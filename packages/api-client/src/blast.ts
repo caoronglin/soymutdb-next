@@ -135,10 +135,9 @@ function normalizeJob(job: BlastJobApi | BlastJob): BlastJob {
   };
 }
 
+/** The only submittable program. Stored jobs may still report the wider
+ *  {@link BlastProgram} vocabulary, which is why this is a one-entry list
+ *  rather than a type alias. */
 export const BLAST_PROGRAMS = [
-  { id: "blastn", label: "BLASTN", type: "nucleotide", description: "Nucleotide vs nucleotide" },
   { id: "blastp", label: "BLASTP", type: "protein", description: "Protein vs protein" },
-  { id: "blastx", label: "BLASTX", type: "nucleotide", description: "Translated nucleotide vs protein" },
-  { id: "tblastn", label: "TBLASTN", type: "protein", description: "Protein vs translated nucleotide" },
-  { id: "tblastx", label: "TBLASTX", type: "nucleotide", description: "Translated nucleotide vs translated nucleotide" },
 ] as const;

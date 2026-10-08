@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import TextIO
 from urllib.parse import urlsplit
 
-from sqlalchemy import select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.content import Release, ReleaseStatus
@@ -270,6 +270,15 @@ async def import_gene_annotation_tsv(
                 and existing.source_version == version
                 and existing.source_url == url
             ):
+                actual_rows = await db.scalar(
+                    select(func.count()).select_from(GeneAnnotation).where(
+                        GeneAnnotation.annotation_set_id == existing.id
+                    )
+                )
+                if actual_rows != existing.row_count:
+                    raise GeneAnnotationImportError(
+                        "existing annotation snapshot row_count does not match stored rows"
+                    )
                 return GeneAnnotationImportResult(
                     annotation_set_id=existing.id,
                     row_count=existing.row_count,
@@ -324,6 +333,13 @@ async def import_gene_annotation_tsv(
             )
             row_count += len(batch)
 
+        actual_rows = await db.scalar(
+            select(func.count()).select_from(GeneAnnotation).where(
+                GeneAnnotation.annotation_set_id == annotation_set.id
+            )
+        )
+        if actual_rows != row_count:
+            raise GeneAnnotationImportError("annotation row_count does not match stored rows")
         annotation_set.row_count = row_count
         await db.flush()
         return GeneAnnotationImportResult(

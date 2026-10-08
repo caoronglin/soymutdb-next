@@ -45,8 +45,19 @@ class _Scalars:
 
 
 class _Result:
+    """Stand-in for SQLAlchemy's ``Result``.
+
+    ``list_genes`` projects two columns (``select(Gene, variant_count)``) and
+    reads whole rows through ``.all()``; ``get_gene`` projects one column and
+    reads entities through ``.scalars()``.  Both shapes have to exist here, or
+    the double silently forces a one-column assumption onto the service.
+    """
+
     def __init__(self, rows: list):
         self._rows = rows
+
+    def all(self) -> list:
+        return self._rows
 
     def scalars(self) -> _Scalars:
         return _Scalars(self._rows)
@@ -63,10 +74,13 @@ class FakeDbSession:
         genes: list[Gene] | None = None,
         assemblies: list[Assembly] | None = None,
         chromosomes: list[Chromosome] | None = None,
+        *,
+        variant_count: int = 0,
     ):
         self.genes = list(genes or [])
         self.assemblies = list(assemblies or [])
         self.chromosomes = list(chromosomes or [])
+        self.variant_count = variant_count
         self.last_stmt = None
         self.statements: list[Any] = []
 
@@ -75,14 +89,34 @@ class FakeDbSession:
         self.statements.append(stmt)
         text = str(stmt)
         if "FROM genes" in text:
-            return _Result(list(self.genes))
+            return _Result(self._gene_rows(stmt))
         if "FROM assemblies" in text:
             return _Result(list(self.assemblies))
         if "FROM chromosomes" in text:
             return _Result(list(self.chromosomes))
         return _Result([])
 
+    def _gene_rows(self, stmt) -> list:
+        """Rows in the shape the statement's projection actually produces.
+
+        ``column_descriptions`` carries one entry per selected entity, so it
+        reports the row-tuple arity. ``selected_columns`` does not: it is the
+        flattened column list (13 for a bare ``select(Gene)``), which would
+        make every projection look multi-column.
+        """
+        descriptions = getattr(stmt, "column_descriptions", None)
+        if descriptions is not None and len(descriptions) > 1:
+            return [(gene, 0) for gene in self.genes]
+        return list(self.genes)
+
     async def scalar(self, stmt):
+        """A COUNT over genes for list paging, over variants for the detail stat.
+
+        The two queries count different things; returning the gene count for
+        both made a gene with no linked variants report a nonzero total.
+        """
+        if "variant_summaries" in str(stmt):
+            return self.variant_count
         return len(self.genes)
 
 
@@ -130,21 +164,29 @@ def make_gene(
 
 
 def make_transcript(
-    tx_id: str = "Glyma.01G000100.1",
+    pk: int = 101,
     *,
+    name: str | None = "Glyma.01G000100.1",
     gene_pk: int = 1,
     is_canonical: bool = True,
 ) -> Transcript:
+    """A transcript whose public identity is its annotation name.
+
+    ``id`` is the internal surrogate key and must never surface to anonymous
+    callers; the published ``name`` is the public identity. Keeping the two
+    distinct here is what makes the privacy assertion in
+    ``test_found_returns_detail_with_transcripts_and_aliases`` meaningful.
+    """
     return Transcript(
-        id=tx_id,
+        id=pk,
         gene_id=gene_pk,
-        name=None,
+        name=name,
         biotype="mRNA",
         start=1000,
         end=5000,
         strand="+",
         is_canonical=is_canonical,
-        exons=[Exon(id=1, transcript_id=tx_id, start=1000, end=2000, order=1)],
+        exons=[Exon(id=1, transcript_id=pk, start=1000, end=2000, order=1)],
     )
 
 
@@ -354,6 +396,35 @@ class TestGetGene:
         assert detail.chromosome == "Gm01"
         assert detail.start_pos == 1000
         assert detail.end_pos == 5000
+
+    async def test_transcript_id_never_exposes_the_surrogate_key(self):
+        """An unnamed transcript must not fall back to its BIGSERIAL key.
+
+        The fallback is derived from public annotation fields, not the
+        internal persistence key. This does not make it an opaque identifier.
+        """
+        gene = make_gene(transcripts=[make_transcript(pk=4242, name=None)])
+        gene.chromosome = make_chromosome(name="Gm01")
+        session = FakeDbSession(genes=[gene])
+
+        detail = await GeneService().get_gene(
+            session, "Glyma.01G000100", release_context=RELEASE_CONTEXT
+        )
+
+        transcript_id = detail.transcripts[0].id
+        assert transcript_id == "transcript-Glyma.01G000100-1000-5000-+"
+        assert "4242" not in transcript_id
+
+    async def test_variant_count_is_reported_from_its_own_query(self):
+        gene = make_gene()
+        gene.chromosome = make_chromosome(name="Gm01")
+        session = FakeDbSession(genes=[gene], variant_count=7)
+
+        detail = await GeneService().get_gene(
+            session, "Glyma.01G000100", release_context=RELEASE_CONTEXT
+        )
+
+        assert detail.variant_count == 7
 
     async def test_missing_raises_not_found(self):
         session = FakeDbSession(genes=[])

@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SoyMutDB",
-    "description": "\nSoyMutDB API \u2014 high-performance multi-species genomic variant platform (soybean currently the default species).\n\n## Error contract\n\nEvery error response uses the unified envelope (see `ErrorResponse`):\n\n```json\n{\n  \"error\": {\"code\": \"not_found\", \"message\": \"...\", \"details\": {}},\n  \"request_id\": \"\u2026\",\n  \"status_code\": 404\n}\n```\n\n- `request_id` is always present and echoed in the `X-Request-ID` header.\n- Validation failures (422) additionally return a field-level `errors` array\n  (`ValidationErrorResponse`); internal framework structures are never\n  exposed.\n- 500 responses never include stack traces, SQL, paths, or exception text.\n\n## Authentication\n\n- **Bearer**: JWT access tokens via `Authorization: Bearer <token>`\n  (obtained from `POST /api/v1/auth/login`).\n- **Cookie**: refresh sessions use the HttpOnly `soymutdb_refresh` cookie\n  (path-scoped to `/api/v1/auth`) for `POST /api/v1/auth/refresh` and\n  `POST /api/v1/auth/logout`.\n",
+    "description": "\nSoyMutDB API \u2014 high-performance multi-species genomic variant platform\n(soybean currently the default species).\n\n## Error contract\n\nEvery error response uses the unified envelope (see `ErrorResponse`):\n\n```json\n{\n  \"error\": {\"code\": \"not_found\", \"message\": \"...\", \"details\": {}},\n  \"request_id\": \"\u2026\",\n  \"status_code\": 404\n}\n```\n\n- `request_id` is always present and echoed in the `X-Request-ID` header.\n- Validation failures (422) additionally return a field-level `errors` array\n  (`ValidationErrorResponse`); internal framework structures are never\n  exposed.\n- 500 responses never include stack traces, SQL, paths, or exception text.\n\n## Authentication\n\n- **Bearer**: JWT access tokens via `Authorization: Bearer <token>`\n  (obtained from `POST /api/v1/auth/login`).\n- **Cookie**: refresh sessions use the HttpOnly `soymutdb_refresh` cookie\n  (path-scoped to `/api/v1/auth`) for `POST /api/v1/auth/refresh` and\n  `POST /api/v1/auth/logout`.\n",
     "version": "2.0.0"
   },
   "paths": {
@@ -18666,19 +18666,6 @@
             "title": "Evalue",
             "default": 1e-05
           },
-          "word_size": {
-            "anyOf": [
-              {
-                "type": "integer",
-                "maximum": 64.0,
-                "minimum": 4.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Word Size"
-          },
           "max_target_seqs": {
             "type": "integer",
             "maximum": 500.0,
@@ -18721,16 +18708,6 @@
             ],
             "title": "Matrix"
           },
-          "dust": {
-            "type": "boolean",
-            "title": "Dust",
-            "default": true
-          },
-          "soft_masking": {
-            "type": "boolean",
-            "title": "Soft Masking",
-            "default": true
-          },
           "percent_identity": {
             "anyOf": [
               {
@@ -18743,6 +18720,41 @@
               }
             ],
             "title": "Percent Identity"
+          },
+          "word_size": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 64.0,
+                "minimum": 4.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Word Size"
+          },
+          "dust": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dust"
+          },
+          "soft_masking": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Soft Masking"
           }
         },
         "type": "object",
@@ -18757,7 +18769,8 @@
           "tblastn",
           "tblastx"
         ],
-        "title": "BlastProgram"
+        "title": "BlastProgram",
+        "description": "Every program value that can appear in a *stored* job row.\n\nThis is a storage/response vocabulary, not a submission contract. The\nsearch engine is DIAMOND ``blastp`` only; the other values remain here so\nthat jobs persisted before the engine was reduced can still be read and\nrendered. :class:`BlastSubmitProgram` is what new requests must use."
       },
       "BlastResultResponse": {
         "properties": {
@@ -18879,10 +18892,19 @@
         "title": "BlastResultResponse",
         "description": "Status-aware result envelope.\n\n``status`` disambiguates states: for pending/running/failed/cancelled jobs\n``hits`` is ``None`` (never a placeholder); for completed jobs it holds\nthe real hit list (possibly empty when BLAST genuinely found no hits)."
       },
+      "BlastSubmitProgram": {
+        "type": "string",
+        "enum": [
+          "blastp"
+        ],
+        "title": "BlastSubmitProgram",
+        "description": "The only program this deployment can execute: DIAMOND ``blastp``."
+      },
       "BlastSubmitRequest": {
         "properties": {
           "program": {
-            "$ref": "#/components/schemas/BlastProgram"
+            "$ref": "#/components/schemas/BlastSubmitProgram",
+            "default": "blastp"
           },
           "database_id": {
             "anyOf": [
@@ -18920,7 +18942,6 @@
         },
         "type": "object",
         "required": [
-          "program",
           "query_sequence"
         ],
         "title": "BlastSubmitRequest"

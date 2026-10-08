@@ -61,7 +61,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH="/app/packages/jobs-py/src:/app/apps/worker/src" \
     SOYMUTDB_APP_ENV=prod
 
-# Bioinformatics tools: htslib, bcftools, ncbi-blast+
+# Bioinformatics tools: htslib, bcftools, diamond
 # libgomp1: OpenMP runtime needed by leidenalg / python-igraph wheels.
 RUN apt-get update \
     && apt-get upgrade -y \
@@ -70,7 +70,7 @@ RUN apt-get update \
     libgomp1 \
     bcftools \
     tabix \
-    ncbi-blast+ \
+    diamond-aligner \
     samtools \
     bedtools \
     pigz \

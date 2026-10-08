@@ -24,6 +24,13 @@ from .contract import (
     QUEUE_STATS,
     TASK_QUEUE_MAP,
 )
+from .protein_fasta import (
+    PROTEIN_ALPHABET,
+    ProteinFasta,
+    ProteinFastaError,
+    ProteinFastaRecord,
+    parse_protein_fasta,
+)
 from .schemas import AnalysisJobPayload, JobPayload, JobRecordStore, JobStatusUpdate
 from .status import TRANSITION_MATRIX, JobStatus, transition_allowed
 
@@ -43,6 +50,10 @@ __all__ = [
     "JobStatus",
     "JobStatusUpdate",
     "PAYLOAD_VERSION",
+    "PROTEIN_ALPHABET",
+    "ProteinFasta",
+    "ProteinFastaError",
+    "ProteinFastaRecord",
     "QUEUE_ANALYSES",
     "QUEUE_BLAST",
     "QUEUE_CLEANUP",
@@ -52,5 +63,6 @@ __all__ = [
     "QUEUE_STATS",
     "TASK_QUEUE_MAP",
     "TRANSITION_MATRIX",
+    "parse_protein_fasta",
     "transition_allowed",
 ]

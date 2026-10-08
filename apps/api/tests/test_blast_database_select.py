@@ -22,7 +22,7 @@ from app.core.exceptions import NotFoundError
 from app.core.exceptions import ValidationError as AppValidationError
 from app.models.blast import BlastDatabase, BlastJob
 from app.models.genomic import Assembly
-from app.schemas.blast import BlastParameters, BlastProgram, BlastSubmitRequest
+from app.schemas.blast import BlastParameters, BlastSubmitProgram, BlastSubmitRequest
 from app.services.blast_service import BlastService
 from app.services.release_context import ReleaseContext
 
@@ -83,7 +83,7 @@ class FakeDbSession:
         pass
 
 
-def _make_db(db_type: str = "nucl", name: str = "williams82_cds") -> BlastDatabase:
+def _make_db(db_type: str = "prot", name: str = "williams82_cds") -> BlastDatabase:
     return BlastDatabase(
         id=1,
         name=name,
@@ -113,7 +113,7 @@ def _context(release_id: int = 7) -> ReleaseContext:
 
 def _make_request(**overrides: Any) -> BlastSubmitRequest:
     defaults: dict[str, Any] = dict(
-        program=BlastProgram.BLASTN,
+        program=BlastSubmitProgram.BLASTP,
         query_sequence="ATGCAAGCTTAGCTAGGCTAGGCTAGGC",
         parameters=BlastParameters(),
     )
@@ -176,9 +176,7 @@ class TestSubmitDatabaseSelection:
         job = next(obj for obj in session.added if isinstance(obj, BlastJob))
         assert job.database_id == 1
         # The worker payload carries the whitelisted database name.
-        outbox = next(
-            obj for obj in session.added if type(obj).__name__ == "OutboxEvent"
-        )
+        outbox = next(obj for obj in session.added if type(obj).__name__ == "OutboxEvent")
         assert outbox.payload["payload"]["database"] == "williams82_cds"
 
     def test_submit_by_database_id_ok(self) -> None:
@@ -231,9 +229,7 @@ class TestSubmitDatabaseSelection:
         from app.services import blast_service
 
         monkeypatch.setattr(blast_service.settings, "blast_default_db", "")
-        session = FakeDbSession(
-            blast_db=_make_db(), default_assembly=_make_assembly()
-        )
+        session = FakeDbSession(blast_db=_make_db(), default_assembly=_make_assembly())
 
         response = asyncio.run(self._submit(session, _make_request()))
 

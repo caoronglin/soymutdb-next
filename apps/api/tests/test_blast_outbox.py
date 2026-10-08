@@ -14,7 +14,7 @@ from typing import Any
 from app.core.task_contract import BLAST_RUN_TASK
 from app.models.blast import BlastDatabase, BlastJob, BlastJobStatus
 from app.models.outbox import OutboxEvent, OutboxEventStatus
-from app.schemas.blast import BlastParameters, BlastProgram, BlastSubmitRequest
+from app.schemas.blast import BlastParameters, BlastSubmitProgram, BlastSubmitRequest
 from app.services.blast_service import BlastService
 from app.services.release_context import ReleaseContext
 
@@ -74,7 +74,7 @@ def _context(release_id: int = 7) -> ReleaseContext:
 
 def _make_request() -> BlastSubmitRequest:
     return BlastSubmitRequest(
-        program=BlastProgram.BLASTN,
+        program=BlastSubmitProgram.BLASTP,
         database_id=1,
         query_sequence="ATGCAAGCTTAGCTAGGCTAGGCTAGGC",
         parameters=BlastParameters(),
@@ -85,7 +85,7 @@ def _make_db() -> BlastDatabase:
     return BlastDatabase(
         id=1,
         name="williams82_cds",
-        db_type="nucl",
+        db_type="prot",
         assembly_id=1,
         file_path="/data/dbs/williams82_cds",
         is_active=True,
@@ -99,8 +99,8 @@ async def test_submit_job_writes_job_and_outbox_event_in_one_transaction() -> No
     service = BlastService()
 
     response = await service.submit_job(
-            session, uuid.uuid4(), _make_request(), release_context=_context()
-        )
+        session, uuid.uuid4(), _make_request(), release_context=_context()
+    )
 
     # One transaction: job + outbox event committed together, broker untouched.
     assert session.commits == 1
@@ -135,9 +135,7 @@ async def test_submit_job_rejects_missing_or_inactive_database() -> None:
     service = BlastService()
 
     try:
-        await service.submit_job(
-            session, uuid.uuid4(), _make_request(), release_context=_context()
-        )
+        await service.submit_job(session, uuid.uuid4(), _make_request(), release_context=_context())
     except NotFoundError:
         pass
     else:

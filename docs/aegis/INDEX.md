@@ -55,7 +55,7 @@ They are retained as historical evidence only. Their conclusions are superseded 
 | [Public portal UI quality remediation](plans/2026-09-28-portal-ui-quality-remediation.md) | Task 1–5 | 部分完成；**可见文案守卫已于 2026-10-02 清零（exit 0 / 0 文件）** |
 | [Admin-editable footer, search, typography](plans/2026-09-28-admin-editable-footer-search-font.md) | Task 0–5 | Task 1 部分完成，Task 2–5 未开始 |
 | [Admin Pro v6 migration (official sub-page pattern)](plans/2026-10-01-admin-pro-migration.md) | A1–A6 | 待执行；A5 可并行。**实测缺口比计划记的更重**：8 个页面用裸 `Table`（非 6），`ProDescriptions`/`ProCard` 仍 0 处 |
-| [BLAST→DIAMOND + enrichment Rust](plans/2026-10-05-blast-diamond-and-enrichment-rust.md) | Track A 引擎切换 / Track B 统计核心 | 未开始。**A1 修的是现存缺陷**：默认 `BLAST_ENGINE=auto` 下 `blastp` 选中 DIAMOND，而 worker 镜像只装 `ncbi-blast+`，任务硬失败而非回退；`.dmnd` 索引当前无获取路径 |
+| [DIAMOND / Biopython / pyDEG / Rust 审计与实施](plans/2026-10-05-blast-diamond-and-enrichment-rust.md) | 比对链路、数值核与分析库接入 | DIAMOND `blastp` 单一引擎；Python 核优化与缓存/同源缺陷修复保留。2026-10-08 纠正“无导入实现”：退役重复 worker 写入器，收敛到既有 API draft-only/不可变快照链，补 dry-run、字节摘要及幂等行数校验。切片 60 通过；根门禁结果见计划。profiler 明确 database replay、校正 annotated-input `n` 并断言 calculation parity。fixture 中位数不能推翻 p95 门槛，Rust ≥20% 完整路径验收保留。真实上游文件及 Rust/pyDEG 生产接入仍缺 |
 | [Audited global optimization](plans/2026-10-02-audited-optimization-execution.md) | H-01–H-18 / W0–W7 | **W0–W4 已完成**（运行时 release 切换、`/auth/me.effective_roles`、可见文案守卫 0 文件、真实浏览器 10/10）；W6 框架就位、本机实跑 exit 0（但比值 49% 波动，**无性能结论**）；W5 离线合同与本地策略已落地（**无出站调用**，未确认清单见 wecom/README.md）；W7 未开始（受阻于部署目标确认） |
 
 ## Work records
@@ -79,3 +79,4 @@ They are retained as historical evidence only. Their conclusions are superseded 
 | 2026-10-01 | work | `.ai-memory/20261001/daily.md` | Contract realignment, admin migration docs, three new guards |
 | 2026-10-02 | audit | `docs/dev/design-audit-2026-10-02.md` | 10 findings on the 2026-10-02 design drafts; D-01/D-08/D-10 withdraw prior claims (CI wiring, 100x speedup, 9/9 ablation) |
 | 2026-10-02 | fix | `AGENTS.md` | pnpm pin 11.21.0 -> 12.5.1 to match `package.json` / `.cnb.yml` |
+| 2026-10-06 | fix | `plans/2026-10-05-blast-diamond-and-enrichment-rust.md` | 比对链路收敛为 DIAMOND `blastp` 单一引擎；A 段路由表、回滚方式与重跑命令同步更新 |

@@ -36,8 +36,10 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Awaitable, Callable, Mapping
+from datetime import date, datetime, time
 from typing import Any
 
+from pydantic import BaseModel
 from structlog import get_logger
 
 from ..core.database import get_redis
@@ -65,9 +67,12 @@ def make_cache_key(name: str, params: Mapping[str, Any] | None = None) -> str:
 
 def _json_default(value: Any) -> Any:
     """Encode non-JSON-native values (datetimes, UUIDs, pydantic models)."""
-    if hasattr(value, "model_dump"):
+    # Dynamic attribute proxies can return a fresh object on every call,
+    # making JSON's default conversion expand forever. Check concrete types.
+    value_type = type(value)
+    if issubclass(value_type, BaseModel):
         return value.model_dump(mode="json")
-    if hasattr(value, "isoformat"):
+    if issubclass(value_type, (datetime, date, time)):
         return value.isoformat()
     return str(value)
 

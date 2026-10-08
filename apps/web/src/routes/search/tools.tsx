@@ -46,7 +46,7 @@ function SearchToolsComponent() {
   return (
     <FadeUp>
       <div className="py-6">
-        <p className="eyebrow">{t("search.tools.title")}</p>
+        <h1 className="eyebrow">{t("search.tools.title")}</h1>
         <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight">
           {t("search.tools.subtitle")}
         </h2>

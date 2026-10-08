@@ -51,12 +51,10 @@ from .release_context import ReleaseContext
 settings = get_settings()
 
 #: Which database types each program may search against (db_type whitelist).
+#: DIAMOND ``blastp`` is protein-query against a protein index; the other
+#: stored programs have no executable engine in this deployment.
 _PROGRAM_DB_TYPES: dict[BlastProgram, frozenset[str]] = {
-    BlastProgram.BLASTN: frozenset({BlastDbType.NUCL.value}),
     BlastProgram.BLASTP: frozenset({BlastDbType.PROT.value}),
-    BlastProgram.BLASTX: frozenset({BlastDbType.PROT.value}),
-    BlastProgram.TBLASTN: frozenset({BlastDbType.NUCL.value}),
-    BlastProgram.TBLASTX: frozenset({BlastDbType.NUCL.value}),
 }
 
 #: Client-facing parameter names → worker whitelisted CLI names.  ``evalue``,
@@ -66,8 +64,6 @@ _PARAMETER_NAME_MAP: dict[str, str] = {
     "gap_open": "gapopen",
     "gap_extend": "gapextend",
     "matrix": "matrix",
-    "dust": "dust",
-    "soft_masking": "soft_masking",
 }
 
 #: Maximum characters of error text exposed to clients.
@@ -82,12 +78,15 @@ def _sanitize_error(message: str | None) -> str | None:
     return clean.strip()[:_MAX_ERROR_LEN] or None
 
 
-def _worker_parameters(params: BlastParameters) -> dict:
+def _worker_parameters(
+    params: BlastParameters, program: BlastProgram = BlastProgram.BLASTP
+) -> dict:
     """Map validated request parameters to worker-whitelisted CLI parameters.
 
     ``percent_identity`` is a client-side filter only and is intentionally
-    dropped (the worker rejects unknown parameter keys).  Boolean flags are
-    rendered as ``yes``/``no`` for the BLAST CLI.
+    dropped (the worker rejects unknown parameter keys).  ``dust`` and
+    ``soft_masking`` are NCBI-BLAST flags with no DIAMOND equivalent, so they
+    are no longer part of the submission surface at all.
     """
     out: dict = {}
     if params.gap_open is not None:
@@ -96,10 +95,6 @@ def _worker_parameters(params: BlastParameters) -> dict:
         out["gapextend"] = params.gap_extend
     if params.matrix:
         out["matrix"] = params.matrix
-    if params.dust is not None:
-        out["dust"] = "yes" if params.dust else "no"
-    if params.soft_masking is not None:
-        out["soft_masking"] = "yes" if params.soft_masking else "no"
     return out
 
 
@@ -139,15 +134,9 @@ class BlastService:
                     is_active=bd.is_active,
                     created_at=bd.created_at,
                     assembly_name=assembly.name if assembly is not None else None,
-                    assembly_version=(
-                        assembly.version if assembly is not None else None
-                    ),
-                    assembly_is_default=(
-                        assembly.is_default if assembly is not None else None
-                    ),
-                    release_id=(
-                        assembly.release_id if assembly is not None else None
-                    ),
+                    assembly_version=(assembly.version if assembly is not None else None),
+                    assembly_is_default=(assembly.is_default if assembly is not None else None),
+                    release_id=(assembly.release_id if assembly is not None else None),
                 )
             )
         return rows
@@ -214,9 +203,7 @@ class BlastService:
                 db, release_context, BlastDatabase.name == request.database
             )
             if blast_db is None:
-                raise NotFoundError(
-                    f"BLAST database {request.database!r} not found or inactive"
-                )
+                raise NotFoundError(f"BLAST database {request.database!r} not found or inactive")
             return blast_db
 
         # Neither identifier given: fall back to the configured default
@@ -263,28 +250,23 @@ class BlastService:
         """
         # Validate the database exists, is active, and belongs to the
         # published release (the active-DB table is the database whitelist).
-        blast_db = await self._resolve_database(
-            db, request, release_context=release_context
-        )
+        blast_db = await self._resolve_database(db, request, release_context=release_context)
 
         # Program ↔ database-type compatibility.
         allowed_types = _PROGRAM_DB_TYPES.get(request.program)
         db_type = getattr(blast_db.db_type, "value", blast_db.db_type)
         if allowed_types is not None and db_type not in allowed_types:
             raise ValidationError(
-                f"Program {request.program.value} cannot search a "
-                f"'{db_type}' database"
+                f"Program {request.program.value} cannot search a '{db_type}' database"
             )
 
         if len(request.query_sequence) > settings.blast_max_length:
-            raise ValidationError(
-                f"Query sequence exceeds max length {settings.blast_max_length}"
-            )
+            raise ValidationError(f"Query sequence exceeds max length {settings.blast_max_length}")
         # Defense in depth: the schema validates the alphabet at the API
         # boundary; re-check here for programmatic callers.
         validate_sequence_charset(request.query_sequence, request.program.value)
 
-        worker_params = _worker_parameters(request.parameters)
+        worker_params = _worker_parameters(request.parameters, request.program)
         job = BlastJob(
             id=uuid.uuid4(),
             user_id=user_id,
@@ -310,7 +292,6 @@ class BlastService:
                 "database": blast_db.name,
                 "sequence": job.query_sequence,
                 "evalue": request.parameters.evalue,
-                "word_size": request.parameters.word_size,
                 "max_target_seqs": request.parameters.max_target_seqs,
                 "parameters": worker_params,
                 # Provenance: the worker (and any later reader of the result)
@@ -366,10 +347,7 @@ class BlastService:
             conditions.append(BlastJob.status == status)
 
         total = int(
-            await db.scalar(
-                select(func.count()).select_from(BlastJob).where(*conditions)
-            )
-            or 0
+            await db.scalar(select(func.count()).select_from(BlastJob).where(*conditions)) or 0
         )
         stmt = (
             select(BlastJob)
@@ -433,9 +411,9 @@ class BlastService:
         hits_result = await db.execute(hits_stmt)
         page = list(hits_result.scalars().all())
 
-        stats_stmt = select(
-            func.min(BlastHit.evalue), func.max(BlastHit.bit_score)
-        ).where(BlastHit.job_id == job.id)
+        stats_stmt = select(func.min(BlastHit.evalue), func.max(BlastHit.bit_score)).where(
+            BlastHit.job_id == job.id
+        )
         best_evalue, best_bit_score = (await db.execute(stats_stmt)).first() or (
             None,
             None,

@@ -498,7 +498,8 @@
     "desc": "对已发布的参考基因组进行序列比对搜索。",
     "defaultTag": "默认",
     "referencePlaceholder": "选择参考序列类型",
-    "submitFailed": "提交失败：{{message}}"
+    "submitFailed": "提交失败：{{message}}",
+    "proteinOnlyHint": "蛋白质序列比对（DIAMOND blastp）"
   },
   "releases": {
     "title": "数据版本",

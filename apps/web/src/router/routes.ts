@@ -198,7 +198,15 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
     path: "/search/tools",
     name: "search-tools",
     componentKey: "search-tools",
-    meta: { title: "Search tools — SoyMutDB" },
+    // A real catalog page, so it needs its own document. Without prerender the
+    // title above was never delivered: only prerendered routes get an
+    // index.html, so a crawler and a no-JS client both saw the site default.
+    meta: {
+      title: "Search tools — SoyMutDB",
+      description: "Browse the analysis tools that complement identifier and location search.",
+      prerender: true,
+      sitemap: false,
+    },
   },
   {
     path: "/browser",

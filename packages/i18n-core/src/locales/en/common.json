@@ -498,7 +498,8 @@
     "desc": "Search sequence alignments against a published reference genome.",
     "defaultTag": "Default",
     "referencePlaceholder": "Select a reference sequence type",
-    "submitFailed": "Failed to submit: {{message}}"
+    "submitFailed": "Failed to submit: {{message}}",
+    "proteinOnlyHint": "Protein sequence search (DIAMOND blastp)"
   },
   "releases": {
     "title": "Data Releases",

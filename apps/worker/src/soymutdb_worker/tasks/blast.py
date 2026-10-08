@@ -29,13 +29,16 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import os
 import resource
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
 from celery import Task
+from soymutdb_jobs.protein_fasta import ProteinFastaError, parse_protein_fasta
 
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
@@ -56,29 +59,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 BLAST_CACHE_DIR = Path(get_setting("BLAST_CACHE_DIR", "/tmp/blast_cache"))
-BLAST_BIN_DIR = Path(get_setting("BLAST_BIN_DIR", "/usr/bin"))
 
-#: Which aligner runs the job: ``auto`` (default), ``diamond`` or ``blast``.
-#:
-#: DIAMOND (https://github.com/bbuchfink/diamond) answers the protein/protein
-#: question 100-1000x faster, which is the difference between a soybean query
-#: finishing in seconds and in minutes, so ``auto`` prefers it. It is
-#: command-line compatible with BLAST for the flags this module builds, but
-#: **not** for output formats — there is no ``-outfmt 15`` (JSON) — so its raw
-#: result is tabular and parsed by :func:`parse_diamond_tabular`.
-#:
-#: ``auto`` exists because DIAMOND is not a universal replacement: it has no
-#: nucleotide/nucleotide mode equivalent to BLAST's ``blastn``. Routing every
-#: program to DIAMOND would turn each ``blastn`` job into a hard failure, which
-#: is strictly worse than either tool alone.
-BLAST_ENGINE = str(get_setting("BLAST_ENGINE", "auto")).strip().lower()
-DIAMOND_BIN = Path(get_setting("DIAMOND_BIN", "/usr/local/bin/diamond"))
-#: Subcommands DIAMOND implements. `blastn` (nucleotide/nucleotide) only exists
-#: from DIAMOND 2.1 and is not a drop-in for BLAST's `blastn` word sizes.
-DIAMOND_PROGRAMS = frozenset({"blastp", "blastx"})
-#: The columns requested from ``--outfmt 6``, spelled out rather than relying on
-#: DIAMOND's defaults so a version that reorders its default output cannot
-#: silently shift every field by one.
+#: The one aligner this deployment runs. DIAMOND replaces NCBI BLAST entirely:
+#: there is no second engine, no auto-routing and no fallback, so a job cannot
+#: end up parsed by a tool it was not built for.
+DIAMOND_BIN = Path(get_setting("DIAMOND_BIN", shutil.which("diamond") or "/usr/bin/diamond"))
+#: Also the documented default columns; explicit names pin our parser contract.
 DIAMOND_OUTFMT6_COLUMNS = (
     "qseqid",
     "sseqid",
@@ -93,18 +79,23 @@ DIAMOND_OUTFMT6_COLUMNS = (
     "evalue",
     "bitscore",
 )
-#: BLAST parameter name -> DIAMOND's kebab-case flag, for the subset that means
-#: the same thing in both tools. Anything not listed is rejected rather than
-#: guessed at: passing `-dust` to DIAMOND aborts the run.
+#: Parameter name -> DIAMOND's kebab-case flag, for the subset that means the
+#: same thing in DIAMOND. Anything not listed is rejected rather than guessed
+#: at: passing a flag DIAMOND does not define aborts the run.
 DIAMOND_PARAM_FLAGS = {
     "evalue": "--evalue",
     "max_target_seqs": "--max-target-seqs",
     "max_hsps": "--max-hsps",
-    "word_size": "--word-size",
     "threads": "--threads",
     "query_gencode": "--query-gencode",
+    "id": "--id",
+    "quiet": "--quiet",
+    "gapopen": "--gapopen",
+    "gapextend": "--gapextend",
+    "matrix": "--matrix",
 }
 DIAMOND_ALLOWED_PARAMS = frozenset(DIAMOND_PARAM_FLAGS)
+
 
 #: Multi-genome BLAST database whitelist / path mapping (assembly → index path).
 #: Populated from the ``BLAST_DATABASE_PATHS`` setting — a JSON object mapping
@@ -115,77 +106,49 @@ DIAMOND_ALLOWED_PARAMS = frozenset(DIAMOND_PARAM_FLAGS)
 #:      "zh13.a1.v1": "/data/genomes/zh13.a1.v1/zh13.a1.v1"}
 #:
 #: This supports ``{assembly}/{assembly}.fasta``-style layouts: the value is
-#: the ``makeblastdb`` output basename (``-db`` expects the index basename,
-#: not the ``.fasta`` file).  **Data preparation is an ops-side step** — one
-#: entry per genome assembly, indexes built with ``makeblastdb`` and present
+#: the ``diamond makedb`` index basename (without the ``.dmnd`` suffix), not the
+#: ``.fasta`` file.  **Data preparation is an ops-side step** — one entry per
+#: genome assembly, protein indexes built with ``diamond makedb`` and present
 #: on the worker host (or in the S3 ``blast-dbs/`` prefix for legacy
-#: downloads).
+#: downloads).  A ``makeblastdb`` product is not a DIAMOND index and is
+#: rejected.
 #:
 #: When configured, this mapping is the authoritative whitelist: database
 #: names outside it are rejected before any filesystem/S3 access.  When empty
 #: (legacy single-genome deployments) the legacy cache + S3-download path is
 #: used with the strict alphanumeric name check.
-_BLAST_DATABASE_PATHS_RAW = get_setting("BLAST_DATABASE_PATHS", "{}")
-try:
-    BLAST_DATABASE_PATHS: dict[str, str] = json.loads(_BLAST_DATABASE_PATHS_RAW)
-    if not isinstance(BLAST_DATABASE_PATHS, dict):
-        raise ValueError("expected a JSON object")
-except (ValueError, TypeError) as _cfg_err:
-    logger.warning(
-        "BLAST_DATABASE_PATHS is not a valid JSON object (%s); "
-        "falling back to legacy single-database mode",
-        _cfg_err,
-    )
-    BLAST_DATABASE_PATHS = {}
+def load_database_paths(raw: str) -> dict[str, str]:
+    """Invalid operator configuration must not disable the database whitelist."""
+    try:
+        parsed = json.loads(raw)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("BLAST_DATABASE_PATHS must be a valid JSON object") from exc
+    if not isinstance(parsed, dict) or any(
+        not isinstance(name, str)
+        or not name.strip()
+        or not isinstance(path, str)
+        or not path.strip()
+        for name, path in parsed.items()
+    ):
+        raise ValueError("BLAST_DATABASE_PATHS must map nonempty names to nonempty path strings")
+    return parsed
 
-# Whitelist of allowed BLAST programs.
-ALLOWED_PROGRAMS = frozenset(
-    {"blastn", "blastp", "blastx", "tblastn", "tblastx"}
-)
 
-# Whitelist of allowed BLAST command-line parameters (without leading dash).
-ALLOWED_PARAMS = frozenset(
-    {
-        "evalue",
-        "word_size",
-        "max_target_seqs",
-        "max_hsps",
-        "gapopen",
-        "gapextend",
-        "reward",
-        "penalty",
-        "dust",
-        "soft_masking",
-        "lcase_masking",
-        "xdrop_ungap",
-        "xdrop_gap",
-        "xdrop_gap_final",
-        "searchsp",
-        "threshold",
-        "window_size",
-        "ungapped",
-        "culling_limit",
-        "best_hit_overhang",
-        "best_hit_score_edge",
-        "subject_besthit",
-        "sum_stats",
-        "db_gencode",
-        "query_gencode",
-        "frame_shift_penalty",
-        "use_index",
-        "index_name",
-        "remote",
-        "num_threads",
-        "mt_mode",
-        "use_sw_tback",
-    }
-)
+BLAST_DATABASE_PATHS = load_database_paths(get_setting("BLAST_DATABASE_PATHS", "{}"))
+
+#: The single executable program. NCBI BLAST and the translated-search
+#: programs (``blastn`` / ``blastx`` / ``tblastn`` / ``tblastx``) have no
+#: engine in this deployment and are rejected before any index is touched.
+ALLOWED_PROGRAMS = frozenset({"blastp"})
 
 # Resource limits
 MAX_QUERY_LENGTH = int(get_setting("BLAST_MAX_QUERY_LENGTH", "100000"))
 MAX_OUTPUT_SIZE = int(get_setting("BLAST_MAX_OUTPUT_SIZE", str(512 * 1024 * 1024)))  # 512 MB
 MAX_RUNTIME_SECONDS = int(get_setting("BLAST_MAX_RUNTIME", "3600"))  # 1 hour
 MAX_MEMORY_MB = int(get_setting("BLAST_MAX_MEMORY_MB", "4096"))  # 4 GB
+MAX_THREADS = int(get_setting("BLAST_MAX_THREADS", "4"))
+if MAX_THREADS < 1:
+    raise ValueError("BLAST_MAX_THREADS must be a positive integer")
 
 #: Minimal environment for the BLAST child process: the binary only needs a
 #: PATH; anything else from the worker's environment (tokens, keys, …) must
@@ -228,66 +191,55 @@ def sanitize_error_message(
 
 
 def validate_program(program: str) -> str:
-    """Validate that *program* is an allowed BLAST program name."""
+    """Validate that *program* is the one program this deployment executes."""
     if program not in ALLOWED_PROGRAMS:
         raise ValueError(
-            f"Invalid BLAST program: {program!r}. "
-            f"Allowed: {sorted(ALLOWED_PROGRAMS)}"
+            f"Unsupported program: {program!r}. This deployment searches with "
+            f"DIAMOND blastp only; allowed: {sorted(ALLOWED_PROGRAMS)}"
         )
     return program
 
 
-def resolve_engine(program: str, engine: str | None = None) -> str:
-    """Return the aligner to use, or raise when the pair is impossible.
+def _executable(path: Path) -> bool:
+    return path.is_file() and os.access(path, os.X_OK)
 
-    ``auto`` (the default) picks DIAMOND exactly when DIAMOND implements the
-    program: ``blastp``/``blastx`` go to DIAMOND, and ``blastn``/``tblastn``/
-    ``tblastx`` go to BLAST because DIAMOND has no equivalent.
 
-    ``diamond`` asked for explicitly and given a program DIAMOND cannot run
-    raises instead of quietly falling back — a forced engine that silently
-    becomes the other one is worse than an error, because the operator believes
-    they tested DIAMOND.
-
-    Availability is part of this decision, not a later check. The caller derives
-    the parser and the output file's extension from the returned engine, so
-    resolving to DIAMOND here and discovering the binary is absent afterwards
-    would run BLAST while still parsing tabular output out of ``results.json``.
-    """
-    requested = (engine or BLAST_ENGINE).strip().lower()
-    if requested == "auto":
-        if program not in DIAMOND_PROGRAMS:
-            return "blast"
-        if not DIAMOND_BIN.exists():
-            logger.warning(
-                "DIAMOND not found at %s; running %s with BLAST. Install "
-                "diamond-aligner or set SOYMUTDB_DIAMOND_BIN to use it.",
-                DIAMOND_BIN,
-                program,
-            )
-            return "blast"
-        return "diamond"
-    if requested not in {"blast", "diamond"}:
-        raise ValueError(
-            f"Unknown aligner {requested!r}; expected 'auto', 'blast' or 'diamond'"
+def _require_diamond() -> Path:
+    """Fail loudly instead of silently degrading to a different aligner."""
+    if not _executable(DIAMOND_BIN):
+        raise RuntimeError(
+            f"DIAMOND binary not found or not executable: {DIAMOND_BIN}. "
+            "Install diamond-aligner or set SOYMUTDB_DIAMOND_BIN."
         )
-    if requested == "diamond":
-        if program not in DIAMOND_PROGRAMS:
-            raise ValueError(
-                f"DIAMOND does not implement {program!r}; "
-                f"supported: {sorted(DIAMOND_PROGRAMS)}. "
-                "Use BLAST_ENGINE=auto to fall back to BLAST for this program."
-            )
-        if not DIAMOND_BIN.exists():
-            raise RuntimeError(f"DIAMOND binary not found: {DIAMOND_BIN}")
-    return requested
+    return DIAMOND_BIN
+
+
+def _positive_threads(value) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, str)):
+        raise ValueError("threads must be a positive integer within BLAST_MAX_THREADS")
+    if isinstance(value, str) and not value.isdecimal():
+        raise ValueError("threads must be a positive integer within BLAST_MAX_THREADS")
+    count = int(value)
+    if not 1 <= count <= MAX_THREADS:
+        raise ValueError(f"threads must be between 1 and BLAST_MAX_THREADS={MAX_THREADS}")
+    return count
+
+
+def _thread_budget(num_threads: int, parameters: dict, key: str) -> int:
+    budget = _positive_threads(num_threads)
+    selected = _positive_threads(parameters.pop(key, budget))
+    if selected > budget:
+        raise ValueError(f"parameter {key!r} exceeds submitted thread budget {budget}")
+    return selected
 
 
 def validate_diamond_parameters(params: dict | None) -> dict:
-    """Same contract as :func:`validate_parameters`, for DIAMOND's flags.
+    """Validate job parameters against DIAMOND's flag vocabulary.
 
-    DIAMOND's vocabulary is narrower, and its flags are kebab-case, so the
-    BLAST whitelist cannot be reused verbatim.
+    DIAMOND's vocabulary is narrow and its flags are kebab-case. Anything not
+    in :data:`DIAMOND_PARAM_FLAGS` is rejected rather than passed through:
+    an unknown flag aborts the search an hour into a queue, and a *known-word*
+    BLAST flag such as ``-dust`` fails just as late.
     """
     if not params:
         return {}
@@ -295,6 +247,21 @@ def validate_diamond_parameters(params: dict | None) -> dict:
     for key, value in params.items():
         if key not in DIAMOND_ALLOWED_PARAMS:
             raise ValueError(f"Disallowed DIAMOND parameter: {key!r}")
+        if key == "threads":
+            cleaned[key] = str(_positive_threads(value))
+            continue
+        if key == "quiet":
+            if not isinstance(value, bool):
+                raise ValueError("DIAMOND quiet must be a boolean")
+            cleaned[key] = value
+            continue
+        if key == "id":
+            try:
+                identity = float(value)
+            except (ValueError, TypeError) as exc:
+                raise ValueError("DIAMOND id must be a percentage in [0, 100]") from exc
+            if isinstance(value, bool) or not math.isfinite(identity) or not 0 <= identity <= 100:
+                raise ValueError("DIAMOND id must be a percentage in [0, 100]")
         if isinstance(value, bool):
             text = "true" if value else "false"
         elif isinstance(value, (int, float, str)):
@@ -307,22 +274,6 @@ def validate_diamond_parameters(params: dict | None) -> dict:
     return cleaned
 
 
-def validate_parameters(params: dict | None) -> dict:
-    """Validate that all parameter keys are in the whitelist.
-
-    Returns a cleaned dict with string values suitable for CLI args.
-    """
-    if not params:
-        return {}
-    cleaned: dict = {}
-    for key, value in params.items():
-        if key not in ALLOWED_PARAMS:
-            raise ValueError(f"Disallowed BLAST parameter: {key!r}")
-        if value is not None:
-            cleaned[key] = str(value)
-    return cleaned
-
-
 def validate_sequence(sequence: str) -> str:
     """Validate query sequence length and basic format."""
     if not sequence or not sequence.strip():
@@ -331,9 +282,7 @@ def validate_sequence(sequence: str) -> str:
     lines = sequence.strip().splitlines()
     seq_body = "".join(part for part in lines if not part.startswith(">"))
     if len(seq_body) > MAX_QUERY_LENGTH:
-        raise ValueError(
-            f"Query sequence too long: {len(seq_body)} > {MAX_QUERY_LENGTH}"
-        )
+        raise ValueError(f"Query sequence too long: {len(seq_body)} > {MAX_QUERY_LENGTH}")
     return sequence
 
 
@@ -342,64 +291,86 @@ def validate_sequence(sequence: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+class DatabaseIndexUnavailable(RuntimeError):
+    """The selected format is absent; distinct from transport/configuration errors."""
+
+
+def _index_file(base: Path, suffix: str) -> Path:
+    # Append: with_suffix would truncate an assembly version such as wm82.a2.v1.
+    return Path(f"{base}{suffix}")
+
+
+def _nonempty_file(path: Path) -> bool:
+    try:
+        return path.is_file() and path.stat().st_size > 0
+    except FileNotFoundError:
+        return False
+
+
+def _database_ready(base: Path) -> bool:
+    path = base if base.suffix == ".dmnd" else _index_file(base, ".dmnd")
+    return _nonempty_file(path)
+
+
 def get_blast_db_path(db_name: str) -> Path:
-    """Return the local path for a BLAST database.
+    """Resolve a whitelisted DIAMOND index; never guess its format.
 
-    With :data:`BLAST_DATABASE_PATHS` configured (multi-genome deployments)
-    *db_name* must be a whitelisted key and the mapped index path is returned
-    directly (indexes are prepared on the worker host by the deployment).
-    Any unlisted name — including path-traversal payloads — is rejected.
-
-    Without the mapping (legacy single-genome deployments) the database is
-    resolved via the local cache, downloading from S3 when needed.  In both
-    modes the name is strictly validated to prevent path traversal.
+    Local mappings use a shared index basename (or an explicit .dmnd path).
+    Legacy S3 objects remain in blast-dbs/; filenames must be the exact
+    ``<db_name>.dmnd`` before an atomic download enters the cache.
     """
     if not db_name:
         raise ValueError("BLAST database name is empty")
-
     if db_name in BLAST_DATABASE_PATHS:
-        return Path(BLAST_DATABASE_PATHS[db_name])
-
+        mapped = Path(BLAST_DATABASE_PATHS[db_name])
+        if not _database_ready(mapped):
+            raise DatabaseIndexUnavailable(f"Missing DIAMOND index for {db_name!r}: {mapped}")
+        return mapped
     if BLAST_DATABASE_PATHS:
-        # A whitelist is configured: refuse anything unlisted (the whitelist
-        # itself is the injection defence — no filesystem/S3 access happens).
         raise ValueError(
             f"BLAST database {db_name!r} is not in the allowed database "
             f"whitelist: {sorted(BLAST_DATABASE_PATHS)}"
         )
-
-    # Legacy mode: only alphanumeric, underscore, and hyphen in *db_name* to
-    # prevent path traversal.
     if not db_name.replace("-", "").replace("_", "").isalnum():
         raise ValueError(f"Invalid BLAST database name: {db_name!r}")
 
     BLAST_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     db_path = BLAST_CACHE_DIR / db_name
-
-    # Check if already cached (BLAST DB files have .nin/.nhr/.ndb etc.)
-    if (db_path.with_suffix(".ndb")).exists() or (db_path.with_suffix(".nin")).exists():
+    if _database_ready(db_path):
         return db_path
 
-    # Download from S3
     s3_bucket = get_setting("S3_BLAST_BUCKET", "blast-dbs")
     s3_prefix = f"blast-dbs/{db_name}"
-
     s3 = get_s3_client()
     paginator = s3.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=s3_bucket, Prefix=s3_prefix):
         for obj in page.get("Contents", []):
             key = obj["Key"]
             filename = Path(key).name
+            # Prefix listings can include neighbouring databases/directories.
+            if filename != f"{db_name}.dmnd" or key not in {
+                f"blast-dbs/{filename}",
+                f"{s3_prefix}/{filename}",
+            }:
+                continue
             local_path = BLAST_CACHE_DIR / filename
-            if not local_path.exists():
-                logger.info("Downloading BLAST db file: %s", filename)
-                s3.download_file(s3_bucket, key, str(local_path))
+            if not local_path.is_file() or local_path.stat().st_size == 0:
+                logger.info("Downloading DIAMOND db file: %s", filename)
+                with tempfile.NamedTemporaryFile(dir=BLAST_CACHE_DIR, delete=False) as handle:
+                    temporary = Path(handle.name)
+                try:
+                    s3.download_file(s3_bucket, key, str(temporary))
+                    temporary.replace(local_path)
+                finally:
+                    temporary.unlink(missing_ok=True)
 
+    if not _database_ready(db_path):
+        raise DatabaseIndexUnavailable(f"Missing DIAMOND index for {db_name!r} after S3 download")
     return db_path
 
 
 # ---------------------------------------------------------------------------
-# BLAST execution
+# DIAMOND execution
 # ---------------------------------------------------------------------------
 
 
@@ -412,12 +383,12 @@ def _set_subprocess_limits() -> None:
     mem_bytes = MAX_MEMORY_MB * 1024 * 1024
     try:
         resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
-    except (ValueError, OSError):
+    except ValueError, OSError:
         pass  # May not be supported on all platforms
     # Output file size limit
     try:
         resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_SIZE, MAX_OUTPUT_SIZE))
-    except (ValueError, OSError):
+    except ValueError, OSError:
         pass
 
 
@@ -440,22 +411,36 @@ def build_diamond_command(
     both only surface as an opaque rc=1 an hour into a queue).
     """
     cleaned = validate_diamond_parameters(extra_args)
+    threads = _thread_budget(num_threads, cleaned, "threads")
     cmd: list[str] = [
         str(DIAMOND_BIN),
         program,
-        "--db", str(db_path),
-        "--query", str(query_path),
-        "--out", str(output_path),
-        "--evalue", str(evalue),
-        "--threads", str(num_threads),
-        "--outfmt", "6", *DIAMOND_OUTFMT6_COLUMNS,
+        "--db",
+        str(db_path),
+        "--query",
+        str(query_path),
+        "--out",
+        str(output_path),
+        "--outfmt",
+        "6",
+        *DIAMOND_OUTFMT6_COLUMNS,
+        # 2.1.14 reserves large per-bin hit buffers. One bin respects RLIMIT_AS
+        # on small searches; block-size alone did not fix allocation failures.
+        "--bin",
+        "1",
     ]
+    for key, default in (("evalue", evalue), ("threads", threads)):
+        if key not in cleaned:
+            cmd.extend([DIAMOND_PARAM_FLAGS[key], str(default)])
     if "max_target_seqs" not in cleaned:
-        # DIAMOND otherwise reports every hit it finds, which for a repeat-rich
-        # plant genome is thousands of rows per query.
+        # DIAMOND defaults to 25; honor the submitted job's limit instead.
         cmd.extend(["--max-target-seqs", str(max_target_seqs)])
     for key, value in cleaned.items():
-        cmd.extend([DIAMOND_PARAM_FLAGS[key], value])
+        if key == "quiet":
+            if value:
+                cmd.append("--quiet")
+        else:
+            cmd.extend([DIAMOND_PARAM_FLAGS[key], value])
     return cmd
 
 
@@ -467,62 +452,44 @@ def run_blast_command(
     evalue: float = 0.001,
     word_size: int | None = None,
     max_target_seqs: int = 100,
-    outfmt: int = 15,  # JSON (BLAST only; DIAMOND has no JSON output)
+    outfmt: int = 15,
     extra_args: dict | None = None,
     num_threads: int = 1,
     engine: str | None = None,
 ) -> None:
-    """Run one alignment search with ``subprocess.run`` (no shell).
+    """Run one DIAMOND search with ``subprocess.run`` (no shell).
 
     All arguments are passed as a list — never through a shell string — and
     the child runs with a minimal environment (:data:`BLAST_SUBPROCESS_ENV`).
 
-    ``engine`` defaults to :data:`BLAST_ENGINE`, so a deployment that wants a
-    pure BLAST stack sets ``BLAST_ENGINE=blast`` and this call is unchanged.
+    ``word_size`` / ``outfmt`` / ``engine`` remain in the signature so that a
+    queued payload written before the engine was reduced still loads; any
+    non-default value is rejected rather than silently ignored.
     """
     program = validate_program(program)
-    resolved = resolve_engine(program, engine)
-
-    if resolved == "diamond":
-        if not DIAMOND_BIN.exists():
-            raise RuntimeError(f"DIAMOND binary not found: {DIAMOND_BIN}")
-        cmd = build_diamond_command(
-            program,
-            db_path,
-            query_path,
-            output_path,
-            evalue,
-            max_target_seqs,
-            num_threads,
-            extra_args,
+    if word_size is not None:
+        raise ValueError(
+            "word_size is a retired NCBI BLAST option; DIAMOND blastp has no equivalent"
         )
-    else:
-        blast_bin = BLAST_BIN_DIR / program
+    if engine not in (None, "diamond", "auto"):
+        raise ValueError(
+            f"Unknown aligner {engine!r}; this deployment runs DIAMOND blastp only"
+        )
+    if outfmt != 15:
+        raise ValueError("outfmt is fixed: DIAMOND always writes the 12-column tabular format")
+    _require_diamond()
+    cmd = build_diamond_command(
+        program,
+        db_path,
+        query_path,
+        output_path,
+        evalue,
+        max_target_seqs,
+        num_threads,
+        extra_args,
+    )
 
-        if not blast_bin.exists():
-            raise RuntimeError(f"BLAST program not found: {blast_bin}")
-
-        # Build command as a list (no shell interpolation possible)
-        cmd = [
-            str(blast_bin),
-            "-db", str(db_path),
-            "-query", str(query_path),
-            "-out", str(output_path),
-            "-evalue", str(evalue),
-            "-max_target_seqs", str(max_target_seqs),
-            "-outfmt", str(outfmt),
-            "-num_threads", str(num_threads),
-        ]
-
-        if word_size is not None:
-            cmd.extend(["-word_size", str(word_size)])
-
-        # Validate and append extra args
-        cleaned = validate_parameters(extra_args)
-        for key, value in cleaned.items():
-            cmd.extend([f"-{key}", value])
-
-    logger.info("Running %s: %s vs %s", resolved, program, db_path.name)
+    logger.info("Running diamond %s: %s vs %s", program, db_path.name, query_path.name)
 
     result = subprocess.run(
         cmd,
@@ -537,13 +504,9 @@ def run_blast_command(
 
     if result.returncode != 0:
         # Sanitize before logging: stderr may echo the query sequence.
-        stderr_scrubbed = sanitize_error_message(
-            result.stderr or f"exit code {result.returncode}"
-        )
-        logger.error("BLAST failed (rc=%d): %s", result.returncode, stderr_scrubbed)
-        raise RuntimeError(
-            f"BLAST execution failed (rc={result.returncode}): {stderr_scrubbed}"
-        )
+        stderr_scrubbed = sanitize_error_message(result.stderr or f"exit code {result.returncode}")
+        logger.error("DIAMOND failed (rc=%d): %s", result.returncode, stderr_scrubbed)
+        raise RuntimeError(f"DIAMOND execution failed (rc={result.returncode}): {stderr_scrubbed}")
 
 
 # ---------------------------------------------------------------------------
@@ -561,12 +524,10 @@ def _result_file_metadata(output_path: Path) -> tuple[str, int]:
 
 
 def parse_diamond_tabular(output_path: Path) -> dict:
-    """Parse DIAMOND's ``--outfmt 6`` output into the same shape as BLAST JSON.
+    """Parse DIAMOND's ``--outfmt 6`` output into structured hits.
 
-    Returns the identical dict structure as :func:`parse_blast_json`, so the
-    task's persistence, statistics and API response do not care which aligner
-    ran. Only the raw-file parser differs, because DIAMOND cannot emit BLAST's
-    ``outfmt 15``.
+    This is the only output parser: DIAMOND cannot emit BLAST's ``outfmt 15``,
+    and with a single engine there is nothing left to dispatch between.
 
     Columns are the ones :data:`DIAMOND_OUTFMT6_COLUMNS` asked for:
     qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue
@@ -646,60 +607,6 @@ def parse_diamond_tabular(output_path: Path) -> dict:
     }
 
 
-def parse_blast_json(output_path: Path) -> dict:
-    """Parse BLAST JSON output (outfmt 15) into structured hits."""
-    with open(output_path) as f:
-        data = json.load(f)
-
-    hits: list[dict] = []
-    blast_result = data.get("BlastOutput2", [{}])[0].get("report", {})
-    results = blast_result.get("results", {})
-    search = results.get("search", {})
-
-    for hit in search.get("hits", []):
-        descriptions = hit.get("description", [{}])
-        desc = descriptions[0] if descriptions else {}
-        for hsp in hit.get("hsps", []):
-            align_len = max(hsp.get("align_len", 1), 1)
-            identity = hsp.get("identity", 0)
-            gaps = hsp.get("gaps", 0)
-            hits.append(
-                {
-                    "query_id": search.get("query_id", ""),
-                    "subject_id": desc.get("id", ""),
-                    "subject_title": desc.get("title", ""),
-                    "percent_identity": identity / align_len * 100,
-                    "alignment_length": hsp.get("align_len", 0),
-                    "mismatches": hsp.get("align_len", 0) - identity - gaps,
-                    "gap_opens": gaps,
-                    "query_start": hsp.get("query_from", 0),
-                    "query_end": hsp.get("query_to", 0),
-                    "subject_start": hsp.get("hit_from", 0),
-                    "subject_end": hsp.get("hit_to", 0),
-                    "evalue": hsp.get("evalue", 0),
-                    "bit_score": hsp.get("bit_score", 0),
-                    "query_strand": (
-                        "plus" if hsp.get("query_strand", "Plus") == "Plus" else "minus"
-                    ),
-                    "subject_strand": (
-                        "plus" if hsp.get("hit_strand", "Plus") == "Plus" else "minus"
-                    ),
-                }
-            )
-
-    return {
-        "program": blast_result.get("program", ""),
-        "version": blast_result.get("version", ""),
-        "reference": blast_result.get("reference", ""),
-        "search_target": search.get("search_target", {}),
-        "query_id": search.get("query_id", ""),
-        "query_len": search.get("query_len", 0),
-        "hits": hits,
-        "total_hits": len(hits),
-        "stat": search.get("stat", {}),
-    }
-
-
 # ---------------------------------------------------------------------------
 # Celery task
 # ---------------------------------------------------------------------------
@@ -776,7 +683,6 @@ def run_blast(
     # Validate inputs before doing any work
     validate_program(program)
     validate_sequence(sequence)
-    validate_parameters(parameters)
 
     # ── Idempotent job claim (shared transition validation) ──────────────
     with get_db() as session:
@@ -788,32 +694,30 @@ def run_blast(
     self.update_state(state="STARTED", meta={"progress": 5})
 
     try:
-        # Get database path (downloads from S3 if needed)
+        # Validate parameters and freeze the index before touching the filesystem.
+        cleaned = validate_diamond_parameters(parameters)
         db_path = get_blast_db_path(database)
         self.update_state(state="STARTED", meta={"progress": 10})
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)
             query_path = tmpdir_path / "query.fasta"
-            # Named for the engine: DIAMOND writes tabular output, BLAST JSON.
-            output_path = tmpdir_path / (
-                "results.txt" if resolve_engine(program) == "diamond" else "results.json"
-            )
+            # DIAMOND writes tabular output; the extension must say so.
+            output_path = tmpdir_path / "results.txt"
 
-            # Ensure FASTA format
-            seq = sequence
-            if not seq.startswith(">"):
-                seq = f">query\n{seq}\n"
-            query_path.write_text(seq)
+            # Validate before the filesystem or the search binary is touched.
+            # A direct or redelivered dispatch never passes through the API,
+            # and DIAMOND reports an empty record as an opaque
+            # "Missing fields in input line" only after the job is running.
+            # The shared parser is the same owner the API validated with, so
+            # acceptance cannot differ between the two.
+            try:
+                query = parse_protein_fasta(sequence)
+            except ProteinFastaError as exc:
+                raise ValueError(f"query_sequence: {exc}") from exc
+            query_path.write_text(query.to_fasta)
             self.update_state(state="STARTED", meta={"progress": 15})
 
-            # One decision drives the binary, the parser and the raw file's
-            # extension together. Choosing them independently is how a job ends
-            # up writing TSV into a file called results.json and then failing in
-            # parse_blast_json on the first byte.
-            engine = resolve_engine(program)
-
-            # Run the search (subprocess.run without shell)
             run_blast_command(
                 program=program,
                 db_path=db_path,
@@ -822,27 +726,23 @@ def run_blast(
                 evalue=evalue,
                 word_size=word_size,
                 max_target_seqs=max_target_seqs,
-                extra_args=parameters,
+                extra_args=cleaned,
                 num_threads=num_threads,
-                engine=engine,
             )
             self.update_state(state="STARTED", meta={"progress": 80})
 
-            # Parse results
-            parsed = (
-                parse_diamond_tabular(output_path)
-                if engine == "diamond"
-                else parse_blast_json(output_path)
-            )
+            parsed = parse_diamond_tabular(output_path)
+            # Residues actually searched. Reusing the validated parse instead of
+            # re-reading the file keeps the reported provenance identical to
+            # what the search consumed, and excludes a terminal stop symbol
+            # that ``len(record.seq)`` used to count as a residue.
+            parsed["query_len"] = query.query_length
             self.update_state(state="STARTED", meta={"progress": 90})
 
             # Upload raw results to MinIO (key contains job_id; metadata
             # carries sha256 checksum + size for integrity verification).
             s3_bucket = get_setting("S3_BLAST_BUCKET", "blast-dbs")
-            # The stored object keeps the aligner's own format: a DIAMOND TSV
-            # named .json would be a lie in every later tool that reads it.
-            raw_ext = ".txt" if engine == "diamond" else ".json"
-            s3_key = f"blast-results/{job_id}{raw_ext}"
+            s3_key = f"blast-results/{job_id}.txt"
             checksum, size = _result_file_metadata(output_path)
             upload_file(
                 str(output_path),
@@ -851,15 +751,11 @@ def run_blast(
             )
 
             # Generate pre-signed URL (24 h)
-            presigned_url = generate_presigned_url(
-                f"{s3_bucket}/{s3_key}", expires_in=86400
-            )
+            presigned_url = generate_presigned_url(f"{s3_bucket}/{s3_key}", expires_in=86400)
 
             self.update_state(state="STARTED", meta={"progress": 100})
 
-            logger.info(
-                "BLAST job %s completed: %d hits", job_id, parsed["total_hits"]
-            )
+            logger.info("BLAST job %s completed: %d hits", job_id, parsed["total_hits"])
 
             # Persist parsed hits (delete-then-insert: idempotent on
             # redelivery) and mark the job succeeded — one transaction, and

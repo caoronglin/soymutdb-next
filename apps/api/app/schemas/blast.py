@@ -2,7 +2,10 @@
 
 Validation notes:
 - ``query_sequence`` is checked for FASTA shape and for alphabet membership
-  (nucleotide vs. protein, chosen by ``program``).
+  (nucleotide vs. protein, chosen by ``program``). Protein structure — empty
+  records, duplicate record ids, terminal stops — is decided by
+  :mod:`soymutdb_jobs.protein_fasta`, the one owner shared with the worker,
+  so a submission that is accepted here is searchable there.
 - BLAST parameters are range/whitelist checked here; the service layer maps
   them to worker-safe CLI names (see ``BlastService._worker_parameters``).
 """
@@ -13,7 +16,12 @@ import re
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator
+from soymutdb_jobs.protein_fasta import PROTEIN_ALPHABET as PROTEIN_ALPHABET
+from soymutdb_jobs.protein_fasta import (
+    ProteinFastaError,
+    parse_protein_fasta,
+)
 
 from ..core.compat import StrEnum
 
@@ -24,11 +32,25 @@ _DATABASE_NAME_RE = re.compile(r"[A-Za-z0-9_-]+")
 
 
 class BlastProgram(StrEnum):
+    """Every program value that can appear in a *stored* job row.
+
+    This is a storage/response vocabulary, not a submission contract. The
+    search engine is DIAMOND ``blastp`` only; the other values remain here so
+    that jobs persisted before the engine was reduced can still be read and
+    rendered. :class:`BlastSubmitProgram` is what new requests must use.
+    """
+
     BLASTN = "blastn"
     BLASTP = "blastp"
     BLASTX = "blastx"
     TBLASTN = "tblastn"
     TBLASTX = "tblastx"
+
+
+class BlastSubmitProgram(StrEnum):
+    """The only program this deployment can execute: DIAMOND ``blastp``."""
+
+    BLASTP = "blastp"
 
 
 class BlastJobStatus(StrEnum):
@@ -44,12 +66,15 @@ class BlastJobStatus(StrEnum):
 # Sequence alphabet validation
 # ---------------------------------------------------------------------------
 
-#: IUPAC nucleotide codes (uppercase; ``-`` for gaps).
+#: IUPAC nucleotide codes (uppercase; ``-`` for gaps). Historic vocabulary:
+#: only ``blastp`` is submittable, but stored job rows may still name the
+#: nucleotide programs, so this alphabet stays readable.
 NUCLEOTIDE_ALPHABET = frozenset("ACGTUNRYSWKMBDHVX-")
-#: Standard amino-acid codes plus ambiguity letters and ``*`` (stop/gap).
-PROTEIN_ALPHABET = frozenset("ACDEFGHIKLMNPQRSTVWYBZX*-")
-#: Programs whose *query* is a protein sequence.
-_PROTEIN_QUERY_PROGRAMS = frozenset({"blastp", "tblastn"})
+#: ``PROTEIN_ALPHABET`` is imported above from the shared contract, so the API
+#: and the worker cannot drift apart on what counts as a protein residue.
+#: Programs whose *query* is a protein sequence. The only executable program
+#: is ``blastp``, so every submitted query is protein.
+_PROTEIN_QUERY_PROGRAMS = frozenset({"blastp"})
 
 #: BLAST matrix whitelist (case-insensitive on input).
 ALLOWED_MATRICES = frozenset(
@@ -63,12 +88,13 @@ def validate_sequence_charset(sequence: str, program: str) -> str:
     FASTA header lines (``>``) and whitespace are ignored; raises
     :class:`ValueError` listing the first offending characters.
     """
+    if program in _PROTEIN_QUERY_PROGRAMS:
+        parse_protein_fasta(sequence)
+        return sequence
     body = "".join(
         part for part in sequence.splitlines() if not part.startswith(">")
     )
-    alphabet = (
-        PROTEIN_ALPHABET if program in _PROTEIN_QUERY_PROGRAMS else NUCLEOTIDE_ALPHABET
-    )
+    alphabet = NUCLEOTIDE_ALPHABET
     invalid = sorted(
         {ch.upper() for ch in body.replace(" ", "") if ch.upper() not in alphabet}
     )
@@ -82,15 +108,29 @@ def validate_sequence_charset(sequence: str, program: str) -> str:
 
 class BlastParameters(BaseModel):
     evalue: float = Field(default=1e-5, gt=0)
-    word_size: int | None = Field(default=None, ge=4, le=64)
     max_target_seqs: int = Field(default=50, ge=1, le=500)
     gap_open: int | None = Field(default=None, ge=0)
     gap_extend: int | None = Field(default=None, ge=0)
     matrix: str | None = None
-    dust: bool = True
-    soft_masking: bool = True
-    #: Client-side filter only; not forwarded to the BLAST binary.
+    #: Client-side filter only; not forwarded to the search binary.
     percent_identity: float | None = Field(default=None, ge=0.0, le=100.0)
+    #: Retired NCBI-BLAST inputs. ``BlastParameters`` is a submission-only
+    #: schema (stored job payloads are read as raw dicts), so these are
+    #: rejected outright rather than silently ignored — DIAMOND has no
+    #: equivalent and quietly ignoring them would misreport the search.
+    word_size: int | None = Field(default=None, ge=4, le=64)
+    dust: bool | None = None
+    soft_masking: bool | None = None
+
+    @field_validator("word_size", "dust", "soft_masking")
+    @classmethod
+    def _reject_retired_blast_params(cls, v, info):
+        if v is None:
+            return v
+        raise ValueError(
+            f"parameters.{info.field_name} is a retired NCBI BLAST option; "
+            "this deployment searches with DIAMOND blastp, which has no equivalent"
+        )
 
     @field_validator("matrix")
     @classmethod
@@ -107,7 +147,9 @@ class BlastParameters(BaseModel):
 
 
 class BlastSubmitRequest(BaseModel):
-    program: BlastProgram
+    #: Only DIAMOND ``blastp`` is executable; the wider :class:`BlastProgram`
+    #: vocabulary exists solely to read historical rows.
+    program: BlastSubmitProgram = BlastSubmitProgram.BLASTP
     #: Numeric id of an active database from ``GET /blast/databases``.
     database_id: int | None = Field(default=None, gt=0)
     #: Database *name* alias (e.g. ``"williams82_cds"``); must match an active
@@ -135,24 +177,31 @@ class BlastSubmitRequest(BaseModel):
             )
         return v
 
-    @field_validator("query_sequence")
+    @field_validator("query_sequence", mode="before")
     @classmethod
-    def _validate_fasta(cls, v: str) -> str:
-        stripped = v.strip()
-        if not stripped:
-            raise ValueError("query_sequence must not be empty")
-        if stripped.startswith(">"):
-            lines = stripped.split("\n", 1)
-            if len(lines) < 2 or not lines[1].strip():
-                raise ValueError(
-                    "FASTA input must contain a header line and a sequence"
-                )
-        return stripped
+    def _validate_fasta(cls, v: object) -> str:
+        """Refuse a query the worker could not search.
 
-    @model_validator(mode="after")
-    def _validate_sequence_alphabet(self) -> BlastSubmitRequest:
-        validate_sequence_charset(self.query_sequence, self.program.value)
-        return self
+        ``mode="before"`` so an empty or header-only submission reports the
+        real reason instead of the length cap, which would otherwise fire first
+        and tell the submitter their empty query "should have at least 10
+        characters".
+
+        The previous check only inspected the first header, so a later empty
+        record was accepted here and then failed inside DIAMOND with an opaque
+        ``Missing fields in input line``. Empty records and duplicate record
+        ids are now rejected at submission time with a 422.
+        """
+        if not isinstance(v, str):
+            return v  # type: ignore[return-value]
+        if len(v) > 100_000:
+            # Let the field's size constraint reject before allocating a parse.
+            return v
+        try:
+            parse_protein_fasta(v)
+        except ProteinFastaError as exc:
+            raise ValueError(f"query_sequence: {exc}") from exc
+        return v.strip(" \t\r\n")
 
 
 class BlastJobResponse(BaseModel):

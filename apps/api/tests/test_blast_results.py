@@ -16,7 +16,7 @@ import pytest
 
 from app.core.exceptions import AuthorizationError, NotFoundError
 from app.models.blast import BlastHit, BlastJob, BlastJobStatus
-from app.schemas.blast import BlastProgram, BlastResultResponse
+from app.schemas.blast import BlastResultResponse, BlastSubmitProgram
 from app.services.blast_service import BlastService
 
 
@@ -67,7 +67,7 @@ def _make_job(status: BlastJobStatus, *, result_path: str | None = None) -> Blas
     return BlastJob(
         id=uuid.uuid4(),
         user_id=uuid.uuid4(),
-        program=BlastProgram.BLASTN.value,
+        program=BlastSubmitProgram.BLASTP.value,
         database_id=1,
         query_sequence="ATGCAAGCTTAGCTAGGCTAGGCTAGGC",
         parameters={},
@@ -113,6 +113,26 @@ def _make_hit(job_id: uuid.UUID, hsp_num: int = 1) -> BlastHit:
 
 
 class TestResultsEnvelope:
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("program", ["blastp", "blastn", "blastx", "tblastn", "tblastx"])
+    @pytest.mark.parametrize("query", [">q\nMKTIIA*", ">q\nMKTIIA\n>q\nMKTIIA", ">empty\n"])
+    async def test_historical_queries_and_lengths_survive_service_read(
+        self, program: str, query: str
+    ) -> None:
+        job = _make_job(BlastJobStatus.COMPLETED)
+        job.program = program
+        job.query_sequence = query
+        job.query_len = 7  # historical stop-inclusive length; never recompute
+        session = FakeDbSession(job)
+        service = BlastService()
+        detail = await service.get_job(session, job.id, job.user_id, ["researcher"])
+        result = await service.get_result(session, job.id, job.user_id, ["researcher"])
+        assert detail.query_sequence == query
+        assert detail.program.value == program
+        assert result.program.value == program
+        assert result.query_len == 7
+        assert result.status.value == "completed"
+
     async def _get(self, session: FakeDbSession, job_id: uuid.UUID):
         user_id = session.job.user_id if session.job is not None else uuid.uuid4()
         return await BlastService().get_result(session, job_id, user_id, ["researcher"])
@@ -160,9 +180,7 @@ class TestResultsEnvelope:
 
     @pytest.mark.asyncio
     @patch("app.services.blast_service.generate_presigned_url")
-    async def test_completed_job_returns_real_hits_and_download_url(
-        self, mock_presign
-    ) -> None:
+    async def test_completed_job_returns_real_hits_and_download_url(self, mock_presign) -> None:
         mock_presign.return_value = "https://minio.example/presigned-raw"
         job = _make_job(BlastJobStatus.COMPLETED, result_path="blast-results/x.json")
         session = FakeDbSession(job, hits=[_make_hit(job.id, 1), _make_hit(job.id, 2)])
@@ -192,9 +210,7 @@ class TestResultsEnvelope:
 
     @pytest.mark.asyncio
     @patch("app.services.blast_service.generate_presigned_url")
-    async def test_completed_job_with_zero_hits_is_not_a_placeholder(
-        self, mock_presign
-    ) -> None:
+    async def test_completed_job_with_zero_hits_is_not_a_placeholder(self, mock_presign) -> None:
         mock_presign.return_value = "https://minio.example/presigned-raw"
         job = _make_job(BlastJobStatus.COMPLETED, result_path="blast-results/x.json")
         job.hit_count = 0
@@ -229,26 +245,20 @@ class TestBlastOwnership:
         job = _make_job(BlastJobStatus.PENDING)
         session = FakeDbSession(job)
         with pytest.raises(AuthorizationError):
-            await BlastService().get_job(
-                session, job.id, uuid.uuid4(), ["researcher"]
-            )
+            await BlastService().get_job(session, job.id, uuid.uuid4(), ["researcher"])
 
     @pytest.mark.asyncio
     async def test_owner_blast_status_is_allowed(self) -> None:
         job = _make_job(BlastJobStatus.PENDING)
         session = FakeDbSession(job)
-        response = await BlastService().get_job(
-            session, job.id, job.user_id, ["researcher"]
-        )
+        response = await BlastService().get_job(session, job.id, job.user_id, ["researcher"])
         assert response.job_id == str(job.id)
 
     @pytest.mark.asyncio
     async def test_administrator_can_read_other_users_blast_results(self) -> None:
         job = _make_job(BlastJobStatus.PENDING)
         session = FakeDbSession(job)
-        response = await BlastService().get_result(
-            session, job.id, uuid.uuid4(), ["administrator"]
-        )
+        response = await BlastService().get_result(session, job.id, uuid.uuid4(), ["administrator"])
         assert response.job_id == str(job.id)
 
     @pytest.mark.asyncio

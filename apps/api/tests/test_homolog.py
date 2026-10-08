@@ -19,6 +19,10 @@ from app.core.exceptions import (
     soy_mut_db_exception_handler,
     validation_exception_handler,
 )
+from app.services.release_context import ReleaseContext, get_release_context
+
+#: Release identity the routes are resolved against in this module.
+TEST_RELEASE_ID = 1
 
 # ---------------------------------------------------------------------------
 # Helper utilities
@@ -124,6 +128,12 @@ async def client(mock_session):
 
     app.dependency_overrides[get_db] = override_get_db
 
+    # Keep release-resolution queries out of the two-result mock sequence
+    # reserved for gene resolution and homolog lookup.
+    app.dependency_overrides[get_release_context] = lambda: ReleaseContext(
+        release_id=TEST_RELEASE_ID
+    )
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
@@ -210,7 +220,12 @@ class TestGetGeneHomologs:
         data = response.json()
         assert len(data["homologs"]) == 1
         assert data["has_more"] is True
-        assert data["next_cursor"] == "1"
+        # The cursor is a signed, opaque token: it carries the last id inside an
+        # authenticated payload so a client cannot hand-edit the keyset
+        # position. Asserting a literal "1" would re-assert the plaintext form
+        # that was deliberately removed.
+        assert isinstance(data["next_cursor"], str)
+        assert data["next_cursor"] != "1"
 
     async def test_get_homologs_unknown_gene_is_404(self, client, mock_session):
         """An accession that resolves to no gene must not disclose homologs."""

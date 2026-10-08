@@ -291,7 +291,7 @@ function LocationSearchComponent() {
   return (
     <FadeUp>
       <div className="py-6">
-        <p className="eyebrow">{get("search.location.title", t("search.location.title"))}</p>
+        <h1 className="eyebrow">{get("search.location.title", t("search.location.title"))}</h1>
         <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight">
           {get("search.location.subtitle", t("search.location.subtitle"))}
         </h2>
@@ -308,10 +308,14 @@ function LocationSearchComponent() {
               inputs; a wrap is only ever allowed between groups. */}
           <Flex wrap align="center" gap={20}>
             <Flex align="center" gap={8} className="shrink-0">
-            <span className="whitespace-nowrap text-sm text-muted-foreground">
+            <label
+              htmlFor="location-assembly"
+              className="whitespace-nowrap text-sm text-muted-foreground"
+            >
               {get("search.location.assembly", t("search.location.assembly"))}
-            </span>
+            </label>
             <Select
+              id="location-assembly"
               value={assemblyId}
               onChange={(v) => setAssemblyId(v)}
               placeholder={get("search.location.assemblyPlaceholder", t("search.location.assemblyPlaceholder"))}
@@ -334,10 +338,14 @@ function LocationSearchComponent() {
             </Flex>
 
             <Flex align="center" gap={8} className="shrink-0">
-            <span className="whitespace-nowrap text-sm text-muted-foreground">
+            <label
+              htmlFor="location-chromosome"
+              className="whitespace-nowrap text-sm text-muted-foreground"
+            >
               {get("search.location.chromosome", t("search.location.chromosome"))}
-            </span>
+            </label>
             <Select
+              id="location-chromosome"
               value={chromosome}
               onChange={(v) => setChromosome(v)}
               loading={chromosomesQuery.isLoading}

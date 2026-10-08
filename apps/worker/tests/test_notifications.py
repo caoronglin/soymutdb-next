@@ -72,9 +72,7 @@ class FakeSession:
             if self.existing_link:
                 return _Result([("existing-id",)])
             return _Result([])
-        if table_name in ("blast_jobs", "analysis_jobs", "gwas_jobs") and hasattr(
-            stmt, "_values"
-        ):
+        if table_name in ("blast_jobs", "analysis_jobs", "gwas_jobs") and hasattr(stmt, "_values"):
             # status UPDATE — track transitions like the real stores.
             values = {
                 getattr(key, "name", key): _extract(value)
@@ -135,13 +133,16 @@ class TestNotifyStore:
         """Same job link twice -> second call is skipped (one row only)."""
         session = FakeSession(existing_link="/blast/jobs/abc12345")
         store = NotifyStore(session)
-        assert store.create(
-            user_id="user-1",
-            type="blast_completed",
-            title="t",
-            body="b",
-            link="/blast/jobs/abc12345",
-        ) is False
+        assert (
+            store.create(
+                user_id="user-1",
+                type="blast_completed",
+                title="t",
+                body="b",
+                link="/blast/jobs/abc12345",
+            )
+            is False
+        )
         assert session.inserts == []
 
     def test_create_without_link_always_inserts(self) -> None:
@@ -215,7 +216,9 @@ class TestTriggerHelpers:
         desktop_calls: list[tuple] = []
         monkeypatch.setattr(notifications_module, "get_db", lambda: _fake_db(session))
         monkeypatch.setattr(
-            notifications_module, "desktop_notify", lambda *a, **k: desktop_calls.append((a, k)) or True
+            notifications_module,
+            "desktop_notify",
+            lambda *a, **k: desktop_calls.append((a, k)) or True,
         )
 
         notify_completed("job-abc", kind="blast")
@@ -225,7 +228,9 @@ class TestTriggerHelpers:
         assert row["user_id"] == "user-9"
         assert row["type"] == "blast_completed"
         assert row["link"] == "/blast/jobs/job-abc"
-        assert desktop_calls == [(("[SoyMutDB] BLAST job completed", "BLAST job job-abc… finished successfully."), {})]
+        assert desktop_calls == [
+            (("[SoyMutDB] BLAST job completed", "BLAST job job-abc… finished successfully."), {})
+        ]
 
     def test_notify_failed_includes_error_excerpt(self, monkeypatch) -> None:
         session = FakeSession(user_id="user-9")
@@ -285,11 +290,11 @@ class TestTriggerPoints:
     def _monkeypatch_blast_execution(self, monkeypatch) -> None:
         import soymutdb_worker.tasks.blast as blast_module
 
-        monkeypatch.setattr(blast_module, "get_blast_db_path", lambda db: "/tmp/db")
+        monkeypatch.setattr(blast_module, "get_blast_db_path", lambda db, **kw: "/tmp/db")
         monkeypatch.setattr(blast_module, "run_blast_command", lambda **kw: None)
         monkeypatch.setattr(
             blast_module,
-            "parse_blast_json",
+            "parse_diamond_tabular",
             lambda path: {"hits": [], "total_hits": 0, "query_len": 0},
         )
         monkeypatch.setattr(blast_module, "_result_file_metadata", lambda p: ("abc123", 12))
@@ -317,9 +322,9 @@ class TestTriggerPoints:
             task_name=BLAST_RUN_TASK,
             payload={
                 "job_id": job_id,
-                "program": "blastn",
-                "database": "williams82_cds",
-                "sequence": "ATGCAAGCTTAGCTAGGCTAGGCTAGGC",
+                "program": "blastp",
+                "database": "williams82_prot",
+                "sequence": "MKTIIALSYIFCLVFADYKDDDDKTRWQYNE",
                 "evalue": 0.001,
                 "max_target_seqs": 10,
             },
@@ -357,9 +362,9 @@ class TestTriggerPoints:
             task_name=BLAST_RUN_TASK,
             payload={
                 "job_id": job_id,
-                "program": "blastn",
-                "database": "williams82_cds",
-                "sequence": "ATGCAAGCTTAGCTAGGCTAGGCTAGGC",
+                "program": "blastp",
+                "database": "williams82_prot",
+                "sequence": "MKTIIALSYIFCLVFADYKDDDDKTRWQYNE",
                 "evalue": 0.001,
                 "max_target_seqs": 10,
             },
@@ -420,7 +425,9 @@ class TestDesktopNotify:
         plyer_mod.notification = _FakeNotification
         monkeypatch.setitem(sys.modules, "plyer", plyer_mod)
 
-        assert notify_utils.desktop_notify("Title", "Message", app_name="SoyMutDB", timeout=5) is True
+        assert (
+            notify_utils.desktop_notify("Title", "Message", app_name="SoyMutDB", timeout=5) is True
+        )
         assert shown["title"] == "Title"
         assert shown["message"] == "Message"
         assert shown["app_name"] == "SoyMutDB"

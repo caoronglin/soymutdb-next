@@ -528,7 +528,7 @@ async def seqfetch(
 )
 async def blast_submit(
     query_sequence: str,
-    program: str = "blastn",
+    program: str = "blastp",
     database: str | None = None,
     database_id: int | None = None,
     params: dict[str, Any] | None = None,

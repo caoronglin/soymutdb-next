@@ -152,7 +152,7 @@ function AnalysesIndexComponent() {
                 <FolderOpenOutlined className="size-5" aria-hidden />
               </span>
               <div>
-                <Typography.Title level={2} className="mb-0">
+                <Typography.Title level={1} className="mb-0">
                   {t("analyses.title")}
                 </Typography.Title>
                 <Typography.Paragraph type="secondary" style={{ margin: 0, maxWidth: "52rem" }}>

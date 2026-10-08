@@ -3,8 +3,8 @@
 # SoyMutDB — backend verification (single source for CI and local runs)
 # =============================================================================
 # Owns the ordered, blocking backend gates:
-#   import-architecture guard → API pytest → worker analysis deps →
-#   worker pytest (real PostgreSQL integration required).
+#   import-architecture guard → shared job contract pytest → API pytest →
+#   worker analysis deps → worker pytest (real PostgreSQL integration required).
 #
 # The integration flag is mandatory: a missing Docker/PostgreSQL must fail this
 # script instead of silently skipping the privacy/identity/assembly matrix.
@@ -69,6 +69,13 @@ export SOYMUTDB_RUN_POSTGRES_INTEGRATION=1
 step "Backend import-direction and cycle guard"
 "${VENV_PYTHON}" scripts/check_architecture.py --self-test
 "${VENV_PYTHON}" scripts/check_architecture.py
+
+step "Shared job contract pytest"
+# packages/jobs-py is the canonical owner of the job payloads, the status
+# machine and the protein-FASTA submission contract. Both the API and the
+# worker validate against it, so its own tests belong to this gate; without
+# this step a change to the shared owner would be unexercised here.
+PYTHONPATH="${REPO_ROOT}" "${VENV_PYTHON}" -m pytest packages/jobs-py/tests -q
 
 step "API pytest (full tree)"
 (

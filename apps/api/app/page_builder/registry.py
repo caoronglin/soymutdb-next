@@ -189,7 +189,9 @@ class JbrowseLauncherConfig(_Strict):
 
 
 class BlastLauncherConfig(_Strict):
-    program: Literal["blastn", "blastp", "blastx", "tblastn", "tblastx"] = "blastn"
+    #: The launcher always opens a DIAMOND blastp search; there is no other
+    #: program to preselect, so the field is retained purely for stored configs.
+    program: Literal["blastn", "blastp", "blastx", "tblastn", "tblastx"] = "blastp"
     assembly: str | None = Field(default=None, max_length=128)
 
 

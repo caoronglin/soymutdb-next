@@ -28,7 +28,11 @@ export function ResearcherGate({ children }: { children: React.ReactNode }) {
         image={<SafetyOutlined className="text-4xl text-muted-foreground" aria-hidden />}
         description={
           <div>
-            <p className="font-medium">{t("analyses.gate.title")}</p>
+            {/* The gate is a full-page state: it stands in for the page the
+                visitor asked for, so its message is that page's top heading.
+                A logged-in researcher gets the module's own h1 instead, so the
+                page carries exactly one either way. */}
+            <h1 className="font-medium">{t("analyses.gate.title")}</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {t("analyses.gate.description")}
             </p>

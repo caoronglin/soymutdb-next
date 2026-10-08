@@ -51,7 +51,7 @@ function GbrowseComponent() {
   return (
     <FadeUp>
       <div className="py-6">
-        <p className="eyebrow">{t("search.gbrowse.title")}</p>
+        <h1 className="eyebrow">{t("search.gbrowse.title")}</h1>
         <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight">
           {t("search.gbrowse.subtitle")}
         </h2>
@@ -74,9 +74,11 @@ function GbrowseComponent() {
             <div className="flex flex-wrap items-end gap-3 md:max-w-3xl md:flex-nowrap">
               <Form.Item
                 label={t("search.gbrowse.assembly")}
+                htmlFor="gbrowse-assembly"
                 className="mb-0 min-w-[240px] flex-1"
               >
                 <Select
+                  id="gbrowse-assembly"
                   value={assemblyId}
                   onChange={(v) => setAssemblyId(v)}
                   placeholder={t("search.genes.assemblyPlaceholder")}

@@ -73,6 +73,11 @@ def _parser() -> argparse.ArgumentParser:
         "--sha256",
         help="Optional expected file SHA-256; import always stores the computed digest",
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run the same validation and import inside a transaction, then roll back",
+    )
     return parser
 
 
@@ -112,7 +117,10 @@ async def _run(
                     raise GeneAnnotationImportError(
                         "input file changed between checksum and import; no rows were committed"
                     )
+                if args.dry_run:
+                    await db.rollback()
         return {
+            "dry_run": args.dry_run,
             "annotation_set_id": result.annotation_set_id,
             "row_count": result.row_count,
             "source_sha256": result.source_sha256,
@@ -122,8 +130,8 @@ async def _run(
         await engine.dispose()
 
 
-def main() -> int:
-    args = _parser().parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
     if not args.file.is_file():
         _parser().error(f"input file does not exist: {args.file}")
     try:

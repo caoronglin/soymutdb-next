@@ -16,10 +16,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import re
 import sys
 import tempfile
+from html.parser import HTMLParser
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -31,17 +32,23 @@ APPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("apps/jbrowse", "config/config.ts", ("dist",)),
 )
 
-ICON_LINK = re.compile(r"<link[^>]*rel=\"icon\"[^>]*>", re.IGNORECASE)
-HREF = re.compile(r"href=\"([^\"]+)\"", re.IGNORECASE)
+class _IconParser(HTMLParser):
+    """Recognize the HTML rel token set, including Umi's ``shortcut icon``."""
+
+    href: str | None = None
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attributes = dict(attrs)
+        rel = (attributes.get("rel") or "").lower().split()
+        if tag == "link" and "icon" in rel and self.href is None:
+            self.href = attributes.get("href") or None
 
 
 def icon_href(html: str) -> str | None:
-    """Return the declared icon href, or None when the shell has no icon link."""
-    match = ICON_LINK.search(html)
-    if match is None:
-        return None
-    href = HREF.search(match.group(0))
-    return href.group(1) if href else None
+    """Return a real icon link's href, independent of quote/attribute order."""
+    parser = _IconParser()
+    parser.feed(html)
+    return parser.href
 
 
 def check_shell(
@@ -88,7 +95,20 @@ def run() -> list[str]:
 
 
 def self_test() -> int:
-    """Exercise pass and both failure modes on a throwaway tree."""
+    """Exercise rel tokens, pass, and missing declarations/assets."""
+    for declaration in (
+        '<link rel="icon" href="/favicon.svg">',
+        '<link href="/favicon.svg" rel="shortcut icon">',
+        "<LINK href='/favicon.svg' REL='SHORTCUT ICON' />",
+    ):
+        assert icon_href(declaration) == "/favicon.svg", declaration
+    for invalid in (
+        "<head></head>",
+        '<link rel="apple-touch-icon" href="/favicon.svg">',
+        '<!-- <link rel="icon" href="/favicon.svg"> -->',
+        '<link rel="icon">',
+    ):
+        assert icon_href(invalid) is None, invalid
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         app = root / "apps" / "demo"
@@ -123,6 +143,9 @@ def self_test() -> int:
         check_shell(app, config, (), failures)
         assert any("no matching public/favicon.svg" in item for item in failures), failures
 
+    # Cover the CLI success path too: APPS entries contain three values.
+    with patch(f"{__name__}.run", return_value=[]), patch("sys.argv", [__file__]):
+        assert main() == 0
     print("app shell asset self-test passed")
     return 0
 
@@ -139,7 +162,7 @@ def main() -> int:
         for failure in failures:
             print(f"FAIL: {failure}", file=sys.stderr)
         return 1
-    checked = ", ".join(app for app, _ in APPS)
+    checked = ", ".join(app for app, _, _ in APPS)
     print(f"app shell assets OK ({checked})")
     return 0
 

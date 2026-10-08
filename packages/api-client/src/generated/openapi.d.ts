@@ -5041,8 +5041,6 @@ export interface components {
              * @default 0.00001
              */
             evalue: number;
-            /** Word Size */
-            word_size?: number | null;
             /**
              * Max Target Seqs
              * @default 50
@@ -5054,21 +5052,23 @@ export interface components {
             gap_extend?: number | null;
             /** Matrix */
             matrix?: string | null;
-            /**
-             * Dust
-             * @default true
-             */
-            dust: boolean;
-            /**
-             * Soft Masking
-             * @default true
-             */
-            soft_masking: boolean;
             /** Percent Identity */
             percent_identity?: number | null;
+            /** Word Size */
+            word_size?: number | null;
+            /** Dust */
+            dust?: boolean | null;
+            /** Soft Masking */
+            soft_masking?: boolean | null;
         };
         /**
          * BlastProgram
+         * @description Every program value that can appear in a *stored* job row.
+         *
+         *     This is a storage/response vocabulary, not a submission contract. The
+         *     search engine is DIAMOND ``blastp`` only; the other values remain here so
+         *     that jobs persisted before the engine was reduced can still be read and
+         *     rendered. :class:`BlastSubmitProgram` is what new requests must use.
          * @enum {string}
          */
         BlastProgram: "blastn" | "blastp" | "blastx" | "tblastn" | "tblastx";
@@ -5106,9 +5106,16 @@ export interface components {
             /** Download Url */
             download_url?: string | null;
         };
+        /**
+         * BlastSubmitProgram
+         * @description The only program this deployment can execute: DIAMOND ``blastp``.
+         * @enum {string}
+         */
+        BlastSubmitProgram: "blastp";
         /** BlastSubmitRequest */
         BlastSubmitRequest: {
-            program: components["schemas"]["BlastProgram"];
+            /** @default blastp */
+            program: components["schemas"]["BlastSubmitProgram"];
             /** Database Id */
             database_id?: number | null;
             /** Database */

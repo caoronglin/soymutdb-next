@@ -52,7 +52,7 @@ docker compose ps
 - **Miniforge**（conda）：<https://github.com/conda-forge/miniforge>（`bash Miniforge3-Linux-x86_64.sh` 后 `conda init`，重开 shell）
 - 仓库代码：`git clone ... && cd <repo>`（或同步发布目录）
 - 外部 CLI 二进制（worker 任务依赖，与 pyproject 注释一致，需按任务启用情况安装）：
-  - BLAST：`conda install -n soymutdb-worker -c bioconda blast`（另有 `samtools bcftools tabix bedtools`）
+  - BLAST：`conda install -n soymutdb-worker -c conda-forge -c bioconda blast 'diamond>=2.1,<3'`（另有 `samtools bcftools tabix bedtools`）
   - fastp（analyses 队列）：bioconda 或宿主机二进制
   - EMMAX / GEMMA（GWAS 队列）：引擎二进制由运维安装到 worker 宿主
 
@@ -230,6 +230,6 @@ sudo systemctl restart soymutdb-api soymutdb-worker-default soymutdb-worker-blas
 
 - **API 拒绝启动（prod fail-fast）**：`SOYMUTDB_JWT_SECRET` <32 字符 / CORS 缺失或含 `*` / 凭据仍是 dev 默认值 → 按 §5 修正 `.env`；`conda-deploy.sh` 第 6 步会先拦截同类问题。
 - **任务不进队列**：确认 `SOYMUTDB_CELERY_BROKER_URL` 指向 `redis-celery`（推荐组合为 localhost:6380/0）而不是缓存 `redis`（allkeys-lru 会丢消息）。
-- **worker 缺 BLAST 等二进制**：`conda install -n soymutdb-worker -c bioconda blast samtools bcftools tabix bedtools`。
+- **worker 缺 BLAST 等二进制**：`conda install -n soymutdb-worker -c conda-forge -c bioconda blast 'diamond>=2.1,<3' samtools bcftools tabix bedtools`。
 - **conda env 路径**：`conda env list`；解释器绝对路径 `$(conda info --base)/envs/<name>/bin/python`（systemd 直接用）。
 - **离线安装**：在有网机器 `conda env export > environment.lock.yml` + `conda pack`，拷到离线机解包后改 prefix（`conda-unpack`）。

@@ -63,6 +63,7 @@ class TestExpressionLibraryListQueryCount:
             assembly_id=None,
             page=1,
             page_size=20,
+            release_context=ReleaseContext(release_id=7),
         )
 
         assert result["total"] == 1
@@ -103,6 +104,7 @@ class TestExpressionLibraryListQueryCount:
             assembly_id=None,
             page=1,
             page_size=20,
+            release_context=ReleaseContext(release_id=7),
         )
 
         # The second statement must be the batched IN query over all 3 ids.
@@ -172,6 +174,8 @@ class TestGeneDetailQueryCount:
 
         db = MagicMock()
         db.execute = AsyncMock(return_value=_make_exec_result(scalars_list=[gene]))
+        # get_gene resolves the header's variant total through db.scalar.
+        db.scalar = AsyncMock(return_value=0)
 
         detail = await GeneService().get_gene(
             db,

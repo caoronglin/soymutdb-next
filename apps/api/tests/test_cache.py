@@ -14,13 +14,15 @@ The Redis client is injected explicitly (never the global one), covering:
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
-from unittest.mock import AsyncMock
+from datetime import date, datetime, time, timezone
+from unittest.mock import AsyncMock, MagicMock
+from uuid import UUID
 
 import pytest
+from pydantic import BaseModel
 
 from app.core.metrics import CACHE_LOOKUPS_TOTAL, CACHE_WRITE_FAILURES_TOTAL
-from app.services.cache import get_or_set, make_cache_key
+from app.services.cache import _json_default, get_or_set, make_cache_key
 from app.services.release_context import ReleaseContext
 
 
@@ -71,7 +73,66 @@ class TestMakeCacheKey:
         )
 
 
+class TestJsonDefault:
+    @pytest.mark.parametrize("spec", [None, BaseModel, datetime])
+    def test_dynamic_proxies_are_not_treated_as_serialization_protocols(self, spec):
+        value = MagicMock(spec=spec) if spec is not None else MagicMock()
+        encoded = _json_default(value)
+        assert isinstance(encoded, str)
+        value.assert_not_called()
+        if spec is None or spec is BaseModel:
+            value.model_dump.assert_not_called()
+        if spec is None or spec is datetime:
+            value.isoformat.assert_not_called()
+        # Exercise JSON's default loop, not only the helper in isolation.
+        assert json.loads(json.dumps({"value": value}, default=_json_default)) == {
+            "value": encoded
+        }
+
+    def test_supported_types_preserve_their_cache_wire_representation(self):
+        class Payload(BaseModel):
+            key: UUID
+            at: datetime
+
+        key = UUID("00000000-0000-0000-0000-000000000001")
+        value = {
+            "model": Payload(key=key, at=datetime(2026, 8, 1)),
+            "date": date(2026, 8, 1),
+            "time": time(12, 30),
+            "uuid": key,
+        }
+        assert json.loads(json.dumps(value, default=_json_default)) == {
+            "model": {"key": str(key), "at": "2026-08-01T00:00:00"},
+            "date": "2026-08-01",
+            "time": "12:30:00",
+            "uuid": str(key),
+        }
+
+
 class TestGetOrSet:
+    async def test_proxy_value_returns_without_recursive_cache_encoding(self):
+        redis = FakeRedis()
+        release = MagicMock()
+        identity = {
+            "release_id": int(release.id),
+            "assembly_id": release.assembly_id,
+            "assembly": release.assembly,
+        }
+        # Fail before the live encoding loop if the old unbounded default
+        # conversion is accidentally restored.
+        assert isinstance(_json_default(identity["assembly_id"]), str)
+        assert isinstance(_json_default(identity["assembly"]), str)
+        loader = AsyncMock(return_value=identity)
+        result = await get_or_set("proxy-regression", 60, loader, redis=redis)
+        assert result is identity
+        loader.assert_awaited_once()
+        assert len(redis.setex_calls) == 1
+        stored = json.loads(redis.setex_calls[0][2])
+        assert stored["release_id"] == identity["release_id"]
+        assert isinstance(stored["assembly_id"], str)
+        release.assembly_id.model_dump.assert_not_called()
+        release.assembly.model_dump.assert_not_called()
+
     async def test_cache_hit_skips_loader(self) -> None:
         redis = FakeRedis(store={"cache:demo": json.dumps({"ok": True})})
         loader = AsyncMock(side_effect=AssertionError("loader must not run"))

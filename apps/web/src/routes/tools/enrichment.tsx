@@ -386,7 +386,7 @@ function EnrichmentComponent() {
         <div className="flex items-start gap-3.5">
           <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm"><NodeIndexOutlined className="size-5" aria-hidden /></span>
           <div>
-            <Typography.Title level={2} style={{ margin: 0 }}>{t("tools.enrichment.title")}</Typography.Title>
+            <Typography.Title level={1} style={{ margin: 0 }}>{t("tools.enrichment.title")}</Typography.Title>
             <Typography.Paragraph type="secondary" style={{ margin: 0 }}>{t("tools.enrichment.subtitle")}</Typography.Paragraph>
           </div>
         </div>

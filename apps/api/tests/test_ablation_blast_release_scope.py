@@ -27,7 +27,7 @@ import pytest
 from app.core.exceptions import NotFoundError
 from app.models.blast import BlastDatabase, BlastJob
 from app.models.genomic import Assembly
-from app.schemas.blast import BlastParameters, BlastProgram, BlastSubmitRequest
+from app.schemas.blast import BlastParameters, BlastSubmitProgram, BlastSubmitRequest
 from app.services.blast_service import BlastService
 from app.services.release_context import ReleaseContext
 
@@ -95,7 +95,7 @@ def _make_db(name: str = "williams82_cds", *, assembly_id: int = 1) -> BlastData
     return BlastDatabase(
         id=1,
         name=name,
-        db_type="nucl",
+        db_type="prot",
         assembly_id=assembly_id,
         file_path="/data/dbs/williams82_cds",
         is_active=True,
@@ -117,7 +117,7 @@ def _make_assembly(release_id: int = _RELEASE_ID) -> Assembly:
 
 def _make_request(**overrides: Any) -> BlastSubmitRequest:
     defaults: dict[str, Any] = dict(
-        program=BlastProgram.BLASTN,
+        program=BlastSubmitProgram.BLASTP,
         query_sequence="ATGCAAGCTTAGCTAGGCTAGGCTAGGC",
         parameters=BlastParameters(),
     )
@@ -232,11 +232,7 @@ def test_job_payload_records_release_and_assembly_provenance():
     db = _RecordingDb(blast_db=_make_db())
     request = _make_request(database="williams82_cds")
 
-    asyncio.run(
-        BlastService().submit_job(
-            db, uuid.uuid4(), request, release_context=_context()
-        )
-    )
+    asyncio.run(BlastService().submit_job(db, uuid.uuid4(), request, release_context=_context()))
 
     job = next(obj for obj in db.added if isinstance(obj, BlastJob))
     assert job.database_id == 1

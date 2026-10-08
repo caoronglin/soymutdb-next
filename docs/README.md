@@ -37,6 +37,8 @@
 
 统一在 [`aegis/INDEX.md`](aegis/INDEX.md) 登记（含状态与所属领域）：
 
+- [DIAMOND / Biopython / pyDEG / Rust 审计与实施](aegis/plans/2026-10-05-blast-diamond-and-enrichment-rust.md) — 核实旧报告、修复比对与统计缺陷；比对链路已收敛为 DIAMOND `blastp` 单一引擎；Python 数值核合成基准约 2.14 倍提速，后端根门禁通过；M0–M7 覆盖 Biopython、Rust 真实负载门禁及 pyDEG 环境/作业/切流回滚；M0 真实注释数据仍缺；2026-10-08 撤回“无导入实现”，M0-1 收敛到既有 API draft-only/不可变快照链，补 dry-run、字节摘要和行数核对并退役重复 worker owner；切片 60 通过，根门禁见计划。profiler 区分数据库回放与真实负载，fixture 中位数不降低 Rust ≥20% 完整路径 p95 门槛；生产迁移待执行。
+
 - [`aegis/plans/2026-10-01-admin-pro-migration.md`](aegis/plans/2026-10-01-admin-pro-migration.md) — 管理后台 Pro 迁移 A1–A6（待执行，A5 可并行）
 - [`aegis/plans/2026-10-02-audited-optimization-execution.md`](aegis/plans/2026-10-02-audited-optimization-execution.md) — 审计后总方案（H-01–H-18、W0–W7；**W0–W4 已完成，W6 仅框架**；阶段证据见 [rebaseline](aegis/baseline/2026-10-02-w0-rebaseline.md) §8–§9）
 - [`aegis/plans/2026-09-28-admin-editable-footer-search-font.md`](aegis/plans/2026-09-28-admin-editable-footer-search-font.md) — 页脚/搜索/字体 Task 0–5（Task 1 部分完成）

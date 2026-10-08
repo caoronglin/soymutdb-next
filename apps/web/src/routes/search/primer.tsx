@@ -267,7 +267,7 @@ function PrimerComponent() {
   return (
     <FadeUp>
       <div className="py-6">
-        <p className="eyebrow">{t("search.primer.title")}</p>
+        <h1 className="eyebrow">{t("search.primer.title")}</h1>
         <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight">
           {t("search.primer.subtitle")}
         </h2>
@@ -315,8 +315,13 @@ function PrimerComponent() {
 
               {mode === "region" ? (
                 <div className="grid gap-4 sm:grid-cols-[240px_1fr_1fr_1fr]">
-                  <Form.Item label={t("search.primer.assembly")} className="mb-0">
+                  <Form.Item
+                    label={t("search.primer.assembly")}
+                    htmlFor="primer-assembly"
+                    className="mb-0"
+                  >
                     <Select
+                      id="primer-assembly"
                       value={assemblyId}
                       onChange={(v) => setAssemblyId(v)}
                       placeholder={t("search.genes.assemblyPlaceholder")}

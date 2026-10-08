@@ -3,12 +3,11 @@
 Implements two analysis modes over an assembly-scoped ``gene_annotations``
 table (``assembly_id``, ``gene_id``, ``term_id``, ``term_name``, ``ontology``):
 
-1. **ORA** — hand-written hypergeometric (right-tail) enrichment test with
-   Benjamini-Hochberg multiple-testing correction.  SciPy is deliberately
-   **not** required (not present in ``pyproject.toml``): all statistics are
-   computed with the standard library (``math.lgamma`` / log-space
-   arithmetic), which is numerically stable for the soybean genome scale
-   (~56k background genes).
+1. **ORA** — hypergeometric (inclusive right-tail) enrichment test with
+   Benjamini-Hochberg correction, computed with the standard library
+   (``math.lgamma`` / scaled recurrence / ``math.fsum``). SciPy is a declared
+   API dependency and provides independent numerical oracles in tests. Tolerances are explicit;
+   bitwise equality across implementations is not a scientific requirement.
 
 2. **GSEA** (simplified, numpy) — rank-based gene-set test over a list of
    per-gene values (e.g. log2 fold-changes).  For every annotated term the
@@ -56,10 +55,6 @@ from ..schemas.enrichment import (
     Ontology,
 )
 
-# Guard against pathological right-tail sums (many terms with large K and n);
-# the truncated tail mass is negligible for significance testing.
-_MAX_TAIL_STEPS = 100_000
-
 # Expected table that carries GO/KEGG annotations.
 ANNOTATION_TABLE = "gene_annotations"
 
@@ -88,21 +83,13 @@ def _log_pmf(N: int, K: int, n: int, x: int) -> float:
     )
 
 
-def _logsumexp(logs: list[float]) -> float:
-    """Numerically stable ``log(sum(exp(logs)))``."""
-    if not logs:
-        return -math.inf
-    peak = max(logs)
-    return peak + math.log(sum(math.exp(log - peak) for log in logs))
-
-
 def hypergeom_sf(N: int, K: int, n: int, k: int) -> float:
     """Hypergeometric survival function: P(X >= k).
 
     Draws ``n`` genes without replacement from ``N`` background genes, of
     which ``K`` are annotated to the term; ``k`` of the drawn genes carry the
-    annotation.  Right-tail probabilities are accumulated from the PMF via
-    the log-space ratio recurrence
+    annotation. Tail terms are scaled to the PMF nearest the mean, summed with
+    ``math.fsum`` in constant space, then restored in log space. The recurrence
 
         P(X = x + 1) / P(X = x) = (K - x)/(x + 1) * (n - x)/(N - K - n + x + 1)
 
@@ -116,22 +103,28 @@ def hypergeom_sf(N: int, K: int, n: int, k: int) -> float:
     if k > x_max:
         return 0.0
 
-    tail: list[float] = []
-    log_p = _log_pmf(N, K, n, x_min)
-    x = x_min
-    while x <= x_max:
-        if x >= k:
-            tail.append(log_p)
-            if len(tail) >= _MAX_TAIL_STEPS:
-                break
-        if x == x_max:
-            break
-        # P(X = x + 1) / P(X = x) recurrence (all factors >= 1 in this range).
-        log_p += math.log(K - x) - math.log(x + 1)
-        log_p += math.log(n - x) - math.log(N - K - n + x + 1)
-        x += 1
+    # Sum the lower tail only below the mean; complementing a probability near
+    # one above the mean would erase tiny, significant right-tail probabilities.
+    lower_tail = k * N <= n * K
+    start = k - 1 if lower_tail else k
 
-    return float(math.exp(_logsumexp(tail)))
+    def scaled_terms():
+        # Walk away from the mean, avoiding enormous ratios from starting at
+        # a remote support boundary. Keep all support terms: no fixed cutoff.
+        weight = 1.0
+        yield weight
+        if lower_tail:
+            for x in range(start, x_min, -1):
+                weight *= (x * (N - K - n + x)) / ((K - x + 1) * (n - x + 1))
+                yield weight
+        else:
+            for x in range(start, x_max):
+                weight *= ((K - x) * (n - x)) / ((x + 1) * (N - K - n + x + 1))
+                yield weight
+
+    log_probability = min(0.0, _log_pmf(N, K, n, start) + math.log(math.fsum(scaled_terms())))
+    probability = -math.expm1(log_probability) if lower_tail else math.exp(log_probability)
+    return min(1.0, max(0.0, probability))
 
 
 def benjamini_hochberg(p_values: list[float]) -> list[float]:
@@ -223,8 +216,7 @@ async def fetch_annotations(
     try:
         columns = await connection.run_sync(
             lambda sync_conn: {
-                column["name"]
-                for column in inspect(sync_conn).get_columns(ANNOTATION_TABLE)
+                column["name"] for column in inspect(sync_conn).get_columns(ANNOTATION_TABLE)
             }
         )
     except Exception as exc:
@@ -319,8 +311,7 @@ async def fetch_annotation_source(
     try:
         source_columns = await connection.run_sync(
             lambda sync_conn: {
-                column["name"]
-                for column in inspect(sync_conn).get_columns("gene_annotation_sets")
+                column["name"] for column in inspect(sync_conn).get_columns("gene_annotation_sets")
             }
         )
     except Exception as exc:
@@ -550,11 +541,7 @@ def compute_enrichment(
     # BH correction across every tested term, then filter by raw p-value.
     q_values = benjamini_hochberg([s.p_value for s in stats])
 
-    significant = [
-        (s, q)
-        for s, q in zip(stats, q_values)
-        if s.p_value <= p_threshold
-    ]
+    significant = [(s, q) for s, q in zip(stats, q_values) if s.p_value <= p_threshold]
     significant.sort(key=lambda sq: (sq[1], sq[0].p_value, sq[0].term_id))
 
     terms = [
@@ -699,11 +686,7 @@ def compute_gsea_enrichment(
     # BH correction across every tested term, then filter by raw p-value.
     q_values = benjamini_hochberg([s.p_value for s in stats])
 
-    significant = [
-        (s, q)
-        for s, q in zip(stats, q_values)
-        if s.p_value <= p_threshold
-    ]
+    significant = [(s, q) for s, q in zip(stats, q_values) if s.p_value <= p_threshold]
     significant.sort(key=lambda sq: (sq[1], sq[0].p_value, sq[0].term_id))
 
     terms = [
@@ -817,9 +800,7 @@ async def run_gsea_enrichment(
     )
 
 
-async def _resolve_assembly(
-    db: AsyncSession, assembly_id: int, release_id: int
-) -> Assembly:
+async def _resolve_assembly(db: AsyncSession, assembly_id: int, release_id: int) -> Assembly:
     result = await db.execute(
         select(Assembly).where(
             Assembly.id == assembly_id,

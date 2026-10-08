@@ -37,7 +37,7 @@ async def active_release(db_session):
 class TestGlobalSearch:
     """Tests for GET /api/v1/search."""
 
-    async def test_search_returns_results(self, client):
+    async def test_search_returns_results(self, client, active_release):
         """Global search returns matching results across entity types."""
         mock_response = {
             "query": "disease",
@@ -71,17 +71,17 @@ class TestGlobalSearch:
         assert len(data["results"]) == 2
         assert data["results"][0]["type"] == "gene"
 
-    async def test_search_empty_query_rejected(self, client):
+    async def test_search_empty_query_rejected(self, client, active_release):
         """Empty query string returns 422."""
         response = await client.get(f"{SEARCH_PREFIX}?query=")
         assert response.status_code == 422
 
-    async def test_search_missing_query_param(self, client):
+    async def test_search_missing_query_param(self, client, active_release):
         """Missing query parameter returns 422."""
         response = await client.get(SEARCH_PREFIX)
         assert response.status_code == 422
 
-    async def test_search_with_type_filter(self, client):
+    async def test_search_with_type_filter(self, client, active_release):
         """Search with type filter returns only matching types."""
         mock_response = {
             "query": "Glyma",
@@ -106,7 +106,7 @@ class TestGlobalSearch:
         data = response.json()
         assert all(r["type"] == "gene" for r in data["results"])
 
-    async def test_search_limit_parameter(self, client):
+    async def test_search_limit_parameter(self, client, active_release):
         """Search respects the limit parameter."""
         mock_response = {
             "query": "test",
@@ -121,7 +121,7 @@ class TestGlobalSearch:
             response = await client.get(f"{SEARCH_PREFIX}?query=test&limit=5")
         assert response.status_code == 200
 
-    async def test_search_forwards_optional_assembly_context(self, client):
+    async def test_search_forwards_optional_assembly_context(self, client, active_release):
         """The public JSON route preserves an explicit assembly selection."""
         mock_response = {
             "query": "Glyma",
@@ -145,7 +145,7 @@ class TestGlobalSearch:
         assert search.await_args.kwargs["assembly_id"] == 11
         assert search.await_args.kwargs["site_variant"] == SiteVariant.EXTERNAL
 
-    async def test_search_limit_max_50(self, client):
+    async def test_search_limit_max_50(self, client, active_release):
         """Search limit is capped at 50."""
         mock_response = {
             "query": "test",

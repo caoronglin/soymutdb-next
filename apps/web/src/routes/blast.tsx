@@ -102,11 +102,10 @@ type BlastHitLoose = {
   score?: number;
 };
 
-// Wireframe: the BLAST type dropdown is restricted to nucleotide (blastn)
-// and protein (blastp) searches — other programs remain supported server-side.
-const BLAST_PROGRAM_OPTIONS = BLAST_PROGRAMS.filter(
-  (p) => p.id === "blastn" || p.id === "blastp",
-);
+// The only executable program is DIAMOND blastp (protein vs protein). The
+// API still reports the wider BlastProgram vocabulary for jobs stored before
+// the engine was reduced, so history rendering must keep using those labels.
+const BLAST_PROGRAM = BLAST_PROGRAMS[0];
 
 const blastSchema = z.object({
   program: z.string().min(1),
@@ -174,9 +173,8 @@ function BlastComponent() {
   // bounced the whole page to /login and made the published route unreachable.
   const { user, isLoading: currentUserLoading } = useCurrentUser();
   const isSignedIn = user != null;
-  // Defaults to blastp: protein/protein is the search this deployment is for,
-  // and it is the one the DIAMOND backend answers (BLAST_ENGINE=auto routes
-  // blastp and blastx to DIAMOND, and everything else to BLAST).
+  // Defaults to blastp: protein/protein is the only program this deployment
+  // executes, and DIAMOND is the only aligner behind it.
   const [form, setForm] = React.useState({
     program: "blastp",
     database: "",
@@ -544,14 +542,19 @@ function BlastComponent() {
               help={errors.program ?? undefined}
               validateStatus={errors.program ? "error" : undefined}
             >
-              <Select
+              {/* One executable program, so a dropdown would be a control that
+                  cannot change anything. A read-only value states the contract
+                  without inviting a click. */}
+              <div
                 id="program"
                 data-testid="blast-program"
-                size="large"
-                value={form.program}
-                onChange={(v) => setForm((f) => ({ ...f, program: v }))}
-                options={BLAST_PROGRAM_OPTIONS.map((p) => ({ value: p.id, label: p.label }))}
-              />
+                className="flex h-8 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-sm"
+              >
+                <span className="font-medium">{BLAST_PROGRAM.label}</span>
+                <span className="text-xs text-muted-foreground">
+                  {t("blast.proteinOnlyHint")}
+                </span>
+              </div>
             </Form.Item>
 
             <Form.Item

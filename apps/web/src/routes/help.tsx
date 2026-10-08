@@ -44,7 +44,7 @@ function HelpComponent() {
             <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
               <Rocket className="size-5" aria-hidden />
             </div>
-            <Typography.Title className="mt-2 text-base">{get("help.gettingStarted", t("help.gettingStarted"))}</Typography.Title>
+            <Typography.Title level={2} className="mt-2 text-base">{get("help.gettingStarted", t("help.gettingStarted"))}</Typography.Title>
             <Typography.Text>{t("help.quickStartDesc")}</Typography.Text>
           </div>
           <div className="mt-4">
@@ -62,7 +62,7 @@ function HelpComponent() {
             <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
               <BookOpen className="size-5" aria-hidden />
             </div>
-            <Typography.Title className="mt-2 text-base">{get("help.documentation", t("help.documentation"))}</Typography.Title>
+            <Typography.Title level={2} className="mt-2 text-base">{get("help.documentation", t("help.documentation"))}</Typography.Title>
             <Typography.Text>{t("help.documentationDesc")}</Typography.Text>
           </div>
           <div className="mt-4">
@@ -79,7 +79,7 @@ function HelpComponent() {
             <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
               <Mail className="size-5" aria-hidden />
             </div>
-            <Typography.Title className="mt-2 text-base">{get("help.contact", t("help.contact"))}</Typography.Title>
+            <Typography.Title level={2} className="mt-2 text-base">{get("help.contact", t("help.contact"))}</Typography.Title>
             <Typography.Text>{t("help.contactDesc")}</Typography.Text>
           </div>
           <div className="mt-4">
@@ -91,7 +91,7 @@ function HelpComponent() {
       <FadeUp>
         <Card className="mt-8">
           <div>
-            <Typography.Title className="flex items-center gap-2">
+            <Typography.Title level={2} className="flex items-center gap-2">
               <HelpCircle className="size-5 text-primary" aria-hidden />
               {get("help.faq", t("help.faq"))}
             </Typography.Title>

@@ -43,6 +43,7 @@ from .blast import (
     BlastParameters,
     BlastProgram,
     BlastResultResponse,
+    BlastSubmitProgram,
     BlastSubmitRequest,
 )
 from .content import (
@@ -122,6 +123,7 @@ __all__ = [
     "BlastProgram",
     "BlastResultResponse",
     "BlastSubmitRequest",
+    "BlastSubmitProgram",
     "ChartDataResponse",
     "ChartSeries",
     "ChromosomeDensity",

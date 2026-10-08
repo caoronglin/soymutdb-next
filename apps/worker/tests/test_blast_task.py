@@ -9,7 +9,6 @@ failed, and the payload contract must be validated.
 from __future__ import annotations
 
 import hashlib
-import json
 import uuid
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -44,7 +43,11 @@ class FakeSession:
         self.rowcount = rowcount
         self.inserted_hits: list[dict] = []
         self.deleted_hits = 0
-
+        # Every row update this fake was asked to persist, so a test can assert
+        # what the job row will actually carry (error reason, query_len)
+        # instead of inferring it from the task's return value.
+        self.updates: list[dict] = []
+        self.error: str | None = None
     def execute(self, stmt, params=None):
         table = getattr(stmt, "table", None)
         table_name = getattr(table, "name", None)
@@ -57,6 +60,10 @@ class FakeSession:
                 getattr(key, "name", key): _extract(value)
                 for key, value in dict(getattr(stmt, "_values", {}) or {}).items()
             }
+            if values:
+                self.updates.append(values)
+            if "error_message" in values:
+                self.error = values["error_message"]
             if "status" in values:
                 self.status = values["status"]
                 return _FakeResult([], rowcount=self.rowcount)
@@ -86,8 +93,8 @@ def _payload(job_id: str | None = None, task_name: str = BLAST_RUN_TASK) -> dict
         task_name=task_name,
         payload={
             "job_id": job_id,
-            "program": "blastn",
-            "database": "williams82_cds",
+            "program": "blastp",
+            "database": "williams82_prot",
             "sequence": "ATGCAAGCTTAGCTAGGCTAGGCTAGGC",
             "evalue": 0.001,
             "max_target_seqs": 10,
@@ -105,18 +112,19 @@ def _fake_db(session: FakeSession):
 
 
 def _monkeypatch_execution(monkeypatch, *, fail: bool = False) -> None:
-    monkeypatch.setattr(blast_module, "get_blast_db_path", lambda db: "/tmp/db")
+    monkeypatch.setattr(blast_module, "get_blast_db_path", lambda db, **kw: Path("/tmp/db"))
+    monkeypatch.setattr(blast_module, "validate_diamond_parameters", lambda p: dict(p or {}))
     if fail:
 
         def boom(*args, **kwargs):
-            raise RuntimeError("blast binary exploded")
+            raise RuntimeError("search binary exploded")
 
         monkeypatch.setattr(blast_module, "run_blast_command", boom)
     else:
         monkeypatch.setattr(blast_module, "run_blast_command", lambda **kw: None)
     monkeypatch.setattr(
         blast_module,
-        "parse_blast_json",
+        "parse_diamond_tabular",
         lambda path: {"hits": [], "total_hits": 0, "query_len": 0},
     )
     monkeypatch.setattr(blast_module, "_result_file_metadata", lambda p: ("abc123", 12))
@@ -171,7 +179,7 @@ def test_successful_run_advances_status_to_completed(monkeypatch) -> None:
     result = _call_task(blast_module.run_blast, FakeTask(), payload=payload)
 
     assert result["total_hits"] == 0
-    assert result["result_s3_path"] == "blast-results/" + payload["payload"]["job_id"] + ".json"
+    assert result["result_s3_path"] == "blast-results/" + payload["payload"]["job_id"] + ".txt"
     # pending -> running -> completed
     assert session.status == "completed"
 
@@ -182,7 +190,7 @@ def test_failed_run_marks_job_failed(monkeypatch) -> None:
     monkeypatch.setattr(blast_module, "get_db", lambda: _fake_db(session))
     _monkeypatch_execution(monkeypatch, fail=True)
 
-    with pytest.raises(RuntimeError, match="blast binary exploded"):
+    with pytest.raises(RuntimeError, match="search binary exploded"):
         _call_task(blast_module.run_blast, FakeTask(), payload=payload)
 
     assert session.status == "failed"
@@ -212,9 +220,9 @@ def test_legacy_kwargs_dispatch_still_works(monkeypatch) -> None:
         blast_module.run_blast,
         FakeTask(),
         job_id=job_id,
-        program="blastn",
-        database="williams82_cds",
-        sequence="ATGCAAGCTTAGCTAGGCTAGGCTAGGC",
+        program="blastp",
+        database="williams82_prot",
+        sequence="MKTIIALSYIFCLVFADYKDDDDKTRWQYNE",
     )
 
     assert result["total_hits"] == 0
@@ -223,7 +231,7 @@ def test_legacy_kwargs_dispatch_still_works(monkeypatch) -> None:
 
 def test_legacy_kwargs_require_job_id() -> None:
     with pytest.raises(TypeError):
-        _call_task(blast_module.run_blast, FakeTask(), program="blastn")
+        _call_task(blast_module.run_blast, FakeTask(), program="blastp")
 
 
 # ---------------------------------------------------------------------------
@@ -258,11 +266,11 @@ def test_hits_persisted_and_uploaded_with_metadata(monkeypatch) -> None:
     job_id = payload["payload"]["job_id"]
     session = FakeSession(status="pending")
     monkeypatch.setattr(blast_module, "get_db", lambda: _fake_db(session))
-    monkeypatch.setattr(blast_module, "get_blast_db_path", lambda db: "/tmp/db")
+    monkeypatch.setattr(blast_module, "get_blast_db_path", lambda db, **kw: "/tmp/db")
     monkeypatch.setattr(blast_module, "run_blast_command", lambda **kw: None)
     monkeypatch.setattr(
         blast_module,
-        "parse_blast_json",
+        "parse_diamond_tabular",
         lambda path: {
             "hits": [_hit_row(1), _hit_row(2)],
             "total_hits": 2,
@@ -287,7 +295,7 @@ def test_hits_persisted_and_uploaded_with_metadata(monkeypatch) -> None:
     assert result["checksum"] == "deadbeef"
     # Raw output object: bucket/key — the key contains the job id and the
     # metadata carries checksum + size.
-    assert uploads["s3"] == f"blast-dbs/blast-results/{job_id}.json"
+    assert uploads["s3"] == f"blast-dbs/blast-results/{job_id}.txt"
     assert uploads["metadata"] == {"checksum": "deadbeef", "size": "42"}
     # Hits were persisted (delete-then-insert) with job_id attached.
     assert len(session.inserted_hits) == 2
@@ -302,11 +310,11 @@ def test_redelivery_replaces_hits_without_duplication(monkeypatch) -> None:
     job_id = payload["payload"]["job_id"]
     session = FakeSession(status="running")  # resume path after crash
     monkeypatch.setattr(blast_module, "get_db", lambda: _fake_db(session))
-    monkeypatch.setattr(blast_module, "get_blast_db_path", lambda db: "/tmp/db")
+    monkeypatch.setattr(blast_module, "get_blast_db_path", lambda db, **kw: "/tmp/db")
     monkeypatch.setattr(blast_module, "run_blast_command", lambda **kw: None)
     monkeypatch.setattr(
         blast_module,
-        "parse_blast_json",
+        "parse_diamond_tabular",
         lambda path: {"hits": [_hit_row(1)], "total_hits": 1, "query_len": 100},
     )
     monkeypatch.setattr(blast_module, "_result_file_metadata", lambda p: ("abc", 1))
@@ -331,70 +339,14 @@ def test_result_file_metadata_sha256(tmp_path) -> None:
     assert checksum == hashlib.sha256(b"hello world").hexdigest()
 
 
-def test_parse_blast_json_fixture(tmp_path) -> None:
-    """Parser converts a real outfmt-15 JSON report into flat hit rows."""
-    fixture = {
-        "BlastOutput2": [
-            {
-                "report": {
-                    "program": "blastn",
-                    "version": "2.15.0+",
-                    "reference": "ref",
-                    "results": {
-                        "search": {
-                            "query_id": "query",
-                            "query_len": 120,
-                            "hits": [
-                                {
-                                    "description": [
-                                        {"id": "Glyma.01G000100.1", "title": "soy gene"}
-                                    ],
-                                    "hsps": [
-                                        {
-                                            "align_len": 120,
-                                            "identity": 118,
-                                            "gaps": 1,
-                                            "query_from": 1,
-                                            "query_to": 120,
-                                            "hit_from": 10,
-                                            "hit_to": 129,
-                                            "evalue": 1e-40,
-                                            "bit_score": 200.5,
-                                            "query_strand": "Plus",
-                                            "hit_strand": "Minus",
-                                        }
-                                    ],
-                                }
-                            ],
-                            "stat": {"db_num": 1},
-                        }
-                    },
-                }
-            }
-        ]
-    }
-    src = tmp_path / "out.json"
-    src.write_text(json.dumps(fixture))
-    parsed = blast_module.parse_blast_json(src)
-    assert parsed["total_hits"] == 1
-    assert parsed["query_len"] == 120
-    hit = parsed["hits"][0]
-    assert hit["subject_id"] == "Glyma.01G000100.1"
-    assert hit["percent_identity"] == pytest.approx(118 / 120 * 100)
-    assert hit["evalue"] == 1e-40
-    assert hit["bit_score"] == 200.5
-    assert hit["query_strand"] == "plus"
-    assert hit["subject_strand"] == "minus"
-
-
 def test_run_blast_command_isolates_env_and_forbids_shell(monkeypatch, tmp_path) -> None:
     """subprocess.run gets a minimal env, no shell, and a pure arg list."""
     import subprocess
 
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "blastn").touch()
-    monkeypatch.setattr(blast_module, "BLAST_BIN_DIR", bin_dir)
+    diamond = tmp_path / "diamond"
+    diamond.touch()
+    diamond.chmod(0o755)
+    monkeypatch.setattr(blast_module, "DIAMOND_BIN", diamond)
 
     captured = {}
 
@@ -406,12 +358,12 @@ def test_run_blast_command_isolates_env_and_forbids_shell(monkeypatch, tmp_path)
     monkeypatch.setattr(blast_module.subprocess, "run", fake_run)
 
     blast_module.run_blast_command(
-        "blastn",
+        "blastp",
         Path("/tmp/db"),
         Path("/tmp/q.fa"),
-        Path("/tmp/out.json"),
+        Path("/tmp/out.txt"),
         evalue=0.01,
-        extra_args={"gapopen": 5, "dust": "no"},
+        extra_args={"gapopen": 5},
     )
 
     assert captured["kwargs"]["shell"] is False
@@ -422,24 +374,24 @@ def test_run_blast_command_isolates_env_and_forbids_shell(monkeypatch, tmp_path)
     # No ambient secrets from the parent environment.
     assert env.get("AWS_SECRET_ACCESS_KEY") is None
     cmd = captured["cmd"]
-    assert cmd[0] == str(bin_dir / "blastn")
-    assert "-gapopen" in cmd and "5" in cmd
-    assert "-dust" in cmd
+    assert cmd[0] == str(diamond)
+    assert cmd[1] == "blastp"
+    assert "--gapopen" in cmd and "5" in cmd
+    # NCBI-only flags must never reach DIAMOND.
+    assert "-dust" not in cmd and "--dust" not in cmd
 
 
 def test_run_blast_command_rejects_disallowed_parameter(monkeypatch, tmp_path) -> None:
     """Unknown parameters are rejected, never forwarded to the CLI."""
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "blastn").touch()
-    monkeypatch.setattr(blast_module, "BLAST_BIN_DIR", bin_dir)
+    diamond = _installed(tmp_path)
+    monkeypatch.setattr(blast_module, "DIAMOND_BIN", diamond)
 
-    with pytest.raises(ValueError, match="Disallowed BLAST parameter"):
+    with pytest.raises(ValueError, match="Disallowed DIAMOND parameter"):
         blast_module.run_blast_command(
-            "blastn",
+            "blastp",
             Path("/tmp/db"),
             Path("/tmp/q.fa"),
-            Path("/tmp/out.json"),
+            Path("/tmp/out.txt"),
             extra_args={"output": "/etc/passwd"},  # injection attempt
         )
 
@@ -451,15 +403,15 @@ def test_timeout_marks_job_failed(monkeypatch) -> None:
     payload = _payload()
     session = FakeSession(status="pending")
     monkeypatch.setattr(blast_module, "get_db", lambda: _fake_db(session))
-    monkeypatch.setattr(blast_module, "get_blast_db_path", lambda db: "/tmp/db")
+    monkeypatch.setattr(blast_module, "get_blast_db_path", lambda db, **kw: "/tmp/db")
 
     def timeout(*args, **kwargs):
-        raise subprocess.TimeoutExpired("blastn", 3600)
+        raise subprocess.TimeoutExpired("diamond", 3600)
 
     monkeypatch.setattr(blast_module, "run_blast_command", timeout)
     monkeypatch.setattr(
         blast_module,
-        "parse_blast_json",
+        "parse_diamond_tabular",
         lambda path: {"hits": [], "total_hits": 0, "query_len": 0},
     )
 
@@ -487,15 +439,22 @@ def test_error_message_scrubs_query_sequence() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_get_blast_db_path_uses_whitelist_mapping(monkeypatch) -> None:
-    """With BLAST_DATABASE_PATHS configured the mapped index path is used."""
-    monkeypatch.setattr(
-        blast_module,
-        "BLAST_DATABASE_PATHS",
-        {"wm82.a2.v1": "/data/genomes/wm82.a2.v1/wm82.a2.v1"},
-    )
-    path = blast_module.get_blast_db_path("wm82.a2.v1")
-    assert path == Path("/data/genomes/wm82.a2.v1/wm82.a2.v1")
+def test_get_blast_db_path_uses_whitelist_mapping(monkeypatch, tmp_path) -> None:
+    """A versioned basename is preserved when resolving the DIAMOND index."""
+    base = tmp_path / "wm82.a2.v1"
+    Path(f"{base}.dmnd").write_text("index")
+    monkeypatch.setattr(blast_module, "BLAST_DATABASE_PATHS", {"wm82.a2.v1": str(base)})
+    assert blast_module.get_blast_db_path("wm82.a2.v1") == base
+
+
+def test_get_blast_db_path_rejects_a_legacy_blast_index(monkeypatch, tmp_path) -> None:
+    """A makeblastdb product is not a DIAMOND index and must not be used as one."""
+    base = tmp_path / "wm82.a2.v1"
+    for suffix in (".pin", ".phr", ".psq"):
+        Path(f"{base}{suffix}").write_text("index")
+    monkeypatch.setattr(blast_module, "BLAST_DATABASE_PATHS", {"wm82.a2.v1": str(base)})
+    with pytest.raises(blast_module.DatabaseIndexUnavailable):
+        blast_module.get_blast_db_path("wm82.a2.v1")
 
 
 def test_get_blast_db_path_rejects_unlisted_database_when_whitelist_configured(
@@ -519,9 +478,9 @@ def test_get_blast_db_path_legacy_fallback_uses_cache(monkeypatch, tmp_path) -> 
     """Empty whitelist keeps the legacy cache behaviour for valid names."""
     monkeypatch.setattr(blast_module, "BLAST_DATABASE_PATHS", {})
     monkeypatch.setattr(blast_module, "BLAST_CACHE_DIR", tmp_path)
-    (tmp_path / "williams82_cds.nin").touch()
+    (tmp_path / "williams82_prot.dmnd").write_text("index")
 
-    assert blast_module.get_blast_db_path("williams82_cds") == tmp_path / "williams82_cds"
+    assert blast_module.get_blast_db_path("williams82_prot") == tmp_path / "williams82_prot"
 
 
 def test_get_blast_db_path_legacy_still_rejects_traversal(monkeypatch) -> None:
@@ -540,12 +499,12 @@ def test_run_blast_forwards_payload_database_to_path_resolver(monkeypatch) -> No
     monkeypatch.setattr(
         blast_module,
         "get_blast_db_path",
-        lambda db: captured.setdefault("db", db) or "/tmp/db",
+        lambda db, **kw: captured.setdefault("db", db) or "/tmp/db",
     )
     monkeypatch.setattr(blast_module, "run_blast_command", lambda **kw: None)
     monkeypatch.setattr(
         blast_module,
-        "parse_blast_json",
+        "parse_diamond_tabular",
         lambda path: {"hits": [], "total_hits": 0, "query_len": 0},
     )
     monkeypatch.setattr(blast_module, "_result_file_metadata", lambda p: ("abc", 1))
@@ -569,7 +528,7 @@ def test_run_blast_with_unlisted_database_fails_job(monkeypatch) -> None:
     monkeypatch.setattr(
         blast_module,
         "BLAST_DATABASE_PATHS",
-        {"williams82_cds": "/data/dbs/williams82_cds"},
+        {"williams82_prot": "/data/dbs/williams82_prot"},
     )
     # get_blast_db_path is NOT mocked: the real whitelist check must reject.
 
@@ -632,19 +591,18 @@ def test_diamond_command_rejects_blast_only_parameters() -> None:
         )
 
 
-def test_diamond_command_translates_word_size_to_kebab_case() -> None:
-    cmd = blast_module.build_diamond_command(
-        "blastp",
-        Path("/db/x.dmnd"),
-        Path("/tmp/q.faa"),
-        Path("/tmp/out.txt"),
-        evalue=1e-5,
-        max_target_seqs=50,
-        num_threads=1,
-        extra_args={"word_size": 5},
-    )
-    assert "--word-size" in cmd
-    assert "-word_size" not in cmd
+def test_diamond_command_rejects_unsupported_word_size() -> None:
+    with pytest.raises(ValueError, match="Disallowed DIAMOND parameter"):
+        blast_module.build_diamond_command(
+            "blastp",
+            Path("/db/x.dmnd"),
+            Path("/tmp/q.faa"),
+            Path("/tmp/out.txt"),
+            evalue=1e-5,
+            max_target_seqs=50,
+            num_threads=1,
+            extra_args={"word_size": 5},
+        )
 
 
 def test_parse_diamond_tabular_maps_columns_without_recomputing_identity(tmp_path) -> None:
@@ -705,99 +663,9 @@ def test_parse_diamond_tabular_accepts_an_empty_result(tmp_path) -> None:
     assert parsed["hits"] == []
 
 
-@pytest.mark.parametrize(
-    ("program", "expected"),
-    [
-        ("blastp", "diamond"),
-        ("blastx", "diamond"),
-        # DIAMOND has no nucleotide/nucleotide equivalent; these must not be
-        # routed to it, or every such job fails.
-        ("blastn", "blast"),
-        ("tblastn", "blast"),
-        ("tblastx", "blast"),
-    ],
-)
-def test_auto_engine_routes_each_program_to_the_one_that_implements_it(
-    program: str, expected: str, tmp_path, monkeypatch
-) -> None:
-    # Availability is pinned deliberately: this case is about which engine
-    # *implements* a program. Whether a missing binary downgrades the route is
-    # asserted separately in the engine-availability block below.
-    monkeypatch.setattr(blast_module, "DIAMOND_BIN", _installed(tmp_path))
-    assert blast_module.resolve_engine(program, "auto") == expected
-
-
-def test_auto_is_the_default_engine(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(blast_module, "DIAMOND_BIN", _installed(tmp_path))
-    assert blast_module.BLAST_ENGINE == "auto"
-    assert blast_module.resolve_engine("blastp") == "diamond"
-    assert blast_module.resolve_engine("blastn") == "blast"
-
-
-def test_forcing_diamond_for_blastn_raises_instead_of_falling_back() -> None:
-    """A forced engine that silently becomes the other one hides the mistake."""
-    with pytest.raises(ValueError, match="does not implement"):
-        blast_module.resolve_engine("blastn", "diamond")
-
-
-def test_explicit_blast_engine_always_wins() -> None:
-    assert blast_module.resolve_engine("blastp", "blast") == "blast"
-
-
-def test_unknown_engine_is_rejected() -> None:
-    with pytest.raises(ValueError, match="Unknown aligner"):
-        blast_module.resolve_engine("blastp", "clustal")
-
-
-# Engine availability
-# ---------------------------------------------------------------------------
-# DIAMOND landed in 2debd36aa touching only blast.py and its tests: the worker
-# image never gained the binary and no deployment file or doc ever mentioned
-# it. With the default BLAST_ENGINE=auto, `blastp` resolved to DIAMOND and then
-# raised "DIAMOND binary not found" on every job.
-#
-# The availability check has to live in resolve_engine, not in
-# run_blast_command: one decision drives the binary, the parser and the output
-# file's extension (see the task body), so a fallback taken later would leave
-# the parser expecting TSV from a file named results.json.
-
-
 def _installed(tmp_path) -> Path:
-    """A present DIAMOND binary, so a case can exercise routing rather than
-    the host's (absent) installation."""
+    """A present, executable DIAMOND stand-in."""
     binary = tmp_path / "diamond"
     binary.touch()
+    binary.chmod(0o755)
     return binary
-
-
-def test_auto_resolves_to_blast_when_diamond_is_not_installed(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(blast_module, "DIAMOND_BIN", tmp_path / "absent-diamond")
-
-    assert blast_module.resolve_engine("blastp") == "blast"
-
-
-def test_auto_still_prefers_diamond_when_it_is_installed(tmp_path, monkeypatch) -> None:
-    present = tmp_path / "diamond"
-    present.touch()
-    monkeypatch.setattr(blast_module, "DIAMOND_BIN", present)
-
-    assert blast_module.resolve_engine("blastp") == "diamond"
-
-
-def test_an_explicit_diamond_request_is_not_silently_downgraded(tmp_path, monkeypatch) -> None:
-    """A forced engine that quietly becomes the other one is worse than an error.
-
-    The operator believes they exercised DIAMOND; a fallback would hide that.
-    """
-    monkeypatch.setattr(blast_module, "DIAMOND_BIN", tmp_path / "absent-diamond")
-
-    with pytest.raises(RuntimeError, match="DIAMOND binary not found"):
-        blast_module.resolve_engine("blastp", "diamond")
-
-
-def test_nucleotide_programs_are_unaffected_by_diamond_availability(tmp_path, monkeypatch) -> None:
-    """blastn has no DIAMOND equivalent at all, so its route never depended on it."""
-    monkeypatch.setattr(blast_module, "DIAMOND_BIN", tmp_path / "absent-diamond")
-
-    for program in ("blastn", "tblastn", "tblastx"):
-        assert blast_module.resolve_engine(program) == "blast"

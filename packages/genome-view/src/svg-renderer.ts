@@ -100,9 +100,6 @@ const DEFAULTS = {
  */
 const MIN_CONTENT_PX = 80;
 
-/** Fraction of the rail a lower-case glyph averages at 11 px, for the docs. */
-const RAIL_CHARS_AT_11PX = "about 18 characters";
-
 /** Escape text destined for an SVG text node. */
 function escapeXml(value: string): string {
   return value

@@ -19,12 +19,15 @@ from app.core.exceptions import ValidationError as AppValidationError
 from app.models.blast import BlastDatabase, BlastJob, BlastJobStatus
 from app.schemas.blast import (
     BlastParameters,
-    BlastProgram,
+    BlastSubmitProgram,
     BlastSubmitRequest,
     validate_sequence_charset,
 )
 from app.services.blast_service import BlastService, _worker_parameters
 from app.services.release_context import ReleaseContext
+
+#: A valid protein query; the only executable program is protein/protein.
+PROTEIN_QUERY = "MKTIIALSYIFCLVFADYKDDDDKTRWQYNE"
 
 
 def _context(release_id: int = 7) -> ReleaseContext:
@@ -34,16 +37,16 @@ def _context(release_id: int = 7) -> ReleaseContext:
 
 def _make_request(**overrides: Any) -> BlastSubmitRequest:
     defaults: dict[str, Any] = dict(
-        program=BlastProgram.BLASTN,
+        program=BlastSubmitProgram.BLASTP,
         database_id=1,
-        query_sequence="ATGCAAGCTTAGCTAGGCTAGGCTAGGC",
+        query_sequence="MKTIIALSYIFCLVFADYKDDDDKTRWQYNE",
         parameters=BlastParameters(),
     )
     defaults.update(overrides)
     return BlastSubmitRequest(**defaults)
 
 
-def _make_db(db_type: str = "nucl") -> BlastDatabase:
+def _make_db(db_type: str = "prot") -> BlastDatabase:
     return BlastDatabase(
         id=1,
         name="williams82_cds",
@@ -108,49 +111,60 @@ class FakeDbSession:
 
 
 class TestSequenceAlphabet:
-    def test_valid_nucleotide_passes(self) -> None:
-        request = _make_request(query_sequence="ACGTUNRYSWKMBDHVXacgtunryswkmbdhvx-" * 2)
+    def test_valid_protein_passes(self) -> None:
+        request = _make_request(query_sequence="ACDEFGHIKLMNPQRSTVWYBZX*acdefghiklmnpqrstvwy" * 2)
         assert request.query_sequence
 
-    def test_invalid_nucleotide_character_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="Invalid characters"):
-            _make_request(query_sequence="ATGCAAGCTTAGCTAGGCTAGGCTAGGZ")
+    def test_acgt_string_is_ambiguous_not_rejected(self) -> None:
+        # A, T, G and C are all valid residues, so a bare ACGT string cannot be
+        # refused by alphabet alone. The nucleotide programs that would have
+        # made this meaningful no longer exist; see
+        # TestOnlyProteinProteinIsSubmittable.
+        assert _make_request(query_sequence="ACGTACGTACGTACGTACGTACGTACGTACGT").query_sequence
+
+    def test_uracil_is_not_a_protein_residue(self) -> None:
+        # The refusal is raised by the shared protein-FASTA contract, so the
+        # message is code-prefixed; see test_blast_protein_fasta_contract.py
+        # for the full edge-case matrix.
+        with pytest.raises(ValidationError, match="protein_fasta_invalid_residue"):
+            _make_request(query_sequence="MKTIIAUALSYIFCLVFADYKDDDDKTRWQYNE")
 
     def test_digit_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="Invalid characters"):
-            _make_request(query_sequence="ATGCAAGCTTAGCTAGGCTAGGCTAGG9")
+        with pytest.raises(ValidationError, match="protein_fasta_invalid_residue"):
+            _make_request(query_sequence="MKTIIALSYIFCLVFADYKDDDDKTRWQYNE9")
 
-    def test_protein_alphabet_for_blastp(self) -> None:
-        request = _make_request(
-            program=BlastProgram.BLASTP,
-            query_sequence="MKTIIALSYIFCLVFADYKDDDDK",
-        )
-        assert request.program == BlastProgram.BLASTP
-
-    def test_protein_program_rejects_nucleotide_only_chars(self) -> None:
-        # 'U' is not a standard protein residue.
-        with pytest.raises(ValidationError, match="Invalid characters"):
-            _make_request(
-                program=BlastProgram.BLASTP,
-                query_sequence="MKTIIAUALSYIFCLVFADYKDDDDK",
-            )
-
-    def test_tblastn_query_is_protein(self) -> None:
-        request = _make_request(
-            program=BlastProgram.TBLASTN,
-            query_sequence="MKTIIALSYIFCLVFADYKDDDDK",
-        )
-        assert request.query_sequence
+    def test_default_program_is_protein_protein(self) -> None:
+        request = _make_request(query_sequence=PROTEIN_QUERY)
+        assert request.program == BlastSubmitProgram.BLASTP
 
     def test_fasta_header_ignored_by_alphabet_check(self) -> None:
-        request = _make_request(
-            query_sequence=">my_gene with spaces\nATGCAAGCTTAGCTAGGCTAGGCTAGGC"
-        )
+        request = _make_request(query_sequence=f">my_gene with spaces\n{PROTEIN_QUERY}")
         assert request.query_sequence.startswith(">")
 
     def test_helper_rejects_bad_charset_directly(self) -> None:
         with pytest.raises(ValueError):
-            validate_sequence_charset("ATGCN$", "blastn")
+            validate_sequence_charset("ATGCN$", "blastp")
+
+
+class TestOnlyProteinProteinIsSubmittable:
+    def test_nucleotide_programs_are_rejected_at_the_schema(self) -> None:
+        for program in ("blastn", "blastx", "tblastn", "tblastx"):
+            with pytest.raises(ValidationError):
+                BlastSubmitRequest(
+                    program=program, query_sequence=PROTEIN_QUERY, parameters=BlastParameters()
+                )
+
+    @pytest.mark.parametrize("field,value", [
+        ("word_size", 11), ("dust", True), ("soft_masking", False),
+    ])
+    def test_retired_blast_parameters_are_rejected(self, field, value) -> None:
+        # Silently dropping them would misreport which search actually ran.
+        with pytest.raises(ValidationError, match="retired NCBI BLAST option"):
+            BlastSubmitRequest(
+                program="blastp",
+                query_sequence=PROTEIN_QUERY,
+                parameters=BlastParameters(**{field: value}),
+            )
 
 
 class TestSequenceLength:
@@ -191,49 +205,19 @@ class TestProgramDatabaseCompatibility:
             session, uuid.uuid4(), request, release_context=_context()
         )
 
-    def test_blastn_against_nucl_db_ok(self) -> None:
-        import asyncio
-
-        session = FakeDbSession(blast_db=_make_db(db_type="nucl"))
-        response = asyncio.run(self._submit(session, _make_request()))
-        assert response.job_id
-
-    def test_blastn_against_protein_db_rejected(self) -> None:
+    def test_blastp_against_prot_db_ok(self) -> None:
         import asyncio
 
         session = FakeDbSession(blast_db=_make_db(db_type="prot"))
-        with pytest.raises(AppValidationError, match="cannot search"):
-            asyncio.run(self._submit(session, _make_request()))
+        response = asyncio.run(self._submit(session, _make_request()))
+        assert response.job_id
 
     def test_blastp_against_nucl_db_rejected(self) -> None:
         import asyncio
 
         session = FakeDbSession(blast_db=_make_db(db_type="nucl"))
         with pytest.raises(AppValidationError, match="cannot search"):
-            asyncio.run(
-                self._submit(
-                    session,
-                    _make_request(
-                        program=BlastProgram.BLASTP,
-                        query_sequence="MKTIIALSYIFCLVFADYKDDDDK",
-                    ),
-                )
-            )
-
-    def test_blastp_against_prot_db_ok(self) -> None:
-        import asyncio
-
-        session = FakeDbSession(blast_db=_make_db(db_type="prot"))
-        response = asyncio.run(
-            self._submit(
-                session,
-                _make_request(
-                    program=BlastProgram.BLASTP,
-                    query_sequence="MKTIIALSYIFCLVFADYKDDDDK",
-                ),
-            )
-        )
-        assert response.job_id
+            asyncio.run(self._submit(session, _make_request()))
 
     def test_missing_or_inactive_database_not_found(self) -> None:
         import asyncio
@@ -248,7 +232,7 @@ class TestProgramDatabaseCompatibility:
             BlastSubmitRequest(
                 program="psiblast",  # type: ignore[arg-type]
                 database_id=1,
-                query_sequence="ATGCAAGCTTAGCTAGGCTAGGCTAGGC",
+                query_sequence="MKTIIALSYIFCLVFADYKDDDDKTRWQYNE",
             )
 
 
@@ -276,21 +260,9 @@ class TestParameters:
 
     def test_worker_parameter_mapping(self) -> None:
         mapped = _worker_parameters(
-            BlastParameters(
-                gap_open=5,
-                gap_extend=2,
-                matrix="BLOSUM62",
-                dust=False,
-                soft_masking=True,
-            )
+            BlastParameters(gap_open=5, gap_extend=2, matrix="BLOSUM62")
         )
-        assert mapped == {
-            "gapopen": 5,
-            "gapextend": 2,
-            "matrix": "BLOSUM62",
-            "dust": "no",
-            "soft_masking": "yes",
-        }
+        assert mapped == {"gapopen": 5, "gapextend": 2, "matrix": "BLOSUM62"}
 
     def test_worker_parameter_drops_percent_identity(self) -> None:
         # percent_identity is a client-side filter, not a BLAST CLI param.
@@ -300,16 +272,17 @@ class TestParameters:
     def test_submitted_job_parameters_are_worker_safe(self) -> None:
         import asyncio
 
-        session = FakeDbSession(blast_db=_make_db(db_type="nucl"))
+        session = FakeDbSession(blast_db=_make_db(db_type="prot"))
         request = _make_request(
-            parameters=BlastParameters(gap_open=5, dust=False, percent_identity=90.0)
+            parameters=BlastParameters(gap_open=5, percent_identity=90.0)
         )
-        asyncio.run(BlastService().submit_job(
-            session, uuid.uuid4(), request, release_context=_context()
-        ))
+        asyncio.run(
+            BlastService().submit_job(session, uuid.uuid4(), request, release_context=_context())
+        )
         job = next(obj for obj in session.added if isinstance(obj, BlastJob))
         assert job.status == BlastJobStatus.PENDING
         params = job.parameters or {}
         assert "percent_identity" not in params
         assert params["gapopen"] == 5
-        assert params["dust"] == "no"
+        # No NCBI-only key may reach the worker: it would abort the search.
+        assert not {"dust", "soft_masking", "word_size"} & set(params)

@@ -334,7 +334,10 @@ function BrowserComponent() {
         return (
             <main className="container-prose section-rhythm" data-testid="browser-missing-context">
                 <Card>
-                    <Typography.Title level={3}>{t("browser.contextMissingTitle")}</Typography.Title>
+                    {/* The gate stands in for the whole page, so its message is
+                        that page's top heading — the loaded view below carries
+                        the h1 itself. */}
+                    <Typography.Title level={1}>{t("browser.contextMissingTitle")}</Typography.Title>
                     <Typography.Paragraph type="secondary">
                         {t("browser.contextMissingDescription")}
                     </Typography.Paragraph>
@@ -348,10 +351,10 @@ function BrowserComponent() {
             <FadeUp>
                 <div className="flex flex-wrap items-end justify-between gap-4">
                     <div>
-                        <p className="eyebrow">{t("browser.title")}</p>
-                        <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
+                        <h1 className="eyebrow">{t("browser.title")}</h1>
+                        <h2 className="mt-2 font-display text-4xl font-semibold tracking-tight">
                             {t("browser.subtitle")}
-                        </h1>
+                        </h2>
                     </div>
                     <div className="flex items-center gap-2">
                         {safeReturn && (

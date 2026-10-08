@@ -433,7 +433,7 @@ function GeneIdSearchComponent() {
   return (
     <FadeUp>
       <div className="py-6">
-        <p className="eyebrow">{get("search.genes.title", t("search.genes.title"))}</p>
+        <h1 className="eyebrow">{get("search.genes.title", t("search.genes.title"))}</h1>
         <h2 className="mt-2 font-display text-2xl font-semibold tracking-tight">
           {get("search.genes.subtitle", t("search.genes.subtitle"))}
         </h2>
@@ -454,10 +454,14 @@ function GeneIdSearchComponent() {
               as that control's caption. */}
           <Flex wrap align="center" gap={20}>
             <Flex align="center" gap={8} className="shrink-0">
-              <span className="whitespace-nowrap text-sm text-muted-foreground">
+              <label
+                htmlFor="genes-assembly"
+                className="whitespace-nowrap text-sm text-muted-foreground"
+              >
                 {get("search.genes.assembly", t("search.genes.assembly"))}
-              </span>
+              </label>
               <Select
+                id="genes-assembly"
                 value={formAssemblyId}
                 onChange={(v) => setAssemblyId(v)}
                 placeholder={get("search.genes.assemblyPlaceholder", t("search.genes.assemblyPlaceholder"))}

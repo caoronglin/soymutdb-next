@@ -254,8 +254,13 @@ function VariantsComponent() {
         ) : null}
 
         <Form layout="inline" className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-4">
-          <Form.Item label={get("variants.assembly", t("search.genes.assembly"))} className="mb-0">
+          <Form.Item
+            label={get("variants.assembly", t("search.genes.assembly"))}
+            htmlFor="variant-assembly"
+            className="mb-0"
+          >
             <Select
+              id="variant-assembly"
               value={selectedAssembly ? String(selectedAssembly.id) : undefined}
               onChange={(value) =>
                 navigate({ to: "/variants", search: { ...search, assembly: value, cursor: undefined } })
@@ -270,8 +275,13 @@ function VariantsComponent() {
               }))}
             />
           </Form.Item>
-          <Form.Item label={get("variants.chromosome", t("variants.chromosome"))} className="mb-0">
+          <Form.Item
+            label={get("variants.chromosome", t("variants.chromosome"))}
+            htmlFor="variant-chromosome"
+            className="mb-0"
+          >
             <Select
+              id="variant-chromosome"
               value={search.chromosome || "all"}
               onChange={(v) =>
                 navigate({ to: "/variants", search: { ...search, chromosome: v === "all" ? "" : v, cursor: undefined } })
@@ -283,8 +293,13 @@ function VariantsComponent() {
               ]}
             />
           </Form.Item>
-          <Form.Item label={get("variants.variantType", t("variants.variantType"))} className="mb-0">
+          <Form.Item
+            label={get("variants.variantType", t("variants.variantType"))}
+            htmlFor="variant-type"
+            className="mb-0"
+          >
             <Select<"all" | VariantType>
+              id="variant-type"
               value={search.variant_type || "all"}
               onChange={(v) =>
                 navigate({
@@ -303,8 +318,13 @@ function VariantsComponent() {
               ]}
             />
           </Form.Item>
-          <Form.Item label={get("variants.impact", t("variants.impact"))} className="mb-0">
+          <Form.Item
+            label={get("variants.impact", t("variants.impact"))}
+            htmlFor="variant-impact"
+            className="mb-0"
+          >
             <Select<"all" | VariantImpact>
+              id="variant-impact"
               value={search.impact || "all"}
               onChange={(v) =>
                 navigate({

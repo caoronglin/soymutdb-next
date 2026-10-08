@@ -15,6 +15,7 @@ import pytest
 
 from app.api.v1 import genes as genes_module
 from app.schemas.genomic import GeneDetail, Strand, TranscriptResponse
+from app.services.gene_service import GeneService
 
 
 class _FakeRequest:
@@ -50,13 +51,39 @@ def stub_gene(monkeypatch: pytest.MonkeyPatch):
         async def fake_sites(*_args: Any, **_kwargs: Any) -> list[Any]:
             return sites or []
 
-        monkeypatch.setattr(genes_module.service, "get_gene", fake_get_gene)
+        # Patch the class, not the module-level ``service`` singleton. Setting
+        # an attribute on the instance makes monkeypatch record the inherited
+        # *bound method* as the old value, so teardown restores a permanent
+        # instance attribute shadowing the class. Any later test that patches
+        # ``GeneService.get_gene`` at class level is then silently bypassed and
+        # the real database lookup runs instead — which surfaced as a 404 in
+        # ``test_genes.py`` only once a real PostgreSQL was available.
+        monkeypatch.setattr(GeneService, "get_gene", fake_get_gene)
 
         import app.services.local_test_preview_service as preview
 
         monkeypatch.setattr(preview, "list_preview_mutation_sites_for_gene", fake_sites)
 
     return install
+
+
+def test_stub_gene_leaves_no_instance_attribute_behind(
+    stub_gene, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The stub must not shadow the class method on the service singleton.
+
+    Regression guard: patching the instance leaves a bound-method attribute in
+    ``vars(service)`` after teardown, which silently defeats class-level
+    patches in every later test in the same session.
+    """
+    assert "get_gene" not in vars(genes_module.service)
+
+    stub_gene(_gene(), sites=[])
+    assert "get_gene" in vars(GeneService) or "get_gene" in vars(type(genes_module.service))
+
+    monkeypatch.undo()
+
+    assert "get_gene" not in vars(genes_module.service)
 
 
 async def _call(**overrides: Any):

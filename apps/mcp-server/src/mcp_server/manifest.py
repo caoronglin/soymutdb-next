@@ -169,12 +169,12 @@ TOOLS: list[dict[str, object]] = [
         "rate_limit": "global 60/min + blast_submit quota 10/hour per client",
         "inputs": {
             "query_sequence": "str, required (>= 10 chars; FASTA header "
-            "optional; alphabet checked by the API per program)",
-            "program": "str, default 'blastn' — blastn/blastp/blastx/"
-            "tblastn/tblastx",
+            "optional; amino-acid alphabet checked by the API)",
+            "program": "str, default 'blastp' — the only supported value; "
+            "searches run with DIAMOND blastp",
             "database": "str, optional — database name alias",
             "database_id": "int, optional — numeric database id",
-            "params": "dict, optional — BLAST parameters (evalue, word_size, "
+            "params": "dict, optional — search parameters (evalue, "
             "max_target_seqs, matrix, ...) sent as 'parameters'",
         },
         "outputs": {

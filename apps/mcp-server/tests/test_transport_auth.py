@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+import json
 import os
-from pathlib import Path
 import socket
 import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
-import json
+from pathlib import Path
 
 import pytest
 
@@ -106,11 +106,16 @@ def test_reverse_proxy_uses_canonical_path():
     repo_root = Path(__file__).resolve().parents[3]
     workflow = (repo_root / ".github/workflows/ci.yml").read_text()
     nginx = (repo_root / "infra/nginx/conf.d/default.conf").read_text()
+    jobs = (repo_root / "scripts/ci-job-steps.sh").read_text()
+    transport = (repo_root / "scripts/mcp-transport-smoke.sh").read_text()
 
-    assert "location = /mcp {" in workflow
-    assert "location = /mcp/ {" in workflow
-    assert "return 308 /mcp;" in workflow
-    assert "base=http://127.0.0.1:8081/mcp" in workflow
+    # CI delegates job bodies; endpoint assertions belong to the actual owner.
+    assert "bash scripts/ci-job-steps.sh run mcp-e2e" in workflow
+    assert 'bash "${REPO_ROOT}/scripts/mcp-transport-smoke.sh"' in jobs
+    assert "location = /mcp {" in transport
+    assert "location = /mcp/ {" in transport
+    assert "return 308 /mcp;" in transport
+    assert 'BASE="http://127.0.0.1:${PORT}/mcp"' in transport
     assert "location = /mcp {" in nginx
     assert "location = /mcp/ {" in nginx
     assert "return 308 /mcp;" in nginx

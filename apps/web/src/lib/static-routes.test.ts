@@ -36,6 +36,7 @@ describe("deriveStaticRouteEntries", () => {
       "/search/genes",
       "/search/location",
       "/search/primer",
+      "/search/tools",
       "/seed-request",
       "/sra",
       "/tools",

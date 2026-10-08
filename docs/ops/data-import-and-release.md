@@ -22,7 +22,7 @@ uploading → validating → ingesting → ready → published → rolled_back
 | FASTA | 完整性、assembly、染色体命名、checksum | assembly/chromosome 与索引对象 |
 | GFF3 | 语法、ID/Parent、与 FASTA 一致 | genes、transcripts、exons、aliases |
 | VCF | header、样本、坐标、Release/assembly | ClickHouse `variant_facts`，Replacing 去重 |
-| BLAST DB | FASTA、参数、`makeblastdb` 产物 | 派生索引并登记 `blast_databases` |
+| BLAST DB | 蛋白 FASTA、`diamond makedb` 的 `.dmnd` 产物 | 派生索引并登记 `blast_databases`（`db_type=prot`） |
 | Seed | 请求字段、物种/品系、库存引用 | seed 请求与库存表 |
 | Expression | 样本、组织、量纲、重复键 | expression 表，冲突去重 |
 | Homolog | 来源、物种、Gene ID、关系字段 | homolog 表，冲突去重 |
@@ -59,6 +59,85 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 Admin「Data Imports」页在创建 Module Data 导入时校验扩展名（`.tsv`/`.txt`/`.csv`/`.xlsx`），并提供
 模板下载入口（Module Key + TSV/CSV/XLSX 格式选择）直接拉取对应模板。
+
+## GO/KEGG 注释快照导入（release/assembly/ontology 作用域）
+
+富集工具读取 `gene_annotation_sets` + `gene_annotations`，并要求 assembly/release
+来源与实际行数一致。仓库已有规范导入器；此前仅检索 worker 后得出的“仓库没有写入路径”
+结论已撤回。缺口是尚未取得真实上游注释文件，不是缺少写入实现。
+
+唯一写入 owner 为 [API 注释导入服务](../../apps/api/app/services/gene_annotation_import_service.py)。
+[API CLI](../../apps/api/scripts/import_gene_annotations.py) 负责文件摘要与事务，
+[根目录入口](../../scripts/import_annotations.py) 仅转交同一 CLI，不实现第二套规则。
+重复 worker 写入器及范围清理测试已按用户确认退役；不删除任何现有数据库数据。
+
+### 源文件格式
+
+制表符分隔、首行为表头。必填列 `gene_id`、`term_id`、`term_name`；可选列
+`ontology`、`evidence_code`、`reference`、`qualifier`（后三列缺省为空字符串）。
+若有 `ontology` 列，每行须与所选 ontology 一致。重复列名、未知列、额外字段、同 term
+不同名称均拒绝；完全重复证据行折叠。`gene_id` 必须是**所选 assembly 内**已有 accession，
+不提供未知基因跳过模式。这里只接收规范化 TSV，不直接解析原始 GAF。
+
+### 执行
+
+```bash
+# URL/来源/版本/摘要从已核实的上游快照取得；勿把合成 fixture 标成真实来源。
+export SOYMUTDB_DATABASE_URL='postgresql+asyncpg://user:pass@host:5432/soymutdb'
+
+# 1) 先 dry-run：校验并写入事务，摘要与计数核对后回滚；只允许 draft release。
+apps/api/.venv/bin/python scripts/import_annotations.py go.normalized.tsv \
+  --assembly-id 3 --release-id 7 --ontology go \
+  --source-name "${SOURCE_NAME:?}" --source-version "${SOURCE_VERSION:?}" \
+  --source-url "${SOURCE_URL:?}" --sha256 "${SOURCE_SHA256:?}" --dry-run
+
+# 2) 确认 row_count 与来源后正式导入同一文件，不使用替换/skip 参数。
+apps/api/.venv/bin/python scripts/import_annotations.py go.normalized.tsv \
+  --assembly-id 3 --release-id 7 --ontology go \
+  --source-name "${SOURCE_NAME:?}" --source-version "${SOURCE_VERSION:?}" \
+  --source-url "${SOURCE_URL:?}" --sha256 "${SOURCE_SHA256:?}"
+```
+
+退出码沿用既有 API CLI：`0` 成功（包括 dry-run），`2` 参数/声明摘要检查失败，
+`1` 导入契约或文件读取失败（stderr 文本）。成功 JSON 包含 `dry_run`、
+`annotation_set_id`、`row_count`、`source_sha256`、`already_imported`。
+dry-run 的新快照 ID 只表示已回滚的预览，不是可供后续读取的已提交记录；序列可能前进。
+
+### 契约与失败模式
+
+- **摘要对应解析字节**：CLI 在同一个文件描述符上先计算摘要，再对解析实际消费的字节
+  重算，提交前不一致则回滚。`--sha256` 是可选的预期摘要比对；摘要不证明上游真实性，
+  更不称“不可伪造”。直接调用服务的程序仍须自行保证传入摘要与流匹配。
+- **仅 draft、快照不可变**：对 release 加行锁检查状态，非 draft 一律拒绝。相同作用域、
+  摘要与来源元数据重入时保留原 ID，返回 `already_imported=true`；不同快照拒绝，
+  应创建新 release，而不是覆盖旧行。
+- **严格 assembly/release 绑定**：assembly 必须属于所选 release；不属于该 assembly
+  的基因在入库前拒绝，不静默跳过。
+- **行数核对**：初次导入及幂等重入均重数实际存储行；不一致拒绝，不自动修补旧数据。
+- **失败原子回滚**：服务 savepoint 与 CLI 外层事务保护部分批次，空源不建快照；
+  dry-run 走相同校验后回滚，不改业务行。
+- **并发边界**：复用既有同连接事务 advisory 锁，并锁定 release；不另开 worker
+  连接、不实现第二个锁协议。并发资格与真实发布流程仍须单独验证。
+
+### 验证导入结果
+
+```bash
+# PGDATABASE_URL 使用原生 postgresql:// URL（不是 API 的 +asyncpg URL）。
+psql "${PGDATABASE_URL:?}" -c "
+SELECT s.id, s.assembly_id, s.release_id, s.ontology, s.row_count,
+       count(a.id) AS actual_rows, s.source_name, s.source_version, s.source_sha256
+FROM gene_annotation_sets s
+LEFT JOIN gene_annotations a
+  ON a.annotation_set_id = s.id AND a.assembly_id = s.assembly_id
+ AND a.release_id = s.release_id AND a.ontology = s.ontology
+GROUP BY s.id ORDER BY s.id;"
+```
+
+`row_count` 必须等于 `actual_rows`，否则公共富集接口会因来源不一致而失败关闭。
+
+> 本节描述的导入能力已在一次性库上端到端验证（CLI + 真实 PostgreSQL + API 读取）。
+> **验证所用的注释数据是合成的 fixture，不是真实上游 GO/KEGG 文件**；真实负载
+> 仍待取得上游文件后导入。
 
 ## Release 组装、发布与回滚
 

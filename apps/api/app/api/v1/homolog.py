@@ -179,6 +179,8 @@ async def search_homologs(
     ``gene_id`` is supplied.
     """
     conditions = [_release_scope(release_context)]
+    if assembly_id is not None:
+        conditions.append(Assembly.id == assembly_id)
     if gene_id:
         gene = await _gene_service.resolve_released_gene(
             db, gene_id, release_context=release_context, assembly_id=assembly_id
@@ -214,18 +216,6 @@ async def search_homologs(
         )
         result = await db.execute(stmt)
         rows = result.scalars().all()
-        has_more = len(rows) > page_size
-        homologs = rows[:page_size]
-        next_cursor = (
-            encode_bound_cursor(
-                kind=_CURSOR_KIND,
-                sort_key={"d": str(homologs[-1].id)},
-                release_context=release_context,
-                filters=filters,
-            )
-            if has_more and homologs
-            else None
-        )
     else:
         count_stmt = (
             select(func.count())
@@ -241,13 +231,25 @@ async def search_homologs(
             .where(where_clause)
             .order_by(GeneHomolog.id.asc())
             .offset(offset)
-            .limit(page_size)
+            .limit(page_size + 1)
         )
         result = await db.execute(stmt)
-        homologs = result.scalars().all()
-        has_more = False
-        next_cursor = None
+        rows = result.scalars().all()
 
+    # Both entry modes must issue a continuation; otherwise clients cannot
+    # enter cursor mode from the first offset page.
+    has_more = len(rows) > page_size
+    homologs = rows[:page_size]
+    next_cursor = (
+        encode_bound_cursor(
+            kind=_CURSOR_KIND,
+            sort_key={"d": str(homologs[-1].id)},
+            release_context=release_context,
+            filters=filters,
+        )
+        if has_more and homologs
+        else None
+    )
     items = [_public_item(h) for h in homologs]
 
     return {
