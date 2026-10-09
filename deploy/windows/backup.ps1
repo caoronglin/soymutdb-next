@@ -20,4 +20,4 @@ Invoke-Step "Back up configured PostgreSQL database to $out" {
     throw "pg_dump failed (exit $LASTEXITCODE); incomplete backup removed"
   }
   if (-not (Test-Path $out)) { throw "pg_dump reported success but wrote no output" }
-} $DryRun
+} -DryRun:$DryRun
