@@ -425,9 +425,7 @@ function LocationSearchComponent() {
               {t("search.location.found", { count: sites.length })}
             </p>
             {!isTestDataPreviewAssembly(resultAssembly?.name) ? (
-              <Alert type="warning" showIcon title={t("search.location.previewAssemblyMismatch", {
-                defaultValue: "Source mutation-site preview coordinates belong only to the unpublished Gmax_880_v6.0 assembly. Choose that assembly to view the preview.",
-              })} />
+              <Alert type="warning" showIcon title={t("search.location.previewAssemblyMismatch")} />
             ) : sitesQuery.isError ? (
               <Alert
                 type="error"
