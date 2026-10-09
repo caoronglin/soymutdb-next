@@ -8,7 +8,7 @@
  * can be exercised end to end — no unconditional `test.skip`.
  */
 import { test, expect } from "@playwright/test";
-import { gotoReady, mockEntityApis, MOCK_ASSEMBLY, MOCK_GENE_ID, MOCK_RELEASE_ID } from "./helpers";
+import { gotoReady, mockEntityApis, MOCK_PREVIEW_ASSEMBLY, MOCK_GENE_ID, MOCK_RELEASE_ID } from "./helpers";
 
 const BASE = "/soymutdb-next";
 
@@ -24,7 +24,7 @@ test.describe("genes — result column order", () => {
     // The e2e/static-server.mjs mock returns one default assembly, the built-in
     // column template, and an empty gene list — so the result table renders its
     // configured column headers offline without inventing rows.
-    await gotoReady(page, `${BASE}/search/genes?q=Glyma.01G000100&run=1`);
+    await gotoReady(page, `${BASE}/search/genes?q=Glyma.01G000100&assembly=${encodeURIComponent(MOCK_PREVIEW_ASSEMBLY.name)}&run=1`);
     const headers = page.getByTestId("search-genes-table").locator("thead th");
     await expect(headers.first()).toBeVisible({ timeout: 15_000 });
     expect((await headers.allTextContents()).map((header) => header.trim())).toEqual([
@@ -42,7 +42,7 @@ test.describe("genes — result column order", () => {
   });
 
   test("renders no row when the API returns none", async ({ page }) => {
-    await gotoReady(page, `${BASE}/search/genes?q=Glyma.01G000100&run=1`);
+    await gotoReady(page, `${BASE}/search/genes?q=Glyma.01G000100&assembly=${encodeURIComponent(MOCK_PREVIEW_ASSEMBLY.name)}&run=1`);
     await expect(page.getByTestId("search-genes-empty")).toBeVisible();
     await expect(page.getByTestId("configurable-row")).toHaveCount(0);
   });
@@ -55,7 +55,7 @@ test.describe("genes — result column order", () => {
         body: JSON.stringify({ error: { code: "SERVICE_UNAVAILABLE", message: "E2E backend offline" } }),
       });
     });
-    await gotoReady(page, `${BASE}/search/genes?q=Glyma.01G000100&run=1`);
+    await gotoReady(page, `${BASE}/search/genes?q=Glyma.01G000100&assembly=${encodeURIComponent(MOCK_PREVIEW_ASSEMBLY.name)}&run=1`);
     const region = page.getByRole("region", { name: "Gene ID search results" });
     await expect(region.getByRole("alert")).toBeVisible();
     await expect(page.getByTestId("search-genes-empty")).toHaveCount(0);
@@ -64,8 +64,8 @@ test.describe("genes — result column order", () => {
   test("JBrowse 2 action opens an assembly-scoped locus deep link", async ({ page }) => {
     // Deterministic offline data: one gene row carrying assembly/coordinates, so
     // the action is guaranteed to exist and its contract can be asserted exactly.
-    await mockEntityApis(page);
-    await gotoReady(page, `${BASE}/search/genes?q=${encodeURIComponent(MOCK_GENE_ID)}&run=1`);
+    await mockEntityApis(page, { assembly: MOCK_PREVIEW_ASSEMBLY });
+    await gotoReady(page, `${BASE}/search/genes?q=${encodeURIComponent(MOCK_GENE_ID)}&assembly=${encodeURIComponent(MOCK_PREVIEW_ASSEMBLY.name)}&run=1`);
 
     // The action carries a stable `jbrowse-link-<index>` handle; target it
     // precisely so the assertion cannot pass vacuously.
@@ -91,7 +91,7 @@ test.describe("genes — result column order", () => {
     const locus = deepLink.searchParams.get("locus");
     // DB-CORE-3/4: the deep link must carry the assembly context, never an
     // assembly-less locus that would resolve to another coordinate namespace.
-    expect(assembly).toBe(MOCK_ASSEMBLY.name);
+    expect(assembly).toBe(MOCK_PREVIEW_ASSEMBLY.name);
     expect(deepLink.searchParams.get("release")).toBe(MOCK_RELEASE_ID);
     expect(locus).toMatch(/^[^:\s]+:\d+-\d+$/);
     expect(locus).toBe("chr01:100-200");
@@ -107,7 +107,7 @@ test.describe("genes — result column order", () => {
     // Check the actual route and context guard, then validate the iframe URL
     // itself: this is the data handoff JBrowse receives.
     await expect(page.getByTestId("browser-missing-context")).toHaveCount(0);
-    await expect(page).toHaveURL(/assembly=Wm82\.a4\.v1/);
+    await expect(page).toHaveURL(/assembly=Gmax_880_v6\.0/);
     // TanStack Router may canonicalize a numeric-looking release string as a
     // JSON search value (release=%227%22). Assert the *parsed* release value
     // and independently verify the downstream JBrowse iframe received it.
@@ -121,7 +121,7 @@ test.describe("genes — result column order", () => {
       }
     }).toBe(MOCK_RELEASE_ID);
     const frame = page.getByTestId("browser-iframe");
-    await expect(frame).toHaveAttribute("src", /assembly=Wm82\.a4\.v1/);
+    await expect(frame).toHaveAttribute("src", /assembly=Gmax_880_v6\.0/);
     await expect(frame).toHaveAttribute("src", /locus=chr01%3A100-200/);
     await expect(frame).toHaveAttribute("src", /release=7/);
   });
