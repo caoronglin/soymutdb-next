@@ -19,6 +19,7 @@ import * as React from "react";
 import { Alert, Button, Empty, Flex, Input, Select, Table, Tag, Typography, type TableColumnsType } from "@/lib/antd";
 import { SearchOutlined } from "@ant-design/icons";
 import {
+  isTestDataPreviewAssembly,
   listTestDataPreviewMutationSitesForGene,
   searchGenes,
   type GeneSummary,
@@ -109,6 +110,11 @@ function GeneIdSearchComponent() {
   const urlAssemblyInfo = resolveSearchAssembly(assemblies, urlAssembly);
   const urlAssemblyId = urlAssemblyInfo ? String(urlAssemblyInfo.id) : undefined;
   const formAssemblyId = assemblyId ?? urlAssemblyId;
+
+  // History navigation must override a prior unsubmitted local assembly choice.
+  React.useEffect(() => {
+    setAssemblyId(undefined);
+  }, [urlAssembly]);
 
   // The route is updated in place now, so the submitted context follows the
   // live URL rather than a mount-time snapshot: a second search on this page
@@ -208,7 +214,9 @@ function GeneIdSearchComponent() {
     },
     // Wait for the catalogue result so the resolved accessions are known; a
     // preview API failure is an error, not an empty dataset.
-    enabled: Boolean(submitted?.q) && !resultsQuery.isLoading,
+    // Unpublished preview rows are pinned to one assembly by the API client.
+    // Do not present their source coordinates as results for another genome.
+    enabled: Boolean(submitted?.q) && !resultsQuery.isLoading && isTestDataPreviewAssembly(selectedAssembly?.name),
     retry: false,
   });
   const previewSites = previewSitesQuery.data ?? [];
