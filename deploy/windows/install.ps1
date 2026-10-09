@@ -23,7 +23,7 @@ Invoke-Step "Install API + shared Python packages (Python 3.14)" {
     if ($LASTEXITCODE -ne 0) { throw "Workspace Python installation failed (exit $LASTEXITCODE)" }
     if (-not (Test-Path $venvPython)) { throw "API Python virtual environment was not created" }
   } finally { Pop-Location }
-} $DryRun
+} -DryRun:$DryRun
 
 if (-not $SkipDatabase) {
   Invoke-Step "Apply PostgreSQL migrations" {
@@ -34,7 +34,7 @@ if (-not $SkipDatabase) {
       & $venvPython -m alembic upgrade head
       if ($LASTEXITCODE -ne 0) { throw "Database migration failed (exit $LASTEXITCODE)" }
     } finally { Pop-Location }
-  } $DryRun
+  } -DryRun:$DryRun
 } else {
   Write-Host "Database migrations explicitly skipped; do not use this mode for production upgrades."
 }
@@ -47,15 +47,15 @@ if (-not $SkipService) {
         throw "Windows API service registration failed"
       }
     }
-  } $DryRun
+  } -DryRun:$DryRun
   if (-not $NoStart) {
     Invoke-Step "Start API Windows service" {
       $service = Get-Service -Name $Script:ServiceName -ErrorAction Stop
       if ($service.Status -ne "Running") { & (Join-Path $PSScriptRoot "service.ps1") -Start }
-    } $DryRun
+    } -DryRun:$DryRun
     Invoke-Step "Verify local API health" {
       & (Join-Path $PSScriptRoot "health.ps1")
       if (-not $?) { throw "Local API health check failed" }
-    } $DryRun
+    } -DryRun:$DryRun
   }
 }
