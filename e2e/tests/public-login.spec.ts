@@ -59,7 +59,10 @@ async function submitLogin(
   await page.getByRole("button", { name: /sign in/i }).click();
 
   const [request, response] = await Promise.all([requestPromise, responsePromise]);
-  expect(new URL(request.url()).pathname).toBe(`${BASE}${LOGIN_ENDPOINT}`);
+  // The API client resolves a root-absolute /api/v1 fallback independently
+  // of the Pages subpath. The static server normalizes this path for its
+  // mocked auth response; ensure it is still the documented endpoint.
+  expect(new URL(request.url()).pathname).toBe(LOGIN_ENDPOINT);
   expect(request.method()).toBe("POST");
   expect(request.headers()["content-type"]).toContain("application/json");
   expect(request.postDataJSON()).toEqual(credentials);

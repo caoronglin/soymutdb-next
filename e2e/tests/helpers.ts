@@ -224,6 +224,13 @@ export async function mockEntityApis(page: Page): Promise<CapturedApiRequest[]> 
       return json({ access_token: "e2e-access-token", expires_in: 900 });
     }
 
+    // --- active release singleton (not a fabricated published dataset) ---
+    // The JBrowse bridge refuses links without BOTH release and assembly.
+    // This deterministic API mock drives the real ReleaseScopeProvider pin.
+    if (path.endsWith("/releases/active")) {
+      return json({ release_id: MOCK_RELEASE_ID, version: "e2e", published_at: "2026-01-01T00:00:00Z" });
+    }
+
     // --- genome catalog ---
     if (path.endsWith("/genes/assemblies")) return json([MOCK_ASSEMBLY]);
     if (/\/genes\/assemblies\/[^/]+\/chromosomes$/.test(path)) {

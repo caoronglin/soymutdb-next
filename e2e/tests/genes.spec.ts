@@ -58,6 +58,13 @@ test.describe("genes — result column order", () => {
     const link = page.getByTestId(/^jbrowse-link-/).first();
     await expect(link).toBeVisible({ timeout: 15_000 });
 
+    // ReleaseScopeProvider resolves /releases/active asynchronously and then
+    // pins the active release for links. Never assert on a transient
+    // assembly-only URL or bypass the browser context safety gate.
+    await expect.poll(async () => {
+      const current = await link.getAttribute("href");
+      return new URL(current ?? "/", "http://e2e.invalid").searchParams.get("release");
+    }).toBe(MOCK_RELEASE_ID);
     const href = await link.getAttribute("href");
     expect(href, "the JBrowse 2 action must be an anchor with an href").toBeTruthy();
     const deepLink = new URL(href as string, "http://e2e.invalid");
@@ -71,6 +78,7 @@ test.describe("genes — result column order", () => {
     // DB-CORE-3/4: the deep link must carry the assembly context, never an
     // assembly-less locus that would resolve to another coordinate namespace.
     expect(assembly).toBe(MOCK_ASSEMBLY.name);
+    expect(deepLink.searchParams.get("release")).toBe(MOCK_RELEASE_ID);
     expect(locus).toMatch(/^[^:\s]+:\d+-\d+$/);
     expect(locus).toBe("chr01:100-200");
 

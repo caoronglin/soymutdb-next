@@ -74,12 +74,12 @@ test.describe("Physical Location search", () => {
     expect(regionRequests).toBe(0);
   });
 
-  test("submit issues the region request for the chosen chromosome", async ({ page }) => {
+  test("submit issues the source-site interval request for the chosen chromosome", async ({ page }) => {
     const requested: string[] = [];
     // Current flow keeps results on this page; still capture exact network
     // requests, including any future secondary navigation.
     page.context().on("request", (request) => {
-      if (request.url().includes("/variants/region")) requested.push(request.url());
+      if (request.url().includes("/preview/test-data/mutation-sites?")) requested.push(request.url());
     });
     await gotoReady(page, `${BASE}/search/location`);
 
@@ -87,7 +87,9 @@ test.describe("Physical Location search", () => {
     // antd Select is a div rather than a native <select>, so open it and click
     // the option instead of using `selectOption`.
     await page.getByTestId("location-chromosome").click();
-    await page.locator(".ant-select-dropdown:visible").getByText("chr01", { exact: true }).click();
+    // antd includes both the option wrapper and its inner label text.
+    // Target the clickable option wrapper, avoiding strict-mode duplicates.
+    await page.locator(".ant-select-dropdown:visible .ant-select-item-option").filter({ hasText: "chr01" }).first().click();
     await page.getByTestId("location-start").fill("1");
     await page.getByTestId("location-end").fill("2000");
     await expect(page.getByTestId("location-submit")).toBeEnabled();
@@ -98,7 +100,9 @@ test.describe("Physical Location search", () => {
     expect(requested[0]).toContain("chromosome=chr01");
     expect(requested[0]).toContain("start=1");
     expect(requested[0]).toContain("end=2000");
-    expect(requested[0]).toContain("assembly=Wm82.a4.v1");
+    // The source preview endpoint has no assembly parameter: context belongs
+    // in the shareable page URL and is validated before submit.
+    await expect(page).toHaveURL(/assembly=Wm82\.a4\.v1/);
     // The empty result is reported, not hidden.
     await expect(page.getByTestId("location-empty")).toBeVisible();
   });
