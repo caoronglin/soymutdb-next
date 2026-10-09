@@ -1019,3 +1019,5 @@ PR #1 已合并。仓库 `main` 当前 HEAD 为 `d3904c210`，与 `origin/main` 
 - 执行阶段：恢复 CI → 保证 Release/assembly 结果等价 → 真实引擎与浏览器 E2E → 性能实测 → 审核后合并。独立发布原子化设计另行审查，不在该局部优化内宣称完成。
 
 - 2026-10-09 第二轮状态：Baseline Run `37896418357` 全部必需步骤通过，主 CI `37896418481` 因 5 个 npm 高危/严重级通告、Python 已报告漏洞、lock 去重和 Knip 问题被真实阻断。新增带版本/修复建议的 CI 审计输出、HTTP ClickHouse DML API 绑定兼容修复、PR 自制品 E2E、Dependabot uv/Actions 候选更新。**未升级锁文件、未解除安全阻断，不得自动合并/发布**；按执行文档 §4 生成并验证升级后的 uv/pnpm 锁。
+
+- 2026-10-09 第三轮：四份经过官方 registry 解析的锁文件已实际回写，三项 Python 安全审计已成功；数据库测试改用 PostgreSQL 18.4、ClickHouse 24.8/25.8 双版本，预览 ClickHouse 候选 25.8。当前仍因未有上游修复的 braces GHSA、Knip 及现有浏览器交互回归 No-Go；详情和回滚见第二轮执行合同 §5。

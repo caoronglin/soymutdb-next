@@ -3187,3 +3187,21 @@ class CnbVolumeGrammarTests(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover - unittest entry point
     unittest.main()
+
+
+def test_postgres_service_script_remains_executable() -> None:
+    """CI runs this resolver directly, so a Git mode change must fail contracts."""
+    import stat
+
+    root = Path(__file__).resolve().parents[1]
+    mode = (root / "scripts/with-postgres-service.sh").stat().st_mode
+    assert mode & stat.S_IXUSR, "with-postgres-service.sh must be executable (100755)"
+
+
+def test_e2e_knip_workspace_tracks_real_test_entrypoints() -> None:
+    """Knip must analyze the independent Playwright package, not mislabel its tests dead."""
+    root = Path(__file__).resolve().parents[1]
+    config = json.loads((root / "knip.json").read_text(encoding="utf-8"))
+    entry = config["workspaces"]["e2e"]["entry"]
+    assert "tests/*.spec.ts" in entry
+    assert "playwright*.config.ts" in entry

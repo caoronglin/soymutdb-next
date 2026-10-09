@@ -38,7 +38,10 @@ services:
     restart: unless-stopped
 
   clickhouse:
-    image: clickhouse/clickhouse-server:24.8-alpine
+    # Preview-only qualification: 24.8 and 25.8 passed the same migration and
+    # idempotence fixture in CI. Existing CH data volumes may not be safely
+    # downgraded; back up / validate restore before starting this preview.
+    image: clickhouse/clickhouse-server:25.8-alpine
     environment:
       CLICKHOUSE_DB: soymutdb
       CLICKHOUSE_USER: soymutdb

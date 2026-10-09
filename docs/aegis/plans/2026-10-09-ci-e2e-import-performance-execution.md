@@ -154,3 +154,28 @@ bash scripts/acceptance.sh --profile contracts
 - 运行 PR 当前 HEAD 的全量 CI、baseline、PR 自制品 Playwright。三者必须以**同一提交**关联，不拼接不同提交的 PASS。
 - 为 Live Pages 另行记录部署 digest+日期以及线上 E2E 的 404；只有经 main 完整 CI 的已验证 artifact 才允许更新 pages。
 - 安全通告未修复时仍为 **No-Go**；不允许使用 `continue-on-error` / `pnpm audit --ignore-registry-errors` / `pip-audit --ignore-vuln` 来称作全绿。
+
+
+## 5. 已落地的依赖与数据库版本更新（2026-10-09）
+
+1. 固定版本 GitHub Actions 解析器成功生成并由受限 owner-only 临时任务回写四份锁：`pnpm-lock.yaml`、`apps/api/uv.lock`、`apps/worker/uv.lock`、`apps/mcp-server/uv.lock`，提交 `b4284ad9`。临时写入任务随后从工作流移除；此后恢复只读候选包生成。
+2. Python 漏洞审计 API/Worker/MCP 三项在 CI Run `37900772377` 均通过；pnpm `dedupe --check` 通过，Node 安全扫描剩余 `braces <=3.0.3`，官方 GHSA-vfj7-8cjw-p6xm **暂无 patched version**；Knip 仍有待处理文件/依赖候选。不得忽略通告冒称全绿。
+3. GitHub 基线与 Worker/Testcontainers 默认 PostgreSQL 从 16 提升为和当前 Compose 相同的 `18.4-alpine`。第一次门禁发现 `scripts/with-postgres-service.sh` Git 执行位错误变为 100644，已在 `8ba08bbe` 恢复 100755，并新增对应 mode 回归防漂移。
+4. CH 真实迁移 Job 现在分别启动 `24.8-alpine`、`25.8-alpine`，对相同 legacy fixture 做迁移及第二次幂等验收；双版本 Job 在 Run `37900578549` 和 `37900772377` 中显示 SUCCESS。因此 **仅更新 preview Compose** 到 25.8；生产 `docker-compose.yml` 仍保持 24.8，待数据快照备份/恢复、负载回归和停止服务窗口后再单独审批升级。**不得直接倒退复用经过新版写入的数据卷**。
+5. Redis 7.4 暂不改生产镜像。官方 Redis Open Source 文档支持 7.x→8.x，但需要 RDB/AOF 备份、认证/连接/过期策略兼容测试和升级回退资格；见 <https://redis.io/docs/latest/operate/oss_and_stack/install/upgrade/standalone/>。
+6. 最新 E2E 仍存在针对旧 UI 结构的用例断言与现行 React DOM 不一致；须逐条确认页面功能而不是 skip/xfail，PR 离线浏览器验收继续阻断。
+
+### 本轮代码命令和恢复办法
+
+```bash
+# 每个命令必须对照 PR 最终 SHA 运行，保存真实退出码
+pnpm install --frozen-lockfile
+pnpm dedupe --check
+pnpm deps:audit
+bash scripts/acceptance.sh --profile contracts
+# 需要隔离 Docker，可验证 18.4 PostgreSQL 和双 ClickHouse 版本
+bash scripts/ci-job-steps.sh run api-tests
+SOYMUTDB_CLICKHOUSE_CI_IMAGE=clickhouse/clickhouse-server:25.8-alpine bash scripts/ci-job-steps.sh run clickhouse-migration
+```
+
+所有数据库升级须在隔离卷中先验证；要回滚版本必须恢复先前备份数据，不能仅 `git revert` 镜像 tag。此 PR 保留 Draft/No-Go，直到 npm `braces` 和 Knip 及 PR E2E 的真实阻断得到解决。
