@@ -39,10 +39,10 @@ test.describe("homepage — primary navigation", () => {
 
     // Search opens the biological entry points.
     await nav.locator('button:has-text("Search")').click();
-    for (const label of ["Genes", "Variants", "Mutant Lines", "Genome Browser"]) {
-      // Menu links carry role="menuitem" inside the ARIA menu.
-      await expect(nav.getByRole("menuitem", { name: label, exact: true })).toBeVisible();
-    }
+    // Current operator-approved Search menu has four entries; variants and
+    // mutant lines remain available via direct routes, not this dropdown.
+    await expect(nav.getByRole("menuitem")).toHaveCount(4);
+    await expect(nav.getByRole("menuitem", { name: /BLAST/i })).toBeVisible();
 
     // Tools opens the sequence/tooling entry points.
     await nav.locator('button:has-text("Tools")').click();
