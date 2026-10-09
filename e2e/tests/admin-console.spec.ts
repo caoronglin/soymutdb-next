@@ -178,6 +178,21 @@ test.describe("admin console — anonymous deep link", () => {
 });
 
 test.describe("admin console — authenticated routes", () => {
+  test("keeps the operator shell within a 390px mobile viewport", async ({ page }) => {
+    test.skip(!ADMIN_BASE_URL || !STORAGE_STATE, "requires a deployed authenticated admin session");
+    await page.setViewportSize({ width: 390, height: 844 });
+    const errors = trackErrors(page);
+    await page.goto(underBase(ADMIN_BASE_URL, "/"), { waitUntil: "load" });
+    await waitForAppReady(page);
+    await expect(page.getByTestId("admin-shell")).toBeVisible();
+    await expect(page.locator("main h1").first()).toBeVisible();
+    // A horizontal page-level overflow makes the shell unusable at phone width.
+    const overflow = await page.evaluate(() =>
+      document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow).toBeLessThanOrEqual(2);
+    expect(errors).toEqual([]);
+  });
+
   for (const route of CONSOLE_ROUTES) {
     test(`${route.label} renders without console errors`, async ({ page }) => {
       test.skip(!ADMIN_BASE_URL, "set ADMIN_BASE_URL to the deployed admin console");
@@ -197,7 +212,11 @@ test.describe("admin console — authenticated routes", () => {
       ).toBe(false);
 
       // Console chrome plus the route's own view, then its data query result.
-      await expect(page.getByTestId("admin-sidebar")).toBeVisible();
+      // ProLayout owns navigation now; the retired AdminSidebar test id is
+      // absent by design. Assert a stable shell boundary plus a real menu link.
+      await expect(page.getByTestId("admin-shell")).toBeVisible();
+      await expect(page.locator("a[href]").filter({ hasText: /Dashboard|Usage guide/i }).first())
+        .toBeVisible();
       await expect(page.locator(route.anchor).first()).toBeVisible();
       await expect(page.locator(route.settled).first()).toBeVisible({ timeout: 20_000 });
 
