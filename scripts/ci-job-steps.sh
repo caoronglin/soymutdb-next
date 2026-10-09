@@ -447,7 +447,7 @@ clickhouse_migration_run() {
   docker run -d --name "${container}" -p 8123:8123 \
     -e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 \
     -e CLICKHOUSE_PASSWORD="${SOYMUTDB_CLICKHOUSE_PASSWORD:-ci-ch-password}" \
-    clickhouse/clickhouse-server:24.8-alpine >/dev/null
+    "${SOYMUTDB_CLICKHOUSE_CI_IMAGE:-clickhouse/clickhouse-server:24.8-alpine}" >/dev/null
 
   local attempt
   for attempt in $(seq 1 60); do
