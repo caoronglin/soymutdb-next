@@ -108,9 +108,21 @@ test.describe("genes — result column order", () => {
     // itself: this is the data handoff JBrowse receives.
     await expect(page.getByTestId("browser-missing-context")).toHaveCount(0);
     await expect(page).toHaveURL(/assembly=Wm82\.a4\.v1/);
-    await expect(page).toHaveURL(/release=7/);
+    // TanStack Router may canonicalize a numeric-looking release string as a
+    // JSON search value (release=%227%22). Assert the *parsed* release value
+    // and independently verify the downstream JBrowse iframe received it.
+    await expect.poll(() => {
+      const raw = new URL(page.url()).searchParams.get("release");
+      if (raw == null) return null;
+      try {
+        return String(JSON.parse(raw));
+      } catch {
+        return raw;
+      }
+    }).toBe(MOCK_RELEASE_ID);
     const frame = page.getByTestId("browser-iframe");
     await expect(frame).toHaveAttribute("src", /assembly=Wm82\.a4\.v1/);
     await expect(frame).toHaveAttribute("src", /locus=chr01%3A100-200/);
+    await expect(frame).toHaveAttribute("src", /release=7/);
   });
 });
