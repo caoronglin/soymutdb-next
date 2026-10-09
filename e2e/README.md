@@ -66,7 +66,7 @@ regression.
 | Trigger | When |
 | --- | --- |
 | `schedule` | nightly 02:00 UTC |
-| `pull_request` | read-only assertions against the currently deployed Demo, not the PR artifact, when E2E files change |
+| `pull_request` | build and test proposed PR `apps/web/dist/external` with offline mock API, separate from online deployed smoke |
 | `workflow_dispatch` | manual — Actions tab → "E2E Smoke (online)" → Run workflow |
 | `workflow_run` | after "Deploy Web to Pages" completes **successfully** (the `if` guard skips failed deployments) |
 
@@ -74,6 +74,12 @@ regression.
 
 - `playwright.config.ts` + `online-smoke.spec.ts`: deployed demo, 10 route checks,
   document status, rendered main/content, JS/CSS fetches and browser errors.
+  Trigger: nightly, manual and post-deployment. This suite **does not run
+  on pull requests**; live 404s are real deployment failures and not waived.
+- PR workflow (`.github/workflows/e2e-smoke.yml`): builds the **current PR**
+  with the static public path and same-origin mock API, then runs
+  `playwright-public.config.ts` against `static-server.mjs`. It does not
+  pretend that an unmerged PR's new pages already exist on GitHub Pages.
   Routes resolve relative to `SMOKE_BASE_URL` (including its subpath).
 - `playwright-local-preview.config.ts` + `local-preview.spec.ts`: existing
   local test-data preview, requires both the local API on port 8010 and UI on
