@@ -1,5 +1,7 @@
 # SoyMutDB × 曹帅课题组：视觉素材、架构与执行验收设计
 
+> **2026-10-09 delivery addendum:** A separate asset-only delivery branch now provides 10 original transparent SVG resources at `apps/web/public/visuals/caoslab/`, with `manifest.json`, source SVG and usage guidance. This supersedes the earlier statement below that all assets remain uncreated. The high-resolution raster exploration renders remain separate and are **not** claimed as committed. Website pages, functionality, Admin, CI and Windows scripts remain untouched by the asset PR; integration still requires its own verified PR. The assets are **concept illustrations**, not actual soybean experimental charts or official lab branding.
+
 > 状态：**设计提案 / 待审批（PLAN ONLY）** · 日期：2026-10-09  
 > 基线：`main@d262c8faa34abca3b5e2076f7abc4ddb92051729`  
 > **当前 PR 仅新增/调整文档，不生成或提交生产素材，不改应用代码、Windows 脚本、CI、依赖或数据库。** 未来实施必须另起 PR、经过人工确认与验收。  
