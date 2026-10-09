@@ -415,3 +415,21 @@ await gotoReady(page, "/soymutdb-next/login");
 - 登录表单使用 `getByLabel` 可访问语义验证，覆盖真实 JSON 401、200 与不失去安全 redirect 边界。
 
 必须先经真实 Playwright/Chromium CI 通过才能宣称这些能力恢复。升级 UI 时同步修改测试、文档与实际 DOM，不能通过 `test.skip` 或缩小 `testMatch` 规避失败。
+
+
+### Source-preview API success/failure assertions
+
+The public artifact's offline server returns `[]` for the exact
+`/api/v1/preview/test-data/mutation-sites/by-gene` path. This is a
+successful empty response, **not** a substitute for production data.
+The E2E suite also intercepts the same request with a 503 and requires
+the Gene ID results region to render an error alert, with no empty-row
+claim. Physical Location uses a validated empty preview envelope for
+its end-to-end empty state. The browser JBrowse test asserts the real
+route/iframe `assembly`, `release` and `locus` parameters and verifies
+that `browser-missing-context` did not render; it does not rely on a
+retired combined header label.
+
+Narrow viewport search inputs must wrap without clipping the assembly
+chooser or gene identifier. URL state stays shareable and re-queries
+are scoped by the active release and assembly.

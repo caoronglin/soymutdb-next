@@ -214,3 +214,20 @@ cd e2e && npx playwright test -c playwright-public.config.ts
 ```
 
 如果最后合并获准，再单独验证 `main` 精确 SHA 触发 GitHub Pages 消费的构建制品，线上 Smoke 必须检查真实已部署站点，不能把 PR 的离线绿色代表生产上线成功。
+
+
+## 7. 第五轮前端与真实性回归（2026-10-09）
+
+### 代码变更和实际语义
+
+1. **Release pin**：Gene ID 与 Physical Location 视图均从 `ReleaseScopeProvider` 读取响应式 `useReleaseId()`；其 preview/query cache key 增加 Release、部署变体与 Assembly。切换发布版本后，不得复用旧数据，JBrowse 链接始终携带 Release、Assembly、Locus 三项上下文。
+2. **来源数据真实性**：`listTestDataPreviewMutationSitesForGene()` 失败不再 `.catch(() => [])`。HTTP 404/503 必须显示可见 `Alert`；只有返回真实合法的空 `[]` 才显示空表。Playwright 使用 `static-server.mjs` 提供此合法空结果并单独模拟 503 做负向验证，不引入生产假数据。
+3. **分页正确性**：基因页面把来源突变位点列表作为唯一数据表，分页总数跟随 `mergedRows.length`，catalogue 搜索仅检索第一页用于补充 gene metadata，不再让其匹配总数生成不存在的来源位点分页。
+4. **移动端布局**：Gene/Location 过滤表单使用 `Flex wrap`，固定宽度的 assembly/染色体选择器收敛到容器；表单及结果块使用中性边界/背景，保留键盘和屏幕阅读器标签。
+5. **验收**：本轮单元测试中 route-only mock 显式实现 `useReleaseId`，生产 Provider 不被修改；E2E 检查上下文 guard、实际路由和 JBrowse iframe，而不是已不存在的组合文本标题。两个 Page 测试用真实浏览器执行，禁止 skip、xfail、静态代替执行。
+
+### 合并前持续阻断
+
+- `braces<=3.0.3` 仍被官方 [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) 标记为 High，patched versions **None**；不得 suppress `pnpm audit`、略过 Job 或标为 success。
+- Knip 的残余 unused 文件和未用依赖必须逐项结合 Umi 动态入口/真实 import 进行分类，只能在确定无用后移除源码并由官方锁生成器重生成 pnpm lock。
+- 所有提交必须以**同一最终 SHA** 检查 Baseline、CI、PR Playwright、生产隔离/发布制品；已经通过的历史 SHA 不是当前放行证据。未完成这些项，Draft/No-Go，不合并 `main`、不部署 `gh-pages`、不升级生产数据库卷。
