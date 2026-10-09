@@ -36,7 +36,7 @@ if ($Install) {
     } else {
       throw "Place winsw.exe beside deploy/windows/service.ps1 or install NSSM."
     }
-  } $DryRun
+  } -DryRun:$DryRun
 }
 if ($Uninstall) {
   Invoke-Step "Uninstall service $svc" {
@@ -44,8 +44,8 @@ if ($Uninstall) {
     if (Test-Path $wrapper) { & $wrapper uninstall; if ($LASTEXITCODE -ne 0) { throw "WinSW uninstall failed" } }
     elseif (Get-Command nssm -ErrorAction SilentlyContinue) { & nssm remove $svc confirm; if ($LASTEXITCODE -ne 0) { throw "NSSM uninstall failed" } }
     else { & sc.exe delete $svc; if ($LASTEXITCODE -ne 0) { throw "sc.exe delete failed" } }
-  } $DryRun
+  } -DryRun:$DryRun
 }
-if ($Start) { Invoke-Step "Start service $svc" { Start-Service -Name $svc -ErrorAction Stop } $DryRun }
-if ($Stop) { Invoke-Step "Stop service $svc" { Stop-Service -Name $svc -ErrorAction Stop } $DryRun }
-if ($Restart) { Invoke-Step "Restart service $svc" { Restart-Service -Name $svc -ErrorAction Stop } $DryRun }
+if ($Start) { Invoke-Step "Start service $svc" { Start-Service -Name $svc -ErrorAction Stop } -DryRun:$DryRun }
+if ($Stop) { Invoke-Step "Stop service $svc" { Stop-Service -Name $svc -ErrorAction Stop } -DryRun:$DryRun }
+if ($Restart) { Invoke-Step "Restart service $svc" { Restart-Service -Name $svc -ErrorAction Stop } -DryRun:$DryRun }
