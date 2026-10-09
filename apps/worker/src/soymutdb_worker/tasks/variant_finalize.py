@@ -203,50 +203,41 @@ def _carry_untouched_partitions(
     touched: set[str],
     imported_assemblies: set[str],
 ) -> None:
-    """Copy the release's not-replaced base rows into staging before rebuild.
+    """Carry unaffected facts with one parameterised INSERT SELECT.
 
-    The physical partition is ``(release_key, chromosome)``, so v4 and v5 rows
-    for the same chromosome share a partition and a partition drop removes
-    both. Carrying must therefore exclude only the ``(assembly, chromosome)``
-    facts actually being replaced: for a touched chromosome, rows of an
-    assembly *not* in this import are carried too. Without this, importing v4
-    would delete v5's rows for the same chromosome.
-
-    Several summaries (gene_impact_summary, release_dashboard,
-    substitution_spectrum) carry no chromosome column, so their rows cannot be
-    purged per partition. Purging the whole release and rebuilding only the
-    touched partitions would therefore delete the summaries of untouched
-    chromosomes while their base rows stay. Carrying those rows into staging
-    first makes the rebuild release-complete: summaries are rebuilt from a base
-    that still contains every chromosome of the release.
+    Physical partitions are (release, chromosome); the replacement slice is
+    (touched chromosomes x imported assemblies). Every other assembly and
+    chromosome must survive the full-release rebuild. One set-based command
+    avoids issuing a query and INSERT for each existing chromosome.
     """
     columns = ", ".join(BASE_COLUMNS)
-    carry_batch = deterministic_batch_id(import_id, -1)
-    ordered_assemblies = sorted(imported_assemblies)
-    for chromosome in sorted(_release_chromosomes(engine, release_key)):
-        where = (
-            "release_key = {release_key:String} "
-            "AND chromosome = {chromosome:String}"
+    params: dict[str, str] = {
+        "import_id": import_id,
+        "batch_id": deterministic_batch_id(import_id, -1),
+        "release_key": release_key,
+    }
+    where = "release_key = {release_key:String}"
+    if touched and imported_assemblies:
+        chromosomes = []
+        assemblies = []
+        for i, chromosome in enumerate(sorted(touched)):
+            key = f"chromosome_{i}"
+            params[key] = chromosome
+            chromosomes.append(f"{{{key}:String}}")
+        for i, assembly in enumerate(sorted(imported_assemblies)):
+            key = f"assembly_{i}"
+            params[key] = assembly
+            assemblies.append(f"{{{key}:String}}")
+        where += (
+            " AND NOT (chromosome IN (" + ", ".join(chromosomes)
+            + ") AND assembly_key IN (" + ", ".join(assemblies) + "))"
         )
-        params: dict[str, str] = {
-            "import_id": import_id,
-            "batch_id": carry_batch,
-            "release_key": release_key,
-            "chromosome": chromosome,
-        }
-        if chromosome in touched and ordered_assemblies:
-            placeholders = ", ".join(
-                f"{{assembly_{i}:String}}" for i in range(len(ordered_assemblies))
-            )
-            where += f" AND assembly_key NOT IN ({placeholders})"
-            for i, assembly in enumerate(ordered_assemblies):
-                params[f"assembly_{i}"] = assembly
-        engine.execute(
-            f"INSERT INTO {STAGING_TABLE} ({columns}, import_id, batch_id) "
-            f"SELECT {columns}, {{import_id:String}}, {{batch_id:String}} "
-            f"FROM {BASE_TABLE} WHERE {where}",
-            params=params,
-        )
+    engine.execute(
+        f"INSERT INTO {STAGING_TABLE} ({columns}, import_id, batch_id) "
+        f"SELECT {columns}, {{import_id:String}}, {{batch_id:String}} "
+        f"FROM {BASE_TABLE} WHERE {where}",
+        params=params,
+    )
 
 
 def _purge_release_summaries(engine: ClickHouseEngine, release_key: str) -> None:

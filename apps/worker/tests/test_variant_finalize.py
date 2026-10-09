@@ -10,6 +10,7 @@ asserting no duplicate facts and no double-counted summaries after retries.
 from __future__ import annotations
 
 from pathlib import Path
+from unittest.mock import patch
 
 import chdb.session  # noqa: F401  (hard dep: acceptance engine lives in worker[dev])
 import pytest
@@ -362,3 +363,43 @@ def test_upload_derived_values_are_bound_not_interpolated(engine: ChdbEngine) ->
         )
         == 1
     )
+
+def test_carry_uses_one_sql_statement_and_preserves_unaffected_rows(
+    engine: ChdbEngine,
+) -> None:
+    """Cross-assembly and untouched chromosome facts survive a set-based carry."""
+    rows = [
+        _base_row(10, "R-CARRY", "Chr01", 10, assembly="v4"),
+        _base_row(20, "R-CARRY", "Chr01", 20, assembly="v5"),
+        _base_row(30, "R-CARRY", "Chr02", 30, assembly="v4"),
+        _base_row(40, "R-CARRY", "Chr03", 40, assembly="v5"),
+    ]
+    engine.insert_rows("variant_facts", rows, list(vf.BASE_COLUMNS))
+    vf.stage_batch(
+        engine,
+        import_id="imp-carry",
+        batch_index=0,
+        base_rows=[_base_row(11, "R-CARRY", "Chr01", 11, assembly="v4")],
+    )
+
+    with patch.object(engine, "execute", wraps=engine.execute) as executed:
+        vf.finalize_release(
+            engine, release_key="R-CARRY", import_id="imp-carry",
+            partitions=[("R-CARRY", "Chr01")],
+        )
+    carries = [
+        call for call in executed.call_args_list
+        if call.args and call.args[0].startswith("INSERT INTO variant_facts_staging ")
+    ]
+    assert len(carries) == 1
+    assert "chromosome IN (" in carries[0].args[0]
+    assert "assembly_key IN (" in carries[0].args[0]
+    assert "{release_key:String}" in carries[0].args[0]
+
+    ids = engine.query_rows(
+        "SELECT variant_id FROM variant_facts "
+        "WHERE release_key = {release_key:String} ORDER BY variant_id",
+        params={"release_key": "R-CARRY"},
+    )
+    assert [int(row[0]) for row in ids] == [11, 20, 30, 40]
+    assert _summary_cnt(engine, "R-CARRY") == 4
