@@ -424,7 +424,11 @@ function LocationSearchComponent() {
             <p className="mb-3 text-sm text-muted-foreground">
               {t("search.location.found", { count: sites.length })}
             </p>
-            {sitesQuery.isError ? (
+            {!isTestDataPreviewAssembly(resultAssembly?.name) ? (
+              <Alert type="warning" showIcon title={t("search.location.previewAssemblyMismatch", {
+                defaultValue: "Source mutation-site preview coordinates belong only to the unpublished Gmax_880_v6.0 assembly. Choose that assembly to view the preview.",
+              })} />
+            ) : sitesQuery.isError ? (
               <Alert
                 type="error"
                 showIcon
