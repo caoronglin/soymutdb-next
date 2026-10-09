@@ -1026,3 +1026,58 @@ PR #1 已合并。仓库 `main` 当前 HEAD 为 `d3904c210`，与 `origin/main` 
 
 - 2026-10-09 第五轮：PR #5 继续以独立提交修复 `search/tool-pages.test.tsx` 对 ReleaseScopeProvider 的测试环境缺陷；修正 JBrowse E2E 对旧组合标题的断言、为位置检索建立**成功但空的合法预览响应**，保留 503 / 错误分支。Gene/Location 组件现在订阅 `useReleaseId`，数据缓存键同时包含当前 Release、site variant 与 assembly，不再跨版本复用。基因表使用来源记录数分页，预览端点错误显示为错误而不是伪称“0 条结果”；表单增加窄屏换行和区块边界。上一轮 [PR 浏览器 37920866965](https://github.com/caoronglin/soymutdb-next/actions/runs/37920866965) 到 **29 passed / 1 failed**；最后一项旧标题断言随后已更正，**后续 E2E/CI 必须以最新 HEAD 重跑验证**。
 - 高危 `braces<=3.0.3` 对应 [CVE-2026-93687](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)，截至 2026-10-09 官方无 patched version；Knip 仍报告入口脚本与依赖候选，**不以 docs 或“仅开发依赖”免除门禁**。主分支保持不变，直到可复现安全修复及全部硬门禁通过。
+
+## 2026-10-09 第六轮：基线合并后的 governance 门禁分诊（HEAD `cf92951f4`）
+
+同步 `origin/main`（+49 提交）后，main CI `37938620733` 中**只有 `Dependency graphs + governance` 为红**，
+其余 API/Worker、ClickHouse 24.8+25.8、DB A/B、Frontend、MCP 均 success，baseline `37938620661` success。
+本轮把该 job 在本地完整复现（`pnpm dlx knip@5.62.0 + typescript@5.9.3`，与 `dependency-governance.json` 同款命令），
+起始结果 **33 files / 31 issues，与 CI artifact 逐条一致**。
+
+### 1. Knip 误报清理（33 → 20），仅改配置、零源码删除
+
+Knip 只能沿 JS/TS import 图解析，无法看见 shell / Makefile / Python 的调用方。逐项核实后确认 13 项为
+**误报而非死码**，已登记为合法入口：
+
+| 入口 | 真实调用方 |
+| --- | --- |
+| `scripts/check-react-entry-graph.mjs` | `scripts/verify-frontend-artifacts.sh:107` |
+| `scripts/check-vue-retirement.mjs` | `scripts/verify-frontend-artifacts.sh:108` |
+| `scripts/check_visible_i18n_react.mjs` | `verify-frontend-artifacts.sh:84,85`、`smoke.sh:158`、`scripts/run_ablations.py:215` |
+| `scripts/test_visible_i18n_react_guard.mjs` | `scripts/run_ablations.py:220,231` |
+| `scripts/dev/local-preview-server.mjs` | `scripts/dev-local-preview.sh:93,99` |
+| `tests/load/{api-load,smoke,variant-stress}.js` | `Makefile:155,158,161`（k6 目标） |
+| `packages/genome-view/scripts/gen-svg-golden.ts` | `apps/api/tests/test_genome_view_svg_parity.py:37` |
+| `apps/web/public/sw.js` | 构建期模板，`apps/web/scripts/gen-sw.js:30` `const TEMPLATE` |
+
+登记后三个门禁实跑仍 `exit 0`，未削弱任何守卫。**注意**：根 workspace 必须写成 `workspaces["."]`
+而不是顶层 `entry`——后者对根脚本不生效（实测 33→31 vs 33→21）。
+
+### 2. 基线回归：共享脚本执行位丢失
+
+`scripts/smoke.sh` 与 `scripts/check-production-artifact.sh` 在已合并的 `00429d35e` / `62d0dd3e3` 中
+被误降为 `100644`，使 `test_shared_scripts_are_executable_and_strict` 失败。已恢复执行位：
+`pytest scripts` 由 **1 failed / 63 passed** 转为 **364 passed / 1 skipped**（全量）。
+
+**根因是覆盖缺口**：`scripts/verify-backend-tests.sh` 不执行 `smoke.sh --profile contracts`，
+因此该契约在 CI 中零覆盖，回归才得以静默发布。待办：把 scripts 契约接入 CI（须落在共享脚本内，
+并由 `test_ci_job_contracts.py` 守护）。
+
+### 3. `braces` 为结构性阻断，本轮无法清除
+
+GitHub advisory API 复核 `GHSA-vfj7-8cjw-p6xm`：`first_patched_version: null`，severity high。
+审计制品显示受影响路径**全部**经 `apps/admin` 与 `apps/jbrowse` 的 `@umijs/max`
+（`chokidar>braces`、`micromatch>braces`）。要使 `pnpm-audit` 转绿只能摘除这两个应用的 Umi Max，
+远超本 PR 范围。**不以 GHSA ignore、`continue-on-error` 或「仅构建期依赖」洗绿**；
+契约 §7 的 No-Go 在此项上成立。
+
+### 4. 未处置（需显式批准）
+
+剩余 20 项为**真实无引用**代码：3 个 `src/main.tsx` 兼容垫片（仅被 eslint 冻结豁免清单引用）、
+12 个门户组件 + `apps/web/src/lib/widget-data.ts`、4 个 admin lib、`scripts/generate-genome-fixtures.mjs`
+（其 16 个 fixture 仍被 `packages/genome-data/src/readers/test-fixtures.ts` 消费，删除脚本不等于删除 fixture）。
+批量删除会触碰 canonical 门户并与 draft PR #20 的 dead-code cleanup 重叠，故本轮**不执行**。
+
+本轮为本地提交，**未推送、未合并、未触发任何发布操作**；`braces` 与上述 20 项处置完成前，
+main 仍不得合并、不得升级生产数据卷。
+

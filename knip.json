@@ -30,6 +30,19 @@
     "tailwindcss"
   ],
   "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/check-react-entry-graph.mjs",
+        "scripts/check-react-entry-graph.test.mjs",
+        "scripts/check-vue-retirement.mjs",
+        "scripts/check_visible_i18n_react.mjs",
+        "scripts/test_visible_i18n_react_guard.mjs",
+        "scripts/dev/local-preview-server.mjs",
+        "tests/load/api-load.js",
+        "tests/load/smoke.js",
+        "tests/load/variant-stress.js"
+      ]
+    },
     "e2e": {
       "entry": [
         "playwright*.config.ts",
@@ -48,6 +61,7 @@
       "entry": [
         "config/config.ts",
         "config/plugins/defer-html-scripts.cjs",
+        "public/sw.js",
         "src/umi-entry.tsx",
         "src/routes/**/*.tsx",
         "scripts/finalize-csp.ts",
@@ -61,13 +75,19 @@
         "config/plugins/defer-html-scripts.cjs",
         "src/umi-entry.tsx",
         "src/routes/**/*.tsx",
-        "src/test/setup.ts"
+        "src/test/setup.ts",
+        "src/test/vitest-env.d.ts"
       ]
     },
     "apps/jbrowse": {
       "entry": [
         "config/config.ts",
         "src/umi-entry.tsx"
+      ]
+    },
+    "packages/genome-view": {
+      "entry": [
+        "scripts/gen-svg-golden.ts"
       ]
     }
   }
