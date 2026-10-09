@@ -19,7 +19,6 @@ import * as React from "react";
 import { Alert, Button, Empty, Flex, Input, Select, Table, Tag, Typography, type TableColumnsType } from "@/lib/antd";
 import { SearchOutlined } from "@ant-design/icons";
 import {
-  getReleaseId,
   listTestDataPreviewMutationSitesForGene,
   searchGenes,
   type GeneSummary,
@@ -32,6 +31,7 @@ import { queryKeys } from "../../lib/query-keys";
 import { SITE_VARIANT } from "../../lib/site-variant";
 import { buildJbrowseLocusUrl } from "../../lib/deployment";
 import { resolveSearchAssembly } from "../../lib/search-assembly";
+import { useReleaseId } from "../../lib/release-scope";
 
 /**
  * One rendered result row: a source mutation-site row joined to its catalogue
@@ -88,12 +88,16 @@ function GeneIdSearchComponent() {
   const { t } = useTranslation();
   const { get } = useSiteContent();
   const router = useRouter();
+  // A release may be published while this route stays mounted. Subscribe to
+  // ReleaseScopeProvider so query keys and JBrowse deep links are repinned
+  // atomically, rather than capturing a stale getReleaseId() snapshot.
+  const releaseId = useReleaseId();
   const { q: urlQ, assembly: urlAssembly, run } = Route.useSearch();
   const [geneIdsRaw, setGeneIdsRaw] = React.useState(() => urlQ ?? "");
   const [page, setPage] = React.useState(1);
 
   const assembliesQuery = useQuery(assembliesQueryOptions({
-    releaseId: getReleaseId(),
+    releaseId,
     siteVariant: SITE_VARIANT,
   }));
   const assemblies = assembliesQuery.data;
@@ -136,7 +140,6 @@ function GeneIdSearchComponent() {
     (a) => String(a.id) === String(resolvedAssemblyId),
   );
 
-  const releaseId = getReleaseId();
   const resultsQuery = useQuery({
     queryKey: queryKeys.genes.search({
       q: submitted?.q,
