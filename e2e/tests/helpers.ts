@@ -85,6 +85,15 @@ export const MOCK_ASSEMBLY = Object.freeze({
   is_default: true,
 });
 
+/** Unpublished source fixture: never mix its coordinates with Wm82.a4.v1. */
+export const MOCK_PREVIEW_ASSEMBLY = Object.freeze({
+  id: "6",
+  name: "Gmax_880_v6.0",
+  species: "Glycine max",
+  version: "v6.0",
+  is_default: false,
+});
+
 export const MOCK_GENE_ID = "Glyma.01G000100";
 /** Release the mocked API pins in its `X-SoyMutDB-Release` response header. */
 export const MOCK_RELEASE_ID = "7";
@@ -168,8 +177,13 @@ function isMockedApiRequest(url: URL): boolean {
  * absolute origin. Cross-origin (internal) requests get CORS headers and an
  * OPTIONS preflight, since the browser enforces CORS even for fulfilled routes.
  */
-export async function mockEntityApis(page: Page): Promise<CapturedApiRequest[]> {
+export async function mockEntityApis(
+  page: Page,
+  options: { assembly?: typeof MOCK_ASSEMBLY } = {},
+): Promise<CapturedApiRequest[]> {
   const captured: CapturedApiRequest[] = [];
+  const assembly = options.assembly ?? MOCK_ASSEMBLY;
+  const geneRow = { ...MOCK_GENE_ROW, assembly_id: assembly.id, assembly_name: assembly.name };
 
   await page.route(/.*/, async (route) => {
     const request = route.request();
@@ -232,9 +246,9 @@ export async function mockEntityApis(page: Page): Promise<CapturedApiRequest[]> 
     }
 
     // --- genome catalog ---
-    if (path.endsWith("/genes/assemblies")) return json([MOCK_ASSEMBLY]);
+    if (path.endsWith("/genes/assemblies")) return json([assembly]);
     if (/\/genes\/assemblies\/[^/]+\/chromosomes$/.test(path)) {
-      return json([{ id: "1", assembly_id: MOCK_ASSEMBLY.id, name: "chr01", length: 100000, order: 0 }]);
+      return json([{ id: "1", assembly_id: assembly.id, name: "chr01", length: 100000, order: 0 }]);
     }
 
     // --- table templates ---
@@ -278,7 +292,7 @@ export async function mockEntityApis(page: Page): Promise<CapturedApiRequest[]> 
     // and the JBrowse action could never exist. Keep this scoped to the one
     // fixture accession; all other queries return zero rows.
     if (path.endsWith("/preview/test-data/mutation-sites/by-gene")) {
-      if (url.searchParams.get("gene_id") !== MOCK_GENE_ID) return json([]);
+      if (assembly.name !== MOCK_PREVIEW_ASSEMBLY.name || url.searchParams.get("gene_id") !== MOCK_GENE_ID) return json([]);
       return json([{
         source_site_key: "E2E-01-100",
         mutant_line_name: "E2E1",
@@ -297,7 +311,7 @@ export async function mockEntityApis(page: Page): Promise<CapturedApiRequest[]> 
     // --- gene search / detail / related ---
     if (/\/genes\/[^/]+$/.test(path) && !path.endsWith("/genes/assemblies")) {
       return json({
-        ...MOCK_GENE_ROW,
+        ...geneRow,
         source: "mock",
         extra: {},
         annotations: [],
@@ -308,7 +322,7 @@ export async function mockEntityApis(page: Page): Promise<CapturedApiRequest[]> 
     }
     if (path.endsWith("/genes")) {
       return json({
-        items: [MOCK_GENE_ROW],
+        items: [geneRow],
         next_cursor: null,
         has_more: false,
         page: 1,
