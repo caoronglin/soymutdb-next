@@ -69,7 +69,7 @@ class HttpClickHouseEngine:
         # the user values into SQL ourselves.
         if params:
             sql = re.sub(
-                r"\\{([A-Za-z_][A-Za-z0-9_]*):String\\}",
+                r"\{([A-Za-z_][A-Za-z0-9_]*):String\}",
                 lambda match: f"%({match.group(1)})s",
                 sql,
             )
