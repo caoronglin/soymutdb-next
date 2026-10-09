@@ -68,6 +68,26 @@ regression.
 | `workflow_dispatch` | manual — Actions tab → "E2E Smoke (online)" → Run workflow |
 | `workflow_run` | after "Deploy Web to Pages" completes **successfully** (the `if` guard skips failed deployments) |
 
+## Test target separation (2026-10-09)
+
+- `playwright.config.ts` + `online-smoke.spec.ts`: deployed demo, 10 route checks,
+  document status, rendered main/content, JS/CSS fetches and browser errors.
+  Routes resolve relative to `SMOKE_BASE_URL` (including its subpath).
+- `playwright-local-preview.config.ts` + `local-preview.spec.ts`: existing
+  local test-data preview, requires both the local API on port 8010 and UI on
+  port 5173 to have been started and populated by the operator. It is **not**
+  included in the nightly/deployment smoke.
+- The online suite emits `test-results/smoke-report.json` with per-route
+  diagnostics from completed tests. This is best-effort on early navigation failure;
+  the Playwright trace remains authoritative for a failing test.
+
+To run the local integration suite explicitly:
+
+```bash
+cd e2e
+npx playwright test -c playwright-local-preview.config.ts
+```
+
 ## Running locally
 
 ```bash

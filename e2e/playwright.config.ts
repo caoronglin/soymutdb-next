@@ -16,8 +16,14 @@ import { defineConfig } from "@playwright/test";
  *   - timeout=60s per test: SSG + hydration + failing API calls
  *     (placeholder origins) can take a while on a slow network.
  */
-const rl_baseURL =
-  process.env.SMOKE_BASE_URL ?? "https://caoronglin.github.io/soymutdb-next/";
+const siteBase = new URL(
+  process.env.SMOKE_BASE_URL ?? "https://caoronglin.github.io/soymutdb-next/",
+);
+if (!siteBase.pathname.endsWith("/")) siteBase.pathname += "/";
+if (siteBase.search || siteBase.hash) {
+  throw new Error("SMOKE_BASE_URL must be a site base without query or fragment");
+}
+const rl_baseURL = siteBase.toString();
 
 export default defineConfig({
   testDir: "./tests",
