@@ -92,7 +92,6 @@ function LocationSearchComponent() {
     (a) => String(a.id) === String(assemblyId),
   );
   const linkedAssembly = resolveSearchAssembly(assemblies, urlAssembly);
-  const resultAssembly = assemblies.find((a) => String(a.id) === submitted?.assemblyId);
 
   React.useEffect(() => {
     if (assemblyId || urlAssembly || assemblies.length === 0) return;
@@ -149,6 +148,8 @@ function LocationSearchComponent() {
     };
   }, [run, urlAssembly, linkedAssembly, urlChromosome, urlStart, urlEnd,
       chromosomesQuery.isSuccess, selectedAssembly?.id, chromosomes]);
+
+  const resultAssembly = assemblies.find((a) => String(a.id) === submitted?.assemblyId);
 
   // The operator's own source records for the interval. The region-variant
   // projection is a separate store that is often empty for these coordinates,
