@@ -10,12 +10,13 @@ pnpm workspace so the root `package.json` / `pnpm-lock.yaml` stay untouched.
 
 ## What is tested (assertion contract)
 
-### 1. Resource loading (homepage)
-- **Zero** responses with HTTP status >= 400 (strict — a missing favicon is
-  a bug too, not something to filter out).
-- **Zero** failed same-origin `script`/`stylesheet` requests
-  (`page.on('requestfailed')`).
-- At least one `/assets/*.js` bundle answered `200` (key-resource check).
+### 1. Resource loading (all 10 routes)
+- Route document responds 2xx/3xx and contains visible `main` and nonempty body.
+- Same-origin `script`/`stylesheet` requests must not return 4xx/5xx or fail
+  to load (`requestfailed`). Demo external API failures are logged but not
+  confused with same-origin static asset failures.
+- Static favicon presence is checked by the artifact build contract, not this
+  runtime test (browser favicon caching can suppress the network request).
 
 ### 2. Route rendering (parameterized over 10 key routes)
 `/`, `/search`, `/genes`, `/variants`, `/blast`, `/news`, `/browser`,
@@ -65,6 +66,7 @@ regression.
 | Trigger | When |
 | --- | --- |
 | `schedule` | nightly 02:00 UTC |
+| `pull_request` | read-only assertions against the currently deployed Demo, not the PR artifact, when E2E files change |
 | `workflow_dispatch` | manual — Actions tab → "E2E Smoke (online)" → Run workflow |
 | `workflow_run` | after "Deploy Web to Pages" completes **successfully** (the `if` guard skips failed deployments) |
 

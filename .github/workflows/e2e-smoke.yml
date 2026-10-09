@@ -24,6 +24,12 @@
 name: E2E Smoke (online)
 
 on:
+  # A PR run executes the proposed smoke assertions against the *currently*
+  # deployed Demo, not against the PR's unshipped frontend artifact.
+  pull_request:
+    paths:
+      - "e2e/**"
+      - ".github/workflows/e2e-smoke.yml"
   schedule:
     - cron: "0 2 * * *"
   workflow_dispatch:
@@ -35,7 +41,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: e2e-smoke
+  group: e2e-smoke-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

@@ -364,6 +364,7 @@ def test_upload_derived_values_are_bound_not_interpolated(engine: ChdbEngine) ->
         == 1
     )
 
+
 def test_carry_uses_one_sql_statement_and_preserves_unaffected_rows(
     engine: ChdbEngine,
 ) -> None:
