@@ -193,9 +193,20 @@ jobs:
             if ($parseErrors.Count -gt 0) { $errors += "$( $_.Name ): $($parseErrors | Out-String)" }
           }
           if ($errors.Count -gt 0) { throw ($errors -join [Environment]::NewLine) }
-      - name: Run no-Docker installer dry-run
+      - name: Verify Windows dry-run does not mutate machine state
         shell: pwsh
-        run: .\\deploy\\windows\\install.ps1 -DryRun -SkipDatabase
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (Test-Path 'apps/api/.venv') { throw 'Unexpected existing API venv before dry-run' }
+          if (Get-Service -Name 'SoyMutDB-API' -ErrorAction SilentlyContinue) { throw 'Unexpected existing service before dry-run' }
+          .\deploy\windows\install.ps1 -DryRun
+          .\deploy\windows\backup.ps1 -DryRun
+          .\deploy\windows\upgrade.ps1 -Ref 'v-does-not-exist' -DryRun
+          .\deploy\windows\rollback.ps1 -Ref 'v-does-not-exist' -DryRun
+          .\deploy\windows\service.ps1 -Install -DryRun
+          if (Test-Path 'apps/api/.venv') { throw 'DryRun created a Python virtualenv' }
+          if (Get-Service -Name 'SoyMutDB-API' -ErrorAction SilentlyContinue) { throw 'DryRun registered a Windows service' }
+          if (Test-Path 'backups') { throw 'DryRun created a backup directory' }
       - name: Run Docker-free unit tests
         shell: pwsh
         run: |
