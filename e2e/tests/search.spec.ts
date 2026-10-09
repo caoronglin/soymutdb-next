@@ -32,6 +32,10 @@ test.describe("Gene ID search", () => {
   test("submit runs the assembly-scoped query and reports the result count", async ({ page }) => {
     await gotoReady(page, `${BASE}/search/genes`);
 
+    // Preview data are pinned to v6, not the default released v4 genome.
+    await page.getByTestId("search-genes-assembly").click();
+    await page.locator(".ant-select-dropdown:visible .ant-select-item-option")
+      .filter({ hasText: "Gmax_880_v6.0" }).first().click();
     await geneIdInput(page).fill("Glyma.01G000100");
     // The submit control stays disabled until the genome-version context is
     // resolved (a request without an assembly would be ambiguous across v4/v5),
@@ -100,7 +104,11 @@ test.describe("Physical Location search", () => {
     });
     await gotoReady(page, `${BASE}/search/location`);
 
-    // The mock assembly auto-selects; pick a chromosome so the form validates.
+    // Source preview coordinates are only valid under this v6 assembly.
+    await page.getByTestId("location-assembly").click();
+    await page.locator(".ant-select-dropdown:visible .ant-select-item-option")
+      .filter({ hasText: "Gmax_880_v6.0" }).first().click();
+    // Pick a chromosome so the form validates.
     // antd Select is a div rather than a native <select>, so open it and click
     // the option instead of using `selectOption`.
     await page.getByTestId("location-chromosome").click();
@@ -119,7 +127,7 @@ test.describe("Physical Location search", () => {
     expect(requested[0]).toContain("end=2000");
     // The source preview endpoint has no assembly parameter: context belongs
     // in the shareable page URL and is validated before submit.
-    await expect(page).toHaveURL(/assembly=Wm82\.a4\.v1/);
+    await expect(page).toHaveURL(/assembly=Gmax_880_v6\.0/);
     // The empty result is reported, not hidden.
     await expect(page.getByTestId("location-empty")).toBeVisible();
   });
