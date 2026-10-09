@@ -30,6 +30,7 @@ import {
 } from "@/lib/antd";
 import { SearchOutlined } from "@ant-design/icons";
 import {
+  isTestDataPreviewAssembly,
   searchTestDataPreviewMutationSites,
     type TestDataPreviewMutationSite,
   type AssemblyInfo,
@@ -81,7 +82,6 @@ function LocationSearchComponent() {
   const [chromosome, setChromosome] = React.useState<string | undefined>(undefined);
   const [start, setStart] = React.useState<number | null>(null);
   const [end, setEnd] = React.useState<number | null>(null);
-  const [submitted, setSubmitted] = React.useState<RegionQuery | null>(null);
 
   const assembliesQuery = useQuery(assembliesQueryOptions({
     releaseId,
@@ -120,34 +120,35 @@ function LocationSearchComponent() {
     }
   }, [chromosome, chromosomes, chromosomesQuery.isSuccess]);
 
-  // Deep link: restore form state from URL once assemblies/chromosomes load.
-  const restoredRef = React.useRef(false);
+  // Restore URL state for every navigation, not just the initial mount.
   React.useEffect(() => {
-    if (restoredRef.current) return;
-    // Resolve the explicit URL assembly without substituting a default version.
-    if (urlAssembly && linkedAssembly) setAssemblyId(String(linkedAssembly.id));
-    if (urlChromosome) setChromosome(urlChromosome);
+    if (urlAssembly) setAssemblyId(linkedAssembly ? String(linkedAssembly.id) : undefined);
+    if (urlChromosome != null) setChromosome(urlChromosome);
     if (urlStart != null) setStart(urlStart);
     if (urlEnd != null) setEnd(urlEnd);
-  }, [urlAssembly, urlChromosome, urlStart, urlEnd, linkedAssembly]);
+  }, [urlAssembly, linkedAssembly, urlChromosome, urlStart, urlEnd]);
 
-  const autoRun = (assembly: AssemblyInfo, chr: string, s: number, e: number): RegionQuery | null => {
-    if (!Number.isSafeInteger(s) || !Number.isSafeInteger(e) || s < 1 || e < s) return null;
-    return { assembly: assembly.name, assemblyId: String(assembly.id), chromosome: chr, start: s, end: e };
-  };
-
-  // Auto-submit once when `run=1` arrives with a complete, valid region.
-  React.useEffect(() => {
-    if (restoredRef.current) return;
-    if (run !== true) return;
-    if (!selectedAssembly || !urlChromosome || urlStart == null || urlEnd == null) return;
-    if (urlAssembly && String(selectedAssembly.id) !== urlAssembly && selectedAssembly.name !== urlAssembly) return;
-    if (!chromosomes.some((item) => item.name === urlChromosome)) return;
-    const query = autoRun(selectedAssembly, urlChromosome, urlStart, urlEnd);
-    if (!query) return;
-    restoredRef.current = true;
-    setSubmitted(query);
-  }, [run, selectedAssembly, urlAssembly, urlChromosome, urlStart, urlEnd, chromosomes]);
+  // Derive the submitted result solely from the current URL. Back/Forward,
+  // invalid assemblies and changed coordinates must never retain stale rows.
+  const submitted: RegionQuery | null = React.useMemo(() => {
+    if (!run || !urlAssembly || !linkedAssembly || !urlChromosome ||
+        !chromosomesQuery.isSuccess ||
+        String(selectedAssembly?.id) !== String(linkedAssembly.id) ||
+        !chromosomes.some((item) => item.name === urlChromosome) ||
+        urlStart == null || urlEnd == null ||
+        !Number.isSafeInteger(urlStart) || !Number.isSafeInteger(urlEnd) ||
+        urlStart < 1 || urlEnd < urlStart) {
+      return null;
+    }
+    return {
+      assembly: linkedAssembly.name,
+      assemblyId: String(linkedAssembly.id),
+      chromosome: urlChromosome,
+      start: urlStart,
+      end: urlEnd,
+    };
+  }, [run, urlAssembly, linkedAssembly, urlChromosome, urlStart, urlEnd,
+      chromosomesQuery.isSuccess, selectedAssembly?.id, chromosomes]);
 
   // The operator's own source records for the interval. The region-variant
   // projection is a separate store that is often empty for these coordinates,
@@ -162,7 +163,9 @@ function LocationSearchComponent() {
         end: submitted!.end,
         limit: 1000,
       }),
-    enabled: submitted != null,
+    // This source endpoint serves one fixed unpublished assembly. Never
+    // issue it for a different assembly or relabel its coordinates as v4/v5.
+    enabled: submitted != null && isTestDataPreviewAssembly(resultAssembly?.name),
     // A missing preview route (non-local deployment) is a normal answer here.
     retry: false,
   });
@@ -209,7 +212,7 @@ function LocationSearchComponent() {
         <Link
           to="/genes/$geneId"
           params={{ geneId: row.gene_id }}
-          search={{ assembly: assemblyId }}
+          search={{ assembly: submitted?.assemblyId }}
           title={row.gene_id}
           className="link-underline whitespace-nowrap font-mono text-xs font-medium text-primary"
         >
@@ -265,17 +268,9 @@ function LocationSearchComponent() {
   const submit = () => {
     if (!selectedAssembly || !chromosome || start == null || end == null) return;
     if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end < start) return;
-    setSubmitted({
-      assembly: selectedAssembly.name,
-      assemblyId: String(selectedAssembly.id),
-      chromosome,
-      start,
-      end,
-    });
     void router.navigate({
       to: "/search/location",
       search: { assembly: selectedAssembly.name, chromosome, start, end, run: true },
-      replace: true,
     });
   };
 
