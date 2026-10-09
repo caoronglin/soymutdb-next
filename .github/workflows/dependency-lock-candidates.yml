@@ -1,0 +1,94 @@
+# Resolver-only PR job: builds REAL lockfiles in a pinned GitHub runner and
+# uploads exact bytes for review. Never pushes, merges, or weakens security gates.
+name: Dependency lockfile upgrade candidates
+
+on:
+  pull_request:
+    paths:
+      - "pnpm-workspace.yaml"
+      - "apps/**/pyproject.toml"
+      - ".github/workflows/dependency-lock-candidates.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lock-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  node-lock:
+    name: Resolve pnpm lock with audited security floors
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      npm_config_registry: https://registry.npmjs.org/
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 12.5.1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.19.0
+      - name: Resolve exact lock and validate install/lock consistency
+        run: |
+          set -euo pipefail
+          pnpm --version
+          pnpm install --lockfile-only --ignore-scripts --registry=https://registry.npmjs.org/
+          pnpm dedupe
+          pnpm install --frozen-lockfile --ignore-scripts --registry=https://registry.npmjs.org/
+          pnpm dedupe --check
+          git diff --stat -- pnpm-lock.yaml pnpm-workspace.yaml
+      - name: Upload resolver-generated lock (no synthetic integrity values)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: reviewed-pnpm-lock-candidate
+          path: pnpm-lock.yaml
+          if-no-files-found: error
+          retention-days: 7
+
+  python-lock:
+    name: Resolve uv lock ${{ matrix.project }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [api, worker, mcp-server]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.14'
+      - name: Install repository-pinned uv resolver
+        run: python -m pip install 'uv==0.11.33'
+      - name: Resolve and verify the security floor
+        env:
+          PROJECT: ${{ matrix.project }}
+        run: |
+          set -euo pipefail
+          case "$PROJECT" in
+            api)
+              uv lock --project apps/api --upgrade-package 'urllib3==2.8.0' --upgrade-package 'multidict==6.9.1' --upgrade-package 'PyJWT==2.15.1'
+              ;;
+            worker)
+              uv lock --project apps/worker --upgrade-package 'urllib3==2.8.0'
+              ;;
+            mcp-server)
+              uv lock --project apps/mcp-server --upgrade-package 'PyJWT==2.15.1'
+              ;;
+            *) exit 2 ;;
+          esac
+          uv lock --project "apps/$PROJECT" --check
+          git diff --stat -- "apps/$PROJECT/uv.lock"
+      - name: Upload resolver-generated uv lock
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: reviewed-uv-lock-${{ matrix.project }}
+          path: apps/${{ matrix.project }}/uv.lock
+          if-no-files-found: error
+          retention-days: 7

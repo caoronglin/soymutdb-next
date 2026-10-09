@@ -28,5 +28,47 @@
     "openapi-typescript",
     "postcss-load-config",
     "tailwindcss"
-  ]
+  ],
+  "workspaces": {
+    "e2e": {
+      "entry": [
+        "playwright*.config.ts",
+        "tests/*.spec.ts",
+        "*.mjs"
+      ],
+      "project": [
+        "**/*.ts",
+        "**/*.mjs"
+      ],
+      "playwright": {
+        "config": []
+      }
+    },
+    "apps/web": {
+      "entry": [
+        "config/config.ts",
+        "config/plugins/defer-html-scripts.cjs",
+        "src/umi-entry.tsx",
+        "src/routes/**/*.tsx",
+        "scripts/finalize-csp.ts",
+        "scripts/release-manifest.ts",
+        "scripts/gen-sw.js"
+      ]
+    },
+    "apps/admin": {
+      "entry": [
+        "config/config.ts",
+        "config/plugins/defer-html-scripts.cjs",
+        "src/umi-entry.tsx",
+        "src/routes/**/*.tsx",
+        "src/test/setup.ts"
+      ]
+    },
+    "apps/jbrowse": {
+      "entry": [
+        "config/config.ts",
+        "src/umi-entry.tsx"
+      ]
+    }
+  }
 }

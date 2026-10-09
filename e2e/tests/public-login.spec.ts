@@ -40,8 +40,8 @@ async function openLogin(page: Page, redirect = "/analyses"): Promise<void> {
   // interacting, otherwise a click is silently discarded and no request fires.
   await waitForAppReady(page);
   await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
-  await expect(page.getByTestId("login-email")).toBeVisible();
-  await expect(page.getByTestId("login-password")).toBeVisible();
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
 }
 
@@ -54,12 +54,15 @@ async function submitLogin(
     response.request().method() === "POST" && isLoginRequest(response.request()),
   );
 
-  await page.getByTestId("login-email").fill(credentials.email);
-  await page.getByTestId("login-password").fill(credentials.password);
+  await page.getByLabel("Email", { exact: true }).fill(credentials.email);
+  await page.getByLabel("Password", { exact: true }).fill(credentials.password);
   await page.getByRole("button", { name: /sign in/i }).click();
 
   const [request, response] = await Promise.all([requestPromise, responsePromise]);
-  expect(new URL(request.url()).pathname).toBe(`${BASE}${LOGIN_ENDPOINT}`);
+  // The API client resolves a root-absolute /api/v1 fallback independently
+  // of the Pages subpath. The static server normalizes this path for its
+  // mocked auth response; ensure it is still the documented endpoint.
+  expect(new URL(request.url()).pathname).toBe(LOGIN_ENDPOINT);
   expect(request.method()).toBe("POST");
   expect(request.headers()["content-type"]).toContain("application/json");
   expect(request.postDataJSON()).toEqual(credentials);

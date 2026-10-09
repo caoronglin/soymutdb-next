@@ -43,11 +43,15 @@ overrides:
   js-yaml: 4.3.2
   # Umi Max 4.7.20 carries older transitive ranges; these compatible floors
   # remove known advisories without replacing the React/Ant Design majors.
-  axios: 0.33.0
+  # GHSA-x97p-jq2g-jp4f. Resolve and integration-test in the lock candidate job.
+  axios: 0.34.0
   immer: 9.0.6
   node-fetch: 2.7.0
   "path-to-regexp@^1.7.0": 1.9.0
   "path-to-regexp@^8.0.0": 8.4.2
+  # GHSA-68fv-2mgg-jv7q and GHSA-85c8-ppgw-ccpr; verify Vitest pools.
+  source-map-js: 1.2.2
+  tinypool: 2.1.2
   esbuild: 0.28.2
   "@babel/core": 7.29.7
   "@babel/runtime": 7.29.7

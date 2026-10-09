@@ -10,12 +10,13 @@ pnpm workspace so the root `package.json` / `pnpm-lock.yaml` stay untouched.
 
 ## What is tested (assertion contract)
 
-### 1. Resource loading (homepage)
-- **Zero** responses with HTTP status >= 400 (strict — a missing favicon is
-  a bug too, not something to filter out).
-- **Zero** failed same-origin `script`/`stylesheet` requests
-  (`page.on('requestfailed')`).
-- At least one `/assets/*.js` bundle answered `200` (key-resource check).
+### 1. Resource loading (all 10 routes)
+- Route document responds 2xx/3xx and contains visible `main` and nonempty body.
+- Same-origin `script`/`stylesheet` requests must not return 4xx/5xx or fail
+  to load (`requestfailed`). Demo external API failures are logged but not
+  confused with same-origin static asset failures.
+- Static favicon presence is checked by the artifact build contract, not this
+  runtime test (browser favicon caching can suppress the network request).
 
 ### 2. Route rendering (parameterized over 10 key routes)
 `/`, `/search`, `/genes`, `/variants`, `/blast`, `/news`, `/browser`,
@@ -65,8 +66,35 @@ regression.
 | Trigger | When |
 | --- | --- |
 | `schedule` | nightly 02:00 UTC |
+| `pull_request` | build and test proposed PR `apps/web/dist/external` with offline mock API, separate from online deployed smoke |
 | `workflow_dispatch` | manual — Actions tab → "E2E Smoke (online)" → Run workflow |
 | `workflow_run` | after "Deploy Web to Pages" completes **successfully** (the `if` guard skips failed deployments) |
+
+## Test target separation (2026-10-09)
+
+- `playwright.config.ts` + `online-smoke.spec.ts`: deployed demo, 10 route checks,
+  document status, rendered main/content, JS/CSS fetches and browser errors.
+  Trigger: nightly, manual and post-deployment. This suite **does not run
+  on pull requests**; live 404s are real deployment failures and not waived.
+- PR workflow (`.github/workflows/e2e-smoke.yml`): builds the **current PR**
+  with the static public path and same-origin mock API, then runs
+  `playwright-public.config.ts` against `static-server.mjs`. It does not
+  pretend that an unmerged PR's new pages already exist on GitHub Pages.
+  Routes resolve relative to `SMOKE_BASE_URL` (including its subpath).
+- `playwright-local-preview.config.ts` + `local-preview.spec.ts`: existing
+  local test-data preview, requires both the local API on port 8010 and UI on
+  port 5173 to have been started and populated by the operator. It is **not**
+  included in the nightly/deployment smoke.
+- The online suite emits `test-results/smoke-report.json` with per-route
+  diagnostics from completed tests. This is best-effort on early navigation failure;
+  the Playwright trace remains authoritative for a failing test.
+
+To run the local integration suite explicitly:
+
+```bash
+cd e2e
+npx playwright test -c playwright-local-preview.config.ts
+```
 
 ## Running locally
 
@@ -375,3 +403,33 @@ await gotoReady(page, "/soymutdb-next/login");
 设置后 push main（或手动重跑 pages.yml）→ 部署完成自动触发 E2E Smoke。
 
 **Smoke 语义**：`API_BASE_URL` 未配置时同源 API 404 记为报告不失败（SPA 相对 /api/v1 回退 + GitHub Pages 404）；一旦检测到跨域 API 请求（已配置），API 404 变为硬失败。静态资源（js/css/fonts/images）404 永远是硬失败。
+
+
+## PR 自制品交互回归（2026-10-09）
+
+`playwright-public.config.ts` 对应当前 React 19/Umi 生产构建、`static-server.mjs` 和 deterministic mock API；**不是**旧版 UI 布局验收。保留完整交互测试覆盖：
+- 首页 Search/Tools/Resources 下拉导航、4 个工具卡、hero identifier search。
+- BLAST 的当前 DIAMOND BLASTP 默认程序、输入和非法序列不提交。
+- Gene ID / Physical Location 通过 `?q` / `?assembly` / `?chromosome` 等 URL 参数**页内**刷新，同源网络请求保留明确 assembly/region 上下文。
+- Gene source mutation-site 表含 10 个字段，JBrowse deep link 同时包含 `assembly` 和 `locus`；本地 mock `preview/test-data` 路由专供 source-row 回归，不代表已发布数据。
+- 登录表单使用 `getByLabel` 可访问语义验证，覆盖真实 JSON 401、200 与不失去安全 redirect 边界。
+
+必须先经真实 Playwright/Chromium CI 通过才能宣称这些能力恢复。升级 UI 时同步修改测试、文档与实际 DOM，不能通过 `test.skip` 或缩小 `testMatch` 规避失败。
+
+
+### Source-preview API success/failure assertions
+
+The public artifact's offline server returns `[]` for the exact
+`/api/v1/preview/test-data/mutation-sites/by-gene` path. This is a
+successful empty response, **not** a substitute for production data.
+The E2E suite also intercepts the same request with a 503 and requires
+the Gene ID results region to render an error alert, with no empty-row
+claim. Physical Location uses a validated empty preview envelope for
+its end-to-end empty state. The browser JBrowse test asserts the real
+route/iframe `assembly`, `release` and `locus` parameters and verifies
+that `browser-missing-context` did not render; it does not rely on a
+retired combined header label.
+
+Narrow viewport search inputs must wrap without clipping the assembly
+chooser or gene identifier. URL state stays shareable and re-queries
+are scoped by the active release and assembly.

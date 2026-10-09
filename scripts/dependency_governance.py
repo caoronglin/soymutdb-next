@@ -807,6 +807,56 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
     return result_row
 
 
+
+def _audit_failure_evidence(row: dict[str, Any], output: Path) -> list[str]:
+    """Bounded actionable diagnostic, never a new pass/fail decision."""
+    if row.get("status") == "passed":
+        return []
+    name = str(row["name"])
+    report = output / str(row.get("report", ""))
+    if not report.is_file():
+        return [f"  {name}: report unavailable; see analyzer stderr / CI artifacts"]
+    try:
+        detail = json.loads(report.read_text(encoding="utf-8"))
+    except (ValueError, UnicodeError):
+        return [f"  {name}: report is not readable JSON"]
+    if not isinstance(detail, dict):
+        return [f"  {name}: unexpected report shape"]
+    evidence: list[str] = []
+    if name == "pnpm-audit":
+        advisories = detail.get("advisories") or {}
+        for item in advisories.values() if isinstance(advisories, dict) else []:
+            if item.get("severity") not in {"high", "critical"}:
+                continue
+            evidence.append(
+                f"  {item.get('severity')} {item.get('module_name')}: "
+                f"{item.get('vulnerable_versions')}; "
+                f"fixed={item.get('patched_versions') or 'unknown'} "
+                f"{item.get('url')}"
+            )
+    elif name.startswith("pip-audit-"):
+        for package in detail.get("dependencies", []):
+            for vuln in package.get("vulns", []):
+                fixes = ", ".join(vuln.get("fix_versions") or []) or "no known fix"
+                evidence.append(
+                    f"  {package.get('name')}=={package.get('version')}: "
+                    f"{vuln.get('id')}; fixed={fixes}"
+                )
+    elif name == "knip":
+        unused = detail.get("files", [])
+        issues = detail.get("issues", [])
+        evidence.append(
+            f"  {len(unused)} candidate unused files, "
+            f"{len(issues)} files with dependency/export issues; "
+            "review entrypoints before removal"
+        )
+        evidence.extend(f"  unused: {file}" for file in unused[:5])
+    elif name == "pnpm-duplicate-versions":
+        if "Run pnpm dedupe" in detail.get("stdout", ""):
+            evidence.append("  pnpm dedupe --check recommends lockfile deduplication")
+    return evidence[:40]
+
+
 def run_audits(config_path: Path, output: Path) -> int:
     output.mkdir(parents=True, exist_ok=True)
     policy = json.loads(config_path.read_text(encoding="utf-8"))
@@ -869,6 +919,8 @@ def run_audits(config_path: Path, output: Path) -> int:
     _write_json(output / "summary.json", summary)
     for row in rows:
         print(f"{row['name']}: {row['status']} ({row['reason']})")
+        for detail in _audit_failure_evidence(row, output):
+            print(detail)
     print(f"dependency governance: {status} ({output})")
     return 0 if status == "passed" else 1
 

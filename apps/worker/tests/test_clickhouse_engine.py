@@ -173,8 +173,36 @@ def test_http_engine_adapter_maps_the_port() -> None:
     )
     engine.insert_rows("t", [(1, "a"), (2, "b")], ["id", "k"])
     assert engine.scalar("SELECT count() FROM t", {"x": "y"}) == 42
-    assert client.commands == ["ALTER TABLE t DROP PARTITION ({rk:String})"]
-    # The adapter forwards bound parameters instead of interpolating values.
+    assert client.commands == ["ALTER TABLE t DROP PARTITION (%(rk)s)"]
+    # The HTTP command uses client-side value binding, not unsupported
+    # server-side {name:String} placeholders on ALTER or INSERT.
     assert client._command_params == {"rk": "R1"}
     assert client.inserts == [("t", [(1, "a"), (2, "b")], ["id", "k"])]
     assert client._params == {"x": "y"}
+
+
+def test_http_command_binding_uses_driver_escaping_on_dml() -> None:
+    """No uploaded value is injected by this adapter into INSERT/ALTER SQL."""
+    from soymutdb_worker.tasks.clickhouse_engine import HttpClickHouseEngine
+
+    client = _FakeClient()
+    engine = HttpClickHouseEngine(client)
+    release = "R1' OR 1=1 --"
+    engine.execute(
+        "INSERT INTO destination (k) SELECT {release_key:String} "
+        "FROM source WHERE release_key = {release_key:String}",
+        params={"release_key": release},
+    )
+    assert client.commands == [
+        "INSERT INTO destination (k) SELECT %(release_key)s "
+        "FROM source WHERE release_key = %(release_key)s"
+    ]
+    assert client._command_params == {"release_key": release}
+
+    # Normal SELECT query binding remains server-side (the supported mode).
+    assert engine.scalar(
+        "SELECT count() FROM source WHERE release_key = {release_key:String}",
+        {"release_key": release},
+    ) == 42
+    assert client._sql.endswith("{release_key:String}")
+    assert client._params == {"release_key": release}

@@ -17,6 +17,7 @@ ClickHouse client.
 
 from __future__ import annotations
 
+import re
 from typing import Any, Protocol, runtime_checkable
 
 
@@ -60,6 +61,18 @@ class HttpClickHouseEngine:
         self._client = client
 
     def execute(self, sql: str, params: dict[str, Any] | None = None) -> Any:
+        # clickhouse-connect's documented {name:Type} server binding only works
+        # for SELECT. The finalize protocol issues INSERT/ALTER DML, so convert
+        # its fixed {name:String} placeholders into the driver's client-side
+        # %(name)s syntax and let the driver quote/escape the values. This also
+        # covers single quotes in import/release/chromosome keys. Never replace
+        # the user values into SQL ourselves.
+        if params:
+            sql = re.sub(
+                r"\{([A-Za-z_][A-Za-z0-9_]*):String\}",
+                lambda match: f"%({match.group(1)})s",
+                sql,
+            )
         return self._client.command(sql, parameters=params or {})
 
     def insert_rows(

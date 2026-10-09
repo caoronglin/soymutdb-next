@@ -32,22 +32,21 @@ test.describe("Gene ID search", () => {
   test("submit runs the assembly-scoped query and reports the result count", async ({ page }) => {
     await gotoReady(page, `${BASE}/search/genes`);
 
+    // Preview data are pinned to v6, not the default released v4 genome.
+    await page.getByTestId("search-genes-assembly").click();
+    await page.locator(".ant-select-dropdown:visible .ant-select-item-option")
+      .filter({ hasText: "Gmax_880_v6.0" }).first().click();
     await geneIdInput(page).fill("Glyma.01G000100");
     // The submit control stays disabled until the genome-version context is
     // resolved (a request without an assembly would be ambiguous across v4/v5),
     // so wait for the enabled state instead of racing the assemblies request.
     const submit = searchSubmit(page);
     await expect(submit).toBeEnabled();
-    // Submission opens a parameterized result view in a NEW tab (the approved
-    // flow: results are shareable and must not replace the form), so the result
-    // assertions belong to the popup rather than to the submitting page.
-    const [results] = await Promise.all([page.waitForEvent("popup"), submit.click()]);
-    await results.waitForLoadState();
-
-    // The result region reports the query instead of inventing rows: the mock
-    // returns an empty gene list, so the empty state is the honest outcome.
-    await expect(results.getByTestId("search-genes-total")).toBeVisible();
-    await expect(results.getByTestId("search-genes-empty")).toBeVisible();
+    // Current flow navigates in-place, retaining q + assembly in a shareable URL.
+    await submit.click();
+    await expect(page).toHaveURL(/\/search\/genes\?.*q=Glyma\.01G000100/);
+    await expect(page.locator('[role="region"][aria-label="Gene ID search results"]')).toBeVisible();
+    await expect(page.getByTestId("search-genes-empty")).toBeVisible();
   });
 
   test("restores form state from a parameterized URL", async ({ page }) => {
@@ -68,7 +67,7 @@ test.describe("Physical Location search", () => {
   test("start < 1 or end < start never submits a request", async ({ page }) => {
     let regionRequests = 0;
     page.on("request", (request) => {
-      if (request.url().includes("/variants/region")) regionRequests += 1;
+      if (request.url().includes("/preview/test-data/mutation-sites?")) regionRequests += 1;
     });
     await gotoReady(
       page,
@@ -79,35 +78,58 @@ test.describe("Physical Location search", () => {
     expect(regionRequests).toBe(0);
   });
 
-  test("submit issues the region request for the chosen chromosome", async ({ page }) => {
+  test("submit issues the source-site interval request for the chosen chromosome", async ({ page }) => {
     const requested: string[] = [];
-    // Listen on the CONTEXT: the result view opens in a popup, so a page-scoped
-    // listener would never observe the region request.
+    // Current flow keeps results on this page; still capture exact network
+    // requests, including any future secondary navigation.
     page.context().on("request", (request) => {
-      if (request.url().includes("/variants/region")) requested.push(request.url());
+      if (request.url().includes("/preview/test-data/mutation-sites?")) requested.push(request.url());
+    });
+    // Intercept ONLY the current source-site read for this test. An empty,
+    // validated preview envelope exercises the real success/empty rendering;
+    // a 404 is an error state and must never be presented as zero results.
+    await page.route("**/preview/test-data/mutation-sites?*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          preview: true,
+          publication_status: "unpublished",
+          coordinate_system: "1-based-inclusive",
+          assembly: { name: "Gmax_880_v6.0", version: "v6.0", species: "Glycine max", status: "unpublished" },
+          annotation_version: "Wm82.a6.v1",
+          items: [], total: 0, limit: 1000,
+        }),
+      });
     });
     await gotoReady(page, `${BASE}/search/location`);
 
-    // The mock assembly auto-selects; pick a chromosome so the form validates.
+    // Source preview coordinates are only valid under this v6 assembly.
+    await page.getByTestId("location-assembly").click();
+    await page.locator(".ant-select-dropdown:visible .ant-select-item-option")
+      .filter({ hasText: "Gmax_880_v6.0" }).first().click();
+    // Pick a chromosome so the form validates.
     // antd Select is a div rather than a native <select>, so open it and click
     // the option instead of using `selectOption`.
     await page.getByTestId("location-chromosome").click();
-    await page.getByRole("option", { name: "chr01" }).click();
+    // antd includes both the option wrapper and its inner label text.
+    // Target the clickable option wrapper, avoiding strict-mode duplicates.
+    await page.locator(".ant-select-dropdown:visible .ant-select-item-option").filter({ hasText: "chr01" }).first().click();
     await page.getByTestId("location-start").fill("1");
     await page.getByTestId("location-end").fill("2000");
-    const [results] = await Promise.all([
-      page.waitForEvent("popup"),
-      page.getByTestId("location-submit").click(),
-    ]);
-    await results.waitForLoadState();
+    await expect(page.getByTestId("location-submit")).toBeEnabled();
+    await page.getByTestId("location-submit").click();
+    await expect(page).toHaveURL(/\/search\/location\?.*chromosome=chr01/);
 
     await expect.poll(() => requested.length).toBeGreaterThan(0);
     expect(requested[0]).toContain("chromosome=chr01");
     expect(requested[0]).toContain("start=1");
     expect(requested[0]).toContain("end=2000");
-    expect(requested[0]).toContain("assembly=Wm82.a4.v1");
+    // The source preview endpoint has no assembly parameter: context belongs
+    // in the shareable page URL and is validated before submit.
+    await expect(page).toHaveURL(/assembly=Gmax_880_v6\.0/);
     // The empty result is reported, not hidden.
-    await expect(results.getByTestId("location-empty")).toBeVisible();
+    await expect(page.getByTestId("location-empty")).toBeVisible();
   });
 });
 

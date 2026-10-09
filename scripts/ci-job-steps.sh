@@ -362,7 +362,21 @@ dependency_governance_step() {
   ensure_governance_python
   dependency_governance_env
 
+  # e2e/ is intentionally outside the pnpm workspace, but Knip 5 discovers
+  # its Playwright config via package.json and imports it to analyze entrypoints.
+  # Without the independent npm lock installation, Knip exits 2 before any
+  # code-quality findings can be generated (Cannot find '@playwright/test').
+  # Install exactly the locked independent dependencies rather than ignoring
+  # the whole workspace or disabling the analysis.
   local rc=0
+  npm ci --prefix "${REPO_ROOT}/e2e" --ignore-scripts \
+    --registry=https://registry.npmjs.org/ || rc=$?
+  # Separate npm package does not belong to root pnpm audit; security-scan it
+  # explicitly, with high/critical vulnerabilities remaining a hard failure.
+  if [[ "${rc}" -eq 0 ]]; then
+    npm audit --prefix "${REPO_ROOT}/e2e" --audit-level=high \
+      --registry=https://registry.npmjs.org/ || rc=$?
+  fi
   pnpm deps:graphs || rc=$?
   # Always attempt the full audit set so a failed graph does not hide Knip,
   # Deptry, cycle, duplicate, license, or vulnerability evidence.
@@ -447,7 +461,7 @@ clickhouse_migration_run() {
   docker run -d --name "${container}" -p 8123:8123 \
     -e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 \
     -e CLICKHOUSE_PASSWORD="${SOYMUTDB_CLICKHOUSE_PASSWORD:-ci-ch-password}" \
-    clickhouse/clickhouse-server:24.8-alpine >/dev/null
+    "${SOYMUTDB_CLICKHOUSE_CI_IMAGE:-clickhouse/clickhouse-server:24.8-alpine}" >/dev/null
 
   local attempt
   for attempt in $(seq 1 60); do

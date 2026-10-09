@@ -70,7 +70,11 @@ jobs:
         run: |
           test -d apps/web/dist
           test -d apps/admin/dist
-          ! grep -RInE 'localhost:8000|CHANGE_ME|VITE_API_BASE_URL' apps/web/dist apps/admin/dist
+          # Inspect deployed destinations, not variable names in emitted JS.
+          # Reuse the shared fail-closed artifact checker (demo fixtures allowed).
+          bash scripts/check-production-artifact.sh apps/web/dist/external --allow-demo
+          bash scripts/check-production-artifact.sh apps/web/dist/internal --allow-demo
+          bash scripts/check-production-artifact.sh apps/admin/dist --allow-demo
       - run: tar -czf web-admin-dist.tgz apps/web/dist apps/admin/dist
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
@@ -84,7 +88,7 @@ jobs:
     runs-on: ubuntu-24.04
     services:
       postgres:
-        image: postgres:16
+        image: postgres:18.4-alpine
         env:
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: soymutdb

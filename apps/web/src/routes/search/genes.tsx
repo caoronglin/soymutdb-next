@@ -19,7 +19,7 @@ import * as React from "react";
 import { Alert, Button, Empty, Flex, Input, Select, Table, Tag, Typography, type TableColumnsType } from "@/lib/antd";
 import { SearchOutlined } from "@ant-design/icons";
 import {
-  getReleaseId,
+  isTestDataPreviewAssembly,
   listTestDataPreviewMutationSitesForGene,
   searchGenes,
   type GeneSummary,
@@ -32,6 +32,7 @@ import { queryKeys } from "../../lib/query-keys";
 import { SITE_VARIANT } from "../../lib/site-variant";
 import { buildJbrowseLocusUrl } from "../../lib/deployment";
 import { resolveSearchAssembly } from "../../lib/search-assembly";
+import { useReleaseId } from "../../lib/release-scope";
 
 /**
  * One rendered result row: a source mutation-site row joined to its catalogue
@@ -88,12 +89,16 @@ function GeneIdSearchComponent() {
   const { t } = useTranslation();
   const { get } = useSiteContent();
   const router = useRouter();
+  // A release may be published while this route stays mounted. Subscribe to
+  // ReleaseScopeProvider so query keys and JBrowse deep links are repinned
+  // atomically, rather than capturing a stale getReleaseId() snapshot.
+  const releaseId = useReleaseId();
   const { q: urlQ, assembly: urlAssembly, run } = Route.useSearch();
   const [geneIdsRaw, setGeneIdsRaw] = React.useState(() => urlQ ?? "");
   const [page, setPage] = React.useState(1);
 
   const assembliesQuery = useQuery(assembliesQueryOptions({
-    releaseId: getReleaseId(),
+    releaseId,
     siteVariant: SITE_VARIANT,
   }));
   const assemblies = assembliesQuery.data;
@@ -105,6 +110,11 @@ function GeneIdSearchComponent() {
   const urlAssemblyInfo = resolveSearchAssembly(assemblies, urlAssembly);
   const urlAssemblyId = urlAssemblyInfo ? String(urlAssemblyInfo.id) : undefined;
   const formAssemblyId = assemblyId ?? urlAssemblyId;
+
+  // History navigation must override a prior unsubmitted local assembly choice.
+  React.useEffect(() => {
+    setAssemblyId(undefined);
+  }, [urlAssembly]);
 
   // The route is updated in place now, so the submitted context follows the
   // live URL rather than a mount-time snapshot: a second search on this page
@@ -136,12 +146,11 @@ function GeneIdSearchComponent() {
     (a) => String(a.id) === String(resolvedAssemblyId),
   );
 
-  const releaseId = getReleaseId();
   const resultsQuery = useQuery({
     queryKey: queryKeys.genes.search({
       q: submitted?.q,
       assemblyId: submitted?.assemblyId,
-      page,
+      page: 1,
       pageSize: PAGE_SIZE,
       releaseId,
       siteVariant: SITE_VARIANT,
@@ -150,7 +159,7 @@ function GeneIdSearchComponent() {
       searchGenes({
         q: submitted?.q || undefined,
         assembly_id: submitted?.assemblyId || undefined,
-        page,
+        page: 1,
         page_size: PAGE_SIZE,
       } as Parameters<typeof searchGenes>[0]),
     enabled: submitted != null,
@@ -174,7 +183,7 @@ function GeneIdSearchComponent() {
   // ID (the field accepts several) and via the gene relation rather than a
   // coordinate interval, because 13% of rows sit outside their gene's range.
   const previewSitesQuery = useQuery({
-    queryKey: ["search-preview-mutation-sites", submitted?.q, resultsQuery.dataUpdatedAt],
+    queryKey: ["search-preview-mutation-sites", releaseId, SITE_VARIANT, submitted?.assemblyId, submitted?.q, resultsQuery.dataUpdatedAt],
     queryFn: async () => {
       // Only what the operator typed. Matching is exact by design, so the
       // catalogue's fuzzy result must not widen it: searching a bare locus name
@@ -185,7 +194,7 @@ function GeneIdSearchComponent() {
       const pages = await Promise.all(
         geneIds.map(async (geneId) => ({
           geneId,
-          sites: await listTestDataPreviewMutationSitesForGene(geneId, 1000).catch(() => []),
+          sites: await listTestDataPreviewMutationSitesForGene(geneId, 1000),
         })),
       );
       // The typed value and the resolved accession are usually the same locus
@@ -204,8 +213,10 @@ function GeneIdSearchComponent() {
       return [...seen.values()];
     },
     // Wait for the catalogue result so the resolved accessions are known; a
-    // missing preview route (non-local deployment) is a normal answer here.
-    enabled: Boolean(submitted?.q) && !resultsQuery.isLoading,
+    // preview API failure is an error, not an empty dataset.
+    // Unpublished preview rows are pinned to one assembly by the API client.
+    // Do not present their source coordinates as results for another genome.
+    enabled: Boolean(submitted?.q) && !resultsQuery.isLoading && isTestDataPreviewAssembly(selectedAssembly?.name),
     retry: false,
   });
   const previewSites = previewSitesQuery.data ?? [];
@@ -441,7 +452,7 @@ function GeneIdSearchComponent() {
         {/* One compact control row: label / assembly / label / identifier /
             submit. antd's `Space` keeps every control on the same baseline, so
             the row no longer depends on flex alignment of mixed heights. */}
-        <div className="mt-6" data-testid="search-genes-form">
+        <div className="mt-6 rounded-xl border border-border/70 bg-card p-4 sm:p-5" data-testid="search-genes-form">
           {/* `Flex`, not `Space`: a Space item is an inline-flex box that does
               not grow, so `width: 100%` inside it resolved against an
               already-collapsed box and the identifier field rendered 180px
@@ -453,7 +464,7 @@ function GeneIdSearchComponent() {
               gap the "基因 ID" label sat 12px from the assembly Select and read
               as that control's caption. */}
           <Flex wrap align="center" gap={20}>
-            <Flex align="center" gap={8} className="shrink-0">
+            <Flex wrap align="center" gap={8} className="w-full min-w-0 sm:w-auto">
               <label
                 htmlFor="genes-assembly"
                 className="whitespace-nowrap text-sm text-muted-foreground"
@@ -468,7 +479,7 @@ function GeneIdSearchComponent() {
                 loading={assembliesQuery.isLoading}
                 data-testid="search-genes-assembly"
                 size="large"
-                style={{ width: 280 }}
+                style={{ width: "min(280px, 100%)" }}
                 options={assemblies?.map((a) => ({
                   value: String(a.id),
                   label: (
@@ -483,11 +494,12 @@ function GeneIdSearchComponent() {
               />
             </Flex>
             <Flex
+              wrap
               align="center"
               gap={8}
               // The group takes the leftover row width, so the identifier field
               // tracks the viewport instead of stopping at a fixed 560px.
-              style={{ flex: "1 1 360px", minWidth: 260 }}
+              style={{ flex: "1 1 360px", minWidth: 0 }}
             >
               <span className="whitespace-nowrap text-sm text-muted-foreground">
                 {get("search.genes.geneId", t("search.genes.geneId"))}
@@ -510,7 +522,7 @@ function GeneIdSearchComponent() {
                 // Grows into the leftover row space, but never below a width
                 // that still shows a full accession; wraps to its own line when
                 // the row runs out.
-                style={{ flex: "1 1 auto", minWidth: 200 }}
+                style={{ flex: "1 1 220px", minWidth: 0 }}
                 data-testid="search-genes-input"
                 aria-label={get("search.genes.geneId", t("search.genes.geneId"))}
               />
@@ -542,7 +554,7 @@ function GeneIdSearchComponent() {
         </div>
 
         {submitted ? (
-          <div className="mt-6" role="region" aria-label={t("search.genes.resultsAria")}>
+          <div className="mt-6 rounded-xl border border-border/70 bg-card p-4 sm:p-5" role="region" aria-label={t("search.genes.resultsAria")}>
             <p className="mb-3 text-sm text-muted-foreground">
               {t("search.genes.resultsFor")}{" "}
               <span className="font-mono text-foreground">"{submitted.q}"</span>
@@ -558,7 +570,9 @@ function GeneIdSearchComponent() {
                 {formatNumber(total)}
               </span>
             </p>
-            {resultsQuery.isError ? (
+            {!isTestDataPreviewAssembly(selectedAssembly?.name) ? (
+              <Alert type="warning" showIcon title={t("search.genes.previewAssemblyMismatch")} />
+            ) : resultsQuery.isError || previewSitesQuery.isError ? (
               <Alert
                 type="error"
                 showIcon
@@ -584,7 +598,7 @@ function GeneIdSearchComponent() {
                   pagination={{
                     current: page,
                     pageSize: PAGE_SIZE,
-                    total,
+                    total: mergedRows.length,
                     showSizeChanger: false,
                     showTotal: (n, range) =>
                       `${formatNumber(range[0])}–${formatNumber(range[1])} of ${formatNumber(n)}`,

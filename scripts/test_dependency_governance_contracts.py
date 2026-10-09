@@ -868,3 +868,38 @@ def test_evidence_is_generated_and_uploaded_before_image_builds() -> None:
     assert any(
         "artifacts" in json.dumps(stage) for stage in verify_job["endStages"]
     )
+
+
+def test_governance_failures_show_exact_packages_without_changing_verdict(tmp_path: Path) -> None:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("governance_for_diagnostics", SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    (tmp_path / "npm.json").write_text(json.dumps({
+        "advisories": {"case": {
+            "severity": "critical", "module_name": "tinypool",
+            "vulnerable_versions": "<2.1.2", "patched_versions": ">=2.1.2",
+            "url": "https://github.com/advisories/GHSA-example",
+        }}
+    }), encoding="utf-8")
+    row = {
+        "name": "pnpm-audit", "status": "failed",
+        "reason": "analyzer_exit_nonzero", "report": "npm.json",
+    }
+    findings = module._audit_failure_evidence(row, tmp_path)
+    assert any("tinypool" in value and ">=2.1.2" in value for value in findings)
+    assert row["status"] == "failed"
+
+    row.update(name="pip-audit-api", report="pip.json")
+    (tmp_path / "pip.json").write_text(json.dumps({"dependencies": [{
+        "name": "urllib3", "version": "2.7.0",
+        "vulns": [{"id": "PYSEC-2026-4177", "fix_versions": ["2.8.0"]}],
+    }]}), encoding="utf-8")
+    assert any("urllib3==2.7.0" in value and "2.8.0" in value
+               for value in module._audit_failure_evidence(row, tmp_path))
+
+    row.update(name="missing-tool", report="nonexistent.json")
+    assert "report unavailable" in module._audit_failure_evidence(row, tmp_path)[0]

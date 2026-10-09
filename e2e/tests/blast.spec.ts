@@ -21,11 +21,12 @@ test.describe("BLAST — form and routing", () => {
     // heading to one i18n string.
     await expect(page.getByText("BLAST Search").first()).toBeVisible();
     await expect(page.getByRole("heading", { level: 1 })).toContainText(/search sequences/i);
-    // Program selector: the nucleotide programme is the default selection.
+    // The current default is DIAMOND BLASTP; both the selected programme
+    // and query input must be visible, regardless of backend availability.
     const programme = page.getByTestId("blast-program");
     // antd Select renders a div rather than an <input>, so assert the rendered
     // selection label instead of an input value.
-    await expect(programme).toContainText("BLASTN");
+    await expect(programme).toContainText("BLASTP");
     // "Reference sequence type" also matches /sequence/i, so target the query
     // textarea by its exact label ("Input Sequence").
     await expect(page.getByRole("textbox", { name: "Input Sequence" })).toBeVisible();
