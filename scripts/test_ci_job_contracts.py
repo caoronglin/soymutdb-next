@@ -3205,3 +3205,27 @@ def test_e2e_knip_workspace_tracks_real_test_entrypoints() -> None:
     entry = config["workspaces"]["e2e"]["entry"]
     assert "tests/*.spec.ts" in entry
     assert "playwright*.config.ts" in entry
+
+def test_pr_artifact_browser_acceptance_covers_frontend_changes() -> None:
+    """A frontend-only PR must still run the current-artifact Playwright gate."""
+    workflow = yaml.load(_workflow_text("e2e-smoke.yml"), Loader=yaml.BaseLoader)
+    pr_paths = set(workflow["on"]["pull_request"]["paths"])
+    required = {
+        "e2e/**",
+        ".github/workflows/e2e-smoke.yml",
+        "apps/web/**",
+        "apps/jbrowse/**",
+        "packages/**",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "scripts/build-pages-artifact.sh",
+        "scripts/build-static-apps.sh",
+        "scripts/verify-frontend-artifacts.sh",
+        "scripts/verify-pages-artifact.sh",
+    }
+    assert required <= pr_paths, (
+        "PR browser E2E must be triggered by frontend and build-contract changes: "
+        f"{sorted(required - pr_paths)}"
+    )
+    assert workflow["jobs"]["pr-artifact"]["if"] == "github.event_name == 'pull_request'"
+    assert "github.event_name != 'pull_request'" in workflow["jobs"]["e2e"]["if"]
