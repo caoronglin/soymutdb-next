@@ -197,6 +197,15 @@ const server = createServer(async (req, res) => {
             version: "a4.v1",
             is_default: true,
           },
+          {
+            // Independent unpublished source-preview namespace, opt-in by
+            // explicit user selection; the default released assembly stays v4.
+            id: "6",
+            name: "Gmax_880_v6.0",
+            species: "Glycine max",
+            version: "v6.0",
+            is_default: false,
+          },
         ]),
       );
     } else {
