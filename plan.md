@@ -1008,3 +1008,12 @@ PR #1 已合并。仓库 `main` 当前 HEAD 为 `d3904c210`，与 `origin/main` 
 3. Phase 1 验收后按主计划继续 Phase 2；Vue Phase 3 已补 gene merged genome context、JBrowse 深链接、gene expression/homolog 与 SeqFetch。Enrichment / ExpPattern 需先完成 assembly-aware API 契约，之后再移植；仍需 external/internal build parity 和 canonical deployment 切换。
 
 > PR #1 的审计门禁与提交证据保留在上文作为历史记录；后续状态以本节最近可验证的运行结果和新 CI 结果回填。
+
+---
+
+## 2026-10-09 定向工程修复：CI/E2E/ClickHouse carry
+
+- 本次设计：`docs/superpowers/specs/2026-10-09-ci-e2e-import-performance-design.md`。
+- 本次执行合同：`docs/aegis/plans/2026-10-09-ci-e2e-import-performance-execution.md`。
+- 当前状态：分支 `fix/audit-20261009-ci-carry-perf` 已做局部代码改动，**尚未通过完整 CI/真实 ClickHouse/部署验证，仍是 No-Go**；不得开启 VCF capability 或自动合并。
+- 执行阶段：恢复 CI → 保证 Release/assembly 结果等价 → 真实引擎与浏览器 E2E → 性能实测 → 审核后合并。独立发布原子化设计另行审查，不在该局部优化内宣称完成。
