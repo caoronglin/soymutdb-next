@@ -27,9 +27,20 @@ on:
   # PRs verify the proposed frontend artifact against an offline deterministic
   # Playwright server. Online checks remain for schedule/post-deploy/manual only.
   pull_request:
+    # Changes to the portal, its shared packages, locks, and static build gates
+    # must exercise the built PR artifact, not only edits to Playwright tests.
     paths:
       - "e2e/**"
       - ".github/workflows/e2e-smoke.yml"
+      - "apps/web/**"
+      - "apps/jbrowse/**"
+      - "packages/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "scripts/build-pages-artifact.sh"
+      - "scripts/build-static-apps.sh"
+      - "scripts/verify-frontend-artifacts.sh"
+      - "scripts/verify-pages-artifact.sh"
   schedule:
     - cron: "0 2 * * *"
   workflow_dispatch:
