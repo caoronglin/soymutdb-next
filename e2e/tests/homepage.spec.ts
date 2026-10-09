@@ -104,6 +104,6 @@ test.describe("homepage — content sections", () => {
     await expect(box.getByRole("textbox")).toBeVisible();
     await box.getByRole("textbox").fill("Glyma.01G000100");
     await box.getByTestId("home-search-submit").click();
-    await expect(page).toHaveURL(/\\/search\\?q=Glyma\\.01G000100/);
+    await expect(page).toHaveURL(/\/search\?q=Glyma\.01G000100/);
   });
 });

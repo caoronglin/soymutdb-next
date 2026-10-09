@@ -40,7 +40,7 @@ test.describe("Gene ID search", () => {
     await expect(submit).toBeEnabled();
     // Current flow navigates in-place, retaining q + assembly in a shareable URL.
     await submit.click();
-    await expect(page).toHaveURL(/\\/search\\/genes\\?.*q=Glyma\\.01G000100/);
+    await expect(page).toHaveURL(/\/search\/genes\?.*q=Glyma\.01G000100/);
     await expect(page.locator('[role="region"][aria-label="Gene ID search results"]')).toBeVisible();
     await expect(page.getByTestId("search-genes-empty")).toBeVisible();
   });
@@ -92,7 +92,7 @@ test.describe("Physical Location search", () => {
     await page.getByTestId("location-end").fill("2000");
     await expect(page.getByTestId("location-submit")).toBeEnabled();
     await page.getByTestId("location-submit").click();
-    await expect(page).toHaveURL(/\\/search\\/location\\?.*chromosome=chr01/);
+    await expect(page).toHaveURL(/\/search\/location\?.*chromosome=chr01/);
 
     await expect.poll(() => requested.length).toBeGreaterThan(0);
     expect(requested[0]).toContain("chromosome=chr01");
