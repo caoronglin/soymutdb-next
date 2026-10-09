@@ -89,9 +89,12 @@ test.describe("genes — result column order", () => {
     // be prefixed with BASE again.
     await gotoReady(page, href as string);
     await expect(page.getByTestId("browser-locus-input")).toHaveValue("chr01:100-200");
-    // The assembly is echoed in the browser header (the <select> only offers
-    // chromosome options, so it is not a reliable assembly assertion).
-    await expect(page.getByText(`${MOCK_ASSEMBLY.name} · chr01:100-200`)).toBeVisible();
+    // The current browser route no longer prints a combined header label.
+    // Check the actual route and context guard, then validate the iframe URL
+    // itself: this is the data handoff JBrowse receives.
+    await expect(page.getByTestId("browser-missing-context")).toHaveCount(0);
+    await expect(page).toHaveURL(/assembly=Wm82\.a4\.v1/);
+    await expect(page).toHaveURL(/release=7/);
     const frame = page.getByTestId("browser-iframe");
     await expect(frame).toHaveAttribute("src", /assembly=Wm82\.a4\.v1/);
     await expect(frame).toHaveAttribute("src", /locus=chr01%3A100-200/);
