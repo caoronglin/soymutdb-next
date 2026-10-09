@@ -41,7 +41,8 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
 
 
   return (
-    <ProLayout
+    <div data-testid="admin-shell" className="min-h-screen min-w-0">
+      <ProLayout
       title="SoyMutDB"
       logo={false}
       layout="side"
@@ -65,6 +66,7 @@ export default function AdminLayout({ children }: AdminLayoutProps) {
           {children}
         </div>
       </div>
-    </ProLayout>
+      </ProLayout>
+    </div>
   );
 }
