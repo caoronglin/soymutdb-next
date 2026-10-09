@@ -179,3 +179,38 @@ SOYMUTDB_CLICKHOUSE_CI_IMAGE=clickhouse/clickhouse-server:25.8-alpine bash scrip
 ```
 
 所有数据库升级须在隔离卷中先验证；要回滚版本必须恢复先前备份数据，不能仅 `git revert` 镜像 tag。此 PR 保留 Draft/No-Go，直到 npm `braces` 和 Knip 及 PR E2E 的真实阻断得到解决。
+
+
+## 6. 2026-10-09 第四轮合并前复审（PR #5，审计日志驱动）
+
+**合并判定：NO-GO。** `main@2c5f0f15` 为本轮修改的冻结对照，Draft PR 不因 `mergeable=true` 自动具备发布资格。实际失败工作流：[CI #37901401229](https://github.com/caoronglin/soymutdb-next/actions/runs/37901401229)、[浏览器 #37901401234](https://github.com/caoronglin/soymutdb-next/actions/runs/37901401234)；[Baseline #37901401112](https://github.com/caoronglin/soymutdb-next/actions/runs/37901401112) 已通过。新提交必须重新跑同一 HEAD 的三条门禁，不得拼接历史不同 SHA 的绿色结果。
+
+### 验证结果与处理方式
+
+- 生产级构建、API/Worker、PostgreSQL 18.4、MCP、DB A/B，以及 ClickHouse 24.8/25.8 真实迁移测试已在先前提交通过；生产 ClickHouse 仍是 24.8，预览 25.8，禁止直接提升生产数据卷。
+- Python API/Worker/MCP `pip-audit` 三项通过。npm 中 `axios`、`tinypool`、`source-map-js` 已由**真实 lockfile 再解析**消除通告；`braces <=3.0.3` 经官方核实 [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) 标记 **Patched versions: None**，目前仍为 High。到期前不得声称 `pnpm audit` 已通过，也不应用 broad GHSA ignore 或 `continue-on-error` 假装发布安全。
+- 根因是 Knip 独立 `e2e/` npm 工作区的 Playwright 配置被动态加载，但 governance Job 只安装了 pnpm workspace，`knip.json` 输出为空，stderr `Cannot find module '@playwright/test'`，而非已得到可信的 unused/dead-code 结论。修复：共享 `ci-job-steps.sh` 在 Knip 之前按 `e2e/package-lock.json` 执行 `npm ci`，单独运行 `npm audit --audit-level=high`；之后**继续** Knip 审计（不忽略该 workspace），逐项分类真正不可达文件/入口配置。
+- 旧版 Playwright 12/30 失败来源主要是测试合同漂移：现有 React 导航 `Search`/4 个首页工具而不是旧 `Explore`/5 个、BLAST 默认 DIAMOND BLASTP 而非 BLASTN、基因表已改成包含来源位点的 10 列、搜索结果原页面内更新而非弹新标签页、登录表单曾没有测试稳定定位。第四轮修正对应断言、加显式 preview mutation-site 测试数据（仅本地 e2e 模拟请求，未发布或引入生产伪造数据）、验证真实 URL 中的 assembly、locus 和 release，仍保留负面空结果和不提交不合法请求的断言。**这些变更必须由真实 Chromium 结果判定通过，失败不可删除/跳过/标 xfail**。
+- `gh-pages` 仍停留在 2026-08-25 的旧构建，在线路由 Smoke 跟 PR 自产物 E2E 分开。直到 `main` 全套门禁通过、生产部署签名/校验完成，不可强推 Pages 绕过 CI。
+
+### 复审 checklist
+
+- [ ] PR 精确 HEAD：`CI` 的 Frontend、API/Worker、CH 24.8/25.8、MCP、DB A/B 以及 Governance 所有 hard gates 成功。
+- [ ] `SoyMutDB baseline validation and release` 的必要 Job 成功、签名/制品校验无失败。
+- [ ] PR 自产物离线 Playwright **全部**实质执行通过；不接受缩减失败测试数量以变绿。
+- [ ] 安全审计无 High/Critical，或后续提供经过代码审查、复现输入和审批的**独立安全修复**；当前 `braces` 无已知上游修复，不满足。
+- [ ] Knip 给出结构化 JSON 报告且所有 findings 经实际静态/运行验证消除；不是空 report + exit 2。
+- [ ] GitHub Release/Pages 发布不修改已有基线外运行态，数据库备份恢复和回滚措施按版本单独验证。
+- [ ] CI 成功之后复核 PR diff、权限/密钥更改、当前 `main` HEAD 是否前进；仅在无冲突、无缺失验收的情况下合并。
+
+复现命令：
+
+```bash
+pnpm install --frozen-lockfile
+npm ci --prefix e2e --ignore-scripts --registry=https://registry.npmjs.org/
+npm audit --prefix e2e --audit-level=high --registry=https://registry.npmjs.org/
+pnpm deps:audit
+cd e2e && npx playwright test -c playwright-public.config.ts
+```
+
+如果最后合并获准，再单独验证 `main` 精确 SHA 触发 GitHub Pages 消费的构建制品，线上 Smoke 必须检查真实已部署站点，不能把 PR 的离线绿色代表生产上线成功。

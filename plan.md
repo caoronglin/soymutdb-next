@@ -1021,3 +1021,5 @@ PR #1 已合并。仓库 `main` 当前 HEAD 为 `d3904c210`，与 `origin/main` 
 - 2026-10-09 第二轮状态：Baseline Run `37896418357` 全部必需步骤通过，主 CI `37896418481` 因 5 个 npm 高危/严重级通告、Python 已报告漏洞、lock 去重和 Knip 问题被真实阻断。新增带版本/修复建议的 CI 审计输出、HTTP ClickHouse DML API 绑定兼容修复、PR 自制品 E2E、Dependabot uv/Actions 候选更新。**未升级锁文件、未解除安全阻断，不得自动合并/发布**；按执行文档 §4 生成并验证升级后的 uv/pnpm 锁。
 
 - 2026-10-09 第三轮：四份经过官方 registry 解析的锁文件已实际回写，三项 Python 安全审计已成功；数据库测试改用 PostgreSQL 18.4、ClickHouse 24.8/25.8 双版本，预览 ClickHouse 候选 25.8。当前仍因未有上游修复的 braces GHSA、Knip 及现有浏览器交互回归 No-Go；详情和回滚见第二轮执行合同 §5。
+
+- 2026-10-09 第四轮 PR #5 合并复审：修复旧 Playwright 对首页、BLAST、搜索新页面模型和登录的过期断言，修复 Knip 缺失独立 `e2e/` npm 锁安装并增加独立安全审计。核心 API/DB/Python 检查在先前 CI 通过；截至本记录，`braces` 高危无上游修复和 Knip/浏览器最新重验均未完成，**PR 继续 Draft/No-Go，不合并 main、不强制部署 gh-pages**。详情见执行合同 §6。

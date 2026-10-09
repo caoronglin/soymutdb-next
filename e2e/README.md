@@ -403,3 +403,15 @@ await gotoReady(page, "/soymutdb-next/login");
 设置后 push main（或手动重跑 pages.yml）→ 部署完成自动触发 E2E Smoke。
 
 **Smoke 语义**：`API_BASE_URL` 未配置时同源 API 404 记为报告不失败（SPA 相对 /api/v1 回退 + GitHub Pages 404）；一旦检测到跨域 API 请求（已配置），API 404 变为硬失败。静态资源（js/css/fonts/images）404 永远是硬失败。
+
+
+## PR 自制品交互回归（2026-10-09）
+
+`playwright-public.config.ts` 对应当前 React 19/Umi 生产构建、`static-server.mjs` 和 deterministic mock API；**不是**旧版 UI 布局验收。保留完整交互测试覆盖：
+- 首页 Search/Tools/Resources 下拉导航、4 个工具卡、hero identifier search。
+- BLAST 的当前 DIAMOND BLASTP 默认程序、输入和非法序列不提交。
+- Gene ID / Physical Location 通过 `?q` / `?assembly` / `?chromosome` 等 URL 参数**页内**刷新，同源网络请求保留明确 assembly/region 上下文。
+- Gene source mutation-site 表含 10 个字段，JBrowse deep link 同时包含 `assembly` 和 `locus`；本地 mock `preview/test-data` 路由专供 source-row 回归，不代表已发布数据。
+- 登录表单使用 `getByLabel` 可访问语义验证，覆盖真实 JSON 401、200 与不失去安全 redirect 边界。
+
+必须先经真实 Playwright/Chromium CI 通过才能宣称这些能力恢复。升级 UI 时同步修改测试、文档与实际 DOM，不能通过 `test.skip` 或缩小 `testMatch` 规避失败。
