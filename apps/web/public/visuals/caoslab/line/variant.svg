@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="基因变异"><title>基因变异</title><defs>
+<linearGradient id="leaf" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#9CDDA5"/><stop offset=".52" stop-color="#42A88B"/><stop offset="1" stop-color="#127A78"/></linearGradient>
+<linearGradient id="sea" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#B7F1EA"/><stop offset=".55" stop-color="#67BEDC"/><stop offset="1" stop-color="#387FC6"/></linearGradient>
+<linearGradient id="gold" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#FFE3A2"/><stop offset="1" stop-color="#D6A94E"/></linearGradient>
+</defs><g fill="none" stroke="#208D88" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7 C46 15 18 48 49 57 M49 7 C18 15 46 48 15 57 M20 15h24 M19 25h26 M19 40h26 M20 50h24"/><circle cx="32" cy="32" r="6.5" fill="#F0C66D" stroke="#CE9B42"/></g></svg>

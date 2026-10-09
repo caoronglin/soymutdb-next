@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="数据下载"><title>数据下载</title><defs>
+<linearGradient id="leaf" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#9CDDA5"/><stop offset=".52" stop-color="#42A88B"/><stop offset="1" stop-color="#127A78"/></linearGradient>
+<linearGradient id="sea" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#B7F1EA"/><stop offset=".55" stop-color="#67BEDC"/><stop offset="1" stop-color="#387FC6"/></linearGradient>
+<linearGradient id="gold" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#FFE3A2"/><stop offset="1" stop-color="#D6A94E"/></linearGradient>
+</defs><g fill="none" stroke="#208D88" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="31" cy="17" rx="19" ry="8"/><path d="M12 17v22c0 4 8 8 19 8 M50 17v13 M12 27c4 9 26 11 38 0 M31 29v27 M22 47l9 9 9-9"/><path d="M14 39c4 3 7 4 12 4" stroke="#7DB8C9"/></g></svg>
