@@ -12,6 +12,7 @@ const runtime = vi.hoisted(() => ({
   assemblies: [
     { id: 4, name: "v4", is_default: false },
     { id: 5, name: "v5", is_default: true },
+    { id: 6, name: "Gmax_880_v6.0", is_default: false },
   ],
   chromosomes: [{ name: "chr01" }],
 }));
@@ -39,7 +40,7 @@ vi.mock("@tanstack/react-query", () => ({
       : key.includes("chromosomes") ? runtime.chromosomes
       : key.includes("search") ? { items: [], total: 0 }
       : [];
-    return { data, isError: false, isLoading: false, isFetching: false };
+    return { data, isSuccess: true, isError: false, isLoading: false, isFetching: false };
   },
 }));
 
@@ -139,5 +140,58 @@ describe("two active search tools", () => {
     runtime.search = { assembly: "v4", chromosome: "chr01", start: Number.NaN, end: 20, run: true };
     render(<LocationPage />);
     await waitFor(() => expect(runtime.queries.find((item) => item.queryKey.includes("search-region-preview-sites"))?.enabled).toBe(false));
+  });
+
+  it("never reads unpublished source mutation sites for another gene assembly", () => {
+    runtime.search = { q: "Glyma.01G000100", assembly: "v4", run: true };
+    render(<GenePage />);
+    const preview = runtime.queries.find((item) => item.queryKey[0] === "search-preview-mutation-sites");
+    expect(preview?.enabled).toBe(false);
+  });
+
+  it("permits unpublished source preview only for its declared assembly", () => {
+    runtime.search = { q: "Glyma.01G000100.Wm82.a6.v1", assembly: "Gmax_880_v6.0", run: true };
+    render(<GenePage />);
+    const preview = runtime.queries.find((item) => item.queryKey[0] === "search-preview-mutation-sites");
+    expect(preview?.enabled).toBe(true);
+  });
+
+  it("updates interval search on browser history navigation without leaking assemblies", async () => {
+    runtime.search = {
+      assembly: "Gmax_880_v6.0", chromosome: "chr01", start: 12, end: 20, run: true,
+    };
+    const view = render(<LocationPage />);
+    const lastRegionQuery = () => [...runtime.queries].reverse().find(
+      (item) => item.queryKey[0] === "search-region-preview-sites",
+    );
+    await waitFor(() => expect(lastRegionQuery()?.enabled).toBe(true));
+    expect(lastRegionQuery()?.queryKey).toContain(12);
+
+    // A new route may be visited while the same component stays mounted.
+    runtime.search = { assembly: "v4", chromosome: "chr01", start: 30, end: 40, run: true };
+    view.rerender(<LocationPage />);
+    await waitFor(() => expect(lastRegionQuery()?.queryKey).toContain(30));
+    expect(lastRegionQuery()?.enabled).toBe(false);
+
+    runtime.search = {
+      assembly: "Gmax_880_v6.0", chromosome: "chr01", start: 50, end: 60, run: true,
+    };
+    view.rerender(<LocationPage />);
+    await waitFor(() => {
+      expect(lastRegionQuery()?.queryKey).toContain(50);
+      expect(lastRegionQuery()?.enabled).toBe(true);
+    });
+  });
+
+  it("rejects invalid intervals after a previously valid deep link", async () => {
+    runtime.search = { assembly: "Gmax_880_v6.0", chromosome: "chr01", start: 1, end: 10, run: true };
+    const view = render(<LocationPage />);
+    const lastRegionQuery = () => [...runtime.queries].reverse().find(
+      (item) => item.queryKey[0] === "search-region-preview-sites",
+    );
+    await waitFor(() => expect(lastRegionQuery()?.enabled).toBe(true));
+    runtime.search = { assembly: "Gmax_880_v6.0", chromosome: "chr01", start: 20, end: 10, run: true };
+    view.rerender(<LocationPage />);
+    await waitFor(() => expect(lastRegionQuery()?.enabled).toBe(false));
   });
 });
