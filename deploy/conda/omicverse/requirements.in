@@ -1,0 +1,4 @@
+# M3 CPU-only pyDEG qualification; no optional/GPU extras.
+omicverse==2.3.2
+# deg_analysis imports PyDESeq2 unconditionally, including the ttest path.
+pydeseq2==0.5.4
