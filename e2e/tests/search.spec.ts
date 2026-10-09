@@ -38,16 +38,11 @@ test.describe("Gene ID search", () => {
     // so wait for the enabled state instead of racing the assemblies request.
     const submit = searchSubmit(page);
     await expect(submit).toBeEnabled();
-    // Submission opens a parameterized result view in a NEW tab (the approved
-    // flow: results are shareable and must not replace the form), so the result
-    // assertions belong to the popup rather than to the submitting page.
-    const [results] = await Promise.all([page.waitForEvent("popup"), submit.click()]);
-    await results.waitForLoadState();
-
-    // The result region reports the query instead of inventing rows: the mock
-    // returns an empty gene list, so the empty state is the honest outcome.
-    await expect(results.getByTestId("search-genes-total")).toBeVisible();
-    await expect(results.getByTestId("search-genes-empty")).toBeVisible();
+    // Current flow navigates in-place, retaining q + assembly in a shareable URL.
+    await submit.click();
+    await expect(page).toHaveURL(/\\/search\\/genes\\?.*q=Glyma\\.01G000100/);
+    await expect(page.locator('[role="region"][aria-label="Gene ID search results"]')).toBeVisible();
+    await expect(page.getByTestId("search-genes-empty")).toBeVisible();
   });
 
   test("restores form state from a parameterized URL", async ({ page }) => {
@@ -81,8 +76,8 @@ test.describe("Physical Location search", () => {
 
   test("submit issues the region request for the chosen chromosome", async ({ page }) => {
     const requested: string[] = [];
-    // Listen on the CONTEXT: the result view opens in a popup, so a page-scoped
-    // listener would never observe the region request.
+    // Current flow keeps results on this page; still capture exact network
+    // requests, including any future secondary navigation.
     page.context().on("request", (request) => {
       if (request.url().includes("/variants/region")) requested.push(request.url());
     });
@@ -92,14 +87,12 @@ test.describe("Physical Location search", () => {
     // antd Select is a div rather than a native <select>, so open it and click
     // the option instead of using `selectOption`.
     await page.getByTestId("location-chromosome").click();
-    await page.getByRole("option", { name: "chr01" }).click();
+    await page.locator(".ant-select-dropdown:visible").getByText("chr01", { exact: true }).click();
     await page.getByTestId("location-start").fill("1");
     await page.getByTestId("location-end").fill("2000");
-    const [results] = await Promise.all([
-      page.waitForEvent("popup"),
-      page.getByTestId("location-submit").click(),
-    ]);
-    await results.waitForLoadState();
+    await expect(page.getByTestId("location-submit")).toBeEnabled();
+    await page.getByTestId("location-submit").click();
+    await expect(page).toHaveURL(/\\/search\\/location\\?.*chromosome=chr01/);
 
     await expect.poll(() => requested.length).toBeGreaterThan(0);
     expect(requested[0]).toContain("chromosome=chr01");
@@ -107,7 +100,7 @@ test.describe("Physical Location search", () => {
     expect(requested[0]).toContain("end=2000");
     expect(requested[0]).toContain("assembly=Wm82.a4.v1");
     // The empty result is reported, not hidden.
-    await expect(results.getByTestId("location-empty")).toBeVisible();
+    await expect(page.getByTestId("location-empty")).toBeVisible();
   });
 });
 

@@ -265,6 +265,28 @@ export async function mockEntityApis(page: Page): Promise<CapturedApiRequest[]> 
       });
     }
 
+    // --- opt-in local unpublished mutation-site preview (test-only payload) ---
+    // The live table joins catalogue genes to exact source mutation-site rows.
+    // Earlier mocks supplied only the catalogue result, so the table was empty
+    // and the JBrowse action could never exist. Keep this scoped to the one
+    // fixture accession; all other queries return zero rows.
+    if (path.endsWith("/preview/test-data/mutation-sites/by-gene")) {
+      if (url.searchParams.get("gene_id") !== MOCK_GENE_ID) return json([]);
+      return json([{
+        source_site_key: "E2E-01-100",
+        mutant_line_name: "E2E1",
+        chromosome: "chr01",
+        position: 100,
+        confidence: "H",
+        gene_id: MOCK_GENE_ID,
+        feature: "insertion",
+        available: true,
+        gene_v2: null,
+        gene_v4: null,
+        gene_dn53: null,
+      }]);
+    }
+
     // --- gene search / detail / related ---
     if (/\/genes\/[^/]+$/.test(path) && !path.endsWith("/genes/assemblies")) {
       return json({

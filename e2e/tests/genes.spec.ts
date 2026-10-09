@@ -1,5 +1,5 @@
 /**
- * Genes search E2E — six-column result order + JBrowse 2 deep link.
+ * Genes search E2E — source mutation-site result table + JBrowse 2 deep link.
  *
  * The result table renders only after a submitted/auto-run query. The default
  * static server returns an empty envelope, so the empty-state test asserts the
@@ -20,7 +20,7 @@ test.describe("genes — form and URL state", () => {
 });
 
 test.describe("genes — result column order", () => {
-  test("renders Assembly → Chromosome → Position → Mutation feature → Gene ID → JBrowse 2", async ({ page }) => {
+  test("renders source mutation fields followed by assembly and JBrowse 2", async ({ page }) => {
     // The e2e/static-server.mjs mock returns one default assembly, the built-in
     // column template, and an empty gene list — so the result table renders its
     // configured column headers offline without inventing rows.
@@ -28,11 +28,15 @@ test.describe("genes — result column order", () => {
     const headers = page.getByTestId("search-genes-table").locator("thead th");
     await expect(headers.first()).toBeVisible({ timeout: 15_000 });
     expect((await headers.allTextContents()).map((header) => header.trim())).toEqual([
+      "搜索基因",
+      "突变体系（株系母+位置）",
+      "染色体号",
+      "位点",
+      "可信度",
+      "基因号",
+      "特征",
+      "可获得",
       "Genome version",
-      "Chromosome",
-      "Position",
-      "Mutation feature",
-      "Gene ID",
       "JBrowse 2",
     ]);
   });

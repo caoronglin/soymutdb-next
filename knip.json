@@ -39,7 +39,10 @@
       "project": [
         "**/*.ts",
         "**/*.mjs"
-      ]
+      ],
+      "playwright": {
+        "config": []
+      }
     }
   }
 }
