@@ -570,7 +570,11 @@ function GeneIdSearchComponent() {
                 {formatNumber(total)}
               </span>
             </p>
-            {resultsQuery.isError || previewSitesQuery.isError ? (
+            {!isTestDataPreviewAssembly(selectedAssembly?.name) ? (
+              <Alert type="warning" showIcon title={t("search.genes.previewAssemblyMismatch", {
+                defaultValue: "Source mutation-site preview data belong only to the unpublished Gmax_880_v6.0 assembly; they cannot be shown under another assembly.",
+              })} />
+            ) : resultsQuery.isError || previewSitesQuery.isError ? (
               <Alert
                 type="error"
                 showIcon
