@@ -3206,6 +3206,7 @@ def test_e2e_knip_workspace_tracks_real_test_entrypoints() -> None:
     assert "tests/*.spec.ts" in entry
     assert "playwright*.config.ts" in entry
 
+
 def test_pr_artifact_browser_acceptance_covers_frontend_changes() -> None:
     """A frontend-only PR must still run the current-artifact Playwright gate."""
     workflow = yaml.load(_workflow_text("e2e-smoke.yml"), Loader=yaml.BaseLoader)
