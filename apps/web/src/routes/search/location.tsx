@@ -154,7 +154,7 @@ function LocationSearchComponent() {
   // while the uploaded table has rows at exactly the coordinates a person
   // searches for, so that table is what this page shows.
   const sitesQuery = useQuery({
-    queryKey: ["search-region-preview-sites", submitted],
+    queryKey: ["search-region-preview-sites", releaseId, SITE_VARIANT, submitted?.assemblyId, submitted?.chromosome, submitted?.start, submitted?.end],
     queryFn: () =>
       searchTestDataPreviewMutationSites({
         chromosome: submitted!.chromosome,

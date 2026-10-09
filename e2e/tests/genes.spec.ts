@@ -47,6 +47,20 @@ test.describe("genes — result column order", () => {
     await expect(page.getByTestId("configurable-row")).toHaveCount(0);
   });
 
+  test("shows an error rather than a fabricated empty result when source preview fails", async ({ page }) => {
+    await page.route("**/preview/test-data/mutation-sites/by-gene?*", async (route) => {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "SERVICE_UNAVAILABLE", message: "E2E backend offline" } }),
+      });
+    });
+    await gotoReady(page, `${BASE}/search/genes?q=Glyma.01G000100&run=1`);
+    const region = page.getByRole("region", { name: "Gene ID search results" });
+    await expect(region.getByRole("alert")).toBeVisible();
+    await expect(page.getByTestId("search-genes-empty")).toHaveCount(0);
+  });
+
   test("JBrowse 2 action opens an assembly-scoped locus deep link", async ({ page }) => {
     // Deterministic offline data: one gene row carrying assembly/coordinates, so
     // the action is guaranteed to exist and its contract can be asserted exactly.

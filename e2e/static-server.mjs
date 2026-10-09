@@ -305,6 +305,14 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // A valid empty unpublished source response is different from a failed API.
+  // E2E fixture only: it never publishes test data.
+  if (req.method === "GET" && pathname === `${PREFIX}/api/v1/preview/test-data/mutation-sites/by-gene`) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify([]));
+    return;
+  }
+
   // Mock gene search: by default return an empty result envelope so the result
   // table renders its column headers without inventing rows. With
   // GENES_JBROWSE_FIXTURE=1 (and only for the fixture query) it returns one

@@ -144,7 +144,7 @@ function GeneIdSearchComponent() {
     queryKey: queryKeys.genes.search({
       q: submitted?.q,
       assemblyId: submitted?.assemblyId,
-      page,
+      page: 1,
       pageSize: PAGE_SIZE,
       releaseId,
       siteVariant: SITE_VARIANT,
@@ -153,7 +153,7 @@ function GeneIdSearchComponent() {
       searchGenes({
         q: submitted?.q || undefined,
         assembly_id: submitted?.assemblyId || undefined,
-        page,
+        page: 1,
         page_size: PAGE_SIZE,
       } as Parameters<typeof searchGenes>[0]),
     enabled: submitted != null,
@@ -177,7 +177,7 @@ function GeneIdSearchComponent() {
   // ID (the field accepts several) and via the gene relation rather than a
   // coordinate interval, because 13% of rows sit outside their gene's range.
   const previewSitesQuery = useQuery({
-    queryKey: ["search-preview-mutation-sites", submitted?.q, resultsQuery.dataUpdatedAt],
+    queryKey: ["search-preview-mutation-sites", releaseId, SITE_VARIANT, submitted?.assemblyId, submitted?.q, resultsQuery.dataUpdatedAt],
     queryFn: async () => {
       // Only what the operator typed. Matching is exact by design, so the
       // catalogue's fuzzy result must not widen it: searching a bare locus name
@@ -188,7 +188,7 @@ function GeneIdSearchComponent() {
       const pages = await Promise.all(
         geneIds.map(async (geneId) => ({
           geneId,
-          sites: await listTestDataPreviewMutationSitesForGene(geneId, 1000).catch(() => []),
+          sites: await listTestDataPreviewMutationSitesForGene(geneId, 1000),
         })),
       );
       // The typed value and the resolved accession are usually the same locus
@@ -207,7 +207,7 @@ function GeneIdSearchComponent() {
       return [...seen.values()];
     },
     // Wait for the catalogue result so the resolved accessions are known; a
-    // missing preview route (non-local deployment) is a normal answer here.
+    // preview API failure is an error, not an empty dataset.
     enabled: Boolean(submitted?.q) && !resultsQuery.isLoading,
     retry: false,
   });
@@ -562,7 +562,7 @@ function GeneIdSearchComponent() {
                 {formatNumber(total)}
               </span>
             </p>
-            {resultsQuery.isError ? (
+            {resultsQuery.isError || previewSitesQuery.isError ? (
               <Alert
                 type="error"
                 showIcon
@@ -588,7 +588,7 @@ function GeneIdSearchComponent() {
                   pagination={{
                     current: page,
                     pageSize: PAGE_SIZE,
-                    total,
+                    total: mergedRows.length,
                     showSizeChanger: false,
                     showTotal: (n, range) =>
                       `${formatNumber(range[0])}–${formatNumber(range[1])} of ${formatNumber(n)}`,
