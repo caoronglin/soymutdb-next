@@ -31,8 +31,7 @@ import {
 import { SearchOutlined } from "@ant-design/icons";
 import {
   searchTestDataPreviewMutationSites,
-  getReleaseId,
-  type TestDataPreviewMutationSite,
+    type TestDataPreviewMutationSite,
   type AssemblyInfo,
 } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
@@ -40,6 +39,7 @@ import { formatNumber } from "../../lib/format";
 import { buildJbrowseLocusUrl } from "../../lib/deployment";
 import { SITE_VARIANT } from "../../lib/site-variant";
 import { resolveSearchAssembly } from "../../lib/search-assembly";
+import { useReleaseId } from "../../lib/release-scope";
 
 interface LocationSearchParams {
   assembly?: string;
@@ -72,7 +72,9 @@ function LocationSearchComponent() {
   const { t } = useTranslation();
   const { get } = useSiteContent();
   const router = useRouter();
-  const releaseId = getReleaseId();
+  // A published release can switch while this form remains open.
+  // Subscribe rather than snapshotting the module's mutable pin.
+  const releaseId = useReleaseId();
   const { assembly: urlAssembly, chromosome: urlChromosome, start: urlStart, end: urlEnd, run } =
     Route.useSearch();
   const [assemblyId, setAssemblyId] = React.useState<string | undefined>(undefined);
@@ -82,7 +84,7 @@ function LocationSearchComponent() {
   const [submitted, setSubmitted] = React.useState<RegionQuery | null>(null);
 
   const assembliesQuery = useQuery(assembliesQueryOptions({
-    releaseId: getReleaseId(),
+    releaseId,
     siteVariant: SITE_VARIANT,
   }));
   const assemblies = React.useMemo(() => assembliesQuery.data ?? [], [assembliesQuery.data]);
@@ -301,13 +303,13 @@ function LocationSearchComponent() {
             non-shrinking group, so a wrap can only happen *between* fields —
             `Space wrap` used to break the label away from its input and leave
             the tail of the row clipped. */}
-        <div className="mt-6" data-testid="location-form">
+        <div className="mt-6 rounded-xl border border-border/70 bg-card p-4 sm:p-5" data-testid="location-form">
           {/* `gap={20}` between groups, `gap={8}` inside one: a single 12px gap
               made four fields read as one long undifferentiated row. Every
               group is `shrink-0` because these are fixed-width coordinate
               inputs; a wrap is only ever allowed between groups. */}
           <Flex wrap align="center" gap={20}>
-            <Flex align="center" gap={8} className="shrink-0">
+            <Flex wrap align="center" gap={8} className="w-full min-w-0 sm:w-auto">
             <label
               htmlFor="location-assembly"
               className="whitespace-nowrap text-sm text-muted-foreground"
@@ -322,7 +324,7 @@ function LocationSearchComponent() {
               loading={assembliesQuery.isLoading}
               data-testid="location-assembly"
               size="large"
-              style={{ width: 260 }}
+              style={{ width: "min(260px, 100%)" }}
               options={assemblies.map((a) => ({
                 value: String(a.id),
                 label: (
@@ -351,7 +353,7 @@ function LocationSearchComponent() {
               loading={chromosomesQuery.isLoading}
               data-testid="location-chromosome"
               size="large"
-              style={{ width: 150 }}
+              style={{ width: "min(150px, 100%)" }}
               options={chromosomes.map((item) => ({ value: item.name, label: item.name }))}
               showSearch
             />
@@ -423,7 +425,7 @@ function LocationSearchComponent() {
         </div>
 
         {submitted ? (
-          <div className="mt-6" role="region" aria-label={t("search.location.resultsAria")}>
+          <div className="mt-6 rounded-xl border border-border/70 bg-card p-4 sm:p-5" role="region" aria-label={t("search.location.resultsAria")}>
             <p className="mb-3 text-sm text-muted-foreground">
               {t("search.location.found", { count: sites.length })}
             </p>

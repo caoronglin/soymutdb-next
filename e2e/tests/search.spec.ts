@@ -63,7 +63,7 @@ test.describe("Physical Location search", () => {
   test("start < 1 or end < start never submits a request", async ({ page }) => {
     let regionRequests = 0;
     page.on("request", (request) => {
-      if (request.url().includes("/variants/region")) regionRequests += 1;
+      if (request.url().includes("/preview/test-data/mutation-sites?")) regionRequests += 1;
     });
     await gotoReady(
       page,
@@ -80,6 +80,23 @@ test.describe("Physical Location search", () => {
     // requests, including any future secondary navigation.
     page.context().on("request", (request) => {
       if (request.url().includes("/preview/test-data/mutation-sites?")) requested.push(request.url());
+    });
+    // Intercept ONLY the current source-site read for this test. An empty,
+    // validated preview envelope exercises the real success/empty rendering;
+    // a 404 is an error state and must never be presented as zero results.
+    await page.route("**/preview/test-data/mutation-sites?*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          preview: true,
+          publication_status: "unpublished",
+          coordinate_system: "1-based-inclusive",
+          assembly: { name: "Gmax_880_v6.0", version: "v6.0", species: "Glycine max", status: "unpublished" },
+          annotation_version: "Wm82.a6.v1",
+          items: [], total: 0, limit: 1000,
+        }),
+      });
     });
     await gotoReady(page, `${BASE}/search/location`);
 

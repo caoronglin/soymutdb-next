@@ -8,7 +8,7 @@
  * can be exercised end to end — no unconditional `test.skip`.
  */
 import { test, expect } from "@playwright/test";
-import { gotoReady, mockEntityApis, MOCK_ASSEMBLY, MOCK_GENE_ID } from "./helpers";
+import { gotoReady, mockEntityApis, MOCK_ASSEMBLY, MOCK_GENE_ID, MOCK_RELEASE_ID } from "./helpers";
 
 const BASE = "/soymutdb-next";
 

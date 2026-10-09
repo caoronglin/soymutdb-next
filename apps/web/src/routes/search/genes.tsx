@@ -444,7 +444,7 @@ function GeneIdSearchComponent() {
         {/* One compact control row: label / assembly / label / identifier /
             submit. antd's `Space` keeps every control on the same baseline, so
             the row no longer depends on flex alignment of mixed heights. */}
-        <div className="mt-6" data-testid="search-genes-form">
+        <div className="mt-6 rounded-xl border border-border/70 bg-card p-4 sm:p-5" data-testid="search-genes-form">
           {/* `Flex`, not `Space`: a Space item is an inline-flex box that does
               not grow, so `width: 100%` inside it resolved against an
               already-collapsed box and the identifier field rendered 180px
@@ -456,7 +456,7 @@ function GeneIdSearchComponent() {
               gap the "基因 ID" label sat 12px from the assembly Select and read
               as that control's caption. */}
           <Flex wrap align="center" gap={20}>
-            <Flex align="center" gap={8} className="shrink-0">
+            <Flex wrap align="center" gap={8} className="w-full min-w-0 sm:w-auto">
               <label
                 htmlFor="genes-assembly"
                 className="whitespace-nowrap text-sm text-muted-foreground"
@@ -471,7 +471,7 @@ function GeneIdSearchComponent() {
                 loading={assembliesQuery.isLoading}
                 data-testid="search-genes-assembly"
                 size="large"
-                style={{ width: 280 }}
+                style={{ width: "min(280px, 100%)" }}
                 options={assemblies?.map((a) => ({
                   value: String(a.id),
                   label: (
@@ -486,11 +486,12 @@ function GeneIdSearchComponent() {
               />
             </Flex>
             <Flex
+              wrap
               align="center"
               gap={8}
               // The group takes the leftover row width, so the identifier field
               // tracks the viewport instead of stopping at a fixed 560px.
-              style={{ flex: "1 1 360px", minWidth: 260 }}
+              style={{ flex: "1 1 360px", minWidth: 0 }}
             >
               <span className="whitespace-nowrap text-sm text-muted-foreground">
                 {get("search.genes.geneId", t("search.genes.geneId"))}
@@ -513,7 +514,7 @@ function GeneIdSearchComponent() {
                 // Grows into the leftover row space, but never below a width
                 // that still shows a full accession; wraps to its own line when
                 // the row runs out.
-                style={{ flex: "1 1 auto", minWidth: 200 }}
+                style={{ flex: "1 1 220px", minWidth: 0 }}
                 data-testid="search-genes-input"
                 aria-label={get("search.genes.geneId", t("search.genes.geneId"))}
               />
@@ -545,7 +546,7 @@ function GeneIdSearchComponent() {
         </div>
 
         {submitted ? (
-          <div className="mt-6" role="region" aria-label={t("search.genes.resultsAria")}>
+          <div className="mt-6 rounded-xl border border-border/70 bg-card p-4 sm:p-5" role="region" aria-label={t("search.genes.resultsAria")}>
             <p className="mb-3 text-sm text-muted-foreground">
               {t("search.genes.resultsFor")}{" "}
               <span className="font-mono text-foreground">"{submitted.q}"</span>

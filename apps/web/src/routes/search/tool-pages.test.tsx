@@ -51,6 +51,11 @@ vi.mock("react-i18next", () => ({
 vi.mock("../../components/route-motion", () => ({
   FadeUp: ({ children }: { children: React.ReactNode }) => children,
 }));
+vi.mock("../../lib/release-scope", () => ({
+  // Search-page unit tests intentionally mount only the route, not the full
+  // App provider tree. Stub the public reactive release hook explicitly.
+  useReleaseId: () => null,
+}));
 vi.mock("../../lib/site-content-react", () => ({
   useSiteContent: () => ({ get: (_key: string, fallback: string) => fallback }),
 }));
