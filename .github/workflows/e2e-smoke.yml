@@ -33,6 +33,8 @@ on:
       - "e2e/**"
       - ".github/workflows/e2e-smoke.yml"
       - "apps/web/**"
+      - "apps/admin/**"
+      - "scripts/verify-admin-artifact-smoke.sh"
       - "apps/jbrowse/**"
       - "packages/**"
       - "pnpm-lock.yaml"
@@ -155,6 +157,10 @@ jobs:
         env:
           CI: "1"
         run: npx playwright test -c playwright-public.config.ts
+      # Use the same Playwright and Chromium installation as the public smoke.
+      # Build the *emitted* admin artifact, never its Vite dev representation.
+      - name: Run authenticated-boundary admin artifact smoke
+        run: bash scripts/verify-admin-artifact-smoke.sh
       - name: Upload PR browser failures
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -163,5 +169,7 @@ jobs:
           path: |
             e2e/playwright-report-public
             e2e/test-results-public
+            e2e/playwright-report-admin-production
+            e2e/test-results-admin-production
           if-no-files-found: ignore
           retention-days: 14
