@@ -94,3 +94,12 @@ WHERE release_key = {release_key:String}
 - GitHub `workflow_run` 触发语义：<https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows>；安全边界：<https://docs.github.com/en/actions/reference/security/secure-use>。
 
 本轮不声称已在生产 HTTP ClickHouse、Docker 镜像或公开域名完成验证；相应内容见执行文档的门禁状态。
+
+
+## 6. 官方 API 兼容性更正与部署态测试分离（2026-10-09）
+
+原第一轮设计展示的 `INSERT … SELECT … {name:String}` SQL 是**逻辑模板**，不可作为 ClickHouse HTTP `client.command` 的服务端参数 SQL 直接发送；官方 Python Client 文档规定 server-side `{name:Type}` binding 仅适用于 SELECT。生产 `HttpClickHouseEngine.execute` 在调用客户端前改为 `%(name)s` 占位符，让 `clickhouse-connect` 实现客户端绑定、转义；ChdbEngine 保持 `{name:Type}`。两端对拍需要验证引号、空字符串和 Unicode 的值绑定，且不得手写插入数据取值到 SQL。
+
+PR 浏览器测试与线上部署检查严格隔离：`pull_request` 构建 PR 本提交静态制品，启动离线 Playwright server 做路由和交互；Nightly/Post-Deploy 在线 Smoke 检查现有 GitHub Pages 实际 404。根因不是测试的断言太严格，而是公共部署提交 `gh-pages@11f2e23c` 仍停留在 2026-08-25；治理未过，不得绕过 `main` CI 发布未经验证的产物。
+
+依赖审查升级策略与版本矩阵见[执行合同 §4](../../aegis/plans/2026-10-09-ci-e2e-import-performance-execution.md#4-第二轮-ci-复查与依赖更新2026-10-09按审计报告)。本轮新增 `.github/dependabot.yml` 仅对 GitHub Actions 与三个 `uv` 子项目创建候选 PR；pnpm 12.5.1 不在 GitHub Dependabot 当前官方兼容列表里，故不冒然打开 npm ecosystem 的自动改锁。

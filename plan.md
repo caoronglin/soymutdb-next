@@ -1017,3 +1017,5 @@ PR #1 已合并。仓库 `main` 当前 HEAD 为 `d3904c210`，与 `origin/main` 
 - 本次执行合同：`docs/aegis/plans/2026-10-09-ci-e2e-import-performance-execution.md`。
 - 当前状态：分支 `fix/audit-20261009-ci-carry-perf` 已做局部代码改动，**尚未通过完整 CI/真实 ClickHouse/部署验证，仍是 No-Go**；不得开启 VCF capability 或自动合并。
 - 执行阶段：恢复 CI → 保证 Release/assembly 结果等价 → 真实引擎与浏览器 E2E → 性能实测 → 审核后合并。独立发布原子化设计另行审查，不在该局部优化内宣称完成。
+
+- 2026-10-09 第二轮状态：Baseline Run `37896418357` 全部必需步骤通过，主 CI `37896418481` 因 5 个 npm 高危/严重级通告、Python 已报告漏洞、lock 去重和 Knip 问题被真实阻断。新增带版本/修复建议的 CI 审计输出、HTTP ClickHouse DML API 绑定兼容修复、PR 自制品 E2E、Dependabot uv/Actions 候选更新。**未升级锁文件、未解除安全阻断，不得自动合并/发布**；按执行文档 §4 生成并验证升级后的 uv/pnpm 锁。

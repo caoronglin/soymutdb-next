@@ -89,3 +89,68 @@ uv run --locked --extra dev ruff check src/soymutdb_worker/tasks/variant_finaliz
 回滚：对本 PR 的独立提交使用常规 `git revert`，保留历史，不强推；已发数据需依据不可变备份和发布指针的独立恢复合同操作，**不能靠 revert 源码恢复 CH 数据**。
 
 本次提交阶段的诚实结论：源码与静态关系已核对、最小修复已经写入 review 分支；完整 chdb、在线 Playwright、真实 ClickHouse 和发布端到端的退出码尚待远端工作流验证。因此当前为 **No-Go**。
+
+
+## 4. 第二轮 CI 复查与依赖更新（2026-10-09，按审计报告）
+
+本阶段实际证据：
+- PR #5 历史运行 `37896418357` 基线 **success**（Web/Admin、OpenAPI、Ubuntu PG、Windows 安装器）。
+- 历史运行 `37896418481` 主 CI：Frontend、API + Worker（包含 chdb）、DB A/B、MCP、ClickHouse fixture 各自 PASS；`Dependency graphs + governance` FAIL，镜像/Kubernetes/发布 Job 因门禁中断 SKIP，不能宣称成功。
+- 审计制品 `dependency-governance-bfebeb0c908fbbfd8ad4a505ff0db70b04c7c762` 的 `summary.json` 及各报告已经逐项检查。之前概括为 `analyzer_exit_nonzero` 的项都存在报告，**不能解释为临时网络中断**。
+- PR 上对旧 GitHub Pages 的 E2E 返回 6 个 404：`gh-pages` 仍是 **2026-08-25** 产物。本轮改成 PR 自己的静态制品离线 E2E，线上 Nightly/Post-Deploy Smoke 继续检查真实部署，404 不作豁免。
+
+### 精确的安全升级矩阵（先修改锁，再提交审核）
+
+| 生态 | 现有受影响版本 | 安全候选 / 后续 | 报告证据 |
+| --- | --- | --- | --- |
+| Python API/Worker | `urllib3 2.7.0` | `2.8.0`（PyPI 已发布） | `PYSEC-2026-4175/4176/4177` |
+| Python API | `multidict 6.7.1` | `6.9.1`（保持 6.x 避免无需求的 major 跃迁） | `GHSA-54p9-h82j-f925` |
+| Python API/MCP | `PyJWT 2.13.0` | `2.15.1`（官方最新，须复验 claim/algorithm/token 测试；`PYSEC-2026-4146` 报告暂未列修复版本，绝不自动豁免） | `PYSEC-2026-4140…4152` / `4183` |
+| pnpm workspace | `axios 0.33.0` override | `>=0.34.0`，确认 0.x 升级行为并固定可兼容版本 | `GHSA-x97p-jq2g-jp4f` |
+| pnpm workspace | `source-map-js <1.2.2` | `>=1.2.2` | `GHSA-68fv-2mgg-jv7q` |
+| pnpm workspace | `tinypool <2.1.2` | `>=2.1.2`，校验 Vitest 执行池行为 | `GHSA-5gmw-xhrv-c9v3`, `GHSA-85c8-ppgw-ccpr` |
+| pnpm workspace | `braces <=3.0.3` | **当前审计器未报告修复版本**；确认入口路径/曝露面，保持阻断，不增 GHSA ignore | `GHSA-vfj7-8cjw-p6xm` |
+| pnpm lock | 不同 Vite/Vitest peer variant 和 `hash-base` 可以去重 | 在锁升级验证中执行 `pnpm dedupe`，检查修改是否符合目录/构建约束 | `pnpm dedupe --check` |
+| knip | 87 个候选文件，30 个 issue files | 依据实际 Umi entry、静态路由、CI 脚本和独立 e2e 入口审查；不可直接批量删除、不能全面 ignore | `knip.json` |
+
+**受限环境结论**：本轮可以查阅锁定版本与安全报告，但当前执行环境不能访问 npm/PyPI Registry 完成可重复的解析。因此本 PR **不直接修改** `uv.lock`、`pnpm-lock.yaml` 或依赖 specifier（避免 `--locked` / `--frozen-lockfile` 变红及伪造 lock 哈希）；新增 Dependabot 对 `uv` 子项目及 Actions 的每周候选 PR，只有合并到默认分支后才会运行。pnpm 12 锁不假定获得 Dependabot 支持；手动使用固定 pnpm 12.5.1 重算。
+
+可在有网络的隔离工作区重算，**每一组改动独立提交**：
+
+```bash
+cd apps/api
+uv lock --upgrade-package 'urllib3==2.8.0' --upgrade-package 'multidict==6.9.1' --upgrade-package 'PyJWT==2.15.1'
+uv lock --check
+cd ../worker
+uv lock --upgrade-package 'urllib3==2.8.0'
+uv lock --check
+cd ../mcp-server
+uv lock --upgrade-package 'PyJWT==2.15.1'
+uv lock --check
+cd ../..
+# pnpm-workspace.yaml 中的受影响 overrides 和相应 peer/依赖范围须先评估并更新；
+# 然后运行固定版本 12.5.1 的 pnpm 更新锁，而不是手动拼凑 YAML：
+pnpm install --lockfile-only
+pnpm dedupe
+pnpm install --frozen-lockfile
+pnpm deps:audit
+bash scripts/acceptance.sh --profile contracts
+```
+
+对 `PyJWT` 强制补 JWT alg allow-list、JWT 签名/时序边界、refresh 旋转和吊销等测试；对 `axios` 重点比对拦截器、取消、错误转换、CSRF；对 `tinypool` 重点运行 Vitest/Playwright 混合链。任何 override 只能在成功解析+真实测试后进入 main。
+
+### 第二轮代码/API 修复
+
+- `HttpClickHouseEngine.execute`：ClickHouse Connect 文档指出服务端 `{name:Type}` 仅对 SELECT 查询提供支持。DML `INSERT/ALTER` 将固定的 `{name:String}` 占位符转成驱动的客户端 `%(name)s`，仍通过 `parameters` 进行转义；`scalar/query_rows` 不改。
+- 增加含特殊引号的 HTTP Adapter mock 测试，并要求真实 HTTP ClickHouse 验收；先前仅 chdb 的 SELECT/INSERT 不足以证明生产兼容。
+- `dependency_governance.py` 输出明确的 npm/Python GHSA、受影响版本、修复范围、knip 候选数量和 dedupe 提示；runner 返回码仍按原审计器决定。
+- `e2e-smoke.yml`：pull_request 用受测分支构建 + 离线浏览器测试；schedule/workflow_dispatch/workflow_run 保留线上的旧站检查，真实缺陷不会被 PR 阶段掩盖。
+- Node24 action deprecation warning：当前 Actions pin 是旧 Node20 runtime。候选迁移 `actions/checkout`、`setup-node`、`setup-python`、`upload-artifact` 新大版本前应按官方 runner 最低版本和 SHA pin 审查，避免直接替换造成供应链漂移。
+
+参考官方：[uv 精准升级](https://docs.astral.sh/uv/concepts/projects/sync/#upgrading-locked-package-versions)，[ClickHouse Connect 绑定](https://clickhouse.com/docs/integrations/language-clients/python/driver-api)，[Knip monorepo 入口](https://knip.dev/reference/configuration)，[GitHub Dependabot uv](https://docs.astral.sh/uv/guides/integration/dependabot/)，[GitHub Dependabot 生态/版本支持](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference)，[GitHub Actions workflow_run](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows)。
+
+### 第二轮验收门禁
+
+- 运行 PR 当前 HEAD 的全量 CI、baseline、PR 自制品 Playwright。三者必须以**同一提交**关联，不拼接不同提交的 PASS。
+- 为 Live Pages 另行记录部署 digest+日期以及线上 E2E 的 404；只有经 main 完整 CI 的已验证 artifact 才允许更新 pages。
+- 安全通告未修复时仍为 **No-Go**；不允许使用 `continue-on-error` / `pnpm audit --ignore-registry-errors` / `pip-audit --ignore-vuln` 来称作全绿。
