@@ -3187,3 +3187,46 @@ class CnbVolumeGrammarTests(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover - unittest entry point
     unittest.main()
+
+
+def test_postgres_service_script_remains_executable() -> None:
+    """CI runs this resolver directly, so a Git mode change must fail contracts."""
+    import stat
+
+    root = Path(__file__).resolve().parents[1]
+    mode = (root / "scripts/with-postgres-service.sh").stat().st_mode
+    assert mode & stat.S_IXUSR, "with-postgres-service.sh must be executable (100755)"
+
+
+def test_e2e_knip_workspace_tracks_real_test_entrypoints() -> None:
+    """Knip must analyze the independent Playwright package, not mislabel its tests dead."""
+    root = Path(__file__).resolve().parents[1]
+    config = json.loads((root / "knip.json").read_text(encoding="utf-8"))
+    entry = config["workspaces"]["e2e"]["entry"]
+    assert "tests/*.spec.ts" in entry
+    assert "playwright*.config.ts" in entry
+
+
+def test_pr_artifact_browser_acceptance_covers_frontend_changes() -> None:
+    """A frontend-only PR must still run the current-artifact Playwright gate."""
+    workflow = yaml.load(_workflow_text("e2e-smoke.yml"), Loader=yaml.BaseLoader)
+    pr_paths = set(workflow["on"]["pull_request"]["paths"])
+    required = {
+        "e2e/**",
+        ".github/workflows/e2e-smoke.yml",
+        "apps/web/**",
+        "apps/jbrowse/**",
+        "packages/**",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "scripts/build-pages-artifact.sh",
+        "scripts/build-static-apps.sh",
+        "scripts/verify-frontend-artifacts.sh",
+        "scripts/verify-pages-artifact.sh",
+    }
+    assert required <= pr_paths, (
+        "PR browser E2E must be triggered by frontend and build-contract changes: "
+        f"{sorted(required - pr_paths)}"
+    )
+    assert workflow["jobs"]["pr-artifact"]["if"] == "github.event_name == 'pull_request'"
+    assert "github.event_name != 'pull_request'" in workflow["jobs"]["e2e"]["if"]

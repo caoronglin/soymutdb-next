@@ -1,6 +1,11 @@
 import { http } from "./auth";
 
 const PREVIEW_ASSEMBLY = "Gmax_880_v6.0";
+
+/** Test preview source records belong to exactly one unpublished assembly. */
+export function isTestDataPreviewAssembly(name: string | null | undefined): boolean {
+  return name === PREVIEW_ASSEMBLY;
+}
 const PREVIEW_ASSEMBLY_VERSION = "v6.0";
 const PREVIEW_ANNOTATION_VERSION = "Wm82.a6.v1";
 const PREVIEW_DATASET_KEY = "03_soymut-a6-test";

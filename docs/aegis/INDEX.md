@@ -36,6 +36,13 @@ Repository-wide document entry point: [docs/README.md](../README.md); superseded
 | [Ontology PostgreSQL control plane](../superpowers/specs/2026-07-15-ontology-postgresql-control-plane-design.md) | 本体控制平面 | 待实施计划审核 |
 | [Vue genome view design](../superpowers/specs/2026-09-26-vue-genome-view-design.md) | — | **整份作废**，仅作历史审计；其前端描述与现状相反 |
 
+## Design proposals awaiting approval
+
+| Plan | Scope | Status |
+| --- | --- | --- |
+| [Caoslab × SoyMutDB visual-system and architecture plan](../design/caoslab-visual-architecture-plan-2026-10-09.md) | Research-informed visuals, asset provenance, admin smoke, Windows deployment, code audit cleanup | **PROPOSED / DOCUMENTATION_ONLY**; no assets or implementation |
+| [PI / Subagent execution prompt](../agents/caoslab-visual-agent-prompt.md) | Scoped subagent contracts and evidence-driven exit gates | **PROPOSED / DOCUMENTATION_ONLY** |
+
 ## Unregistered working drafts (not authority)
 
 The 2026-10-02 optimization / ablation design drafts (total design, functional ablation, database, auth + WeCom, UI audit)

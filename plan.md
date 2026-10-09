@@ -1008,3 +1008,21 @@ PR #1 已合并。仓库 `main` 当前 HEAD 为 `d3904c210`，与 `origin/main` 
 3. Phase 1 验收后按主计划继续 Phase 2；Vue Phase 3 已补 gene merged genome context、JBrowse 深链接、gene expression/homolog 与 SeqFetch。Enrichment / ExpPattern 需先完成 assembly-aware API 契约，之后再移植；仍需 external/internal build parity 和 canonical deployment 切换。
 
 > PR #1 的审计门禁与提交证据保留在上文作为历史记录；后续状态以本节最近可验证的运行结果和新 CI 结果回填。
+
+---
+
+## 2026-10-09 定向工程修复：CI/E2E/ClickHouse carry
+
+- 本次设计：`docs/superpowers/specs/2026-10-09-ci-e2e-import-performance-design.md`。
+- 本次执行合同：`docs/aegis/plans/2026-10-09-ci-e2e-import-performance-execution.md`。
+- 当前状态：分支 `fix/audit-20261009-ci-carry-perf` 已做局部代码改动，**尚未通过完整 CI/真实 ClickHouse/部署验证，仍是 No-Go**；不得开启 VCF capability 或自动合并。
+- 执行阶段：恢复 CI → 保证 Release/assembly 结果等价 → 真实引擎与浏览器 E2E → 性能实测 → 审核后合并。独立发布原子化设计另行审查，不在该局部优化内宣称完成。
+
+- 2026-10-09 第二轮状态：Baseline Run `37896418357` 全部必需步骤通过，主 CI `37896418481` 因 5 个 npm 高危/严重级通告、Python 已报告漏洞、lock 去重和 Knip 问题被真实阻断。新增带版本/修复建议的 CI 审计输出、HTTP ClickHouse DML API 绑定兼容修复、PR 自制品 E2E、Dependabot uv/Actions 候选更新。**未升级锁文件、未解除安全阻断，不得自动合并/发布**；按执行文档 §4 生成并验证升级后的 uv/pnpm 锁。
+
+- 2026-10-09 第三轮：四份经过官方 registry 解析的锁文件已实际回写，三项 Python 安全审计已成功；数据库测试改用 PostgreSQL 18.4、ClickHouse 24.8/25.8 双版本，预览 ClickHouse 候选 25.8。当前仍因未有上游修复的 braces GHSA、Knip 及现有浏览器交互回归 No-Go；详情和回滚见第二轮执行合同 §5。
+
+- 2026-10-09 第四轮 PR #5 合并复审：修复旧 Playwright 对首页、BLAST、搜索新页面模型和登录的过期断言，修复 Knip 缺失独立 `e2e/` npm 锁安装并增加独立安全审计。核心 API/DB/Python 检查在先前 CI 通过；截至本记录，`braces` 高危无上游修复和 Knip/浏览器最新重验均未完成，**PR 继续 Draft/No-Go，不合并 main、不强制部署 gh-pages**。详情见执行合同 §6。
+
+- 2026-10-09 第五轮：PR #5 继续以独立提交修复 `search/tool-pages.test.tsx` 对 ReleaseScopeProvider 的测试环境缺陷；修正 JBrowse E2E 对旧组合标题的断言、为位置检索建立**成功但空的合法预览响应**，保留 503 / 错误分支。Gene/Location 组件现在订阅 `useReleaseId`，数据缓存键同时包含当前 Release、site variant 与 assembly，不再跨版本复用。基因表使用来源记录数分页，预览端点错误显示为错误而不是伪称“0 条结果”；表单增加窄屏换行和区块边界。上一轮 [PR 浏览器 37920866965](https://github.com/caoronglin/soymutdb-next/actions/runs/37920866965) 到 **29 passed / 1 failed**；最后一项旧标题断言随后已更正，**后续 E2E/CI 必须以最新 HEAD 重跑验证**。
+- 高危 `braces<=3.0.3` 对应 [CVE-2026-93687](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)，截至 2026-10-09 官方无 patched version；Knip 仍报告入口脚本与依赖候选，**不以 docs 或“仅开发依赖”免除门禁**。主分支保持不变，直到可复现安全修复及全部硬门禁通过。

@@ -197,6 +197,15 @@ const server = createServer(async (req, res) => {
             version: "a4.v1",
             is_default: true,
           },
+          {
+            // Independent unpublished source-preview namespace, opt-in by
+            // explicit user selection; the default released assembly stays v4.
+            id: "6",
+            name: "Gmax_880_v6.0",
+            species: "Glycine max",
+            version: "v6.0",
+            is_default: false,
+          },
         ]),
       );
     } else {
@@ -302,6 +311,14 @@ const server = createServer(async (req, res) => {
   if (req.method === "GET" && pathname.startsWith(`${PREFIX}/api/v1/news`)) {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ items: [], total: 0 }));
+    return;
+  }
+
+  // A valid empty unpublished source response is different from a failed API.
+  // E2E fixture only: it never publishes test data.
+  if (req.method === "GET" && pathname === `${PREFIX}/api/v1/preview/test-data/mutation-sites/by-gene`) {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify([]));
     return;
   }
 

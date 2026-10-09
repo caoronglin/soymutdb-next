@@ -30,9 +30,9 @@ import {
 } from "@/lib/antd";
 import { SearchOutlined } from "@ant-design/icons";
 import {
+  isTestDataPreviewAssembly,
   searchTestDataPreviewMutationSites,
-  getReleaseId,
-  type TestDataPreviewMutationSite,
+    type TestDataPreviewMutationSite,
   type AssemblyInfo,
 } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
@@ -40,6 +40,7 @@ import { formatNumber } from "../../lib/format";
 import { buildJbrowseLocusUrl } from "../../lib/deployment";
 import { SITE_VARIANT } from "../../lib/site-variant";
 import { resolveSearchAssembly } from "../../lib/search-assembly";
+import { useReleaseId } from "../../lib/release-scope";
 
 interface LocationSearchParams {
   assembly?: string;
@@ -72,17 +73,18 @@ function LocationSearchComponent() {
   const { t } = useTranslation();
   const { get } = useSiteContent();
   const router = useRouter();
-  const releaseId = getReleaseId();
+  // A published release can switch while this form remains open.
+  // Subscribe rather than snapshotting the module's mutable pin.
+  const releaseId = useReleaseId();
   const { assembly: urlAssembly, chromosome: urlChromosome, start: urlStart, end: urlEnd, run } =
     Route.useSearch();
   const [assemblyId, setAssemblyId] = React.useState<string | undefined>(undefined);
   const [chromosome, setChromosome] = React.useState<string | undefined>(undefined);
   const [start, setStart] = React.useState<number | null>(null);
   const [end, setEnd] = React.useState<number | null>(null);
-  const [submitted, setSubmitted] = React.useState<RegionQuery | null>(null);
 
   const assembliesQuery = useQuery(assembliesQueryOptions({
-    releaseId: getReleaseId(),
+    releaseId,
     siteVariant: SITE_VARIANT,
   }));
   const assemblies = React.useMemo(() => assembliesQuery.data ?? [], [assembliesQuery.data]);
@@ -90,7 +92,6 @@ function LocationSearchComponent() {
     (a) => String(a.id) === String(assemblyId),
   );
   const linkedAssembly = resolveSearchAssembly(assemblies, urlAssembly);
-  const resultAssembly = assemblies.find((a) => String(a.id) === submitted?.assemblyId);
 
   React.useEffect(() => {
     if (assemblyId || urlAssembly || assemblies.length === 0) return;
@@ -118,41 +119,44 @@ function LocationSearchComponent() {
     }
   }, [chromosome, chromosomes, chromosomesQuery.isSuccess]);
 
-  // Deep link: restore form state from URL once assemblies/chromosomes load.
-  const restoredRef = React.useRef(false);
+  // Restore URL state for every navigation, not just the initial mount.
   React.useEffect(() => {
-    if (restoredRef.current) return;
-    // Resolve the explicit URL assembly without substituting a default version.
-    if (urlAssembly && linkedAssembly) setAssemblyId(String(linkedAssembly.id));
-    if (urlChromosome) setChromosome(urlChromosome);
+    if (urlAssembly) setAssemblyId(linkedAssembly ? String(linkedAssembly.id) : undefined);
+    if (urlChromosome != null) setChromosome(urlChromosome);
     if (urlStart != null) setStart(urlStart);
     if (urlEnd != null) setEnd(urlEnd);
-  }, [urlAssembly, urlChromosome, urlStart, urlEnd, linkedAssembly]);
+  }, [urlAssembly, linkedAssembly, urlChromosome, urlStart, urlEnd]);
 
-  const autoRun = (assembly: AssemblyInfo, chr: string, s: number, e: number): RegionQuery | null => {
-    if (!Number.isSafeInteger(s) || !Number.isSafeInteger(e) || s < 1 || e < s) return null;
-    return { assembly: assembly.name, assemblyId: String(assembly.id), chromosome: chr, start: s, end: e };
-  };
+  // Derive the submitted result solely from the current URL. Back/Forward,
+  // invalid assemblies and changed coordinates must never retain stale rows.
+  const submitted: RegionQuery | null = React.useMemo(() => {
+    if (!run || !urlAssembly || !linkedAssembly || !urlChromosome ||
+        !chromosomesQuery.isSuccess ||
+        String(selectedAssembly?.id) !== String(linkedAssembly.id) ||
+        !chromosomes.some((item) => item.name === urlChromosome) ||
+        urlStart == null || urlEnd == null ||
+        !Number.isSafeInteger(urlStart) || !Number.isSafeInteger(urlEnd) ||
+        urlStart < 1 || urlEnd < urlStart) {
+      return null;
+    }
+    return {
+      assembly: linkedAssembly.name,
+      assemblyId: String(linkedAssembly.id),
+      chromosome: urlChromosome,
+      start: urlStart,
+      end: urlEnd,
+    };
+  }, [run, urlAssembly, linkedAssembly, urlChromosome, urlStart, urlEnd,
+      chromosomesQuery.isSuccess, selectedAssembly?.id, chromosomes]);
 
-  // Auto-submit once when `run=1` arrives with a complete, valid region.
-  React.useEffect(() => {
-    if (restoredRef.current) return;
-    if (run !== true) return;
-    if (!selectedAssembly || !urlChromosome || urlStart == null || urlEnd == null) return;
-    if (urlAssembly && String(selectedAssembly.id) !== urlAssembly && selectedAssembly.name !== urlAssembly) return;
-    if (!chromosomes.some((item) => item.name === urlChromosome)) return;
-    const query = autoRun(selectedAssembly, urlChromosome, urlStart, urlEnd);
-    if (!query) return;
-    restoredRef.current = true;
-    setSubmitted(query);
-  }, [run, selectedAssembly, urlAssembly, urlChromosome, urlStart, urlEnd, chromosomes]);
+  const resultAssembly = assemblies.find((a) => String(a.id) === submitted?.assemblyId);
 
   // The operator's own source records for the interval. The region-variant
   // projection is a separate store that is often empty for these coordinates,
   // while the uploaded table has rows at exactly the coordinates a person
   // searches for, so that table is what this page shows.
   const sitesQuery = useQuery({
-    queryKey: ["search-region-preview-sites", submitted],
+    queryKey: ["search-region-preview-sites", releaseId, SITE_VARIANT, submitted?.assemblyId, submitted?.chromosome, submitted?.start, submitted?.end],
     queryFn: () =>
       searchTestDataPreviewMutationSites({
         chromosome: submitted!.chromosome,
@@ -160,7 +164,9 @@ function LocationSearchComponent() {
         end: submitted!.end,
         limit: 1000,
       }),
-    enabled: submitted != null,
+    // This source endpoint serves one fixed unpublished assembly. Never
+    // issue it for a different assembly or relabel its coordinates as v4/v5.
+    enabled: submitted != null && isTestDataPreviewAssembly(resultAssembly?.name),
     // A missing preview route (non-local deployment) is a normal answer here.
     retry: false,
   });
@@ -207,7 +213,7 @@ function LocationSearchComponent() {
         <Link
           to="/genes/$geneId"
           params={{ geneId: row.gene_id }}
-          search={{ assembly: assemblyId }}
+          search={{ assembly: submitted?.assemblyId }}
           title={row.gene_id}
           className="link-underline whitespace-nowrap font-mono text-xs font-medium text-primary"
         >
@@ -263,17 +269,9 @@ function LocationSearchComponent() {
   const submit = () => {
     if (!selectedAssembly || !chromosome || start == null || end == null) return;
     if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end < start) return;
-    setSubmitted({
-      assembly: selectedAssembly.name,
-      assemblyId: String(selectedAssembly.id),
-      chromosome,
-      start,
-      end,
-    });
     void router.navigate({
       to: "/search/location",
       search: { assembly: selectedAssembly.name, chromosome, start, end, run: true },
-      replace: true,
     });
   };
 
@@ -301,13 +299,13 @@ function LocationSearchComponent() {
             non-shrinking group, so a wrap can only happen *between* fields —
             `Space wrap` used to break the label away from its input and leave
             the tail of the row clipped. */}
-        <div className="mt-6" data-testid="location-form">
+        <div className="mt-6 rounded-xl border border-border/70 bg-card p-4 sm:p-5" data-testid="location-form">
           {/* `gap={20}` between groups, `gap={8}` inside one: a single 12px gap
               made four fields read as one long undifferentiated row. Every
               group is `shrink-0` because these are fixed-width coordinate
               inputs; a wrap is only ever allowed between groups. */}
           <Flex wrap align="center" gap={20}>
-            <Flex align="center" gap={8} className="shrink-0">
+            <Flex wrap align="center" gap={8} className="w-full min-w-0 sm:w-auto">
             <label
               htmlFor="location-assembly"
               className="whitespace-nowrap text-sm text-muted-foreground"
@@ -322,7 +320,7 @@ function LocationSearchComponent() {
               loading={assembliesQuery.isLoading}
               data-testid="location-assembly"
               size="large"
-              style={{ width: 260 }}
+              style={{ width: "min(260px, 100%)" }}
               options={assemblies.map((a) => ({
                 value: String(a.id),
                 label: (
@@ -351,7 +349,7 @@ function LocationSearchComponent() {
               loading={chromosomesQuery.isLoading}
               data-testid="location-chromosome"
               size="large"
-              style={{ width: 150 }}
+              style={{ width: "min(150px, 100%)" }}
               options={chromosomes.map((item) => ({ value: item.name, label: item.name }))}
               showSearch
             />
@@ -423,11 +421,13 @@ function LocationSearchComponent() {
         </div>
 
         {submitted ? (
-          <div className="mt-6" role="region" aria-label={t("search.location.resultsAria")}>
+          <div className="mt-6 rounded-xl border border-border/70 bg-card p-4 sm:p-5" role="region" aria-label={t("search.location.resultsAria")}>
             <p className="mb-3 text-sm text-muted-foreground">
               {t("search.location.found", { count: sites.length })}
             </p>
-            {sitesQuery.isError ? (
+            {!isTestDataPreviewAssembly(resultAssembly?.name) ? (
+              <Alert type="warning" showIcon title={t("search.location.previewAssemblyMismatch")} />
+            ) : sitesQuery.isError ? (
               <Alert
                 type="error"
                 showIcon

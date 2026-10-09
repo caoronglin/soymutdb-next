@@ -91,8 +91,8 @@ pnpm accept --profile static                  # 验收：静态制品 + 字节�
 
 ### Prerequisites
 
-- Node.js ≥ 20（pnpm ≥ 10，锁定 `pnpm@11.21.0`）
-- Python ≥ 3.13（API 与 worker 各自 venv：`apps/api/.venv`、`apps/worker/.venv`）
+- Node.js 24.19.0（`pnpm@12.5.1`；以 `.nvmrc` 与 `package.json` 为准）
+- Python ≥ 3.14（API 与 Worker 的受支持开发/CI 基线；依赖版本以各项目 uv.lock 为准）
 - Docker（数据层与生产部署；可选，另见 conda 裸进程备选路径）
 
 ### Install

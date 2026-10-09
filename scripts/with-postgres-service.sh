@@ -4,7 +4,7 @@
 # =============================================================================
 # Why this script exists
 #   The CNB stage that runs the API + worker test tree used to declare
-#   `services: - postgres:16` and expect a database. The platform accepted the
+#   `services: - postgres:18.4` and expect a database. The platform accepted the
 #   declaration and then started NOTHING: measured on a real build
 #   (cnb-j0g-1k285hm3b), the container had no postgres DNS entry, nothing
 #   listening on 5432, and `/var/run/docker.sock` absent. The declared service
@@ -52,7 +52,7 @@
 #
 # Environment
 #   SOYMUTDB_TEST_DATABASE_URL  caller-provided database; skips the bootstrap
-#   SOYMUTDB_PG_DOCKER_IMAGE    postgres image (default postgres:16-alpine)
+#   SOYMUTDB_PG_DOCKER_IMAGE    postgres image (default postgres:18.4-alpine)
 #   SOYMUTDB_PG_PORT            loopback port (default 5432)
 #   SOYMUTDB_PG_CONTAINER       container name (default soymutdb-pg-test)
 # =============================================================================
@@ -61,7 +61,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-PG_IMAGE="${SOYMUTDB_PG_DOCKER_IMAGE:-postgres:16-alpine}"
+PG_IMAGE="${SOYMUTDB_PG_DOCKER_IMAGE:-postgres:18.4-alpine}"
 PG_PORT="${SOYMUTDB_PG_PORT:-5432}"
 PG_CONTAINER="${SOYMUTDB_PG_CONTAINER:-soymutdb-pg-test}"
 PG_USER="soymutdb"

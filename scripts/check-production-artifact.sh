@@ -54,6 +54,8 @@ PATTERNS=(
   'api\.example\.com'
   'jbrowse\.example\.com'
   'change-me'
+  'CHANGE_ME'      # Preserve the old baseline guard for uppercase placeholders.
+  'localhost:8000' # A deployment must not bake an API loopback into JS.
 )
 
 # Demo-only surface — real release copy never contains these. They are expected

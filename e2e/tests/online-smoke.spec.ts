@@ -1,54 +1,117 @@
-import { test, expect } from "@playwright/test";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { expect, test } from "@playwright/test";
 
-// Disposable smoke for the local minimal-mode deployment.
-// Requires: API uvicorn on 127.0.0.1:8010 and vite dev on 127.0.0.1:5173
-// (VITE_DEPLOYMENT_MODE=minimal VITE_SEARCH_TEST_PREVIEW=true).
-// Both search routes submit by opening the parameterized URL in a new tab.
+// Online smoke checks deployed artifacts. Local preview API fixtures belong to
+// local-preview.spec.ts and are NEVER prerequisites for this test suite.
+const routes = [
+  "",
+  "search",
+  "genes",
+  "variants",
+  "blast",
+  "news",
+  "browser",
+  "about",
+  "help",
+  "tools",
+] as const;
 
-test("local preview deployment: gene + location search render real data", async ({ page }) => {
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
-  page.on("console", (msg) => {
-    if (msg.type() === "error" && !msg.text().includes("frame-ancestors")) {
-      errors.push(`console: ${msg.text()}`);
-    }
-  });
+type RouteEvidence = {
+  route: string;
+  url: string;
+  status: number;
+  title: string;
+  bodyLength: number;
+  assetFailures: string[];
+  pageErrors: string[];
+  consoleErrors: string[];
+  toleratedDemoConsoleErrors: string[];
+};
+const report: RouteEvidence[] = [];
+// Demo has deliberately missing external API/JBrowse targets. Do not classify
+// such network messages as frontend JS errors; never tolerate a failed same-
+// origin JS/CSS load, even if its console message also matches this pattern.
+const demoNetworkNoise =
+  /404|net::ERR_|Failed to load resource|Failed to fetch|NetworkError|ERR_ABORTED|frame-ancestors|EventSource|Content Security Policy|CSP violation/i;
 
-  const banner = page.getByTestId("test-data-preview-banner");
-
-  // ---- gene ID search ----
-  await page.goto("http://127.0.0.1:5173/search/genes", { waitUntil: "networkidle" });
-  await expect(banner).toContainText("测试预览 · 未发布数据");
-  await expect(banner).toContainText("Gmax_880_v6.0");
-  await expect(banner).toContainText("Wm82.a6.v1");
-
-  await page.getByPlaceholder(/每行一个基因 ID/).fill("Glyma.01G000100.Wm82.a6.v1");
-  const [genesTab] = await Promise.all([
-    page.waitForEvent("popup"),
-    page.getByRole("button", { name: "搜索" }).click(),
-  ]);
-  await genesTab.waitForLoadState("networkidle");
-  await expect(genesTab.locator("main")).toContainText("Glyma.01G000100.Wm82.a6.v1");
-  await expect(genesTab.locator("main")).toContainText("Gm01:78,503-103,594");
-  await expect(genesTab.locator("main")).toContainText("1–1 of 1");
-
-  // ---- physical location search ----
-  await page.goto("http://127.0.0.1:5173/search/location", { waitUntil: "networkidle" });
-  await expect(banner).toContainText("测试预览 · 未发布数据");
-
-  await page.getByRole("combobox").first().click();
-  await page.keyboard.type("Gm01");
-  await page.keyboard.press("Enter");
-  await page.getByLabel("起始位点").fill("98256");
-  await page.getByLabel("终止位点").fill("98256");
-  const [locationTab] = await Promise.all([
-    page.waitForEvent("popup"),
-    page.getByRole("button", { name: "搜索" }).click(),
-  ]);
-  await locationTab.waitForLoadState("networkidle");
-  await expect(locationTab.locator("main")).toContainText("SOYTE1M-Gm01-98256");
-  await expect(locationTab.locator("main")).toContainText("Glyma.01G000100.Wm82.a6.v1");
-  await expect(locationTab.locator("main")).toContainText("Gm01:98,256");
-
-  expect(errors).toEqual([]);
+test.afterAll(() => {
+  mkdirSync("test-results", { recursive: true });
+  writeFileSync(
+    join("test-results", "smoke-report.json"),
+    JSON.stringify({ routes: report }, null, 2) + "\n",
+    "utf8",
+  );
 });
+
+for (const route of routes) {
+  test("deployed demo renders /" + route + " with healthy assets", async ({ page, baseURL }) => {
+    if (!baseURL) throw new Error("Online smoke requires a baseURL");
+    const origin = new URL(baseURL).origin;
+    const assetFailures: string[] = [];
+    const pageErrors: string[] = [];
+    const consoleErrors: string[] = [];
+    const toleratedDemoConsoleErrors: string[] = [];
+
+    page.on("response", (response) => {
+      const resourceType = response.request().resourceType();
+      if (
+        (resourceType === "script" || resourceType === "stylesheet") &&
+        new URL(response.url()).origin === origin &&
+        response.status() >= 400
+      ) {
+        assetFailures.push(String(response.status()) + " " + response.url());
+      }
+    });
+    page.on("requestfailed", (request) => {
+      const resourceType = request.resourceType();
+      if (
+        (resourceType === "script" || resourceType === "stylesheet") &&
+        new URL(request.url()).origin === origin
+      ) {
+        assetFailures.push((request.failure()?.errorText ?? "request failed") + " " + request.url());
+      }
+    });
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    page.on("console", (message) => {
+      if (message.type() !== "error") return;
+      if (demoNetworkNoise.test(message.text())) {
+        toleratedDemoConsoleErrors.push(message.text());
+      } else {
+        consoleErrors.push(message.text());
+      }
+    });
+
+    // "./" retains the /soymutdb-next/ prefix in Playwright's baseURL.
+    // Absolute "/genes" would silently navigate to the domain root.
+    const navigation = await page.goto(route ? "./" + route : "./", {
+      waitUntil: "domcontentloaded",
+    });
+    const status = navigation?.status() ?? 0;
+    await expect(page.locator("main").first()).toBeVisible();
+    await expect.poll(async () => (await page.locator("body").innerText()).trim().length)
+      .toBeGreaterThan(20);
+    await page.waitForLoadState("load");
+    const body = await page.locator("body").innerText();
+
+    report.push({
+      route: "/" + route,
+      url: page.url(),
+      status,
+      title: await page.title(),
+      bodyLength: body.trim().length,
+      assetFailures,
+      pageErrors,
+      consoleErrors,
+      toleratedDemoConsoleErrors,
+    });
+
+    expect(status, "document status").toBeGreaterThanOrEqual(200);
+    expect(status, "document status").toBeLessThan(400);
+    expect(body).not.toContain("Unexpected application error");
+    expect(body).not.toContain("404: Not Found");
+    expect(assetFailures, "same-origin JS/CSS failures").toEqual([]);
+    expect(pageErrors, "uncaught exceptions").toEqual([]);
+    expect(consoleErrors, "unexpected browser console errors").toEqual([]);
+  });
+}

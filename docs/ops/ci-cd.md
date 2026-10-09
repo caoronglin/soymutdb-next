@@ -640,3 +640,11 @@ SOYMUTDB_CI_DOCKER_BUILD_EXTRA_ARGS="--cache-from=type=registry,ref=<registry>/c
 * 制品：已发布的 release 由 `release-manifest.json` 的 digest 锚定；回滚使用
   `deploy/scripts/blue-green-rollback.sh`（校验上一次 release manifest 后切换）。
 * 迁移：本次未改动任何数据库 schema。
+
+
+## 10. PR 浏览器/依赖治理分层验收（2026-10-09）
+
+- `CI` 的依赖治理运行共享脚本 `scripts/ci-job-steps.sh run dependency-governance`。其根 pnpm 环境和独立 `e2e/` npm 锁分开安装；后者只供 Knip 读取真实 Playwright 配置，仍单独执行 npm 高危审计。若 `knip.json` 空且 exit 2，必须先检查其 stderr，不得误标记成死代码。
+- `E2E Smoke (online)` 在 PR 上构建**该 PR 提交**的外部门户产物并启动本地浏览器 mock；Nightly/手动/成功的 Pages 发布后才对实际 GitHub Pages 域名运行线上 Smoke，避免把旧网页 404 当作 PR 新页面的缺陷。
+- ClickHouse 迁移矩阵验证 `24.8-alpine` 和 `25.8-alpine`，**不是**对生产原卷执行在线迁移；preview 使用 25.8，新旧兼容性/回滚仍需独立数据库快照验收。
+- GitHub Actions 的“可合并”只表示 Git 图可合并。发布还依赖 Governance 无高危报告、PR 交互 E2E 真实通过、PG/CH 数据层测试、CI 与 Pages 精确 commit SHA 的制品溯源。详见 [2026-10-09 执行合同 §6](../aegis/plans/2026-10-09-ci-e2e-import-performance-execution.md#6-2026-10-09-第四轮合并前复审pr-5审计日志驱动)。

@@ -1,0 +1,32 @@
+# Proposal for future dependency update PRs. Dependabot configuration is
+# active only after merge into the repository's default branch.
+# Pin drift/security issues remain hard failures until new lockfiles pass CI.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+  - package-ecosystem: uv
+    directory: "/apps/api"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+  - package-ecosystem: uv
+    directory: "/apps/worker"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+  - package-ecosystem: uv
+    directory: "/apps/mcp-server"
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+# pnpm 12.5.1 is deliberately not declared as a Dependabot "npm" updater
+# until GitHub lists support for its lockfile format. See the execution plan:
+# pnpm upgrades are a pinned, reviewed local lockfile regeneration step.

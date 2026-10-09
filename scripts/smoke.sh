@@ -111,6 +111,7 @@ smoke_contracts() {
     scripts/test_import_capability_contracts.py
     scripts/test_motion_policy.py
     scripts/test_site_artifact_isolation.py
+    scripts/test_production_artifact_scan.py
     scripts/test_supply_chain_contracts.py
     scripts/test_production_compose_contract.py
     scripts/test_development_compose_contract.py

@@ -100,7 +100,7 @@ def postgres_engine() -> Iterator[object]:
             f"{POSTGRES_INTEGRATION_ENV}=1: {exc}"
         )
 
-    container = PostgresContainer("postgres:16-alpine")
+    container = PostgresContainer("postgres:18.4-alpine")
     engine = None
     try:
         container.start()

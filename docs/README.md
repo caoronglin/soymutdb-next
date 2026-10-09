@@ -19,6 +19,11 @@
 | 交付流水线怎么跑（CNB 主链路） | [`ops/ci-cd.md`](ops/ci-cd.md) |
 | 跨应用总览、API 与端口、部署运维、多实例信任 | [`wiki/README.md`](wiki/README.md) |
 
+## 曹帅课题组视觉体系（2026-10-09，设计阶段）
+
+- [SoyMutDB × 曹帅课题组视觉素材与架构验收计划](design/caoslab-visual-architecture-plan-2026-10-09.md)：研究来源、科研真实性、素材清单、后台/Windows/CI/死代码待办分级与退出条件。**目前仅规划，尚未提交素材或改代码。**
+- [PI/Coding Agent 与 Subagent 执行提示词](agents/caoslab-visual-agent-prompt.md)：文档阶段权限边界、委派规则、未来实施阶段和验收矩阵。
+
 ## 2. 现行设计（按领域）
 
 | 领域 | 文档 |

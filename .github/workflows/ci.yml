@@ -565,11 +565,21 @@ jobs:
   # Job 6 — Real ClickHouse legacy migration (hard gate)
   # ---------------------------------------------------------------------------
   clickhouse-migration:
-    name: ClickHouse migration fixture
+    name: ClickHouse migration fixture (${{ matrix.image }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     continue-on-error: false
+    # Preserve the current 24.8 acceptance contract while qualifying 25.8 LTS
+    # against the same real fixture and idempotence checks. This does not
+    # upgrade existing volumes or production by changing a Docker tag.
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - clickhouse/clickhouse-server:24.8-alpine
+          - clickhouse/clickhouse-server:25.8-alpine
     env:
+      SOYMUTDB_CLICKHOUSE_CI_IMAGE: ${{ matrix.image }}
       SOYMUTDB_CLICKHOUSE_PASSWORD: ci-ch-password
       CLICKHOUSE_MIGRATION_PYTHON: python
     steps:

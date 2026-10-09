@@ -209,6 +209,7 @@ function LoginComponent() {
                     <label htmlFor="email">{t("auth.email")}</label>
                     <Input
                       id="email"
+                      data-testid="login-email"
                       type="email"
                       autoComplete="email"
                       required
@@ -221,6 +222,7 @@ function LoginComponent() {
                     <label htmlFor="password">{t("auth.password")}</label>
                     <Input
                       id="password"
+                      data-testid="login-password"
                       type="password"
                       autoComplete="current-password"
                       required

@@ -1,10 +1,9 @@
 /**
  * Homepage E2E — the database entry point.
  *
- * Offline-capable: the five task entries and the portal navigation render
- * without a backend. Assembly/news data is API-backed and degrades to an empty
- * state, never to fake rows. The hero identifier-search strip is intentionally
- * absent (public-web-layout `:45` removes it from the approved structure).
+ * Offline-capable: the four homepage task cards and grouped portal navigation render
+ * without a backend. The hero search bar is present; Primer remains a direct
+ * route but was intentionally removed from the featured cards.
  *
  * Target: local static server at /soymutdb-next/ (playwright-public.config.ts),
  * or the deployed site via SMOKE_BASE_URL.
@@ -18,16 +17,15 @@ test.describe("homepage — primary navigation", () => {
   test("renders the primary nav with the database entry points", async ({ page }) => {
     await gotoReady(page, `${BASE}/`);
 
-    // The header groups the old flat links under labelled menus; the
-    // contract is that the groups exist in data-entry order and each menu
-    // opens to show its links.
+    // The current operator configuration names its search group "Search", not
+    // "Explore". All three groups and direct Downloads navigation must work.
     const nav = page.locator('nav[aria-label="Primary navigation"]').first();
     await expect(nav).toBeVisible();
 
     const groupLabels = (await nav.locator("button").allTextContents()).map((label) =>
       label.trim(),
     );
-    for (const label of ["Explore", "Tools", "Resources"]) {
+    for (const label of ["Search", "Tools", "Resources"]) {
       expect(groupLabels, `${label} group must be in the primary nav`).toContain(label);
     }
     // Data entry points come before the resources group, and downloads sits
@@ -39,12 +37,12 @@ test.describe("homepage — primary navigation", () => {
     expect(explore).toBeLessThan(resources);
     await expect(nav.locator('a[href$="/downloads"]')).toBeVisible();
 
-    // Explore opens the biological entry points.
-    await nav.locator('button:has-text("Explore")').click();
-    for (const label of ["Genes", "Variants", "Mutant Lines", "Genome Browser"]) {
-      // Menu links carry role="menuitem" inside the ARIA menu.
-      await expect(nav.getByRole("menuitem", { name: label, exact: true })).toBeVisible();
-    }
+    // Search opens the biological entry points.
+    await nav.locator('button:has-text("Search")').click();
+    // Current operator-approved Search menu has four entries; variants and
+    // mutant lines remain available via direct routes, not this dropdown.
+    await expect(nav.getByRole("menuitem")).toHaveCount(4);
+    await expect(nav.getByRole("menuitem", { name: /BLAST/i })).toBeVisible();
 
     // Tools opens the sequence/tooling entry points.
     await nav.locator('button:has-text("Tools")').click();
@@ -53,17 +51,16 @@ test.describe("homepage — primary navigation", () => {
 });
 
 test.describe("homepage — task entries", () => {
-  test("renders the five task entries in the approved order", async ({ page }) => {
+  test("renders the four current featured task entries in order", async ({ page }) => {
     await gotoReady(page, `${BASE}/`);
 
-    // Five task entries in the approved design order: Gene ID, Physical
-    // Location, JBrowse 2, BLAST, Primer Design (public-web-layout `:42`).
+    // Primer is still reachable through its route but is not a homepage card.
+    // The current operator-approved cards: Gene ID, Location, JBrowse, BLAST.
     const taskIds = [
       "task-gene-search",
       "task-location-search",
       "task-jbrowse",
       "task-blast",
-      "task-primer",
     ];
     for (const testId of taskIds) {
       await expect(page.getByTestId(testId)).toBeVisible();
@@ -85,7 +82,6 @@ test.describe("homepage — task entries", () => {
       "task-location-search": "/search/location",
       "task-jbrowse": "/search/gbrowse",
       "task-blast": "/blast",
-      "task-primer": "/search/primer",
     };
     for (const [testId, href] of Object.entries(expectedHrefs)) {
       await expect(page.getByTestId(testId)).toHaveAttribute("href", new RegExp(`${href}$`));
@@ -102,12 +98,12 @@ test.describe("homepage — content sections", () => {
     await expect(page.getByTestId("home-news-empty")).toBeVisible();
   });
 
-  test("does not render the removed hero search strip", async ({ page }) => {
+  test("hero identifier search is visible and navigates to the shareable global search", async ({ page }) => {
     await gotoReady(page, `${BASE}/`);
-    await expect(page.locator('[data-testid="hero"]')).toHaveCount(0);
-    // The hero identifier-search strip and statistics band sit outside the
-    // approved structure (public-web-layout `:45`) and must stay absent.
-    await expect(page.getByTestId("home-search-input")).toHaveCount(0);
-    await expect(page.getByTestId("home-search-submit")).toHaveCount(0);
+    const box = page.getByTestId("home-search");
+    await expect(box.getByRole("textbox")).toBeVisible();
+    await box.getByRole("textbox").fill("Glyma.01G000100");
+    await box.getByTestId("home-search-submit").click();
+    await expect(page).toHaveURL(/\/search\?q=Glyma\.01G000100/);
   });
 });
