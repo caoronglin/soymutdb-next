@@ -339,7 +339,7 @@ CI 在 main 上成功（workflow_run 触发）或 workflow_dispatch 手动触发
 .github/workflows/pages.yml（仅此文件负责 gh-pages）
    ├─ gate：workflow_run 仅接受本仓库 main 分支的成功 CI；失败/取消/PR 运行在此拦截，deploy 被跳过
    ├─ checkout 触发 CI 的同一 commit（workflow_run.head_sha），确保发布经过验证的代码
-   ├─ pnpm 11.21.0 + Node 24.19.0，官方 npm registry（覆盖仓库 .npmrc 的 npmmirror）
+   ├─ pnpm 11.21.0 + Node 26.10.0，官方 npm registry（覆盖仓库 .npmrc 的 npmmirror）
    ├─ pnpm install --frozen-lockfile
    ├─ build：VITE_API_BASE_URL=${{ secrets.API_BASE_URL }}，VITE_CDN_ENABLED=false
    ├─ pnpm --filter @soymutdb/web build（SSG + assets）

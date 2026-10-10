@@ -32,7 +32,7 @@
 # Both delegate to scripts/{start-cloud-dev,acceptance}.sh; see
 # docs/ops/cnb-startup-acceptance.md.
 #
-# Version pins (Node 24.19.0 / pnpm 12.5.1 / Python 3.14 / uv 0.11.33) mirror
+# Version pins (Node 26.10.0 / pnpm 12.5.1 / Python 3.14 / uv 0.11.33) mirror
 # package.json, .nvmrc and the Dockerfiles; the contract test fails when any of
 # these disagree.
 #
@@ -76,7 +76,7 @@ main:
       # reference handed to `docker pull`, so a repository path in `image:`
       # fails the stage with `invalid reference format` before any script runs.
       # Stages that need another environment (API on python:3.14, governance on
-      # node:24.19.0) still declare their own `image:` and override this.
+      # node:26.10.0) still declare their own `image:` and override this.
       docker:
         volumes:
           - /cache/pnpm-store
@@ -120,7 +120,7 @@ main:
         # the pipeline-level `docker.build` above, which is the only place CNB
         # accepts a Dockerfile; a path in a stage `image:` is handed to
         # `docker pull` and fails with `invalid reference format`. The image must
-        # carry both toolchains: node:24.19.0 has no Python at all, and the
+        # carry both toolchains: node:26.10.0 has no Python at all, and the
         # GitHub mirror only avoids this because actions/setup-python provides one.
         - name: Frontend verification
           script: bash scripts/ci-job-steps.sh run frontend
@@ -131,7 +131,7 @@ main:
         #   * Node-backed -- `pnpm deps:graphs` / `pnpm deps:audit`;
         #   * Python-backed -- `scripts/dependency_governance.py` imports PyYAML
         #     and drives `uv`/`uvx` for the Deptry/license analyzers.
-        # The `node:24.19.0` override that used to be here ships no Python
+        # The `node:26.10.0` override that used to be here ships no Python
         # packaging toolchain (its python3 is the bare node-gyp interpreter,
         # without pip), so the job body could not install its pins and real
         # build cnb-mqg-1k289oe96 died with `ModuleNotFoundError: No module
@@ -205,7 +205,7 @@ main:
         # the pipeline-level `docker.build` above, which is the only place CNB
         # accepts a Dockerfile; a path in a stage `image:` is handed to
         # `docker pull` and fails with `invalid reference format`. The image must
-        # carry both toolchains: node:24.19.0 has no Python at all, and the
+        # carry both toolchains: node:26.10.0 has no Python at all, and the
         # GitHub mirror only avoids this because actions/setup-python provides one.
         - name: Frontend verification
           script: bash scripts/ci-job-steps.sh run frontend
@@ -216,7 +216,7 @@ main:
         #   * Node-backed -- `pnpm deps:graphs` / `pnpm deps:audit`;
         #   * Python-backed -- `scripts/dependency_governance.py` imports PyYAML
         #     and drives `uv`/`uvx` for the Deptry/license analyzers.
-        # The `node:24.19.0` override that used to be here ships no Python
+        # The `node:26.10.0` override that used to be here ships no Python
         # packaging toolchain (its python3 is the bare node-gyp interpreter,
         # without pip), so the job body could not install its pins and real
         # build cnb-mqg-1k289oe96 died with `ModuleNotFoundError: No module
@@ -234,7 +234,7 @@ main:
           image: python:3.14
           script: bash scripts/ci-job-steps.sh run db-ab
         - name: Build the checksummed Pages artifact
-          image: node:24.19.0
+          image: node:26.10.0
           # Both scripts carry a bash shebang and bootstrap their own container
           # (build-pages-artifact.sh runs `pnpm --filter ... build`).
           script: bash scripts/build-pages-artifact.sh && bash scripts/verify-pages-artifact.sh pages-dist
@@ -492,10 +492,10 @@ main:
         SMOKE_BASE_URL: https://soymutdb.example.com
       stages:
         - name: Install Playwright browsers
-          image: node:24.19.0
+          image: node:26.10.0
           script: bash -c 'cd e2e && npm ci && npx playwright install --with-deps chromium'
         - name: Run online smoke tests
-          image: node:24.19.0
+          image: node:26.10.0
           script: bash -c 'cd e2e && CI=1 npx playwright test'
       failStages:
         - name: Upload smoke failure artifacts
@@ -728,7 +728,7 @@ $:
         # the pipeline-level `docker.build` above, which is the only place CNB
         # accepts a Dockerfile; a path in a stage `image:` is handed to
         # `docker pull` and fails with `invalid reference format`. The image must
-        # carry both toolchains: node:24.19.0 has no Python at all, and the
+        # carry both toolchains: node:26.10.0 has no Python at all, and the
         # GitHub mirror only avoids this because actions/setup-python provides one.
         - name: Frontend verification
           script: bash scripts/ci-job-steps.sh run frontend
@@ -805,7 +805,7 @@ $:
           image: python:3.14
           script: bash scripts/acceptance.sh --profile backend
         - name: Static artifact acceptance
-          image: node:24.19.0
+          image: node:26.10.0
           script: bash scripts/acceptance.sh --profile static
       endStages:
         - name: Upload acceptance evidence

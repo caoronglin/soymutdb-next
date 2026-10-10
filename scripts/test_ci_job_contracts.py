@@ -22,7 +22,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
-NODE_VERSION = "24.19.0"
+NODE_VERSION = "26.10.0"
 PNPM_VERSION = "12.5.1"
 PYTHON_VERSION = "3.14"
 
@@ -645,7 +645,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         cnb = _cnb_text()
         self.assertIn(f"node:{NODE_VERSION}", cnb)
         self.assertIn(f"python:{PYTHON_VERSION}", cnb)
-        for stale in ("node:20", "node:22", "pnpm@10", "python:3.12"):
+        for stale in ("node:20", "node:22", "node:24", "pnpm@10", "python:3.12"):
             self.assertNotIn(stale, cnb, stale)
 
         # The pnpm version is no longer inlined into every CNB stage: the
@@ -1286,7 +1286,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # The governance job body must bootstrap the Python modules its own
         # `pnpm deps:*` scripts import. The GitHub mirror installs
         # `PyYAML==6.0.3 uv==0.11.33` by hand; the CNB stage ran in
-        # `node:24.19.0`, which has no PyYAML and no pip, and died with
+        # `node:26.10.0`, which has no PyYAML and no pip, and died with
         # `ModuleNotFoundError: No module named 'yaml'`.
         self.assertIn("ensure_governance_python", bodies["dependency_governance_step"])
         governance_python = bodies["ensure_governance_python"]
@@ -1375,7 +1375,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         `verify-frontend-artifacts.sh` closes with
         `pnpm --filter @soymutdb/api-client check:contract`, and that script
         exports the backend OpenAPI document from `apps/api/.venv/bin/python`.
-        CNB ran the gate in `node:24.19.0`, which carries no Python, so the venv
+        CNB ran the gate in `node:26.10.0`, which carries no Python, so the venv
         could neither exist nor be created. The GitHub mirror escaped the same
         failure only because `actions/setup-python` installs an interpreter.
 
@@ -1542,7 +1542,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 f"{dockerfile_path} must carry Python for the OpenAPI contract gate",
             )
             # Node is installed from the official release tarball, not from a
-            # `FROM node:` base: python:3.14 and node:24.19.0 sit on different
+            # `FROM node:` base: python:3.14 and node:26.10.0 sit on different
             # Debian generations, and `COPY --from` cannot carry the C library
             # the copied interpreter needs, so the reverse composition dies with
             # `GLIBC_2.38 not found`. Assert the version arrives pinned AND that
@@ -1550,7 +1550,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
             # reviewed pin.
             self.assertRegex(
                 docker_text,
-                r"(?m)^ARG NODE_VERSION=24\.19\.0$",
+                rf"(?m)^ARG NODE_VERSION={re.escape(NODE_VERSION)}$",
                 f"{dockerfile_path} must pin Node to the repository version",
             )
             self.assertIn(

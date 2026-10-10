@@ -8,7 +8,7 @@
 #   * `pnpm deps:graphs` / `pnpm deps:audit` shell out through Node/pnpm;
 #   * `scripts/dependency_governance.py` imports PyYAML and drives `uv`/`uvx`
 #     for the Deptry/license analyzers.
-# The bare `node:24.19.0` override carried no Python packaging toolchain (no
+# The bare `node:26.10.0` override carried no Python packaging toolchain (no
 # pip), and the first real build (cnb-mqg-1k289oe96) died on:
 #
 #   ModuleNotFoundError: No module named 'yaml'

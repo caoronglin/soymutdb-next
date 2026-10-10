@@ -180,7 +180,7 @@ OCI digest 引用、blue/green 外部适配器合同），但对应真实后端�
 
 | Gate | 描述 | 通过标准 | 负责人 | 证据 |
 | --- | --- | --- | --- | --- |
-| G1 | 统一 Docker/Node/pnpm/uv 工具链 | Node 24.19.0、pnpm 11.21.0、uv 固定版本；全部 Dockerfile 一致；无重复/陈旧 Dockerfile | build-release | 变更文件清单 + 验证（t4） |
+| G1 | 统一 Docker/Node/pnpm/uv 工具链 | Node 26.10.0、pnpm 11.21.0、uv 固定版本；全部 Dockerfile 一致；无重复/陈旧 Dockerfile | build-release | 变更文件清单 + 验证（t4） |
 | G2 | `docker compose config` 全部 profile 通过 | `core,blast,analyses,mcp`（+可选 `jbrowse`,`cloudflare-tunnel`）配置均合法 | build-release | CI compose config 输出（t4） |
 | G3 | shellcheck / `bash -n` 通过 | `deploy/scripts/*.sh`、`scripts/*.sh` 静态检查无错 | build-release | 本地+CI 输出（t4） |
 

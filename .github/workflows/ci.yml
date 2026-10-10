@@ -86,7 +86,7 @@ jobs:
       - name: Setup Node 24
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24.19.0
+          node-version: 26.10.0
           # Cache the pnpm store; key is derived from pnpm-lock.yaml.
           cache: pnpm
 
@@ -262,7 +262,7 @@ jobs:
       - name: Setup Node 24
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24.19.0
+          node-version: 26.10.0
           cache: pnpm
 
       - name: Setup Python 3.14

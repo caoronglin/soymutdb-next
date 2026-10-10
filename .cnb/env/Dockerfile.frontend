@@ -11,7 +11,7 @@
 #   `app.main`'s OpenAPI document from `apps/api/.venv/bin/python`. The gate
 #   therefore needs BOTH toolchains in one container.
 #
-#   The stage used to run on `node:24.19.0`, which carries no Python, so the
+#   The stage used to run on `node:26.10.0`, which carries no Python, so the
 #   build failed with:
 #
 #     scripts/check-contract.sh: line 18: /workspace/apps/api/.venv/bin/python:
@@ -22,7 +22,7 @@
 #   both providers run identical bytes instead of one silently skipping a gate.
 #
 # Design: Python base, Node installed from the official tarball
-#   An earlier revision took the opposite shape — `FROM node:24.19.0` plus
+#   An earlier revision took the opposite shape — `FROM node:26.10.0` plus
 #   `COPY --from=python:3.14 /usr/local /usr/local` — and the image build failed
 #   on the first real CNB run:
 #
@@ -32,7 +32,7 @@
 #
 #   `COPY --from` moves the interpreter's binary and shared libraries but NOT
 #   the C library underneath them. python:3.14 sits on a newer Debian (glibc
-#   2.38+) than node:24.19.0 (bookworm, glibc 2.36), so the copied interpreter
+#   2.38+) than node:26.10.0 (bookworm, glibc 2.36), so the copied interpreter
 #   could never load. Installing a shared-library list was necessary but not
 #   sufficient, and glibc itself cannot be swapped in a `COPY`.
 #
@@ -57,9 +57,9 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # https://nodejs.org/dist/<version>/SHASUMS256.txt and are verified before the
 # tarball is unpacked: `curl | tar` would let a mirror swap the binary under a
 # reviewed pin.
-ARG NODE_VERSION=24.19.0
-ARG NODE_SHA256_X64=14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647
-ARG NODE_SHA256_ARM64=01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc
+ARG NODE_VERSION=26.10.0
+ARG NODE_SHA256_X64=ca70e9e349de048b9522abb3adc05b3bd6f43c5ffd3ec57916c7da292f59f022
+ARG NODE_SHA256_ARM64=7a6353f63eb3d04765004b4adf172616243e4522434635cb1d26288658b04ab5
 # Must match PNPM_VERSION in scripts/{setup-workspace,ci-job-steps}.sh and
 # package.json's packageManager; scripts/check-toolchain-pins.py enforces it.
 ARG PNPM_VERSION=12.5.1

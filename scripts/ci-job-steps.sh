@@ -49,7 +49,7 @@ export REPO_ROOT
 # cannot `source` a checked-out script until after the checkout step. Keeping one
 # copy here plus one in .cnb.yml + one in ci.yml is guarded by
 # scripts/test_ci_job_contracts.py, which fails when the three disagree.
-NODE_VERSION="${SOYMUTDB_CI_NODE_VERSION:-24.19.0}"
+NODE_VERSION="${SOYMUTDB_CI_NODE_VERSION:-26.10.0}"
 PNPM_VERSION="${SOYMUTDB_CI_PNPM_VERSION:-12.5.1}"
 PYTHON_VERSION="${SOYMUTDB_CI_PYTHON_VERSION:-3.14}"
 UV_VERSION="${SOYMUTDB_CI_UV_VERSION:-0.11.33}"
@@ -87,7 +87,7 @@ log() { printf '[ci-job-steps] %s\n' "$*" >&2; }
 # which imports PyYAML AND drives `uv`/`uvx` for the Deptry/license analyzers.
 # The GitHub mirror installs both explicitly
 # (`python -m pip install --quiet PyYAML==6.0.3 uv==0.11.33`), but the CNB
-# governance stage ran in `node:24.19.0`, whose only Python is the bare
+# governance stage ran in `node:26.10.0`, whose only Python is the bare
 # interpreter from the base image (for node-gyp, with no pip) -- so the job
 # died before any analyzer ran:
 #
@@ -207,7 +207,7 @@ frontend_install() {
 #
 # The GitHub mirror escapes this because `actions/setup-python` puts a system
 # `python3` on PATH and the workflow prepares the venv by hand; CNB runs the
-# gate in `node:24.19.0`, which has no Python at all. Bootstrap the venv exactly
+# gate in `node:26.10.0`, which has no Python at all. Bootstrap the venv exactly
 # where check-contract.sh already looks for it, from the same closed dependency
 # set the API job installs, so no gate is skipped and the contract is still
 # checked on every provider.

@@ -10,7 +10,7 @@ import yaml
 from compose_loader import load_compose
 
 ROOT = Path(__file__).resolve().parents[1]
-NODE_VERSION = "24.19.0"
+NODE_VERSION = "26.10.0"
 PNPM_VERSION = "12.5.1"
 PROFILES = {"core", "jbrowse", "blast", "analyses", "mcp", "cloudflare-tunnel"}
 UPGRADE = ROOT / "deploy/scripts/upgrade.sh"
@@ -121,7 +121,7 @@ def test_node_and_pnpm_toolchain_is_exact_in_jobs_that_build_assets() -> None:
     assert (ROOT / ".nvmrc").read_text(encoding="utf-8").strip() == NODE_VERSION
     assert (ROOT / ".node-version").read_text(encoding="utf-8").strip() == NODE_VERSION
     assert package["packageManager"] == f"pnpm@{PNPM_VERSION}"
-    assert package["engines"] == {"node": ">=24.0.0 <25", "pnpm": PNPM_VERSION}
+    assert package["engines"] == {"node": ">=26.0.0 <27", "pnpm": PNPM_VERSION}
 
     # CNB is the primary delivery pipeline. Every pipeline that builds or tests
     # the workspace must pin the exact Node release; the smoke pipeline runs the
@@ -131,6 +131,7 @@ def test_node_and_pnpm_toolchain_is_exact_in_jobs_that_build_assets() -> None:
         text = path.read_text(encoding="utf-8")
         assert "node:22" not in text, path
         assert "node:20" not in text, path
+        assert "node:24" not in text, path
         if "node:" in text:
             assert f"node:{NODE_VERSION}" in text, path
     assert f"node:{NODE_VERSION}" in (ROOT / ".cnb.yml").read_text(encoding="utf-8")
@@ -1038,7 +1039,7 @@ def test_platform_delivery_adr_records_decisions_and_rollback() -> None:
     adr = (ROOT / "docs/adr/0001-platform-delivery-contract.md").read_text(encoding="utf-8")
 
     assert "Status: Accepted" in adr
-    assert "Node.js 24.19.0" in adr
+    assert "Node.js 26.10.0" in adr
     assert f"pnpm {PNPM_VERSION}" in adr
     assert "Ant Design 6" in adr
     assert "image@sha256" in adr
