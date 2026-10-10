@@ -119,6 +119,7 @@ smoke_contracts() {
     scripts/test_backup_restore_contracts.py
     scripts/test_ci_job_contracts.py
     scripts/test_dockerfile_contracts.py
+    scripts/test_custom_element_registration_contracts.py
     infra/clickhouse/test_schema_contract.py
   )
   # Suites that need an interpreter or service this smoke layer does not own
