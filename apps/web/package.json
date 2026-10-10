@@ -42,7 +42,6 @@
     "pdfjs-dist": "^4.10.38",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "react-hook-form": "^7.54.0",
     "react-i18next": "^15.4.0",
     "zod": "^3.24.0"
   },
