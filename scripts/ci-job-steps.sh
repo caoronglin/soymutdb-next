@@ -100,6 +100,15 @@ log() { printf '[ci-job-steps] %s\n' "$*" >&2; }
 # enforce, so the analyzers cannot run on a different uv than production.
 GOVERNANCE_PYYAML_VERSION="${SOYMUTDB_CI_PYYAML_VERSION:-${SOYMUTDB_CI_GOVERNANCE_PYYAML_VERSION:-6.0.3}}"
 
+# The contracts layer runs pytest, and the `python:3.14` stage image ships no
+# test runner. CNB build cnb-66s-1k4i8rfii (2026-10-10) failed the smoke-contracts
+# stage with "pytest is required for the contracts smoke layer" — the job existed
+# and was wired into both providers, but had never actually executed, so its
+# prerequisites were never exercised. Every other contract import is either
+# stdlib or vendored in scripts/ (compose_loader.py), so pytest is the whole gap.
+# Matches the floor in apps/api/pyproject.toml ("pytest>=8.0.0").
+CONTRACTS_PYTEST_VERSION="${SOYMUTDB_CI_PYTEST_VERSION:-9.1.1}"
+
 # Debian-based `node:*` images ship a bare `python3` (for node-gyp) without the
 # `pip` module. A bare `python3 -m pip` therefore fails there, so bootstrap pip
 # with `ensurepip` before giving up: the failure this whole function exists to
@@ -118,6 +127,33 @@ governance_pip_install() {
   shift
   PIP_NO_CACHE_DIR=1 PIP_ROOT_USER_ACTION=ignore PIP_DISABLE_PIP_VERSION_CHECK=1 \
     "${interpreter}" -m pip install --quiet --break-system-packages "$@"
+}
+
+ensure_contracts_python() {
+  local interpreter
+  interpreter="$(command -v python3 || true)"
+  [[ -n "${interpreter}" ]] || {
+    log "the contracts stage image must provide python3"
+    return 1
+  }
+  if ! interpreter_matches_pin "${interpreter}"; then
+    log "cannot run the contract suites: ${interpreter} is $("${interpreter}" -V 2>&1), not ${PYTHON_VERSION}"
+    return 1
+  fi
+
+  if ! "${interpreter}" -m pytest --version >/dev/null 2>&1; then
+    ensure_governance_pip "${interpreter}" || return 1
+    log "installing pytest==${CONTRACTS_PYTEST_VERSION} for the contract suites"
+    governance_pip_install "${interpreter}" "pytest==${CONTRACTS_PYTEST_VERSION}" || return 1
+  fi
+
+  # Verified, not assumed: scripts/smoke.sh checks this itself and would
+  # otherwise fail with a bare "pytest is required", which reads as a missing
+  # test dependency rather than a stage that never provisioned one.
+  "${interpreter}" -m pytest --version >/dev/null 2>&1 || {
+    log "pytest is still not runnable by ${interpreter}; the contracts gate cannot run"
+    return 1
+  }
 }
 
 ensure_governance_python() {
@@ -370,7 +406,7 @@ smoke_contracts_run() {
   # The contracts layer is plain pytest under scripts/; it needs no workspace
   # install, no API venv and no service, which is why it can run as its own cheap
   # stage instead of being appended to a heavier job.
-  ensure_governance_python
+  ensure_contracts_python
   bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts
 }
 

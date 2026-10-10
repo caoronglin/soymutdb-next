@@ -634,6 +634,32 @@ class DeliveryArchitectureTests(unittest.TestCase):
         ):
             self.assertIn(event, fallback, event)
 
+    def test_smoke_contracts_job_provisions_its_own_test_runner(self) -> None:
+        """The contracts stage must not depend on an image that already has pytest.
+
+        `smoke-contracts` runs `scripts/smoke.sh --profile contracts`, which is
+        pytest. The stage runs on `python:3.14`, which ships no test runner, so
+        the job has to provision one.
+
+        It did not, and the wiring hid it: the job was added to `.cnb.yml`, to
+        both split pipelines and to the GitHub mirror, and passed every local
+        run — because a developer machine already has pytest. The first real
+        execution (CNB `cnb-66s-1k4i8rfii`, 2026-10-10) failed in 11s with
+        "pytest is required for the contracts smoke layer".
+
+        This is the general failure mode of adding a CI job that has never run:
+        delegation was proven, execution was not. Assert the bootstrap exists.
+        """
+        shared = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        self.assertIn("ensure_contracts_python", shared)
+        self.assertRegex(shared, r'CONTRACTS_PYTEST_VERSION="\$\{[^}]*:-[0-9]+\.[0-9]+\.[0-9]+\}"')
+        # The install must be pinned, not floating: an unpinned test runner makes
+        # the gate a moving target between two runs of the same commit.
+        self.assertIn('"pytest==${CONTRACTS_PYTEST_VERSION}"', shared)
+        # And it must verify rather than assume, because smoke.sh's own failure
+        # message points at the wrong cause.
+        self.assertIn("pytest is still not runnable by", shared)
+
     def test_no_build_path_depends_on_corepack(self) -> None:
         """No image build, compose service or CI job may shell out to corepack.
 
