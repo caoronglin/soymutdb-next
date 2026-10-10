@@ -56,9 +56,10 @@ See `docs/ops/ci-cd.md` (architecture and release flow) and
 ## Build, Test, and Development Commands
 
 > **Running things on a workstation? Read `.ai-memory/LOCAL-RUN-ENV.md` first.**
-> It records the mamba environment this machine requires, the exact env vars
+> It records the mamba environments this machine has (one carries a full
+> PostgreSQL server, so the API *can* run here), the exact env vars
 > `max build` needs, which existing start scripts to use instead of writing a
-> throwaway server, and which capabilities (Docker, PostgreSQL, port 80) the
+> throwaway server, and which capabilities (Docker, Redis, port 80) the
 > agent process cannot have. Those gaps have been rediscovered the hard way
 > more than once.
 

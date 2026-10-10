@@ -104,18 +104,98 @@ cd /mnt/data02/T25ronglin/code/web && sudo python3 -m http.server 80 \
 | `10.133.20.92` | 内网 |
 | `100.77.182.76` | Tailscale，**用户指定的对外预览地址** |
 
-## 7. 本机缺失的能力（不要重复尝试）
+## 7. ⚠️ 本机**有** PostgreSQL —— 在 `webdb` 环境里
+
+**这一条之前写错过，代价是好几轮"本机起不了后端"的错误结论。纠正如下。**
+
+```bash
+mamba env list     # webdb = /mnt/data02/T25ronglin/.miniforge3/envs/webdb
+```
+
+`webdb` 环境里有**完整的服务端和依赖**：
+
+| 类别 | 内容 |
+| --- | --- |
+| PostgreSQL 服务端 | `postgres` `initdb` `pg_ctl` `psql` `pg_isready` `createdb` |
+| Python 3.14.7 | fastapi 0.137.1、uvicorn 0.134.3、sqlalchemy 2.1.0、asyncpg 0.31.0、alembic 1.20.0、celery 5.6.3、redis 6.4.0 |
+
+所以**本机可以跑通完整后端**，不必退化成只看静态页面。完整启动顺序见下节。
+
+没有 Redis 服务端二进制，Celery worker 跑不了；用
+`SOYMUTDB_OUTBOX_DISPATCHER_ENABLED=false` 让 API 跳过 outbox。
+
+### 完整全栈启动（已实测通过）
+
+```bash
+E=/mnt/data02/T25ronglin/.miniforge3/envs/webdb
+cd /mnt/data02/T25ronglin/code/web
+
+# 1) 集群只需初始化一次
+export PATH="$E/bin:$PATH"
+PGDATA="$PWD/.local-pg/data"
+[ -d "$PGDATA" ] || initdb -D "$PGDATA" -U postgres --auth=trust --encoding=UTF8
+postgres -D "$PGDATA" -p 5432 -k "$PWD/.local-pg" -c listen_addresses=127.0.0.1
+createdb -h 127.0.0.1 -p 5432 -U postgres soymutdb   # 已存在会报错，忽略
+
+# 2) 迁移（45 个）
+cd apps/api
+SOYMUTDB_DATABASE_URL="postgresql+asyncpg://postgres@127.0.0.1:5432/soymutdb" \
+SOYMUTDB_APP_ENV=dev $E/bin/python -m alembic upgrade head
+
+# 3) 本地管理员
+cd ../..
+SOYMUTDB_DATABASE_URL="postgresql+asyncpg://postgres@127.0.0.1:5432/soymutdb" \
+SOYMUTDB_APP_ENV=dev $E/bin/python scripts/dev/seed-local-account.py \
+  --username admin --email admin@local --password 'LocalDev!2026'
+
+# 4) API
+cd apps/api
+SOYMUTDB_DATABASE_URL="postgresql+asyncpg://postgres@127.0.0.1:5432/soymutdb" \
+SOYMUTDB_APP_ENV=dev SOYMUTDB_OUTBOX_DISPATCHER_ENABLED=false \
+SOYMUTDB_JWT_SECRET="local-dev-only-secret-at-least-32-chars-long" \
+SOYMUTDB_REFRESH_COOKIE_SECURE=false SOYMUTDB_CORS_ORIGINS="<前端地址>" \
+$E/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8010
+```
+
+**登录账号**：`admin` / `LocalDev!2026`（administrator）。
+
+**登录需要 `Origin` 头**：curl 测登录必须带
+`-H "Origin: http://100.77.182.76:8081"`，否则 401
+`Request origin could not be verified`。浏览器自带，无需处理。
+
+**API 路由前缀**是 `/api/v1`，健康检查在 `/health`（**不在** `/api/v1/health`）。
+
+### 构建时指向真实 API
+
+```bash
+export VITE_API_BASE_URL="http://100.77.182.76:8010/api/v1"
+```
+
+门户与管理端**必须各自独立源**（仓库契约：external/internal 与 portal/console
+都是分离的安全边界）。所以构建时 admin 用同一个 API 地址，但**伺服端口不同**：
+
+```bash
+node scripts/dev/local-preview-server.mjs --app portal --dist apps/web/dist --port 8080
+node scripts/dev/local-preview-server.mjs --app admin  --port 8081
+```
+
+> `--dist apps/web/dist` 必须显式给：脚本默认 `dist/external`，而普通
+> `max build` 把它删了，会 404。
+
+## 8. 本机确实缺失的能力
 
 - **无 Docker** → `compose-acceptance`、`image-build`、`release`、
-  `clickhouse-migration`、`mcp-e2e`、211 个 testcontainers 测试均无法本地跑
-- **无 PostgreSQL** → 本机起不了 API
+  `clickhouse-migration`、`mcp-e2e`、211 个 testcontainers 测试无法本地跑
+- **无 Redis 服务端** → Celery worker 跑不了
 - `uv` 在 `~/.local/share/uv/tools` 上是**只读**的 → `deptry-*` / `pip-audit-*`
   本地必然失败，这是环境问题不是代码问题（CNB 上通过）
+- **绑不了 80 端口**（见第 5 节）
 - 每个 bash 调用在**独立 pid namespace**，`pgrep` 看不到上一次调用起的进程；
   但它们仍在服务。后台常驻进程要用 `run_in_background` 托管，
-  `nohup ... &` 会在调用结束后被清理
+  `nohup ... &` 和 `pg_ctl start` 都会在调用结束后被清理
 
-## 8. 临时文件
+## 9. 临时文件
 
 - `/tmp` **不跨 bash 调用保留**（踩过两次）→ 临时文件放工作区内
 - 工作区 scratch 用完即删：`.ph` `.cache` `.serve.py` `e2e/.shot-*.png`
+- `.local-pg/` 是本地数据库集群，**保留**（重装代价大）；`data/` 在 gitignore 内
