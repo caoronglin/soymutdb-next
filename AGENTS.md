@@ -55,6 +55,13 @@ See `docs/ops/ci-cd.md` (architecture and release flow) and
 
 ## Build, Test, and Development Commands
 
+> **Running things on a workstation? Read `.ai-memory/LOCAL-RUN-ENV.md` first.**
+> It records the mamba environment this machine requires, the exact env vars
+> `max build` needs, which existing start scripts to use instead of writing a
+> throwaway server, and which capabilities (Docker, PostgreSQL, port 80) the
+> agent process cannot have. Those gaps have been rediscovered the hard way
+> more than once.
+
 Use Node.js 26 (`.nvmrc` pins 26.10.0 and `package.json` permits only `>=26 <27`), Python 3.14+, and the pinned pnpm version (`pnpm@12.5.1`). Install dependencies with `pnpm install`.
 
 ```bash

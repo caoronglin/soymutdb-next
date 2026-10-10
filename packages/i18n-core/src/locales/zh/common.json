@@ -51,7 +51,7 @@
     "subtitle": "大豆突变体数据库",
     "heroTitle": "探索多物种突变的未知疆域",
     "heroSubtitle": "按明确的基因组组装和数据版本，检索已发布的公开记录。",
-    "searchPlaceholder": "搜索基因 ID、变异或突变系公开编号…",
+    "searchPlaceholder": "基因ID",
     "searchButton": "搜索",
     "databaseTitle": "SoyMutDB 数据库",
     "databaseSubtitle": "通过稳定的公开标识符浏览已发布记录，并明确区分不同基因组组装。",

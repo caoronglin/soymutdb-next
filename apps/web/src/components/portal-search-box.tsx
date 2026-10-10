@@ -33,7 +33,7 @@ export function PortalSearchBox({
   const navigate = useNavigate();
   const [term, setTerm] = React.useState(defaultValue);
   const placeholder = t("home.searchPlaceholder", {
-    defaultValue: "搜索基因 ID、变异或突变系公开编号…",
+    defaultValue: "基因ID",
   });
 
   const submit = () => {
