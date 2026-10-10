@@ -713,6 +713,55 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertIn("pytest is still not runnable by", body)
         self.assertIn("PyYAML is still not importable by", body)
 
+    def test_contract_suites_stage_carries_both_pinned_interpreters(self) -> None:
+        """The contracts stage must be able to run the contracts layer it hosts.
+
+        The layer is not Python-only: `resolveDevAllowedHosts` is TypeScript,
+        and one case shells out to node to run the frontend gate self-test. The
+        stage was declared `image: python:3.14`, which has no node, so CNB
+        build `cnb-t65-1k4ibj79d` (2026-10-10) reported
+        "FileNotFoundError: No such file or directory: 'node'" — 264 contracts
+        passed and two could not run.
+
+        The pipeline image is the correct host: .cnb/env/Dockerfile.frontend is
+        `FROM python:3.14` with Node 26.10.0 unpacked on top, so it is the only
+        image in the pipeline carrying both pins.
+
+        Two wrong-looking fixes are ruled out here rather than left to review:
+        re-adding `python:3.14` fails the assertion, and so does swapping the
+        `FROM` to `node:26.10.0` with a copied interpreter, which cannot start
+        across the glibc 2.36 / 2.38 boundary.
+        """
+        cnb = yaml.safe_load((ROOT / ".cnb.yml").read_text(encoding="utf-8"))
+        stage = next(
+            st for st in cnb["main"]["pull_request"][0]["stages"]
+            if st["name"] == "Contract suites"
+        )
+        self.assertNotIn(
+            "image", stage,
+            "the contracts stage must inherit the pipeline image, which carries "
+            "both the pinned Python and the pinned Node",
+        )
+
+        dockerfile = (ROOT / ".cnb/env/Dockerfile.frontend").read_text(encoding="utf-8")
+        base = re.search(r"(?m)^FROM\s+(\S+)", dockerfile)
+        self.assertIsNotNone(base, "Dockerfile.frontend has no FROM")
+        self.assertEqual(
+            base.group(1), "python:3.14",
+            "the pipeline image must be built FROM python:3.14 and carry Node on "
+            "top; node:26.10.0 is glibc 2.36 and cannot host a copied 3.14 "
+            "interpreter that needs 2.38",
+        )
+        self.assertIn("node --version", dockerfile)
+
+        # The mirror must agree, or the two providers stop executing the same
+        # stage on the same image.
+        verify = yaml.safe_load((ROOT / ".cnb/pipelines/verify.yml").read_text(encoding="utf-8"))
+        mirror = next(
+            st for st in verify["stages"] if st["name"] == "Contract suites"
+        )
+        self.assertNotIn("image", mirror)
+
     def test_no_build_path_depends_on_corepack(self) -> None:
         """No image build, compose service or CI job may shell out to corepack.
 
