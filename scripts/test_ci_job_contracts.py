@@ -634,6 +634,55 @@ class DeliveryArchitectureTests(unittest.TestCase):
         ):
             self.assertIn(event, fallback, event)
 
+    def test_no_build_path_depends_on_corepack(self) -> None:
+        """No image build, compose service or CI job may shell out to corepack.
+
+        Node 25 removed corepack from the distribution. Raising the pin to
+        26.10.0 therefore broke every path that did `corepack enable`: the CNB
+        pipeline image failed at stage Prepare with
+        `corepack: command not found` (build cnb-on5-1k4i8kkap, 2026-10-10) and
+        no gate ran at all.
+
+        Nothing caught it. Every local gate passed, because the dev machine had
+        a leftover corepack 0.34.5 from an unrelated Node install, and the only
+        signal was a pipeline that could not build its own image.
+
+        pnpm must come from `npm install -g pnpm@<pinned>`, which is what the
+        reviewed pin resolves to either way. scripts/setup-workspace.sh is the
+        one exception: it keeps a corepack branch for older pinned images, and
+        this test tolerates it because the call sits inside a
+        `command -v corepack` guard that npm-installed pnpm cannot reach.
+        """
+        import re as _re
+
+        targets = [
+            ".cnb/env/Dockerfile.frontend",
+            "apps/jbrowse/Dockerfile",
+            "infra/docker/Dockerfile.web",
+            "infra/docker/Dockerfile.admin",
+            "docker-compose.dev.yml",
+            "docker-compose.yml",
+            ".github/workflows/ci.yml",
+            ".github/workflows/baseline-validation.yml",
+            ".github/workflows/e2e-smoke.yml",
+        ]
+        for relative in targets:
+            path = ROOT / relative
+            if not path.exists():
+                continue
+            # Strip comments so prose explaining the corepack removal, or the
+            # build log that records it, does not trip the assertion.
+            text = path.read_text(encoding="utf-8")
+            code = _re.sub(r"^\s*#.*$", "", text, flags=_re.MULTILINE)
+            for call in ("corepack enable", "corepack prepare", "corepack pnpm"):
+                self.assertNotIn(call, code, f"{relative} still calls `{call}`")
+
+        # The one sanctioned corepack path must actually be guarded, or this
+        # exception becomes a silent dependency again.
+        setup = (ROOT / "scripts/setup-workspace.sh").read_text(encoding="utf-8")
+        self.assertIn("command -v corepack", setup)
+        self.assertIn('npm install --global --no-fund --no-audit "pnpm@${PNPM_VERSION}"', setup)
+
     def test_contract_suites_run_in_both_pipelines(self) -> None:
         """`smoke.sh --profile contracts` must execute in CI on both providers.
 

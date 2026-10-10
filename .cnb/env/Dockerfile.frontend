@@ -152,10 +152,19 @@ RUN node --version \
 # lockfile, while an empty directory fails with ERR_PNPM_NO_LOCKFILE.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 
+# pnpm is installed with npm, NOT corepack.
+#
+# Node 25+ no longer ships corepack in its distribution, so `corepack enable`
+# here failed with `corepack: command not found` on the Node 26.10.0 tarball
+# (CNB build cnb-on5-1k4i8kkap, stage Prepare, 2026-10-10) and the pipeline
+# image could not be built at all. npm is still bundled with Node, and
+# `npm install -g pnpm@<pinned>` puts the exact reviewed version on PATH --
+# the same pin corepack used to resolve from `packageManager`, still enforced
+# by scripts/check-toolchain-pins.py.
 RUN set -eux; \
     mkdir -p /cache/pnpm-store; \
-    corepack enable; \
-    corepack prepare "pnpm@${PNPM_VERSION}" --activate; \
+    npm install --global --no-fund --no-audit "pnpm@${PNPM_VERSION}"; \
+    pnpm --version; \
     pnpm config set store-dir /cache/pnpm-store; \
     pnpm fetch --ignore-scripts; \
     du -sh /cache/pnpm-store

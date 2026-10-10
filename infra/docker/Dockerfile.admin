@@ -8,7 +8,9 @@
 # ---------- Stage 1: Dependencies ----------
 FROM node:26.10.0-alpine AS deps
 
-RUN corepack enable && corepack prepare pnpm@12.5.1 --activate
+# Node 25+ ships no corepack; this image is on the Node 26 pin, so pnpm comes
+# from the bundled npm at the same reviewed version.
+RUN npm install --global --no-fund --no-audit pnpm@12.5.1 && pnpm --version
 
 WORKDIR /app
 
@@ -25,7 +27,9 @@ RUN pnpm install --frozen-lockfile
 # ---------- Stage 2: Builder ----------
 FROM node:26.10.0-alpine AS builder
 
-RUN corepack enable && corepack prepare pnpm@12.5.1 --activate
+# Node 25+ ships no corepack; this image is on the Node 26 pin, so pnpm comes
+# from the bundled npm at the same reviewed version.
+RUN npm install --global --no-fund --no-audit pnpm@12.5.1 && pnpm --version
 
 WORKDIR /app
 

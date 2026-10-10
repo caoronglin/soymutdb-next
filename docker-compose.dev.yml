@@ -241,7 +241,7 @@ services:
       - web-node-modules:/app/node_modules
       - web-pnpm-store:/pnpm/store
     command: >
-      sh -c "corepack enable && pnpm install --frozen-lockfile &&
+      sh -c "npm install --global --no-fund --no-audit pnpm@12.5.1 && pnpm install --frozen-lockfile &&
       pnpm --filter @soymutdb/web dev --host 0.0.0.0 --port 5173"
     ports:
       - "5173:5173"
@@ -257,7 +257,7 @@ services:
       - admin-node-modules:/app/node_modules
       - admin-pnpm-store:/pnpm/store
     command: >
-      sh -c "corepack enable && pnpm install --frozen-lockfile &&
+      sh -c "npm install --global --no-fund --no-audit pnpm@12.5.1 && pnpm install --frozen-lockfile &&
       pnpm --filter @soymutdb/admin dev --host 0.0.0.0 --port 5174"
     ports:
       - "5174:5174"
