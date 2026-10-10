@@ -109,6 +109,14 @@ GOVERNANCE_PYYAML_VERSION="${SOYMUTDB_CI_PYYAML_VERSION:-${SOYMUTDB_CI_GOVERNANC
 # Matches the floor in apps/api/pyproject.toml ("pytest>=8.0.0").
 CONTRACTS_PYTEST_VERSION="${SOYMUTDB_CI_PYTEST_VERSION:-9.1.1}"
 
+# PyYAML is the second requirement, and it is not obvious: `compose_loader` is
+# vendored under scripts/, so the compose and Dockerfile contracts import it as
+# if it were a third-party package, and it in turn imports yaml. The contracts
+# layer therefore needs PyYAML even though the only pytest targets are repo
+# files. Both pins are enforced together by
+# scripts/test_ci_job_contracts.py::test_contracts_job_provisions_every_import_it_needs,
+# which reads the layer's import graph instead of trusting this comment.
+
 # Debian-based `node:*` images ship a bare `python3` (for node-gyp) without the
 # `pip` module. A bare `python3 -m pip` therefore fails there, so bootstrap pip
 # with `ensurepip` before giving up: the failure this whole function exists to
@@ -141,17 +149,35 @@ ensure_contracts_python() {
     return 1
   fi
 
-  if ! "${interpreter}" -m pytest --version >/dev/null 2>&1; then
+  local -a required=(
+    "pytest==${CONTRACTS_PYTEST_VERSION}"
+    "PyYAML==${GOVERNANCE_PYYAML_VERSION}"
+  )
+  local -a missing=()
+  local spec
+  for spec in "${required[@]}"; do
+    case "${spec}" in
+      pytest*) "${interpreter}" -m pytest --version >/dev/null 2>&1 || missing+=("${spec}") ;;
+      *) "${interpreter}" -c "import yaml" >/dev/null 2>&1 || missing+=("${spec}") ;;
+    esac
+  done
+  if [[ ${#missing[@]} -gt 0 ]]; then
     ensure_governance_pip "${interpreter}" || return 1
-    log "installing pytest==${CONTRACTS_PYTEST_VERSION} for the contract suites"
-    governance_pip_install "${interpreter}" "pytest==${CONTRACTS_PYTEST_VERSION}" || return 1
+    log "installing ${missing[*]} for the contract suites"
+    governance_pip_install "${interpreter}" "${missing[@]}" || return 1
   fi
 
   # Verified, not assumed: scripts/smoke.sh checks this itself and would
   # otherwise fail with a bare "pytest is required", which reads as a missing
-  # test dependency rather than a stage that never provisioned one.
+  # test dependency rather than a stage that never provisioned one. PyYAML
+  # fails later and further away -- as a collection error naming an unrelated
+  # contract file -- which is why it is checked here too.
   "${interpreter}" -m pytest --version >/dev/null 2>&1 || {
     log "pytest is still not runnable by ${interpreter}; the contracts gate cannot run"
+    return 1
+  }
+  "${interpreter}" -c "import yaml" >/dev/null 2>&1 || {
+    log "PyYAML is still not importable by ${interpreter}; the compose contracts cannot run"
     return 1
   }
 }

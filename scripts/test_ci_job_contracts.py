@@ -634,31 +634,84 @@ class DeliveryArchitectureTests(unittest.TestCase):
         ):
             self.assertIn(event, fallback, event)
 
-    def test_smoke_contracts_job_provisions_its_own_test_runner(self) -> None:
-        """The contracts stage must not depend on an image that already has pytest.
+    def test_contracts_job_provisions_every_import_it_needs(self) -> None:
+        """The contracts stage must provision the layer's whole dependency set.
 
-        `smoke-contracts` runs `scripts/smoke.sh --profile contracts`, which is
-        pytest. The stage runs on `python:3.14`, which ships no test runner, so
-        the job has to provision one.
+        `smoke-contracts` runs `scripts/smoke.sh --profile contracts` on a
+        `python:3.14` stage, which ships neither a test runner nor PyYAML. The
+        job has to provision both, and both were found the expensive way:
+        CNB build `cnb-66s-1k4i8rfii` (2026-10-10) failed in 11s on missing
+        pytest, and the fix then failed again on missing PyYAML -- because
+        `compose_loader` is vendored under scripts/ and imports yaml, so a
+        compose contract imports PyYAML while appearing to import only repo
+        code.
 
-        It did not, and the wiring hid it: the job was added to `.cnb.yml`, to
-        both split pipelines and to the GitHub mirror, and passed every local
-        run — because a developer machine already has pytest. The first real
-        execution (CNB `cnb-66s-1k4i8rfii`, 2026-10-10) failed in 11s with
-        "pytest is required for the contracts smoke layer".
-
-        This is the general failure mode of adding a CI job that has never run:
-        delegation was proven, execution was not. Assert the bootstrap exists.
+        Two CI round trips to discover two requirements is the failure mode this
+        replaces. The set is now derived from the layer's own import graph, so
+        adding a contract that imports a new third-party package fails here
+        rather than on the pipeline, where the symptom names an unrelated file.
         """
+        import ast
+        import sys
+
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        # The gating suites of the contracts layer, read from smoke.sh rather
+        # than restated here so the two cannot drift.
+        function = smoke.split("smoke_contracts() {", 1)[1]
+        block = function.split("environment_bound=(", 1)[0]
+        targets = re.findall(r"^\s+((?:scripts|infra)/[A-Za-z0-9_./-]+\.py)\s*$",
+                             block, flags=re.MULTILINE)
+        assert targets, "failed to read the contracts layer suite list from smoke.sh"
+
+        third_party = set()
+        stdlib = set(getattr(sys, "stdlib_module_names", ()))
+        for relative in targets:
+            path = ROOT / relative
+            if not path.exists():
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    roots = [alias.name.split(".")[0] for alias in node.names]
+                elif isinstance(node, ast.ImportFrom):
+                    if node.level:  # relative import: repo code, not a package
+                        continue
+                    roots = [(node.module or "").split(".")[0]]
+                else:
+                    continue
+                for root in roots:
+                    if not root or root in stdlib:
+                        continue
+                    if (ROOT / "scripts" / f"{root}.py").exists():
+                        continue  # vendored under scripts/
+                    if (ROOT / root).is_dir() or (ROOT / "tools" / root).exists():
+                        continue  # repo package
+                    third_party.add(root)
+
+        # Modules pytest itself needs are never our problem.
+        third_party -= {"pytest"}
+
+        self.assertTrue(third_party == {"yaml"}, f"unexpected contracts deps: {third_party}")
+
         shared = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
-        self.assertIn("ensure_contracts_python", shared)
+        # Scope every assertion below to ensure_contracts_python. Searching the
+        # whole file passes for the wrong reason: PyYAML is also installed by
+        # ensure_governance_python, so dropping it from the contracts bootstrap
+        # would leave the string present and the guard silent. That hole was
+        # found by ablation, not by reading.
+        body = shared.split("ensure_contracts_python() {", 1)[1].split("\n}\n", 1)[0]
+        self.assertTrue(body, "ensure_contracts_python disappeared from ci-job-steps.sh")
+        provisioners = {"yaml": "PyYAML==${GOVERNANCE_PYYAML_VERSION}"}
+        for module in third_party:
+            self.assertIn(
+                provisioners[module], body,
+                f"contracts layer imports {module} but ensure_contracts_python provisions no pin for it",
+            )
+        # And the test runner itself, pinned and post-verified.
         self.assertRegex(shared, r'CONTRACTS_PYTEST_VERSION="\$\{[^}]*:-[0-9]+\.[0-9]+\.[0-9]+\}"')
-        # The install must be pinned, not floating: an unpinned test runner makes
-        # the gate a moving target between two runs of the same commit.
-        self.assertIn('"pytest==${CONTRACTS_PYTEST_VERSION}"', shared)
-        # And it must verify rather than assume, because smoke.sh's own failure
-        # message points at the wrong cause.
-        self.assertIn("pytest is still not runnable by", shared)
+        self.assertIn('"pytest==${CONTRACTS_PYTEST_VERSION}"', body)
+        self.assertIn("pytest is still not runnable by", body)
+        self.assertIn("PyYAML is still not importable by", body)
 
     def test_no_build_path_depends_on_corepack(self) -> None:
         """No image build, compose service or CI job may shell out to corepack.
