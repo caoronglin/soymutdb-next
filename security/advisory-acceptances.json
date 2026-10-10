@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "_comment": [
+    "Signed risk acceptances for vulnerability findings that have no available fix.",
+    "",
+    "This file is NOT a suppression list. An entry here changes one specific",
+    "finding from `failed` to `accepted`, and nothing else: a different",
+    "advisory, a different package, or a second high finding in the same package",
+    "still fails the gate. Every entry must carry an approver, a date, a",
+    "reachability argument and an expiry, and the gate fails when an entry is",
+    "expired, when required fields are missing, or when an entry no longer",
+    "matches any reported finding (stale entries fail, so an acceptance cannot",
+    "outlive the problem it was written for).",
+    "",
+    "`expires_on` may not be more than MAX_ACCEPTANCE_DAYS in the future.",
+    "Raising this file's ceiling is a reviewable diff like any other."
+  ],
+  "acceptances": [
+    {
+      "advisory": "GHSA-vfj7-8cjw-p6xm",
+      "package": "braces",
+      "vulnerable_range": "<=3.0.3",
+      "title": "braces vulnerable to stack-exhaustion denial of service through deeply nested patterns",
+      "introduced_by": "chokidar@3.5.3 -> @umijs/utils@4.7.20 -> umi@4.7.20 -> @umijs/max@4.7.20",
+      "severity_reached": "high",
+      "reachability": [
+        "Build-time only. The sole consumer is chokidar's file watcher; `grep -rl chokidar` returns 0 files across apps/web/dist, apps/admin/dist and apps/jbrowse/dist.",
+        "The literal string `braces` does appear in those bundles, in exactly one place per bundle: React's own error text, \"Did you forget to wrap your children in braces?\". It is not the braces package.",
+        "Exploitation requires an attacker to control a brace pattern fed to brace expansion during a build. No such input crosses a boundary in this repository."
+      ],
+      "rationale": "braces 3.0.3 is the newest release; the advisory declares no patched version, so no upgrade, no lockfile change and no pnpm override can clear it. The alternative is removing Umi Max from three applications, which is a larger change than the risk. Accepted with the reachability above, on the understanding that it expires and must be re-reviewed.",
+      "accepted_by": "caoronglin",
+      "accepted_on": "2026-10-10",
+      "expires_on": "2026-12-09",
+      "review": "Re-check whether braces has shipped a fixed version, and whether umi/chokidar can be replaced without dropping Umi Max."
+    }
+  ]
+}

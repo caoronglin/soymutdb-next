@@ -15,6 +15,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -761,6 +762,174 @@ class DeliveryArchitectureTests(unittest.TestCase):
             st for st in verify["stages"] if st["name"] == "Contract suites"
         )
         self.assertNotIn("image", mirror)
+
+    def _load_governance_module(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "dep_governance_under_test", ROOT / "scripts/dependency_governance.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def _pnpm_audit_report(self, dg, tmp_path, *, advisories):
+        path = tmp_path / "pnpm-audit.json"
+        path.write_text(json.dumps({"advisories": advisories, "metadata": {}}))
+        return path
+
+    def test_advisory_acceptance_is_narrow_expiring_and_signed(self) -> None:
+        """A signed risk acceptance must behave like a record, not a suppression.
+
+        braces 3.0.3 has no published fix, so the finding can only be
+        acknowledged (accepted by caoronglin on 2026-10-10, expiring 2026-12-09).
+        The mechanism that acknowledges it is asserted here because the failure
+        mode is a gate that silently stops failing — the one outcome nobody
+        would notice in review.
+        """
+        from datetime import date, timedelta
+
+        dg = self._load_governance_module()
+        today = date(2026, 10, 10)
+        accept = ROOT / "security/advisory-acceptances.json"
+
+        def advisories(module="braces", advisory="GHSA-vfj7-8cjw-p6xm", severity="high"):
+            return {
+                "1": {
+                    "module_name": module, "severity": severity,
+                    "github_advisory_id": advisory,
+                    "vulnerable_versions": "<=3.0.3", "patched_versions": None,
+                }
+            }
+
+        # Baseline: the real file accepts exactly the real finding.
+        self.assertTrue((accept).is_file(), "the acceptance record must be committed")
+        entries = dg.load_advisory_acceptances(accept, today=today)
+        self.assertTrue(entries)
+        for entry in entries:
+            for field in dg.ACCEPTANCE_REQUIRED_FIELDS:
+                self.assertTrue(str(entry.get(field, "")).strip(), f"{field} is required")
+            self.assertTrue(
+                str(entry.get("reachability", "")).strip(),
+                "an acceptance must state why the finding is not reachable",
+            )
+
+        # Narrow: a different advisory in the same package is still a failure.
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            passed, findings, _ = dg.evaluate_advisory_report(
+                self._pnpm_audit_report(
+                    dg, tmp_path, advisories=advisories(advisory="GHSA-0000-0000-0000")
+                ),
+                dg.load_advisory_acceptances(accept, today=today),
+            )
+            self.assertFalse(passed, "an unlisted advisory must not be accepted")
+            self.assertTrue(any("GHSA-0000-0000-0000" in f for f in findings))
+
+            # Narrow: a different package under the same advisory likewise.
+            passed, _, _ = dg.evaluate_advisory_report(
+                self._pnpm_audit_report(
+                    dg, tmp_path, advisories=advisories(module="micromatch")
+                ),
+                dg.load_advisory_acceptances(accept, today=today),
+            )
+            self.assertFalse(passed, "an acceptance must not transfer to another package")
+
+            # Severity downgrade: the finding stops being gated, so the
+            # acceptance stops being load-bearing and must be reported stale.
+            # Failing here is the point -- it forces the record to be deleted
+            # instead of outliving the risk, and it is what stops an acceptance
+            # from being quietly parked while a package gets worse again.
+            passed, findings, _ = dg.evaluate_advisory_report(
+                self._pnpm_audit_report(
+                    dg, tmp_path, advisories=advisories(severity="moderate")
+                ),
+                dg.load_advisory_acceptances(accept, today=today),
+            )
+            self.assertFalse(passed)
+            self.assertTrue(any("matches no reported finding" in f for f in findings))
+
+        # Expiring: an expired entry fails rather than degrading to a warning.
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = json.loads(accept.read_text(encoding="utf-8"))
+            payload["acceptances"][0]["expires_on"] = "2026-09-01"
+            stale = Path(tmp) / "acc.json"
+            stale.write_text(json.dumps(payload), encoding="utf-8")
+            entries = dg.load_advisory_acceptances(stale, today=today)
+            passed, findings, accepted = dg.evaluate_advisory_report(
+                self._pnpm_audit_report(dg, Path(tmp), advisories=advisories()),
+                entries,
+            )
+            self.assertFalse(passed, "an expired acceptance must fail the gate")
+            self.assertTrue(any("expired" in f for f in findings))
+            self.assertTrue(accepted and accepted[0]["expired"])
+
+        # Bounded: no entry may be written further out than the maximum.
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = json.loads(accept.read_text(encoding="utf-8"))
+            payload["acceptances"][0]["expires_on"] = (
+                today + timedelta(days=dg.MAX_ACCEPTANCE_DAYS + 1)
+            ).isoformat()
+            far = Path(tmp) / "acc.json"
+            far.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaises(dg.AcceptancePolicyError):
+                dg.load_advisory_acceptances(far, today=today)
+
+        # Unsigned: a missing approver is a policy error, never a silent accept.
+        for field in ("accepted_by", "rationale", "expires_on", "advisory", "package"):
+            with self.subTest(missing=field):
+                with tempfile.TemporaryDirectory() as tmp:
+                    payload = json.loads(accept.read_text(encoding="utf-8"))
+                    payload["acceptances"][0].pop(field)
+                    path = Path(tmp) / "acc.json"
+                    path.write_text(json.dumps(payload), encoding="utf-8")
+                    with self.assertRaises(dg.AcceptancePolicyError):
+                        dg.load_advisory_acceptances(path, today=today)
+
+        # Non-rotting: an entry matching nothing is stale and fails.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            payload = json.loads(accept.read_text(encoding="utf-8"))
+            payload["acceptances"][0]["advisory"] = "GHSA-1111-1111-1111"
+            path = Path(tmp) / "acc.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            passed, findings, _ = dg.evaluate_advisory_report(
+                self._pnpm_audit_report(dg, tmp_path, advisories=advisories()),
+                dg.load_advisory_acceptances(path, today=today),
+            )
+            self.assertFalse(passed, "a stale acceptance must fail")
+            self.assertTrue(any("matches no reported finding" in f for f in findings))
+
+    def test_accepted_advisories_stay_visible_in_gate_output(self) -> None:
+        """An accepted finding is printed on pass, not only on failure."""
+        dg = self._load_governance_module()
+        row = {
+            "name": "pnpm-audit",
+            "status": "passed",
+            "report": "pnpm-audit.json",
+            "accepted": [
+                {
+                    "package": "braces",
+                    "advisory": "GHSA-vfj7-8cjw-p6xm",
+                    "expires_on": "2026-12-09",
+                    "expired": False,
+                    "accepted_by": "caoronglin",
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            evidence = dg._audit_failure_evidence(row, Path(tmp))
+            self.assertTrue(evidence, "a passing run must still report what it accepted")
+            joined = " ".join(evidence)
+            self.assertIn("GHSA-vfj7-8cjw-p6xm", joined)
+            self.assertIn("2026-12-09", joined)
+            self.assertIn("caoronglin", joined)
+
+        # And the policy must actually point the check at the record.
+        policy = json.loads((ROOT / "dependency-governance.json").read_text(encoding="utf-8"))
+        audit = next(c for c in policy["checks"] if c["name"] == "pnpm-audit")
+        self.assertEqual(audit.get("normalize"), "accepted-advisories")
+        self.assertTrue((ROOT / audit["accept_file"]).is_file())
 
     def test_no_build_path_depends_on_corepack(self) -> None:
         """No image build, compose service or CI job may shell out to corepack.
