@@ -14,21 +14,36 @@ vi.mock("react-i18next", async () => (await import("../test/mocks")).mockTransla
 vi.mock("../components/admin-header", () => ({
   AdminHeader: () => <header data-testid="shell-header" />,
 }));
-// Keep the production menuItemRender callback, with the real Router and Link.
-// Only the unrelated ProLayout presentation shell is replaced.
-vi.mock("../lib/antd", () => ({
-  ProLayout: ({ route, menuItemRender, headerRender, children }: {
-    route: { routes: Array<{ path: string; name: string }> };
-    menuItemRender: (item: { path?: string }, dom: React.ReactNode) => React.ReactNode;
-    headerRender: false;
-    children: React.ReactNode;
-  }) => <div data-header-render={String(headerRender)}>
-    <nav>{route.routes.map((item) => <React.Fragment key={item.path}>
-      {menuItemRender(item, item.name)}
-    </React.Fragment>)}</nav>
-    {children}
-  </div>,
-}));
+// The shell renders native antd 6 `Layout`/`Menu` now. Only the presentational
+// antd surface is doubled here: the real Router and `Link` stay in place, so the
+// click-cancellation and reachability assertions still exercise production code.
+vi.mock("../lib/antd", () => {
+  // A React component's first argument is its props, so the passthrough has to
+  // read `children` off them — rendering the props object itself would drop the
+  // router outlet.
+  const passthrough = () => ({ children }: { children?: React.ReactNode }) => <div>{children}</div>;
+  return {
+    Grid: { useBreakpoint: () => ({ lg: true }) },
+    Layout: Object.assign(passthrough(), { Sider: passthrough(), Content: passthrough() }),
+    Menu: ({ items, children }: {
+      items?: Array<{
+        key: string;
+        label?: React.ReactNode;
+        type?: string;
+        children?: Array<{ key: string; label?: React.ReactNode }>;
+      }>;
+      children?: React.ReactNode;
+    }) => (
+      <nav data-menu="inline">
+        {items?.flatMap((item) => item.children ?? [item]).map((entry) => (
+          <React.Fragment key={entry.key}>{entry.label}</React.Fragment>
+        ))}
+        {children}
+      </nav>
+    ),
+    theme: { useToken: () => ({ token: { colorPrimary: "#000", colorTextLightSolid: "#fff", colorBorderSecondary: "#eee" } }) },
+  };
+});
 
 afterEach(cleanup);
 
@@ -55,13 +70,20 @@ describe("admin root navigation rendering", () => {
     expect(screen.queryByText("dashboard-body")).toBeNull();
   });
 
-  it("retains every NAV_SECTIONS destination and the disabled Pro header", async () => {
+  it("retains every NAV_SECTIONS destination, under its section group", async () => {
     await renderNavigation();
-    const links = screen.getAllByRole("link");
-    expect(links.map((link) => link.getAttribute("href"))).toEqual(
-      NAV_SECTIONS.flatMap((section) => section.items.map((item) => item.path)),
-    );
-    expect(document.querySelector('[data-header-render="false"]')).toBeTruthy();
+    // The sider also carries a brand link back to "/", so this asserts that
+    // every destination is reachable, not that these are the only links.
+    const hrefs = screen.getAllByRole("link").map((link) => link.getAttribute("href"));
+    for (const item of NAV_SECTIONS.flatMap((section) => section.items)) {
+      expect(hrefs).toContain(item.path);
+    }
+    // The old shell flattened NAV_SECTIONS, so the sidebar rendered as one
+    // undifferentiated list of 19 destinations with no group headings. Grouping
+    // is the point of the section list, so it is asserted rather than assumed.
+    expect(screen.getByText("Overview")).toBeTruthy();
+    expect(screen.getByText("Data Management")).toBeTruthy();
+    expect(screen.getByText("Administration")).toBeTruthy();
   });
 
   it("leaves the page name to the page, not the shell", async () => {

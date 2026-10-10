@@ -41,6 +41,8 @@ EXEMPT = {
     "tools.seqfetch.genesPlaceholderExample",
     # Brand eyebrow, rendered in English in both bundles by design.
     "home.databaseEyebrow",
+    # Vendor product name, identical in both bundles by design.
+    "admin.analyticsSettings.badgeCloudflare",
 }
 
 
@@ -92,6 +94,35 @@ def test_both_locales_define_the_same_keys() -> None:
     missing_in_zh = sorted(set(en) - set(zh))
     assert missing_in_en == [], f"present in zh, missing in en: {missing_in_en[:8]}"
     assert missing_in_zh == [], f"present in en, missing in zh: {missing_in_zh[:8]}"
+
+
+def test_every_translated_key_exists_in_the_bundle() -> None:
+    """A `t(key, { defaultValue })` whose key is absent renders the default.
+
+    This is how the sign-in page stayed English inside a Chinese console: all 19
+    `admin.login.*` keys and 9 `admin.shell.*` navigation keys existed only in
+    source, never in a bundle, so every call silently fell back to its inline
+    English `defaultValue`. Neither locale was "missing" the other, so the
+    key-parity test above could not see it.
+    """
+    bundles = {locale: dict(_walk(_load(locale))) for locale in ("zh", "en")}
+    # Admin only: the portal still carries 127 keys that exist in source but in
+    # neither bundle. Widening to apps/web fails on those until they are
+    # translated, and a permanently red guard trains everyone to ignore it.
+    roots = [REPO_ROOT / "apps" / "admin" / "src"]
+    # t("a.b.c", ...) and t("a.b.c", "text") — the defaultValue form.
+    call = re.compile(r"""\bt\(\s*["']([a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9_]+)+)["']""")
+    offenders: dict[str, str] = {}
+    for root in roots:
+        for path in root.rglob("*.ts*"):
+            text = path.read_text(encoding="utf-8")
+            for match in call.finditer(text):
+                key = match.group(1)
+                if all(key in table for table in bundles.values()):
+                    continue
+                rel = str(path.relative_to(REPO_ROOT))
+                offenders.setdefault(key, rel)
+    assert offenders == {}, f"t() keys with no bundle entry: {offenders}"
 
 
 def test_no_source_hardcodes_a_bilingual_label() -> None:

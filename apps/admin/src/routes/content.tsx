@@ -45,9 +45,9 @@ export default function ContentPage() {
         {isLegacyRoute ? (
           <>
             <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
-              <span className="mr-2 rounded-full bg-muted px-2 py-1 text-xs font-medium">Legacy Pages</span>
+              <span className="mr-2 rounded-full bg-muted px-2 py-1 text-xs font-medium">{t("admin.content.legacyBadge")}</span>
               <Typography.Text type="secondary">
-                Existing pages remain editable. The migration preview below is read-only and proposes draft candidates only.
+                {t("admin.content.legacyHint")}
               </Typography.Text>
             </div>
             <StaticPageMigrationReport />
