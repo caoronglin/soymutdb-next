@@ -660,7 +660,7 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
                   id="about-title-zh"
                   value={about.title_zh}
                   onChange={(e) => setAbout({ ...about, title_zh: e.target.value })}
-                  placeholder="关于我们"
+                  placeholder={t("admin.settings.placeholderAboutTitle")}
                 />
               </Form.Item>
               <Form.Item label={t("admin.settings.summaryEnglish", { defaultValue: "Summary (English)" })} htmlFor="about-summary-en">
@@ -678,7 +678,7 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
                   value={about.summary_zh}
                   onChange={(e) => setAbout({ ...about, summary_zh: e.target.value })}
                   rows={2}
-                  placeholder="关于我们页面的简短介绍"
+                  placeholder={t("admin.settings.placeholderAboutSummary")}
                 />
               </Form.Item>
               {/* RichEditor exposes only value/onChange/placeholder, so no `htmlFor` can be wired here. */}
@@ -694,7 +694,7 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
                 <RichEditor
                   value={about.content_zh}
                   onChange={(html) => setAbout({ ...about, content_zh: html })}
-                  placeholder="页面内容（中文，富文本 / Markdown 均可）"
+                  placeholder={t("admin.settings.placeholderAboutContentChinese")}
                 />
               </Form.Item>
             </div>
@@ -739,7 +739,7 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
                 <RichEditor
                   value={home.welcome_zh}
                   onChange={(html) => setHome({ ...home, welcome_zh: html })}
-                  placeholder={t("admin.settings.homeWelcomeChinesePlaceholder", { defaultValue: "首页欢迎内容（中文）" })}
+                  placeholder={t("admin.settings.homeWelcomeChinesePlaceholder", { defaultValue: "Homepage welcome content (Chinese)" })}
                 />
               </Form.Item>
             </div>

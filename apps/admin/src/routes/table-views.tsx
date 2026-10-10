@@ -52,51 +52,56 @@ import {
   type TableViewTemplate,
 } from "@soymutdb/api-client";
 
-const KIND_LABELS: Record<TableKind, string> = {
-  mutation_sites: "突变位点表 / Mutation sites",
-  variants: "变异表 / Variants",
-  genes: "基因表 / Genes",
-  mutant_lines: "株系表 / Mutant lines",
+// Labels are i18n keys, not display text. A single `X / Y` string per label
+// made the console read as two languages at once and never matched the active
+// locale; each key now resolves to exactly the locale's own wording.
+const KIND_LABEL_KEYS: Record<TableKind, string> = {
+  mutation_sites: "admin.tableViews.kind.mutation_sites",
+  variants: "admin.tableViews.kind.variants",
+  genes: "admin.tableViews.kind.genes",
+  mutant_lines: "admin.tableViews.kind.mutant_lines",
 };
 
 /** Candidate columns an operator can add; ``homolog:*`` is the opt-in family. */
-const KNOWN_COLUMNS: Record<TableKind, Array<{ key: string; label: string }>> = {
+const KNOWN_COLUMN_KEYS: Record<TableKind, Array<{ key: string; labelKey: string }>> = {
   mutation_sites: [
-    { key: "mutant_line_name", label: "株系 / Mutant line" },
-    { key: "mutation_system", label: "突变体系（株系母+位置）" },
-    { key: "chromosome", label: "染色体号" },
-    { key: "position", label: "位点" },
-    { key: "confidence", label: "可信度" },
-    { key: "gene_id", label: "基因号" },
-    { key: "feature", label: "特征" },
-    { key: "available", label: "可获得" },
-    { key: "homolog:W82_V2", label: "W82_V2（跨组装同源）" },
-    { key: "homolog:W82_V4", label: "W82_V4（跨组装同源）" },
-    { key: "homolog:DN53_V1", label: "DN53_V1（跨物种同源）" },
+    { key: "mutant_line_name", labelKey: "admin.tableViews.column.mutant_line_name" },
+    { key: "mutation_system", labelKey: "admin.tableViews.column.mutation_system" },
+    { key: "chromosome", labelKey: "admin.tableViews.column.chromosome" },
+    { key: "position", labelKey: "admin.tableViews.column.position" },
+    { key: "confidence", labelKey: "admin.tableViews.column.confidence" },
+    { key: "gene_id", labelKey: "admin.tableViews.column.gene_id" },
+    { key: "feature", labelKey: "admin.tableViews.column.feature" },
+    { key: "available", labelKey: "admin.tableViews.column.available" },
+    // i18next reads `:` as a namespace separator, so the homolog family uses an
+    // underscore here and the component maps the key back.
+    { key: "homolog:W82_V2", labelKey: "admin.tableViews.column.homolog_W82_V2" },
+    { key: "homolog:W82_V4", labelKey: "admin.tableViews.column.homolog_W82_V4" },
+    { key: "homolog:DN53_V1", labelKey: "admin.tableViews.column.homolog_DN53_V1" },
   ],
   variants: [
-    { key: "variant_id", label: "Variant ID" },
-    { key: "chromosome", label: "染色体号" },
-    { key: "position", label: "位点" },
-    { key: "ref", label: "参考等位" },
-    { key: "alt", label: "替代等位" },
-    { key: "variant_type", label: "类型" },
-    { key: "impact", label: "影响" },
-    { key: "gene_id", label: "基因号" },
+    { key: "variant_id", labelKey: "admin.tableViews.column.variant_id" },
+    { key: "chromosome", labelKey: "admin.tableViews.column.chromosome" },
+    { key: "position", labelKey: "admin.tableViews.column.position" },
+    { key: "ref", labelKey: "admin.tableViews.column.ref" },
+    { key: "alt", labelKey: "admin.tableViews.column.alt" },
+    { key: "variant_type", labelKey: "admin.tableViews.column.variant_type" },
+    { key: "impact", labelKey: "admin.tableViews.column.impact" },
+    { key: "gene_id", labelKey: "admin.tableViews.column.gene_id" },
   ],
   genes: [
-    { key: "gene_id", label: "基因 ID" },
-    { key: "symbol", label: "符号" },
-    { key: "biotype", label: "类型" },
-    { key: "chromosome", label: "染色体号" },
-    { key: "variant_count", label: "变异数" },
+    { key: "gene_id", labelKey: "admin.tableViews.column.gene_id" },
+    { key: "symbol", labelKey: "admin.tableViews.column.symbol" },
+    { key: "biotype", labelKey: "admin.tableViews.column.biotype" },
+    { key: "chromosome", labelKey: "admin.tableViews.column.chromosome" },
+    { key: "variant_count", labelKey: "admin.tableViews.column.variant_count" },
   ],
   mutant_lines: [
-    { key: "public_id", label: "株系" },
-    { key: "name", label: "名称" },
-    { key: "mutagen", label: "诱变剂" },
-    { key: "cultivar", label: "品种" },
-    { key: "generation", label: "世代" },
+    { key: "public_id", labelKey: "admin.tableViews.column.public_id" },
+    { key: "name", labelKey: "admin.tableViews.column.name" },
+    { key: "mutagen", labelKey: "admin.tableViews.column.mutagen" },
+    { key: "cultivar", labelKey: "admin.tableViews.column.cultivar" },
+    { key: "generation", labelKey: "admin.tableViews.column.generation" },
   ],
 };
 
@@ -111,7 +116,7 @@ interface InstanceFormValues {
 }
 
 export default function TableViewsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { message } = App.useApp();
   const queryClient = useQueryClient();
 
@@ -146,7 +151,7 @@ export default function TableViewsPage() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload = {
-        name: draftName.trim() || `${KIND_LABELS[kind]} ${templatesQuery.data?.total ?? 0 + 1}`,
+        name: draftName.trim() || `${t(KIND_LABEL_KEYS[kind])} ${templatesQuery.data?.total ?? 0 + 1}`,
         columns: draftColumns,
         actions: draftActions,
         release_id: editingReleaseId ? Number(editingReleaseId) : null,
@@ -209,8 +214,12 @@ export default function TableViewsPage() {
 
   const templates: TableViewTemplate[] = templatesQuery.data?.items ?? [];
   const instances: SpeciesInstance[] = instancesQuery.data?.items ?? [];
-  const candidates = KNOWN_COLUMNS[kind];
+  const candidates = KNOWN_COLUMN_KEYS[kind];
   const selectedKeys = new Set(draftColumns.map((column) => column.key));
+  // A template persists one label per locale, so both are resolved from the
+  // resources rather than copied from whichever language the operator is in.
+  const labelZh = i18n.getFixedT("zh");
+  const labelEn = i18n.getFixedT("en");
 
   function startNew() {
     setEditingId(null);
@@ -219,8 +228,8 @@ export default function TableViewsPage() {
     setDraftColumns(
       candidates.slice(0, 8).map((column) => ({
         key: column.key,
-        label_zh: column.label,
-        label_en: column.label,
+        label_zh: labelZh(column.labelKey),
+        label_en: labelEn(column.labelKey),
         visible: true,
       })),
     );
@@ -241,14 +250,14 @@ export default function TableViewsPage() {
   // buttons remain the only mutation path.
   const templateColumns: ProColumns<TableViewTemplate>[] = [
     {
-      title: "名称",
+      title: t("admin.tableViews.columnName"),
       dataIndex: "name",
       key: "name",
       editable: false,
       render: (name) => <span className="font-medium">{name}</span>,
     },
     {
-      title: "物种 / 变体",
+      title: t("admin.tableViews.instanceSpeciesVariant"),
       key: "scope",
       editable: false,
       render: (_, row) => (
@@ -262,7 +271,7 @@ export default function TableViewsPage() {
       ),
     },
     {
-      title: "列",
+      title: t("admin.tableViews.columnsLabel"),
       key: "columns",
       editable: false,
       render: (_, row) => (
@@ -275,19 +284,19 @@ export default function TableViewsPage() {
       ),
     },
     {
-      title: "默认",
+      title: t("admin.tableViews.columnDefault"),
       key: "is_default",
       editable: false,
       render: (_, row) => (row.is_default ? <Tag color="green">default</Tag> : null),
     },
     {
-      title: "操作",
+      title: t("admin.tableViews.actions"),
       key: "actions",
       editable: false,
       render: (_, row) => (
         <Space>
           <Button size="small" onClick={() => startEdit(row)}>
-            编辑
+            {t("admin.tableViews.actionEdit")}
           </Button>
           {row.is_default ? null : (
             <Button
@@ -296,7 +305,7 @@ export default function TableViewsPage() {
               loading={promoteMutation.isPending}
               onClick={() => promoteMutation.mutate(row.id)}
             >
-              设为默认
+              {t("admin.tableViews.actionSetDefault")}
             </Button>
           )}
           <Button
@@ -305,7 +314,7 @@ export default function TableViewsPage() {
             icon={<DeleteOutlined />}
             onClick={() => deleteMutation.mutate(row.id)}
           >
-            删除
+            {t("admin.tableViews.actionDelete")}
           </Button>
         </Space>
       ),
@@ -314,17 +323,17 @@ export default function TableViewsPage() {
 
   const instanceColumns: ProColumns<SpeciesInstance>[] = [
     { title: "code", dataIndex: "code", key: "code", editable: false, render: (code) => <code>{code}</code> },
-    { title: "名称", dataIndex: "name", key: "name", editable: false },
-    { title: "物种", dataIndex: "species", key: "species", editable: false },
+    { title: t("admin.tableViews.columnName"), dataIndex: "name", key: "name", editable: false },
+    { title: t("admin.tableViews.species"), dataIndex: "species", key: "species", editable: false },
     { title: "API", dataIndex: "api_base_url", key: "api_base_url", editable: false, render: (url) => <code>{url}</code> },
     {
-      title: "本地",
+      title: t("admin.tableViews.local"),
       key: "is_local",
       editable: false,
       render: (_, row) => (row.is_local ? <Tag color="green">local</Tag> : null),
     },
     {
-      title: "操作",
+      title: t("admin.tableViews.actions"),
       key: "actions",
       editable: false,
       render: (_, row) => (
@@ -348,7 +357,7 @@ export default function TableViewsPage() {
               )
             }
           >
-            删除
+            {t("admin.tableViews.actionDelete")}
           </Button>
         </Space>
       ),
@@ -356,24 +365,24 @@ export default function TableViewsPage() {
   ];
 
   return (
-    <PageContainer title="表格模板 / Table view templates">
+    <PageContainer title={t("admin.tableViews.title")}>
       <div className="space-y-6">
         <Alert
           type="info"
           showIcon
-          title="列顺序、显隐与操作按钮都在此配置；跨组装同源列（W82_V2 / W82_V4 / DN53_V1）默认关闭，按需添加。"
-          description="保存为模板后立即生效：门户按物种、站点变体与 release 解析这一列集合。"
+          title={t("admin.tableViews.bannerTitle")}
+          description={t("admin.tableViews.bannerDescription")}
         />
 
         <ProCard
           size="small"
-          title="选择表 / Table"
+          title={t("admin.tableViews.tableLabel")}
           extra={
             <Space>
               <Select
                 value={kind}
                 style={{ width: 220 }}
-                options={TABLE_KINDS.map((value) => ({ value, label: KIND_LABELS[value] }))}
+                options={TABLE_KINDS.map((value) => ({ value, label: t(KIND_LABEL_KEYS[value]) }))}
                 onChange={(value: TableKind) => setKind(value)}
               />
               <Select
@@ -400,7 +409,7 @@ export default function TableViewsPage() {
           {templatesQuery.isLoading ? (
             <Skeleton active />
           ) : templates.length === 0 ? (
-            <Empty description="该表还没有模板，正在使用内置默认列。" />
+            <Empty description={t("admin.tableViews.empty")} />
           ) : (
             <ProTable<TableViewTemplate>
               {...PRO_LIST_SHELL}
@@ -413,16 +422,16 @@ export default function TableViewsPage() {
           )}
         </ProCard>
 
-        <ProCard size="small" title={editingId ? "编辑模板 / Edit template" : "新建模板 / New template"}>
+        <ProCard size="small" title={t(editingId ? "admin.tableViews.editTemplate" : "admin.tableViews.newTemplate")}>
           <Form layout="vertical" onFinish={() => saveMutation.mutate()}>
-            <Form.Item label="名称" required>
+            <Form.Item label={t("admin.tableViews.name")} required>
               <Input
                 value={draftName}
-                placeholder="例如：突变位点（含同源列）"
+                placeholder={t("admin.tableViews.namePlaceholder")}
                 onChange={(event) => setDraftName(event.target.value)}
               />
             </Form.Item>
-            <Form.Item label="列（按显示顺序；勾选控制显隐）">
+            <Form.Item label={t("admin.tableViews.columnsLabel")}>
               <div className="grid gap-2 sm:grid-cols-2">
                 {draftColumns.map((column, index) => (
                   <Space key={column.key} size={8}>
@@ -481,7 +490,7 @@ export default function TableViewsPage() {
                 ))}
               </div>
             </Form.Item>
-            <Form.Item label="添加列">
+            <Form.Item label={t("admin.tableViews.addColumns")}>
               <Space wrap>
                 {candidates
                   .filter((column) => !selectedKeys.has(column.key))
@@ -492,16 +501,21 @@ export default function TableViewsPage() {
                       onClick={() =>
                         setDraftColumns((previous) => [
                           ...previous,
-                          { key: column.key, label_zh: column.label, label_en: column.label, visible: true },
+                          {
+                            key: column.key,
+                            label_zh: labelZh(column.labelKey),
+                            label_en: labelEn(column.labelKey),
+                            visible: true,
+                          },
                         ])
                       }
                     >
-                      + {column.label}
+                      + {t(column.labelKey)}
                     </Button>
                   ))}
               </Space>
             </Form.Item>
-            <Form.Item label="尾部操作">
+            <Form.Item label={t("admin.tableViews.trailingActions")}>
               <Space>
                 <Switch
                   checked={draftActions.jbrowse}
@@ -511,18 +525,18 @@ export default function TableViewsPage() {
                 />
                 <Switch
                   checked={draftActions.genome_preview}
-                  checkedChildren="基因预览"
-                  unCheckedChildren="基因预览"
+                  checkedChildren={t("admin.tableViews.genePreview")}
+                  unCheckedChildren={t("admin.tableViews.genePreview")}
                   onChange={(checked) =>
                     setDraftActions((previous) => ({ ...previous, genome_preview: checked }))
                   }
                 />
               </Space>
             </Form.Item>
-            <Form.Item label="Release（留空=全部 release）">
+            <Form.Item label={t("admin.tableViews.releaseLabel")}>
               <Input
                 value={editingReleaseId}
-                placeholder="留空表示发布级默认"
+                placeholder={t("admin.tableViews.releasePlaceholder")}
                 onChange={(event) => setEditingReleaseId(event.target.value)}
               />
             </Form.Item>
@@ -534,20 +548,20 @@ export default function TableViewsPage() {
                 loading={saveMutation.isPending}
                 disabled={draftColumns.length === 0}
               >
-                保存模板
+                {t("admin.tableViews.saveTemplate")}
               </Button>
               <Button onClick={startNew} icon={<PlusOutlined />}>
-                新建
+                {t("admin.tableViews.create")}
               </Button>
             </Space>
           </Form>
         </ProCard>
 
-        <ProCard size="small" title="多物种实例 / Species instances">
+        <ProCard size="small" title={t("admin.tableViews.instancesTitle")}>
           <Alert
             type="info"
             showIcon
-            title="一个管理面板可管理多个物种库：在此登记每个实例的 API / JBrowse / 门户地址，数据仍留在各自实例内。"
+            title={t("admin.tableViews.instancesBanner")}
             style={{ marginBottom: 12 }}
           />
           {instancesQuery.isLoading ? (
@@ -574,10 +588,10 @@ export default function TableViewsPage() {
               <Form.Item name="code" label="code" rules={[{ required: true }]}>
                 <Input placeholder="soy" />
               </Form.Item>
-              <Form.Item name="name" label="名称" rules={[{ required: true }]}>
+              <Form.Item name="name" label={t("admin.tableViews.instanceName")} rules={[{ required: true }]}>
                 <Input placeholder="Soybean" />
               </Form.Item>
-              <Form.Item name="species" label="物种" rules={[{ required: true }]}>
+              <Form.Item name="species" label={t("admin.tableViews.instanceSpecies")} rules={[{ required: true }]}>
                 <Input placeholder="Glycine max" />
               </Form.Item>
               <Form.Item name="api_base_url" label="API origin" rules={[{ required: true }]}>
@@ -589,12 +603,12 @@ export default function TableViewsPage() {
               <Form.Item name="portal_base_url" label="Portal origin">
                 <Input placeholder="https://portal.example.org" />
               </Form.Item>
-              <Form.Item name="is_local" label="本机实例" valuePropName="checked">
+              <Form.Item name="is_local" label={t("admin.tableViews.instanceLocal")} valuePropName="checked">
                 <Switch />
               </Form.Item>
               <Form.Item label=" ">
                 <Button type="primary" htmlType="submit" icon={<PlusOutlined />} loading={instanceMutation.isPending}>
-                  登记实例
+                  {t("admin.tableViews.registerInstance")}
                 </Button>
               </Form.Item>
             </Space>
