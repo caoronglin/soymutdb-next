@@ -99,5 +99,3 @@ export function StorageGrowthChart({ data, className }: StorageGrowthChartProps)
     </ProCard>
   );
 }
-
-export default StorageGrowthChart;

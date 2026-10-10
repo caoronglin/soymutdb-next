@@ -76,5 +76,3 @@ export function ChromosomeDensityChart({ data, className }: ChromosomeDensityCha
     </figure>
   );
 }
-
-export default ChromosomeDensityChart;

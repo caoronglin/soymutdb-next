@@ -26,7 +26,6 @@
     "@soymutdb/i18n-core": "workspace:*",
     "i18next": "^24.2.0",
     "react": "catalog:",
-    "react-dom": "catalog:",
     "react-i18next": "^15.4.0"
   },
   "peerDependencies": {

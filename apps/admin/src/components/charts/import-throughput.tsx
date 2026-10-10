@@ -113,5 +113,3 @@ export function ImportThroughputChart({
     </ProCard>
   );
 }
-
-export default ImportThroughputChart;

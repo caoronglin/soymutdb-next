@@ -98,5 +98,3 @@ export function ReleaseTrend({ data, className }: ReleaseTrendProps) {  const { 
     </figure>
   );
 }
-
-export default ReleaseTrend;

@@ -421,4 +421,3 @@ export async function mockEntityApis(
 }
 
 /** Backwards-compatible alias for the gene-only suites. */
-export const mockGeneApis = mockEntityApis;

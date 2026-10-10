@@ -23,11 +23,15 @@
   "ignoreDependencies": [
     "@soymutdb/shared",
     "@testing-library/jest-dom",
+    "@types/react-dom",
     "ansi-regex",
     "autoprefixer",
     "openapi-typescript",
+    "postcss",
     "postcss-load-config",
-    "tailwindcss"
+    "react-dom",
+    "tailwindcss",
+    "vite"
   ],
   "workspaces": {
     ".": {

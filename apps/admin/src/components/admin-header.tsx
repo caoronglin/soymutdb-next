@@ -367,5 +367,3 @@ function UserMenu() {
     </div>
   );
 }
-
-export default AdminHeader;

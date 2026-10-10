@@ -110,5 +110,3 @@ function ConfirmPhraseInput({ phrase }: { phrase: string }) {
     </div>
   );
 }
-
-export default ConfirmDialog;

@@ -37,7 +37,6 @@
     "ci:jobs": "bash scripts/ci-job-steps.sh list"
   },
   "devDependencies": {
-    "@ant-design/cli": "^6.6.5",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.8.0",
     "eslint-plugin-react-hooks": "^7.1.1",

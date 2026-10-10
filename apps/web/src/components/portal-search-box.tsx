@@ -63,5 +63,3 @@ export function PortalSearchBox({
     </div>
   );
 }
-
-export default PortalSearchBox;
