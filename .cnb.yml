@@ -127,6 +127,14 @@ main:
         - name: API + Worker verification
           image: python:3.14
           script: bash scripts/ci-job-steps.sh run api-tests
+        # The repo contract suites had no CI coverage at all: nothing invoked
+        # `smoke.sh --profile contracts`, so scripts/test_ci_job_contracts.py
+        # never ran and a commit that dropped the exec bit from a shared script
+        # passed every pipeline. Plain pytest under scripts/, no workspace
+        # install and no service required, so it is its own cheap stage.
+        - name: Contract suites
+          image: python:3.14
+          script: bash scripts/ci-job-steps.sh run smoke-contracts
         # No `image:` override on purpose. The gate is BOTH:
         #   * Node-backed -- `pnpm deps:graphs` / `pnpm deps:audit`;
         #   * Python-backed -- `scripts/dependency_governance.py` imports PyYAML
@@ -212,6 +220,14 @@ main:
         - name: API + Worker verification
           image: python:3.14
           script: bash scripts/ci-job-steps.sh run api-tests
+        # The repo contract suites had no CI coverage at all: nothing invoked
+        # `smoke.sh --profile contracts`, so scripts/test_ci_job_contracts.py
+        # never ran and a commit that dropped the exec bit from a shared script
+        # passed every pipeline. Plain pytest under scripts/, no workspace
+        # install and no service required, so it is its own cheap stage.
+        - name: Contract suites
+          image: python:3.14
+          script: bash scripts/ci-job-steps.sh run smoke-contracts
         # No `image:` override on purpose. The gate is BOTH:
         #   * Node-backed -- `pnpm deps:graphs` / `pnpm deps:audit`;
         #   * Python-backed -- `scripts/dependency_governance.py` imports PyYAML
@@ -735,6 +751,14 @@ $:
         - name: API + Worker verification
           image: python:3.14
           script: bash scripts/ci-job-steps.sh run api-tests
+        # The repo contract suites had no CI coverage at all: nothing invoked
+        # `smoke.sh --profile contracts`, so scripts/test_ci_job_contracts.py
+        # never ran and a commit that dropped the exec bit from a shared script
+        # passed every pipeline. Plain pytest under scripts/, no workspace
+        # install and no service required, so it is its own cheap stage.
+        - name: Contract suites
+          image: python:3.14
+          script: bash scripts/ci-job-steps.sh run smoke-contracts
 
   # ---------------------------------------------------------------------------
   # Cloud development — manual entry point

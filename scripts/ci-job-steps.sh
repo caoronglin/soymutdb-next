@@ -172,6 +172,7 @@ ensure_governance_python() {
 JOBS=(
   frontend
   api-tests
+  smoke-contracts
   dependency-governance
   compose-acceptance
   clickhouse-migration
@@ -353,6 +354,24 @@ dependency_governance_env() {
   export VITE_DEPLOYMENT_MODE="${SOYMUTDB_CI_DEMO_MODE}"
   export VITE_API_BASE_URL="${SOYMUTDB_CI_DEMO_API_URL}"
   export VITE_JBROWSE_BASE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL}"
+}
+
+# -----------------------------------------------------------------------------
+# smoke-contracts — repo contract suites (the gate that had no CI coverage)
+# -----------------------------------------------------------------------------
+smoke_contracts_run() {
+  # scripts/test_ci_job_contracts.py asserts, among other things, that every
+  # shared script is executable and strict. It runs only under
+  # `smoke.sh --profile contracts`, and no CI job invoked that profile, so a
+  # commit that dropped the exec bit from scripts/smoke.sh or
+  # scripts/check-production-artifact.sh passed every pipeline and reached main.
+  # This job is the coverage that made that class of regression shippable.
+  #
+  # The contracts layer is plain pytest under scripts/; it needs no workspace
+  # install, no API venv and no service, which is why it can run as its own cheap
+  # stage instead of being appended to a heavier job.
+  ensure_governance_python
+  bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts
 }
 
 dependency_governance_step() {

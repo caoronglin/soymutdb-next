@@ -634,6 +634,45 @@ class DeliveryArchitectureTests(unittest.TestCase):
         ):
             self.assertIn(event, fallback, event)
 
+    def test_contract_suites_run_in_both_pipelines(self) -> None:
+        """`smoke.sh --profile contracts` must execute in CI on both providers.
+
+        scripts/test_ci_job_contracts.py — which asserts that every shared script
+        is executable and strict — runs only under that profile. Until the
+        smoke-contracts job existed, no pipeline invoked it, so the suite could
+        not fail a build and commits 00429d35e / 62d0dd3e3 shipped shared
+        scripts with a cleared exec bit.
+
+        Each provider must delegate through scripts/ci-job-steps.sh rather than
+        call the profile directly, so both run identical bytes.
+        """
+        jobs = subprocess.run(
+            ["bash", str(ROOT / "scripts/ci-job-steps.sh"), "list"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+        self.assertIn("smoke-contracts", jobs)
+
+        call = "bash scripts/ci-job-steps.sh run smoke-contracts"
+        self.assertIn(call, _workflow_text("ci.yml"))
+        self.assertIn(call, _flatten(_cnb()))
+
+        # The job body must stay a delegation. Inline pytest invocation would be
+        # a second owner for the same gate, which is what
+        # test_no_duplicate_verification_logic_between_providers forbids. Only
+        # `run:` lines count; a comment may still explain what the profile is.
+        run_lines = [
+            line
+            for line in _workflow_text("ci.yml").splitlines()
+            if re.match(r"\s*run:", line)
+        ]
+        self.assertFalse(
+            [line for line in run_lines if "smoke.sh --profile contracts" in line],
+            "the contracts profile must be reached through ci-job-steps.sh, "
+            "not invoked directly in the workflow",
+        )
+
     def test_toolchain_pins_agree_across_pipelines_and_manifests(self) -> None:
         package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
         self.assertEqual(package["packageManager"], f"pnpm@{PNPM_VERSION}")
