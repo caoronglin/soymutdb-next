@@ -43,9 +43,7 @@
     "marked": "^18.0.9",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "react-hook-form": "^7.54.0",
     "react-i18next": "^15.4.0",
-    "zod": "^3.24.0",
     "@umijs/max": "catalog:"
   },
   "devDependencies": {
@@ -54,7 +52,6 @@
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.5.2",
-    "@soymutdb/i18n-core": "workspace:*",
     "@types/dompurify": "^3.0.5",
     "@types/node": "^22.10.0",
     "@types/react": "catalog:",
