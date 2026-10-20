@@ -163,4 +163,15 @@ describe("escapeHtml", () => {
   it("escapes the five document characters", () => {
     expect(escapeHtml(`<a href="x">&'`)).toBe("&lt;a href=&quot;x&quot;&gt;&amp;&#39;");
   });
+
+  it("upgrades an existing robots meta instead of duplicating it", () => {
+    const html = injectPageHead(
+      '<html><head><title>x</title><meta name="robots" content="noindex,nofollow"></head><body></body></html>',
+      { path: "/", title: "Home", description: undefined, includeInSitemap: false },
+      undefined,
+      "internal",
+    );
+    expect(html.match(/<meta name="robots"/gi)).toHaveLength(1);
+    expect(html).toContain('<meta name="robots" content="noindex, nofollow, noarchive" />');
+  });
 });

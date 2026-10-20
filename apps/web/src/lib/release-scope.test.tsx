@@ -26,6 +26,8 @@ const transport = vi.hoisted(() => ({
   probeFails: false,
   probes: 0,
   assemblyRuns: [] as Array<string | null>,
+  /** When set, the assembly read waits for this promise before resolving. */
+  assemblyGate: null as Promise<void> | null,
   newsRuns: 0,
   listeners: new Set<(next: string | null, previous: string | null) => void>(),
 }));
@@ -56,7 +58,6 @@ vi.mock("@soymutdb/api-client", () => ({
 import {
   RELEASE_SCOPED_PREFIXES,
   ReleaseScopeProvider,
-  dropReleaseScopedQueries,
   isReleaseScopedKey,
   useReleaseScope,
 } from "./release-scope";
@@ -67,6 +68,7 @@ function Probe() {
     queryKey: queryKeys.assemblies.list({ releaseId, siteVariant: "external" }),
     queryFn: async () => {
       transport.assemblyRuns.push(releaseId);
+      if (transport.assemblyGate) await transport.assemblyGate;
       return [{ id: Number(releaseId ?? 0), name: `release-${releaseId}` }];
     },
     staleTime: 60_000,
@@ -92,7 +94,7 @@ function Probe() {
   );
 }
 
-async function renderScope() {
+async function renderScope({ awaitAssembly = true } = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const user = userEvent.setup();
   render(
@@ -102,7 +104,9 @@ async function renderScope() {
       </ReleaseScopeProvider>
     </QueryClientProvider>,
   );
-  await waitFor(() => expect(screen.getByTestId("assembly").textContent).toBe("release-1"));
+  if (awaitAssembly) {
+    await waitFor(() => expect(screen.getByTestId("assembly").textContent).toBe("release-1"));
+  }
   return { queryClient, user };
 }
 
@@ -112,6 +116,7 @@ beforeEach(() => {
   transport.probeFails = false;
   transport.probes = 0;
   transport.assemblyRuns = [];
+  transport.assemblyGate = null;
   transport.newsRuns = 0;
   transport.listeners.clear();
 });
@@ -124,6 +129,12 @@ describe("release-scoped key classification", () => {
   it("recognises every declared family", () => {
     for (const prefix of RELEASE_SCOPED_PREFIXES) {
       expect(isReleaseScopedKey([...prefix, "release", "external"])).toBe(true);
+    }
+  });
+
+  it("recognises the analytics page's plain query roots", () => {
+    for (const root of ["chromosome-density", "homepage-stats", "variant-type-summary", "impact-summary", "discovery-trend"]) {
+      expect(isReleaseScopedKey([root])).toBe(true);
     }
   });
 
@@ -152,11 +163,31 @@ describe("release switching", () => {
     await waitFor(() => expect(screen.getByTestId("assembly").textContent).toBe("release-2"));
     expect(screen.getByTestId("switches").textContent).toBe("1");
 
-    // The old release's cache entry is gone, so nothing can read stale data.
-    expect(queryClient.getQueryData(queryKeys.assemblies.list({ releaseId: "1", siteVariant: "external" }))).toBeUndefined();
-    expect(queryClient.getQueryData(queryKeys.assemblies.list({ releaseId: "2", siteVariant: "external" }))).toBeTruthy();
+    // The old key can only ever hold the old release's payload; the mounted
+    // observer reads the new key. (Invalidation may refetch either key — what
+    // matters is that no entry crosses releases.)
+    const oldKey = queryKeys.assemblies.list({ releaseId: "1", siteVariant: "external" });
+    const oldData = queryClient.getQueryData<Array<{ name: string }>>(oldKey);
+    if (oldData) expect(oldData[0]?.name).toBe("release-1");
+    expect(
+      queryClient.getQueryData<Array<{ name: string }>>(
+        queryKeys.assemblies.list({ releaseId: "2", siteVariant: "external" }),
+      )?.[0]?.name,
+    ).toBe("release-2");
     // The news query is not release-scoped: it must not have been refetched.
     expect(transport.newsRuns).toBe(1);
+  });
+
+  it("invalidates every plain analytics cache only when the release changes", async () => {
+    const { queryClient, user } = await renderScope();
+    const roots = ["chromosome-density", "homepage-stats", "variant-type-summary", "impact-summary", "discovery-trend"];
+    for (const root of roots) queryClient.setQueryData([root], { release: "1" });
+    await user.click(screen.getByRole("button", { name: "probe" }));
+    for (const root of roots) expect(queryClient.getQueryState([root])?.isInvalidated).toBe(false);
+    transport.activeReleaseId = "2";
+    await user.click(screen.getByRole("button", { name: "probe" }));
+    await waitFor(() => expect(screen.getByTestId("release").textContent).toBe("2"));
+    for (const root of roots) expect(queryClient.getQueryState([root])?.isInvalidated).toBe(true);
   });
 
   it("leaves the cache alone when the probe reports the same release", async () => {
@@ -182,17 +213,31 @@ describe("release switching", () => {
     expect(queryClient.getQueryData(queryKeys.assemblies.list({ releaseId: "1", siteVariant: "external" }))).toBeTruthy();
   });
 
-  it("dropReleaseScopedQueries removes only the scoped entries", () => {
-    const queryClient = new QueryClient();
-    queryClient.setQueryData(queryKeys.assemblies.list({ releaseId: "1", siteVariant: "external" }), ["a"]);
-    queryClient.setQueryData(queryKeys.news.list({ category: null, page: 1, pageSize: 10 }), ["n"]);
-    queryClient.setQueryData(["analytics", "impact", "1", "external"], { ok: true });
+  it("keeps a release-scoped read alive when the switch lands mid-flight", async () => {
+    // Regression: the previous implementation called removeQueries(), which
+    // silently cancels an in-flight fetch (query-core Query#destroy). The
+    // observer is orphaned and the route stays on its skeleton forever — it
+    // reproduced on every load of an unpinned artifact and would hit a deployed
+    // tab when a release is published during a read.
+    let releaseGate!: () => void;
+    transport.assemblyGate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    const { user, queryClient } = await renderScope({ awaitAssembly: false });
 
-    const dropped = dropReleaseScopedQueries(queryClient);
+    // The assembly read is still pending when the probe reports release 2.
+    transport.activeReleaseId = "2";
+    await user.click(screen.getByRole("button", { name: "probe" }));
+    expect(screen.getByTestId("switches").textContent).toBe("1");
 
-    expect(dropped).toHaveLength(2);
-    expect(queryClient.getQueryData(queryKeys.assemblies.list({ releaseId: "1", siteVariant: "external" }))).toBeUndefined();
-    expect(queryClient.getQueryData(["analytics", "impact", "1", "external"])).toBeUndefined();
-    expect(queryClient.getQueryData(queryKeys.news.list({ category: null, page: 1, pageSize: 10 }))).toEqual(["n"]);
+    releaseGate();
+    await waitFor(() => expect(screen.getByTestId("assembly").textContent).toBe("release-2"));
+
+    // A live query keeps its active observer; the destroyed bug left none.
+    const state = queryClient.getQueryState(
+      queryKeys.assemblies.list({ releaseId: "2", siteVariant: "external" }),
+    );
+    expect(state?.status).toBe("success");
+    expect(state?.fetchStatus).toBe("idle");
   });
 });

@@ -10,15 +10,15 @@ from collections.abc import Awaitable, Callable
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
+from starlette.types import ASGIApp
 from structlog import get_logger
 from structlog.contextvars import bind_contextvars, clear_contextvars
 
-from .config import get_settings
-from .database import get_redis
+from .exceptions import SoyMutDBError, soy_mut_db_exception_handler
 from .metrics import REQUEST_COUNT, REQUEST_LATENCY, update_db_pool_metrics
+from .ratelimit import RequestRateLimiter, request_rate_limiter
 
 logger = get_logger(__name__)
-settings = get_settings()
 
 # Path normalization for the Prometheus ``endpoint`` label.  User middleware
 # runs outside the router (scope["route"] is not available yet), so we
@@ -117,40 +117,41 @@ class TimingMiddleware(BaseHTTPMiddleware):
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Simple per-IP rate limiter backed by Redis.
+    """Enforce the global per-peer request budget.
 
-    ``INCR`` + ``EXPIRE`` are batched into one pipeline round-trip (the key
-    embeds the minute window, so the unconditional EXPIRE is harmless — each
-    window gets its own key).  Falls back to allowing all requests if Redis
-    is unavailable so that the API remains available during a Redis outage.
+    The limiter itself lives in :class:`app.core.ratelimit.RequestRateLimiter`
+    and is graded per request class:
+
+    * anonymous public reads (``GET``/``HEAD`` without a verified principal)
+      consume ``public_read_rate_limit_per_minute`` and **fail open** while
+      the limiter backend is unavailable;
+    * writes (``POST``/``PUT``/``PATCH``/``DELETE``) consume
+      ``write_rate_limit_per_minute`` and **fail closed** with 503;
+    * login keeps its dedicated limiter without being counted twice;
+      other auth writes still consume the write budget;
+    * ``/health`` / ``/metrics`` are exempt.
+
+    Wiring: the middleware is registered by ``app/main.py``.  It is the
+    innermost user middleware (directly in front of the router) so that the
+    observability and response-shaping middlewares still see a rejected
+    request - ``MetricsMiddleware`` counts the rejection, ``RequestIdMiddleware``
+    supplies the request id of the error envelope, and the security/CORS
+    headers are still added to the rejected response.
+
+    The domain error is rendered here with the shared error handler because
+    Starlette's ``ExceptionMiddleware`` sits *inside* the user middleware
+    stack and therefore cannot translate an exception raised by a middleware.
     """
+
+    def __init__(self, app: ASGIApp, *, limiter: RequestRateLimiter | None = None) -> None:
+        super().__init__(app)
+        self._limiter = limiter if limiter is not None else request_rate_limiter
 
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
-        from .exceptions import RateLimitExceededError
-
-        # Skip rate limiting for health checks.
-        if request.url.path.endswith("/health"):
-            return await call_next(request)
-
-        client_ip = request.client.host if request.client else "unknown"
-        key = f"ratelimit:{client_ip}:{int(time.time() // 60)}"
         try:
-            redis = get_redis()
-            async with redis.pipeline(transaction=True) as pipe:
-                pipe.incr(key)
-                pipe.expire(key, 60)
-                results = await pipe.execute()
-            count = int(results[0])
-            if count > settings.rate_limit_per_minute:
-                raise RateLimitExceededError(
-                    "Rate limit exceeded. Please retry later."
-                )
-        except RateLimitExceededError:
-            raise
-        except Exception:
-            # Redis unavailable – fail open.
-            logger.warning("rate_limit_redis_unavailable")
-
+            await self._limiter.check(request)
+        except SoyMutDBError as exc:
+            return await soy_mut_db_exception_handler(request, exc)
         return await call_next(request)

@@ -1,4 +1,4 @@
-"""Admin endpoints: audit-log inspection, export, CDN config, and timeout config \
+"""Admin endpoints: audit-log inspection, export, and timeout config \
 (administrator-only)."""
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ from ...schemas.data_publishing import (
     ReleaseCreateRequest,
     ReleaseReadyRequest,
 )
-from ...services.clickhouse_service import ClickHouseService
+from ...services.postgres_variant_service import PostgresVariantService
 from ...services.release_service import (
     ReleaseNotReady,
     mark_release_ready,
@@ -51,7 +51,7 @@ from .deps import get_current_user, get_user_roles
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 settings = get_settings()
-ch_service = ClickHouseService()
+variant_service = PostgresVariantService()
 
 
 def _require_admin(current_user: User) -> None:
@@ -649,15 +649,6 @@ async def export_audit_logs_excel(
 
 
 # ---------------------------------------------------------------------------
-# CDN config (legacy compatibility redirect)
-# ---------------------------------------------------------------------------
-
-# CDN settings now use /admin/settings/cdn so they participate in the same
-# typed optimistic-lock, revision-history, rollback, and audit contract as the
-# other settings domains. The former /cdn-config endpoints deliberately do
-# not keep a parallel storage model.
-
-# ---------------------------------------------------------------------------
 # Timeout config (centralized)
 # ---------------------------------------------------------------------------
 
@@ -691,10 +682,10 @@ def _pct_change(current: float, previous: float) -> float:
 
 
 async def _total_variants(db: AsyncSession) -> int:
-    """Total variant count: ClickHouse first, PostgreSQL fallback, 0 last."""
+    """Total variant count: native PostgreSQL projection first, fallback, 0 last."""
     try:
-        ch_stats = await ch_service.get_dashboard_stats()
-        return int(ch_stats.get("total_variants", 0))
+        variant_stats = await variant_service.get_dashboard_stats()
+        return int(variant_stats.get("total_variants", 0))
     except Exception:
         return await db.scalar(select(func.count(VariantSummary.id))) or 0
 
@@ -711,9 +702,9 @@ async def admin_dashboard_stats(
     """High-level system numbers for the admin dashboard.
 
     All values are real aggregations (users/releases from PostgreSQL, variant
-    count from ClickHouse with a PostgreSQL fallback).  Change percentages are
-    computed between the last 30 days and the previous 30 days; metrics
-    without a temporal source report 0.0.
+    count from the native PostgreSQL projection with a ``variant_summaries``
+    fallback).  Change percentages are computed between the last 30 days and
+    the previous 30 days; metrics without a temporal source report 0.0.
     """
     _require_admin(current_user)
     now = datetime.now(UTC)
@@ -773,7 +764,7 @@ async def admin_dashboard_stats(
 
     # 95th-percentile query latency from the analytics events (best-effort).
     try:
-        query_p95_ms = await ch_service.get_query_latency_percentile(
+        query_p95_ms = await variant_service.get_query_latency_percentile(
             percentile=0.95, days=30
         )
     except Exception:
@@ -807,8 +798,8 @@ async def admin_dashboard_series(
 
     - ``import_throughput``: daily import tasks (completed vs. failed) from
       the PostgreSQL ``import_tasks`` table.
-    - ``query_latency``: daily p50/p95/p99 percentiles from ClickHouse
-      analytics events (empty when ClickHouse is unavailable).
+    - ``query_latency``: daily p50/p95/p99 percentiles from the PostgreSQL
+      analytics events (empty when that query is unavailable).
     - ``storage_growth``: no reliable storage source exists yet — empty.
     """
     _require_admin(current_user)
@@ -840,7 +831,7 @@ async def admin_dashboard_series(
     ]
 
     try:
-        latency_rows = await ch_service.get_query_latency_series(days=days)
+        latency_rows = await variant_service.get_query_latency_series(days=days)
     except Exception:
         latency_rows = []
     query_latency = [

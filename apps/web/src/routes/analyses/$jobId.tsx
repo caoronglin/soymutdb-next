@@ -200,7 +200,7 @@ function JobResultComponent() {
               <Typography.Title level={2} style={{ margin: 0 }}>{t("analyses.job.title")}</Typography.Title>
             </div>
           </header>
-          <Spin tip={t("analyses.job.loading")} className="py-24" />
+          <Spin description={t("analyses.job.loading")} className="py-24" />
         </ResearcherGate>
       </div>
     );
@@ -318,7 +318,7 @@ function JobResultComponent() {
                   >
                     <div>
                       {fastpHtml.isLoading ? (
-                        <Spin tip={t("analyses.job.preparingReport")} className="py-16" />
+                        <Spin description={t("analyses.job.preparingReport")} className="py-16" />
                       ) : fastpHtml.error || !fastpHtml.data ? (
                         <p className="py-10 text-center text-sm text-muted-foreground">
                           {t("analyses.job.reportUnavailable")}
@@ -349,7 +349,7 @@ function JobResultComponent() {
                   >
                     <div>
                       {umap.isLoading ? (
-                        <Spin tip={t("analyses.job.loadingUmap")} className="py-16" />
+                        <Spin description={t("analyses.job.loadingUmap")} className="py-16" />
                       ) : umap.error || !umap.data ? (
                         <p className="py-10 text-center text-sm text-muted-foreground">{t("analyses.job.umapUnavailable")}</p>
                       ) : (

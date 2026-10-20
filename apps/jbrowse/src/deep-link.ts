@@ -210,13 +210,3 @@ function toURLSearchParams(record: Record<string, unknown>): URLSearchParams {
     return search;
 }
 
-export default {
-    parseDeepLink,
-    buildDeepLink,
-    parseLocus,
-    formatLocus,
-    toZeroBased,
-    toOneBased,
-    calculateViewWindow,
-    pointToLocus,
-};

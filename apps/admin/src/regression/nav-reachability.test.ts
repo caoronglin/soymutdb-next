@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import { NAV_SECTIONS } from "../components/admin-sidebar";
+import { COMMANDS } from "../components/admin-command-palette";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const appSource = readFileSync(join(here, "../App.tsx"), "utf8");
@@ -56,7 +57,30 @@ const NOT_IN_NAV = new Set([
   "/widget-preview",
   "/widget-health",
   "/layout",
+  "/resource-catalog",
 ]);
+
+/**
+ * Path -> the lazy component the router renders for it, read from the same
+ * `createRoute` literals the reachability check above already parses.
+ *
+ * `LegacyUnavailablePage` is the console's explicit "nothing lives here" screen.
+ * Reachability is not enough on its own: an entry can be perfectly reachable and
+ * still be a dead end. `/resource-catalog` shipped in the sidebar and as the
+ * dashboard's primary call-to-action while resolving to that page, which is how
+ * a reachable-but-useless destination survives every "is it in the nav?" guard.
+ */
+function routerComponents(): Map<string, string> {
+  const components = new Map<string, string>();
+  for (const block of appSource.split(/createRoute\(\{/)) {
+    const path = /\bpath:\s*"([^"]+)"/.exec(block)?.[1];
+    const component = /component:\s*\(\)\s*=>\s*withSuspense\((\w+)\)/.exec(block)?.[1];
+    if (path && component) components.set(path, component);
+  }
+  return components;
+}
+
+const UNAVAILABLE_COMPONENT = "LegacyUnavailablePage";
 
 function isDetailRoute(path: string): boolean {
   return path.includes("$");
@@ -86,6 +110,35 @@ describe("admin navigation reachability", () => {
     // If this fails the guard below is vacuous, which is worse than no guard.
     expect(routerPaths().length).toBeGreaterThan(20);
     expect(routerPaths()).toContain("/content/pages");
+  });
+
+  it("resolves each sidebar entry to the component the router renders", () => {
+    const components = routerComponents();
+    expect(components.size).toBeGreaterThan(20);
+    expect(components.get("/")).toBe("DashboardPage");
+    // The retired routes are the ones this guard exists for, so the parser has
+    // to see them before it can keep them out of the menu.
+    expect(components.get("/resource-catalog")).toBe(UNAVAILABLE_COMPONENT);
+    expect(components.get("/widgets")).toBe(UNAVAILABLE_COMPONENT);
+  });
+
+  it("keeps every sidebar entry off the unavailable page", () => {
+    const components = routerComponents();
+    const deadEnds = [...NAV_PATHS]
+      .filter((path) => components.get(path) === UNAVAILABLE_COMPONENT)
+      .sort();
+    expect(deadEnds).toEqual([]);
+  });
+
+  it("keeps every command-palette destination on a real, live route", () => {
+    const paths = new Set(routerPaths());
+    const components = routerComponents();
+    const routes = COMMANDS.filter((command) => command.kind === "route");
+    expect(routes.length).toBeGreaterThan(0);
+    for (const command of routes) {
+      expect(paths.has(command.path), command.id).toBe(true);
+      expect(components.get(command.path), command.id).not.toBe(UNAVAILABLE_COMPONENT);
+    }
   });
 
   it("puts every shipped admin destination in the sidebar", () => {

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import * as React from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import enCommon from "@soymutdb/i18n-core/locales/en/common.json";
@@ -51,6 +52,16 @@ import { Route } from "./compare";
 type RouteOptions = { component: React.ComponentType };
 const ComparePage = (Route as unknown as { options: RouteOptions }).options.component;
 
+/** The page now reads the deployment assembly/release context through a query. */
+function renderPage() {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ComparePage />
+    </QueryClientProvider>,
+  );
+}
+
 afterEach(() => cleanup());
 
 beforeEach(() => {
@@ -63,7 +74,7 @@ beforeEach(() => {
 
 describe("curated variant comparison", () => {
   it("renders every selector option in normal page flow without a capped nested scroller", () => {
-    render(<ComparePage />);
+    renderPage();
 
     const picker = screen.getByTestId("compare-picker");
     expect(picker.querySelectorAll('input[type="checkbox"]')).toHaveLength(COMPARE_VARIANTS.length);
@@ -75,7 +86,7 @@ describe("curated variant comparison", () => {
 
   it("keeps the four-variant selection limit and synchronizes selected IDs to the URL", () => {
     runtime.search = { ids: "SMDB-00001,SMDB-00002" };
-    render(<ComparePage />);
+    renderPage();
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Select SMDB-00003" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Select SMDB-00004" }));
@@ -88,17 +99,28 @@ describe("curated variant comparison", () => {
 
   it("renders localized copy and localized curated descriptions in Chinese", () => {
     runtime.language = "zh";
-    render(<ComparePage />);
+    renderPage();
 
     expect(screen.getByRole("heading", { level: 1, name: "大豆突变体变异对比" })).toBeTruthy();
     expect(screen.getByText("开花提前，株高降低")).toBeTruthy();
     expect(document.title).toBe("变异对比 — SoyMutDB");
   });
 
+  it("shows the deployment assembly/release provenance rows", () => {
+    renderPage();
+
+    // The curated dataset carries no provenance, so the page renders it from the
+    // deployment context instead of letting "curated" read as "release-pinned".
+    expect(screen.getByText("Assembly")).toBeTruthy();
+    expect(screen.getByText("Release")).toBeTruthy();
+    expect(screen.getAllByTestId("compare-row-assembly-value").length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId("compare-row-release-value").length).toBeGreaterThan(0);
+  });
+
   it("localizes the empty state when fewer than two variants are selected", () => {
     runtime.search = { ids: "SMDB-00001" };
     runtime.language = "zh";
-    render(<ComparePage />);
+    renderPage();
 
     expect(screen.getByText("至少选择 2 个变异")).toBeTruthy();
     expect(screen.getByText("从上方网格选择变异以开始对比。")).toBeTruthy();

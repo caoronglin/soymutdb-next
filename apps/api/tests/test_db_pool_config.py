@@ -12,6 +12,8 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.core import database
 from app.core.config import Settings
@@ -203,7 +205,9 @@ async def test_clickhouse_client_can_be_awaited_repeatedly_without_reusing_corou
     """Repeated dependency resolution returns the same usable client."""
     client = MagicMock()
     factory = AsyncMock(return_value=client)
-    monkeypatch.setattr(database.clickhouse_connect, "get_async_client", factory)
+    clickhouse_connect = pytest.importorskip("clickhouse_connect", reason="Historical driver only")
+
+    monkeypatch.setattr(clickhouse_connect, "get_async_client", factory)
     database._clickhouse_client = None
 
     try:
@@ -218,13 +222,51 @@ async def test_clickhouse_client_can_be_awaited_repeatedly_without_reusing_corou
 
 
 @pytest.mark.asyncio
-async def test_close_db_closes_clickhouse_client(monkeypatch) -> None:
-    """Application shutdown closes and clears the ClickHouse client."""
-    client = MagicMock()
-    client.aclose = AsyncMock()
+async def test_close_db_closes_clickhouse_client() -> None:
+    """Application shutdown closes and clears the ClickHouse client.
+
+    The double is specced from the real ``AsyncClient`` on purpose: a plain
+    ``MagicMock`` happily invents any attribute, so a shutdown path calling a
+    method the driver does not expose stays green in unit tests and only
+    raises ``AttributeError`` against a live client. ``spec_set`` fails here
+    instead, which keeps this test honest about the client's real surface.
+    """
+    AsyncClient = pytest.importorskip("clickhouse_connect.driver.asyncclient").AsyncClient
+    client = MagicMock(spec_set=AsyncClient)
     database._clickhouse_client = client
 
-    await database.close_db()
+    try:
+        await database.close_db()
+    finally:
+        database._clickhouse_client = None
 
-    client.aclose.assert_awaited_once()
+    client.close.assert_awaited_once()
+    assert database._clickhouse_client is None
+
+
+@pytest.mark.asyncio
+async def test_close_db_still_disposes_postgres_and_redis() -> None:
+    """Fixing the ClickHouse teardown must not drop the other disposals."""
+    engine = MagicMock(spec_set=AsyncEngine)
+    engine.dispose = AsyncMock()
+    redis = MagicMock(spec_set=Redis)
+    redis.aclose = AsyncMock()
+    database._engine = engine
+    database._session_factory = object()
+    database._redis = redis
+    database._clickhouse_client = None
+
+    try:
+        await database.close_db()
+    finally:
+        database._engine = None
+        database._session_factory = None
+        database._redis = None
+        database._clickhouse_client = None
+
+    engine.dispose.assert_awaited_once()
+    redis.aclose.assert_awaited_once()
+    assert database._engine is None
+    assert database._session_factory is None
+    assert database._redis is None
     assert database._clickhouse_client is None

@@ -4,8 +4,8 @@
  * TanStack Query + AntD 5: category Tabs (all / news / update /
  * announcement), client-side search box (backend has no search param —
  * FastAPI would reject unknown params with 422, so filtering happens on the
- * current page), paginated AntD List of NewsCard. Loading / error / empty
- * states included; no fake data.
+ * current page), paginated native <ul> grid of NewsCard. Loading / error /
+ * empty states included; no fake data.
  *
  * E3 (snapshot takeover): `category` / `page` live in the URL search params
  * (same semantics for the static ?category=&page= pages), and SSG pages
@@ -18,7 +18,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, Button, Empty, Input, List, Pagination, Result, Skeleton, Tabs, Typography } from "@/lib/antd";
+import { Alert, Button, Empty, Input, Pagination, Result, Skeleton, Tabs, Typography } from "@/lib/antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import { ApiError, listNews, type NewsListResponse, type NewsSummary } from "@soymutdb/api-client";
 import { NewsCard } from "../../components/news-card";
@@ -202,15 +202,16 @@ function NewsIndexComponent() {
                 className="mb-4"
               />
             ) : null}
-            <List<NewsSummary>
-              grid={{ gutter: 16, xs: 1, sm: 2, lg: 3 }}
-              dataSource={filtered}
-              renderItem={(item) => (
-                <List.Item className="border-0!">
+            {/* Native <ul>/<li> rather than AntD 6's deprecated List. The
+                gutter-16 grid with xs:1 / sm:2 / lg:3 columns maps straight
+                onto gap-4 plus the responsive grid-cols utilities. */}
+            <ul className="m-0 grid list-none grid-cols-1 gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3">
+              {filtered.map((item) => (
+                <li key={item.slug}>
                   <NewsCard item={item} />
-                </List.Item>
-              )}
-            />
+                </li>
+              ))}
+            </ul>
             <div className="mt-8 flex justify-center">
               <Pagination
                 current={page}

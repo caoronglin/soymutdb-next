@@ -33,11 +33,17 @@ import { extname, join, normalize } from "node:path";
 
 const ROOT = process.argv[2] ?? join(import.meta.dirname, "..", "apps", "web", "dist");
 const PORT = Number(process.argv[3] ?? 4173);
-const PREFIX = process.argv[4] ?? "/soymutdb-next";
+// Mount prefix, normalised to either "" (origin root) or "/segment" with no
+// trailing slash. Keeping "" for the root mount matters: every mock below is
+// built as `${PREFIX}/api/v1/...`, and a raw "/" would produce "//api/v1/...",
+// which silently 404s every mocked endpoint.
+const PREFIX_RAW = process.argv[4] ?? "/soymutdb-next";
+const PREFIX = PREFIX_RAW === "/" ? "" : PREFIX_RAW.replace(/\/+$/, "");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json",
   ".svg": "image/svg+xml",
@@ -108,7 +114,7 @@ const server = createServer(async (req, res) => {
   // `/api/v1/...` while every mock route below is keyed on the mount prefix.
   // Normalise before matching, otherwise the whole portal 404s offline and the
   // suites report "assemblies could not be loaded" instead of exercising a page.
-  if (PREFIX !== "/" && pathname.startsWith("/api/v1")) {
+  if (PREFIX !== "" && pathname.startsWith("/api/v1")) {
     pathname = `${PREFIX}${pathname}`;
   }
 
@@ -124,8 +130,11 @@ const server = createServer(async (req, res) => {
       /* invalid JSON is an invalid credential attempt for this test server */
     }
 
+    // The public portal posts `{email, password}`; the admin console posts
+    // `{username, password}`. Both are one test principal here.
+    const identifier = body?.email ?? body?.username;
     const valid =
-      body?.email === LOGIN_TEST_CREDENTIALS.email &&
+      identifier === LOGIN_TEST_CREDENTIALS.email &&
       body?.password === LOGIN_TEST_CREDENTIALS.password;
 
     if (valid) {
@@ -326,6 +335,25 @@ const server = createServer(async (req, res) => {
   // table renders its column headers without inventing rows. With
   // GENES_JBROWSE_FIXTURE=1 (and only for the fixture query) it returns one
   // deterministic row so the JBrowse deep-link assertion can run offline.
+  // A gene DETAIL path (`/genes/<gene_id>`) is a different contract from the
+  // search list. This server only has an optional one-row SEARCH fixture, so
+  // answering a detail request with the list envelope would hand the page a
+  // malformed record (the list envelope has no `start_pos`/`end_pos`, and a
+  // detail consumer that trusts its types then crashes). Answer honestly with
+  // 404 so the page renders its empty state; the focused gene tests install
+  // their own mocks.
+  if (
+    req.method === "GET" &&
+    pathname.startsWith(`${PREFIX}/api/v1/genes/`) &&
+    !pathname.startsWith(`${PREFIX}/api/v1/genes/assemblies`)
+  ) {
+    res.writeHead(404, { "Content-Type": "application/json" });
+    res.end(
+      JSON.stringify({ error: { code: "NOT_FOUND", message: "gene detail is not mocked offline" } }),
+    );
+    return;
+  }
+
   if (
     req.method === "GET" &&
     pathname.startsWith(`${PREFIX}/api/v1/genes`) &&
@@ -370,14 +398,21 @@ const server = createServer(async (req, res) => {
   // A Vite artifact may be built for a sub-path (e.g. /soymutdb-next/) while
   // this local server is mounted at / for visual QA. Accept both the mount
   // prefix and the artifact's baked deployment prefix for static assets.
-  if (PREFIX === "/" && pathname.startsWith("/soymutdb-next/")) {
+  if (PREFIX === "" && pathname.startsWith("/soymutdb-next/")) {
     pathname = pathname.slice("/soymutdb-next".length);
-  } else if (PREFIX !== "/" && pathname.startsWith(`${PREFIX}/`)) {
+  } else if (PREFIX !== "" && pathname.startsWith(`${PREFIX}/`)) {
     pathname = pathname.slice(PREFIX.length);
-  } else if (PREFIX !== "/") {
-    res.writeHead(404, { "Content-Type": "text/plain" });
-    res.end("not found");
-    return;
+  } else if (PREFIX !== "") {
+    // A root-based artifact mounted under a sub-path: the emitted HTML/JS
+    // reference root-absolute assets (`/assets/...`, `/fonts/...`), while only
+    // documents are meant to live under the mount prefix. Serve a real file at
+    // ROOT instead of 404ing the SPA's own assets; unknown routes still 404.
+    const rootBaked = join(ROOT, normalize(pathname).replace(/^\/+/, ""));
+    if (!existsSync(rootBaked) || statSync(rootBaked).isDirectory()) {
+      res.writeHead(404, { "Content-Type": "text/plain" });
+      res.end("not found");
+      return;
+    }
   }
 
   if (pathname === "/") {
@@ -416,5 +451,5 @@ const server = createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[static-server] ${ROOT} → http://localhost:${PORT}${PREFIX}/`);
+  console.log(`[static-server] ${ROOT} → http://localhost:${PORT}${PREFIX || ""}/`);
 });

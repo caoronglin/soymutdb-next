@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { http } from "@soymutdb/api-client";
-import { Badge, Button } from "@/lib/antd";
+import { Skeleton, Badge, Button } from "@/lib/antd";
 import { ConfirmDialog } from "../../components/confirm-dialog";
 import { DataTable, type DataTableColumn } from "../../components/data-table";
 
@@ -29,10 +29,11 @@ export function NewsPublicationTab({ type }: { type: "news" | "publication" }) {
   const [deleteTarget, setDeleteTarget] = React.useState<ContentItem | null>(
     null,
   );
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
   const isNews = type === "news";
   const isPublication = type === "publication";
 
-  const { data, isLoading } = useQuery<{ items: ContentItem[]; total: number }>(
+  const { data, isLoading, isError } = useQuery<{ items: ContentItem[]; total: number }>(
     {
       queryKey: ["admin-content", type],
       queryFn: async () => {
@@ -88,7 +89,6 @@ export function NewsPublicationTab({ type }: { type: "news" | "publication" }) {
           total: response.total,
         };
       },
-      placeholderData: { items: [], total: 0 },
     },
   );
 
@@ -98,6 +98,12 @@ export function NewsPublicationTab({ type }: { type: "news" | "publication" }) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-content"] });
       setDeleteTarget(null);
+      setDeleteError(null);
+    },
+    onError: (error) => {
+      // The dialog stays open and explains the refusal; a rejected delete used
+      // to be indistinguishable from a successful one.
+      setDeleteError(error instanceof Error ? error.message : String(error));
     },
   });
 
@@ -195,7 +201,7 @@ export function NewsPublicationTab({ type }: { type: "news" | "publication" }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <Badge color="secondary">
-          {t("admin.content.itemCount", { defaultValue: items.length === 1 ? "{{count}} {{type}}" : "{{count}} {{type}}s", count: items.length, type: typeLabel })}
+          {isError || !data ? "—" : t("admin.content.itemCount", { defaultValue: items.length === 1 ? "{{count}} {{type}}" : "{{count}} {{type}}s", count: items.length, type: typeLabel })}
         </Badge>
         <Button
           onClick={() => {
@@ -211,25 +217,51 @@ export function NewsPublicationTab({ type }: { type: "news" | "publication" }) {
         </Button>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={items}
-        rowKey={(c) => c.id}
-        loading={isLoading}
-        emptyTitle={t("admin.content.noTypeContent", { defaultValue: "No {{type}} content", type: typeLabel.toLowerCase() })}
-        emptyDescription={t("admin.content.noTypeContentDesc", { defaultValue: "Create a new {{type}} to get started.", type: typeLabel.toLowerCase() })}
-      />
+      {isError ? (
+        /* A failed list request is not an empty content list. */
+        <div
+          role="alert"
+          data-testid="content-list-load-error"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+        >
+          {t("admin.content.loadError", { defaultValue: "The content list could not be loaded." })}
+        </div>
+      ) : isLoading ? <Skeleton active /> : (
+        <DataTable
+          columns={columns}
+          data={items}
+          rowKey={(c) => c.id}
+          loading={isLoading}
+          emptyTitle={t("admin.content.noTypeContent", { defaultValue: "No {{type}} content", type: typeLabel.toLowerCase() })}
+          emptyDescription={t("admin.content.noTypeContentDesc", { defaultValue: "Create a new {{type}} to get started.", type: typeLabel.toLowerCase() })}
+        />
+      )}
 
       {deleteTarget && (
         <ConfirmDialog
           open={Boolean(deleteTarget)}
-          onOpenChange={(open) => !open && setDeleteTarget(null)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDeleteTarget(null);
+              setDeleteError(null);
+            }
+          }}
           title={t("admin.content.deleteContentTitle", { defaultValue: "Delete Content" })}
           description={t("admin.content.deleteContentConfirm", { defaultValue: 'Are you sure you want to delete "{{title}}"? This action cannot be undone.', title: deleteTarget.title })}
           confirmLabel={t("admin.content.delete", { defaultValue: "Delete" })}
           severity="destructive"
           onConfirm={() => deleteMutation.mutate(deleteTarget.id)}
           loading={deleteMutation.isPending}
+          error={deleteError ? (
+            <span data-testid="content-delete-error">
+              {t("admin.content.deleteContentFailed", { defaultValue: "The content could not be deleted." })}
+              {" "}
+              {t("common.errorReason", {
+                reason: deleteError,
+                defaultValue: "Server response: {{reason}}",
+              })}
+            </span>
+          ) : null}
         />
       )}
     </div>

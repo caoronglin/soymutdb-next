@@ -2,7 +2,7 @@ import { SaveOutlined, GlobalOutlined, DatabaseOutlined, MailOutlined, SafetyOut
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { adminSettingsApi, http, type SiteVariant } from "@soymutdb/api-client";
+import { http, type SiteVariant } from "@soymutdb/api-client";
 import { Alert, Badge, Button, ColorPicker, Flex, Form, Input, PageContainer, ProCard, Select, Typography } from "@/lib/antd";
 import { ConfirmDialog } from "../components/confirm-dialog";
 import { RichEditor } from "../components/rich-editor/rich-editor";
@@ -21,7 +21,6 @@ type SettingsSection =
   | "data"
   | "email"
   | "security"
-  | "cdn"
   | "filePreview"
   | "footer"
   | "content";
@@ -32,7 +31,6 @@ const initialSettingsLoadState: Record<SettingsSection, boolean> = {
   data: false,
   email: false,
   security: false,
-  cdn: false,
   filePreview: false,
   footer: false,
   home: false,
@@ -45,7 +43,6 @@ const initialSettingsLoadErrorState: Record<SettingsSection, boolean> = {
   data: false,
   email: false,
   security: false,
-  cdn: false,
   filePreview: false,
   footer: false,
   home: false,
@@ -59,11 +56,20 @@ const settingsSectionLabels: Record<SettingsSection, string> = {
   data: "Data & Storage settings",
   email: "Email & Notifications settings",
   security: "Security settings",
-  cdn: "CDN Configuration settings",
   filePreview: "File Preview settings",
   footer: "Footer settings",
   content: "Site content settings",
 };
+
+/**
+ * Human label for a settings section key.
+ *
+ * The saved section is a raw API key (`about_external`, `footer_internal`, …),
+ * so it needs a readable name before it is shown to an operator.
+ */
+function settingsSectionLabel(section: string): string {
+  return (settingsSectionLabels as Record<string, string>)[section] ?? section;
+}
 
 const SITE_VARIANT_OPTIONS: Array<{ value: SiteVariant; label: string; description: string }> = [
   {
@@ -147,6 +153,7 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
   const isCardVisible = (card: SettingsCard) => !domain || SETTINGS_CARD_DOMAINS[card].includes(domain);
   const queryClient = useQueryClient();
   const [saveTarget, setSaveTarget] = useState<string | null>(null);
+  const [saveFailure, setSaveFailure] = useState<{ section: string; reason: string } | null>(null);
   const [sectionLoaded, setSectionLoaded] = useState(initialSettingsLoadState);
   const [sectionLoadError, setSectionLoadError] = useState(initialSettingsLoadErrorState);
   const [siteVariant, setSiteVariant] = useState<SiteVariant>("external");
@@ -167,7 +174,6 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
     defaultAssembly: "Wm82v4.0",
     maxExportRecords: "10000",
     cacheTtlSeconds: "300",
-    enableClickhouse: "true",
   });
 
   const [email, setEmail] = useState({
@@ -183,12 +189,6 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
     requireTwoFactor: "false",
     passwordMinLength: "8",
   });
-
-  const [cdn, setCdn] = useState({
-    enabled: false,
-    url: "",
-  });
-  const [cdnVersion, setCdnVersion] = useState<number | null>(null);
 
   const [filePreview, setFilePreview] = useState({
     enabled: "true",
@@ -294,7 +294,6 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
         defaultAssembly: String(res.defaultAssembly ?? "Wm82v4.0"),
         maxExportRecords: String(res.maxExportRecords ?? "10000"),
         cacheTtlSeconds: String(res.cacheTtlSeconds ?? "300"),
-        enableClickhouse: String(res.enableClickhouse ?? "true"),
       });
       setSectionLoadError((errors) => ({ ...errors, data: false }));
       setSectionLoaded((loaded) => ({ ...loaded, data: true }));
@@ -338,20 +337,6 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
       setSectionLoaded((loaded) => ({ ...loaded, security: true }));
     }).catch(() => {
       setSectionLoadError((errors) => ({ ...errors, security: true }));
-    });
-  }, []);
-
-  useEffect(() => {
-    adminSettingsApi.get("cdn").then((document) => {
-      setCdn({
-        enabled: document.values.enabled === true,
-        url: typeof document.values.url === "string" ? document.values.url : "",
-      });
-      setCdnVersion(document.version);
-      setSectionLoadError((errors) => ({ ...errors, cdn: false }));
-      setSectionLoaded((loaded) => ({ ...loaded, cdn: true }));
-    }).catch(() => {
-      setSectionLoadError((errors) => ({ ...errors, cdn: true }));
     });
   }, []);
 
@@ -473,36 +458,25 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
     },
     onSuccess: (_response, params) => {
       queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
+      setSaveFailure(null);
       setSaveTarget(params.section);
+    },
+    onError: (error, params) => {
+      // A rejected save must never look like a saved one: the success dialog
+      // is only opened from `onSuccess`, so a failure keeps the operator on the
+      // form and states the reason in an alert region.
+      setSaveTarget(null);
+      setSaveFailure({
+        section: params.section,
+        reason: error instanceof Error ? error.message : String(error),
+      });
     },
   });
 
   const handleSave = (section: string, values: Record<string, string>) => {
     setSaveTarget(null);
+    setSaveFailure(null);
     saveMutation.mutate({ section, values });
-  };
-
-  const cdnMutation = useMutation({
-    mutationFn: async () => {
-      if (cdnVersion === null) throw new Error("CDN settings have not loaded");
-      return adminSettingsApi.patch("cdn", cdnVersion, {
-        enabled: cdn.enabled,
-        url: cdn.url,
-      });
-    },
-    onSuccess: (document) => {
-      setCdn({
-        enabled: document.values.enabled === true,
-        url: typeof document.values.url === "string" ? document.values.url : "",
-      });
-      setCdnVersion(document.version);
-      queryClient.invalidateQueries({ queryKey: ["admin-settings"] });
-      setSaveTarget("cdn");
-    },
-  });
-
-  const handleCdnSave = () => {
-    cdnMutation.mutate();
   };
 
   return (
@@ -511,6 +485,33 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
       subTitle={t("admin.settings.subtitle", { defaultValue: "Configure global platform settings. Changes require administrator approval." })}
     >
       <div className="mx-auto max-w-5xl space-y-6">
+
+        {/* A rejected save is reported here: the success dialog only opens from
+            `onSuccess`, so without this region a failed write is invisible. */}
+        {saveFailure ? (
+          <div
+            role="alert"
+            data-testid="settings-save-error"
+            className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+          >
+            <p>
+              {t("admin.settings.saveFailed", {
+                section: t(`admin.settings.section_${saveFailure.section}`, {
+                  defaultValue: settingsSectionLabel(saveFailure.section),
+                }),
+                defaultValue: "The {{section}} settings could not be saved. The values on screen are unchanged.",
+              })}
+            </p>
+            {saveFailure.reason ? (
+              <p className="mt-1 text-xs">
+                {t("common.errorReason", {
+                  reason: saveFailure.reason,
+                  defaultValue: "Server response: {{reason}}",
+                })}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
 
         {/* General */}
         <ProCard hidden={!isCardVisible("general")}>
@@ -536,10 +537,11 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
                   id="default-lang"
                   value={general.defaultLanguage}
                   onChange={(v) => setGeneral({ ...general, defaultLanguage: v })}
-                >
-                  <Select.Option value="en">{t("admin.settings.languageEnglish", { defaultValue: "English" })}</Select.Option>
-                  <Select.Option value="zh">中文</Select.Option>
-                </Select>
+                  options={[
+                    { value: "en", label: t("admin.settings.languageEnglish", { defaultValue: "English" }) },
+                    { value: "zh", label: "中文" },
+                  ]}
+                />
               </Form.Item>
             </div>
             <Form.Item label={t("admin.settings.siteDescription", { defaultValue: "Site Description" })} htmlFor="site-desc">
@@ -612,15 +614,14 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
                     setSectionLoaded((loaded) => ({ ...loaded, about: false, home: false, footer: false, content: false }));
                     setSectionLoadError((errors) => ({ ...errors, about: false, home: false, footer: false, content: false }));
                   }}
-                >
-                  {SITE_VARIANT_OPTIONS.map((option) => (
-                    <Select.Option key={option.value} value={option.value}>
-                      {option.value === "internal"
+                  options={SITE_VARIANT_OPTIONS.map((option) => ({
+                    value: option.value,
+                    label:
+                      option.value === "internal"
                         ? t("admin.settings.siteVariantInternal", { defaultValue: "Internal site" })
-                        : t("admin.settings.siteVariantExternal", { defaultValue: "External site" })}
-                    </Select.Option>
-                  ))}
-                </Select>
+                        : t("admin.settings.siteVariantExternal", { defaultValue: "External site" }),
+                  }))}
+                />
               </div>
             </div>
             <Alert
@@ -792,25 +793,6 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
                   onChange={(e) => setData({ ...data, cacheTtlSeconds: e.target.value })}
                 />
               </Form.Item>
-              <Form.Item label={t("admin.settings.clickhouseAnalytics", { defaultValue: "ClickHouse Analytics" })}>
-                <div className="flex items-center gap-2">
-                  <Badge color={data.enableClickhouse === "true" ? "success" : "secondary"}>
-                    {data.enableClickhouse === "true" ? t("admin.settings.enabled", { defaultValue: "Enabled" }) : t("admin.settings.disabled", { defaultValue: "Disabled" })}
-                  </Badge>
-                  <Button
-                    type="default"
-                    size="small"
-                    onClick={() =>
-                      setData({
-                        ...data,
-                        enableClickhouse: data.enableClickhouse === "true" ? "false" : "true",
-                      })
-                    }
-                  >
-                    {t("admin.settings.toggle", { defaultValue: "Toggle" })}
-                  </Button>
-                </div>
-              </Form.Item>
             </div>
             <Form.Item label={null}>
               <div className="flex justify-end">
@@ -938,65 +920,6 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
                 <Button
                   onClick={() => handleSave("security", security)}
                   disabled={!sectionLoaded.security || saveMutation.isPending}
-                >
-                  <SaveOutlined aria-hidden className="size-4" />
-                  {t("admin.settings.saveChanges", { defaultValue: "Save Changes" })}
-                </Button>
-              </div>
-            </Form.Item>
-          </Form>
-        </ProCard>
-
-        {/* CDN Configuration */}
-        <ProCard hidden={!isCardVisible("cdn")}>
-          <div>
-            <Typography.Title level={5} className="flex items-center gap-2 text-base">
-              <GlobalOutlined className="size-4 text-primary" />
-              {t("admin.settings.cdnSection", { defaultValue: "CDN Configuration" })}
-            </Typography.Title>
-            <Typography.Text type="secondary">{t("admin.settings.cdnSubtitle", { defaultValue: "External CDN URLs for frontend assets" })}</Typography.Text>
-            {sectionLoadError.cdn && <SettingsLoadError section="cdn" />}
-          </div>
-          <Form layout="vertical" component={false}>
-            <div className="grid gap-x-4 sm:grid-cols-2">
-              <Form.Item label={t("admin.settings.cdnEnabled", { defaultValue: "CDN Enabled" })}>
-                <div className="flex items-center gap-2">
-                  <Badge color={cdn.enabled ? "success" : "secondary"}>
-                    {cdn.enabled ? t("admin.settings.enabled", { defaultValue: "Enabled" }) : t("admin.settings.disabled", { defaultValue: "Disabled" })}
-                  </Badge>
-                  <Button
-                    type="default"
-                    size="small"
-                    onClick={() =>
-                      setCdn({
-                        ...cdn,
-                        enabled: !cdn.enabled,
-                      })
-                    }
-                  >
-                    {t("admin.settings.toggle", { defaultValue: "Toggle" })}
-                  </Button>
-                </div>
-              </Form.Item>
-              <Form.Item label={t("admin.settings.echartsUrl", { defaultValue: "ECharts CDN URL" })} htmlFor="cdn-echarts">
-                <Input
-                  id="cdn-echarts"
-                  value={cdn.url}
-                  onChange={(e) => setCdn({ ...cdn, url: e.target.value })}
-                  placeholder={t("admin.settings.placeholderEchartsUrl", { defaultValue: "https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.1/echarts.min.js" })}
-                />
-              </Form.Item>
-            </div>
-            <Form.Item label={null}>
-              <Typography.Text type="secondary" className="text-xs">
-                {t("admin.settings.cdnNote", { defaultValue: "CDN URLs are used at build time. Changes require a rebuild to take effect. For production, consider nginx edge caching as a fallback." })}
-              </Typography.Text>
-            </Form.Item>
-            <Form.Item label={null}>
-              <div className="flex justify-end">
-                <Button
-                  onClick={handleCdnSave}
-                  disabled={!sectionLoaded.cdn || cdnMutation.isPending}
                 >
                   <SaveOutlined aria-hidden className="size-4" />
                   {t("admin.settings.saveChanges", { defaultValue: "Save Changes" })}

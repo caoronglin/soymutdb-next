@@ -1,6 +1,7 @@
 import tailwindcss from "@tailwindcss/postcss";
 import { resolve } from "node:path";
 import { defineConfig } from "@umijs/max";
+import { chartSupportCacheGroups } from "../../../scripts/webpack/chart-split-groups";
 import { normalizeBasePath, requireDeploymentOrigin, resolveDevAllowedHosts } from "@soymutdb/shared/deployment";
 
 type WebpackChain = Parameters<NonNullable<Parameters<typeof defineConfig>[0]["chainWebpack"]>>[0];
@@ -59,6 +60,18 @@ export default defineConfig({
   hash: true,
   title: "SoyMutDB Admin",
   favicons: [`${base}favicon.svg`],
+  // Start the Regular subset before CSS is parsed. `crossorigin` is required for
+  // a font preload to match the CORS fetch the browser makes for @font-face;
+  // without it the preload is discarded and the font is downloaded twice.
+  links: [
+    {
+      rel: "preload",
+      href: `${base}fonts/harmonyos/HarmonyOS-Sans-SC-Regular-latin.woff2`,
+      as: "font",
+      type: "font/woff2",
+      crossorigin: "anonymous",
+    },
+  ],
   routes: [
     { path: "/", component: "@/umi-entry" },
     { path: "/*", component: "@/umi-entry" },
@@ -71,7 +84,13 @@ export default defineConfig({
   // "getOwnPropertyDescriptors(undefined)" -> blank page. Terser keeps
   // helpers inside the module/chunk scope, so the collision cannot form.
   jsMinifier: "terser",
-  plugins: [resolve(__dirname, "plugins/defer-html-scripts.cjs")],
+  plugins: [
+    resolve(__dirname, "plugins/defer-html-scripts.cjs"),
+    // Chart dependency closure instrumentation. Registration only: it writes
+    // .build/chart-closure/<app>-<variant>.json at the end of the compilation
+    // and never changes the module graph or the emitted bytes.
+    resolve(__dirname, "../../../scripts/webpack/chart-closure-plugin.cjs"),
+  ],
   extraPostCSSPlugins: [tailwindcss()],
   mfsu: false,
   layout: false,
@@ -92,6 +111,18 @@ export default defineConfig({
       .filename("assets/[name].[contenthash:8].js")
       .chunkFilename("assets/[name].[contenthash:8].async.js")
       .set("assetModuleFilename", "assets/[name].[contenthash:8][ext][query]");
+    memo.optimization.splitChunks({
+      chunks: "all",
+      cacheGroups: {
+        ...chartSupportCacheGroups(),
+        charts: {
+          test: /[\\/]node_modules[\\/](?:@antv[\\/]|@ant-design[\\/]plots[\\/])/,
+          name: "charts",
+          priority: 22,
+          enforce: true,
+        },
+      },
+    });
   },
   define: {
     "import.meta.env": JSON.stringify(viteEnv),

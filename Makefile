@@ -208,7 +208,7 @@ lint-fix: ## Auto-fix lint issues
 
 typecheck: ## Run type checking
 	@echo "$(CYAN)Type checking Python...$(RESET)"
-	cd $(API_DIR) && mypy src/soymutdb/
+	cd $(API_DIR) && mypy app/
 	@echo "$(CYAN)Type checking TypeScript...$(RESET)"
 	pnpm --filter @soymutdb/web typecheck
 	pnpm --filter @soymutdb/admin typecheck

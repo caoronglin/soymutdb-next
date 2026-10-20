@@ -62,7 +62,8 @@
   ],
   "devDependencies": {
     "typescript": "5.9.3",
-    "vitest": "3.2.7"
+    "vitest": "catalog:",
+    "@types/node": "^26.6.5"
   },
   "scripts": {
     "test": "vitest run",

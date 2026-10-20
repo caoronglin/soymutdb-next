@@ -8,6 +8,7 @@
 | 想知道 | 读这份 |
 | --- | --- |
 | 现在到底是什么状态（门禁数字、红灯、缺口） | [`dev/project-status.md`](dev/project-status.md) |
+| 2026-10-17 非 Docker 验收、真实服务演练与剩余生产边界 | [`dev/native-validation-20261017.md`](dev/native-validation-20261017.md) |
 | 改代码前的双基线、需求判据、七维复审 | [`aegis/baseline/2026-10-01-react-only-baseline.md`](aegis/baseline/2026-10-01-react-only-baseline.md) |
 | 全部设计与计划的整合视图与待决项 | [`3.9升级优化文档.md`](3.9升级优化文档.md) |
 | 2026-10-02 优化/消融设计草稿的审计结论与执行前修订项 | [`dev/design-audit-2026-10-02.md`](dev/design-audit-2026-10-02.md) |

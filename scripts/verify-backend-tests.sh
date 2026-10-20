@@ -70,6 +70,19 @@ step "Backend import-direction and cycle guard"
 "${VENV_PYTHON}" scripts/check_architecture.py --self-test
 "${VENV_PYTHON}" scripts/check_architecture.py
 
+step "Retired ClickHouse lane import-boundary guard"
+# The retired service is documented as a migration/test surface only. This gate
+# proves the Python import graph agrees; the Compose side is covered by
+# scripts/test_native_compose_cutover_contracts.py.
+"${VENV_PYTHON}" scripts/check_retired_lane_boundaries.py --self-test
+"${VENV_PYTHON}" scripts/check_retired_lane_boundaries.py
+
+step "Deprecated-API ratchet"
+# apps/api blanket-ignores DeprecationWarning, so this ratchet is the only
+# thing that notices a newly deprecated upstream API.
+"${VENV_PYTHON}" scripts/check_deprecated_api_usage.py --self-test
+"${VENV_PYTHON}" scripts/check_deprecated_api_usage.py
+
 step "Shared job contract pytest"
 # packages/jobs-py is the canonical owner of the job payloads, the status
 # machine and the protein-FASTA submission contract. Both the API and the
@@ -90,9 +103,8 @@ step "Worker test package marker (cross-module imports must resolve)"
 "${VENV_PYTHON}" scripts/check_worker_test_package.py
 
 step "Worker analysis dependencies"
-# Install the worker dev extra too: the import finalize/staging protocol is
-# accepted against a real embedded ClickHouse (`chdb`), which lives in the
-# worker's dev extra and runs in this shared venv. The shared bootstrap
+# Install the native worker dev extra. Historical embedded ClickHouse tests
+# run in the mandatory Python 3.14 clickhouse-migration lane. The shared bootstrap
 # installs the editable workspace distributions (packages/jobs-py,
 # packages/import-protocol) first, because pip cannot fetch the import protocol
 # from PyPI.

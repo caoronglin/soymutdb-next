@@ -152,7 +152,6 @@ emmax -v -h  # 验证
 | `SOYMUTDB_GWAS_MAX_INPUT_SIZE` | `524288000` | 单输入文件上限（字节） |
 | `SOYMUTDB_GWAS_MAX_OUTPUT_SIZE` | `536870912` | 单输出文件上限（字节） |
 | `SOYMUTDB_S3_GWAS_BUCKET` | `gwas` | MinIO 桶（输入 `gwas/{job}/input/`，输出 `gwas/{job}/output/`） |
-| `SOYMUTDB_GWAS_MAX_ATTEMPTS` | `3` | API 侧投递重试上限 |
 
 MinIO 桶需预创建（`mc mb gwas` 或 compose 初始化脚本），API 与 worker
 共享同一 S3 配置。

@@ -22,6 +22,10 @@ describe("safeRedirect", () => {
     expect(safeRedirect("/genes\u0000")).toBe("/");
   });
 
+  it.each([0x1f, 0x7f, 0x80, 0x85, 0x9f])("rejects C0, DEL and C1 code point %i", (code) => {
+    expect(safeRedirect(`/genes${String.fromCharCode(code)}`)).toBe("/");
+  });
+
   it("falls back to the home path for missing or non-string values", () => {
     expect(safeRedirect(undefined)).toBe("/");
     expect(safeRedirect(null)).toBe("/");

@@ -7,10 +7,21 @@
 # after tree-shaking; every emitted group is still size-checked. Initial scripts
 # referenced by index.html and every individual JS asset have independent caps.
 #
+# A cache-group budget measures ONE named chunk, which under-reports the chart
+# engine: during the ECharts -> AntV transition the engine also landed in an
+# unnamed vendor chunk (lodash, html2canvas, gl-matrix, d3-*) and partly in `ui`.
+# The complete chart dependency cost is therefore gated separately, by
+# scripts/chart_closure_budget.py, over the manifest that
+# scripts/webpack/chart-closure-plugin.cjs writes during the build. It walks the
+# real moduleGraph closure of packages/charts/src/index.ts and charges every JS
+# chunk carrying it at its full actual gzip. That step is mandatory: there is no
+# flag that turns it off, because a chart budget that can be skipped is not one.
+#
 # Usage: bash scripts/check-bundle-size.sh [dist/assets directory]
 # =============================================================================
 set -euo pipefail
 
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="${1:-apps/web/dist/external/assets}"
 ARTIFACT_ROOT="$(cd "$(dirname "$DIST_DIR")" && pwd)"
 INDEX_HTML="${ARTIFACT_ROOT}/index.html"
@@ -163,8 +174,21 @@ for file in "${JS_ASSETS[@]}"; do
   fi
 done
 
+# Complete chart dependency closure. Runs against the built tree, resolves its
+# own manifest through the shared dist -> manifest table, and exits non-zero on
+# schema / path-safety / seed / attribution / engine-census / budget failure.
+# `lazy` vs `initial` is reported as INFO here; it is not a separate budget.
+printf 'Umi chart closure budgets (gzip recomputed from the built tree): dist=%s\n' "$ARTIFACT_ROOT"
+# Its exit code folds into the same `fail` flag as every other budget here, so a
+# single run still prints the whole picture before failing. That is not an escape
+# hatch: the script still exits non-zero, and the gate has no skip flag.
+if ! python3 "${REPO_ROOT}/scripts/chart_closure_budget.py" --dist "$ARTIFACT_ROOT"; then
+  fail=1
+fi
+
 if [[ "$fail" -ne 0 ]]; then
-  echo "Umi bundle check: FAILED — split or optimize the oversized bundle(s)" >&2
+  echo "Umi bundle check: FAILED — split or optimize the oversized bundle(s), or read the failing gate above" >&2
   exit 1
 fi
+
 echo "Umi bundle check: OK"

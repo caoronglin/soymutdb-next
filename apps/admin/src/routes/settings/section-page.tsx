@@ -21,6 +21,22 @@ interface SettingsDomainPageProps {
   children?: ReactNode;
 }
 
+/**
+ * The two domains whose variant-specific content still lives only in the legacy
+ * complete form point at it. Both sentences wrap one link, so each is stored as
+ * the fragment before it and the fragment after it.
+ */
+const VARIANT_NOTICE: Partial<Record<SettingsDomain, { before: string; after: string }>> = {
+  site: {
+    before: "Variant-specific site content remains available in the ",
+    after: " while its local editor is extracted.",
+  },
+  localization: {
+    before: "Site-variant content selection remains available in the ",
+    after: " while its editor is extracted.",
+  },
+};
+
 export function SettingsDomainPage({ domain, children }: SettingsDomainPageProps) {
   const { t } = useTranslation();
   const meta = SETTINGS_DOMAIN_META[domain];
@@ -46,8 +62,22 @@ export function SettingsDomainPage({ domain, children }: SettingsDomainPageProps
     >
       <div className="space-y-4">
         {domain === "appearance" ? <AppearanceSettingsForm /> : domain === "site" ? <SiteSettingsForm /> : domain === "localization" ? <LocalizationSettingsForm /> : domain === "security" ? <SecuritySettingsForm /> : <SettingsPage domain={domain} />}
-        {domain === "site" ? <p className="text-sm text-muted-foreground">Variant-specific site content remains available in the <Link to="/settings/legacy" className="text-primary hover:underline">complete settings form</Link> while its local editor is extracted.</p> : null}
-        {domain === "localization" ? <p className="text-sm text-muted-foreground">Site-variant content selection remains available in the <Link to="/settings/legacy" className="text-primary hover:underline">complete settings form</Link> while its editor is extracted.</p> : null}
+        {VARIANT_NOTICE[domain] ? (
+          // One sentence around a link, so it is split into a leading and a
+          // trailing fragment. Both are locale keys: this paragraph used to be
+          // hardcoded English, which left it untranslated in a zh console.
+          <p className="text-sm text-muted-foreground">
+            {t(`admin.settings.domains.${domain}.variantNoticeBefore`, {
+              defaultValue: VARIANT_NOTICE[domain]?.before,
+            })}
+            <Link to="/settings/legacy" className="text-primary hover:underline">
+              {t("admin.settings.completeForm", { defaultValue: "complete settings form" })}
+            </Link>
+            {t(`admin.settings.domains.${domain}.variantNoticeAfter`, {
+              defaultValue: VARIANT_NOTICE[domain]?.after,
+            })}
+          </p>
+        ) : null}
         {children}
         <SettingsRevisionHistory sections={translatedSections} />
       </div>

@@ -5,6 +5,9 @@
  * frozen shared UI components. TanStack Query data flow and zod
  * validation logic unchanged.
  *
+ * The recent-jobs list is a native <ul>/<li>: AntD 6 deprecated List and the
+ * rows are plain markup, so no AntD replacement component is involved.
+ *
  * Completed jobs expose a hits table (GET /blast/jobs/{id}/hits) with an
  * actions column: "JBrowse 2" opens /browser at the hit's subject coordinates
  * (new tab) and "Gene search" deep-links /search/genes?q=<subject id>.
@@ -21,7 +24,7 @@ import {
   Empty,
   Form,
   Input,
-  List,
+  Result,
   Select,
   Skeleton,
   Table,
@@ -197,7 +200,7 @@ function BlastComponent() {
     databasesQuery.isLoading
       ? [{ value: "__loading__", label: get("ui.loading", t("common.loading")), disabled: true }]
       : activeDatabases.length === 0
-        ? [{ value: "__empty__", label: get("ui.noResults", "No databases available"), disabled: true }]
+        ? [{ value: "__empty__", label: get("ui.noResults", t("blast.noDatabases")), disabled: true }]
         : activeDatabases.map((d) => ({
             value: String(d.id),
             label: (
@@ -458,6 +461,7 @@ function BlastComponent() {
       width: 180,
       render: (_, hit) => {
         const geneId = hitSubjectId(hit);
+        const assembly = selectedJob ? assemblyForJob(selectedJob) : undefined;
         // The identifier is shown whole. It used to go through
         // `compactGeneId(geneId, 18)`, which cut `Glyma.066015200`-length and
         // longer accessions with an ellipsis — the one string on this row a
@@ -468,12 +472,12 @@ function BlastComponent() {
             size="small"
             className="h-auto whitespace-normal break-all py-1 text-left font-mono text-xs"
             title={geneId ?? undefined}
-            disabled={!geneId}
+            disabled={!geneId || !assembly}
             onClick={() => {
-              if (!geneId) return;
+              if (!geneId || !assembly) return;
               navigate({
                 to: "/search/genes",
-                search: { q: geneId, run: true },
+                search: { q: geneId, assembly, run: true },
               });
             }}
           >
@@ -680,10 +684,12 @@ function BlastComponent() {
           ) : jobs.length === 0 ? (
             <Empty description={get("ui.noResults", t("blast.noJobs"))} />
           ) : (
-            <List<BlastJob>
-              dataSource={jobs}
-              renderItem={(job) => (
-                <List.Item key={job.id}>
+            // Native <ul>/<li> rather than AntD 6's deprecated List. The
+            // empty state is the sibling branch above, so this list is only
+            // reached with at least one job.
+            <ul className="m-0 list-none p-0">
+              {jobs.map((job) => (
+                <li key={job.id} className="py-3">
                   <div className="flex w-full items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-mono text-xs">{job.id.slice(0, 12)}…</p>
@@ -707,9 +713,9 @@ function BlastComponent() {
                       ) : null}
                     </div>
                   </div>
-                </List.Item>
-              )}
-            />
+                </li>
+              ))}
+            </ul>
           )}
         </Card>
 
@@ -727,6 +733,18 @@ function BlastComponent() {
           >
             {hitsQuery.isLoading ? (
               <Skeleton active paragraph={{ rows: 4 }} title={false} />
+            ) : hitsQuery.isError ? (
+              <div role="alert">
+                <Result
+                  status="error"
+                  title={t("blast.hitsLoadError")}
+                  extra={
+                    <Button loading={hitsQuery.isFetching} onClick={() => void hitsQuery.refetch()}>
+                      {t("common.retry")}
+                    </Button>
+                  }
+                />
+              </div>
             ) : hits.length === 0 ? (
               <Empty description={get("ui.noResults", t("blast.noHits"))} />
             ) : (

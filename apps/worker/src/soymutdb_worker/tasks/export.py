@@ -15,10 +15,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from celery import Task
+from sqlalchemy import text
 
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
-from soymutdb_worker.tasks.ingest import get_clickhouse_client
+from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.s3 import (
     delete_object,
     generate_presigned_url,
@@ -61,7 +62,7 @@ EXPORT_COLUMNS = [
     # Public gene/mutant locators (never the surrogate keys).
     "gene_id",
     "gene_symbol",
-    "mutant_line_name",
+    "mutant_public_id",
     "hgvs_c",
     "hgvs_p",
     "read_depth",
@@ -70,7 +71,7 @@ EXPORT_COLUMNS = [
 
 #: Columns that must never appear in a published export artifact.
 FORBIDDEN_EXPORT_COLUMNS = frozenset(
-    {"gene_surrogate_id", "mutant_line_surrogate_id"}
+    {"gene_surrogate_id", "mutant_line_surrogate_id", "mutant_line_name"}
 )
 
 if FORBIDDEN_EXPORT_COLUMNS.intersection(EXPORT_COLUMNS):  # pragma: no cover
@@ -81,80 +82,63 @@ if FORBIDDEN_EXPORT_COLUMNS.intersection(EXPORT_COLUMNS):  # pragma: no cover
 
 
 def build_export_query(filters: dict) -> tuple[str, dict]:
-    """Build a parameterised ClickHouse query from export filters.
+    """Build a native PostgreSQL query restricted to released public records.
 
-    All user values are bound via ``%(name)s`` placeholders — never
+    All user values are bound via ``:name`` placeholders — never
     interpolated into the SQL string.
     """
-    conditions: list[str] = []
-    params: dict = {}
-
-    if filters.get("release_key"):
-        conditions.append("release_key = %(release_key)s")
-        params["release_key"] = filters["release_key"]
-
-    if filters.get("assembly"):
-        conditions.append("assembly_key = %(assembly)s")
-        params["assembly"] = filters["assembly"]
-
-    if filters.get("chromosome"):
-        conditions.append("chromosome = %(chromosome)s")
-        params["chromosome"] = filters["chromosome"]
-
-    if filters.get("start") is not None:
-        conditions.append("position >= %(start)s")
-        params["start"] = filters["start"]
-
-    if filters.get("end") is not None:
-        conditions.append("position <= %(end)s")
-        params["end"] = filters["end"]
-
-    if filters.get("ref"):
-        conditions.append("ref_allele = %(ref)s")
-        params["ref"] = filters["ref"]
-
-    if filters.get("alt"):
-        conditions.append("alt_allele = %(alt)s")
-        params["alt"] = filters["alt"]
-
-    if filters.get("gene_id"):
-        conditions.append("gene_id = %(gene_id)s")
-        params["gene_id"] = filters["gene_id"]
-
-    if filters.get("mutant_line_id"):
-        conditions.append("mutant_line_surrogate_id = %(ml_id)s")
-        params["ml_id"] = filters["mutant_line_id"]
-
-    if filters.get("variant_type"):
-        conditions.append("variant_type = %(vtype)s")
-        params["vtype"] = filters["variant_type"]
-
-    if filters.get("consequence"):
-        conditions.append("consequence = %(consequence)s")
-        params["consequence"] = filters["consequence"]
-
-    if filters.get("impact"):
-        conditions.append("impact = %(impact)s")
-        params["impact"] = filters["impact"]
-
-    if filters.get("min_af") is not None:
-        conditions.append("allele_frequency >= %(min_af)s")
-        params["min_af"] = filters["min_af"]
-
-    if filters.get("max_af") is not None:
-        conditions.append("allele_frequency <= %(max_af)s")
-        params["max_af"] = filters["max_af"]
-
-    where = " AND ".join(conditions) if conditions else "1=1"
-
-    query = f"""
-    SELECT
-        {", ".join(EXPORT_COLUMNS)}
-    FROM variant_facts
-    WHERE {where}
-    ORDER BY chromosome, position, variant_id
-    """
+    release = filters.get("release_key")
+    try:
+        release_id = int(release)
+    except (ValueError, TypeError) as error:
+        raise ValueError("A resolved release identity is required for public export") from error
+    if release_id < 1:
+        raise ValueError("A positive release identity is required for public export")
+    conditions = ["v.release_id = :release_id", "r.status = 'published'",
+                  "(v.mutant_line_name = '' OR ml.public_id IS NOT NULL)"]
+    params = {"release_id": release_id}
+    for field, column in (
+        ("assembly", "assembly_key"), ("chromosome", "chromosome"),
+        ("ref", "ref_allele"), ("alt", "alt_allele"), ("gene_id", "gene_id"),
+        ("mutant_line_id", "mutant_line_surrogate_id"),
+        ("variant_type", "variant_type"), ("consequence", "consequence"), ("impact", "impact"),
+    ):
+        value = filters.get(field)
+        if value is not None:
+            conditions.append(f"v.{column} = :{field}")
+            params[field] = getattr(value, "value", value)
+    for field, column, operator in (
+        ("start", "position", ">="), ("end", "position", "<="),
+        ("min_af", "allele_frequency", ">="), ("max_af", "allele_frequency", "<="),
+    ):
+        if filters.get(field) is not None:
+            conditions.append(f"v.{column} {operator} :{field}")
+            params[field] = filters[field]
+    columns = [
+        "CAST(v.release_id AS text) AS release_key" if name == "release_key" else
+        "ml.public_id AS mutant_public_id" if name == "mutant_public_id" else f"v.{name}"
+        for name in EXPORT_COLUMNS
+    ]
+    query = (
+        "SELECT " + ", ".join(columns) + " FROM variant_facts v "
+        "JOIN releases r ON r.id = v.release_id "
+        "LEFT JOIN mutant_lines ml ON ml.name = v.mutant_line_name "
+        "AND ml.release_id = v.release_id AND ml.is_public = true "
+        "AND ml.is_deleted = false AND ml.public_id IS NOT NULL "
+        "WHERE " + " AND ".join(conditions)
+        + " ORDER BY v.assembly_key, v.chromosome, v.position, v.variant_id "
+        "LIMIT :record_limit"
+    )
+    params["record_limit"] = MAX_RECORDS_EXPORT + 1
     return query, params
+
+
+def _bounded_rows(rows, export_id):
+    """A private temporary file may be partial; no over-budget artifact is uploaded."""
+    for number, row in enumerate(rows, start=1):
+        if number > MAX_RECORDS_EXPORT:
+            raise ValueError(f"Export {export_id} exceeds the {MAX_RECORDS_EXPORT} record budget")
+        yield row
 
 
 def _open_output(path: Path, compress: bool):
@@ -165,7 +149,7 @@ def _open_output(path: Path, compress: bool):
 
 
 def _record(row) -> dict:
-    """Map a ClickHouse row tuple onto EXPORT_COLUMNS by name.
+    """Map a PostgreSQL row tuple onto EXPORT_COLUMNS by name.
 
     Writers address columns by name rather than by position so a reorder of
     EXPORT_COLUMNS cannot silently mislabel a published artifact.
@@ -283,7 +267,6 @@ def export_variants(
 
     logger.info("Starting export %s: %s format", export_id, format)
 
-    ch = get_clickhouse_client()
     query, params = build_export_query(filters)
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -294,21 +277,6 @@ def export_variants(
             filename += ".gz"
         output_path = tmpdir_path / filename
 
-        result = ch.query(query, parameters=params)
-        rows = result.result_rows
-
-        # Fail closed on an over-budget export. MAX_RECORDS_EXPORT was declared
-        # but never enforced, so a broad filter could materialise an unbounded
-        # result set in the worker. The cap is checked before any bytes are
-        # written so the job fails loudly instead of producing a partial file
-        # that looks complete.
-        if len(rows) > MAX_RECORDS_EXPORT:
-            raise ValueError(
-                f"Export {export_id} matched {len(rows)} records, which exceeds "
-                f"the {MAX_RECORDS_EXPORT} record budget; narrow the filters "
-                "(chromosome/region/impact) and resubmit."
-            )
-
         # Provenance stamped on the artifact itself (VCF/BED headers and every
         # row of the tabular formats).
         provenance = {
@@ -317,25 +285,29 @@ def export_variants(
         }
 
         record_count = 0
-        output_file = _open_output(output_path, compress)
-        try:
-            if format == "tsv":
-                record_count = _write_tsv_csv(output_file, rows, "\t")
-            elif format == "csv":
-                record_count = _write_tsv_csv(output_file, rows, ",")
-            elif format == "vcf":
-                record_count = _write_vcf(output_file, rows, provenance)
-            elif format == "bed":
-                record_count = _write_bed(output_file, rows)
-            elif format == "json":
-                record_count = _write_json(output_file, rows)
-
-            self.update_state(
-                state="PROGRESS",
-                meta={"records": record_count},
-            )
-        finally:
-            output_file.close()
+        with get_db() as session:
+            session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
+            # Psycopg's server cursor bounds memory independently of result size.
+            result = session.execute(text(query), params, execution_options={
+                "stream_results": True, "yield_per": 1000,
+            })
+            rows = _bounded_rows(result, export_id)
+            output_file = _open_output(output_path, compress)
+            try:
+                if format == "tsv":
+                    record_count = _write_tsv_csv(output_file, rows, "\t")
+                elif format == "csv":
+                    record_count = _write_tsv_csv(output_file, rows, ",")
+                elif format == "vcf":
+                    record_count = _write_vcf(output_file, rows, provenance)
+                elif format == "bed":
+                    record_count = _write_bed(output_file, rows)
+                elif format == "json":
+                    record_count = _write_json(output_file, rows)
+                self.update_state(state="PROGRESS", meta={"records": record_count})
+            finally:
+                output_file.close()
+                result.close()
 
         file_size = output_path.stat().st_size
 

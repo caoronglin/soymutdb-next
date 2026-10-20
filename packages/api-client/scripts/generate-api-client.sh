@@ -12,10 +12,11 @@ set -euo pipefail
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$PKG_DIR/../.." && pwd)"
 API_DIR="$REPO_ROOT/apps/api"
+API_PYTHON="${SOYMUTDB_API_PYTHON:-$API_DIR/.venv/bin/python}"
 
 echo ">> exporting OpenAPI from backend..."
 export PYTHONPATH="$REPO_ROOT"
-"$API_DIR/.venv/bin/python" "$API_DIR/scripts/export_openapi.py" \
+"$API_PYTHON" "$API_DIR/scripts/export_openapi.py" \
   --output "$PKG_DIR/openapi.json" \
   --error-codes-output "$PKG_DIR/error-codes.json"
 

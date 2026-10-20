@@ -27,10 +27,12 @@
 # Usage
 #   bash scripts/compose-local.sh build                 # build the 8 images
 #   bash scripts/compose-local.sh up -d                 # start the whole stack
-#   bash scripts/compose-local.sh up -d postgres clickhouse redis minio
+#   bash scripts/compose-local.sh up -d postgres redis minio
 #   bash scripts/compose-local.sh down
 #   bash scripts/compose-local.sh ps
 #   bash scripts/compose-local.sh --tag 2026.09.12 up -d
+#   SOYMUTDB_LOCAL_LEGACY_CLICKHOUSE=1 \
+#     bash scripts/compose-local.sh up -d              # + the legacy source overlay
 #
 # Env
 #   SOYMUTDB_LOCAL_IMAGE_TAG   tag for the locally built images (default: local)
@@ -43,7 +45,16 @@
 #                              at all.
 #   SOYMUTDB_LOCAL_PROFILES    comma-separated Compose profiles (default: the
 #                              shell COMPOSE_PROFILES, else the env file's
-#                              COMPOSE_PROFILES, else `core`)
+#                              COMPOSE_PROFILES, else `core`). `legacy-migration`
+#                              is never part of the default list.
+#   SOYMUTDB_LOCAL_LEGACY_CLICKHOUSE
+#                              1 loads docker-compose.legacy-clickhouse.yml and
+#                              enables the `legacy-migration` profile, i.e. the
+#                              explicit historical ClickHouse source used only for
+#                              a native_backfill run. The default topology has no
+#                              ClickHouse service, so the wrapper supplies
+#                              CLICKHOUSE_PASSWORD and MIGRATE_CLICKHOUSE_IMAGE_REF
+#                              only in this mode.
 #   SOYMUTDB_CI_DOCKER_BUILD_EXTRA_ARGS
 #                              extra `docker build` flags (e.g. --cache-from)
 # =============================================================================
@@ -155,16 +166,31 @@ set_local_compose_defaults() {
   set_compose_default API_IMAGE_REF "${API_IMAGE}"
   set_compose_default WORKER_IMAGE_REF "${WORKER_IMAGE}"
   set_compose_default MIGRATE_IMAGE_REF "${MIGRATE_IMAGE}"
-  set_compose_default MIGRATE_CLICKHOUSE_IMAGE_REF "${MIGRATE_CLICKHOUSE_IMAGE}"
   set_compose_default MCP_IMAGE_REF "${MCP_IMAGE}"
   set_compose_default JBROWSE_IMAGE_REF "soymutdb-jbrowse:${IMAGE_TAG}"
   set_compose_default POSTGRES_PASSWORD soymutdb_dev_password
-  set_compose_default CLICKHOUSE_PASSWORD soymutdb_dev_password
   set_compose_default REDIS_PASSWORD soymutdb_dev_password
   set_compose_default MINIO_ROOT_USER soymutdb_dev
   set_compose_default MINIO_ROOT_PASSWORD soymutdb_dev_password
   set_compose_default GRAFANA_PASSWORD soymutdb_dev_password
   set_compose_default SOYMUTDB_MCP_API_TOKEN soymutdb_dev_mcp_token
+  # ClickHouse is not part of the native topology: the two names below are read
+  # exclusively by docker-compose.legacy-clickhouse.yml, so a default run must
+  # not invent a credential for a service it never starts.
+  if legacy_clickhouse_enabled; then
+    set_compose_default MIGRATE_CLICKHOUSE_IMAGE_REF "${MIGRATE_CLICKHOUSE_IMAGE}"
+    set_compose_default CLICKHOUSE_PASSWORD soymutdb_dev_password
+  fi
+}
+
+# The legacy ClickHouse source is opt-in and never part of the default profile
+# list: it exists to serve a native_backfill run, and loading it silently would
+# put a historical database back into a stack that no longer depends on it.
+legacy_clickhouse_enabled() {
+  case "${SOYMUTDB_LOCAL_LEGACY_CLICKHOUSE:-0}" in
+    1|true|TRUE|yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # Resolve the explicit `--profile` flags. Precedence, highest first:
@@ -190,7 +216,16 @@ compose() {
   file="$(env_file)"
   set_local_compose_defaults "${file}"
   local profiles
+  local -a overlay_args=()
   profiles="$(resolve_profiles)"
+  if legacy_clickhouse_enabled; then
+    # The overlay carries the historical ClickHouse source and the old schema
+    # migrator. It is loaded only on request, and its `legacy-migration` profile
+    # is appended to the resolved list, so the flags and the exported
+    # COMPOSE_PROFILES describe the same stack.
+    profiles="${profiles},legacy-migration"
+    overlay_args=(-f "${REPO_ROOT}/docker-compose.legacy-clickhouse.yml")
+  fi
   # Mask any COMPOSE_PROFILES in the env file: the shell environment wins, so
   # Compose enables exactly the list resolved above (see resolve_profiles).
   export COMPOSE_PROFILES="${profiles}"
@@ -202,6 +237,7 @@ compose() {
     -f "${REPO_ROOT}/docker-compose.yml"
     -f "${REPO_ROOT}/docker-compose.local.yml"
   )
+  args+=("${overlay_args[@]}")
   local profile
   IFS=',' read -r -a profile_list <<< "${profiles}"
   for profile in "${profile_list[@]}"; do

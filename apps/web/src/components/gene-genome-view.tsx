@@ -129,7 +129,7 @@ export function GeneGenomeView({
     [token],
   );
 
-  const transcripts = gene.transcripts ?? [];
+  const transcripts = React.useMemo(() => gene.transcripts ?? [], [gene.transcripts]);
   /** Only worth its own lane once there is more than the gene body itself. */
   const showTranscriptLane = transcripts.length > 1;
 

@@ -2,6 +2,8 @@
 
 > **已归档（2026-10-01）**：一次性任务笔记与旧状态视图（结论已进入现状视图与计划）。继任：docs/dev/project-status.md；任务级进度见 `docs/aegis/plans/`。仅供历史审计，**不得作为现状引用**；归档清单见 [`docs/ARCHIVE.md`](../ARCHIVE.md)。
 
+> **2026-10-18 现状注记**：本设计已落地，下文 Scope/Compatibility 的“currently carries one decimal offset cursor”是 2026-10-01 设计时状态。当前 `SearchService.global_search()` 对新搜索签发 sealed v1 cursor、按 source 各自续页，同时继续接受 legacy 十进制 cursor 以保留 offset 语义；见 `apps/api/app/services/search_service.py:102-128`、`apps/api/tests/test_search_keyset.py`（7 项）与 `apps/api/tests/test_search_database_integration.py:120`。
+
 ## Scope
 
 `SearchService.global_search()` currently carries one decimal offset cursor across every queried source. This is sufficient for shallow continuation but has offset cost and cannot represent an independent stable position for each result type. This document specifies a backwards-compatible keyset continuation migration.

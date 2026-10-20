@@ -21,6 +21,16 @@ Design notes:
   strings, but prefer the header for non-browser clients.
 - The stream terminates when the client disconnects (checked every poll
   cycle; the generator is also cancelled by the ASGI server).
+- **The stream never holds a pooled database connection.**  FastAPI closes
+  the request-scoped session only *after* the response body has been
+  produced — up to 30 minutes for this endpoint — so polling through that
+  session would pin one of the few pooled connections (``db_pool_size`` +
+  ``db_max_overflow``; 5 per API worker in production) for the whole
+  stream.  Five anonymous ``GET /jobs/events`` connections would then
+  exhaust one worker's pool and every other request would block for
+  ``db_pool_timeout``.  Every poll cycle therefore opens its own
+  short-lived session and closes it again before the stream sleeps, and the
+  request-scoped session is released before the stream starts.
 """
 
 from __future__ import annotations
@@ -29,6 +39,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
@@ -37,7 +48,7 @@ from sqlalchemy import String, cast, func, literal, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from structlog import get_logger
 
-from ...core.database import get_db
+from ...core.database import get_db, get_session_factory
 from ...models.analysis_job import AnalysisJob
 from ...models.auth import User
 from ...models.blast import BlastJob
@@ -56,6 +67,10 @@ _UPDATE_WINDOW_SECONDS = 30
 _MAX_EVENTS_PER_CYCLE = 100
 #: Bound a polling connection so abandoned clients cannot hold a DB task forever.
 _MAX_STREAM_SECONDS = 30 * 60
+#: Minimum delay between two consecutive poll-error logs.  A database that
+#: stays unreachable must not produce one traceback every 2 seconds for the
+#: whole 30-minute lifetime of the stream.
+_POLL_ERROR_LOG_INTERVAL_SECONDS = 60.0
 
 
 def _blast_updated_at():
@@ -90,7 +105,7 @@ async def get_optional_sse_user(
 
 
 async def _recent_job_updates(
-    db: AsyncSession, user: User | None
+    db: AsyncSession, user_id: UUID | None
 ) -> list[dict]:
     """Return the user's jobs updated in the trailing 30s window.
 
@@ -101,9 +116,9 @@ async def _recent_job_updates(
     since = datetime.now(timezone.utc) - timedelta(seconds=_UPDATE_WINDOW_SECONDS)  # noqa: UP017
 
     def user_condition(user_id_column):
-        if user is None:
+        if user_id is None:
             return user_id_column.is_(None)
-        return user_id_column == user.id
+        return user_id_column == user_id
 
     # `status` has a different physical type per table (varchar on blast_jobs,
     # `analysis_job_status_enum` on analysis_jobs), and PostgreSQL refuses to
@@ -159,6 +174,59 @@ async def _recent_job_updates(
     ]
 
 
+async def _rollback_session(session: AsyncSession) -> None:
+    """Roll a session's transaction back, ignoring failures.
+
+    An aborted transaction poisons every later request that reuses the
+    pooled connection, so the rollback is not optional after a failed
+    statement.
+    """
+    try:
+        await session.rollback()
+    except Exception:
+        logger.warning("jobs_events_rollback_failed", exc_info=True)
+
+
+async def _poll_job_updates(user_id: UUID | None) -> list[dict]:
+    """Return the user's recent job updates for a single poll cycle.
+
+    The SSE response outlives the request that created it: FastAPI closes
+    the request-scoped session only *after* the response body has been
+    produced — up to 30 minutes for this endpoint — so polling through
+    that session would pin one of the few pooled connections
+    (``db_pool_size`` + ``db_max_overflow``) for the whole stream.
+
+    Every cycle therefore opens its own short-lived session on the pooled
+    engine and closes it again as soon as the query is done: the
+    connection is back in the pool before the stream sleeps, and a single
+    client never holds more than one connection.
+    """
+    factory = get_session_factory()
+    async with factory() as session:
+        try:
+            return await _recent_job_updates(session, user_id)
+        except Exception:
+            # The failed statement aborted the transaction.  Roll it back
+            # so the connection is handed back to the pool in a clean state
+            # (an aborted transaction poisons every later request that
+            # reuses it).  The session is discarded either way, so the next
+            # cycle starts from a fresh, usable transaction.
+            await _rollback_session(session)
+            raise
+
+
+async def _release_pooled_connection(db: AsyncSession) -> None:
+    """Return the request-scoped session's pooled connection to the pool.
+
+    The optional token lookup reads a user row and therefore checks a
+    connection out of the pool.  FastAPI closes the request-scoped session
+    only after the response body has been produced — up to 30 minutes for
+    an SSE stream — so the connection is released here, before the stream
+    starts.  The lookup is read-only, so ending its transaction is safe.
+    """
+    await _rollback_session(db)
+
+
 @router.get("/events")
 async def job_events(
     request: Request,
@@ -178,19 +246,48 @@ async def job_events(
     disconnects.
     """
 
+    # The stream polls on its own short-lived sessions; the request-scoped
+    # session (used by the optional auth lookup) must not keep its pooled
+    # connection while the stream is running.
+    # Rollback expires ORM attributes, including the primary key, even with
+    # expire_on_commit=False. Carry only the scalar identity into the stream.
+    user_id = user.id if user is not None else None
+    await _release_pooled_connection(db)
+
     async def event_stream() -> AsyncIterator[str]:
-        deadline = asyncio.get_running_loop().time() + _MAX_STREAM_SECONDS
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + _MAX_STREAM_SECONDS
+        failed_cycles = 0
+        last_error_log = 0.0
         try:
-            while asyncio.get_running_loop().time() < deadline:
+            while loop.time() < deadline:
                 if await request.is_disconnected():
                     return
                 try:
-                    updates = await _recent_job_updates(db, user)
+                    updates = await _poll_job_updates(user_id)
                 except Exception:
-                    # A transient query failure must not kill the stream;
-                    # skip this cycle and try again on the next poll.
-                    logger.exception("jobs_events_poll_error")
+                    # A transient query failure must not kill the stream:
+                    # the cycle ran on its own session, so the next cycle
+                    # starts from a clean transaction and can recover.
+                    failed_cycles += 1
+                    now = loop.time()
+                    if (
+                        failed_cycles == 1
+                        or now - last_error_log >= _POLL_ERROR_LOG_INTERVAL_SECONDS
+                    ):
+                        # Rate-limited: a database that stays down would
+                        # otherwise log one traceback every 2 seconds for
+                        # the whole 30-minute lifetime of the stream.
+                        logger.exception(
+                            "jobs_events_poll_error",
+                            failed_cycles=failed_cycles,
+                        )
+                        last_error_log = now
                     updates = []
+                else:
+                    if failed_cycles:
+                        logger.info("jobs_events_poll_recovered", failed_cycles=failed_cycles)
+                        failed_cycles = 0
 
                 if updates:
                     for update in updates:

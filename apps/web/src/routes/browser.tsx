@@ -362,7 +362,15 @@ function BrowserComponent() {
                                 {t("browser.back")}
                             </Button>
                         )}
-                        <Button type="default" size="small" href={newTabSrc} target="_blank" rel="noopener noreferrer" icon={<ExternalLink className="size-4" aria-hidden />}>
+                        {/*
+                          `browser-open-new-tab` is the canonical new-tab link for the
+                          embed contract (asserted by e2e/tests/portal-browser-embed.spec.ts:
+                          the standalone shell URL must stay free of internal identifiers).
+                          The timeout/error overlays below render the same link but carry
+                          their own distinct ids, so this testid is never duplicated in
+                          the DOM.
+                        */}
+                        <Button type="default" size="small" data-testid="browser-open-new-tab" href={newTabSrc} target="_blank" rel="noopener noreferrer" icon={<ExternalLink className="size-4" aria-hidden />}>
                             {t("browser.openInNewTab")}
                         </Button>
                     </div>
@@ -462,7 +470,10 @@ function BrowserComponent() {
                                     <Button type="default" size="small" onClick={handleRetry} icon={<Loader2 className="size-4" aria-hidden />}>
                                         {t("browser.retry")}
                                     </Button>
-                                    <Button type="default" size="small" href={newTabSrc} target="_blank" rel="noopener noreferrer" icon={<ExternalLink className="size-4" aria-hidden />}>
+                                    {/* Distinct id from the header `browser-open-new-tab`:
+                                        this copy only exists in the timeout state, which the
+                                        embed spec treats as a hard failure. */}
+                                    <Button type="default" size="small" data-testid="browser-open-new-tab-timeout" href={newTabSrc} target="_blank" rel="noopener noreferrer" icon={<ExternalLink className="size-4" aria-hidden />}>
                                         {t("browser.openInNewTab")}
                                     </Button>
                                 </div>
@@ -486,7 +497,10 @@ function BrowserComponent() {
                                     <Button type="default" size="small" onClick={handleRetry} icon={<Loader2 className="size-4" aria-hidden />}>
                                         {t("browser.retry")}
                                     </Button>
-                                    <Button type="default" size="small" href={newTabSrc} target="_blank" rel="noopener noreferrer" icon={<ExternalLink className="size-4" aria-hidden />}>
+                                    {/* Distinct id from the header `browser-open-new-tab`:
+                                        this copy only exists in the error state, which the
+                                        embed spec treats as a hard failure. */}
+                                    <Button type="default" size="small" data-testid="browser-open-new-tab-error" href={newTabSrc} target="_blank" rel="noopener noreferrer" icon={<ExternalLink className="size-4" aria-hidden />}>
                                         {t("browser.openInNewTab")}
                                     </Button>
                                 </div>

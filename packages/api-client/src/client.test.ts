@@ -477,6 +477,6 @@ describe("401 handling", () => {
 
     expect(location.href).toBe("");
 
-    delete (globalThis as any).window;
+    delete (globalThis as { window?: unknown }).window;
   });
 });

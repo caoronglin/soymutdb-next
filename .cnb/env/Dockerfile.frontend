@@ -23,15 +23,15 @@
 #
 # Design: Python base, Node installed from the official tarball
 #   An earlier revision took the opposite shape — `FROM node:26.10.0` plus
-#   `COPY --from=python:3.14 /usr/local /usr/local` — and the image build failed
+#   `COPY --from=python:3.15 /usr/local /usr/local` — and the image build failed
 #   on the first real CNB run:
 #
 #     python3: /lib/x86_64-linux-gnu/libm.so.6: version `GLIBC_2.38' not found
-#              (required by /usr/local/lib/libpython3.14.so.1.0)
+#              (required by /usr/local/lib/libpython3.15.so.1.0)
 #     python3: /lib/x86_64-linux-gnu/libc.so.6: version `GLIBC_2.38' not found
 #
 #   `COPY --from` moves the interpreter's binary and shared libraries but NOT
-#   the C library underneath them. python:3.14 sits on a newer Debian (glibc
+#   the C library underneath them. python:3.15 sits on a newer Debian (glibc
 #   2.38+) than node:26.10.0 (bookworm, glibc 2.36), so the copied interpreter
 #   could never load. Installing a shared-library list was necessary but not
 #   sufficient, and glibc itself cannot be swapped in a `COPY`.
@@ -44,12 +44,12 @@
 # Constraints
 #   * The base tag MUST stay version-pinned. scripts/check-toolchain-pins.py
 #     rejects an untagged or `:latest` FROM in .cnb/env/*.
-#   * The Python base MUST match PYTHON_VERSION (3.14).
+#   * The Python base MUST match PYTHON_VERSION (3.15).
 #   * No credentials: this image only builds, tests and exports a schema.
 # =============================================================================
 
 # Matches PYTHON_VERSION in scripts/ci-job-steps.sh and the API job's image.
-FROM python:3.14
+FROM python:3.15
 
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
@@ -62,7 +62,7 @@ ARG NODE_SHA256_X64=ca70e9e349de048b9522abb3adc05b3bd6f43c5ffd3ec57916c7da292f59
 ARG NODE_SHA256_ARM64=7a6353f63eb3d04765004b4adf172616243e4522434635cb1d26288658b04ab5
 # Must match PNPM_VERSION in scripts/{setup-workspace,ci-job-steps}.sh and
 # package.json's packageManager; scripts/check-toolchain-pins.py enforces it.
-ARG PNPM_VERSION=12.5.1
+ARG PNPM_VERSION=12.11.2
 
 # coreutils    sha256sum for the Node tarball verification
 # ca-certs     pnpm and the OpenAPI export both reach HTTPS endpoints
@@ -148,7 +148,7 @@ RUN node --version \
 #
 # The per-package manifests are deliberately NOT copied: the context does not
 # carry them, and `pnpm fetch` selects tarballs from the lockfile alone.
-# Verified with the pinned pnpm 12.5.1 -- these four files resolve the whole
+# Verified with the pinned pnpm 12.11.2 -- these four files resolve the whole
 # lockfile, while an empty directory fails with ERR_PNPM_NO_LOCKFILE.
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 

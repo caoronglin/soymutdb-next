@@ -1,118 +1,69 @@
-"""Tests for health API endpoints (/api/v1/health/*).
+"""Health gates for the native PostgreSQL store and optional Redis broker."""
 
-Covers: liveness probe, readiness probe (with dependency-unavailable scenarios).
-All routes use the ``/api/v1/`` prefix.
-"""
-
-from __future__ import annotations
-
-from unittest.mock import AsyncMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
-HEALTH_PREFIX = "/api/v1/health"
+from app.api.v1 import health
 
 
-@pytest.mark.asyncio
-class TestLiveness:
-    """Tests for GET /api/v1/health/live."""
-
-    async def test_liveness_ok(self, client):
-        """Liveness probe returns 200 when the process is alive."""
-        response = await client.get(f"{HEALTH_PREFIX}/live")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "ok"
-
-    async def test_liveness_no_auth_required(self, client):
-        """Liveness probe should not require authentication."""
-        response = await client.get(f"{HEALTH_PREFIX}/live")
-        assert response.status_code == 200
+@pytest.fixture(autouse=True)
+def extended_mode(monkeypatch):
+    monkeypatch.setattr(health, "get_settings", lambda: SimpleNamespace(deployment_mode="extended"))
 
 
-@pytest.mark.asyncio
-class TestReadiness:
-    """Tests for GET /api/v1/health/ready."""
+async def test_liveness_needs_no_auth(client):
+    response = await client.get("/api/v1/health/live")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
 
-    async def test_readiness_healthy(self, client):
-        """Readiness probe returns 200 when all dependencies are up."""
-        # Mock ClickHouse service to return healthy
-        with patch(
-            "app.services.clickhouse_service.ClickHouseService.ping",
-            new_callable=AsyncMock,
-            return_value=True,
-        ), patch("app.api.v1.health.get_redis") as get_redis, patch(
-            "app.api.v1.health.get_db"
-        ):
-            get_redis.return_value.ping = AsyncMock(return_value=True)
-            response = await client.get(f"{HEALTH_PREFIX}/ready")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "ok"
-        assert data["checks"]["postgres"]["healthy"] is True
-        assert data["checks"]["clickhouse"]["healthy"] is True
-        assert data["checks"]["redis"]["healthy"] is True
 
-    async def test_readiness_baseline_reports_optional_services_without_failing(
-        self, client, monkeypatch
-    ):
-        """Baseline readiness only gates PostgreSQL and diagnoses optional services."""
-        from app.api.v1 import health
-        from app.core.config import Settings
+async def test_native_readiness_healthy(client, monkeypatch):
+    redis = SimpleNamespace(ping=AsyncMock(return_value=True))
+    monkeypatch.setattr(health, "get_redis", lambda: redis)
+    response = await client.get("/api/v1/health/ready")
+    assert response.status_code == 200
+    assert response.json()["checks"] == {
+        "postgres": {"healthy": True}, "redis": {"healthy": True, "required": True},
+    }
 
-        monkeypatch.setattr(
-            health, "get_settings", lambda: Settings(_env_file=None, deployment_mode="baseline")
-        )
-        with patch("app.api.v1.health.get_redis") as get_redis, patch(
-            "app.api.v1.health.ClickHouseService.ping", new_callable=AsyncMock, return_value=False
-        ):
-            get_redis.return_value.ping = AsyncMock(
-                side_effect=ConnectionError("redis unavailable")
-            )
-            response = await client.get(f"{HEALTH_PREFIX}/ready")
 
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "ok"
-        assert data["checks"]["postgres"]["healthy"] is True
-        assert data["checks"]["clickhouse"] == {
-            "healthy": None, "required": False, "status": "disabled"
-        }
-        assert data["checks"]["redis"] == {
-            "healthy": None, "required": False, "status": "disabled"
-        }
+async def test_baseline_only_requires_postgres(client, monkeypatch):
+    monkeypatch.setattr(health, "get_settings", lambda: SimpleNamespace(deployment_mode="baseline"))
+    getter = AsyncMock(side_effect=AssertionError("Baseline must not probe Redis"))
+    monkeypatch.setattr(health, "get_redis", getter)
+    response = await client.get("/api/v1/health/ready")
+    assert response.status_code == 200
+    assert response.json()["checks"] == {
+        "postgres": {"healthy": True},
+        "redis": {"healthy": None, "required": False, "status": "disabled"},
+    }
+    getter.assert_not_called()
 
-    async def test_readiness_clickhouse_down(self, client):
-        """Readiness probe returns 503 when ClickHouse is unavailable."""
-        with patch(
-            "app.services.clickhouse_service.ClickHouseService.ping",
-            new_callable=AsyncMock,
-            return_value=False,
-        ):
-            response = await client.get(f"{HEALTH_PREFIX}/ready")
-        assert response.status_code == 503
-        data = response.json()
-        assert data["status"] == "degraded"
-        assert data["checks"]["clickhouse"]["healthy"] is False
 
-    async def test_readiness_clickhouse_exception(self, client):
-        """Readiness probe returns 503 when ClickHouse raises an exception."""
-        with patch(
-            "app.services.clickhouse_service.ClickHouseService.ping",
-            new_callable=AsyncMock,
-            side_effect=ConnectionError("Connection refused"),
-        ):
-            response = await client.get(f"{HEALTH_PREFIX}/ready")
-        assert response.status_code == 503
-        data = response.json()
-        assert data["checks"]["clickhouse"]["healthy"] is False
+@pytest.mark.parametrize("failure", [False, ConnectionError("broker unavailable")])
+async def test_extended_redis_failure_is_not_ready(client, monkeypatch, failure):
+    ping = AsyncMock(side_effect=failure) if isinstance(failure, Exception) else AsyncMock(
+        return_value=failure,
+    )
+    monkeypatch.setattr(health, "get_redis", lambda: SimpleNamespace(ping=ping))
+    response = await client.get("/api/v1/health/ready")
+    assert response.status_code == 503
+    assert response.json()["checks"]["redis"]["healthy"] is False
+    assert "clickhouse" not in response.json()["checks"]
 
-    async def test_readiness_no_auth_required(self, client):
-        """Readiness probe should not require authentication."""
-        with patch(
-            "app.services.clickhouse_service.ClickHouseService.ping",
-            new_callable=AsyncMock,
-            return_value=True,
-        ):
-            response = await client.get(f"{HEALTH_PREFIX}/ready")
-        assert response.status_code in (200, 503)
+
+async def test_postgres_failure_is_not_ready_and_hides_connection_details(client, app, monkeypatch):
+    from app.core.database import get_db
+
+    async def broken_db():
+        yield SimpleNamespace(execute=AsyncMock(side_effect=ConnectionError("secret-host:5432")))
+
+    app.dependency_overrides[get_db] = broken_db
+    redis = SimpleNamespace(ping=AsyncMock(return_value=True))
+    monkeypatch.setattr(health, "get_redis", lambda: redis)
+    response = await client.get("/api/v1/health/ready")
+    assert response.status_code == 503
+    assert response.json()["checks"]["postgres"]["healthy"] is False
+    assert "secret-host" not in response.text

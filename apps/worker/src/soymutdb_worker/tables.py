@@ -92,6 +92,11 @@ assemblies = Table(
     Column("id", Integer, primary_key=True),
     Column("name", String(128), nullable=False),
     Column("version", String(64), nullable=False),
+    # Release scoping for a gene build.  ``assemblies.release_id`` is API-owned
+    # and nullable (an assembly can predate release assignment), so the worker
+    # only ever filters on it -- it never writes it.  Kept narrow on purpose:
+    # the worker needs the join key, not the rest of the assembly record.
+    Column("release_id", Integer, ForeignKey("releases.id", ondelete="SET NULL")),
 )
 
 chromosomes = Table(
@@ -375,6 +380,7 @@ def utcnow() -> datetime:
 
 __all__ = [
     "analysis_jobs",
+    "assemblies",
     "blast_hits",
     "blast_jobs",
     "chromosomes",

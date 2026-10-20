@@ -54,36 +54,39 @@ createdb -p 55432 -h 127.0.0.1 -U soymutdb soymutdb_deploy
 cd apps/api && SOYMUTDB_DATABASE_URL='postgresql+asyncpg://soymutdb@127.0.0.1:55432/soymutdb_deploy' \
   .venv/bin/python -m alembic upgrade head
 
-# 2) 构建（每个 origin 独立构建；internal 产物另存）
-CI= VITE_DEPLOYMENT_MODE=demo VITE_SITE_VARIANT=internal VITE_BASE_URL=/ \
-  VITE_API_BASE_URL=http://localhost:8094/api/v1 VITE_JBROWSE_BASE_URL=http://localhost:8094/jbrowse/ \
-  pnpm --filter @soymutdb/web build && mv apps/web/dist apps/web/dist-internal
-CI= VITE_DEPLOYMENT_MODE=demo VITE_SITE_VARIANT=external VITE_BASE_URL=/ \
-  VITE_API_BASE_URL=http://localhost:8090/api/v1 VITE_JBROWSE_BASE_URL=http://localhost:8090/jbrowse/ \
-  pnpm --filter @soymutdb/web build
-VITE_BASE_URL=/ VITE_API_BASE_URL=http://localhost:8091/api/v1 pnpm --filter @soymutdb/admin build
-VITE_BASE_URL=/jbrowse/ VITE_API_BASE_URL=http://localhost:8090/api/v1 \
-  pnpm --filter @soymutdb/jbrowse build
+# 2) 构建双站制品（apps/web/scripts/build-sites.ts 一次产出 dist/external 与 dist/internal）
+VITE_DEPLOYMENT_MODE=demo \
+  SOYMUTDB_EXTERNAL_BASE_URL=/ SOYMUTDB_INTERNAL_BASE_URL=/ \
+  SOYMUTDB_EXTERNAL_API_URL=http://localhost:8090/api/v1 \
+  SOYMUTDB_INTERNAL_API_URL=http://localhost:8094/api/v1 \
+  SOYMUTDB_EXTERNAL_JBROWSE_URL=http://localhost:8090/jbrowse/ \
+  SOYMUTDB_INTERNAL_JBROWSE_URL=http://localhost:8094/jbrowse/ \
+  pnpm build:web
+VITE_API_BASE_URL=http://localhost:8091/api/v1 pnpm build:admin
+# jbrowse 壳单独构建（沙箱内可能受 esbuild 进程配额限制，CI 中验证）
+pnpm --filter @soymutdb/jbrowse build
 
 # 3) API（8010）
 cd apps/api && SOYMUTDB_DATABASE_URL=... SOYMUTDB_JWT_SECRET=<>=32 chars> \
   .venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8010
 
 # 4) 三个前端 origin（各自代理 /api → 8010；/jbrowse/ 同源）
-node scripts/dev/local-preview-server.mjs --app portal --port 8090
-node scripts/dev/local-preview-server.mjs --app portal --dist apps/web/dist-internal --port 8094
-node scripts/dev/local-preview-server.mjs --app admin  --port 8091
+node scripts/dev/local-preview-server.mjs --app portal --dist apps/web/dist/external --port 8090
+node scripts/dev/local-preview-server.mjs --app portal --dist apps/web/dist/internal --port 8094
+node scripts/dev/local-preview-server.mjs --app admin  --dist apps/admin/dist --port 8091
 ```
 
 - 端口：external 8090、internal 8094、管理端 8091、API 8010、JBrowse 经 `/jbrowse/`。
-- 无 Redis/ClickHouse/MinIO 时 `/api/v1/health/ready` 返回 `degraded`（PG 正常）；
-  依赖 ClickHouse 的接口 503、无发布数据时 assemblies 503，均为预期降级。
-- 部署前务必确认迁移为最新：`alembic upgrade head`；模型/迁移漂移由迁移 `0042` 修复。
+- `/api/v1/health/ready`：baseline 模式只要求 PostgreSQL；extended 模式额外要求 Redis
+  （`deployment_mode=extended`），Redis 不可用时返回 503。MinIO/ClickHouse 不参与就绪探针
+  （ClickHouse 已退役为历史迁移源）。
+- 部署前务必确认迁移为最新：`alembic upgrade head`（当前 head 见
+  `apps/api/migrations/versions/`）；每次 schema 变更都带 PostgreSQL 升级/降级测试。
 
 ## 备份、迁移与回滚
 
 ```bash
-bash deploy/scripts/backup.sh             # PostgreSQL + ClickHouse + MinIO + 元数据
+bash deploy/scripts/backup.sh             # PostgreSQL + MinIO + 元数据
 bash deploy/scripts/restore.sh            # 恢复
 bash deploy/scripts/verify-restore.sh     # 恢复演练校验
 bash deploy/scripts/blue-green-rollback.sh

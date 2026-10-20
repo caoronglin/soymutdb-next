@@ -35,6 +35,8 @@
         ".",
         "--ignore",
         "DEP002",
+        "--per-rule-ignores",
+        "DEP001=clickhouse_connect",
         "--package-module-name-map",
         "argon2-cffi=argon2,PyJWT=jwt",
         "--json-output",
@@ -59,7 +61,7 @@
         "--ignore",
         "DEP002",
         "--per-rule-ignores",
-        "DEP001=soymutdb_worker",
+        "DEP001=soymutdb_worker|clickhouse_connect|chdb",
         "--json-output",
         "{output_dir}/deptry-worker.json"
       ],

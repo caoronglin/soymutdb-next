@@ -135,7 +135,13 @@ def test_variant_contract_is_shared_by_ddl_worker_and_api() -> None:
     export_columns = set(re.findall(r'"([a-z_]+)"', re.search(
         r"EXPORT_COLUMNS\s*=\s*\[(.*?)\]", export, re.S
     ).group(1)))
-    assert export_columns <= ddl_columns
+    # Native exports join the public mutant identity from PostgreSQL. It is
+    # deliberately absent from the historical fact table's storage schema.
+    assert export_columns - {"mutant_public_id"} <= ddl_columns
+    assert "mutant_public_id" in export_columns
+    assert "ml.public_id AS mutant_public_id" in export
+    assert "mutant_line_surrogate_id" not in export_columns
+    assert "internal_id" not in export_columns
 
 
 def test_worker_stats_and_service_only_reference_variant_columns() -> None:
@@ -145,7 +151,10 @@ def test_worker_stats_and_service_only_reference_variant_columns() -> None:
         # variant_facts references without requiring a ClickHouse parser.
         used = set(re.findall(r"(?:v\.)?([a-z_]+)", source)) & CANONICAL_VARIANT_COLUMNS
         if source == STATS.read_text():
-            assert {"gene_surrogate_id", "mutant_line_surrogate_id", "release_key"} <= used
+            assert {"gene_surrogate_id", "mutant_line_surrogate_id"} <= used
+            # Stats now bind the authoritative PostgreSQL release identity.
+            assert "WHERE release_id=:release_id" in source
+            assert "get_clickhouse_client" not in source
 
 
 def test_variant_table_keys_and_materialized_views_use_declared_columns() -> None:

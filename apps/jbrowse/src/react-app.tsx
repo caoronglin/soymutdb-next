@@ -20,11 +20,26 @@ const queryClient = new QueryClient({
   },
 });
 
+/**
+ * Announce the React handoff on `<html data-app-ready>`.
+ *
+ * Umi prerenders inert markup; browser gates must wait for this boundary before
+ * asserting (the portal/admin shells do the same). Without it an offline
+ * artifact test cannot distinguish a live shell from the inert document.
+ */
+function AppReadySignal() {
+  React.useLayoutEffect(() => {
+    document.documentElement.dataset.appReady = "true";
+  }, []);
+  return null;
+}
+
 export default function ReactApp() {
   return (
     <React.StrictMode>
       <QueryClientProvider client={queryClient}>
         <DesignSystemProvider>
+          <AppReadySignal />
           <App />
         </DesignSystemProvider>
       </QueryClientProvider>

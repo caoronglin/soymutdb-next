@@ -50,7 +50,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-PNPM_VERSION="${SOYMUTDB_CI_PNPM_VERSION:-12.5.1}"
+PNPM_VERSION="${SOYMUTDB_CI_PNPM_VERSION:-12.11.2}"
 PNPM_STORE_DIR="${SOYMUTDB_CI_PNPM_STORE_DIR:-/cache/pnpm-store}"
 # The repo .npmrc pins a mirror; CI must use the registry the lockfile was
 # resolved against.

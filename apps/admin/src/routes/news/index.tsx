@@ -274,6 +274,7 @@ export default function NewsListPage() {
           <Button
             type="primary"
             icon={<PlusOutlined />}
+            data-testid="news-new"
             onClick={() => router.navigate({ to: "/news/new" })}
           >
             {t("admin.news.createNew")}
@@ -285,14 +286,15 @@ export default function NewsListPage() {
         <Space orientation="vertical" size="middle" style={{ width: "100%" }}>
           <Form form={searchForm} layout="inline" onFinish={applyFilters}>
             <Form.Item name="title_en" label={t("admin.news.columns.title")}>
-              <Input placeholder={t("admin.news.search.placeholder")} />
+              <Input data-testid="news-search" placeholder={t("admin.news.search.placeholder")} />
             </Form.Item>
             <Form.Item name="category" label={t("admin.news.columns.category")}>
-              <Input />
+              <Input data-testid="news-category" />
             </Form.Item>
             <Form.Item name="status" label={t("admin.news.columns.status")}>
               <Select
                 allowClear
+                data-testid="news-status-filter"
                 style={{ minWidth: 140 }}
                 options={([
                   "draft",
@@ -323,6 +325,7 @@ export default function NewsListPage() {
             table. Nothing here turns this into client-side paging over a
             pre-fetched array — the page only ever holds one server page.
           */}
+          <div data-testid="news-table" data-state={loading ? "loading" : "ready"}>
           <ProTable<NewsSummary>
             {...PRO_LIST_SHELL}
             rowKey="id"
@@ -341,6 +344,7 @@ export default function NewsListPage() {
             }}
             locale={{ emptyText: t("admin.news.empty") }}
           />
+          </div>
         </Space>
 
         <NewsPreviewModal

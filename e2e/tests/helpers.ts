@@ -146,6 +146,120 @@ const MOCK_VARIANT_ROW = Object.freeze({
   release_id: "7",
 });
 
+/**
+ * Deterministic API mock for the primer-design page.
+ *
+ * The built portal bakes an ABSOLUTE API origin, so the static server's
+ * same-origin `/api/v1/...` mocks never see these requests. This in-browser
+ * route fulfils only what the page needs (assemblies, chromosomes, seqfetch,
+ * active release) with CORS headers so the cross-origin fetches succeed, and
+ * 404s everything else instead of inventing data.
+ */
+export async function mockPrimerApis(page: Page): Promise<void> {
+  const sequence = "ACGTACGTACGTACGTACGT".repeat(15); // GC-balanced 300 bp
+  await page.route(/\/api\/v1\//, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const origin = request.headers()["origin"];
+    const headers: Record<string, string> = {
+      "access-control-allow-origin": origin ?? "*",
+      "access-control-allow-credentials": "true",
+      "access-control-allow-headers": "authorization,content-type,x-soymutdb-release",
+      "access-control-allow-methods": "GET,POST,OPTIONS",
+      "access-control-expose-headers": "x-soymutdb-release",
+      vary: "Origin",
+      "x-soymutdb-release": MOCK_RELEASE_ID,
+    };
+    if (request.method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers });
+      return;
+    }
+    const json = (body: unknown, status = 200) =>
+      route.fulfill({ status, contentType: "application/json", headers, body: JSON.stringify(body) });
+    const path = url.pathname;
+    if (path.endsWith("/genes/assemblies")) return json([MOCK_ASSEMBLY]);
+    if (/\/genes\/assemblies\/[^/]+\/chromosomes$/.test(path)) {
+      return json([{ id: "1", assembly_id: "1", name: "chr01", length: 100000, order: 0 }]);
+    }
+    if (path.endsWith("/tools/seqfetch")) {
+      return json({
+        format: "fasta",
+        sequence: `>mock chr01:1-300\n${sequence}`,
+        count: 1,
+        truncated: false,
+        missing: [],
+      });
+    }
+    // No `releases/active` mock on purpose. A fabricated release id changes the
+    // deployment context: after a reload the assembly query is released-scoped
+    // and the primer page's assemblies stop resolving (proved with the page's
+    // own requests). A 404 — the static-server baseline — leaves the release
+    // unpinned and the page falls back to the default assembly, which is the
+    // offline contract these specs assert.
+    return json({}, 404);
+  });
+}
+
+/**
+ * Deterministic API mock for the standalone genome browser.
+ *
+ * The artifact bakes an absolute API origin, so the static server's same-origin
+ * mocks never see these requests. The assembly uses JBrowse's
+ * `FromConfigSequenceAdapter` (inline sequence data), which lets the linear
+ * genome view initialise without any `/jbrowse-data` files on disk — the point
+ * of this mock is to prove the BROWSER renders a real view, not to serve genome
+ * data the repository does not ship.
+ *
+ * Deliberately no `/releases/active` mock: a fabricated release changes the
+ * deployment context (proven with the primer page); a 404 leaves the release
+ * unpinned, which is the offline contract.
+ */
+export async function mockJbrowseApis(page: Page): Promise<void> {
+  const sequence = "ACGT".repeat(1000); // 4 kb inline reference sequence
+  await page.route(/\/api\/v1\//, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const origin = request.headers()["origin"];
+    const headers: Record<string, string> = {
+      "access-control-allow-origin": origin ?? "*",
+      "access-control-allow-credentials": "true",
+      "access-control-allow-headers": "authorization,content-type,x-soymutdb-release",
+      "access-control-allow-methods": "GET,POST,OPTIONS",
+      "access-control-expose-headers": "x-soymutdb-release",
+      vary: "Origin",
+    };
+    if (request.method() === "OPTIONS") {
+      await route.fulfill({ status: 204, headers });
+      return;
+    }
+    const json = (body: unknown, status = 200) =>
+      route.fulfill({ status, contentType: "application/json", headers, body: JSON.stringify(body) });
+    const path = url.pathname;
+    if (path.endsWith("/genes/assemblies")) return json([MOCK_ASSEMBLY]);
+    if (path.endsWith("/tracks/jbrowse-config")) {
+      return json({
+        assembly: {
+          name: MOCK_ASSEMBLY.name,
+          aliases: [MOCK_ASSEMBLY.version],
+          sequence: {
+            trackId: "reference_sequence",
+            type: "ReferenceSequenceTrack",
+            adapter: {
+              type: "FromConfigSequenceAdapter",
+              features: [{ refName: "chr01", start: 0, end: sequence.length, seq: sequence }],
+            },
+          },
+        },
+        tracks: [],
+      });
+    }
+    return json({}, 404);
+  });
+  // No genome data files are shipped for the offline artifact: fail them fast
+  // instead of leaving track adapters waiting on the static server.
+  await page.route(/\/jbrowse-data\//, (route) => route.fulfill({ status: 404, body: "" }));
+}
+
 /** A request captured by {@link mockEntityApis}, for context-consistency checks. */
 export interface CapturedApiRequest {
   method: string;

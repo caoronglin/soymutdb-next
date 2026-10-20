@@ -54,13 +54,20 @@ export default function ContentPage() {
           </>
         ) : (
           <>
-            <div className="flex items-center gap-1 border-b border-border">
+            <div
+              role="tablist"
+              data-testid="content-tabs"
+              className="flex items-center gap-1 border-b border-border"
+            >
               {(Object.keys(TYPE_CONFIG) as ContentType[]).map((typeKey) => {
                 const Icon = TYPE_CONFIG[typeKey].icon;
                 return (
                   <button
                     key={typeKey}
                     type="button"
+                    role="tab"
+                    aria-selected={tab === typeKey}
+                    data-testid={`content-tab-${typeKey}`}
                     onClick={() => setTab(typeKey)}
                     className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
                       tab === typeKey

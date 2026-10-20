@@ -99,12 +99,12 @@ async def test_asm01_ablation_assembly_predicate_is_load_bearing(db_session, mon
     assert len(control.results) == 1
     assert control.results[0].assembly_id == v4.id
 
-    original = search_service._gene_match_conditions
+    original = search_service._gene_match_query
 
     def drop_assembly(query, pattern, *, release_id, assembly_id):
         return original(query, pattern, release_id=release_id, assembly_id=None)
 
-    monkeypatch.setattr(search_service, "_gene_match_conditions", drop_assembly)
+    monkeypatch.setattr(search_service, "_gene_match_query", drop_assembly)
     ablated = await service.global_search(
         db_session, "Glyma.01G000100", types=[SearchResultType.GENE], assembly_id=v4.id
     )
@@ -350,12 +350,12 @@ async def test_alias_ablation_alias_scope_is_load_bearing(db_session, monkeypatc
     assert [r.id for r in control.results] == ["GmFT2b"]
     assert control.results[0].match_type == MatchType.ALIAS
 
-    original = search_service._gene_match_conditions
+    original = search_service._gene_match_query
 
     def drop_assembly(query, pattern, *, release_id, assembly_id):
         return original(query, pattern, release_id=release_id, assembly_id=None)
 
-    monkeypatch.setattr(search_service, "_gene_match_conditions", drop_assembly)
+    monkeypatch.setattr(search_service, "_gene_match_query", drop_assembly)
     ablated = await service.global_search(
         db_session, "FLOWER-B", types=[SearchResultType.GENE], assembly_id=v4.id
     )

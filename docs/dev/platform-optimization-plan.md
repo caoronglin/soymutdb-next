@@ -7,8 +7,9 @@
 > **版本**：v4.0　**日期**：2026-08-29
 > **性质**：设计方案（Design Proposal）
 
-> **2026-09-26 校正（历史文档）**：文中 `packages/i18n` 已移除（现为 `packages/i18n-core`），
-> 前端文件路径与框架描述为迁移前记录，三端现为 Vue 3。
+> **2026-09-26 校正（历史文档）**：文中 `packages/i18n` 已移除（现为 `packages/i18n-core`）。
+> 前端文件路径与框架描述为迁移前记录：三端曾迁到 Vue 3，Vue 现已完全退役
+> （`scripts/check-vue-retirement.mjs` 断言通过），当前为 React 19 + Umi Max 4。
 >
 > **四份方案的分工**（互不重叠，按此顺序阅读）：
 >

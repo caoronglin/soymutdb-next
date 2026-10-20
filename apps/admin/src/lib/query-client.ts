@@ -40,3 +40,34 @@ export function createQueryClient(): QueryClient {
     },
   });
 }
+
+/**
+ * Close the admin cache boundary at an identity transition (login, logout, or
+ * a hard session death).
+ *
+ * `staleTime: 30s` above is why this has to be explicit: a cached entry is
+ * served to the next render without a refetch, so a payload fetched as one
+ * operator stays on screen as the next one. Clearing at the boundary is what
+ * makes the identity switch visible instead of eventual.
+ *
+ * Clearing the query cache is also what stops an in-flight request from
+ * repopulating what was just emptied — `QueryCache#clear` removes each entry
+ * through `Query#destroy`, which cancels its pending fetch, so a response
+ * issued under the previous identity is discarded rather than delivered to an
+ * observer. No separate `cancelQueries` pass is needed; `clear` performs that
+ * removal itself.
+ *
+ * The mutation cache is dropped for the same reason: it retains the previous
+ * identity's response payloads for as long as the cache lives.
+ *
+ * The client is passed in rather than captured, because this module owns the
+ * policy while the app tree constructs the client, and the boundary has to
+ * hold for whichever client is actually mounted. A missing client
+ * (`AuthProvider` outside a `QueryClientProvider`) is a no-op rather than a
+ * crash, and repeated calls are idempotent.
+ */
+export function clearAdminSessionCache(client: QueryClient | null | undefined): void {
+  if (!client) return;
+  client.getQueryCache().clear();
+  client.getMutationCache().clear();
+}

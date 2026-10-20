@@ -90,26 +90,47 @@ function putPart(
   url: string,
   bytes: Blob,
   onProgress?: (percent: number) => void,
+  signal?: AbortSignal,
 ): Promise<PartUploadResult> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url);
+    if (signal?.aborted) {
+      reject(new DOMException("Upload cancelled", "AbortError"));
+      return;
+    }
+    const onAbort = () => xhr.abort();
+    signal?.addEventListener("abort", onAbort, { once: true });
+    const settle = (finish: () => void) => {
+      signal?.removeEventListener("abort", onAbort);
+      finish();
+    };
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && e.total > 0 && onProgress) {
         onProgress(Math.round((e.loaded / e.total) * 100));
       }
     };
     xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        // S3 returns the ETag header; strip surrounding quotes if present.
-        const etag = (xhr.getResponseHeader("ETag") ?? xhr.getResponseHeader("etag") ?? "")
-          .replace(/^"(.*)"$/, "$1");
-        resolve({ etag });
-      } else {
-        reject(new Error(`Part upload failed with status ${xhr.status}`));
+      if (xhr.status < 200 || xhr.status >= 300) {
+        settle(() => reject(new Error(`Part upload failed with status ${xhr.status}`)));
+        return;
       }
+      // S3 returns the ETag header; strip surrounding quotes if present.
+      const etag = (xhr.getResponseHeader("ETag") ?? xhr.getResponseHeader("etag") ?? "")
+        .replace(/^"(.*)"$/, "$1");
+      if (!etag) {
+        // complete_multipart_upload rejects falsy ETags, so an empty header
+        // would otherwise surface as an opaque failure after the whole file
+        // has already been transferred.
+        settle(() =>
+          reject(new Error("Object storage did not return an ETag for the uploaded part.")),
+        );
+        return;
+      }
+      settle(() => resolve({ etag }));
     };
-    xhr.onerror = () => reject(new Error("Network error during part upload"));
+    xhr.onerror = () => settle(() => reject(new Error("Network error during part upload")));
+    xhr.onabort = () => settle(() => reject(new DOMException("Upload cancelled", "AbortError")));
     xhr.send(bytes);
   });
 }
@@ -128,6 +149,36 @@ export interface UploadModuleFileOptions {
   signal?: AbortSignal;
 }
 
+/** The local-file facts that decide whether two uploads are the same intent. */
+export interface UploadSourceIdentity {
+  filename: string;
+  size: number;
+  /** File.lastModified; 0 when the browser does not expose one. */
+  lastModified: number;
+  type: string;
+  moduleKey?: string;
+  dataSetId?: number;
+}
+
+/**
+ * Signature of one uploaded source.
+ *
+ * Object keys are bound to their data set on the server (validate_data_key
+ * checks the data/<data_set_id>/... prefix), so the data set is part of the
+ * identity: the same bytes uploaded into another data set are a different
+ * object and must never be reused.
+ */
+export function describeUploadSource(identity: UploadSourceIdentity): string {
+  return JSON.stringify([
+    identity.filename,
+    identity.size,
+    identity.lastModified,
+    identity.type,
+    identity.moduleKey?.trim() ?? "",
+    identity.dataSetId ?? "",
+  ]);
+}
+
 /**
  * Run the full multipart upload for a local file. Returns the completed
  * object key + checksum for import submission. Throws on any step failure so
@@ -137,6 +188,12 @@ export async function uploadModuleFile(
   opts: UploadModuleFileOptions,
 ): Promise<UploadedObject> {
   const { filename, type, file, dataSetId, onProgress, signal } = opts;
+  if (signal?.aborted) throw new DOMException("Upload cancelled", "AbortError");
+  if (file.size === 0) {
+    // A zero-byte file divides by zero in the progress callback and still
+    // opens a multipart session the server can never turn into an import.
+    throw new Error("The selected file is empty.");
+  }
   const partCount = partCountFor(file.size);
   const contentType = file.type || "application/octet-stream";
 
@@ -160,19 +217,26 @@ export async function uploadModuleFile(
     // in-flight S3 part.
     const slice = file.slice(start, end, contentType);
 
-    const result = await putPart(part.url, slice, (percent) => {
-      // part percent * part size / total, accumulated with prior parts.
-      const partBytes = (end - start) * (percent / 100);
-      const pct = Math.round(((uploadedBytes + partBytes) / file.size) * 100);
-      onProgress?.({ percent: Math.min(100, pct) });
-    });
+    const result = await putPart(
+      part.url,
+      slice,
+      (percent) => {
+        // part percent * part size / total, accumulated with prior parts.
+        const partBytes = (end - start) * (percent / 100);
+        const pct = Math.round(((uploadedBytes + partBytes) / file.size) * 100);
+        onProgress?.({ percent: Math.min(100, pct) });
+      },
+      signal,
+    );
     parts.push({ part_number: part.part_number, etag: result.etag });
     uploadedBytes += end - start;
   }
 
   const completed = await completeMultipart(session.upload_id, {
     object_key: session.object_key,
-    parts,
+    // S3 requires the completion list in ascending part order and the API
+    // forwards it verbatim.
+    parts: [...parts].sort((a, b) => a.part_number - b.part_number),
   });
 
   return { object_key: completed.object_key, sha256: completed.sha256 };

@@ -1,17 +1,6 @@
-import {
-  BRAND_PRIMARY_HEX,
-  BRAND_PRIMARY_OKLCH,
-  BRAND_PRIMARY_OKLCH_DARK,
-  createSoyMutdbTheme,
-  type ThemeConfig,
-} from "@soymutdb/ui-react";
+import { createSoyMutdbTheme, type ThemeConfig } from "@soymutdb/ui-react";
 import type { Locale } from "antd/es/locale";
-import type { EffectiveMotionMode } from "./motion-policy";
-
-export const ANTD_PRIMARY_HEX = BRAND_PRIMARY_HEX;
-export const ANTD_PRIMARY_OKLCH = BRAND_PRIMARY_OKLCH;
-export const ANTD_PRIMARY_OKLCH_DARK = BRAND_PRIMARY_OKLCH_DARK;
-export const ANTD_FONT_FAMILY = '"HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif';
+import type { EffectiveMotionMode } from "@soymutdb/ui-react";
 
 /** Ant Design theme uses the shared SoyMutDB tokens plus the app motion policy. */
 export function createAntdTheme(opts?: {

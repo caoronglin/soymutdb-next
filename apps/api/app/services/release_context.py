@@ -38,7 +38,7 @@ class ReleaseContext:
 
     @property
     def release_key(self) -> str:
-        """Return the ClickHouse representation of the release id."""
+        """Return the release id as the string key variant queries bind on."""
         return str(self.release_id)
 
     def identity(self) -> dict[str, Any]:

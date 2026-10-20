@@ -74,8 +74,12 @@ export default function DashboardPage() {
               <h2 className="mt-1 text-lg font-semibold">{t("admin.dashboard.pipelineHeadline", { defaultValue: "Keep the data pipeline moving" })}</h2>
               <p className="mt-1 text-sm text-muted-foreground">{t("admin.dashboard.pipelineDesc", { defaultValue: "Start from the real operational workflows instead of decorative management pages." })}</p>
             </div>
-            <Link to="/resource-catalog" className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-              {t("admin.dashboard.openResourceCatalog", { defaultValue: "Open resource catalog" })} <ArrowRightOutlined className="size-4" aria-hidden />
+            {/* This used to point at `/resource-catalog`, which the router
+                resolves to `LegacyUnavailablePage`: the console's single primary
+                call-to-action opened "this page is unavailable". Imports is the
+                live workflow the unavailable page itself recommends. */}
+            <Link to="/imports" className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+              {t("admin.dashboard.openImports", { defaultValue: "Open imports" })} <ArrowRightOutlined className="size-4" aria-hidden />
             </Link>
           </div>
         </section>
@@ -84,12 +88,14 @@ export default function DashboardPage() {
           <Alert
             type="error"
             showIcon
+            data-testid="dashboard-stats-error"
             title={t("admin.dashboard.metricsUnavailable", { defaultValue: "Dashboard metrics unavailable" })}
             description={t("admin.dashboard.metricsUnavailableDesc", { defaultValue: "The API did not return a current metric snapshot; no placeholder values are shown." })}
             action={
               <Button
                 type="link"
                 size="small"
+                data-testid="dashboard-stats-retry"
                 onClick={() => {
                   void homepageStatsQuery.refetch();
                   void dashboardStatsQuery.refetch();
@@ -101,8 +107,17 @@ export default function DashboardPage() {
           />
         ) : null}
 
-        {/* Stat cards */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Stat cards.
+            `dashboard-stats` + `data-pending` is the browser-gate contract for
+            "the metrics APIs it actually calls (homepage stats and
+            /admin/dashboard-stats) settled": an errored query leaves the cards
+            in the "—" placeholder state instead of a fabricated number, so the
+            settled marker is reached in both outcomes. */}
+        <div
+          className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+          data-testid="dashboard-stats"
+          data-pending={String(homepageStatsQuery.isPending || dashboardStatsQuery.isPending)}
+        >
           <StatCard
             label={t("admin.dashboard.totalTeam", { defaultValue: "Total Team" })}
             value={dashboardStatsQuery.isPending ? "…" : dashboardStatsQuery.isError ? "—" : formatNumber(dashboardStats?.totalUsers ?? 0)}
@@ -137,27 +152,32 @@ export default function DashboardPage() {
           />
         </div>
 
-        {/* Charts */}
+        {/* Charts. `dashboard-trends` + `data-pending` mirrors `dashboard-stats`
+            for /admin/dashboard-series, which fails independently of the metric
+            snapshot above. */}
         {seriesError ? (
           <Alert
             type="error"
             showIcon
+            data-testid="dashboard-series-error"
             title={t("admin.dashboard.trendUnavailable", {
               defaultValue: "Dashboard trend data unavailable.",
             })}
             action={
-              <Button type="link" size="small" onClick={() => void refetchSeries()}>
+              <Button type="link" size="small" data-testid="dashboard-series-retry" onClick={() => void refetchSeries()}>
                 {t("admin.dashboard.retry", { defaultValue: "Retry" })}
               </Button>
             }
           />
         ) : null}
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Suspense fallback={<ChartLoading />}><ImportThroughputChart data={seriesLoading ? [] : importData} /></Suspense>
-          <Suspense fallback={<ChartLoading />}><QueryLatencyChart data={seriesLoading ? [] : latencyData} /></Suspense>
-        </div>
+        <div data-testid="dashboard-trends" data-pending={String(seriesLoading)}>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Suspense fallback={<ChartLoading />}><ImportThroughputChart data={seriesLoading ? [] : importData} /></Suspense>
+            <Suspense fallback={<ChartLoading />}><QueryLatencyChart data={seriesLoading ? [] : latencyData} /></Suspense>
+          </div>
 
-        <Suspense fallback={<ChartLoading />}><StorageGrowthChart data={seriesLoading ? [] : storageData} /></Suspense>
+          <Suspense fallback={<ChartLoading />}><StorageGrowthChart data={seriesLoading ? [] : storageData} /></Suspense>
+        </div>
 
         {/* Quick stats footer */}
         <div className="grid gap-4 sm:grid-cols-3">

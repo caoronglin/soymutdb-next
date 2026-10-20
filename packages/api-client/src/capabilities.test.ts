@@ -62,7 +62,7 @@ describe("capabilities API", () => {
       plugins: { jbrowse: plugin() },
       databases: {
         authoritative: "postgresql" as const,
-        analytics: "clickhouse" as const,
+        analytics: "postgresql" as const,
       },
     };
     mockGet.mockResolvedValueOnce(response);

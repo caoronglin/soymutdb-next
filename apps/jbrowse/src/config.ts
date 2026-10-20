@@ -124,19 +124,6 @@ export const DEFAULT_ASSEMBLY: JBrowseAssembly = {
  * Build an assembly config for the given assembly name, using default data URLs.
  * Falls back to DEFAULT_ASSEMBLY if the name is not recognised.
  */
-export function buildAssembly(name: string): JBrowseAssembly {
-    if (name === DEFAULT_ASSEMBLY.name) return DEFAULT_ASSEMBLY;
-    // For other assembly names, clone the default but override the name.
-    return {
-        ...DEFAULT_ASSEMBLY,
-        name,
-        sequence: {
-            ...DEFAULT_ASSEMBLY.sequence,
-            trackId: `reference_sequence_${name.replace(/[^a-zA-Z0-9]/g, "_")}`,
-        },
-    };
-}
-
 /** The three file locations a BgzipFastaAdapter needs to read chrom sizes. */
 export interface SequenceFileLocations {
     readonly fasta: string;

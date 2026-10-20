@@ -1,9 +1,11 @@
 # syntax=docker/dockerfile:1.7
 # =====================================================================
 # SoyMutDB MCP server image — uv-based multi-stage build (B1 skeleton)
-# Unified Python toolchain: pinned uv (same version as api/worker images).
+# Unified Python toolchain: Python 3.15 and pinned uv, same as the api/worker
+# images. This file used to sit on 3.12, two releases below everything else it
+# shares a delivery pipeline with.
 # =====================================================================
-FROM python:3.12-slim AS builder
+FROM python:3.15.0-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -11,7 +13,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy
 
 # Pin uv to the same release used by the api/worker images.
-COPY --from=ghcr.io/astral-sh/uv:0.11.33 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
@@ -23,7 +25,7 @@ COPY src ./src
 RUN UV_PROJECT_ENVIRONMENT=/opt/venv uv sync --frozen --no-dev
 
 # ---- runtime stage ----------------------------------------------------
-FROM python:3.12-slim AS runtime
+FROM python:3.15.0-slim AS runtime
 
 RUN apt-get update \
     && apt-get upgrade -y \

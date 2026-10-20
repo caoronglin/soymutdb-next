@@ -1,0 +1,179 @@
+{
+  "anonymous_export": {
+    "error_code": "authentication_failed",
+    "rejected": true,
+    "request": "POST /api/v1/variants/export (no Authorization header)",
+    "status_code": 401
+  },
+  "artifact": {
+    "assembly_key_values": [
+      "chain-v4"
+    ],
+    "columns": [
+      "release_key",
+      "assembly_key",
+      "chromosome",
+      "position",
+      "variant_id",
+      "ref_allele",
+      "alt_allele",
+      "variant_type",
+      "variant_subtype",
+      "impact",
+      "quality_score",
+      "allele_frequency",
+      "zygosity",
+      "gene_id",
+      "gene_symbol",
+      "mutant_public_id",
+      "hgvs_c",
+      "hgvs_p",
+      "read_depth",
+      "filter_status"
+    ],
+    "excluded_variant_ids": [
+      "1003",
+      "1004",
+      "1005"
+    ],
+    "forbidden_columns_absent": [
+      "gene_surrogate_id",
+      "mutant_line_name",
+      "mutant_line_surrogate_id"
+    ],
+    "mutant_public_id_values": [
+      "",
+      "SMBFQWHMRJ6J"
+    ],
+    "private_line_name_absent": true,
+    "release_key_values": [
+      "1"
+    ],
+    "row_count": 2,
+    "s3": {
+      "bucket": "exports",
+      "bytes": 429,
+      "etag": "\"dd87f2eae7422fb2112280dc65c2a7d5\"",
+      "key": "exports/b75339a5-28ef-43ee-83af-94417d897822/soymutdb_export_b75339a5-28ef-43ee-83af-94417d897822.tsv"
+    },
+    "variant_ids": [
+      "1001",
+      "1002"
+    ]
+  },
+  "authenticated_export": {
+    "assembly_filter": "chain-v4",
+    "authorization_header": "<redacted: access token>",
+    "compress": false,
+    "export_id": "b75339a5-28ef-43ee-83af-94417d897822",
+    "format": "tsv",
+    "request": "POST /api/v1/variants/export (researcher bearer token)",
+    "status_code": 202
+  },
+  "bucket": "existed",
+  "export_bucket": "exports",
+  "fixture": {
+    "assemblies": {
+      "chain-v4": {
+        "id": 1
+      },
+      "chain-v5": {
+        "id": 2
+      }
+    },
+    "draft_release": {
+      "id": 2,
+      "version": "chain-draft-1"
+    },
+    "mutant_lines": {
+      "private": {
+        "is_public": false,
+        "name": "chain-private-line",
+        "public_id": null
+      },
+      "public": {
+        "name": "chain-public-line",
+        "public_id": "SMBFQWHMRJ6J"
+      }
+    },
+    "published_release": {
+      "id": 1,
+      "version": "chain-pub-1"
+    },
+    "researcher": {
+      "role": "researcher",
+      "username": "chain_researcher"
+    },
+    "user_id": "f217b85d-a2b5-4696-b35d-5147b4443e75",
+    "variant_facts_expected_excluded": [
+      {
+        "because": "private line",
+        "variant_id": "1003"
+      },
+      {
+        "because": "other assembly",
+        "variant_id": "1004"
+      },
+      {
+        "because": "draft release",
+        "variant_id": "1005"
+      }
+    ],
+    "variant_facts_expected_in_export": [
+      "1001",
+      "1002"
+    ],
+    "variant_facts_seeded": 5
+  },
+  "outbox_after_dispatch": {
+    "aggregate_type": "variant_export",
+    "attempt_count": 1,
+    "event_id": "60f09f39-d6df-4d01-bff8-64cd0b02dd05",
+    "event_type": "variant_export_requested",
+    "sent_at": "2026-10-16T16:06:07.492212+00:00",
+    "status": "sent",
+    "task_name": "soymutdb_worker.tasks.export.export_variants"
+  },
+  "outbox_before_dispatch": {
+    "aggregate_type": "variant_export",
+    "attempt_count": 0,
+    "event_id": "60f09f39-d6df-4d01-bff8-64cd0b02dd05",
+    "event_type": "variant_export_requested",
+    "sent_at": null,
+    "status": "pending",
+    "task_name": "soymutdb_worker.tasks.export.export_variants"
+  },
+  "replay": {
+    "artifact_etag_unchanged": true,
+    "attempt_count": 1,
+    "outbox_status": "sent",
+    "second_poll_processed": 0
+  },
+  "steps": [
+    "seeded isolated fixture",
+    "anonymous export rejected with 401",
+    "authenticated export accepted with 202",
+    "outbox row persisted as pending",
+    "poll_outbox_once sent 1 event to the broker",
+    "worker finished with AsyncResult SUCCESS",
+    "artifact read back from S3 and inspected",
+    "second poll re-sent nothing; artifact unchanged"
+  ],
+  "target": {
+    "app_env": "dev",
+    "broker": "<redacted: broker url>",
+    "database": "127.0.0.1:55448/soymutdb_chain_20261016",
+    "result_backend": "<redacted: broker url>",
+    "s3_endpoint": "http://127.0.0.1:59000",
+    "s3_region": "us-east-1"
+  },
+  "verified": true,
+  "worker_result": {
+    "async_result_state": "SUCCESS",
+    "download_url": "<redacted: presigned URL>",
+    "file_size": 429,
+    "record_count": 2,
+    "s3_path": "exports/b75339a5-28ef-43ee-83af-94417d897822/soymutdb_export_b75339a5-28ef-43ee-83af-94417d897822.tsv",
+    "task_id_matches_outbox_event_id": true
+  }
+}

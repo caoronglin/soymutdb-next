@@ -1,7 +1,7 @@
 """Pydantic v2 schemas for the population-genetics tool endpoints.
 
 Three public, read-only tools (mirroring the public ``/tools/seqfetch``
-pattern) that aggregate the ClickHouse ``variant_facts`` data:
+pattern) that aggregate the PostgreSQL ``variant_facts`` data:
 
 - ``POST /api/v1/tools/ld`` – LD heatmap (r² matrix + variant coordinates).
 - ``POST /api/v1/tools/diversity`` – nucleotide diversity (π / θ) per

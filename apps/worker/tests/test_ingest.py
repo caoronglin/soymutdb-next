@@ -44,7 +44,7 @@ def test_vcf_import_fails_closed_while_flag_is_off(monkeypatch):
 
     monkeypatch.setattr(ingest, "get_clickhouse_client", fail_if_clickhouse_is_opened)
 
-    with pytest.raises(RuntimeError, match=r"VCF import is disabled.*gated off"):
+    with pytest.raises(RuntimeError, match=r"VCF import is disabled.*PostgreSQL"):
         ingest.import_vcf.run("release-1", "variants.vcf.gz", "assembly-1")
 
 

@@ -51,6 +51,7 @@ _MANAGED = frozenset(
         "SOYMUTDB_LOCAL_ENV_FILE",
         "SOYMUTDB_LOCAL_IMAGE_TAG",
         "SOYMUTDB_LOCAL_PROFILES",
+        "SOYMUTDB_LOCAL_LEGACY_CLICKHOUSE",
         "SOYMUTDB_CI_DOCKER_BUILD_EXTRA_ARGS",
     }
 )
@@ -131,10 +132,10 @@ def _profile_flags(argv: list[str]) -> list[str]:
 def test_empty_env_file_value_falls_back_to_development_default(tmp_path: Path) -> None:
     _result, _argv, captured = _run_wrapper(
         tmp_path,
-        "# an unset credential\nPOSTGRES_PASSWORD=\nCLICKHOUSE_PASSWORD=   # empty\n",
+        "# an unset credential\nPOSTGRES_PASSWORD=\nREDIS_PASSWORD=   # empty\n",
     )
     assert captured["POSTGRES_PASSWORD"] == "soymutdb_dev_password"
-    assert captured["CLICKHOUSE_PASSWORD"] == "soymutdb_dev_password"
+    assert captured["REDIS_PASSWORD"] == "soymutdb_dev_password"
 
 
 def test_quoted_empty_env_file_value_falls_back(tmp_path: Path) -> None:
@@ -265,3 +266,35 @@ def test_profiles_default_to_core_when_nothing_is_set(tmp_path: Path) -> None:
 def test_env_file_without_trailing_newline_is_fully_read(tmp_path: Path) -> None:
     _result, argv, _captured = _run_wrapper(tmp_path, "COMPOSE_PROFILES=blast")
     assert _profile_flags(argv) == ["blast"]
+
+
+# ---------------------------------------------------------------------------
+# The historical ClickHouse source is opt-in, never part of the default stack.
+# ---------------------------------------------------------------------------
+def test_default_run_keeps_clickhouse_out_of_the_local_topology(tmp_path: Path) -> None:
+    """A default run loads neither the legacy overlay nor its credentials.
+
+    `docker-compose.yml` and `docker-compose.local.yml` have no ClickHouse
+    service, so supplying CLICKHOUSE_PASSWORD / MIGRATE_CLICKHOUSE_IMAGE_REF
+    would invent a credential for a database the stack never starts. Only
+    `docker-compose.legacy-clickhouse.yml` reads either name.
+    """
+    _result, argv, captured = _run_wrapper(tmp_path, "POSTGRES_PASSWORD=fixture\n")
+    assert not any(token.endswith("docker-compose.legacy-clickhouse.yml") for token in argv)
+    assert "CLICKHOUSE_PASSWORD" not in captured
+    assert "MIGRATE_CLICKHOUSE_IMAGE_REF" not in captured
+    assert "legacy-migration" not in _profile_flags(argv)
+
+
+def test_legacy_clickhouse_opt_in_loads_the_overlay_and_its_credentials(
+    tmp_path: Path,
+) -> None:
+    _result, argv, captured = _run_wrapper(
+        tmp_path,
+        "POSTGRES_PASSWORD=fixture\n",
+        extra_env={"SOYMUTDB_LOCAL_LEGACY_CLICKHOUSE": "1"},
+    )
+    assert any(token.endswith("docker-compose.legacy-clickhouse.yml") for token in argv)
+    assert "legacy-migration" in _profile_flags(argv)
+    assert captured["CLICKHOUSE_PASSWORD"] == "soymutdb_dev_password"
+    assert captured["MIGRATE_CLICKHOUSE_IMAGE_REF"] == "soymutdb-migrate-clickhouse:local"

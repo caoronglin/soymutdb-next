@@ -100,7 +100,7 @@ def postgres_container():
             "to use an explicit PostgreSQL test database"
         )
 
-    with PostgresContainer("postgres:18.4-alpine") as pg:
+    with PostgresContainer("postgres:18.6-alpine") as pg:
         # Build asyncpg URL from the container's JDBC-style URL
         host = pg.get_container_host_ip()
         port = pg.get_exposed_port(5432)

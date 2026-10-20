@@ -24,8 +24,8 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 NODE_VERSION = "26.10.0"
-PNPM_VERSION = "12.5.1"
-PYTHON_VERSION = "3.14"
+PNPM_VERSION = "12.11.2"
+PYTHON_VERSION = "3.15"
 
 CNB_CONFIG = ROOT / ".cnb.yml"
 LEGACY_WORKFLOWS = (
@@ -44,11 +44,14 @@ SHARED_SCRIPTS = (
     "scripts/verify-backend-tests.sh",
     "scripts/with-postgres-service.sh",
     "scripts/build-static-apps.sh",
+    "scripts/build-all-static-apps.sh",
+    "scripts/ci-nightly-artifact-gate.sh",
     "scripts/build-release-image.sh",
     "scripts/release-contract.golden.sh",
     "scripts/build-pages-artifact.sh",
     "scripts/verify-pages-artifact.sh",
     "scripts/verify-site-variant-artifacts.sh",
+    "scripts/verify-artifact-e2e.sh",
     "scripts/mcp-transport-smoke.sh",
     "scripts/assert-clickhouse-migration.py",
     "scripts/smoke.sh",
@@ -639,7 +642,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         """The contracts stage must provision the layer's whole dependency set.
 
         `smoke-contracts` runs `scripts/smoke.sh --profile contracts` on a
-        `python:3.14` stage, which ships neither a test runner nor PyYAML. The
+        `python:3.15` stage, which ships neither a test runner nor PyYAML. The
         job has to provision both, and both were found the expensive way:
         CNB build `cnb-66s-1k4i8rfii` (2026-10-10) failed in 11s on missing
         pytest, and the fix then failed again on missing PyYAML -- because
@@ -719,17 +722,17 @@ class DeliveryArchitectureTests(unittest.TestCase):
 
         The layer is not Python-only: `resolveDevAllowedHosts` is TypeScript,
         and one case shells out to node to run the frontend gate self-test. The
-        stage was declared `image: python:3.14`, which has no node, so CNB
+        stage was declared `image: python:3.15`, which has no node, so CNB
         build `cnb-t65-1k4ibj79d` (2026-10-10) reported
         "FileNotFoundError: No such file or directory: 'node'" — 264 contracts
         passed and two could not run.
 
         The pipeline image is the correct host: .cnb/env/Dockerfile.frontend is
-        `FROM python:3.14` with Node 26.10.0 unpacked on top, so it is the only
+        `FROM python:3.15` with Node 26.10.0 unpacked on top, so it is the only
         image in the pipeline carrying both pins.
 
         Two wrong-looking fixes are ruled out here rather than left to review:
-        re-adding `python:3.14` fails the assertion, and so does swapping the
+        re-adding `python:3.15` fails the assertion, and so does swapping the
         `FROM` to `node:26.10.0` with a copied interpreter, which cannot start
         across the glibc 2.36 / 2.38 boundary.
         """
@@ -748,9 +751,9 @@ class DeliveryArchitectureTests(unittest.TestCase):
         base = re.search(r"(?m)^FROM\s+(\S+)", dockerfile)
         self.assertIsNotNone(base, "Dockerfile.frontend has no FROM")
         self.assertEqual(
-            base.group(1), "python:3.14",
-            "the pipeline image must be built FROM python:3.14 and carry Node on "
-            "top; node:26.10.0 is glibc 2.36 and cannot host a copied 3.14 "
+            base.group(1), "python:3.15",
+            "the pipeline image must be built FROM python:3.15 and carry Node on "
+            "top; node:26.10.0 is glibc 2.36 and cannot host a copied 3.15 "
             "interpreter that needs 2.38",
         )
         self.assertIn("node --version", dockerfile)
@@ -1285,7 +1288,12 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # A stage named like a setup step must not masquerade as preparation for
         # later stages. If one comes back, it must at least be honest about it.
         document = yaml.safe_load(CNB_CONFIG.read_text(encoding="utf-8"))
-        for branch, event in (("main", "pull_request"), ("main", "push"), ("$", "web_trigger_verify")):
+        for branch, event in (
+            ("main", "pull_request"),
+            ("main", "push"),
+            ("$", "web_trigger_verify"),
+            ("main", "crontab: 0 2 * * *"),
+        ):
             for pipeline in _cnb_pipelines(branch, event):
                 stage_names = [stage.get("name", "") for stage in pipeline.get("stages", [])]
                 for name in stage_names:
@@ -1670,7 +1678,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
 
         # The governance job body must bootstrap the Python modules its own
         # `pnpm deps:*` scripts import. The GitHub mirror installs
-        # `PyYAML==6.0.3 uv==0.11.33` by hand; the CNB stage ran in
+        # `PyYAML==6.0.3 uv==0.13.1` by hand; the CNB stage ran in
         # `node:26.10.0`, which has no PyYAML and no pip, and died with
         # `ModuleNotFoundError: No module named 'yaml'`.
         self.assertIn("ensure_governance_python", bodies["dependency_governance_step"])
@@ -1816,7 +1824,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
 
         # The interpreter must be the PINNED one. The image supplies it, but
         # `command -v python3` succeeding is a weaker claim than "python3 is
-        # 3.14": a rebuilt image could put 3.11 on PATH, the venv would be
+        # 3.15": a rebuilt image could put 3.11 on PATH, the venv would be
         # created, and the contract gate would validate against a backend the
         # repository never declared. Assert the version check is real.
         self.assertIn("interpreter_matches_pin", bodies)
@@ -1923,11 +1931,11 @@ class DeliveryArchitectureTests(unittest.TestCase):
             docker_text = path.read_text(encoding="utf-8")
             self.assertRegex(
                 docker_text,
-                r"(?m)^FROM python:3\.14",
+                r"(?m)^FROM python:3\.15",
                 f"{dockerfile_path} must carry Python for the OpenAPI contract gate",
             )
             # Node is installed from the official release tarball, not from a
-            # `FROM node:` base: python:3.14 and node:26.10.0 sit on different
+            # `FROM node:` base: python:3.15 and node:26.10.0 sit on different
             # Debian generations, and `COPY --from` cannot carry the C library
             # the copied interpreter needs, so the reverse composition dies with
             # `GLIBC_2.38 not found`. Assert the version arrives pinned AND that
@@ -1947,7 +1955,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 docker_text,
                 r"(?m)^FROM node:",
                 f"{dockerfile_path} cannot be built on a node: base and also "
-                "provide Python 3.14 from python: via COPY --from",
+                "provide Python 3.15 from python: via COPY --from",
             )
 
     def test_no_stage_image_is_a_dockerfile_path(self) -> None:
@@ -2744,7 +2752,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         """`docker compose` interpolates the whole file, not the services named.
 
         `docker-compose.yml` is the production topology and fails fast on
-        `${POSTGRES_PASSWORD:?…}` / `${CLICKHOUSE_PASSWORD:?…}` /
+        `${POSTGRES_PASSWORD:?…}` /
         `${REDIS_PASSWORD:?…}` / `${MINIO_ROOT_USER:?…}` /
         `${MINIO_ROOT_PASSWORD:?…}`. Compose resolves those before it selects
         services, so on a cloud-development environment -- which has no release
@@ -2761,7 +2769,6 @@ class DeliveryArchitectureTests(unittest.TestCase):
         """
         required = (
             "POSTGRES_PASSWORD",
-            "CLICKHOUSE_PASSWORD",
             "REDIS_PASSWORD",
             "MINIO_ROOT_USER",
             "MINIO_ROOT_PASSWORD",
@@ -2905,6 +2912,93 @@ class DeliveryArchitectureTests(unittest.TestCase):
             "pip install --quiet clickhouse-connect",
             ci,
             "the dependency belongs in the shared script, not inlined in the workflow",
+        )
+
+    def test_clickhouse_migration_keeps_its_own_python_314(self) -> None:
+        """The legacy ClickHouse lane stays below the 3.15 floor, on purpose.
+
+        Every native service moved to 3.15, and clickhouse-connect moved with
+        them -- out of [project].dependencies and into a 'legacy-clickhouse'
+        extra whose marker is python_version < 3.15, because upstream 1.10
+        declares requires-python >=3.10,<3.15 and publishes no 3.15 release.
+        The migration lane still needs that driver: the migration library
+        imports it and scripts/assert-clickhouse-migration.py asserts
+        through it.
+
+        So the lane keeps one interpreter of its own, and this test guards two
+        silent failures: the stage image following the pipeline to 3.15, where
+        pip can only report 'no matching distribution' for the driver; and the
+        shared body losing the assertion that turns that into a clear message.
+        """
+        CH_JOB = "clickhouse-migration"
+        CH_VERSION = "3.14"
+        dollar = chr(36)  # the pin lives inside a bash parameter expansion
+
+        shared = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        body = shared.split("clickhouse_migration_run()", 1)[1].split(chr(10) + "}", 1)[0]
+        self.assertIn(
+            "CLICKHOUSE_MIGRATION_PYTHON_VERSION",
+            body,
+            "the migration body must pin and verify its own interpreter version",
+        )
+        self.assertIn(
+            "SOYMUTDB_CLICKHOUSE_MIGRATION_PYTHON_VERSION:-" + CH_VERSION,
+            body,
+            "the legacy ClickHouse lane must default to Python " + CH_VERSION,
+        )
+        self.assertIn(
+            "version_info",
+            body,
+            "the migration body must compare sys.version_info against that pin, "
+            "not merely find an interpreter",
+        )
+        self.assertIn(
+            'PYTHON_VERSION="'
+            + dollar
+            + "{SOYMUTDB_CI_PYTHON_VERSION:-"
+            + PYTHON_VERSION
+            + '}"',
+            shared,
+        )
+        self.assertNotEqual(
+            CH_VERSION,
+            PYTHON_VERSION,
+            "if clickhouse-connect ever ships 3.15 wheels, move the lane with it "
+            "instead of leaving this test asserting a split that no longer exists",
+        )
+
+        cnb = yaml.safe_load((ROOT / ".cnb.yml").read_text(encoding="utf-8"))
+        pipeline = next(job for job in cnb["main"]["push"] if job["name"] == CH_JOB)
+        images = [stage.get("image") for stage in pipeline["stages"]]
+        self.assertEqual(
+            images,
+            ["python:" + CH_VERSION],
+            "the ClickHouse migration stage must stay on python:" + CH_VERSION,
+        )
+
+        ci = yaml.safe_load(_workflow_text("ci.yml"))
+        job = ci["jobs"][CH_JOB]
+        setup = next(
+            step for step in job["steps"] if step.get("name", "").startswith("Setup Python")
+        )
+        self.assertEqual(
+            str(setup["with"]["python-version"]),
+            CH_VERSION,
+            "the ClickHouse migration job must set up Python " + CH_VERSION,
+        )
+        self.assertEqual(
+            job["env"].get("CLICKHOUSE_MIGRATION_PYTHON"),
+            "python",
+            "the assertion target must be the interpreter the job installs",
+        )
+
+        dockerfile = (ROOT / "infra/docker/Dockerfile.migrate-clickhouse").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            "FROM python:3.14.6-slim",
+            dockerfile,
+            "the migrator image is the other half of this lane and stays on 3.14",
         )
 
     def test_setup_workspace_declares_helpers_before_it_calls_them(self) -> None:

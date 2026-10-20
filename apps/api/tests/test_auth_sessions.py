@@ -246,11 +246,28 @@ def make_user(
 
 
 @pytest_asyncio.fixture
-async def auth_env() -> AsyncGenerator[tuple[AsyncClient, FakeAuthDB]]:
-    """Minimal app + fake session for exercising the real auth endpoints."""
+async def auth_env(monkeypatch) -> AsyncGenerator[tuple[AsyncClient, FakeAuthDB]]:
+    """Minimal app with explicit database and rate-budget backend doubles."""
+    from app.core import middleware
     from app.core.database import get_db
+    from app.core.ratelimit import RequestRateLimiter
     from app.main import create_app
 
+    class BudgetRedis:
+        def __init__(self) -> None:
+            self.counts: dict[str, int] = {}
+
+        async def eval(self, script: str, numkeys: int, key: str, window: int) -> list[int]:
+            self.counts[key] = self.counts.get(key, 0) + 1
+            return [self.counts[key], window]
+
+    # Refresh/logout/register now correctly consume a global write budget.
+    # Supply its disposable backend without disabling the production middleware;
+    # outage and quota failures are asserted in test_request_rate_limit.py.
+    redis = BudgetRedis()
+    monkeypatch.setattr(
+        middleware, "request_rate_limiter", RequestRateLimiter(redis_getter=lambda: redis)
+    )
     fake_db = FakeAuthDB(user=make_user())
     application = create_app()
 

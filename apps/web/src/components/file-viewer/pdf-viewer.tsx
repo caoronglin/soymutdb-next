@@ -9,7 +9,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button, Skeleton } from "@/lib/antd";
 import { MinusOutlined, PlusOutlined } from "@ant-design/icons";
-import type { PDFDocumentProxy } from "pdfjs-dist";
+import type { PDFDocumentLoadingTask, PDFDocumentProxy } from "pdfjs-dist";
 
 interface PdfViewerProps {
   url: string;
@@ -31,23 +31,28 @@ export function PdfViewer({ url }: PdfViewerProps) {
   const [fitWidth, setFitWidth] = useState(true);
 
   // Load the library + document once per URL.
+  //
+  // pdfjs-dist 6 removed `PDFDocumentProxy.destroy()`; teardown must destroy
+  // the loading task, which aborts the network requests and the worker.
   useEffect(() => {
     let disposed = false;
-    let doc: PDFDocumentProxy | null = null;
+    let loadingTask: PDFDocumentLoadingTask | null = null;
 
     setState({ status: "loading" });
 
     (async () => {
       try {
         const pdfjs = await import("pdfjs-dist");
-        const workerUrl = (await import("pdfjs-dist/build/pdf.worker.min.mjs?url")).default;
         if (disposed) return;
-        pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+        // Umi/webpack has no `?url` import convention: the worker is copied to
+        // `public/pdf.worker.min.mjs` by scripts/sync-pdf-worker.mjs and served
+        // under the portal base (external sub-path or internal root).
+        pdfjs.GlobalWorkerOptions.workerSrc = `${import.meta.env.BASE_URL}pdf.worker.min.mjs`;
 
-        const loadingTask = pdfjs.getDocument({ url });
-        doc = await loadingTask.promise;
+        loadingTask = pdfjs.getDocument({ url });
+        const doc = await loadingTask.promise;
         if (disposed) {
-          void doc.destroy();
+          void loadingTask.destroy();
           return;
         }
         setState({ status: "ready", doc });
@@ -62,7 +67,7 @@ export function PdfViewer({ url }: PdfViewerProps) {
 
     return () => {
       disposed = true;
-      if (doc) void doc.destroy();
+      void loadingTask?.destroy();
     };
   }, [url]);
 
@@ -102,9 +107,9 @@ export function PdfViewer({ url }: PdfViewerProps) {
         wrapper.appendChild(canvas);
         container.appendChild(wrapper);
 
-        const ctx = canvas.getContext("2d");
-        if (!ctx) continue;
-        await page.render({ canvasContext: ctx, viewport }).promise;
+        // pdfjs-dist 6 requires the canvas element (`canvasContext` is legacy
+        // and only accepted with `canvas: null`).
+        await page.render({ canvas, viewport }).promise;
       }
     })();
 

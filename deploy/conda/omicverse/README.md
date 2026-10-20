@@ -43,6 +43,14 @@ OUTPUT_DIR="$PWD/.validation/m3-delivery-20261009/fresh" \
 有意升级时用 uv 0.11.33 在本目录执行锁头的 compile 命令，审查完整 resolver 差异并
 重跑 fresh 资格，不能仅改 pins 宣称通过。
 
+> **仓库 pin 已前移，本 profile 未跟随（2026-10-15）。** 交付链路的 uv pin 已从 0.11.33 升到
+> **0.13.1**（`scripts/check-toolchain-pins.py` 的 `EXPECTED_UV` 为准，覆盖全部镜像与 GitHub 镜像
+> workflow）。本目录 `setup.sh` **仍硬性要求 0.11.33**，因为现有 `requirements.lock` 是 0.11.33
+> 按 `--require-hashes` 解析并完成资格产出的；用 0.13.1 重新解析会换 resolver，锁内容可能变化，
+> 而上面那条「不能仅改 pins 宣称通过」的规矩正是为此。上面两处 0.11.33 是**历史资格记录**，不是
+> 仓库现行 pin。要升这里，必须按上一段的 compile → 审查 resolver 差异 → 重跑 fresh 资格流程，
+> 走完再改 `setup.sh` 的硬性校验。
+
 [run_bounded.py](run_bounded.py) 仅为本 profile 实验命令 runner：create/check 30 秒，
 hash-sync 240 秒，真实 smoke **180 秒**；每个子进程 **8 GiB RLIMIT_AS**、CPU 时间限制、
 单 CPU affinity。公开 `PYTHON_CPU_COUNT=1` 加 BLAS/OMP/MKL/NUMBA/LOKY/Rayon/uv 线程

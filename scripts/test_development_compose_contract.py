@@ -35,7 +35,7 @@ POSTGRES_18_VOLUME_TARGET = "/var/lib/postgresql"
 # The data layer `scripts/start-cloud-dev.sh preview` actually starts. `services:`
 # is additive in Compose, so a service outside this set keeps the production
 # references it declares -- which is fine, because nothing starts it.
-DEV_DATA_LAYER_SERVICES = ("postgres", "clickhouse", "redis", "redis-celery", "minio")
+DEV_DATA_LAYER_SERVICES = ("postgres", "redis", "redis-celery", "minio")
 
 
 def _load(path: Path) -> dict:
@@ -146,7 +146,7 @@ def _unresolved_demands(
        merged; every other base service keeps its own `${…:?…}`. `services:` is
        therefore only meaningful together with the set the operator actually
        starts — `scripts/start-cloud-dev.sh` brings up
-       `postgres clickhouse redis minio` explicitly, so those are the four this
+       `postgres redis minio` explicitly, so those are the four this
        test resolves. A stack that started `--profile core` would still need the
        release image references and the monitoring secrets, which is by design.
 
@@ -313,7 +313,6 @@ def test_cloud_preview_data_layer_is_standalone_and_data_only() -> None:
 
     assert set(preview["services"]) == {
         "postgres",
-        "clickhouse",
         "redis",
         "redis-celery",
         "minio",
@@ -330,7 +329,6 @@ def test_cloud_preview_data_layer_is_standalone_and_data_only() -> None:
     #    fallback), so the preview does not need production credentials at all.
     for variable in (
         "POSTGRES_PASSWORD",
-        "CLICKHOUSE_PASSWORD",
         "REDIS_PASSWORD",
         "MINIO_ROOT_USER",
         "MINIO_ROOT_PASSWORD",
@@ -461,7 +459,7 @@ def test_development_overlay_supplies_the_base_required_credentials() -> None:
     dev_services = _load(DEV)["services"]
 
     assert dev_services["postgres"]["environment"]["POSTGRES_PASSWORD"]
-    assert dev_services["clickhouse"]["environment"]["CLICKHOUSE_PASSWORD"]
+    assert "clickhouse" not in dev_services
     assert dev_services["minio"]["environment"]["MINIO_ROOT_USER"]
     assert dev_services["minio"]["environment"]["MINIO_ROOT_PASSWORD"]
     for service_name in ("redis", "redis-celery"):
@@ -514,7 +512,6 @@ def test_development_stack_demands_nothing_from_the_environment() -> None:
     # could fail without any production behaviour changing.
     assert _required_variables(base) >= {
         "POSTGRES_PASSWORD",
-        "CLICKHOUSE_PASSWORD",
         "REDIS_PASSWORD",
         "MINIO_ROOT_USER",
         "MINIO_ROOT_PASSWORD",

@@ -3,7 +3,7 @@ import { SITE_VARIANT } from "../../lib/site-variant";
 import { assembliesQueryOptions } from "../../lib/query-options";
 /**
  * ExpPattern tool — gene × condition expression matrix with optional row
- * clustering, rendered as an ECharts heatmap (lazy-loaded via useECharts)
+ * clustering, rendered as a heatmap through the shared @soymutdb/charts facade
  * plus a raw matrix table.
  *
  * POST /api/v1/tools/exppattern: 1–50 genes, ≤200 conditions, rows are
@@ -14,8 +14,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { useMemo } from "react";
-import type { EChartsOption } from "echarts";
 import { RiseOutlined, CaretRightOutlined, LoadingOutlined, RedoOutlined } from "@ant-design/icons";
 import {
   Breadcrumb,
@@ -31,7 +29,21 @@ import {
   Typography,
 } from "@/lib/antd";
 import { useToast } from "../../lib/toast";
-import { useECharts } from "../../lib/use-echarts";
+import {
+  buildExpPatternCanvasData,
+  buildExpPatternChartDefinitionWithDomain,
+  expPatternCanvasTableRow,
+  expPatternCanvasTooltipFormatter,
+  EXP_PATTERN_CANVAS_TABLE_COLUMNS,
+} from "../../components/charts/tool-chart-definitions";
+import { ToolChartFigure, ToolColorScale } from "../../components/charts/tool-chart-figure";
+import {
+  expPatternColorRange,
+  expPatternHasData,
+  expPatternValueDomain,
+  fmtExpPatternValue as fmtV,
+  EXP_PATTERN_LARGE_MATRIX_CELLS as LARGE_MATRIX_CELLS,
+} from "../../components/charts/tool-exppattern-mapping";
 import { runExpPattern, type ExpPatternResponse } from "./api";
 
 export const Route = createFileRoute("/tools/exppattern")({
@@ -39,8 +51,6 @@ export const Route = createFileRoute("/tools/exppattern")({
 });
 
 const MAX_INPUT_GENES = 50;
-/** Above this many cells we warn that the heatmap is dense. */
-const LARGE_MATRIX_CELLS = 2000;
 
 function parseGenes(raw: string): string[] {
   return [
@@ -51,11 +61,6 @@ function parseGenes(raw: string): string[] {
         .filter(Boolean),
     ),
   ];
-}
-
-function fmtV(v: number | null): string {
-  if (v === null || Number.isNaN(v)) return "—";
-  return v.toFixed(2);
 }
 
 function ExpPatternComponent() {
@@ -96,7 +101,10 @@ function ExpPatternInner() {
       setResult(data);
       success(
         t("tools.exppattern.toastDone"),
-        t("tools.exppattern.toastDoneDesc", { genes: data.genes.length, conds: data.conditions.length }),
+        t("tools.exppattern.toastDoneDesc", {
+          genes: data.genes.length,
+          conditions: data.conditions.length,
+        }),
       );
     },
     onError: (err: Error) => {
@@ -126,7 +134,7 @@ function ExpPatternInner() {
     patternMutation.reset();
   };
 
-  const hasData = !!result && result.conditions.length > 0 && result.matrix.some((row) => row.some((v) => v !== null));
+  const hasData = !!result && expPatternHasData(result);
   const cellCount = result ? result.genes.length * result.conditions.length : 0;
   const isLarge = cellCount > LARGE_MATRIX_CELLS;
 
@@ -295,7 +303,7 @@ function ExpPatternInner() {
                   <Typography.Text type="secondary">
                     {t("tools.exppattern.summaryDesc", {
                       genes: result.genes.length,
-                      conds: result.conditions.length,
+                      conditions: result.conditions.length,
                     })}
                   </Typography.Text>
                 </>
@@ -410,115 +418,50 @@ function ExpPatternInner() {
 }
 
 /**
- * ECharts heatmap — echarts itself is lazy-loaded by useECharts (dynamic
- * import inside the hook), so no static echarts import here.
+ * Expression heatmap, drawn by the shared @soymutdb/charts facade.
+ *
+ * The contract and its rows come from components/charts/
+ * tool-chart-definitions; the cells, the colour domain, the two ramps and the
+ * label cut-off live in tool-exppattern-mapping, where they are unit-tested.
  */
-function ExpPatternHeatmap({ result }: { result: ExpPatternResponse }) {
+export function ExpPatternHeatmap({ result }: { result: ExpPatternResponse }) {
   const { t } = useTranslation();
-  const [min, max] = result.value_range;
-  const option: EChartsOption = useMemo(() => {
-    const data: [number, number, number][] = [];
-    for (let i = 0; i < result.genes.length; i += 1) {
-      for (let j = 0; j < result.conditions.length; j += 1) {
-        const v = result.matrix[i]?.[j];
-        if (v !== null && v !== undefined && !Number.isNaN(v)) {
-          data.push([j, i, v]);
-        }
-      }
-    }
-    const isZ = result.scale === "zscore";
-    return {
-      tooltip: {
-        position: "top",
-        formatter: (params) => {
-          const p = params as unknown as { value: [number, number, number] };
-          const cond = result.conditions[p.value[0]] ?? "";
-          const gene = result.genes[p.value[1]] ?? "";
-          return `${gene}<br/>${cond}<br/><strong>${p.value[2].toFixed(2)}</strong>`;
-        },
-      },
-      grid: {
-        left: result.genes.length > 1 ? 110 : 70,
-        right: 60,
-        top: 8,
-        bottom: 90,
-      },
-      xAxis: {
-        type: "category",
-        data: result.conditions,
-        splitArea: { show: true },
-        axisLabel: {
-          fontSize: 10,
-          color: "var(--muted-foreground)",
-          rotate: result.conditions.length > 6 ? 45 : 0,
-          interval: 0,
-          overflow: "truncate",
-          width: 80,
-        },
-        axisLine: { lineStyle: { color: "var(--border)" } },
-      },
-      yAxis: {
-        type: "category",
-        data: result.genes,
-        splitArea: { show: true },
-        axisLabel: {
-          fontSize: 10,
-          color: "var(--foreground)",
-          fontFamily: "JetBrains Mono, monospace",
-        },
-        axisLine: { lineStyle: { color: "var(--border)" } },
-      },
-      visualMap: {
-        min: min ?? 0,
-        max: max ?? 1,
-        calculable: true,
-        orient: "horizontal",
-        left: "center",
-        bottom: 0,
-        textStyle: { fontSize: 10, color: "var(--muted-foreground)" },
-        inRange: {
-          // z-scored data centres on 0 (blue → white → green); raw FPKM
-          // stays on the green ramp used across the site charts.
-          color: isZ
-            ? ["var(--impact-low)", "#F6F8F6", "var(--chart-1)"]
-            : ["var(--chart-5)", "var(--chart-3)", "var(--chart-1)"],
-        },
-      },
-      series: [
-        {
-          name: result.scale,
-          type: "heatmap",
-          data,
-          label: {
-            show: data.length <= 50,
-            fontSize: 10,
-            color: "var(--foreground)",
-          },
-          emphasis: {
-            itemStyle: { shadowBlur: 10, shadowColor: "rgba(0,0,0,0.15)" },
-          },
-        },
-      ],
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [result]);
-
-  const { ref, loading } = useECharts(option, [result]);
+  // The colour domain is consumer state, exactly as the ECharts visualMap's
+  // calculable handles were. A new response resets it to the reported range.
+  const bounds = React.useMemo(
+    () => expPatternValueDomain(result),
+    [result],
+  );
+  const [domain, setDomain] = React.useState<[number, number]>([bounds.min, bounds.max]);
+  React.useEffect(() => {
+    setDomain([bounds.min, bounds.max]);
+  }, [bounds.min, bounds.max]);
 
   return (
-    <figure className="relative">
-      <div
-        ref={ref}
-        className="h-80 w-full"
-        role="img"
-        aria-label={t("tools.exppattern.heatmapAria")}
-      />
-      {loading ? (
-        <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden />
-      ) : null}
-      <figcaption className="sr-only">
-        {t("tools.exppattern.heatmapAria", { genes: result.genes.length, conditions: result.conditions.length })}
-      </figcaption>
-    </figure>
+    <ToolChartFigure
+      definition={buildExpPatternChartDefinitionWithDomain(result, domain)}
+      data={buildExpPatternCanvasData(result)}
+      label={t("tools.exppattern.heatmapAria", {
+        genes: result.genes.length,
+        conditions: result.conditions.length,
+      })}
+      description={t("tools.exppattern.heatmapAria", {
+        genes: result.genes.length,
+        conditions: result.conditions.length,
+      })}
+      tableColumns={EXP_PATTERN_CANVAS_TABLE_COLUMNS}
+      tableRow={expPatternCanvasTableRow}
+      height={320}
+      tooltipFormatter={expPatternCanvasTooltipFormatter}
+      footer={
+        <ToolColorScale
+          bounds={[bounds.min, bounds.max]}
+          value={domain}
+          ramp={expPatternColorRange(result.scale)}
+          onChange={setDomain}
+          label={t("tools.exppattern.heatmapTitle")}
+        />
+      }
+    />
   );
 }

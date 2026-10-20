@@ -50,6 +50,7 @@ celery_app = Celery(
         "soymutdb_worker.tasks.ingest",
         "soymutdb_worker.tasks.stats",
         "soymutdb_worker.tasks.cleanup",
+        "soymutdb_worker.tasks.native_retention",
         "soymutdb_worker.tasks.expression",
         "soymutdb_worker.tasks.homolog",
         "soymutdb_worker.tasks.gwas",
@@ -89,6 +90,10 @@ celery_app.conf.update(
         "update-release-stats": {
             "task": "soymutdb_worker.tasks.stats.update_release_stats",
             "schedule": 3600,  # every hour
+        },
+        "cleanup-native-retention": {
+            "task": "soymutdb_worker.tasks.native_retention.cleanup",
+            "schedule": 3600,
         },
         "cleanup-old-exports": {
             "task": "soymutdb_worker.tasks.export.cleanup_old_exports",
@@ -133,6 +138,7 @@ celery_app.autodiscover_tasks(
         "soymutdb_worker.tasks.export",
         "soymutdb_worker.tasks.stats",
         "soymutdb_worker.tasks.cleanup",
+        "soymutdb_worker.tasks.native_retention",
         "soymutdb_worker.tasks.email",
         "soymutdb_worker.tasks.expression",
         "soymutdb_worker.tasks.homolog",
@@ -202,13 +208,19 @@ def _observe_task_duration(
 
 
 @task_success.connect
-def _observe_task_success(sender: str | None = None, **kwargs: object) -> None:
-    worker_metrics.TASKS_TOTAL.labels(queue=_queue_of_task(sender or "")).inc()
+def _observe_task_success(sender: object | None = None, **kwargs: object) -> None:
+    worker_metrics.TASKS_TOTAL.labels(queue=_queue_of_task(_task_name(sender))).inc()
 
 
 @task_failure.connect
-def _observe_task_failure(sender: str | None = None, **kwargs: object) -> None:
-    worker_metrics.TASK_FAILURES_TOTAL.labels(queue=_queue_of_task(sender or "")).inc()
+def _observe_task_failure(sender: object | None = None, **kwargs: object) -> None:
+    worker_metrics.TASK_FAILURES_TOTAL.labels(queue=_queue_of_task(_task_name(sender))).inc()
+
+
+def _task_name(sender: object | None) -> str:
+    """Celery sends Task instances; direct callers may supply task names."""
+    name = sender if isinstance(sender, str) else getattr(sender, "name", "")
+    return name if isinstance(name, str) else ""
 
 
 if __name__ == "__main__":

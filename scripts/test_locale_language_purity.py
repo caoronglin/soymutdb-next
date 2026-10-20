@@ -106,10 +106,7 @@ def test_every_translated_key_exists_in_the_bundle() -> None:
     key-parity test above could not see it.
     """
     bundles = {locale: dict(_walk(_load(locale))) for locale in ("zh", "en")}
-    # Admin only: the portal still carries 127 keys that exist in source but in
-    # neither bundle. Widening to apps/web fails on those until they are
-    # translated, and a permanently red guard trains everyone to ignore it.
-    roots = [REPO_ROOT / "apps" / "admin" / "src"]
+    roots = [REPO_ROOT / "apps" / "admin" / "src", REPO_ROOT / "apps" / "web" / "src"]
     # t("a.b.c", ...) and t("a.b.c", "text") — the defaultValue form.
     call = re.compile(r"""\bt\(\s*["']([a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9_]+)+)["']""")
     offenders: dict[str, str] = {}

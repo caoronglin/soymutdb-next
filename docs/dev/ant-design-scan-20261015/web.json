@@ -1,0 +1,95 @@
+{
+  "app": "web",
+  "sourceFiles": 205,
+  "facadeImports": 66,
+  "aliases": [
+    "../lib/antd",
+    "./antd",
+    "@/lib/antd",
+    "@soymutdb/ui-react"
+  ],
+  "lint": {
+    "issues": [],
+    "skippedFiles": [],
+    "partial": false,
+    "summary": {
+      "total": 0,
+      "deprecated": 0,
+      "a11y": 0,
+      "usage": 0,
+      "performance": 0,
+      "skipped": 0
+    }
+  },
+  "doctor": {
+    "checks": [
+      {
+        "name": "antd-installed",
+        "status": "pass",
+        "message": "antd 6.6.6 is installed"
+      },
+      {
+        "name": "react-compat",
+        "status": "pass",
+        "message": "React 19.3.0 is compatible with antd 6.6.6"
+      },
+      {
+        "name": "duplicate-install",
+        "status": "pass",
+        "message": "No duplicate antd installations detected"
+      },
+      {
+        "name": "dayjs-duplicate",
+        "status": "pass",
+        "message": "No duplicate dayjs installations detected"
+      },
+      {
+        "name": "cssinjs-duplicate",
+        "status": "pass",
+        "message": "No duplicate @ant-design/cssinjs installations detected"
+      },
+      {
+        "name": "cssinjs-compat",
+        "status": "pass",
+        "message": "No @ant-design/cssinjs peer dependency required by this antd version"
+      },
+      {
+        "name": "icons-compat",
+        "status": "pass",
+        "message": "No @ant-design/icons peer dependency declared"
+      },
+      {
+        "name": "theme-config",
+        "status": "pass",
+        "message": "No theme configuration issues detected"
+      },
+      {
+        "name": "babel-plugin",
+        "status": "pass",
+        "message": "No problematic Babel/webpack antd plugins detected"
+      },
+      {
+        "name": "cssinjs",
+        "status": "warn",
+        "severity": "warning",
+        "message": "No @ant-design/cssinjs found, SSR style extraction will not work",
+        "suggestion": "Install @ant-design/cssinjs if you need SSR support"
+      },
+      {
+        "name": "ecosystem-compat:icons",
+        "status": "pass",
+        "message": "@ant-design/icons 6.3.4 satisfies all peerDependencies"
+      },
+      {
+        "name": "ecosystem-compat:pro-components",
+        "status": "pass",
+        "message": "@ant-design/pro-components 3.1.15-2 satisfies all peerDependencies"
+      }
+    ],
+    "summary": {
+      "pass": 11,
+      "warn": 1,
+      "fail": 0
+    }
+  }
+}

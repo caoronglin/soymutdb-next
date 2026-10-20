@@ -236,7 +236,7 @@ class _CapturingRegionStore:
 async def test_popgen_region_query_propagates_release_context():
     store = _CapturingRegionStore()
     context = _context()
-    service = PopGenService(ch=store)
+    service = PopGenService(variant_service=store)
 
     await service.allele_frequencies(
         _EmptyGeneDb(),
@@ -419,7 +419,7 @@ async def test_same_position_variants_paginate_without_skip_or_duplicate():
     store = _InMemoryVariantStore(
         [_variant(41, 0), _variant(42, 0), _variant(43, 0), _variant(44, 1)]
     )
-    service = VariantService(ch=store)
+    service = VariantService(variant_service=store)
     context = _context()
 
     first = await service.list_variants(

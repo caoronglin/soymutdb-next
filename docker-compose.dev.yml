@@ -31,11 +31,6 @@ x-dev-app-env: &dev-app-env
   SOYMUTDB_APP_ENV: dev
   SOYMUTDB_DEBUG: "true"
   SOYMUTDB_DATABASE_URL: postgresql+asyncpg://soymutdb:soymutdb_dev_password@postgres:5432/soymutdb
-  SOYMUTDB_CLICKHOUSE_HOST: clickhouse
-  SOYMUTDB_CLICKHOUSE_PORT: "8123"
-  SOYMUTDB_CLICKHOUSE_USER: soymutdb
-  SOYMUTDB_CLICKHOUSE_PASSWORD: soymutdb_dev_password
-  SOYMUTDB_CLICKHOUSE_DATABASE: soymutdb
   SOYMUTDB_REDIS_URL: redis://:soymutdb_dev_password@redis:6379/0
   SOYMUTDB_CELERY_BROKER_URL: redis://:soymutdb_dev_password@redis-celery:6379/0
   SOYMUTDB_CELERY_RESULT_BACKEND: redis://:soymutdb_dev_password@redis-celery:6379/1
@@ -90,10 +85,6 @@ services:
   postgres:
     environment:
       POSTGRES_PASSWORD: soymutdb_dev_password
-
-  clickhouse:
-    environment:
-      CLICKHOUSE_PASSWORD: soymutdb_dev_password
 
   # The `healthcheck` override is load-bearing, not cosmetic. The base file's
   # healthcheck is

@@ -1,0 +1,22 @@
+# Isolated Python 3.14 acceptance only; never install into native services.
+pytest>=8
+chdb==4.4.0
+chdb-core==26.9.0
+clickhouse-connect>=1.10,<2
+alembic>=1.14
+asyncpg>=0.30
+sqlalchemy[asyncio]>=2
+psycopg2-binary>=2.9
+pydantic>=2.10
+pydantic-settings>=2.6
+celery[redis]>=5.4
+boto3>=1.35
+structlog>=24.4
+prometheus-client>=0.21
+jinja2>=3.1
+bleach>=6
+openpyxl>=3.1
+polars>=1.16
+pyarrow>=18
+cyvcf2>=0.31
+dominate>=2.9

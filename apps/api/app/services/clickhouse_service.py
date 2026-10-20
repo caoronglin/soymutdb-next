@@ -1,4 +1,12 @@
-"""ClickHouse query service with parameterised queries.
+"""Legacy ClickHouse query service — retained migration/test surface only.
+
+This module is **not part of the runtime path**. The API reads the
+authoritative PostgreSQL store natively (:class:`PostgresVariantService`), and
+nothing under ``apps/api/app`` or the worker imports this service. It is kept
+solely because the historical ClickHouse schema contract
+(``infra/clickhouse/test_schema_contract.py``, run by ``scripts/smoke.sh``) and
+the legacy-lane ablation tests still exercise it. Retire it together with that
+``infra`` contract and the historical ClickHouse migration lane.
 
 CRITICAL SECURITY: every query uses ``parameters=`` from clickhouse-connect.
 User input is NEVER interpolated into SQL via f-strings or ``%`` formatting.
@@ -11,11 +19,12 @@ import functools
 import math
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
-from clickhouse_connect.driver.asyncclient import AsyncClient
-from clickhouse_connect.driver.exceptions import ClickHouseError
 from structlog import get_logger
+
+if TYPE_CHECKING:
+    from clickhouse_connect.driver.asyncclient import AsyncClient
 
 from ..core.database import get_clickhouse_client
 from ..core.exceptions import ServiceUnavailableError
@@ -42,6 +51,17 @@ CLICKHOUSE_UNAVAILABLE_MESSAGE = (
 )
 
 
+def _is_legacy_transport_error(exc: Exception) -> bool:
+    """Inspect the optional driver only after a legacy operation fails."""
+    if isinstance(exc, ModuleNotFoundError) and exc.name == "clickhouse_connect":
+        return True
+    try:
+        from clickhouse_connect.driver.exceptions import ClickHouseError
+    except ModuleNotFoundError:
+        return False
+    return isinstance(exc, ClickHouseError)
+
+
 def _capability_guarded[T](
     func: Callable[..., Awaitable[T]],
 ) -> Callable[..., Awaitable[T]]:
@@ -59,7 +79,9 @@ def _capability_guarded[T](
     async def wrapper(*args: Any, **kwargs: Any) -> T:
         try:
             return await func(*args, **kwargs)
-        except ClickHouseError as exc:
+        except Exception as exc:
+            if not _is_legacy_transport_error(exc):
+                raise
             logger.warning(
                 "clickhouse_capability_unavailable",
                 operation=func.__name__,

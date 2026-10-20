@@ -6,13 +6,17 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import AdminLayout from "../routes/__root";
 import { NAV_SECTIONS } from "../components/admin-sidebar";
 
+const viewport = vi.hoisted(() => ({ desktop: true }));
+
 // The shared double, imported inside the factory: `vi.mock` is hoisted above
 // the imports, so a factory that closes over a top-level import hits the TDZ.
 // An inline `useTranslation: () => ({ t: ... })` is banned by
 // test_ci_job_contracts (a new `t` every render re-fires every effect).
 vi.mock("react-i18next", async () => (await import("../test/mocks")).mockTranslation);
 vi.mock("../components/admin-header", () => ({
-  AdminHeader: () => <header data-testid="shell-header" />,
+  AdminHeader: ({ onToggleSidebar }: { onToggleSidebar?: () => void }) => (
+    <header data-testid="shell-header"><button aria-label="Toggle sidebar" onClick={onToggleSidebar} /></header>
+  ),
 }));
 // The shell renders native antd 6 `Layout`/`Menu` now. Only the presentational
 // antd surface is doubled here: the real Router and `Link` stay in place, so the
@@ -23,7 +27,11 @@ vi.mock("../lib/antd", () => {
   // router outlet.
   const passthrough = () => ({ children }: { children?: React.ReactNode }) => <div>{children}</div>;
   return {
-    Grid: { useBreakpoint: () => ({ lg: true }) },
+    ConfigProvider: passthrough(),
+    Grid: { useBreakpoint: () => ({ lg: viewport.desktop }) },
+    Drawer: ({ open, children, onClose }: {
+      open?: boolean; children?: React.ReactNode; onClose?: () => void;
+    }) => open ? <div role="dialog"><button aria-label="Close navigation" onClick={onClose} />{children}</div> : null,
     Layout: Object.assign(passthrough(), { Sider: passthrough(), Content: passthrough() }),
     Menu: ({ items, children }: {
       items?: Array<{
@@ -35,17 +43,20 @@ vi.mock("../lib/antd", () => {
       children?: React.ReactNode;
     }) => (
       <nav data-menu="inline">
+        {items?.filter((item) => item.children).map((item) => (
+          <div key={item.key}>{item.label}</div>
+        ))}
         {items?.flatMap((item) => item.children ?? [item]).map((entry) => (
           <React.Fragment key={entry.key}>{entry.label}</React.Fragment>
         ))}
         {children}
       </nav>
     ),
-    theme: { useToken: () => ({ token: { colorPrimary: "#000", colorTextLightSolid: "#fff", colorBorderSecondary: "#eee" } }) },
+    theme: { defaultAlgorithm: () => ({}), darkAlgorithm: () => ({}), useToken: () => ({ token: { colorPrimary: "#000", colorTextLightSolid: "#fff", colorBorderSecondary: "#eee" } }) },
   };
 });
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); viewport.desktop = true; });
 
 async function renderNavigation() {
   const root = createRootRoute({ component: () => <AdminLayout><Outlet /></AdminLayout> });
@@ -59,6 +70,24 @@ async function renderNavigation() {
 }
 
 describe("admin root navigation rendering", () => {
+  it("opens mobile navigation from the header and closes it after navigating", async () => {
+    viewport.desktop = false;
+    const router = await renderNavigation();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await act(async () => { screen.getByRole("button", { name: "Toggle sidebar" }).click(); });
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    await act(async () => { screen.getByRole("link", { name: "Usage guide" }).click(); });
+    await waitFor(() => expect(router.state.location.pathname).toBe("/guide"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(await screen.findByText("guide-body")).toBeTruthy();
+  });
+
+  it("provides a keyboard skip link to main content", async () => {
+    await renderNavigation();
+    const link = screen.getByRole("link", { name: "Skip to main content" });
+    expect(link.getAttribute("href")).toBe("#admin-main-content");
+  });
+
   it("uses client navigation and cancels the browser document-navigation default", async () => {
     const router = await renderNavigation();
     const link = screen.getByRole("link", { name: "Usage guide" });

@@ -125,7 +125,7 @@ them, so producing them for a published tree would double its size for nothing.
 
 | Path | `SOYMUTDB_EMIT_GZ` | Result |
 | --- | --- | --- |
-| `scripts/build-sites.ts` (Pages / gh-pages) | unset | no `.gz`; any stale `.gz` in the tree is deleted |
+| `apps/web/scripts/build-sites.ts` (Pages / gh-pages) | unset | no `.gz`; any stale `.gz` in the tree is deleted |
 | `infra/docker/Dockerfile.{web,admin}` | `1` | `.gz` emitted for nginx `gzip_static` |
 | `scripts/build-static-apps.sh` | `1` (default) | matches the container path it stands in for |
 

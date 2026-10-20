@@ -19,7 +19,7 @@ export function ResearcherGate({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
 
   if (isLoading) {
-    return <Spin tip={t("analyses.gate.checking")} className="flex justify-center py-20" />;
+    return <Spin description={t("analyses.gate.checking")} className="flex justify-center py-20" />;
   }
 
   if (!isResearcher) {

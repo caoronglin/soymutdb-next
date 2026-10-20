@@ -116,7 +116,7 @@ export default function NewsEditPage() {
   if (loading) {
     return (
       <div className="route-fade-in flex justify-center py-24">
-        <Spin tip={t("admin.news.loading")}>
+        <Spin description={t("admin.news.loading")}>
           <div className="h-24 w-64" />
         </Spin>
       </div>

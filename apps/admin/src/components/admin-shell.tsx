@@ -1,7 +1,9 @@
 import { MenuFoldOutlined } from "@ant-design/icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Grid, Layout, Menu, theme } from "../lib/antd";
+import { ConfigProvider, Drawer, Grid, Layout, Menu, theme } from "../lib/antd";
+import { motionTokens } from "@soymutdb/ui-react";
+import { useAdminMotion } from "../lib/motion-preference";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { NAV_SECTIONS } from "./admin-sidebar";
 
@@ -24,22 +26,15 @@ const { useBreakpoint } = Grid;
  * flattened those sections with `flatMap`, which is why every destination
  * rendered as one flat list with no group headings.
  */
-export function AdminShell({ children }: { children: React.ReactNode }) {
+export function AdminShell({ children }: {
+  children: React.ReactNode | ((toggleNavigation: () => void) => React.ReactNode);
+}) {
   const { t } = useTranslation();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const screens = useBreakpoint();
   const [collapsed, setCollapsed] = React.useState(false);
+  const [mobileOpen, setMobileOpen] = React.useState(false);
   const isDesktop = screens.lg ?? true;
-
-  // Open a group when the current page lives inside it, so a deep link never
-  // lands on a route whose heading is folded away.
-  const openKeys = React.useMemo(
-    () =>
-      NAV_SECTIONS.filter((section) =>
-        section.items.some((item) => item.path !== "/" && pathname.startsWith(item.path)),
-      ).map((section) => t(section.labelKey, { defaultValue: section.label })),
-    [pathname, t],
-  );
 
   const menuItems = React.useMemo(
     () =>
@@ -50,7 +45,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         children: section.items.map((item) => ({
           key: item.path,
           icon: React.createElement(item.icon),
-          label: <Link to={item.path}>{t(item.labelKey, { defaultValue: item.label })}</Link>,
+          label: <Link to={item.path} onClick={() => setMobileOpen(false)}>{t(item.labelKey, { defaultValue: item.label })}</Link>,
         })),
       })),
     [t],
@@ -58,16 +53,38 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
 
   // `/` must not prefix-match every route, so it is matched exactly.
   const selectedKeys = React.useMemo(() => {
-    const hit = NAV_SECTIONS.flatMap((s) => s.items).find((item) =>
-      item.path === "/" ? pathname === "/" : pathname.startsWith(item.path),
-    );
+    const hit = NAV_SECTIONS.flatMap((s) => s.items)
+      .filter((item) => item.path === "/" ? pathname === "/" :
+        pathname === item.path || pathname.startsWith(`${item.path}/`))
+      .sort((a, b) => b.path.length - a.path.length)[0];
     return hit ? [hit.path] : [];
   }, [pathname]);
 
   const { token } = theme.useToken();
+  // Ant Design 6 derives component transitions from its fast/mid/slow duration
+  // tokens, so setting them here is the only place the console needs to change
+  // to honour the motion preference, including `prefers-reduced-motion`.
+  const motion = useAdminMotion();
+  const durations = motionTokens(motion.effective);
 
   return (
-    <Layout style={{ minHeight: "100vh" }}>
+    <ConfigProvider
+      theme={{
+        token: {
+          motionDurationFast: `${durations.fast}s`,
+          motionDurationMid: `${durations.mid}s`,
+          motionDurationSlow: `${durations.slow}s`,
+        },
+      }}
+    >
+    <Layout
+      data-motion={motion.effective}
+      style={{ minHeight: "100vh" }}
+    >
+      <a className="admin-skip-link" href="#admin-main-content">
+        {t("admin.shell.skipToContent", { defaultValue: "Skip to main content" })}
+      </a>
+      {isDesktop ? (
       <Sider
         theme="light"
         collapsible
@@ -87,6 +104,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
       >
         <Link
           to="/"
+          aria-label="SoyMutDB"
           style={{
             display: "flex",
             alignItems: "center",
@@ -134,7 +152,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             alignItems: "center",
             justifyContent: "center",
             width: "100%",
-            height: 40,
+            height: 44,
             border: 0,
             borderBlockStart: `1px solid ${token.colorBorderSecondary}`,
             background: "transparent",
@@ -149,21 +167,43 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           mode="inline"
           items={menuItems}
           selectedKeys={selectedKeys}
-          defaultOpenKeys={openKeys}
           style={{ borderInlineEnd: "none", paddingBlock: token.paddingXS }}
         />
       </Sider>
+      ) : (
+        <Drawer
+          title="SoyMutDB"
+          placement="left"
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          size="min(280px, calc(100vw - 32px))"
+          styles={{ body: { padding: 0 } }}
+        >
+          <Menu
+            mode="inline"
+            items={menuItems}
+            selectedKeys={selectedKeys}
+            style={{ borderInlineEnd: "none", paddingBlock: token.paddingXS }}
+          />
+        </Drawer>
+      )}
 
-      <Layout>
+      <Layout style={{ minWidth: 0 }}>
         <Content
+          id="admin-main-content"
+          tabIndex={-1}
           style={{
             padding: isDesktop ? token.paddingLG : token.paddingMD,
             minHeight: "calc(100vh - 56px)",
+            minWidth: 0,
           }}
         >
-          {children}
+          {typeof children === "function"
+            ? children(() => isDesktop ? setCollapsed((value) => !value) : setMobileOpen((value) => !value))
+            : children}
         </Content>
       </Layout>
     </Layout>
+    </ConfigProvider>
   );
 }

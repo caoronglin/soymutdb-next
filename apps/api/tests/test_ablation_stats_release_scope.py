@@ -5,8 +5,8 @@ one place, disclosed internal operational data:
 
 * ``/stats/dashboard`` counted every gene/mutant/phenotype/assembly row, exposed
   the real account population anonymously, and cached one global key;
-* ``/stats/variant-types`` and ``/stats/density`` called ClickHouse without a
-  release, so bins and distributions spanned every release's facts;
+* ``/stats/variant-types`` and ``/stats/density`` queried the variant facts
+  without a release, so bins and distributions spanned every release's facts;
 * ``/summary/{variant-types,impact,chromosome-density,mutagens}`` accepted an
   arbitrary ``release_id`` (including a draft's) and only filtered when the
   caller supplied one;
@@ -17,7 +17,7 @@ The contract now is: each endpoint resolves ``ReleaseContext`` (published-only)
 and filters unconditionally; cache keys carry the resolved release.
 
 Unit-level guards (no PostgreSQL): the route coroutines are driven with a fake
-session / fake ClickHouse client that records what was asked.
+session / fake PostgreSQL variant service that records what was asked.
 """
 
 from __future__ import annotations
@@ -91,8 +91,8 @@ class _RecordingDb:
         return str(self.statements[index])
 
 
-class _CapturingClickHouse:
-    """Records the parameters a ClickHouse query was called with."""
+class _CapturingVariantService:
+    """Records the parameters a PostgreSQL variant query was called with."""
 
     def __init__(self, result: Any = None) -> None:
         self.calls: list[dict[str, Any]] = []
@@ -122,16 +122,16 @@ class _CapturingClickHouse:
 async def test_dashboard_counts_are_bound_to_the_release():
     """Ablation: dropping the release predicates counts every release's rows."""
     db = _RecordingDb(results=[(10, 4, 3, 2), _Release()])
-    ch = _CapturingClickHouse()
+    ch = _CapturingVariantService()
 
     import app.api.v1.stats as mod
 
-    original = mod.ch_service
-    mod.ch_service = ch
+    original = mod.variant_service
+    mod.variant_service = ch
     try:
         payload = await stats_module._load_dashboard_stats(db, _RELEASE_ID)  # noqa: SLF001
     finally:
-        mod.ch_service = original
+        mod.variant_service = original
 
     sql = db.sql(0)
     # Genes are bounded by the release's assemblies; mutants/phenotypes/assemblies
@@ -140,7 +140,7 @@ async def test_dashboard_counts_are_bound_to_the_release():
     assert "assemblies.release_id" in sql, sql
     assert "mutant_lines.release_id" in sql, sql
     assert payload["total_genes"] == 10
-    # The ClickHouse aggregate is bound to the same release key.
+    # The PostgreSQL variant aggregate is bound to the same release key.
     assert ch.calls[0]["release_key"] == str(_RELEASE_ID)
 
 
@@ -150,13 +150,13 @@ async def test_dashboard_never_exposes_the_account_population():
 
     import app.api.v1.stats as mod
 
-    ch = _CapturingClickHouse()
-    original = mod.ch_service
-    mod.ch_service = ch
+    ch = _CapturingVariantService()
+    original = mod.variant_service
+    mod.variant_service = ch
     try:
         payload = await stats_module._load_dashboard_stats(db, _RELEASE_ID)  # noqa: SLF001
     finally:
-        mod.ch_service = original
+        mod.variant_service = original
 
     assert payload["total_users"] == 0
     # The User table is not even queried any more.
@@ -224,24 +224,24 @@ async def test_chromosome_density_summary_caches_per_release():
 
 
 # ---------------------------------------------------------------------------
-# 3. ClickHouse aggregates receive the release key.
+# 3. PostgreSQL variant aggregates receive the release key.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
 async def test_variant_type_distribution_passes_the_release_key():
-    ch = _CapturingClickHouse(result={"SNP": 2, "INS": 1})
+    ch = _CapturingVariantService(result={"SNP": 2, "INS": 1})
 
     import app.api.v1.stats as mod
 
-    original = mod.ch_service
-    mod.ch_service = ch
+    original = mod.variant_service
+    mod.variant_service = ch
     try:
         result = await stats_module.variant_type_distribution(
             release_context=_context(), assembly="Wm82.a4.v1"
         )
     finally:
-        mod.ch_service = original
+        mod.variant_service = original
 
     assert ch.calls[0]["release_key"] == str(_RELEASE_ID)
     assert ch.calls[0]["assembly"] == "Wm82.a4.v1"

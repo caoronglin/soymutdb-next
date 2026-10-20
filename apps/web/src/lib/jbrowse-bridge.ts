@@ -58,11 +58,6 @@ export interface LocusChangePayload {
     tracks?: string[];
 }
 
-/** JBrowse -> Portal: initialisation failed. */
-export interface ErrorPayload {
-    message: string;
-}
-
 /** Build the "init" message the portal sends into the iframe. */
 export function buildInitMessage(payload: InitPayload): BridgeEnvelope {
     return {

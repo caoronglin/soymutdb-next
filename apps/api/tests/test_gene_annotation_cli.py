@@ -212,7 +212,7 @@ def test_hashing_reader_covers_bom_crlf_and_buffer_boundaries():
 def test_root_cli_uses_canonical_argument_contract():
     result = subprocess.run(
         [sys.executable, str(ROOT / "scripts/import_annotations.py"), "--help"],
-        capture_output=True, text=True, check=False, timeout=20,
+        capture_output=True, text=True, encoding="utf-8", check=False, timeout=20,
     )
     assert result.returncode == 0, result.stderr
     assert "--dry-run" in result.stdout

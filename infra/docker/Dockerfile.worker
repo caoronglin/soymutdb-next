@@ -1,32 +1,87 @@
-# =====================================================================
-# SoyMutDB Worker Dockerfile
-# Python 3.14 matches the locked project and shared jobs package.
-# =====================================================================
+# SoyMutDB Python 3.15 Worker. Locked PyArrow/Matplotlib use cp315 wheels;
+# HDF5/HTS and pandas still need source-build prerequisites.
+FROM python:3.15.0-slim AS builder
 
-# ---------- Stage 1: Builder ----------
-FROM python:3.14.6-slim AS builder
+ARG BUILD_JOBS=4
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
-    UV_LINK_MODE=copy
+    UV_LINK_MODE=copy \
+    PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib/python3.15/site-packages/numpy/_core/lib/pkgconfig \
+    HDF5_PKGCONFIG_NAME=hdf5-serial
 
-# build-essential/gcc cover the rare source-build path for the analyses
-# stack (leidenalg / python-igraph / louvain); on CPython 3.14 linux-x86_64
-# manylinux wheels are used and no compilation happens.
+# Why each of these, for the sdist-only distributions in the lockfile:
+#
+#   build-essential  a C/C++ compiler for all of them; meson-python (pandas)
+#                    and scikit-build-core (cyvcf2) fetch
+#                    their own meson/ninja/cmake, so those are not apt packages
+#                    here.
+#   pkg-config       h5py 3.16 vendors no HDF5 and has no 3.15 wheel, so it
+#                    resolves HDF5 through pkg-config. Debian trixie calls that
+#                    file hdf5-serial.pc, which is why HDF5_PKGCONFIG_NAME is
+#                    pinned above rather than left to h5py's default lookup.
+#   libhdf5-dev      the h5py build dependency (serial flavour, headers in
+#                    /usr/include/hdf5/serial).
+#   zlib1g-dev
+#   libbz2-dev       cyvcf2 0.34 builds a bundled htslib,
+#   liblzma-dev      and htslib's configure picks up the system zlib/bzip2/xz
+#                    when their headers are present.
+#   libpq-dev        pg_config for psycopg2-binary.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    libpq-dev \
+    pkg-config \
     curl \
+    libpq-dev \
+    zlib1g-dev \
+    libbz2-dev \
+    liblzma-dev \
+    libhdf5-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:0.11.33 /uv /usr/local/bin/uv
+# h5py links with `-lhdf5 -lhdf5_hl` and takes only the include/-L paths from
+# pkg-config. Debian trixie builds HDF5 1.14 with flavours: the serial one is
+# installed under /usr/include/hdf5/serial and /usr/lib/<triplet>/hdf5/serial
+# with `hdf5-serial.pc`. Link the exact line h5py will use, so a Debian point
+# that renames the flavour paths fails here with a link error naming them
+# instead of inside the h5py build.
+RUN set -eux; \
+    pkg-config --exists hdf5-serial; \
+    printf 'int main(void) { return 0; }\n' > /tmp/hdf5-link-probe.c; \
+    cc /tmp/hdf5-link-probe.c -o /tmp/hdf5-link-probe \
+        $(pkg-config --cflags hdf5-serial) \
+        -L"$(pkg-config --variable=libdir hdf5-serial)" -lhdf5 -lhdf5_hl; \
+    /tmp/hdf5-link-probe; \
+    rm -f /tmp/hdf5-link-probe /tmp/hdf5-link-probe.c
+
+# pkg-config has to answer for THIS interpreter. meson-python (pandas,
+# matplotlib) asks pkg-config for python3 while checking that Cython compiles
+# against the Python being built; a python3-dev for another CPython in the image
+# answers with /usr/include/python3.x, and the build then dies inside
+# Cython-generated code with an error naming neither Python nor pkg-config.
+# PKG_CONFIG_PATH above puts /usr/local/lib/pkgconfig ahead of any Debian
+# python3.x.pc, and this check turns whatever is left into an error that says
+# what it is.
+RUN set -eux; \
+    foreign="$(pkg-config --variable=includedir python3 2>/dev/null || true)"; \
+    case "${foreign}" in \
+        "" | /usr/local/include/python3*) ;; \
+        *) echo "pkg-config resolves python3 to ${foreign}, which is not this image's CPython; a Debian python3-dev breaks the meson-python builds (pandas, matplotlib)" >&2; \
+           exit 1 ;; \
+    esac
+
+COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /usr/local/bin/uv
 
 WORKDIR /app
 
 COPY apps/worker/pyproject.toml apps/worker/uv.lock ./apps/worker/
 COPY packages/jobs-py ./packages/jobs-py
 COPY packages/import-protocol ./packages/import-protocol
+
+# Numcodecs Meson locates NumPy with pkg-config. Bootstrap the exact locked
+# version in the build interpreter so system NumPy headers cannot win.
+RUN numpy_version="$(python -c 'import tomllib; d=tomllib.load(open("apps/worker/uv.lock", "rb")); print(next(p["version"] for p in d["package"] if p["name"] == "numpy"))')" \
+    && uv pip install --system --only-binary=:all: "numpy==${numpy_version}"
 
 # ONE resolution for the whole third-party dependency graph. The layer order is
 # what makes that true: only the manifests are copied yet, so a source-only
@@ -45,7 +100,14 @@ COPY packages/import-protocol ./packages/import-protocol
 # dependency graph on every build. The application is now imported the same way
 # the API image does it, through the PYTHONPATH roots below, so nothing about
 # the dependency set changes and a large chunk of build time goes away.
-RUN UV_PROJECT_ENVIRONMENT=/opt/venv uv sync --frozen --no-dev --no-install-project --project apps/worker
+# CMAKE_BUILD_PARALLEL_LEVEL bounds scikit-build-core (cyvcf2) and
+# meson-python (pandas) builds; without it each of those sdists
+# compiles its C++ single-threaded. UV_CONCURRENT_BUILDS=1 keeps the sdists
+# sequential: building them side by side is the same memory peak with a smaller
+# margin. Kept on one RUN line with `uv sync` because
+# scripts/test_production_compose_contract.py counts the resolution passes by
+# matching a single line that both starts with RUN and contains `uv sync`.
+RUN CMAKE_BUILD_PARALLEL_LEVEL="${BUILD_JOBS}" UV_CONCURRENT_BUILDS=1 UV_PROJECT_ENVIRONMENT=/opt/venv uv sync --frozen --no-dev --no-install-project --project apps/worker
 
 COPY apps/worker ./apps/worker
 COPY deploy/scripts/migrate-clickhouse.sh /opt/soymutdb/migrate-clickhouse.sh
@@ -53,7 +115,7 @@ COPY deploy/scripts/migrate_clickhouse_lib.py /opt/soymutdb/migrate_clickhouse_l
 COPY infra/clickhouse/upgrade_variant_facts_schema.sql /opt/soymutdb/upgrade_variant_facts_schema.sql
 
 # ---------- Stage 2: Runtime ----------
-FROM python:3.14.6-slim AS runtime
+FROM python:3.15.0-slim AS runtime
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -61,13 +123,38 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONPATH="/app/packages/jobs-py/src:/app/apps/worker/src" \
     SOYMUTDB_APP_ENV=prod
 
+# scanpy's kernels are numba-jitted with cache=True while scanpy is imported,
+# and numba's default cache location is __pycache__ beside the source file.
+# /opt/venv is root-owned and read-only for uid 1000, so without this the
+# first scanpy task in production dies on
+#   RuntimeError: cannot cache function 'agg_sum_csr-parallel':
+#                no locator available for file '.../scanpy/get/_kernels.py'
+# /tmp is world-writable and the cache is disposable; nothing in the analyses
+# queue needs it to survive a restart.
+ENV NUMBA_CACHE_DIR=/tmp/soymutdb-numba-cache
+
 # Bioinformatics tools: htslib, bcftools, diamond
-# libgomp1: OpenMP runtime needed by leidenalg / python-igraph wheels.
+#
+# Libraries the source-built science stack links but does not vendor. The
+# builder's -dev packages have been purged by this point, so each of these is
+# named here for a reason rather than by habit:
+#   libgomp1       OpenMP runtime (leidenalg / python-igraph wheels, numba).
+#   libstdc++6     Arrow, Matplotlib and cyvcf2 contain C++ extensions
+#                  and Debian's g++ links the C++ runtime dynamically. The
+#                  image keeps only what its own interpreter's ldd scan found,
+#                  which does not cover third-party C++ extensions.
+#   libhdf5-310    h5py links libhdf5_serial.so.310; the SONAME package name
+#                  follows the HDF5 series Debian ships (trixie: 1.14.5).
+# Arrow C++, pandas, matplotlib's FreeType/Qhull and cyvcf2's htslib carry
+# their own dependencies inside site-packages or statically, so nothing else
+# from the builder stage is needed here.
 RUN apt-get update \
     && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
     libpq5 \
     libgomp1 \
+    libstdc++6 \
+    libhdf5-310 \
     bcftools \
     tabix \
     diamond-aligner \
@@ -88,6 +175,32 @@ COPY --chown=soymutdb:soymutdb infra/clickhouse/upgrade_variant_facts_schema.sql
 WORKDIR /app/apps/worker
 
 USER soymutdb
+
+# Two gates, both AFTER the USER switch so they run as uid 1000 exactly as a
+# task does: an import that works as root and fails for the service account is
+# a gate that gates nothing, and the scanpy/numba cache above is precisely such
+# a difference. Both fail the image build rather than a production task, and
+# both keep every artifact in a scratch directory the trap removes. The thread
+# caps stop the gate from occupying every core of a CI builder. The trap also
+# clears NUMBA_CACHE_DIR: importing scanpy compiles kernels into it, and those
+# root-owned cache files would otherwise be baked into the image layer for the
+# service account to trip over.
+RUN set -eux; \
+    scratch="$(mktemp -d)"; \
+    trap 'rm -rf "${scratch}" "${NUMBA_CACHE_DIR:-/nonexistent}"' EXIT; \
+    OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1 RAYON_NUM_THREADS=1 MPLCONFIGDIR="${scratch}/mpl" \
+    /opt/venv/bin/python -c 'import anndata, cyvcf2, h5py, igraph, leidenalg, llvmlite, llvmlite.binding, matplotlib, numba, numpy, pandas, polars, pysam, scanpy, scipy, pyarrow, pyarrow.compute, pyarrow.csv, pyarrow.dataset, pyarrow.parquet; print("worker science-stack import gate passed")'
+
+# Importing is half of it: these extensions only prove themselves when they run
+# -- a lazily loaded Arrow codec or a lazily resolved numba kernel raises on
+# first use, not at import. The Parquet round trip per codec is what proves the
+# locked Arrow wheel did not quietly drop a compression codec.
+RUN set -eux; \
+    scratch="$(mktemp -d)"; \
+    trap 'rm -rf "${scratch}" "${NUMBA_CACHE_DIR:-/nonexistent}"' EXIT; \
+    mkdir -p "${scratch}/work"; \
+    OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMBA_NUM_THREADS=1 RAYON_NUM_THREADS=1 MPLCONFIGDIR="${scratch}/mpl" SOYMUTDB_VERIFY_DIR="${scratch}/work" \
+    /opt/venv/bin/python -c 'import io, os, matplotlib, numpy, pandas, polars, scipy, anndata, scanpy, igraph, leidenalg, llvmlite.binding, numba, pysam, cyvcf2, h5py, pyarrow as pa, pyarrow.compute as pc, pyarrow.csv as pcsv, pyarrow.dataset as pds, pyarrow.parquet as pq; d = os.environ["SOYMUTDB_VERIFY_DIR"]; codecs = ("snappy", "gzip", "zstd", "lz4", "brotli"); missing = [c for c in codecs if not pa.Codec.is_available(c)]; assert not missing, "Arrow codecs unavailable: %s" % missing; table = pa.table({"gene_id": ["ZM00001EB001", "ZM00001EB002"], "score": [0.5, 1.5]}); paths = [os.path.join(d, "verify-%s.parquet" % c) for c in codecs]; [pq.write_table(table, path, compression=codec) for path, codec in zip(paths, codecs)]; assert all(pq.read_table(path).num_rows == 2 for path in paths), paths; assert pcsv.read_csv(io.BytesIO(b"gene_id,score\nZM00001EB001,0.5\n")).num_rows == 1; assert pds.dataset(table).to_table().num_rows == 2; assert pc.add(pa.scalar(1), pa.scalar(2)).as_py() == 3; assert pandas.read_parquet(paths[0]).shape == (2, 2); h5py.File(os.path.join(d, "verify.h5"), "w")["score"] = [0.5, 1.5]; assert h5py.File(os.path.join(d, "verify.h5"))["score"][()].tolist() == [0.5, 1.5]; matplotlib.use("Agg"); import matplotlib.pyplot as plt; plt.figure().savefig(os.path.join(d, "verify.png")); assert pysam.AlignmentFile is not None and cyvcf2.VCF is not None; assert scipy.sparse.identity(2).toarray().tolist() == [[1.0, 0.0], [0.0, 1.0]]; assert polars.DataFrame({"a": [1, 2]}).select(polars.col("a").sum()).item() == 3; adata = anndata.AnnData(numpy.asarray([[1.0, 2.0], [3.0, 4.0]], dtype="float32"), obs={"sample": ["s1", "s2"]}, var={"gene": ["g1", "g2"]}); scanpy.pp.normalize_total(adata); assert adata.X.shape == (2, 2); g = igraph.Graph(4); g.add_edges([(0, 1), (2, 3)]); part = leidenalg.find_partition(g, leidenalg.ModularityVertexPartition, n_iterations=2); assert len(part.membership) == 4, part.membership; assert numba.njit(lambda x: x + 1)(1) == 2; assert llvmlite.binding.llvm_version_info[0] >= 11; print("worker science-stack capability check passed")'
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD celery -A soymutdb_worker.main:celery_app inspect ping 2>/dev/null || exit 1

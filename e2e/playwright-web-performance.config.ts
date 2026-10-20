@@ -10,7 +10,7 @@ import { defineConfig } from "@playwright/test";
  */
 // The checked-in validation artifact is built with Vite's root base path. The
 // separate deployed-site smoke suite covers the gh-pages sub-path deployment.
-const baseURL = "http://127.0.0.1:4175/";
+const baseURL = "http://127.0.0.1:4178/";
 
 export default defineConfig({
   testDir: "./tests",
@@ -32,7 +32,9 @@ export default defineConfig({
   },
   outputDir: "test-results-web-performance/artifacts",
   webServer: {
-    command: "node static-server.mjs ../apps/web/dist 4175 /",
+    // `build:sites` writes dist/external + dist/internal; the external tree is
+    // the production portal artifact (base "/"), so serve it explicitly.
+    command: "node static-server.mjs ../apps/web/dist/external 4178 /",
     cwd: ".",
     url: baseURL,
     reuseExistingServer: false,

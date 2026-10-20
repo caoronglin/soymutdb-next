@@ -2,6 +2,11 @@
 
 **Status:** implementation baseline and acceptance contract (2026-08-24)
 
+> **Update (2026-10-18):** the `admin-ui.tsx` compatibility layer referenced
+> below has been removed; the antd facades now live in
+> `apps/admin/src/lib/antd.ts` + `antd-theme.ts` (with `motion-policy.ts` for the
+> OS motion policy). File paths in this baseline are historical.
+
 This document records the Ant Design 6 rules used by the public portal and Admin console. It is deliberately an implementation contract, not a claim that a dependency version alone modernizes the UI.
 
 ## 1. Official references

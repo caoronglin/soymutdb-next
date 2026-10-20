@@ -4,8 +4,17 @@ import { test, expect } from "@playwright/test";
 // Requires: API uvicorn on 127.0.0.1:8010 and vite dev on 127.0.0.1:5173
 // (VITE_DEPLOYMENT_MODE=minimal VITE_SEARCH_TEST_PREVIEW=true).
 // Both search routes submit by opening the parameterized URL in a new tab.
-
+//
+// Gated like the other env-gated specs (jbrowse-browser, portal-browser-embed,
+// entity-detail, admin-console): playwright-local-preview.config.ts falls back to
+// http://127.0.0.1:5173/, so without an explicit opt-in this suite would fail
+// against a stack that is not running rather than skip.
 test("local preview deployment: gene + location search render real data", async ({ page }) => {
+  test.skip(
+    !process.env.LOCAL_PREVIEW_BASE_URL,
+    "requires a running local preview API + UI (LOCAL_PREVIEW_BASE_URL)",
+  );
+
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(`pageerror: ${error.message}`));
   page.on("console", (msg) => {
@@ -14,6 +23,11 @@ test("local preview deployment: gene + location search render real data", async 
     }
   });
 
+  // TODO(e2e): `test-data-preview-banner` is not emitted anywhere in apps/web/src
+  // (repo-wide grep finds this spec only), so these banner assertions cannot pass
+  // against the current UI. Re-validate every testid/label below against
+  // apps/web/src/routes/search/*.tsx before running this suite; do not weaken the
+  // assertions to make it green.
   const banner = page.getByTestId("test-data-preview-banner");
 
   // ---- gene ID search ----

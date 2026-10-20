@@ -58,6 +58,7 @@ function MutantsIndex() {
           to="/mutants/$id"
           params={{ id: line.public_id }}
           data-public-id={line.public_id}
+          data-testid="mutant-row"
           className="font-mono text-xs text-primary hover:underline"
         >
           {line.public_id}

@@ -14,17 +14,22 @@ autoInstallPeers: false
 # framework-line change remains one reviewed workspace decision.
 catalog:
   typescript: 5.9.3
-  vite: 6.4.3
+  vite: 8.3.4
   # React Pro v6 frontend line; exact pins shared by all three applications.
-  '@umijs/max': 4.7.20
-  react: 19.3.0
-  react-dom: 19.3.0
+  '@umijs/max': 4.7.24
+  react: 19.3.1
+  react-dom: 19.3.1
+  # @types/react(-dom) 19.3.1 is not published; keep 19.3.0 until it is.
   '@types/react': 19.3.0
   '@types/react-dom': 19.3.0
-  antd: 6.6.5
-  echarts: 5.5.1
+  antd: 6.6.6
+  # A1 measurement slice: exact pin verified against the registry `latest`
+  # (2.6.8, published 2025-12-24, MIT, AntV maintainers). Only the React 19
+  # feasibility smoke test imports it, so `@soymutdb/charts` keeps it as a
+  # devDependency; the production engine is `@antv/g2` via `g2-runtime`.
+  '@ant-design/plots': 2.6.8
   '@ant-design/pro-components': 3.1.15-2
-  vitest: 3.2.7
+  vitest: 5.0.5
   tailwindcss: 4.3.3
   '@tailwindcss/vite': 4.3.3
 
@@ -41,7 +46,7 @@ overrides:
   # merge sources. Reached through api-client -> openapi-typescript ->
   # @redocly/openapi-core.
   js-yaml: 4.3.2
-  # Umi Max 4.7.20 carries older transitive ranges; these compatible floors
+  # Umi Max 4.7.24 carries older transitive ranges; these compatible floors
   # remove known advisories without replacing the React/Ant Design majors.
   # GHSA-x97p-jq2g-jp4f. Resolve and integration-test in the lock candidate job.
   axios: 0.34.0
@@ -59,6 +64,17 @@ overrides:
   "react-router-dom@6": 6.30.6
   "@remix-run/router": 1.23.3
   decode-uri-component: 0.5.0
+  # GHSA-rj75-hqrm-r3gf: ReDoS through crafted CSS selectors. The vulnerable
+  # 6.x copy is reached through Umi's postcss-preset-env; 7.1.6 is the patched
+  # floor and the plugins only use the stable parse/walk API.
+  "postcss-selector-parser@<7.1.6": 7.1.6
+  # GHSA-477h-4r7f-fvrx: the crypto-browserify shim (bundler-only) pins an
+  # older KDF; 3.1.7 is a patch-level floor.
+  pbkdf2: 3.1.7
+  # GHSA-hp3w-g68c-fv3c (ReDoS): no patched release exists yet (the advisory
+  # covers <=1.1.3); 1.1.3 is the current latest, still better than the 1.0.3
+  # Umi/mammoth chain resolved. Recheck when upstream publishes a fix.
+  sprintf-js: 1.1.3
 
 allowBuilds:
   # Umi/Vite-compatible bundling requires esbuild's platform binary.
@@ -74,6 +90,53 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - "@tanstack/query-core@5.103.2"
   - "@ant-design/pro-components@3.1.15-2"
+  - '@tanstack/react-router@1.170.44'
+  - '@tanstack/router-core@1.171.37'
+  - '@testing-library/user-event@14.6.8'
+  - '@typescript-eslint/eslint-plugin@8.71.2'
+  - '@typescript-eslint/parser@8.71.2'
+  - '@typescript-eslint/project-service@8.71.2'
+  - '@typescript-eslint/scope-manager@8.71.2'
+  - '@typescript-eslint/tsconfig-utils@8.71.2'
+  - '@typescript-eslint/type-utils@8.71.2'
+  - '@typescript-eslint/types@8.71.2'
+  - '@typescript-eslint/typescript-estree@8.71.2'
+  - '@typescript-eslint/utils@8.71.2'
+  - '@typescript-eslint/visitor-keys@8.71.2'
+  - '@umijs/ast@4.7.24'
+  - '@umijs/babel-preset-umi@4.7.24'
+  - '@umijs/bundler-esbuild@4.7.24'
+  - '@umijs/bundler-utils@4.7.24'
+  - '@umijs/bundler-utoopack@4.7.24'
+  - '@umijs/bundler-vite@4.7.24'
+  - '@umijs/bundler-webpack@4.7.24'
+  - '@umijs/core@4.7.24'
+  - '@umijs/lint@4.7.24'
+  - '@umijs/max@4.7.24'
+  - '@umijs/mfsu@4.7.24'
+  - '@umijs/plugin-run@4.7.24'
+  - '@umijs/plugins@4.7.24'
+  - '@umijs/preset-umi@4.7.24'
+  - '@umijs/renderer-react@4.7.24'
+  - '@umijs/server@4.7.24'
+  - '@umijs/test@4.7.24'
+  - '@umijs/utils@4.7.24'
+  - '@umijs/zod2ts@4.7.24'
+  - '@utoo/pack-darwin-arm64@1.5.26'
+  - '@utoo/pack-darwin-x64@1.5.26'
+  - '@utoo/pack-linux-arm64-gnu@1.5.26'
+  - '@utoo/pack-linux-arm64-musl@1.5.26'
+  - '@utoo/pack-linux-x64-gnu@1.5.26'
+  - '@utoo/pack-linux-x64-musl@1.5.26'
+  - '@utoo/pack-shared@1.5.26'
+  - '@utoo/pack-win32-x64-msvc@1.5.26'
+  - '@utoo/pack@1.5.26'
+  - dompurify@3.4.17
+  - marked@18.1.1
+  - postcss@8.5.30
+  - typescript-eslint@8.71.2
+  - umi@4.7.24
+  - react-i18next@17.0.21
 
 catalogs:
   # Framework-neutral genome readers over the same /jbrowse-data files.

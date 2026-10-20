@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload, lazyload
 
 from ..core.exceptions import NotFoundError, ValidationError
 from ..models.genomic import Assembly, Chromosome, Gene, Transcript
@@ -27,6 +28,7 @@ from .release_context import (
     decode_bound_cursor,
     encode_bound_cursor,
 )
+from .sql_like import LIKE_ESCAPE_CHARACTER, contains_pattern
 
 
 def _public_transcript_id(tx: Transcript) -> str:
@@ -207,6 +209,31 @@ class GeneService:
             select(Gene, variant_count)
             .join(Assembly, Gene.assembly_id == Assembly.id)
             .where(Assembly.release_id == release_context.release_id)
+            .options(
+                # The list response carries no transcript or alias data (the
+                # projection below is GeneResponse, which has no such fields),
+                # but ``Gene.transcripts`` and ``Gene.aliases`` are
+                # ``selectin`` relationships: a 200-row page materialised
+                # every transcript, exon, transcript part and alias of those
+                # genes and then threw them away -- extra round trips plus the
+                # joined back-references they drag along.
+                #
+                # The same holds for the assembly's own chromosome list, which
+                # the list response never renders either (it names the gene's
+                # own chromosome, not the assembly's set). ``joinedload`` keeps
+                # the assembly in the very same statement -- it is already
+                # joined -- and the chained ``lazyload`` is what stops the
+                # assembly's ``selectin`` chromosomes from being fetched.
+                #
+                # ``lazyload`` keeps the mapper's default for every other
+                # path -- the detail endpoint still eager-loads transcripts,
+                # exons, parts and aliases exactly as before -- and only
+                # suppresses the eager load for this one statement. It is the
+                # 2.1 replacement for the deprecated ``noload`` strategy.
+                lazyload(Gene.transcripts),
+                lazyload(Gene.aliases),
+                joinedload(Gene.assembly).lazyload(Assembly.chromosomes),
+            )
         )
 
         if params.assembly_id is not None:
@@ -224,12 +251,18 @@ class GeneService:
         if params.biotype is not None:
             stmt = stmt.where(Gene.biotype == params.biotype)
         if params.search:
-            pattern = f"%{params.search}%"
+            # The user's text is matched *literally*. Interpolating it raw made
+            # the search a LIKE program: "%" matched every gene and "_" matched
+            # any single character (docs/dev/database-core-contract.md §6 item
+            # 6 asks for a literal "%" / "_" fixture for exactly this reason).
+            # A pattern made only of wildcards also carries no trigram, so the
+            # planner could not use the trigram indexes either.
+            pattern = contains_pattern(params.search)
             stmt = stmt.where(
                 or_(
-                    Gene.accession.ilike(pattern),
-                    Gene.name.ilike(pattern),
-                    Gene.description.ilike(pattern),
+                    Gene.accession.ilike(pattern, escape=LIKE_ESCAPE_CHARACTER),
+                    Gene.name.ilike(pattern, escape=LIKE_ESCAPE_CHARACTER),
+                    Gene.description.ilike(pattern, escape=LIKE_ESCAPE_CHARACTER),
                 )
             )
 

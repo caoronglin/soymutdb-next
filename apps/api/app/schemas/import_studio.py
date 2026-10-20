@@ -65,8 +65,15 @@ class DatasetVersionCreateRequest(BaseModel):
     license: str | None = Field(default=None, max_length=256)
     mime_type: str = Field(default="application/octet-stream", max_length=128)
     row_count: int = Field(default=0, ge=0, le=2_000_000)
-    column_count: int = Field(default=0, ge=0, le=50)
+    # The widest shape any import may carry. Whether a given shape is allowed
+    # is decided by ``validate_import_shape`` against the module key, so the
+    # schema bound must not be tighter than the scientific limit.
+    column_count: int = Field(default=0, ge=0, le=256)
     source_objects: list[dict[str, Any]] = Field(default_factory=list, max_length=64)
+    # Selects the shape limits for the immutable version. The value is not
+    # persisted on the version: the Import Draft carries the module key and
+    # is the authority from that point on.
+    module_key: str | None = Field(default=None, min_length=1, max_length=80)
 
     @field_validator("filename")
     @classmethod
@@ -77,6 +84,18 @@ class DatasetVersionCreateRequest(BaseModel):
     @classmethod
     def reject_dangerous_source(cls, value: str) -> str:
         return _reject_dangerous_source(value)
+
+    @model_validator(mode="after")
+    def enforce_module_aware_limits(self) -> DatasetVersionCreateRequest:
+        try:
+            validate_import_shape(
+                row_count=self.row_count,
+                column_count=self.column_count,
+                module_key=self.module_key,
+            )
+        except Exception as exc:
+            raise ValueError(str(exc)) from exc
+        return self
 
 
 class ImportDraftCreateRequest(BaseModel):
@@ -123,16 +142,21 @@ class DataPatchCreateRequest(BaseModel):
 
 class ImportValidationRequest(BaseModel):
     row_count: int = Field(ge=0, le=2_000_000)
-    column_count: int = Field(ge=0, le=50)
+    # The widest shape any import may carry; the effective limit depends on
+    # the module key and is enforced again by the endpoint against the draft.
+    column_count: int = Field(ge=0, le=256)
     field_mapping: list[FieldMappingItem] = Field(default_factory=list, max_length=50)
+    # The module key the caller believes it is validating. The endpoint
+    # rejects a mismatch against the draft's own module key.
+    module_key: str | None = Field(default=None, min_length=1, max_length=80)
 
     @model_validator(mode="after")
-    def enforce_generic_page_limits(self) -> ImportValidationRequest:
+    def enforce_module_aware_limits(self) -> ImportValidationRequest:
         try:
             validate_import_shape(
                 row_count=self.row_count,
                 column_count=self.column_count,
-                module_key=None,
+                module_key=self.module_key,
             )
         except Exception as exc:
             raise ValueError(str(exc)) from exc

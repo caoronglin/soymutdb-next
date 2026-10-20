@@ -8,7 +8,7 @@
 | 页面 | 内容 |
 | --- | --- |
 | [architecture.md](architecture.md) | 系统组成、数据流、权威存储与隔离边界 |
-| [applications.md](applications.md) | 公共站与管理端功能、路由与 Vue 迁移状态 |
+| [applications.md](applications.md) | 公共站与管理端功能、路由与实现状态 |
 | [api-and-ports.md](api-and-ports.md) | API 路由分组、端口表、配置来源 |
 | [deployment-and-ops.md](deployment-and-ops.md) | 构建交付、部署、备份/迁移/回滚、门禁命令 |
 | [multi-instance.md](multi-instance.md) | 多实例登记、探活与远端信任模型 |
@@ -19,7 +19,7 @@
 
 - 交付流水线：`.cnb.yml`（权威）+ `scripts/ci-job-steps.sh`（任务体）。
 - 数据库与身份契约：`docs/dev/database-core-contract.md`。
-- Vue 迁移状态与证据：`docs/dev/vue-migration-recovery-status.md`。
+- 当前功能与门禁状态：`docs/dev/project-status.md`（Vue 时期文档仅作历史，见 `docs/dev/vue-migration-recovery-status.md`）。
 - 项目总体状态（单一视图）：`docs/dev/project-status.md`。
 - 端口与编排：`docker-compose.yml`、`deploy/.env.example`、`deploy/conda/env.example`。
 - API 契约：`apps/api/app/api/v1/router.py`、`packages/api-client/openapi.json`。
@@ -28,5 +28,5 @@
 
 1. 端口、路由或部署方式变化时，同时更新本 wiki 与对应的契约测试。
 2. 功能实现状态变化时更新 [applications.md](applications.md)，并在
-   `docs/dev/vue-migration-recovery-status.md` 记录命令与结果。
+   `docs/dev/project-status.md` 记录命令与结果。
 3. 本目录不复制大段配置；引用文件路径与契约测试，避免漂移。

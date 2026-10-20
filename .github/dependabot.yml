@@ -27,6 +27,6 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 3
-# pnpm 12.5.1 is deliberately not declared as a Dependabot "npm" updater
+# pnpm 12.11.2 is deliberately not declared as a Dependabot "npm" updater
 # until GitHub lists support for its lockfile format. See the execution plan:
 # pnpm upgrades are a pinned, reviewed local lockfile regeneration step.

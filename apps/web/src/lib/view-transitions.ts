@@ -10,7 +10,7 @@ import {
     resolveMotionDecision,
     type MotionPreference,
     type MotionSessionCeiling,
-} from "./motion-policy";
+} from "@soymutdb/ui-react";
 
 let sessionCeiling: MotionSessionCeiling = "standard";
 

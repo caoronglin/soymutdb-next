@@ -5,13 +5,13 @@
  * without a backend. The hero search bar is present; Primer remains a direct
  * route but was intentionally removed from the featured cards.
  *
- * Target: local static server at /soymutdb-next/ (playwright-public.config.ts),
+ * Target: local static server at the origin root (playwright-public.config.ts),
  * or the deployed site via SMOKE_BASE_URL.
  */
 import { test, expect } from "@playwright/test";
 import { gotoReady } from "./helpers";
 
-const BASE = "/soymutdb-next";
+const BASE = "";
 
 test.describe("homepage — primary navigation", () => {
   test("renders the primary nav with the database entry points", async ({ page }) => {

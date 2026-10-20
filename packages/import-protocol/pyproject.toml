@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "soymutdb-import-protocol"
 version = "0.1.0"
 description = "SoyMutDB shared import protocol: semantic fingerprint, manifest lifecycle states and transitions used by both the API control plane and the Celery worker (ADR-0005 / Phase A)"
-requires-python = ">=3.14"
+requires-python = ">=3.15"
 license = { text = "MIT" }
 dependencies = []
 
@@ -19,7 +19,7 @@ dev = [
 packages = ["src/soymutdb_import_protocol"]
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py315"
 line-length = 100
 
 [tool.ruff.lint]

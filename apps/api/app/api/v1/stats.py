@@ -1,9 +1,10 @@
 """Statistics / dashboard endpoints.
 
-Every endpoint aggregates **real data** from PostgreSQL and/or ClickHouse.
-When a data source is unavailable (e.g. ClickHouse not provisioned) the
-endpoint degrades gracefully: it logs a warning and returns the empty
-structure (zeros / empty lists) — never fabricated values.
+Every endpoint aggregates **real data** from PostgreSQL: relational metadata
+(genes, assemblies, releases) from the relational tables and variant counts
+from the native ``variant_facts`` projection.  When a query fails the endpoint
+degrades gracefully: it logs a warning and returns the empty structure
+(zeros / empty lists) — never fabricated values.
 
 Release scope
 -------------
@@ -15,7 +16,10 @@ when it is bound to one published release:
 * ``/dashboard`` and the PG aggregates counted every row in the table,
   including draft/other-release records;
 * ``/dashboard`` also exposed the total account count anonymously;
-* ``/releases`` defaulted to listing every release, drafted or rolled back.
+* ``/releases`` defaulted to listing every release, drafted or rolled back;
+* ``/homepage`` counted every gene, every mutant line (public or not), every
+  assembly, every seed lot and every variant fact in the database, so an
+  anonymous visitor learned the size of unpublished data.
 
 Every endpoint therefore resolves ``ReleaseContext`` (which accepts only a
 published release, or the active published pointer) and filters its queries by
@@ -27,12 +31,13 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, Header, Query
+from sqlalchemy import ColumnElement, func, literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from structlog import get_logger
 
 from ...core.database import get_db
+from ...core.exceptions import ServiceUnavailableError, ValidationError
 from ...models.content import Release, ReleaseStatus
 from ...models.genomic import Assembly, Chromosome, Gene
 from ...models.seed import SeedInventory
@@ -51,13 +56,17 @@ from ...schemas.analytics import (
     VariantTypeSummaryItem,
 )
 from ...services.cache import get_or_set
-from ...services.clickhouse_service import ClickHouseService
-from ...services.release_context import ReleaseContext, get_release_context
+from ...services.postgres_variant_service import PostgresVariantService
+from ...services.release_context import (
+    ReleaseContext,
+    get_release_context,
+    resolve_release_context,
+)
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/stats", tags=["stats"])
-ch_service = ClickHouseService()
+variant_service = PostgresVariantService()
 
 # Impact classes in canonical display order.
 _IMPACT_ORDER = ("HIGH", "MODERATE", "LOW", "MODIFIER")
@@ -68,6 +77,9 @@ _VARIANT_TYPE_ORDER = (  # noqa: E501
     ("MNV", ("MNV",)),
     ("SV", ("SV",)),
 )
+#: Release key used when no release is published. It matches no release, so a
+#: release-scoped aggregate answers zeros instead of counting the whole table.
+_NO_RELEASE_KEY = "0"
 
 
 # ---------------------------------------------------------------------------
@@ -76,9 +88,14 @@ _VARIANT_TYPE_ORDER = (  # noqa: E501
 
 
 async def _variant_type_counts_from_pg(
-    db: AsyncSession, release_id: int | None = None
+    db: AsyncSession, release_id: int | ColumnElement[int] | None = None
 ) -> dict[str, int]:
-    """Aggregate variant counts by ``variant_type`` from PostgreSQL."""
+    """Aggregate variant counts by ``variant_type`` from PostgreSQL.
+
+    ``release_id`` binds the aggregate to one release. It accepts a release id
+    or any SQL expression that resolves to one (see ``_release_scope``);
+    public callers must pass it, otherwise the aggregate spans every release.
+    """
     stmt = (
         select(VariantSummary.variant_type, func.count())
         .group_by(VariantSummary.variant_type)
@@ -89,16 +106,16 @@ async def _variant_type_counts_from_pg(
     return {str(variant_type): int(count) for variant_type, count in rows}
 
 
-async def _variant_type_summary_from_ch(release_key: str | None = None) -> dict[str, int] | None:
-    """Best-effort variant-type counts from ClickHouse (None when unavailable).
+async def _variant_type_summary_from_pg(release_key: str | None = None) -> dict[str, int] | None:
+    """Best-effort variant-type counts from PostgreSQL (None when unavailable).
 
     ``release_key`` scopes the aggregate to one release; callers on a public
     surface must pass it (see the dashboard loader).
     """
     try:
-        return await ch_service.get_dashboard_stats(release_key=release_key)
+        return await variant_service.get_dashboard_stats(release_key=release_key)
     except Exception:
-        logger.warning("stats_clickhouse_unavailable", component="variant_type_summary")
+        logger.warning("stats_variant_store_unavailable", component="variant_type_summary")
         return None
 
 
@@ -149,9 +166,10 @@ async def _load_dashboard_stats(db: AsyncSession, release_id: int) -> dict:
     release_result = await db.execute(select(Release).where(Release.id == release_id))
     current_release = release_result.scalar_one_or_none()
 
-    # Total variants from ClickHouse, scoped to the same release (best-effort).
-    ch_stats = await _variant_type_summary_from_ch(release_key=str(release_id)) or {}
-    total_variants = int(ch_stats.get("total_variants", 0))
+    # Total variants from the native PostgreSQL projection, scoped to the same
+    # release (best-effort: the endpoint still answers when the query fails).
+    variant_stats = await _variant_type_summary_from_pg(release_key=str(release_id)) or {}
+    total_variants = int(variant_stats.get("total_variants", 0))
 
     return DashboardStats(
         total_variants=total_variants,
@@ -187,73 +205,204 @@ async def dashboard_stats(
     return DashboardStats(**payload)
 
 
+async def _homepage_release_context(
+    db: AsyncSession = Depends(get_db),
+    release_id: int | None = Query(default=None, ge=1, include_in_schema=False),
+    pinned_release_id: int | None = Header(
+        default=None,
+        alias="X-SoyMutDB-Release",
+        ge=1,
+        include_in_schema=False,
+    ),
+) -> ReleaseContext | None:
+    """Resolve the published release the home page aggregate is bound to.
+
+    This mirrors :func:`get_release_context` (query pin, header pin, rejection
+    of conflicting pins) with two deliberate differences:
+
+    * a missing published release answers ``None`` instead of raising, so the
+      public home page still renders an empty aggregate before the first
+      release is published (the sibling endpoints answer 503 there);
+    * the pins stay out of the OpenAPI document, so the published home page
+      contract — and the generated client built from it — is unchanged.
+    """
+    if release_id is not None and pinned_release_id is not None and release_id != pinned_release_id:
+        raise ValidationError("Conflicting release ids were provided")
+    requested = release_id if release_id is not None else pinned_release_id
+    try:
+        return await resolve_release_context(db, requested)
+    except ServiceUnavailableError:
+        return None
+
+
 @router.get(
     "/homepage",
     response_model=HomepageStats,
     summary="Homepage statistics",
     description=(
         "Aggregate statistics for the public home page. Variant counts come "
-        "from ClickHouse when available, falling back to the PostgreSQL "
-        "variant_summaries table; other counts are real PostgreSQL aggregates. "
-        "Empty results are returned as zeros."
+        "from the native PostgreSQL variant_facts projection, falling back to "
+        "the variant_summaries table; other counts are real PostgreSQL "
+        "aggregates. Empty results are returned as zeros."
     ),
 )
 async def homepage_stats(
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext | None = Depends(_homepage_release_context),
 ) -> HomepageStats:
     """Home page statistics (genes, lines, releases, variants, seeds).
 
-    Read-hot aggregation cached in Redis (default TTL) via cache-aside;
-    a Redis failure degrades to a direct aggregation.
+    The aggregate is bound to the resolved published release: the genes,
+    mutant lines, assemblies and seed lots of other releases — and the
+    variant facts of a draft release — are never counted, so an anonymous
+    visitor cannot learn the size of unpublished data.
+
+    Read-hot aggregation cached in Redis (default TTL) via cache-aside; a
+    Redis failure degrades to a direct aggregation. The cache key carries the
+    release, so one release's aggregate is never served for another.
+
+    A database without a published release answers an empty (zero) aggregate
+    instead of failing the public home page.
     """
+    if release_context is None:
+        # Nothing is published: the home page still renders, with zeros.
+        return HomepageStats()
+    release_id = release_context.release_id
     payload = await get_or_set(
         "stats:homepage",
         ttl=None,
-        loader=lambda: _load_homepage_stats(db),
+        params={"release_id": release_id},
+        loader=lambda: _load_homepage_stats(db, release_id),
     )
     return HomepageStats(**payload)
 
 
-async def _load_homepage_stats(db: AsyncSession) -> dict:
-    """Compute homepage aggregates (loader for the Redis cache)."""
-    gene_count = await db.scalar(select(func.count(Gene.gene_pk))) or 0
-    mutant_line_count = (
-        await db.scalar(
-            select(func.count(MutantLine.id)).where(MutantLine.is_deleted.is_(False))
-        )
-        or 0
+def _release_scope(release_id: int | None) -> ColumnElement[int]:
+    """Return the SQL expression the homepage aggregate is bound to.
+
+    An explicit release id is used as is. Without one the newest *published*
+    release is resolved inside the same statement, so the aggregate is still
+    bound to a single released release instead of spanning the whole table.
+    """
+    if release_id is not None:
+        return literal(release_id)
+    return (
+        select(Release.id)
+        .where(Release.status == ReleaseStatus.PUBLISHED.value)
+        .order_by(Release.published_at.desc().nulls_last(), Release.id.desc())
+        .limit(1)
+        .scalar_subquery()
     )
-    release_count = (
-        await db.scalar(
-            select(func.count(Release.id)).where(
-                Release.status == ReleaseStatus.ACTIVE.value
+
+
+async def _load_homepage_stats(db: AsyncSession, release_id: int | None = None) -> dict:
+    """Compute homepage aggregates for one published release (Redis loader).
+
+    Every independent aggregate is folded into one statement as a scalar
+    subquery. They were previously seven sequential ``db.scalar`` / ``db.execute``
+    calls, so one page load spent seven pool round trips to read seven numbers
+    that never depend on each other. One statement is the same snapshot and one
+    round trip; the homepage is the most-requested aggregate in the product.
+
+    The counts are bound to one release, which in this schema means:
+
+    * **genes** have no release column — they are assembly-scoped, so they are
+      counted through the release's assemblies;
+    * **mutant lines** carry ``release_id`` and are counted when they belong to
+      the release, are not deleted and are public (the same visibility rule
+      the public mutant routes use);
+    * **assemblies** carry ``release_id`` and are counted directly;
+    * **seed lots** have no release column — they hang off a mutant line, so
+      they are counted through the release's public lines;
+    * **variant facts** carry ``release_id`` and are read through the native
+      projection bound to the same release key.
+
+    ``release_count`` stays the number of *published* releases: that is the
+    publication history, all of it public data, and not a property of the
+    resolved release.
+
+    ``release_id`` is optional only for local tooling (``scripts/dev``) and the
+    query-count guard, which resolve the newest published release in the same
+    statement. The public endpoint always passes the resolved release.
+    """
+    scope = _release_scope(release_id)
+
+    # Public mutant lines of the release: not deleted, explicitly public and
+    # attached to that release.
+    public_lines = select(MutantLine.id).where(
+        MutantLine.release_id == scope,
+        MutantLine.is_deleted.is_(False),
+        MutantLine.is_public.is_(True),
+    )
+
+    row = (
+        await db.execute(
+            select(
+                select(func.count(Gene.gene_pk))
+                .where(
+                    Gene.assembly_id.in_(
+                        select(Assembly.id).where(Assembly.release_id == scope)
+                    )
+                )
+                .scalar_subquery(),
+                select(func.count(MutantLine.id))
+                .where(
+                    MutantLine.release_id == scope,
+                    MutantLine.is_deleted.is_(False),
+                    MutantLine.is_public.is_(True),
+                )
+                .scalar_subquery(),
+                select(func.count(Release.id))
+                .where(Release.status == ReleaseStatus.ACTIVE.value)
+                .scalar_subquery(),
+                select(func.count(Assembly.id))
+                .where(Assembly.release_id == scope)
+                .scalar_subquery(),
+                select(func.count(SeedInventory.id))
+                .where(SeedInventory.mutant_line_id.in_(public_lines))
+                .scalar_subquery(),
+                select(Release.published_at).where(Release.id == scope).scalar_subquery(),
+                select(Release.version).where(Release.id == scope).scalar_subquery(),
+                # The release the aggregate is bound to, so the native
+                # projection can be scoped to the very same release.
+                select(Release.id).where(Release.id == scope).scalar_subquery(),
             )
         )
-        or 0
-    )
-    assembly_count = await db.scalar(select(func.count(Assembly.id))) or 0
-    seed_accessions = await db.scalar(select(func.count(SeedInventory.id))) or 0
+    ).one()
+    values = list(row)
+    (
+        gene_count,
+        mutant_line_count,
+        release_count,
+        assembly_count,
+        seed_accessions,
+        published_at,
+        current_release_version,
+    ) = values[:7]
+    # The bound release id is the last column; a row that does not carry it
+    # falls back to the release the caller asked for.
+    row_release_id = values[7] if len(values) > 7 else None
+    bound_release_id = release_id if release_id is not None else row_release_id
 
-    release_result = await db.execute(
-        select(Release)
-        .where(Release.status == ReleaseStatus.ACTIVE.value)
-        .order_by(Release.published_at.desc())
-        .limit(1)
-    )
-    current_release = release_result.scalar_one_or_none()
-
-    # Variant counts: ClickHouse first, PostgreSQL as fallback, zeros last.
-    ch_stats = await _variant_type_summary_from_ch()
-    if ch_stats is not None:
-        total_variants = int(ch_stats.get("total_variants", 0))
-        snp_count = int(ch_stats.get("snp_count", 0))
-        indel_count = int(ch_stats.get("ins_count", 0)) + int(
-            ch_stats.get("del_count", 0)
+    # Variant counts: native PostgreSQL projection first, the variant_summaries
+    # table as fallback, zeros last. Both are bound to the same release; when
+    # nothing is published the projection is bound to a release that does not
+    # exist, so it answers zeros instead of the whole table.
+    variant_stats = await _variant_type_summary_from_pg(
+        release_key=(
+            str(bound_release_id) if bound_release_id is not None else _NO_RELEASE_KEY
         )
-        sv_count = int(ch_stats.get("sv_count", 0))
+    )
+    if variant_stats is not None:
+        total_variants = int(variant_stats.get("total_variants", 0))
+        snp_count = int(variant_stats.get("snp_count", 0))
+        indel_count = int(variant_stats.get("ins_count", 0)) + int(
+            variant_stats.get("del_count", 0)
+        )
+        sv_count = int(variant_stats.get("sv_count", 0))
     else:
         try:
-            pg_counts = await _variant_type_counts_from_pg(db)
+            pg_counts = await _variant_type_counts_from_pg(db, scope)
         except Exception:
             logger.warning("stats_pg_unavailable", component="homepage")
             pg_counts = {}
@@ -267,13 +416,13 @@ async def _load_homepage_stats(db: AsyncSession) -> dict:
         snp_count=snp_count,
         indel_count=indel_count,
         sv_count=sv_count,
-        gene_count=int(gene_count),
-        mutant_line_count=int(mutant_line_count),
-        release_count=int(release_count),
-        assembly_count=int(assembly_count),
-        seed_accessions=int(seed_accessions),
-        last_release_date=current_release.published_at if current_release else None,
-        last_release_name=current_release.version if current_release else None,
+        gene_count=int(gene_count or 0),
+        mutant_line_count=int(mutant_line_count or 0),
+        release_count=int(release_count or 0),
+        assembly_count=int(assembly_count or 0),
+        seed_accessions=int(seed_accessions or 0),
+        last_release_date=published_at,
+        last_release_name=current_release_version,
     ).model_dump(mode="json")
 
 
@@ -284,15 +433,15 @@ async def variant_type_distribution(
 ) -> VariantTypeDistribution:
     """Variant type distribution (SNP/INS/DEL/MNV/SV) for a published release.
 
-    The ClickHouse aggregate is bound to the resolved release; previously it
-    scanned every release's facts.
+    The PostgreSQL variant aggregate is bound to the resolved release;
+    previously it scanned every release's facts.
     """
     try:
-        dist = await ch_service.get_variant_type_distribution(
+        dist = await variant_service.get_variant_type_distribution(
             assembly=assembly, release_key=release_context.release_key
         )
     except Exception:
-        logger.warning("stats_clickhouse_unavailable", component="variant_types")
+        logger.warning("stats_variant_store_unavailable", component="variant_types")
         dist = {}
 
     snp = dist.get("SNP", 0)
@@ -587,14 +736,15 @@ async def chromosome_density(
 ) -> ChromosomeDensity:
     """Variant density across a chromosome in the published release.
 
-    Density is computed entirely from the ClickHouse projection, so an
-    unavailable projection is reported as capability-unavailable (503). The
-    response model also requires a concrete ``chromosome_length``: fabricating
-    ``0`` here would both violate the contract and present an empty chromosome
-    as a real result. The query is bound to the resolved release, so bins can
-    never mix drafts into a published density.
+    Density is computed entirely from the PostgreSQL ``variant_facts``
+    projection, so an unavailable projection is reported as
+    capability-unavailable (503). The response model also requires a concrete
+    ``chromosome_length``: fabricating ``0`` here would both violate the
+    contract and present an empty chromosome as a real result. The query is
+    bound to the resolved release, so bins can never mix drafts into a
+    published density.
     """
-    bins = await ch_service.get_chromosome_density(
+    bins = await variant_service.get_chromosome_density(
         assembly=assembly,
         chromosome=chromosome,
         bin_size=bin_size,

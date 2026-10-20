@@ -1,0 +1,194 @@
+{
+  "api_python": "Python 3.15.0",
+  "apply": {
+    "identities": [
+      [
+        1,
+        "2001"
+      ],
+      [
+        1,
+        "2002"
+      ],
+      [
+        2,
+        "2003"
+      ],
+      [
+        2,
+        "2004"
+      ],
+      [
+        2,
+        "2005"
+      ]
+    ],
+    "receipts": [
+      {
+        "payload_sha256": "38cd26f896c42b50bae9457b20c8af8c6440f9bcf4edb393db830cff0df20693",
+        "release_id": 1,
+        "source_count": 5,
+        "source_version": "backfill-v5.0.0"
+      }
+    ],
+    "release_facts": 5,
+    "report": {
+      "applied": true,
+      "matches": true,
+      "payload_sha256": "38cd26f896c42b50bae9457b20c8af8c6440f9bcf4edb393db830cff0df20693",
+      "release_id": 1,
+      "source_count": 5,
+      "target_count": 5
+    }
+  },
+  "clickhouse": {
+    "database": "soymutdb_backfill_rehearsal_final",
+    "ddl_columns": 26,
+    "ddl_source": "infra/clickhouse/init.sql",
+    "fixtures": {
+      "assemblies_seeded": [
+        "backfill-v4",
+        "backfill-v5"
+      ],
+      "clickhouse_target_release_rows": 5,
+      "clickhouse_total_rows": 6,
+      "expected_target_release_rows": 5,
+      "releases_seeded": [
+        "backfill-v4.0.0",
+        "backfill-v5.0.0"
+      ],
+      "rows_inserted": 6
+    }
+  },
+  "cutover": {
+    "exit_code": 0,
+    "faults": [],
+    "native_cutover_ready": true
+  },
+  "disclaimer": "Rehearsal evidence only. It proves the backfill contract against data this script created in a throwaway database; it is not a claim that any production release has been backfilled.",
+  "dry_run": {
+    "receipt_count": 0,
+    "release_facts": 0,
+    "report": {
+      "applied": false,
+      "matches": false,
+      "payload_sha256": "38cd26f896c42b50bae9457b20c8af8c6440f9bcf4edb393db830cff0df20693",
+      "release_id": 1,
+      "source_count": 5,
+      "target_count": 0
+    },
+    "wrote_nothing": true
+  },
+  "idempotent_repeat": {
+    "digest_matches_first_apply": true,
+    "payload_sha256": "38cd26f896c42b50bae9457b20c8af8c6440f9bcf4edb393db830cff0df20693",
+    "receipt_count": 1,
+    "unchanged": true
+  },
+  "identity": {
+    "assembly_labels": {
+      "backfill-v4": "v4",
+      "backfill-v5": "v5"
+    },
+    "assembly_map": {
+      "backfill-v4": 1,
+      "backfill-v5": 2
+    },
+    "other_release_id": 2,
+    "other_release_version": "backfill-v4.0.0",
+    "release_id": 1,
+    "release_variant_count": 5,
+    "release_version": "backfill-v5.0.0"
+  },
+  "negatives": [
+    {
+      "case": "apply without --source-frozen",
+      "exit_code": 2,
+      "message_matched": "source-frozen",
+      "postgres_after": {
+        "receipt_count": 1,
+        "release_facts": 5
+      },
+      "postgres_unchanged": true,
+      "rejected": true
+    },
+    {
+      "case": "collapsed assembly namespaces",
+      "exit_code": 1,
+      "message_matched": "must not be collapsed",
+      "postgres_after": {
+        "receipt_count": 1,
+        "release_facts": 5
+      },
+      "postgres_unchanged": true,
+      "rejected": true
+    },
+    {
+      "case": "source version does not match the release",
+      "exit_code": 1,
+      "message_matched": "does not match authoritative identity",
+      "postgres_after": {
+        "receipt_count": 1,
+        "release_facts": 5
+      },
+      "postgres_unchanged": true,
+      "rejected": true
+    }
+  ],
+  "postgres_database": "existed",
+  "postgres_final": {
+    "all_facts": 5,
+    "identities": [
+      [
+        1,
+        "2001"
+      ],
+      [
+        1,
+        "2002"
+      ],
+      [
+        2,
+        "2003"
+      ],
+      [
+        2,
+        "2004"
+      ],
+      [
+        2,
+        "2005"
+      ]
+    ],
+    "receipt_count": 1,
+    "receipts": [
+      {
+        "payload_sha256": "38cd26f896c42b50bae9457b20c8af8c6440f9bcf4edb393db830cff0df20693",
+        "release_id": 1,
+        "source_count": 5,
+        "source_version": "backfill-v5.0.0"
+      }
+    ],
+    "release_facts": 5
+  },
+  "postgres_migration": "at head",
+  "scope": "isolated rehearsal; NOT a production backfill",
+  "steps": [
+    "rehearsal database created and migrated to head",
+    "ClickHouse provisioned from init.sql and seeded",
+    "PostgreSQL identity seeded (releases, assemblies)",
+    "dry run verified the source and wrote nothing",
+    "apply transferred and verified with one receipt",
+    "verify_native_cutover reports ready",
+    "repeat apply was idempotent (same digest, one receipt)",
+    "three rejections refused, PostgreSQL unchanged"
+  ],
+  "target": {
+    "app_env": "dev",
+    "clickhouse": "127.0.0.1:58123",
+    "clickhouse_database": "soymutdb_backfill_rehearsal_final",
+    "postgres": "127.0.0.1:55448/soymutdb_backfill_20261017_final"
+  },
+  "verified": true,
+  "worker_python": "3.15.0"
+}

@@ -147,7 +147,7 @@ daemon 和 docker CLI 都不会注入，门禁在解析数据库时直接失败�
     - name: Frontend verification
       script: bash scripts/ci-job-steps.sh run frontend
     - name: API + Worker verification
-      image: python:3.14
+      image: python:3.15
       script: bash scripts/ci-job-steps.sh run api-tests
 ```
 
@@ -198,7 +198,7 @@ while IFS='=' read -r key value; do export "${key}=${value}"; done <<< "${PG_ENV
 * `scripts/dependency_governance.py` 既 `import yaml`（读锁文件与策略），又用
   `uv`/`uvx` 跑 Deptry / license 分析器。
 
-早期 stage 用了 `image: node:24.19.0` 覆盖。基础镜像里的 `python3` 是给 node-gyp
+早期 stage 用了 `image: node:26.10.0` 覆盖。基础镜像里的 `python3` 是给 node-gyp
 用的**裸解释器**，没有 pip、没有 site-packages，于是真实构建
 `cnb-mqg-1k289oe96` 直接死在导入阶段：
 
@@ -216,7 +216,7 @@ fail-closed 门禁把这个当失败，等于门禁没跑。
 
 1. **不要给治理 stage 钉 Node-only 的 `image:`**。让它继承 pipeline 默认的
    `docker.build` 镜像（`.cnb/env/Dockerfile.frontend`），该镜像基于
-   `python:3.14`，同时带 Node 24 + pnpm + 可用的 pip/venv。三处都要改：
+   `python:3.15`，同时带 Node 26 + pnpm + 可用的 pip/venv。三处都要改：
    `.cnb.yml` 的 PR/main 两条 verify，以及独立流水线文件
    `.cnb/pipelines/verify.yml`；`.cnb/pipelines/dependency-governance.yml` 也要
    显式声明同一个 `docker.build`（外加 pnpm store 卷，否则安装结果落在会被丢弃的
@@ -226,7 +226,7 @@ fail-closed 门禁把这个当失败，等于门禁没跑。
    major.minor（不匹配即 fail closed），再探测 `import yaml`（满足即静默返回，
    热容器零成本、开发者本机不被干扰），否则用 `ensure_governance_pip`（`pip`
    缺失时先 `ensurepip`）安装固定版本的 `PyYAML==6.0.3`，最后确保
-   `uv==${UV_VERSION}`（0.11.33，与 Dockerfile / `check-toolchain-pins.py` 同一
+   `uv==${UV_VERSION}`（0.13.1，与 Dockerfile / `check-toolchain-pins.py` 同一
    pin）存在。任何一步失败都**非零退出**，绝不降级成 skip。
 
 版本钉在共享脚本里，GitHub workflow 与 CNB 才会解析出同一个分析器。
@@ -286,7 +286,7 @@ CNB 文档明确"任务级仅支持 `image` 配置，不支持 `dockerfile`"。�
 
 * 需要 Dockerfile 的 stage，其 `image:` 必须**留空**，由流水线级
   `docker.build.dockerfile` 提供默认环境。
-* 同一流水线里需要别的环境（API 用 `python:3.14`、governance 用 `node:26.10.0`）
+* 同一流水线里需要别的环境（API 用 `python:3.15`、governance 用 `node:26.10.0`）
   的 stage，**保留自己的 `image:`** 覆盖默认值，语义与之前完全一致。
 * `docker.build.by` 只列 Dockerfile 本身：stage 体通过 `scripts/` 自行引导工具链，
   Dockerfile 是唯一能改变门禁运行环境的输入。
@@ -304,7 +304,7 @@ CNB 文档明确"任务级仅支持 `image` 配置，不支持 `dockerfile`"。�
 | 文件 | 用途 | 内容边界 |
 | --- | --- | --- |
 | `.cnb/env/Dockerfile.build-tools` | 镜像构建/扫描/SBOM/签名 stage 的构建环境 | 基础镜像为 `docker:<pin>-cli` + bash/curl/jq/python3；**不含任何密钥** |
-| `.cnb/env/Dockerfile.frontend` | 前端/依赖治理/契约门禁的构建环境 | `python:3.14` + 官方 Node tarball（校验和固定）+ **预热好的 pnpm store**（`VOLUME /cache/pnpm-store`）；**不含任何密钥** |
+| `.cnb/env/Dockerfile.frontend` | 前端/依赖治理/契约门禁的构建环境 | `python:3.15` + 官方 Node 26.10.0 tarball（校验和固定）+ **预热好的 pnpm store**（`VOLUME /cache/pnpm-store`）；**不含任何密钥** |
 | `.cnb/env/release.yml` | 发布流水线/手动按钮导入的**非密钥**配置 | 只有 `SOYMUTDB_OIDC_ISSUER`：`cosign verify` 要 pin 的 OIDC trust root。keyless 签名没有长期私钥；真实凭据仍只在平台 secret store |
 
 两点容易误判：
@@ -352,7 +352,7 @@ CNB 文档（build-env.md「Volume 共享」）给的通道是 Dockerfile 的 `V
 | `web_trigger_acceptance` | `acceptance-manual` | contracts → backend → static，上传验收清单 |
 | PR | `verify` | 前端 / API+Worker / 依赖治理（无凭据） |
 | main push | `verify` | 同上 + 构建并自校验 Pages 制品 |
-| main push | `clickhouse-migration` | 真实 ClickHouse 遗留迁移 + 幂等复跑 |
+| main push | `clickhouse-migration` | **历史 lane**：真实 ClickHouse 遗留 schema 迁移 + 幂等复跑（走 3.14 镜像，不是默认运行时的门禁） |
 | main push | `mcp-e2e` | nginx 后的 MCP 鉴权契约 |
 | main push | `docker-images (amd64)` / `(arm64)` | 原生架构构建 → 冒烟 → Trivy → SPDX → 导出 |
 | main push | `release` | 同事件 await 双架构包 → 取回并校验 → 合并 manifest、keyless 签名、SLSA+SPDX attestation |
@@ -418,8 +418,17 @@ manifest 校验用同一份清单生成期望值，因此"多一个 / 少一个�
 
 | 镜像 | Dockerfile | 内容 | 冒烟门禁 |
 | --- | --- | --- | --- |
-| `migrate` | `infra/docker/Dockerfile.migrate` | python:3.14-slim + 锁定的 API 依赖（alembic 需要 ORM 元数据与 asyncpg） | `test -f alembic.ini && alembic heads`（离线解析迁移图） |
-| `migrate-clickhouse` | `infra/docker/Dockerfile.migrate-clickhouse` | python:3.14-slim + bash + `clickhouse-connect` | 三个 payload 文件到位（`migrate-clickhouse.sh` / lib / SQL） |
+| `migrate` | `infra/docker/Dockerfile.migrate` | python:3.15.0-slim + 锁定的 API 依赖（alembic 需要 ORM 元数据与 asyncpg） | `test -f alembic.ini && alembic heads`（离线解析迁移图） |
+| `migrate-clickhouse` | `infra/docker/Dockerfile.migrate-clickhouse` | **python:3.14.6-slim** + bash + `clickhouse-connect` | 三个 payload 文件到位（`migrate-clickhouse.sh` / lib / SQL） |
+
+`migrate-clickhouse` 是**唯一一个刻意留在 3.15 之下**的镜像。`clickhouse-connect` 最新发布版（1.10）
+声明 `requires-python >=3.10,<3.15`，没有任何 3.15 解释器能装这个驱动，所以历史迁移 lane 在镜像、
+`.cnb.yml` 的 `clickhouse-migration` stage、GitHub 的同名 job 和
+历史 Worker 引擎测试上都停在 3.14；其余原生服务（api / worker / migrate /
+mcp）已全部移到 3.15。`scripts/ci-job-steps.sh` 在 provision 驱动前校验
+`CLICKHOUSE_MIGRATION_PYTHON` 的 major.minor 等于 `SOYMUTDB_CLICKHOUSE_MIGRATION_PYTHON_VERSION`
+（默认 `3.14`），不匹配即失败而不是静默装不上驱动。
+这条 lane 只服务 `docker-compose.legacy-clickhouse.yml` 的显式历史路径，**不属于**默认运行时。
 
 `migrate-clickhouse` 里建 `/opt/venv` 并软链 `/opt/soymutdb/venv`，因为
 `migrate-clickhouse.sh` 默认取 `${ROOT}/../venv/bin/python`；这样 Compose 服务不再
@@ -457,12 +466,21 @@ overlay 的 bind mount 与 `--reload`）。缺的那一半现在是
 ```bash
 bash scripts/compose-local.sh build              # 用 list-images.sh 构建 8 个镜像
 bash scripts/compose-local.sh up -d              # 用这些镜像启动整套拓扑
-bash scripts/compose-local.sh up -d postgres clickhouse redis redis-cli
+bash scripts/compose-local.sh up -d postgres redis minio
 bash scripts/compose-local.sh --tag 2026.09.12 up -d
 bash scripts/compose-local.sh down
+
+# 只在需要历史回填源端时（额外加载 overlay + legacy-migration profile）：
+SOYMUTDB_LOCAL_LEGACY_CLICKHOUSE=1 bash scripts/compose-local.sh up -d
 ```
 
 它用的是**同一批 Dockerfile**，所以"本地能起来"与"release 能构出来"不会分叉。
+
+默认拓扑**没有 ClickHouse 服务**，因此包装脚本默认既不加载
+`docker-compose.legacy-clickhouse.yml`，也不提供 `CLICKHOUSE_PASSWORD` 与
+`MIGRATE_CLICKHOUSE_IMAGE_REF`——不为一个不会启动的服务编造凭据。只有
+`SOYMUTDB_LOCAL_LEGACY_CLICKHOUSE=1` 时才加载该 overlay、启用 `legacy-migration` profile 并提供这两个
+变量。镜像清单 `scripts/list-images.sh` 仍保留 `migrate-clickhouse` 条目，历史回填镜像因此仍可本地构建。
 
 实现方式是后置的 `docker-compose.local.yml`：
 
@@ -582,10 +600,14 @@ bash scripts/smoke.sh --list
 | 组件 | 版本 | 位置 |
 | --- | --- | --- |
 | Node | 26.10.0 | `.nvmrc` / `.node-version` / `package.json` / 容器镜像 |
-| pnpm | 11.21.0 | `package.json` / `setup-workspace.sh` |
-| Python | 3.14 | `pyproject.toml` / `api.yml` / 镜像 tag |
-| uv | 0.11.33 | Dockerfile / 治理流水线 |
+| pnpm | 12.11.2 | `package.json` / `setup-workspace.sh` |
+| Python | 3.15 | `pyproject.toml`（`requires-python >=3.15`）/ `api.yml` / 镜像 tag |
+| uv | 0.13.1 | Dockerfile / 治理流水线 |
 | Trivy | 0.61.0（容器回退） | `build-release-image.sh` |
+
+唯一例外是历史 ClickHouse 迁移 lane（`migrate-clickhouse` 镜像 + `clickhouse-migration` stage/job），
+它刻意停在 **Python 3.14**，因为 `clickhouse-connect` 1.10 不发布 3.15 版本。这条例外写在
+`scripts/test_ci_job_contracts.py` 的守卫里（`CH_VERSION = "3.14"`），不是遗漏。
 
 版本不再逐条写进每个 stage：pnpm 由 `scripts/setup-workspace.sh` 单点声明。一致性
 由 `scripts/check-toolchain-pins.py` 强制，并作为 contracts 冒烟层的第一个检查项执行：
@@ -597,7 +619,7 @@ python3 scripts/check-toolchain-pins.py --json   # 机器可读
 
 它同时校验 `.nvmrc` 与 `.node-version` 互相一致——这两个文件分别由 nvm 与
 asdf/volta/mise 读取，此前已经漂移过，没有任何东西会发现。`Node 26.10.0 /
-pnpm 11.21.0` 这些写入 `.cnb.yml` 或流水线文件的字面量，另由
+pnpm 12.11.2` 这些写入 `.cnb.yml` 或流水线文件的字面量，另由
 `scripts/test_ci_job_contracts.py` 锁定（例如禁止再出现 `node:22`、
 `python:3.12`）。
 
@@ -646,5 +668,14 @@ SOYMUTDB_CI_DOCKER_BUILD_EXTRA_ARGS="--cache-from=type=registry,ref=<registry>/c
 
 - `CI` 的依赖治理运行共享脚本 `scripts/ci-job-steps.sh run dependency-governance`。其根 pnpm 环境和独立 `e2e/` npm 锁分开安装；后者只供 Knip 读取真实 Playwright 配置，仍单独执行 npm 高危审计。若 `knip.json` 空且 exit 2，必须先检查其 stderr，不得误标记成死代码。
 - `E2E Smoke (online)` 在 PR 上构建**该 PR 提交**的外部门户产物并启动本地浏览器 mock；Nightly/手动/成功的 Pages 发布后才对实际 GitHub Pages 域名运行线上 Smoke，避免把旧网页 404 当作 PR 新页面的缺陷。
-- ClickHouse 迁移矩阵验证 `24.8-alpine` 和 `25.8-alpine`，**不是**对生产原卷执行在线迁移；preview 使用 25.8，新旧兼容性/回滚仍需独立数据库快照验收。
+- ClickHouse 迁移矩阵验证 `24.8-alpine` 和 `25.8-alpine`，**不是**对生产原卷执行在线迁移；preview 使用 25.8，新旧兼容性/回滚仍需独立数据库快照验收。该矩阵在 GitHub 镜像 job 上按 `matrix.image` 展开，CNB 的 `clickhouse-migration` stage 只跑默认的 `clickhouse/clickhouse-server:24.8-alpine`（`SOYMUTDB_CLICKHOUSE_CI_IMAGE` 可覆盖），两侧差异是已知未对齐项，不是两平台都跑矩阵。
 - GitHub Actions 的“可合并”只表示 Git 图可合并。发布还依赖 Governance 无高危报告、PR 交互 E2E 真实通过、PG/CH 数据层测试、CI 与 Pages 精确 commit SHA 的制品溯源。详见 [2026-10-09 执行合同 §6](../aegis/plans/2026-10-09-ci-e2e-import-performance-execution.md#6-2026-10-09-第四轮合并前复审pr-5审计日志驱动)。
+
+### 历史 Worker 引擎测试分流（2026-10-16）
+
+原生后端 gate 使用 Python 3.15，不安装 chdb。chdb-core 26.9 的 abi3 wheel
+仍仅附带至 Python 3.14 的非限定 API shim，直接在 3.15 import 会退出进程。
+已有 `clickhouse-migration` 强制 job 在真实 schema 迁移/幂等检查后调用
+`scripts/verify-legacy-worker-tests.sh`；该共享脚本按独立 requirements 安装测试依赖，
+解析真实 PostgreSQL，并执行五个历史引擎/VCF 模块。GitHub/CNB 不增加各自独有逻辑。
+本机原生 657 tests、历史 33 tests 已分别通过；Docker CI 运行结果仍需由流水线产生。

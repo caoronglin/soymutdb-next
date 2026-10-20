@@ -1,4 +1,4 @@
-"""System settings key-value model for dynamic configuration (CDN, feature flags, etc.)."""
+"""System settings key-value model for dynamic configuration (feature flags, etc.)."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from .base import Base
 class SystemSetting(Base):
     """Key-value store for dynamic system settings.
 
-    Used to store configuration that can be updated at runtime (e.g. CDN URLs,
+    Used to store configuration that can be updated at runtime (e.g. thresholds,
     feature flags) without requiring a deployment or environment variable change.
     """
 

@@ -9,12 +9,22 @@
 浏览器 → GitHub Pages（公开 demo）或 Cloudflare Pages（可选生产静态托管）
        → Cloudflare Tunnel（仅公开 API/基因组数据）→ tunnel-origin → API / MinIO
        → nginx → API / MCP / MinIO（自管/内部入口）
-API → PostgreSQL（权威）/ ClickHouse（分析）/ MinIO（对象）/ Redis
+API → PostgreSQL（权威：身份、关系、release、权限、变异事实、匿名分析）
+    → MinIO/S3（对象）/ Redis（缓存与 broker，可丢弃）
 worker-analyses → analyses 队列 → analyses bucket
+历史 ClickHouse 源端 → 仅在显式加载 docker-compose.legacy-clickhouse.yml
+                     并选择 legacy-migration profile 时存在（回填源，不是运行时依赖）
 ```
 
-生产 Compose 保留 API、worker、ClickHouse、PostgreSQL、MinIO、Redis、MCP 和 nginx。GWAS 使用 `gwas`
+生产 Compose 保留 API、worker、PostgreSQL、MinIO、Redis、MCP 和 nginx，**不含 ClickHouse**。变异事实、
+统计与匿名分析都由 PostgreSQL 提供；Redis 只是可丢弃的缓存与 broker，MinIO 存对象。GWAS 使用 `gwas`
 bucket，fastp/scanpy 等分析使用 `analyses` bucket。
+
+旧 ClickHouse 现在只是**迁移源**：历史源端与旧 schema migrator 在
+`docker-compose.legacy-clickhouse.yml`（`legacy-migration` profile），必须显式加载。四个默认 compose
+（生产、开发、本地、预览）都没有 `clickhouse` / `migrate-clickhouse` 服务，API/Worker 也不再注入
+`SOYMUTDB_CLICKHOUSE_*`。逐版本回填与生产切换的真实执行记录见
+[原生 PostgreSQL 迁移与验收](native-postgres-cutover.md)，本文不据此宣称生产替代已完成。
 
 Cloudflare Pages/Tunnel 是可选生产边缘方案：`cloudflare-tunnel` profile 使用 `cloudflared` 连接仅含 API、
 公开基因组数据和健康检查的 `tunnel-origin`。管理端/API、MCP、数据库、MinIO 控制台和监控不经过该 Tunnel；
@@ -70,8 +80,10 @@ Admin 端点：`/admin/publication/targets`（列目标，redacted）、`/admin/
 默认启用 `core,blast,analyses,mcp`。API、worker、MCP、JBrowse 的 CI tag 只用于发现，发布后解析远端
 manifest 并输出 `image@sha256` 合同，生产仅接受 `*_IMAGE_REF` digest 引用。PR 只在 CI 做本地
 build/scan/runtime smoke 与全部 profile 的 `docker compose config` 验收；开发机合同测试不要求 Docker。
-升级顺序为预检、manifest、拉取、备份、停止/迁移、启动、readiness、smoke 和 digest 状态记录。
-ClickHouse 迁移输入封装在 worker 镜像内，不可逆迁移进入人工恢复门槛。完整决策见
+升级顺序为预检、manifest、拉取、备份、停止、`migrate`（alembic）→ `app.scripts.verify_native_cutover`
+→ 启动、readiness、smoke 和 digest 状态记录。`verify_native_cutover` 不通过就不启动新应用。
+旧 ClickHouse schema 迁移已移出默认路径：`upgrade.sh` 不再引用 `migrate-clickhouse`，只有显式加载历史
+叠加层并使用 `legacy-migration` profile 时才运行。完整决策见
 [ADR-0001](../adr/0001-platform-delivery-contract.md)。
 
 OCI 发布的 amd64/arm64 在原生 runner 上分别 build、runtime smoke、Trivy 与 SPDX，只有两份验证制品都成功
@@ -79,6 +91,29 @@ OCI 发布的 amd64/arm64 在原生 runner 上分别 build、runtime smoke、Tri
 签名并立即验证。blue/green 不复用固定端口 Compose 伪装双槽，而由
 [外部 slot adapter 合同](../../deploy/blue-green.md)完成 stage/verify/switch/current；实际负载均衡器、ARM runner、
 Sigstore/GHCR 可用性和生产演练仍是外部验收项。
+
+## 备份与恢复格式
+
+`deploy/scripts/backup.sh` 默认输出 **v3**：只含权威 PostgreSQL 与 S3 对象，因为默认运行时已经没有
+ClickHouse 组件；覆盖不到全部必需组件的运行会失败，而不是产出一个残缺归档。历史 **v2** 包只有显式
+`--allow-legacy-v2`，且目标 compose 确实提供 `clickhouse` 服务时才允许 `restore.sh` / `verify-restore.sh`
+恢复或校验，缺失组件不会被当成「已校验」。v2 恢复还需要目标目录旁存在
+`docker-compose.legacy-clickhouse.yml`（或等价的显式历史目标配置），并提供 `RESTORE_CLICKHOUSE_HOST/USER`
+（校验侧为 `CLICKHOUSE_HOST`）。
+
+## 本地复现生产拓扑
+
+`scripts/compose-local.sh` 是显式的开发/自建入口：用同一批 Dockerfile 构建镜像，再由
+`docker-compose.local.yml` 覆盖 digest 要求；它不是发布路径的回退。默认 profile 是 `core`，
+**不含也不需要** ClickHouse。历史源端只能显式开启：
+
+```bash
+SOYMUTDB_LOCAL_LEGACY_CLICKHOUSE=1 bash scripts/compose-local.sh up -d
+```
+
+该模式会额外加载 `docker-compose.legacy-clickhouse.yml`、启用 `legacy-migration` profile，并只在此模式
+下提供 `CLICKHOUSE_PASSWORD` 与 `MIGRATE_CLICKHOUSE_IMAGE_REF`。`scripts/list-images.sh` 仍保留
+`migrate-clickhouse` 条目，让历史回填镜像还能在本地构建。
 
 ## Pages 单次发布
 
@@ -103,7 +138,7 @@ Admin 现在为 Web-only（`/soymutdb-admin/`）。删除前须确认无生产�
 
 ## 双站点变体与安全边界
 
-SoyMutDB 的门户现在支持两个**独立静态制品**：external（外部站点）和 internal（内部站点）。两者共用 Vue 3/Vite 代码（`apps/web/package.json`），但通过构建变量显式选择，不根据 hostname、IP、请求头、cookie、User-Agent 或访客身份在后端推断站点。
+SoyMutDB 的门户现在支持两个**独立静态制品**：external（外部站点）和 internal（内部站点）。两者共用同一份 React 19 / Umi Max 4 代码（`apps/web/package.json`，入口 `src/umi-entry.tsx`），但通过构建变量显式选择，不根据 hostname、IP、请求头、cookie、User-Agent 或访客身份在后端推断站点。`scripts/check-vue-retirement.mjs` 断言仓库里已没有 Vue 运行时依赖，本文不再描述 Vue/Vite 前端。
 
 - 在 apps/web 执行 pnpm run build:sites 会按顺序生成 dist/external 与 dist/internal 两棵完整制品树；每棵树的 hashed bundle、SSG HTML、robots.txt、Service Worker 和 integrity manifest 都独立生成。
 - VITE_SITE_VARIANT 只允许 external 或 internal。external 的 site API 可公开缓存；internal 的 site API（about、home、footer、content）必须携带 Bearer 访问令牌，并返回 private, no-store，避免共享缓存泄露内容。

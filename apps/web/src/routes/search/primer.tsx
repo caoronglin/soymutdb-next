@@ -17,6 +17,7 @@ import { useTranslation } from "react-i18next";
 import * as React from "react";
 import {
   Alert,
+  App,
   Button,
   Card,
   Empty,
@@ -29,7 +30,6 @@ import {
   Table,
   Tag,
   Typography,
-  message,
 } from "@/lib/antd";
 import {
   CopyOutlined,
@@ -52,6 +52,9 @@ export const Route = createFileRoute("/search/primer")({
 
 function PrimerComponent() {
   const { t } = useTranslation();
+  // Context-aware message: the static API would bypass the ConfigProvider
+  // theme held by the root <App> provider in DesignSystemProvider.
+  const { message } = App.useApp();
   const [form] = Form.useForm<PrimerFormValues>();
   const [assemblyId, setAssemblyId] = React.useState<string | undefined>(undefined);
   const [mode, setMode] = React.useState<"region" | "paste">("region");
@@ -401,7 +404,7 @@ function PrimerComponent() {
 
         {loading ? (
           <Card className="mt-6 max-w-3xl">
-            <Spin tip={t("search.primer.designing")}>
+            <Spin description={t("search.primer.designing")}>
               <div className="h-16" />
             </Spin>
           </Card>

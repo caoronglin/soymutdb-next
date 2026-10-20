@@ -157,7 +157,7 @@ OCI digest 引用、blue/green 外部适配器合同），但对应真实后端�
 - `SOYMUTDB_JWT_SECRET` ≥ 32 字符、非示例值；`SOYMUTDB_CORS_ORIGINS` 为精确 origin 列表，**不含 `*`**
   （带凭据 CORS + HttpOnly refresh cookie）。缺失/示例/短 JWT 时 `APP_ENV=prod` **拒绝启动**（fail-fast）。
 - Cookie 生产为 `Secure`；`SameSite` 边界符合登录/刷新流。
-- CSP：生产 `script-src 'self'`（`VITE_CDN_ENABLED=false`）；`connect-src` 仅允许生产 API origin；
+- CSP：生产 `script-src 'self'`（第三方库全部本地打包）；`connect-src` 仅允许生产 API origin；
   `frame-src` 仅允许 JBrowse origin。
 - Admin 使用**独立受保护 origin**，不经过公共 API Tunnel。
 - 所有镜像引用使用 `*_IMAGE_REF=image@sha256` digest，**禁止 tag 回退**（`upgrade.sh` 拒绝非 digest）。

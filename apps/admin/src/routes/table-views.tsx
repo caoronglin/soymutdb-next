@@ -35,6 +35,7 @@ import {
   type ProColumns,
 } from "@/lib/antd";
 import { PRO_LIST_SHELL } from "../components/pro-table-shell";
+import { ConfirmDialog } from "../components/confirm-dialog";
 import { PlusOutlined, SaveOutlined, DeleteOutlined, StarOutlined } from "@ant-design/icons";
 import {
   TABLE_KINDS,
@@ -129,6 +130,14 @@ export default function TableViewsPage() {
   const [editingId, setEditingId] = React.useState<number | null>(null);
   const [editingReleaseId, setEditingReleaseId] = React.useState<string>("");
   const [instanceForm] = Form.useForm<InstanceFormValues>();
+  // Every write on this screen is confirmed and every rejection is reported.
+  const [promoteTarget, setPromoteTarget] = React.useState<TableViewTemplate | null>(null);
+  const [deleteTarget, setDeleteTarget] = React.useState<TableViewTemplate | null>(null);
+  const [instanceDeleteTarget, setInstanceDeleteTarget] = React.useState<SpeciesInstance | null>(null);
+  const [actionError, setActionError] = React.useState<{ message: string; reason: string } | null>(null);
+  const [promoteError, setPromoteError] = React.useState<string | null>(null);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const [instanceDeleteError, setInstanceDeleteError] = React.useState<string | null>(null);
 
   const templatesQuery = useQuery({
     queryKey: ["admin", "table-views", kind],
@@ -179,18 +188,72 @@ export default function TableViewsPage() {
     mutationFn: (id: number) => deleteTableViewTemplate(id),
     onSuccess: () => {
       message.success(t("common.success"));
+      setDeleteTarget(null);
+      setDeleteError(null);
       invalidate();
     },
-    onError: () => message.error(t("common.error")),
+    onError: (error) => {
+      // The confirmation dialog stays open and explains the refusal; before
+      // this the rejection was swallowed by a generic toast.
+      setDeleteError(error instanceof Error ? error.message : String(error));
+      message.error(t("common.error"));
+    },
   });
 
   const promoteMutation = useMutation({
     mutationFn: (id: number) => updateTableViewTemplate(id, { is_default: true }),
     onSuccess: () => {
       message.success(t("common.success"));
+      setPromoteTarget(null);
+      setPromoteError(null);
       invalidate();
     },
-    onError: () => message.error(t("common.error")),
+    onError: (error) => {
+      setPromoteError(error instanceof Error ? error.message : String(error));
+      message.error(t("common.error"));
+    },
+  });
+
+  /**
+   * Enable / disable a registered species instance.
+   *
+   * The row switch used to call the API directly and chain only a
+   * `then(...)`, so a rejected update became an unhandled promise rejection:
+   * the switch kept the old value and the operator was told nothing.
+   */
+  const instanceToggleMutation = useMutation({
+    mutationFn: (variables: { id: number; is_enabled: boolean; name: string }) =>
+      updateSpeciesInstance(variables.id, { is_enabled: variables.is_enabled }),
+    onSuccess: () => {
+      setActionError(null);
+      void queryClient.invalidateQueries({ queryKey: ["admin", "species-instances"] });
+    },
+    onError: (error, variables) => {
+      const reason = error instanceof Error ? error.message : String(error);
+      const failure = {
+        message: t("admin.tableViews.instanceUpdateFailed", {
+          name: variables.name,
+          defaultValue: 'The instance "{{name}}" could not be updated.',
+        }),
+        reason,
+      };
+      setActionError(failure);
+      message.error(failure.message);
+    },
+  });
+
+  const instanceDeleteMutation = useMutation({
+    mutationFn: (id: number) => deleteSpeciesInstance(id),
+    onSuccess: () => {
+      message.success(t("common.success"));
+      setInstanceDeleteTarget(null);
+      setInstanceDeleteError(null);
+      void queryClient.invalidateQueries({ queryKey: ["admin", "species-instances"] });
+    },
+    onError: (error) => {
+      setInstanceDeleteError(error instanceof Error ? error.message : String(error));
+      message.error(t("common.error"));
+    },
   });
 
   const instanceMutation = useMutation({
@@ -303,7 +366,10 @@ export default function TableViewsPage() {
               size="small"
               icon={<StarOutlined />}
               loading={promoteMutation.isPending}
-              onClick={() => promoteMutation.mutate(row.id)}
+              onClick={() => {
+                setActionError(null);
+                setPromoteTarget(row);
+              }}
             >
               {t("admin.tableViews.actionSetDefault")}
             </Button>
@@ -312,7 +378,10 @@ export default function TableViewsPage() {
             size="small"
             danger
             icon={<DeleteOutlined />}
-            onClick={() => deleteMutation.mutate(row.id)}
+            onClick={() => {
+              setActionError(null);
+              setDeleteTarget(row);
+            }}
           >
             {t("admin.tableViews.actionDelete")}
           </Button>
@@ -341,21 +410,24 @@ export default function TableViewsPage() {
           <Switch
             size="small"
             checked={row.is_enabled}
-            onChange={(checked) =>
-              updateSpeciesInstance(row.id, { is_enabled: checked }).then(() =>
-                queryClient.invalidateQueries({ queryKey: ["admin", "species-instances"] }),
-              )
-            }
+            loading={instanceToggleMutation.isPending}
+            onChange={(checked) => {
+              setActionError(null);
+              instanceToggleMutation.mutate({
+                id: row.id,
+                is_enabled: checked,
+                name: row.name,
+              });
+            }}
           />
           <Button
             size="small"
             danger
             icon={<DeleteOutlined />}
-            onClick={() =>
-              deleteSpeciesInstance(row.id).then(() =>
-                queryClient.invalidateQueries({ queryKey: ["admin", "species-instances"] }),
-              )
-            }
+            onClick={() => {
+              setActionError(null);
+              setInstanceDeleteTarget(row);
+            }}
           >
             {t("admin.tableViews.actionDelete")}
           </Button>
@@ -373,6 +445,22 @@ export default function TableViewsPage() {
           title={t("admin.tableViews.bannerTitle")}
           description={t("admin.tableViews.bannerDescription")}
         />
+
+        {actionError ? (
+          <div
+            role="alert"
+            data-testid="table-views-action-error"
+            className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+          >
+            <p>{actionError.message}</p>
+            <p className="mt-1 text-xs">
+              {t("common.errorReason", {
+                reason: actionError.reason,
+                defaultValue: "Server response: {{reason}}",
+              })}
+            </p>
+          </div>
+        ) : null}
 
         <ProCard
           size="small"
@@ -408,6 +496,14 @@ export default function TableViewsPage() {
         >
           {templatesQuery.isLoading ? (
             <Skeleton active />
+          ) : templatesQuery.isError ? (
+            <div
+              role="alert"
+              data-testid="table-views-templates-error"
+              className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+            >
+              {t("admin.tableViews.loadError", { defaultValue: "The table-view templates could not be loaded." })}
+            </div>
           ) : templates.length === 0 ? (
             <Empty description={t("admin.tableViews.empty")} />
           ) : (
@@ -566,6 +662,14 @@ export default function TableViewsPage() {
           />
           {instancesQuery.isLoading ? (
             <Skeleton active />
+          ) : instancesQuery.isError ? (
+            <div
+              role="alert"
+              data-testid="table-views-instances-error"
+              className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+            >
+              {t("admin.tableViews.instancesLoadError", { defaultValue: "The species instances could not be loaded." })}
+            </div>
           ) : (
             <ProTable<SpeciesInstance>
               {...PRO_LIST_SHELL}
@@ -614,6 +718,100 @@ export default function TableViewsPage() {
             </Space>
           </Form>
         </ProCard>
+
+        {/* Promote confirmation */}
+        {promoteTarget && (
+          <ConfirmDialog
+            open={Boolean(promoteTarget)}
+            onOpenChange={(open) => {
+              if (!open) {
+                setPromoteTarget(null);
+                setPromoteError(null);
+              }
+            }}
+            title={t("admin.tableViews.promoteTitle", { defaultValue: "Set as default template" })}
+            description={t("admin.tableViews.promoteConfirm", {
+              defaultValue: 'Make "{{name}}" the default layout for its scope? The portal resolves it first.',
+              name: promoteTarget.name,
+            })}
+            confirmLabel={t("admin.tableViews.actionSetDefault", { defaultValue: "Set as default" })}
+            onConfirm={() => promoteMutation.mutate(promoteTarget.id)}
+            loading={promoteMutation.isPending}
+            error={promoteError ? (
+              <span data-testid="table-views-promote-error">
+                {t("common.errorReason", {
+                  reason: promoteError,
+                  defaultValue: "Server response: {{reason}}",
+                })}
+              </span>
+            ) : null}
+          />
+        )}
+
+        {/* Template delete confirmation */}
+        {deleteTarget && (
+          <ConfirmDialog
+            open={Boolean(deleteTarget)}
+            onOpenChange={(open) => {
+              if (!open) {
+                setDeleteTarget(null);
+                setDeleteError(null);
+              }
+            }}
+            title={t("admin.tableViews.deleteTemplateTitle", { defaultValue: "Delete template" })}
+            description={t("admin.tableViews.deleteTemplateConfirm", {
+              defaultValue: 'Delete the template "{{name}}"? The portal stops resolving it.',
+              name: deleteTarget.name,
+            })}
+            confirmLabel={t("admin.tableViews.actionDelete", { defaultValue: "Delete" })}
+            severity="destructive"
+            onConfirm={() => deleteMutation.mutate(deleteTarget.id)}
+            loading={deleteMutation.isPending}
+            error={deleteError ? (
+              <span data-testid="table-views-delete-error">
+                {t("common.errorReason", {
+                  reason: deleteError,
+                  defaultValue: "Server response: {{reason}}",
+                })}
+              </span>
+            ) : null}
+          />
+        )}
+
+        {/* Instance unregister confirmation */}
+        {instanceDeleteTarget && (
+          <ConfirmDialog
+            open={Boolean(instanceDeleteTarget)}
+            onOpenChange={(open) => {
+              if (!open) {
+                setInstanceDeleteTarget(null);
+                setInstanceDeleteError(null);
+              }
+            }}
+            title={t("admin.tableViews.deleteInstanceTitle", { defaultValue: "Unregister instance" })}
+            description={t("admin.tableViews.deleteInstanceConfirm", {
+              defaultValue: 'Unregister the instance "{{name}}"? The console stops using it.',
+              name: instanceDeleteTarget.name,
+            })}
+            confirmLabel={t("admin.tableViews.actionDelete", { defaultValue: "Delete" })}
+            severity="destructive"
+            onConfirm={() => instanceDeleteMutation.mutate(instanceDeleteTarget.id)}
+            loading={instanceDeleteMutation.isPending}
+            error={instanceDeleteError ? (
+              <span data-testid="table-views-instance-delete-error">
+                {t("admin.tableViews.instanceDeleteFailed", {
+                  name: instanceDeleteTarget.name,
+                  defaultValue: 'The instance "{{name}}" could not be unregistered.',
+                })}
+                {" "}
+                {t("common.errorReason", {
+                  reason: instanceDeleteError,
+                  defaultValue: "Server response: {{reason}}",
+                })}
+              </span>
+            ) : null}
+          />
+        )}
       </div>
     </PageContainer>
   );

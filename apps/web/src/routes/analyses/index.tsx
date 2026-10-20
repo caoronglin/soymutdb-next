@@ -63,6 +63,60 @@ function AnalysesIndexComponent() {
   const { t } = useTranslation();
   const navigate = useNavigate();
 
+  return (
+    <div className="container-prose section-rhythm">
+      <ResearcherGate>
+        <header className="flex flex-col gap-4">
+          <Breadcrumb items={[{ title: t("analyses.title") }]} />
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-3.5">
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-card shadow-sm">
+                <FolderOpenOutlined className="size-5" aria-hidden />
+              </span>
+              <div>
+                <Typography.Title level={1} className="mb-0">
+                  {t("analyses.title")}
+                </Typography.Title>
+                <Typography.Paragraph type="secondary" style={{ margin: 0, maxWidth: "52rem" }}>
+                  {t("analyses.indexIntro")}
+                </Typography.Paragraph>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
+              <Button
+                size="small"
+                type="primary"
+                icon={<ExperimentOutlined aria-hidden />}
+                onClick={() => navigate({ to: "/analyses/fastp" })}
+              >
+                {t("analyses.newFastp")}
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                icon={<ScanOutlined aria-hidden />}
+                onClick={() => navigate({ to: "/analyses/scanpy" })}
+              >
+                {t("analyses.newScanpy")}
+              </Button>
+            </div>
+          </div>
+        </header>
+        {/* The job list is a CHILD of the gate on purpose: mounting the query
+            above the gate made every anonymous visitor issue a personal
+            `GET /api/v1/analyses` (401 + refresh attempts) before the
+            research-access state rendered. The module's contract is that an
+            anonymous visitor issues zero personal requests. */}
+        <AnalysesJobList />
+      </ResearcherGate>
+    </div>
+  );
+}
+
+function AnalysesJobList() {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+
   const jobsQuery = useQuery({
     queryKey: ["analysis-jobs"],
     queryFn: async (): Promise<AnalysisJobRow[]> => {
@@ -142,45 +196,6 @@ function AnalysesIndexComponent() {
   ];
 
   return (
-    <div className="container-prose section-rhythm">
-      <ResearcherGate>
-        <header className="flex flex-col gap-4">
-          <Breadcrumb items={[{ title: t("analyses.title") }]} />
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-3.5">
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-border bg-card shadow-sm">
-                <FolderOpenOutlined className="size-5" aria-hidden />
-              </span>
-              <div>
-                <Typography.Title level={1} className="mb-0">
-                  {t("analyses.title")}
-                </Typography.Title>
-                <Typography.Paragraph type="secondary" style={{ margin: 0, maxWidth: "52rem" }}>
-                  {t("analyses.indexIntro")}
-                </Typography.Paragraph>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 lg:shrink-0">
-              <Button
-                size="small"
-                type="primary"
-                icon={<ExperimentOutlined aria-hidden />}
-                onClick={() => navigate({ to: "/analyses/fastp" })}
-              >
-                {t("analyses.newFastp")}
-              </Button>
-              <Button
-                size="small"
-                variant="outlined"
-                icon={<ScanOutlined aria-hidden />}
-                onClick={() => navigate({ to: "/analyses/scanpy" })}
-              >
-                {t("analyses.newScanpy")}
-              </Button>
-            </div>
-          </div>
-        </header>
-
         <div className="mt-8">
           {jobsQuery.isLoading ? (
             <Skeleton active paragraph={{ rows: 5 }} />
@@ -206,7 +221,5 @@ function AnalysesIndexComponent() {
             />
           )}
         </div>
-      </ResearcherGate>
-    </div>
   );
 }

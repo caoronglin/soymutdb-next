@@ -10,7 +10,7 @@
 import { test, expect } from "@playwright/test";
 import { gotoReady, mockEntityApis, MOCK_PREVIEW_ASSEMBLY, MOCK_GENE_ID, MOCK_RELEASE_ID } from "./helpers";
 
-const BASE = "/soymutdb-next";
+const BASE = "";
 
 test.describe("genes — form and URL state", () => {
   test("gene ID form restores q from URL", async ({ page }) => {
@@ -27,15 +27,20 @@ test.describe("genes — result column order", () => {
     await gotoReady(page, `${BASE}/search/genes?q=Glyma.01G000100&assembly=${encodeURIComponent(MOCK_PREVIEW_ASSEMBLY.name)}&run=1`);
     const headers = page.getByTestId("search-genes-table").locator("thead th");
     await expect(headers.first()).toBeVisible({ timeout: 15_000 });
+    // The config pins `locale: "en-US"` on purpose (see
+    // playwright-public.config.ts): the specs assert the English catalog so
+    // host detection cannot make the result depend on the machine. The first
+    // eight headers used to be hard-coded Chinese before the i18n migration;
+    // they are now translated from the English catalog like the last two.
     expect((await headers.allTextContents()).map((header) => header.trim())).toEqual([
-      "搜索基因",
-      "突变体系（株系母+位置）",
-      "染色体号",
-      "位点",
-      "可信度",
-      "基因号",
-      "特征",
-      "可获得",
+      "Search a gene",
+      "Mutant system (parent + position)",
+      "Chromosome",
+      "Position",
+      "Confidence",
+      "Gene ID",
+      "Feature",
+      "Available",
       "Genome version",
       "JBrowse 2",
     ]);
@@ -44,7 +49,14 @@ test.describe("genes — result column order", () => {
   test("renders no row when the API returns none", async ({ page }) => {
     await gotoReady(page, `${BASE}/search/genes?q=Glyma.01G000100&assembly=${encodeURIComponent(MOCK_PREVIEW_ASSEMBLY.name)}&run=1`);
     await expect(page.getByTestId("search-genes-empty")).toBeVisible();
-    await expect(page.getByTestId("configurable-row")).toHaveCount(0);
+    // The empty-state answer must come from a rendered (header-only) results
+    // table with zero data rows. `gene-row` is the per-row testid the table
+    // actually emits (apps/web/src/routes/search/genes.tsx); asserting its
+    // absence is a real negative check. The previous `configurable-row` testid
+    // is not emitted anywhere in apps/web/src, so that assertion could never
+    // fail and proved nothing.
+    await expect(page.getByTestId("search-genes-table")).toBeVisible();
+    await expect(page.getByTestId("gene-row")).toHaveCount(0);
   });
 
   test("shows an error rather than a fabricated empty result when source preview fails", async ({ page }) => {

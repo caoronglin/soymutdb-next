@@ -30,9 +30,7 @@ from contextlib import contextmanager
 from datetime import UTC
 from typing import Any
 
-import clickhouse_connect
 from celery import Task
-from clickhouse_connect.driver import Client
 from soymutdb_import_protocol import ImportManifestStatus
 from sqlalchemy import or_, select, text
 
@@ -42,7 +40,7 @@ from soymutdb_worker.tables import assemblies, releases
 from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.s3 import download_file, stream_s3_file
 
-from .clickhouse_engine import ClickHouseEngine, HttpClickHouseEngine
+from .clickhouse_engine import ClickHouseEngine
 from .data_adapters import ImportContext, UnsupportedImportError, get_adapter
 from .import_manifest_repo import (
     get as get_manifest,
@@ -54,6 +52,7 @@ from .import_manifest_repo import (
     start_or_resume,
     transition,
 )
+from .postgres_variant_store import PostgresVariantStore
 from .variant_finalize import (
     BASE_COLUMNS,
     ConflictingVariantRowsError,
@@ -286,7 +285,7 @@ IMPACT_RANK = {"HIGH": 1, "MODERATE": 2, "LOW": 3, "MODIFIER": 4}
 # ---------------------------------------------------------------------------
 
 
-def get_clickhouse_client() -> Client:
+def get_clickhouse_client() -> Any:
     """Return a synchronous ClickHouse client for worker tasks."""
     url = get_setting(
         "CLICKHOUSE_URL",
@@ -302,6 +301,8 @@ def get_clickhouse_client() -> Client:
         host = "localhost"
         port = 8123
         database = "soymutdb"
+
+    import clickhouse_connect
 
     return clickhouse_connect.get_client(
         host=host,
@@ -460,7 +461,7 @@ def determine_zygosity(gt_type: int) -> str:
 # ---------------------------------------------------------------------------
 
 
-def rebuild_trigram_index(ch: Client, release_id: str) -> None:
+def rebuild_trigram_index(ch: Any, release_id: str) -> None:
     """Rebuild the trigram full-text index for a release.
 
     Uses ClickHouse's ``tokenbf_v1`` / ``ngrambf_v1`` skip indexes which are
@@ -494,33 +495,31 @@ def import_vcf(
     batch_size: int = BATCH_SIZE,
     engine: ClickHouseEngine | None = None,
 ) -> dict:
-    """Ingest variants from a VCF file into ClickHouse via the ADR-0005 protocol.
+    """Ingest variants into PostgreSQL with atomic facts and manifest publication.
 
     Staging -> verify -> finalize make retries safe: writes land only in the
-    staging table, the release partition is rewritten from de-duplicated staged
-    rows, and only a PUBLISHED import is visible to the portal.
+    staging table, matching retries are accepted, and facts become visible in
+    the same transaction that marks the import PUBLISHED.
 
     Gated behind ``SOYMUTDB_ENABLE_VCF_IMPORT`` (default OFF). Until the flag is
-    flipped -- which requires real ClickHouse acceptance per ADR-0005 -- this
+    flipped -- which requires real PostgreSQL acceptance -- this
     task keeps failing closed so the disabled capability returns 422 (P1-2).
 
     Args:
         release_id: Release version string; resolved to the integer release id
-            recorded on the manifest and used as the ``variant_facts`` release_key.
+            recorded on the manifest and used as ``variant_facts.release_id``.
         file_key: object key of the VCF file (stable id + source checksum).
         assembly_key: Assembly label; resolved to the integer assembly id.
         batch_size: Number of variants per staging batch.
-        engine: ClickHouse engine port (injected in tests; defaults to the
-            production clickhouse-connect client).
+        engine: Explicit legacy engine adapter for historical protocol tests.
+            Without an adapter the task always uses PostgreSQL.
     """
     if not _vcf_import_enabled():
         raise UnsupportedImportError(
-            "VCF import is disabled: variant_facts uses MergeTree and the "
-            "idempotent staging/finalize protocol is gated off until real "
-            "ClickHouse acceptance (ADR-0005)"
+            "VCF import is disabled: enable the PostgreSQL staging/finalize "
+            "capability after its acceptance gates pass"
         )
 
-    engine = engine or HttpClickHouseEngine(get_clickhouse_client())
     logger.info(
         "Starting protocol-driven VCF ingestion: %s for release %s", file_key, release_id
     )
@@ -534,17 +533,85 @@ def import_vcf(
                 raise ValueError(f"unknown release version: {release_id!r}")
             if assembly_id_int is None:
                 raise ValueError(f"unknown assembly: {assembly_key!r}")
-            return _import_vcf_via_protocol(
-                engine,
-                release_id=release_id,
-                assembly_key=assembly_key,
-                local_vcf_path=local_vcf_path,
-                file_key=file_key,
-                batch_size=batch_size,
-                source_sha256=source_sha256,
-                release_id_int=release_id_int,
-                assembly_id_int=assembly_id_int,
+        protocol = _import_vcf_via_protocol if engine is not None else _import_vcf_native
+        return protocol(
+            engine,
+            release_id=release_id,
+            assembly_key=assembly_key,
+            local_vcf_path=local_vcf_path,
+            file_key=file_key,
+            batch_size=batch_size,
+            source_sha256=source_sha256,
+            release_id_int=release_id_int,
+            assembly_id_int=assembly_id_int,
+        )
+
+
+def _import_vcf_native(
+    _engine, *, release_id: str, assembly_key: str, local_vcf_path: str,
+    file_key: str, batch_size: int, source_sha256: str,
+    release_id_int: int, assembly_id_int: int,
+) -> dict:
+    """Commit bounded private batches; facts and manifest become visible atomically."""
+    if not 1 <= batch_size <= BATCH_SIZE:
+        raise ValueError("VCF batch size must be between 1 and 50000")
+    with get_db() as session:
+        manifest, _created = start_or_resume(
+            session, source_sha256=source_sha256, release_id=release_id_int,
+            assembly_id=assembly_id_int, importer_version=_VCF_IMPORTER_VERSION,
+            schema_version="fact-pg-1", normalization_version=_VCF_NORMALIZATION_VERSION,
+            config_hash=_VCF_CONFIG_HASH,
+        )
+        if manifest.status == ImportManifestStatus.PUBLISHED.value:
+            return _published_result(session, manifest.import_id)
+        status = session.execute(select(releases.c.status).where(
+            releases.c.id == release_id_int,
+        )).scalar_one()
+        if str(status) == "published":
+            raise ValueError("Published release facts are immutable")
+        if manifest.status == ImportManifestStatus.FAILED.value:
+            manifest = transition(session, manifest, ImportManifestStatus.CREATED)
+        if manifest.status == ImportManifestStatus.CREATED.value:
+            manifest = transition(session, manifest, ImportManifestStatus.PARSING)
+        import_id = manifest.import_id
+
+    total = 0
+    batch_index = 0
+    batch: list[tuple] = []
+    try:
+        for row in _iter_vcf_base_rows(local_vcf_path, release_id, assembly_key, file_key):
+            batch.append(row)
+            total += 1
+            if len(batch) >= batch_size:
+                with get_db() as session:
+                    PostgresVariantStore(session).stage_batch(
+                        release_id=release_id_int, assembly_id=assembly_id_int,
+                        import_id=import_id, batch_index=batch_index, base_rows=batch,
+                    )
+                batch_index += 1
+                batch = []
+        if batch:
+            with get_db() as session:
+                PostgresVariantStore(session).stage_batch(
+                    release_id=release_id_int, assembly_id=assembly_id_int,
+                    import_id=import_id, batch_index=batch_index, base_rows=batch,
+                )
+        with get_db() as session:
+            return PostgresVariantStore(session).finalize(
+                release_id=release_id_int, assembly_id=assembly_id_int,
+                import_id=import_id, expected_rows=total,
             )
+    except Exception:
+        with get_db() as session:
+            session.execute(text(
+                "SELECT status FROM import_manifests WHERE import_id = :import_id FOR UPDATE"
+            ), {"import_id": import_id})
+            current = get_manifest(session, import_id)
+            # A parallel identical retry may already have committed publication;
+            # never downgrade its successful manifest because this delivery failed.
+            if current and current.status != ImportManifestStatus.PUBLISHED.value:
+                mark_failed(session, current, "native_variant_import_failed")
+        raise
 
 
 def _sha256_file(path: str, _chunk: int = 1 << 20) -> str:

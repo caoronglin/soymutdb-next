@@ -1,77 +1,72 @@
 /**
- * ImpactDistribution — horizontal bar chart of variant impact severity.
+ * ImpactDistribution — bar chart of variant impact severity.
  * Uses the semantic impact color tokens (high/moderate/low/modifier).
+ *
+ * Drawn by @soymutdb/charts. The fixed severity order, the semantic colors,
+ * the 64-unit height and the caption are unchanged; the bars now read on the
+ * band axis, because the facade has no transpose/orientation field.
  */
+import * as React from "react";
 import { useTranslation } from "react-i18next";
-import type { EChartsOption } from "echarts";
-import { useECharts } from "../../lib/use-echarts";
+import { ChartCanvas } from "@soymutdb/charts";
 import { Empty } from "@/lib/antd";
 import { cn } from "@/lib/cn";
+import {
+  PORTAL_CHART_HEIGHT_COMPACT,
+  formatImpactTooltip,
+  portalCountAxisFormatter,
+  portalImpactDefinition,
+  toPortalImpactRows,
+  usePortalChartAnimation,
+  usePortalChartLoading,
+  usePortalChartTheme,
+} from "./portal-chart-adapter";
+
+/**
+ * Built once, not per render. `ChartCanvas` lists `tooltipFormatter` in the
+ * dependency array of the effect that updates an existing chart in place, so a
+ * factory call written inline in the JSX handed the facade a brand new function
+ * on every render and re-ran a whole `buildChartOptions()` + G2 `render()` with
+ * no data change.
+ */
+const tooltipFormatter = formatImpactTooltip();
 
 export interface ImpactDistributionProps {
   data: ReadonlyArray<{ impact: "HIGH" | "MODERATE" | "LOW" | "MODIFIER"; count: number }>;
   className?: string;
 }
 
-const IMPACT_COLORS: Record<string, string> = {
-  HIGH: "var(--impact-high)",
-  MODERATE: "var(--impact-moderate)",
-  LOW: "var(--impact-low)",
-  MODIFIER: "var(--impact-modifier)",
-};
+export function ImpactDistribution({ data, className }: ImpactDistributionProps) {
+  const { t } = useTranslation();
+  const host = React.useRef<HTMLDivElement | null>(null);
+  const theme = usePortalChartTheme();
+  const animation = usePortalChartAnimation();
 
-export function ImpactDistribution({ data, className }: ImpactDistributionProps) {  const { t } = useTranslation();
-
-  const ordered = ["HIGH", "MODERATE", "LOW", "MODIFIER"]
-    .map((impact) => data.find((d) => d.impact === impact))
-    .filter((d): d is { impact: "HIGH" | "MODERATE" | "LOW" | "MODIFIER"; count: number } => Boolean(d));
-
-  const option: EChartsOption = {
-    tooltip: {
-      trigger: "axis",
-      axisPointer: { type: "shadow" },
-      formatter: (params) => {
-        const p = (params as Array<{ name: string; value: number }>)[0];
-        return `${p.name}: ${p.value.toLocaleString()}`;
-      },
-    },
-    grid: { left: 80, right: 24, top: 8, bottom: 24 },
-    xAxis: {
-      type: "value",
-      axisLabel: {
-        fontSize: 10,
-        color: "var(--muted-foreground)",
-        formatter: (v: number) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(0)}K` : String(v)),
-      },
-      splitLine: { lineStyle: { color: "var(--border)", type: "dashed" } },
-    },
-    yAxis: {
-      type: "category",
-      data: ordered.map((d) => d.impact),
-      axisLabel: { fontSize: 11, color: "var(--foreground)", fontWeight: 500 },
-      axisLine: { lineStyle: { color: "var(--border)" } },
-      axisTick: { show: false },
-    },
-    series: [
-      {
-        type: "bar",
-        data: ordered.map((d) => ({
-          value: d.count,
-          itemStyle: { color: IMPACT_COLORS[d.impact], borderRadius: [0, 3, 3, 0] },
-        })),
-        barWidth: "55%",
-      },
-    ],
-  };
-  const { ref, loading } = useECharts(option, [data]);
+  // Severity order is a property of the chart, not of the payload, so it is
+  // resolved before the rows are built and the caption lists the same order.
+  const ordered = React.useMemo(() => toPortalImpactRows(data), [data]);
+  const loading = usePortalChartLoading(host, ordered.length > 0);
 
   return (
     <figure className={cn("relative", className)}>
-      <div ref={ref} className="h-64 w-full" role="img" aria-label={t("charts.impactTitle")} />
+      <div ref={host} className="h-64 w-full">
+        {ordered.length > 0 ? (
+          <ChartCanvas
+            definition={portalImpactDefinition()}
+            data={ordered}
+            label={t("charts.impactTitle")}
+            height={PORTAL_CHART_HEIGHT_COMPACT}
+            theme={theme}
+            animation={animation}
+            tooltipFormatter={tooltipFormatter}
+            axisFormatter={portalCountAxisFormatter}
+          />
+        ) : null}
+      </div>
       {loading ? <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden /> : null}
-      {ordered.length === 0 && !loading ? <Empty className="absolute inset-0 flex items-center justify-center" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
+      {ordered.length === 0 ? <Empty className="absolute inset-0 flex items-center justify-center" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
       <figcaption className="sr-only">
-        {t("charts.impactDescription", { values: ordered.map((d) => `${d.impact} ${d.count.toLocaleString()}`).join(", ") })}
+        {t("charts.impactDescription", { values: ordered.map((d) => `${d.category} ${d.value.toLocaleString()}`).join(", ") })}
       </figcaption>
     </figure>
   );

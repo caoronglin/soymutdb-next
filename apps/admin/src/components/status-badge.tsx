@@ -135,15 +135,3 @@ export function StatusBadge({ status, type = "task", className }: StatusBadgePro
 }
 
 /** Allowed state transitions for the release state machine. */
-export const RELEASE_TRANSITIONS: Record<ReleaseStatus, ReleaseStatus[]> = {
-  draft: ["importing"],
-  importing: ["validating", "draft"],
-  validating: ["active", "importing"],
-  active: ["archived"],
-  archived: [],
-};
-
-/** Check if a transition between release states is allowed. */
-export function canTransition(from: ReleaseStatus, to: ReleaseStatus): boolean {
-  return RELEASE_TRANSITIONS[from]?.includes(to) ?? false;
-}

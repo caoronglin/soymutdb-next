@@ -186,7 +186,7 @@ async def test_preflight_reads_identity_and_emits_digest_only_evidence(tmp_path)
     assert rl_connection_factory.rl_profiles[0].rl_profile_id == "profile-a0"
     assert rl_connection.rl_closed is True
 
-    rl_file_text = (tmp_path / "guard.jsonl").read_text()
+    rl_file_text = (tmp_path / "guard.jsonl").read_text(encoding="utf-8")
     assert "cluster-a0" not in rl_file_text
     assert "opaque-marker-a0" not in rl_file_text
     assert json.loads(rl_file_text) == rl_outcome.rl_evidence

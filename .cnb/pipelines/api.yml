@@ -12,11 +12,11 @@ services:
 - docker
 stages:
 - name: API + Worker verification
-  image: python:3.14
+  image: python:3.15
   script: bash scripts/ci-job-steps.sh run api-tests
 # Mirrors the root .cnb.yml stage. The repo contract suites had no CI coverage
 # on either provider, so a shared script that lost its exec bit passed every
 # pipeline and reached main.
 - name: Contract suites
-  image: python:3.14
+  image: python:3.15
   script: bash scripts/ci-job-steps.sh run smoke-contracts

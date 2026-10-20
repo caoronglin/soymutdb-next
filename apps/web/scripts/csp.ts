@@ -7,7 +7,7 @@
  * finalizer may then add per-page inline-script hashes.
  */
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { dirname } from "node:path";
 
 import { buildCsp, requireDeploymentOrigin } from "@soymutdb/shared/deployment";
 
@@ -66,4 +66,3 @@ export function decodeHtmlAttribute(value: string): string {
     .replace(/&amp;/g, "&");
 }
 
-export const APP_DIR = resolve(here, "..");

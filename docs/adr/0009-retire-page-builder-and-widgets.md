@@ -1,6 +1,11 @@
 # ADR-0009: retire the page builder and the widget system
 
 Status: accepted
+
+Update (2026-10-18): the "Vue portal" wording records the state when this ADR was
+written. The public portal is now React 19 (Vue is fully retired); the decision
+is unchanged — the page builder and widget system are retired either way, and
+the React admin has no page-builder/widget routes.
 Context: the React portal composed its public pages from `page_definitions`
 (a stored component tree) and rendered widgets in named slots. Publishing
 content therefore meant authoring a page definition, and the admin console

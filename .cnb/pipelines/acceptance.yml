@@ -51,11 +51,11 @@ services:
   - docker
 stages:
   - name: Delivery contracts
-    image: python:3.14
+    image: python:3.15
     script: bash scripts/acceptance.sh --profile contracts
 
   - name: API + Worker acceptance
-    image: python:3.14
+    image: python:3.15
     script: bash scripts/acceptance.sh --profile backend
 
   - name: Static artifact acceptance

@@ -5,7 +5,9 @@ import { defineConfig } from "@playwright/test";
  * Build apps/web/dist first, then run from e2e/:
  *   npm run test:visual
  */
-const baseURL = process.env.VISUAL_BASE_URL ?? "http://localhost:4175/soymutdb-next/";
+// `build:sites` emits `dist/external` with the root base ("/"); serve that tree
+// at the origin root so the layout audit measures the real artifact.
+const baseURL = process.env.VISUAL_BASE_URL ?? "http://localhost:4177/";
 
 export default defineConfig({
   testDir: "./tests",
@@ -25,9 +27,9 @@ export default defineConfig({
   webServer: process.env.VISUAL_BASE_URL
     ? undefined
     : {
-        command: "node static-server.mjs ../apps/web/dist 4175 /soymutdb-next",
+        command: "node static-server.mjs ../apps/web/dist/external 4177 /",
         url: baseURL,
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer: false,
         timeout: 30_000,
       },
 });

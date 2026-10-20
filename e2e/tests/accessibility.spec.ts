@@ -7,7 +7,7 @@
 import { test, expect } from "@playwright/test";
 import { gotoReady } from "./helpers";
 
-const BASE = "/soymutdb-next";
+const BASE = "";
 
 const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },

@@ -59,10 +59,14 @@ export function SiteSettingsForm() {
               </label>
               <label className="space-y-1.5">
                 <span>Default Language</span>
-                <Select value={fields.defaultLanguage} onChange={(value) => setFields((current) => ({ ...current, defaultLanguage: value }))}>
-                  <Select.Option value="en">English</Select.Option>
-                  <Select.Option value="zh">中文</Select.Option>
-                </Select>
+                <Select
+                  value={fields.defaultLanguage}
+                  onChange={(value) => setFields((current) => ({ ...current, defaultLanguage: value }))}
+                  options={[
+                    { value: "en", label: "English" },
+                    { value: "zh", label: "中文" },
+                  ]}
+                />
               </label>
             </div>
             <label className="block space-y-1.5">

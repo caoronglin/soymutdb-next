@@ -116,7 +116,9 @@
     "heroInstructions": "悬停染色体以查看变异密度；点击片段可导航到该区间。",
     "lowDensity": "低密度",
     "highDensity": "高密度",
-    "featuredHero": "特色焦点"
+    "featuredHero": "特色焦点",
+    "latestNews": "最新动态",
+    "newsMeta": "最新发布"
   },
   "genes": {
     "title": "基因搜索",
@@ -243,8 +245,25 @@
     "effectBreakdown": "该基因的效应分布",
     "seedRequest": {
       "availableHint": "该基因有 {{count}} 个突变位点标记为可获得",
-      "availableCount": "{{count}} 个可获得位点"
-    }
+      "availableCount": "{{count}} 个可获得位点",
+      "action": "申请种子",
+      "ownCount": "本基因申请次数",
+      "statsUnavailable": "申请次数暂时无法获取，不影响提交申请。",
+      "totalCount": "全站申请总数"
+    },
+    "mutationSites": {
+      "available": "可获得",
+      "chromosome": "染色体号",
+      "confidence": "可信度",
+      "feature": "特征",
+      "geneId": "基因号",
+      "openLocus": "在基因组视图中打开该插入位点（上下游各 10 kb）",
+      "position": "位点",
+      "queryGene": "搜索基因",
+      "siteKey": "突变体系（株系母+位置）"
+    },
+    "mutationSitesTitle": "突变位点",
+    "unpublishedPreview": "未发布预览"
   },
   "variants": {
     "title": "变异搜索",
@@ -433,7 +452,13 @@
     "densityHistogram": "基因密度直方图",
     "requiresJavaScript": "交互式基因组视图需要启用 JavaScript。",
     "openJbrowse": "打开 JBrowse",
-    "tooltipCounts": "{{position}} — {{count}} 个变异"
+    "tooltipCounts": "{{position}} — {{count}} 个变异",
+    "back": "返回",
+    "loadErrorDetail": "无法加载该位点的数据，请确认组装版本与坐标是否正确。",
+    "openInNewTab": "在新标签页打开",
+    "retry": "重试",
+    "stillLoading": "仍在加载",
+    "stillLoadingDesc": "数据量较大时首屏需要一些时间。"
   },
   "blast": {
     "title": "BLAST 搜索",
@@ -445,6 +470,7 @@
     "tblastn": "TBLASTN（翻译蛋白质）",
     "tblastx": "TBLASTX（双向翻译）",
     "database": "参考序列类型",
+    "noDatabases": "暂无可用数据库",
     "databasePlaceholder": "请选择参考序列类型",
     "inputSequence": "输入序列",
     "sequencePlaceholder": "以 FASTA 格式粘贴序列...",
@@ -474,6 +500,7 @@
     "noJobs": "暂无任务",
     "noJobsAnonymous": "数据库列表与提交表单是公开的；提交比对需要登录会话。",
     "noHits": "该任务未找到比对命中",
+    "hitsLoadError": "无法加载 BLAST 比对命中，请重试。",
     "resultsTitle": "BLAST 结果",
     "alignments": "比对",
     "hitTable": "命中表",
@@ -505,6 +532,8 @@
     "title": "数据版本",
     "subtitle": "浏览所有数据版本",
     "releaseName": "版本名称",
+    "version": "版本",
+    "description": "描述",
     "releaseDate": "发布日期",
     "status": "状态",
     "variantCount": "变异数",
@@ -566,7 +595,8 @@
     "fitWidth": "适应宽度",
     "title": "文件预览",
     "downloadOnly": "仅支持下载的预览",
-    "undecodable": "浏览器无法解析该压缩、未知或二进制格式。"
+    "undecodable": "浏览器无法解析该压缩、未知或二进制格式。",
+    "downloadOnlyHint": "该文件不支持在线预览，请下载后查看。"
   },
   "docs": {
     "title": "文档",
@@ -751,14 +781,14 @@
     "tableOfContents": "目录",
     "noRouteFor": "没有匹配 {{path}} 的路由。",
     "backToHome": "返回首页",
-    "working": {
-      "working": "处理中…"
-    },
+    "working": "处理中…",
     "home": "SoyMutDB 首页",
     "zoomIn": "放大",
     "zoomOut": "缩小",
     "resetView": "重置视图",
-    "tryAgain": "重试"
+    "tryAgain": "重试",
+    "requestId": "请求编号",
+    "errorReason": "服务器响应：{{reason}}"
   },
   "footer": {
     "description": "用于功能基因组学研究的综合性多物种突变体数据库",
@@ -780,7 +810,8 @@
     "copyright": "© {{year}} SoyMutDB. 保留所有权利。",
     "builtWithCare": "为多物种植物研究而生",
     "label": "页脚",
-    "version": "v2.0.0"
+    "version": "v2.0.0",
+    "address": "地址"
   },
   "analytics": {
     "title": "可视化分析",
@@ -961,7 +992,8 @@
       "score": "评分",
       "actions": "操作",
       "gbrowse": "JBrowse 2",
-      "geneSearch": "基因搜索"
+      "geneSearch": "基因搜索",
+      "submit": "提交引物设计"
     },
     "blast": {
       "title": "BLAST",
@@ -1100,7 +1132,7 @@
       "nextActions": "后续操作",
       "pipelineHeadline": "让数据流水线保持运转",
       "pipelineDesc": "从真实的运维流程开始，而不是装饰性的管理页面。",
-      "openResourceCatalog": "打开资源目录",
+      "openImports": "打开导入",
       "trendUnavailable": "仪表盘趋势数据暂不可用。"
     },
     "dashboardStats": {
@@ -1122,7 +1154,9 @@
       "domains": {
         "site": {
           "title": "站点信息",
-          "description": "站点名称、公开内容、首页和页脚配置。"
+          "description": "站点名称、公开内容、首页和页脚配置。",
+          "variantNoticeBefore": "各站点的专属内容仍可在",
+          "variantNoticeAfter": " 中编辑，本页编辑器尚未拆分。"
         },
         "appearance": {
           "title": "外观",
@@ -1138,7 +1172,9 @@
         },
         "localization": {
           "title": "本地化",
-          "description": "默认语言和站点变体内容。"
+          "description": "默认语言和站点变体内容。",
+          "variantNoticeBefore": "站点变体内容的选择仍可在",
+          "variantNoticeAfter": " 中设置，本页编辑器尚未拆分。"
         },
         "advanced": {
           "title": "高级设置",
@@ -1155,7 +1191,6 @@
         "home_internal": "首页（内网）",
         "content_external": "站点内容（外网）",
         "footer_external": "页脚（外网）",
-        "cdn": "CDN 配置",
         "security": "安全",
         "data": "数据与存储",
         "email": "邮件与通知",
@@ -1218,7 +1253,6 @@
       "defaultAssembly": "默认组装版本",
       "maxExportRecords": "最大导出记录数",
       "cacheTtlSeconds": "缓存 TTL（秒）",
-      "clickhouseAnalytics": "ClickHouse 分析",
       "enabled": "已启用",
       "disabled": "已停用",
       "toggle": "切换",
@@ -1236,12 +1270,6 @@
       "twoFactorAuth": "双重身份验证",
       "required": "必需",
       "optional": "可选",
-      "cdnSection": "CDN 配置",
-      "cdnSubtitle": "前端资源外部 CDN 地址",
-      "cdnEnabled": "启用 CDN",
-      "echartsUrl": "ECharts CDN 地址",
-      "placeholderEchartsUrl": "https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.1/echarts.min.js",
-      "cdnNote": "CDN 地址在构建时使用，修改后需要重新构建。生产环境也可使用 Nginx 边缘缓存。",
       "filePreviewSubtitle": "配置文件内嵌预览行为",
       "filePreviewFormatsHelp": "用逗号分隔支持的文件格式。",
       "siteContentSection": "站点内容",
@@ -1257,7 +1285,8 @@
       "settingsSaved": "设置已保存",
       "settingsSavedDesc": "{{section}} 设置已成功更新。",
       "ok": "确定",
-      "placeholderAboutContentChinese": "页面内容（中文，富文本 / Markdown 均可）"
+      "placeholderAboutContentChinese": "页面内容（中文，富文本 / Markdown 均可）",
+      "saveFailed": "无法保存 {{section}} 设置，页面上的值未被修改。"
     },
     "analyticsSettings": {
       "title": "分析设置",
@@ -1287,7 +1316,7 @@
       "statusHint1": "浏览器打开门户 → 查看网页源代码（Ctrl/Cmd+U）→ 搜索 \"cloudflareinsights\"。能找到即表示当前部署已注入 beacon。",
       "statusHint2": "或在 Cloudflare 控制台 → Web Analytics 中查看：部署后短时间内出现流量即表示 beacon 生效。",
       "legacyTitle": "原有自建统计",
-      "legacyDesc": "API 侧 ClickHouse analytics 端点与门户 /analytics 页面继续保留，作为兜底/详情补充。Cloudflare Web Analytics 作为主要的访问统计渠道。",
+      "legacyDesc": "API 侧的原生 PostgreSQL 分析端点（/analytics、/stats）与门户 /analytics 页面继续保留，用于站内数据；Cloudflare Web Analytics 作为主要的访问统计渠道。",
       "window": "统计窗口（天）",
       "loadError": "当前部署无法使用统计分析：未能连接 summary 端点。此处不会显示占位数字。",
       "totalEvents": "事件总数",
@@ -1467,7 +1496,16 @@
       "legacyHint": "已有页面仍可编辑。下面的迁移预览为只读，仅提出草稿候选，不会写入。",
       "migrationTitle": "页面构建器迁移预览",
       "migrationBody": "该预览仅校验旧版页面并报告草稿候选，不会创建、发布或修改任何源页面。",
-      "previewMigration": "预览迁移"
+      "previewMigration": "预览迁移",
+      "publishTitle": "发布页面",
+      "publishConfirm": "确定发布“{{title}}”吗？发布后将立即在公开站点可见。",
+      "unpublishTitle": "取消发布页面",
+      "unpublishConfirm": "确定取消发布“{{title}}”吗？取消后将不再出现在公开站点。",
+      "publishFailed": "发布页面失败。",
+      "unpublishFailed": "取消发布页面失败。",
+      "deleteFailed": "删除页面失败。",
+      "deleteContentFailed": "删除内容失败。",
+      "loadError": "无法加载内容列表。"
     },
     "contentPages": {
       "subtitle": "创建、编辑并发布门户渲染的静态页面。草稿与已发布页面同列显示，发布始终是显式操作。",
@@ -1750,7 +1788,17 @@
         "homolog_W82_V2": "W82_V2（跨组装同源）",
         "homolog_W82_V4": "W82_V4（跨组装同源）",
         "homolog_DN53_V1": "DN53_V1（跨物种同源）"
-      }
+      },
+      "promoteTitle": "设为默认模板",
+      "promoteConfirm": "确定将“{{name}}”设为其范围内的默认布局吗？门户将优先解析该模板。",
+      "deleteTemplateTitle": "删除模板",
+      "deleteTemplateConfirm": "确定删除模板“{{name}}”吗？门户将不再解析该模板。",
+      "deleteInstanceTitle": "注销实例",
+      "deleteInstanceConfirm": "确定注销实例“{{name}}”吗？控制台将不再使用该实例。",
+      "instanceUpdateFailed": "无法更新实例“{{name}}”。",
+      "instanceDeleteFailed": "无法注销实例“{{name}}”。",
+      "loadError": "无法加载表格视图模板。",
+      "instancesLoadError": "无法加载物种实例。"
     },
     "tableViewsHint": "配置门户各表格显示哪些列。模板按物种、站点变体与 release 作用域；跨组装同源列默认不启用。",
     "table": "表格",
@@ -1835,7 +1883,11 @@
       "topIpsTitle": "热门 IP 地址",
       "totalActions": "操作总数",
       "totalLogins": "登录总数",
-      "uniqueIps": "独立 IP 数"
+      "uniqueIps": "独立 IP 数",
+      "loadError": "无法加载审计日志。",
+      "loadErrorDesc": "请求失败，因此下方记录的情况未知，并不代表没有记录。请重试加载。",
+      "statsLoadError": "无法加载审计统计。",
+      "exportFailed": "CSV 导出失败。"
     },
     "publications": {
       "featured": "精选",
@@ -1846,7 +1898,7 @@
       "deleteTitle": "删除文献"
     },
     "importsHint": "该部署已接收的全部导入任务，按状态在服务端过滤。",
-    "releasesHint": "API 提供的全部发布版本，以及产生它的导入与源文件。",
+    "releasesHint": "管理数据版本、发布状态及数据库记录统计。",
     "media": {
       "description": "新闻与页面引用的已上传素材；归档只从选择器中移除，不破坏已发布的引用。",
       "title": "媒体库",
@@ -1900,6 +1952,11 @@
         "selectedImage": "已选图片",
         "noAltText": "请填写替代文本",
         "missingAlt": "缺少替代文本"
+      },
+      "purposes": {
+        "news": "新闻",
+        "editor": "编辑器",
+        "about": "关于"
       }
     },
     "shell": {
@@ -1915,6 +1972,7 @@
       "widgetPreview": "组件预览",
       "widgetHealth": "组件健康",
       "navigationAria": "管理端导航",
+      "skipToContent": "跳转到主要内容",
       "expandSidebar": "展开侧栏",
       "collapseSidebar": "收起侧栏",
       "collapse": "收起",
@@ -1933,6 +1991,8 @@
       "notifications": "通知",
       "notificationsAria": "通知（{{count}} 条未读）",
       "markAllRead": "全部标记为已读",
+      "markRead": "标记已读",
+      "markReadAria": "标记为已读：{{title}}",
       "notificationsEmpty": "暂无通知",
       "toggleTheme": "切换主题",
       "adminUserLabel": "管理员",
@@ -1946,6 +2006,38 @@
       "settings": "设置",
       "featureFlags": "功能开关",
       "analytics": "访问分析"
+    },
+    "commandPalette": {
+      "dialogLabel": "命令面板",
+      "inputLabel": "搜索命令与基因",
+      "listLabel": "可用命令",
+      "geneHint": "已发布基因记录",
+      "commands": {
+        "dashboard": {
+          "label": "打开仪表盘",
+          "hint": "总览与运行指标"
+        },
+        "import": {
+          "label": "发起数据导入",
+          "hint": "创建或查看导入任务"
+        },
+        "content": {
+          "label": "管理内容",
+          "hint": "静态页面、新闻与论文"
+        },
+        "newNews": {
+          "label": "新建新闻",
+          "hint": "撰写新的公告"
+        },
+        "settings": {
+          "label": "打开设置",
+          "hint": "站点与系统配置"
+        },
+        "audit": {
+          "label": "查看审计日志",
+          "hint": "回顾近期的管理操作"
+        }
+      }
     },
     "usage": {
       "title": "使用说明",
@@ -1992,6 +2084,10 @@
       }
     },
     "importPage": {
+      "filteredTotal": "匹配任务总数",
+      "pageRunning": "本页运行中 / 排队中",
+      "pageCompleted": "本页已完成",
+      "pageFailed": "本页失败",
       "title": "数据导入",
       "subtitle": "提交模块数据导入并查看历史任务。当前尚未开放生物数据专用导入器。",
       "newImport": "新建导入",
@@ -2023,7 +2119,17 @@
       "releaseIdPlaceholder": "例如 42",
       "moduleKeyPlaceholder": "例如 genes",
       "checksum": "校验和",
-      "checksumPlaceholder": "源文件 SHA-256（必填）"
+      "checksumPlaceholder": "源文件 SHA-256（必填）",
+      "cancelTaskTitle": "取消导入任务",
+      "cancelTaskConfirm": "确定取消导入任务“{{filename}}”吗？正在运行的任务将被终止且无法续跑。",
+      "retryTaskTitle": "重试导入任务",
+      "retryTaskConfirm": "确定重试导入任务“{{filename}}”吗？系统会用同一文件提交一个新任务。",
+      "cancelFailed": "无法取消导入任务。",
+      "retryFailed": "无法重试导入任务。",
+      "cancelSucceeded": "导入任务已取消。",
+      "retrySucceeded": "导入任务已重新排队。",
+      "loadError": "无法加载导入任务。",
+      "cancelTaskConfirmLabel": "取消任务"
     },
     "charts": {
       "imported": "已导入",
@@ -2047,7 +2153,8 @@
       "cancel": "取消",
       "working": "处理中…",
       "typePhrasePrefix": "请输入",
-      "typePhraseSuffix": "以确认"
+      "typePhraseSuffix": "以确认",
+      "errorLabel": "操作失败"
     },
     "ops": {
       "emptyTitle": "暂无数据",
@@ -2086,7 +2193,9 @@
       "dot": "。",
       "previewReadOnly": "该预览为只读，其中的改动不会计入本次导入。",
       "validatedModulePreview": "已校验的模块预览",
-      "noValidPreviewRows": "未找到有效的预览数据行。"
+      "noValidPreviewRows": "未找到有效的预览数据行。",
+      "toggleFeatureFailed": "无法更新 {{key}} 功能开关。",
+      "toggleFeatureUpdated": "{{key}} 功能开关已更新。"
     },
     "uploads": {
       "selectFile": "选择文件",
@@ -2575,114 +2684,46 @@
       "title": "fastp — 读段质控",
       "subtitle": "对 FASTQ 读段进行修剪与质量过滤",
       "files": "FASTQ 文件（单端：1 个文件；双端：先 R1 后 R2）",
-      "subtitleLong": {
-        "subtitleLong": "修剪接头并过滤 FASTQ 文件中的低质量读段。结果包含 HTML 报告与每次运行的统计信息。"
-      },
-      "inputFiles": {
-        "inputFiles": "输入文件"
-      },
-      "pairedHint": {
-        "pairedHint": "单端：一个 FASTQ 文件。双端：请同时选择 R1 与 R2（先 R1 后 R2）。"
-      },
-      "qualityCutoff": {
-        "qualityCutoff": "质量阈值（phred）"
-      },
-      "threads": {
-        "threads": "线程数"
-      },
-      "howItWorks": {
-        "howItWorks": "工作原理"
-      },
-      "howStep1": {
-        "howStep1": "文件通过预签名 URL 直接上传到对象存储（每个不超过 500 MB）。"
-      },
-      "howStep2": {
-        "howStep2": "fastp 任务进入队列，随后跳转到自动刷新的结果页。"
-      },
-      "howStep3": {
-        "howStep3": "完成后可查看 HTML 报告与汇总统计。"
-      },
-      "parameters": {
-        "parameters": "参数"
-      },
-      "paramTrim": {
-        "paramTrim": "— 从读段 5′/3′ 端修剪的碱基数。"
-      },
-      "paramQuality": {
-        "paramQuality": "— 碱基质量阈值（phred 分数，0–40；默认 15）。"
-      },
-      "paramThreads": {
-        "paramThreads": "— 流程使用的 CPU 线程数（1–64）。"
-      },
-      "paramNameTrim": {
-        "paramNameTrim": "trim_front1 / trim_tail1"
-      },
-      "paramNameQuality": {
-        "paramNameQuality": "quality_phred"
-      },
-      "paramNameThreads": {
-        "paramNameThreads": "thread"
-      }
+      "subtitleLong": "对双端测序数据做质控、去接头与统计，产出可下载的报告。",
+      "inputFiles": "输入文件",
+      "pairedHint": "请同时提供 R1 与 R2 两个文件。",
+      "qualityCutoff": "质量阈值",
+      "threads": "线程数",
+      "howItWorks": "工作原理",
+      "howStep1": "上传双端 FASTQ 文件",
+      "howStep2": "设置质量阈值与线程数",
+      "howStep3": "提交任务并等待结果",
+      "parameters": "参数",
+      "paramTrim": "自动剪除接头序列。",
+      "paramQuality": "低于该 Q 值的读段将被丢弃。",
+      "paramThreads": "并行线程数，默认为 2。",
+      "paramNameTrim": "剪切引物",
+      "paramNameQuality": "最低质量",
+      "paramNameThreads": "线程数"
     },
     "scanpy": {
       "title": "scanpy — 单细胞",
       "subtitle": "过滤、选择高变基因、降维与聚类",
       "files": "AnnData .h5ad 文件",
       "useHvg": "选择高变基因",
-      "subtitleLong": {
-        "subtitleLong": "对单细胞表达矩阵（.h5ad）进行质量过滤、标准化与聚类。结果包含 UMAP 投影、聚类规模与标志基因。"
-      },
-      "inputData": {
-        "inputData": "输入数据"
-      },
-      "inputHint": {
-        "inputHint": "一个 .h5ad 格式的 AnnData 文件（原始计数或标准化矩阵）。"
-      },
-      "paramNameMinGene": {
-        "paramNameMinGene": "min_genes"
-      },
-      "paramNameMinCell": {
-        "paramNameMinCell": "min_cells"
-      },
-      "paramNameTop": {
-        "paramNameTop": "n_top_genes"
-      },
-      "resolution": {
-        "resolution": "分辨率"
-      },
-      "useHvgLong": {
-        "useHvgLong": "在 PCA 之前使用高变基因（HVG）"
-      },
-      "howItWorks": {
-        "howItWorks": "工作原理"
-      },
-      "howStep1": {
-        "howStep1": ".h5ad 文件通过预签名 URL 直接上传到对象存储（最大 500 MB）。"
-      },
-      "howStep2": {
-        "howStep2": "scanpy 任务进入队列：过滤 → HVG → PCA → Leiden 聚类 → UMAP。"
-      },
-      "howStep3": {
-        "howStep3": "结果页自动刷新，展示 UMAP 图、聚类规模与标志基因。"
-      },
-      "parameters": {
-        "parameters": "参数"
-      },
-      "paramNameMin": {
-        "paramNameMin": "min_genes / min_cells"
-      },
-      "paramMin": {
-        "paramMin": "— 过滤后每个细胞的最少基因数与每个基因的最少细胞数。"
-      },
-      "paramTop": {
-        "paramTop": "— 启用“使用 HVG”后用于 PCA 的高变基因数。"
-      },
-      "paramNameResolution": {
-        "paramNameResolution": "resolution"
-      },
-      "paramResolution": {
-        "paramResolution": "— Leiden 聚类分辨率（0.1–10；数值越大聚类越多）。"
-      }
+      "subtitleLong": "对单细胞表达数据做质控、归一化与降维聚类，产出可交互的细胞簇结果。",
+      "inputData": "输入数据",
+      "inputHint": "支持 count 矩阵（.h5ad / .mtx）与细胞注释文件。",
+      "paramNameMinGene": "最小基因数",
+      "paramNameMinCell": "最小细胞数",
+      "paramNameTop": "高变基因数",
+      "resolution": "分辨率",
+      "useHvgLong": "按表达方差筛选高变基因后再降维，可显著提升聚类稳定性。",
+      "howItWorks": "工作原理",
+      "howStep1": "上传表达矩阵与细胞注释",
+      "howStep2": "选择降维参数与分辨率",
+      "howStep3": "提交任务并查看聚类结果",
+      "parameters": "参数",
+      "paramNameMin": "最小细胞数",
+      "paramMin": "最小细胞 / 基因数",
+      "paramTop": "按表达方差筛选的高变基因数量。",
+      "paramNameResolution": "分辨率",
+      "paramResolution": "Leiden 聚类分辨率，越大簇越细。"
     },
     "job": {
       "title": "分析任务",
@@ -2723,33 +2764,15 @@
       "annotatedH5ad": "annotated .h5ad",
       "statusLine": "任务状态：{{status}}。"
     },
-    "indexIntro": {
-      "indexIntro": "对上传的数据运行 RNA-seq 读段质控（fastp）与单细胞聚类（scanpy）流程。任务异步执行，完成后在此显示结果。"
-    },
-    "newFastp": {
-      "newFastp": "新建 fastp 任务"
-    },
-    "newScanpy": {
-      "newScanpy": "新建 scanpy 任务"
-    },
-    "jobsErrorTitle": {
-      "jobsErrorTitle": "无法加载分析任务"
-    },
-    "jobsErrorHint": {
-      "jobsErrorHint": "任务服务暂不可用，请稍后重试。"
-    },
-    "submitting": {
-      "submitting": "正在提交任务…"
-    },
-    "uploading": {
-      "uploading": "正在上传到对象存储…"
-    },
-    "selectFilesFirst": {
-      "selectFilesFirst": "请先选择文件"
-    },
-    "selectFileFirst": {
-      "selectFileFirst": "请先选择一个文件"
-    },
+    "indexIntro": "提交测序质控与单细胞分析任务，结果会保留在任务列表中可随时下载。",
+    "newFastp": "新建 FastQC / fastp 任务",
+    "newScanpy": "新建 Scanpy 任务",
+    "jobsErrorTitle": "任务列表加载失败",
+    "jobsErrorHint": "请稍后重试；若持续失败，请联系站点管理员。",
+    "submitting": "正在提交…",
+    "uploading": "正在上传…",
+    "selectFilesFirst": "请先选择文件",
+    "selectFileFirst": "请先选择文件",
     "upload": {
       "pairedHint": "双端：请同时选择 R1 与 R2（顺序：先 R1 后 R2）",
       "removeFile": "移除 {{name}}",
@@ -2849,7 +2872,11 @@
         "protein": "蛋白质变化",
         "mutagen": "诱变剂",
         "cultivar": "栽培品种",
-        "phenotype": "表型"
+        "phenotype": "表型",
+        "assembly": "基因组版本",
+        "release": "发布版本",
+        "releaseUnpinned": "未固定",
+        "assemblyUnknown": "—"
       },
       "removeVariant": "移除 {{id}}",
       "impactDistribution": {
@@ -2897,7 +2924,30 @@
   },
   "genomeView": {
     "window": "窗口 {{start}}–{{end}}（上下游各 {{flank}} bp）· 组装 {{assembly}}",
-    "geneCount": "{{variants}} 个基因"
+    "geneCount": "{{variants}} 个基因",
+    "ariaLabel": "位点基因组视图",
+    "back": "返回基因搜索",
+    "bodyOnly": "仅基因主体",
+    "cardTitle": "位点注释",
+    "controls": {
+      "panLeft": "左移",
+      "panRight": "右移",
+      "reset": "复位",
+      "zoomIn": "放大",
+      "zoomOut": "缩小"
+    },
+    "eyebrow": "基因组视图",
+    "geneList": "窗口内基因",
+    "hasStructure": "含 CDS/UTR",
+    "loadError": "无法加载该位点的注释。",
+    "missingParams": "链接缺少组装版本、染色体或位点参数。",
+    "noGenes": "该窗口内没有已注释的基因。",
+    "title": "位点基因组视图",
+    "tracks": {
+      "all": "全部",
+      "genes": "基因",
+      "markers": "标记"
+    }
   },
   "dataTable": {
     "title": "数据表",
@@ -2921,9 +2971,67 @@
     "impactDescription": "影响分布：{{values}}。",
     "variantTypeTitle": "变异类型分布环形图",
     "variantTypeDescription": "变异类型分布：{{values}}。",
+    "variantTypeTotal": "总计",
+    "valueTableToggle": "以表格查看数值",
+    "renderFallback": "—图表无法绘制，精确数值列在下方。",
+    "emptySelection": "当前筛选无数据。",
+    "axisMin": "最小",
+    "axisMax": "最大",
+    "ariaMinimum": "最小值",
+    "ariaMaximum": "最大值",
+    "colorRange": "颜色范围",
     "heatmapTitle": "基因与文库之间 FPKM 表达量热图",
     "heatmapDescription": "表达量热图：{{genes}} 个基因、{{libraries}} 个文库，共 {{points}} 个数据点。",
     "releaseTrendTitle": "版本趋势面积图",
     "releaseTrendDescription": "{{releases}} 个版本间的变异累积。最新累计总数：{{total}}。"
+  },
+  "mutants": {
+    "columns": {
+      "cultivar": "品种",
+      "linkedVariants": "关联变异",
+      "mutagen": "诱变方式",
+      "name": "名称"
+    },
+    "detail": {
+      "back": "返回列表",
+      "details": "详细信息",
+      "loading": "正在加载株系详情…",
+      "notFound": "未找到该株系，或它尚未公开。",
+      "variantFilter": "按变异筛选"
+    },
+    "empty": "暂无公开株系",
+    "emptyFiltered": "没有符合当前筛选条件的株系",
+    "error": "株系列表加载失败",
+    "eyebrow": "突变株系",
+    "fields": {
+      "cultivar": "品种",
+      "description": "描述",
+      "generation": "世代",
+      "mutagen": "诱变方式",
+      "phenotypeSummary": "表型摘要",
+      "species": "物种"
+    },
+    "filter": {
+      "apply": "筛选",
+      "clear": "清除",
+      "label": "筛选株系",
+      "placeholder": "输入株系名称、品种或诱变方式…"
+    },
+    "loading": "正在加载株系…",
+    "phenotypes": {
+      "boundary": "对照值",
+      "category": "分类",
+      "description": "描述",
+      "empty": "该株系暂无表型数据",
+      "error": "表型数据加载失败",
+      "loading": "正在加载表型…",
+      "name": "指标",
+      "title": "表型数据",
+      "unit": "单位",
+      "value": "数值"
+    },
+    "resultsAria": "株系检索结果",
+    "subtitle": "按品种、诱变方式与表型检索已公开的突变株系。",
+    "title": "突变株系"
   }
 }

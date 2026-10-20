@@ -130,7 +130,10 @@ export async function withRetry<T>(
 }
 
 /** Whether an error is safe to retry (idempotent transport failure). */
+const callerCancellationReasons = new WeakSet<object>();
+
 function isRetryableError(err: unknown): boolean {
+    if (typeof err === "object" && err !== null && callerCancellationReasons.has(err)) return false;
     if (err instanceof ApiError) {
         // Network failure surfaced as status 0 with NETWORK_ERROR code.
         if (err.code === "NETWORK_ERROR") return true;
@@ -217,6 +220,28 @@ export function clearAuth(): void {
 }
 
 /**
+ * Reason to reject with when a caller cancels.
+ *
+ * `AbortSignal.reason` is preserved so a caller that aborts with a structured
+ * reason sees that exact value, and the DOMException fallback keeps the
+ * conventional `err.name === "AbortError"` shape for a plain
+ * `controller.abort()`.
+ */
+function abortReason(signal: AbortSignal | null | undefined): unknown {
+    if (signal?.aborted && signal.reason !== undefined) {
+        const reason: unknown = signal.reason;
+        if (typeof reason === "object" && reason !== null) callerCancellationReasons.add(reason);
+        return reason;
+    }
+    return new DOMException("Request aborted", "AbortError");
+}
+
+/** Whether a rejection is an abort rather than a transport failure. */
+function isAbortLike(err: unknown): boolean {
+    return (err as { name?: string } | null | undefined)?.name === "AbortError";
+}
+
+/**
  * Execute a request and return the raw response after normalising failures.
  *
  * Keeping response handling here lets JSON and streamed file requests share the
@@ -233,11 +258,17 @@ async function requestResponse(
         headers,
         auth = true,
         withCredentials = false,
+        signal: callerSignal,
         ...rest
     } = options;
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    // A caller that already cancelled must never reach the network: fetch would
+    // dispatch the request and only then reject. The timeout preset is not a
+    // substitute for the caller's own decision, so this check runs before any
+    // controller, timer, or listener exists.
+    if (callerSignal?.aborted) {
+        throw abortReason(callerSignal);
+    }
 
     const requestHeaders = new Headers(headers);
     if (auth) {
@@ -256,6 +287,33 @@ async function requestResponse(
         body = JSON.stringify(json);
     }
 
+    const controller = new AbortController();
+    // Only one signal reaches fetch, so the caller's cancellation is forwarded
+    // into the transport's own controller. The first source to fire wins and
+    // decides the error shape: a timeout stays a retryable 408
+    // GATEWAY_TIMEOUT ApiError, while a caller cancellation propagates the
+    // caller's own reason so existing `err.name === "AbortError"` guards keep
+    // working and `withRetry` never replays a cancelled request.
+    let abortedBy: "timeout" | "caller" | null = null;
+    const onCallerAbort = () => {
+        if (abortedBy === null) abortedBy = "caller";
+        controller.abort(abortReason(callerSignal));
+    };
+    const timer = setTimeout(() => {
+        if (abortedBy === null) abortedBy = "timeout";
+        controller.abort();
+    }, timeoutMs);
+    callerSignal?.addEventListener("abort", onCallerAbort, { once: true });
+
+    // The forwarded listener is the only thing this function adds to the
+    // caller's signal. Removing it on every exit path keeps long-lived caller
+    // controllers (React effects, query clients) from retaining one entry per
+    // completed request.
+    const cleanup = () => {
+        clearTimeout(timer);
+        callerSignal?.removeEventListener("abort", onCallerAbort);
+    };
+
     let response: Response;
     try {
         response = await fetch(buildUrl(path, params), {
@@ -266,8 +324,11 @@ async function requestResponse(
             credentials: withCredentials ? "include" : rest.credentials,
         });
     } catch (err) {
-        clearTimeout(timer);
-        if (err instanceof DOMException && err.name === "AbortError") {
+        cleanup();
+        if (abortedBy === "caller") {
+            throw abortReason(callerSignal);
+        }
+        if (abortedBy === "timeout" || isAbortLike(err)) {
             throw new ApiError("Request timed out", 408, "GATEWAY_TIMEOUT");
         }
         throw new ApiError(
@@ -276,7 +337,7 @@ async function requestResponse(
             "NETWORK_ERROR",
         );
     }
-    clearTimeout(timer);
+    cleanup();
 
     if (!response.ok) {
         // Unified error envelope: { error: { code, message, details? }, request_id, status_code }
@@ -384,18 +445,4 @@ export const http = {
             ...options,
             method: "DELETE",
         }),
-};
-
-export default {
-    request,
-    requestBlob,
-    http,
-    apiBaseUrl,
-    setAuthTokens,
-    clearAuth,
-    getAccessToken,
-    ApiError,
-    TimeoutPresets,
-    isTimeoutError,
-    withRetry,
 };

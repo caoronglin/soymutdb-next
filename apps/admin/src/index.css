@@ -182,6 +182,50 @@ pre,
     outline-offset: 2px;
 }
 
+.admin-skip-link {
+    position: fixed;
+    inset-block-start: 8px;
+    inset-inline-start: 8px;
+    z-index: 2000;
+    padding: 12px 16px;
+    color: var(--foreground);
+    background: var(--card);
+    border: 2px solid var(--ring);
+    border-radius: 6px;
+    transform: translateY(-180%);
+}
+
+.admin-skip-link:focus-visible {
+    transform: translateY(0);
+}
+
+@media (width < 992px) {
+    #admin-main-content .ant-pro-page-container-children-container {
+        padding-inline: 0;
+    }
+
+    #admin-main-content .ant-page-header {
+        padding-inline: 0;
+    }
+
+    #admin-main-content .ant-page-header-heading-left {
+        flex-wrap: wrap;
+        min-width: 0;
+        gap: 4px;
+    }
+
+    #admin-main-content .ant-page-header-heading-title,
+    #admin-main-content .ant-page-header-heading-sub-title {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        margin-inline: 0;
+    }
+
+    #admin-main-content .ant-page-header-heading-sub-title {
+        flex-basis: 100%;
+    }
+}
+
 /* Scrollbar styling */
 ::-webkit-scrollbar {
     width: 10px;
@@ -329,26 +373,74 @@ pre,
     ::view-transition-old(root), ::view-transition-new(root) { animation: none !important; }
 }
 
-/* HarmonyOS Sans SC — local fonts (public/fonts/harmonyos), Latin + CJK.
-   Placed after @theme: Tailwind 4 requires @theme to follow @import directly. */
+/* HarmonyOS Sans SC — local fonts (public/fonts/harmonyos), split by
+   unicode-range into a small latin face (preloaded) and a CJK face the browser
+   fetches only when CJK glyphs are rendered. Placed after @theme: Tailwind 4
+   requires @theme to follow @import directly. */
 @font-face {
     font-family: "HarmonyOS Sans SC";
-    src: url("../public/fonts/harmonyos/HarmonyOS-Sans-SC-Regular.woff2") format("woff2");
+    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Regular-latin.woff2") format("woff2");
     font-weight: 400;
     font-style: normal;
     font-display: swap;
+    unicode-range: U+0000-024F, U+02B0-02FF, U+0300-036F, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2100-214F, U+2190-21FF, U+2200-22FF, U+25A0-25FF, U+FB00-FB06;
 }
 @font-face {
     font-family: "HarmonyOS Sans SC";
-    src: url("../public/fonts/harmonyos/HarmonyOS-Sans-SC-Medium.woff2") format("woff2");
+    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Regular-cjk.woff2") format("woff2");
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+2E80-2EFF, U+3000-303F, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FE30-FE4F, U+FF00-FFEF;
+}
+@font-face {
+    font-family: "HarmonyOS Sans SC";
+    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Medium-latin.woff2") format("woff2");
     font-weight: 500;
     font-style: normal;
     font-display: swap;
+    unicode-range: U+0000-024F, U+02B0-02FF, U+0300-036F, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2100-214F, U+2190-21FF, U+2200-22FF, U+25A0-25FF, U+FB00-FB06;
 }
 @font-face {
     font-family: "HarmonyOS Sans SC";
-    src: url("../public/fonts/harmonyos/HarmonyOS-Sans-SC-Bold.woff2") format("woff2");
+    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Medium-cjk.woff2") format("woff2");
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+2E80-2EFF, U+3000-303F, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FE30-FE4F, U+FF00-FFEF;
+}
+@font-face {
+    font-family: "HarmonyOS Sans SC";
+    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Bold-latin.woff2") format("woff2");
     font-weight: 700;
     font-style: normal;
     font-display: swap;
+    unicode-range: U+0000-024F, U+02B0-02FF, U+0300-036F, U+1E00-1EFF, U+2000-206F, U+20A0-20CF, U+2100-214F, U+2190-21FF, U+2200-22FF, U+25A0-25FF, U+FB00-FB06;
+}
+@font-face {
+    font-family: "HarmonyOS Sans SC";
+    src: url("/fonts/harmonyos/HarmonyOS-Sans-SC-Bold-cjk.woff2") format("woff2");
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+    unicode-range: U+2E80-2EFF, U+3000-303F, U+3400-4DBF, U+4E00-9FFF, U+F900-FAFF, U+FE30-FE4F, U+FF00-FFEF;
+}
+
+
+/* Admin login responsive layout.
+ *
+ * The sign-in page is a two-panel Pro-style layout: a decorative identity panel
+ * (flex 1 1 55%) plus a fixed 480px form panel. On a phone that combination is
+ * wider than the viewport and produced a 240px horizontal scrollbar at 390px.
+ * The hero is decorative only (aria-hidden, every phrase repeated in the form),
+ * so it is dropped on narrow screens and the form panel takes the full width. */
+@media (max-width: 767px) {
+  .admin-login-hero {
+    display: none !important;
+  }
+  .admin-login-panel {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+    padding: 24px 16px !important;
+  }
 }

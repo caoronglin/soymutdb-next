@@ -1,6 +1,4 @@
 {
-  "comment": "Hardcoded visible strings per Vue file. The count may fall but must never rise; remove an entry once the page is translated.",
-  "counts": {
-    "apps/admin/src/views/TableTemplatesView.vue": 6
-  }
+  "comment": "Hardcoded visible strings per source file (React scanner; the legacy Vue scanner shares this baseline but currently has no .vue files). Counts may fall but must never rise.",
+  "counts": {}
 }

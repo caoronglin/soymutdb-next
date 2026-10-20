@@ -32,7 +32,6 @@ import {
   Carousel,
   Col,
   Empty,
-  List,
   Row,
   Typography,
 } from "@/lib/antd";
@@ -131,34 +130,37 @@ function LatestNewsPanel() {
   }
 
   const items: NewsSummary[] = query.data?.featured.slice(0, 5) ?? [];
+  if (items.length === 0) {
+    return (
+      <div data-testid="home-news-empty">
+        <Empty description={t("home.noNews", { defaultValue: "暂无已发布新闻" })} />
+      </div>
+    );
+  }
+
+  // Native <ul>/<li> rather than AntD 6's deprecated List: these are plain
+  // headline rows, and the semantic list keeps the split rule (a bottom rule
+  // on every row but the last) that `split` used to provide.
   return (
-    <List
-      dataSource={items}
-      split
-      locale={{
-        emptyText: (
-          <div data-testid="home-news-empty">
-            <Empty description={t("home.noNews", { defaultValue: "暂无已发布新闻" })} />
+    <ul className="m-0 list-none p-0">
+      {items.map((item) => (
+        <li key={item.slug} className="flex items-center border-b border-border py-3 last:border-b-0">
+          <div className="min-w-0 flex-1">
+            <Link
+              to="/news/$slug"
+              params={{ slug: item.slug }}
+              className="home-news-link block truncate"
+              style={{ color: "var(--foreground)" }}
+            >
+              {pickNewsTitle(item, i18n.language)}
+            </Link>
+            <span className="block text-xs text-muted-foreground">
+              {item.category ? `${item.category} · ` : ""}{item.published_at ? formatDate(item.published_at) : t("home.newsMeta", { defaultValue: "最新发布" })}
+            </span>
           </div>
-        ),
-      }}
-      renderItem={(item) => (
-        <List.Item>
-          <List.Item.Meta
-            title={
-              <Link to="/news/$slug" params={{ slug: item.slug }} className="home-news-link" style={{ color: "var(--foreground)" }}>
-                {pickNewsTitle(item, i18n.language)}
-              </Link>
-            }
-            description={
-              <span className="text-xs text-muted-foreground">
-                {item.category ? `${item.category} · ` : ""}{item.published_at ? formatDate(item.published_at) : t("home.newsMeta", { defaultValue: "最新发布" })}
-              </span>
-            }
-          />
-        </List.Item>
-      )}
-    />
+        </li>
+      ))}
+    </ul>
   );
 }
 

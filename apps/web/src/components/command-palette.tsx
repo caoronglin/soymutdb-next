@@ -22,7 +22,7 @@ interface QuickAction {
 }
 
 const QUICK_ACTIONS: QuickAction[] = [
-  { id: "browser", label: "Open Genome Browser", description: "Navigate to JBrowse viewer", icon: DeploymentUnitOutlined, to: "/browser" },
+  { id: "browser", label: "Open Genome Browser", description: "Navigate to JBrowse viewer", icon: DeploymentUnitOutlined, to: "/search/gbrowse" },
   { id: "genes", label: "Browse Genes", description: "Search gene models", icon: DeploymentUnitOutlined, to: "/genes" },
   { id: "variants", label: "Search Variants", description: "Query SNP/INDEL catalog", icon: DeploymentUnitOutlined, to: "/variants" },
   { id: "blast", label: "BLAST Search", description: "Sequence similarity search", icon: DeploymentUnitOutlined, to: "/blast" },

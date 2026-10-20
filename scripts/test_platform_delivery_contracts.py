@@ -11,7 +11,7 @@ from compose_loader import load_compose
 
 ROOT = Path(__file__).resolve().parents[1]
 NODE_VERSION = "26.10.0"
-PNPM_VERSION = "12.5.1"
+PNPM_VERSION = "12.11.2"
 PROFILES = {"core", "jbrowse", "blast", "analyses", "mcp", "cloudflare-tunnel"}
 UPGRADE = ROOT / "deploy/scripts/upgrade.sh"
 BACKUP = ROOT / "deploy/scripts/backup.sh"
@@ -23,7 +23,7 @@ CONDA_DEPLOY = ROOT / "deploy/scripts/conda-deploy.sh"
 CONDA_SERVICES = ROOT / "deploy/scripts/conda-services.sh"
 CONDA_NO_DOCKER = ROOT / "deploy/conda/no-docker-data-layer.md"
 DEPLOYMENT_ARCHITECTURE = ROOT / "docs/design/deployment-architecture.md"
-DATA_SERVICES = ("postgres", "clickhouse", "redis", "minio")
+DATA_SERVICES = ("postgres", "redis", "minio")
 # Release services that the local wrapper rebuilds from the checkout. The
 # production file declares no `build:` for any of them: a release host pulls a
 # signed digest and must never build from source. scripts/compose-local.sh is
@@ -38,20 +38,19 @@ RELEASE_SERVICES = {
     "beat",
     "mcp-server",
     "migrate",
-    "migrate-clickhouse",
 }
 PLATFORM_CATALOG = {
     "typescript": "5.9.3",
-    "vite": "6.4.3",
-    "@umijs/max": "4.7.20",
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
+    "vite": "8.3.4",
+    "@umijs/max": "4.7.24",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "antd": "6.6.5",
-    "echarts": "5.5.1",
+    "antd": "6.6.6",
     "@ant-design/pro-components": "3.1.15-2",
-    "vitest": "3.2.7",
+    "@ant-design/plots": "2.6.8",
+    "vitest": "5.0.5",
     "tailwindcss": "4.3.3",
     "@tailwindcss/vite": "4.3.3",
 }
@@ -193,10 +192,10 @@ def test_frontend_platform_lines_remain_bounded() -> None:
             )
         assert package["devDependencies"]["typescript"] == "catalog:"
 
-    assert workspace["catalog"]["react"] == "19.3.0"
-    assert workspace["catalog"]["react-dom"] == "19.3.0"
-    assert workspace["catalog"]["@umijs/max"] == "4.7.20"
-    assert workspace["catalog"]["antd"] == "6.6.5"
+    assert workspace["catalog"]["react"] == "19.3.1"
+    assert workspace["catalog"]["react-dom"] == "19.3.1"
+    assert workspace["catalog"]["@umijs/max"] == "4.7.24"
+    assert workspace["catalog"]["antd"] == "6.6.6"
     assert workspace["catalog"]["@ant-design/pro-components"] == "3.1.15-2"
     # Vue is fully retired: it must not be a production dependency of any React
     # application (dev-only Vue tooling was removed alongside the legacy sources).
@@ -213,7 +212,7 @@ def test_tiptap_family_is_pinned_for_the_react_admin_editor() -> None:
         if name.startswith("@tiptap/")
     }
     assert pins
-    assert set(pins.values()) == {"3.31.3"}
+    assert set(pins.values()) == {"3.32.0"}
     assert not [
         name
         for name in _json("apps/web/package.json")["dependencies"]
@@ -314,7 +313,6 @@ def test_release_services_use_digest_refs_without_compose_build_fallbacks() -> N
     service_refs = {
         "migrate": "MIGRATE_IMAGE_REF",
         "api": "API_IMAGE_REF",
-        "migrate-clickhouse": "MIGRATE_CLICKHOUSE_IMAGE_REF",
         "worker-default": "WORKER_IMAGE_REF",
         "worker-blast": "WORKER_IMAGE_REF",
         "worker-ingest": "WORKER_IMAGE_REF",
@@ -324,7 +322,7 @@ def test_release_services_use_digest_refs_without_compose_build_fallbacks() -> N
         "jbrowse": "JBROWSE_IMAGE_REF",
     }
     assert len(set(service_refs.values())) == len(
-        {"MIGRATE_IMAGE_REF", "API_IMAGE_REF", "MIGRATE_CLICKHOUSE_IMAGE_REF",
+        {"MIGRATE_IMAGE_REF", "API_IMAGE_REF",
          "WORKER_IMAGE_REF", "MCP_IMAGE_REF", "JBROWSE_IMAGE_REF"}
     )
 
@@ -378,7 +376,6 @@ def test_local_compose_wrapper_uses_a_post_merge_override() -> None:
         "WORKER_IMAGE",
         "MCP_IMAGE",
         "MIGRATE_IMAGE",
-        "MIGRATE_CLICKHOUSE_IMAGE",
     ):
         assert f'image: "${{{variable}:-' in local
     # The local file must not carry a build definition for any service (or a

@@ -59,7 +59,7 @@
           "health"
         ],
         "summary": "Readiness",
-        "description": "Readiness probe with baseline and extended dependency semantics.\n\nBaseline gates PostgreSQL only; extended also gates ClickHouse and Redis.",
+        "description": "Readiness probe with baseline and extended dependency semantics.\n\nBaseline gates PostgreSQL only; extended also gates the Redis broker.",
         "operationId": "readiness_api_v1_health_ready_get",
         "responses": {
           "200": {
@@ -2094,7 +2094,7 @@
           "variants"
         ],
         "summary": "List Variants",
-        "description": "Search variants with filters and cursor pagination (limit \u2264 200).\n\nThe mutant-line filter takes a **public** identifier. It is resolved to the\nline's internal key inside the resolved published release, so a numeric or\notherwise internal value is rejected instead of being bound to ClickHouse as\nif it were a surrogate (which previously matched nothing, or silently\nnothing, depending on the value).",
+        "description": "Search variants with filters and cursor pagination (limit \u2264 200).\n\nThe mutant-line filter takes a **public** identifier. It is resolved to the\nline's internal key inside the resolved published release, so a numeric or\notherwise internal value is rejected instead of being bound to the variant\nstore as if it were a surrogate (which previously matched nothing, or\nnothing, depending on the value).",
         "operationId": "list_variants_api_v1_variants_get",
         "parameters": [
           {
@@ -3238,7 +3238,7 @@
           "stats"
         ],
         "summary": "Homepage statistics",
-        "description": "Aggregate statistics for the public home page. Variant counts come from ClickHouse when available, falling back to the PostgreSQL variant_summaries table; other counts are real PostgreSQL aggregates. Empty results are returned as zeros.",
+        "description": "Aggregate statistics for the public home page. Variant counts come from the native PostgreSQL variant_facts projection, falling back to the variant_summaries table; other counts are real PostgreSQL aggregates. Empty results are returned as zeros.",
         "operationId": "homepage_stats_api_v1_stats_homepage_get",
         "responses": {
           "200": {
@@ -3256,7 +3256,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -3281,7 +3281,7 @@
           "stats"
         ],
         "summary": "Variant Type Distribution",
-        "description": "Variant type distribution (SNP/INS/DEL/MNV/SV) for a published release.\n\nThe ClickHouse aggregate is bound to the resolved release; previously it\nscanned every release's facts.",
+        "description": "Variant type distribution (SNP/INS/DEL/MNV/SV) for a published release.\n\nThe PostgreSQL variant aggregate is bound to the resolved release;\npreviously it scanned every release's facts.",
         "operationId": "variant_type_distribution_api_v1_stats_variant_types_get",
         "parameters": [
           {
@@ -3850,7 +3850,7 @@
           "stats"
         ],
         "summary": "Chromosome Density",
-        "description": "Variant density across a chromosome in the published release.\n\nDensity is computed entirely from the ClickHouse projection, so an\nunavailable projection is reported as capability-unavailable (503). The\nresponse model also requires a concrete ``chromosome_length``: fabricating\n``0`` here would both violate the contract and present an empty chromosome\nas a real result. The query is bound to the resolved release, so bins can\nnever mix drafts into a published density.",
+        "description": "Variant density across a chromosome in the published release.\n\nDensity is computed entirely from the PostgreSQL ``variant_facts``\nprojection, so an unavailable projection is reported as\ncapability-unavailable (503). The response model also requires a concrete\n``chromosome_length``: fabricating ``0`` here would both violate the\ncontract and present an empty chromosome as a real result. The query is\nbound to the resolved release, so bins can never mix drafts into a\npublished density.",
         "operationId": "chromosome_density_api_v1_stats_density_get",
         "parameters": [
           {
@@ -5037,6 +5037,11 @@
         "summary": "List Releases",
         "description": "List database releases.\n\nRead-hot query cached in Redis (default TTL) keyed by ``status``; a\nRedis failure degrades to a direct query.",
         "operationId": "list_releases_api_v1_releases_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "status",
@@ -5052,6 +5057,15 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SiteVariant",
+              "default": "external"
             }
           }
         ],
@@ -5144,6 +5158,11 @@
         ],
         "summary": "Get Release",
         "operationId": "get_release_api_v1_releases__release_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "parameters": [
           {
             "name": "release_id",
@@ -5152,6 +5171,15 @@
             "schema": {
               "type": "integer",
               "title": "Release Id"
+            }
+          },
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SiteVariant",
+              "default": "external"
             }
           }
         ],
@@ -8729,7 +8757,7 @@
           "admin"
         ],
         "summary": "System overview statistics",
-        "description": "High-level system numbers for the admin dashboard.\n\nAll values are real aggregations (users/releases from PostgreSQL, variant\ncount from ClickHouse with a PostgreSQL fallback).  Change percentages are\ncomputed between the last 30 days and the previous 30 days; metrics\nwithout a temporal source report 0.0.",
+        "description": "High-level system numbers for the admin dashboard.\n\nAll values are real aggregations (users/releases from PostgreSQL, variant\ncount from the native PostgreSQL projection with a ``variant_summaries``\nfallback).  Change percentages are computed between the last 30 days and\nthe previous 30 days; metrics without a temporal source report 0.0.",
         "operationId": "admin_dashboard_stats_api_v1_admin_dashboard_stats_get",
         "responses": {
           "200": {
@@ -8777,7 +8805,7 @@
           "admin"
         ],
         "summary": "Dashboard trend series",
-        "description": "Time series for the admin dashboard charts.\n\n- ``import_throughput``: daily import tasks (completed vs. failed) from\n  the PostgreSQL ``import_tasks`` table.\n- ``query_latency``: daily p50/p95/p99 percentiles from ClickHouse\n  analytics events (empty when ClickHouse is unavailable).\n- ``storage_growth``: no reliable storage source exists yet \u2014 empty.",
+        "description": "Time series for the admin dashboard charts.\n\n- ``import_throughput``: daily import tasks (completed vs. failed) from\n  the PostgreSQL ``import_tasks`` table.\n- ``query_latency``: daily p50/p95/p99 percentiles from the PostgreSQL\n  analytics events (empty when that query is unavailable).\n- ``storage_growth``: no reliable storage source exists yet \u2014 empty.",
         "operationId": "admin_dashboard_series_api_v1_admin_dashboard_series_get",
         "security": [
           {
@@ -14237,15 +14265,13 @@
           "admin-static"
         ],
         "summary": "Trigger Build",
-        "description": "Trigger a static page generation job (administrator-only).\n\nRequest body::\n\n    {\n        \"gene_ids\": [\"Glyma.01G000100\", \"Glyma.02G000200\"] | null\n    }\n\nIf ``gene_ids`` is ``None``, all genes will be rebuilt.",
+        "description": "Trigger a static page generation job (administrator-only).\n\nRequest body::\n\n    {\n        \"gene_ids\": [\"Glyma.01G000100\", \"Glyma.02G000200\"] | null\n    }\n\nIf ``gene_ids`` is ``None``, all genes of the active published release\nwill be rebuilt; ``[]`` rebuilds nothing. The build is scoped to a\npublished release, so an installation without one is rejected (503)\ninstead of queueing work against an unreleased namespace.",
         "operationId": "trigger_build_api_v1_admin_build_static_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": true,
-                "type": "object",
-                "title": "Body"
+                "$ref": "#/components/schemas/StaticBuildRequest"
               }
             }
           },
@@ -16001,7 +16027,7 @@
           "analytics"
         ],
         "summary": "Analytics Summary",
-        "description": "Aggregate analytics metrics for the admin dashboard.\n\nReturns event totals, unique sessions, breakdowns by type/page/referrer/\nsearch term, and a daily time series.  Administrator-only.",
+        "description": "Aggregate visit metrics for the administrator dashboard.\n\nReturns event totals, unique sessions, breakdowns by event type, by\ncanonical route template and by referrer category, and a daily count\nseries.\n\nEvery label is a fixed constant of this API and never caller data: a route\ntemplate such as ``/mutants/:publicId`` or ``/other``, one of the four\nreferrer categories (``direct``, ``search``, ``social``, ``other``), a\nfinite event type, or a ``YYYY-MM-DD`` day. Free-text search terms are\nneither queried nor returned, so ``top_searches`` is always empty and\n``top_searches_available`` is always ``false``.\n\nEach section carries an ``*_available`` flag, which is ``false`` when the\nanalytics store could not be read: an unavailable store is therefore never\ndisplayed as a window with no traffic. A referrer category describes a\nclient-supplied header hint, not a verified traffic source, and unique\nsessions count opaque cookie sessions, not people.\n\nAdministrator-only, and the response is ``private, no-store``.",
         "operationId": "analytics_summary_api_v1_admin_analytics_summary_get",
         "security": [
           {
@@ -16028,9 +16054,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Analytics Summary Api V1 Admin Analytics Summary Get"
+                  "$ref": "#/components/schemas/AnalyticsSummary"
                 }
               }
             }
@@ -18232,6 +18256,117 @@
         "title": "AnalysisType",
         "description": "Supported analysis pipelines (path parameter of the submit endpoint)."
       },
+      "AnalyticsBreakdownItem": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "count"
+        ],
+        "title": "AnalyticsBreakdownItem",
+        "description": "One labelled bucket of an analytics breakdown.\n\n``label`` is always a constant of this API: a canonical route template (or\n``/other``), one of the four referrer categories, a finite event type, or a\n``YYYY-MM-DD`` day. A count is never negative, and a label is never a raw\nidentifier, query string, URL or free-text search term."
+      },
+      "AnalyticsSummary": {
+        "properties": {
+          "total_events": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Events"
+          },
+          "unique_sessions": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Unique Sessions"
+          },
+          "events_by_type": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsBreakdownItem"
+            },
+            "type": "array",
+            "title": "Events By Type"
+          },
+          "top_pages": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsBreakdownItem"
+            },
+            "type": "array",
+            "title": "Top Pages"
+          },
+          "top_referrers": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsBreakdownItem"
+            },
+            "type": "array",
+            "title": "Top Referrers"
+          },
+          "top_searches": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsBreakdownItem"
+            },
+            "type": "array",
+            "title": "Top Searches"
+          },
+          "events_by_day": {
+            "items": {
+              "$ref": "#/components/schemas/AnalyticsBreakdownItem"
+            },
+            "type": "array",
+            "title": "Events By Day"
+          },
+          "total_events_available": {
+            "type": "boolean",
+            "title": "Total Events Available"
+          },
+          "unique_sessions_available": {
+            "type": "boolean",
+            "title": "Unique Sessions Available"
+          },
+          "events_by_type_available": {
+            "type": "boolean",
+            "title": "Events By Type Available"
+          },
+          "top_pages_available": {
+            "type": "boolean",
+            "title": "Top Pages Available"
+          },
+          "top_referrers_available": {
+            "type": "boolean",
+            "title": "Top Referrers Available"
+          },
+          "top_searches_available": {
+            "type": "boolean",
+            "title": "Top Searches Available"
+          },
+          "events_by_day_available": {
+            "type": "boolean",
+            "title": "Events By Day Available"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_events",
+          "unique_sessions",
+          "total_events_available",
+          "unique_sessions_available",
+          "events_by_type_available",
+          "top_pages_available",
+          "top_referrers_available",
+          "top_searches_available",
+          "events_by_day_available"
+        ],
+        "title": "AnalyticsSummary",
+        "description": "Aggregate visit metrics over a bounded day window (administrator-only).\n\nThe seven data sections and the seven ``*_available`` booleans are declared\nhere, so the published contract, the generated client and the stored rows\ncannot drift apart. An ``*_available`` flag is ``False`` when the analytics\nstore could not be read, which is what keeps \"no traffic in this window\"\ndistinguishable from \"could not ask\".\n\n``top_searches`` is always empty and ``top_searches_available`` is always\n``False``: free-text search terms are never queried and never returned."
+      },
       "AssemblyResponse": {
         "properties": {
           "id": {
@@ -19464,14 +19599,14 @@
             "anyOf": [
               {
                 "type": "string",
-                "const": "clickhouse"
+                "const": "postgresql"
               },
               {
                 "type": "null"
               }
             ],
             "title": "Analytics",
-            "default": "clickhouse"
+            "default": "postgresql"
           }
         },
         "type": "object",
@@ -19534,7 +19669,7 @@
           },
           "column_count": {
             "type": "integer",
-            "maximum": 50.0,
+            "maximum": 256.0,
             "minimum": 0.0,
             "title": "Column Count",
             "default": 0
@@ -19547,6 +19682,19 @@
             "type": "array",
             "maxItems": 64,
             "title": "Source Objects"
+          },
+          "module_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Module Key"
           }
         },
         "type": "object",
@@ -22868,7 +23016,7 @@
           },
           "column_count": {
             "type": "integer",
-            "maximum": 50.0,
+            "maximum": 256.0,
             "minimum": 0.0,
             "title": "Column Count"
           },
@@ -22879,6 +23027,19 @@
             "type": "array",
             "maxItems": 50,
             "title": "Field Mapping"
+          },
+          "module_key": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 80,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Module Key"
           }
         },
         "type": "object",
@@ -29242,6 +29403,28 @@
         "additionalProperties": false,
         "type": "object",
         "title": "SpeciesInstanceUpdate"
+      },
+      "StaticBuildRequest": {
+        "properties": {
+          "gene_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 200
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gene Ids"
+          }
+        },
+        "type": "object",
+        "title": "StaticBuildRequest",
+        "description": "Body of the static-build trigger.\n\nSelection is validated but not resolved: an accession only means something\nagainst a release, so an unknown (or foreign-release) ID has to reach the\nbuild exactly as the administrator wrote it and simply not be counted."
       },
       "StaticPageCreate": {
         "properties": {

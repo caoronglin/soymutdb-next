@@ -27,6 +27,7 @@ import {
 import { Button, Card, Input, Typography } from "@/lib/antd";
 import { ApiError, request, setAccessToken } from "@soymutdb/api-client";
 import { TextReveal, Reveal, Stagger } from "../components/route-motion";
+import { safeRedirect } from "../lib/redirect";
 
 export const Route = createFileRoute("/login")({
   component: LoginComponent,
@@ -34,21 +35,6 @@ export const Route = createFileRoute("/login")({
 
 interface LoginResponse {
   access_token: string;
-}
-
-function safeRedirect(value: unknown): string {
-  const containsControlCharacter =
-    typeof value === "string" && Array.from(value).some((character) => character.charCodeAt(0) < 0x20);
-  if (
-    typeof value !== "string" ||
-    !value.startsWith("/") ||
-    value.startsWith("//") ||
-    value.includes("\\") ||
-    containsControlCharacter
-  ) {
-    return "/";
-  }
-  return value;
 }
 
 function LoginComponent() {

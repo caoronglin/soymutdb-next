@@ -295,16 +295,22 @@ class TestEndpointCacheIntegration:
         async def _fake_get_or_set(name, ttl, loader, **kwargs):
             called["name"] = name
             called["ttl"] = ttl
+            called["params"] = kwargs.get("params")
             return payload
 
         monkeypatch.setattr(stats_module, "get_or_set", _fake_get_or_set)
 
-        result = await stats_module.homepage_stats(db)
+        from app.services.release_context import ReleaseContext
+
+        result = await stats_module.homepage_stats(
+            db, release_context=ReleaseContext(release_id=7, assembly_id=3)
+        )
 
         assert isinstance(result, HomepageStats)
         assert result.total_variants == 10
         assert result.last_release_name == "v4.0"
         assert called["name"] == "stats:homepage"
+        assert called["params"] == {"release_id": 7}
         assert called["ttl"] is None  # default TTL
 
     async def test_list_releases_cache_hit_skips_db(self, monkeypatch) -> None:
@@ -342,7 +348,13 @@ class TestEndpointCacheIntegration:
 
         monkeypatch.setattr(releases_module, "get_or_set", _fake_get_or_set)
 
-        result = await releases_module.list_releases(db, status=None)
+        from fastapi import Response
+
+        from app.core.site_variant import SiteVariant
+
+        result = await releases_module.list_releases(
+            Response(), db=db, status=None, variant=SiteVariant.EXTERNAL, current_user=None
+        )
 
         assert isinstance(result, list)
         assert isinstance(result[0], ReleaseResponse)

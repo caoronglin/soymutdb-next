@@ -9,6 +9,7 @@
  *   same-group file switching)
  * - Size badges with "too large" indicator
  */
+import type * as React from "react";
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -236,6 +237,9 @@ function DownloadsComponent() {
                 dataSource={group.files}
                 pagination={false}
                 scroll={{ x: 720 }}
+                onRow={(file) =>
+                  ({ "data-testid": `download-row-${file.id}` }) as React.HTMLAttributes<HTMLElement>
+                }
                 columns={downloadColumns}
               />
             </Card>

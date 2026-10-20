@@ -148,7 +148,7 @@ export default function AnalyticsSettingsPage() {
               <BarChartOutlined className="size-4 text-primary" />
               {t("admin.analyticsSettings.legacyTitle", { defaultValue: "Legacy self-hosted analytics" })}
             </Typography.Title>
-            <Typography.Text type="secondary">{t("admin.analyticsSettings.legacyDesc", { defaultValue: "The API-side ClickHouse analytics endpoint and the portal /analytics page remain available as a fallback / detail source. Cloudflare Web Analytics is the primary visitor-statistics channel." })}</Typography.Text>
+            <Typography.Text type="secondary">{t("admin.analyticsSettings.legacyDesc", { defaultValue: "The native PostgreSQL analytics endpoints (/analytics, /stats) and the portal /analytics page remain available for on-site data; Cloudflare Web Analytics is the primary visitor-statistics channel." })}</Typography.Text>
 
         </ProCard>
       </div>

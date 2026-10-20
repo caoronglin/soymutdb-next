@@ -131,8 +131,8 @@ async def list_variants(
 
     The mutant-line filter takes a **public** identifier. It is resolved to the
     line's internal key inside the resolved published release, so a numeric or
-    otherwise internal value is rejected instead of being bound to ClickHouse as
-    if it were a surrogate (which previously matched nothing, or silently
+    otherwise internal value is rejected instead of being bound to the variant
+    store as if it were a surrogate (which previously matched nothing, or
     nothing, depending on the value).
     """
     requested_public_id = mutant_line_public_id or mutant_line_id
@@ -162,6 +162,8 @@ async def list_variants(
             db, requested_public_id, release_context=release_context
         )
 
+    # The request-scoped session is passed on: the service reads the page
+    # through it, so this request holds one pooled connection, not two.
     return await service.list_variants(
         db,
         params,
@@ -171,6 +173,7 @@ async def list_variants(
 
 @router.get("/region", response_model=list[VariantResponse])
 async def get_variants_by_region(
+    db: AsyncSession = Depends(get_db),
     release_context: ReleaseContext = Depends(get_release_context),
     assembly: str = Query(..., description="Assembly name (required)"),
     chromosome: str = Query(...),
@@ -182,6 +185,7 @@ async def get_variants_by_region(
     if end < start:
         raise ValidationError("end must be greater than or equal to start")
     return await service.get_variants_by_region(
+        db,
         assembly=assembly,
         chromosome=chromosome,
         start=start,

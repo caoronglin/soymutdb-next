@@ -19,7 +19,7 @@ def test_migration_is_ordered_additive_and_downgrade_is_guarded() -> None:
     assert module.revision == "0031"
     assert module.down_revision == "0030"
 
-    source = MIGRATION.read_text()
+    source = MIGRATION.read_text(encoding="utf-8")
     assert "ADD COLUMN IF NOT EXISTS lock_version" in source
     assert "ADD COLUMN IF NOT EXISTS schedule_generation" in source
     assert "news_article_revisions" in source

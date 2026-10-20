@@ -126,6 +126,29 @@ async def test_validate_release_rejects_dataset_not_ready(fake_not_ready_db):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("status", ["ready", "published", "rolled_back"])
+async def test_validation_cannot_reverse_release_lifecycle(fake_ready_db, status):
+    target = fake_ready_db.releases[1]
+    target.status = status
+    with pytest.raises(ReleaseNotReady, match="only draft or validated"):
+        await validate_release(fake_ready_db, release_id=2, actor_id="actor")
+    assert target.status == status
+    assert fake_ready_db.pointer.release_id == 1
+    assert fake_ready_db.audit == []
+
+
+@pytest.mark.asyncio
+async def test_repeated_validation_keeps_one_transition_audit(fake_ready_db):
+    target = fake_ready_db.releases[1]
+    target.status = "draft"
+    fake_ready_db.datasets[10].source_objects = [{"sha256": "a" * 64, "etag": "etag"}]
+    await validate_release(fake_ready_db, release_id=2, actor_id="actor")
+    await validate_release(fake_ready_db, release_id=2, actor_id="actor")
+    assert target.status == "validated"
+    assert [entry.action for entry in fake_ready_db.audit] == ["release_validated"]
+
+
+@pytest.mark.asyncio
 async def test_ready_requires_jbrowse_blast_download_api_smoke(db_session):
     with pytest.raises(ReleaseNotReady, match="api"):
         await mark_release_ready(

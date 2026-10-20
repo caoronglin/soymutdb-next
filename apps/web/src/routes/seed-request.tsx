@@ -127,7 +127,7 @@ function SeedRequestComponent() {
             {t("seedRequest.subtitle")}
           </h1>
         </FadeUp>
-        <div className="mt-8 max-w-2xl">
+        <div className="mt-8 max-w-2xl" data-testid="seed-request-success">
           <Result
             status="success"
             title={t("seedRequest.successTitle")}
@@ -155,9 +155,13 @@ function SeedRequestComponent() {
         </p>
       </FadeUp>
 
-      <div className="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,.85fr)]">
+      <div
+        data-testid="seed-request-form"
+        className="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(18rem,.85fr)]"
+      >
       <Card className="min-w-0 rounded-xl">
         {submitError ? (
+          <div data-testid="seed-request-error-banner">
           <Alert
             type="error"
             showIcon
@@ -165,6 +169,7 @@ function SeedRequestComponent() {
             description={submitError}
             className="mb-4"
           />
+          </div>
         ) : null}
 
         <Form<SeedRequestFormValues>
@@ -232,6 +237,7 @@ function SeedRequestComponent() {
           </Form.Item>
 
           <Button
+            data-testid="seed-request-submit"
             type="primary"
             htmlType="submit"
             size="large"

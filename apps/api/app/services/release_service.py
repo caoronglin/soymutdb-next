@@ -43,6 +43,8 @@ async def validate_release(db: AsyncSession, *, release_id: int, actor_id) -> Re
     ).scalar_one_or_none()
     if release is None:
         raise ReleaseNotReady("release not found")
+    if release.status not in {ReleaseStatus.DRAFT.value, ReleaseStatus.VALIDATED.value}:
+        raise ReleaseNotReady("only draft or validated releases may be validated")
     datasets = await _datasets(db, release_id)
     if not datasets or any(ds.status != ImportStatus.READY.value for ds in datasets):
         raise ReleaseNotReady("all data sets must be ready")
@@ -51,6 +53,8 @@ async def validate_release(db: AsyncSession, *, release_id: int, actor_id) -> Re
         for ds in datasets
     ):
         raise ReleaseNotReady("source objects must be complete")
+    if release.status == ReleaseStatus.VALIDATED.value:
+        return release
     release.status = ReleaseStatus.VALIDATED.value
     db.add(
         AuditLog(

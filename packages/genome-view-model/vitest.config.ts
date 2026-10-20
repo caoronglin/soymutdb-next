@@ -7,11 +7,8 @@ export default defineConfig({
     globals: true,
     include: ["src/**/*.test.ts"],
     pool: "forks",
-    poolOptions: {
-      forks: {
-        singleFork: true,
-        maxForks: 1,
+    // Vitest 5 removed `poolOptions`; one forked worker keeps the
+    // suite serial (isolation stays on: files share global mocks otherwise).
+    maxWorkers: 1,
       },
-    },
-  },
 });

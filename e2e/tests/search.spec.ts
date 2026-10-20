@@ -9,7 +9,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { gotoReady } from "./helpers";
 
-const BASE = "/soymutdb-next";
+const BASE = "";
 
 /** The form control, rather than the similarly named results landmark. */
 function geneIdInput(page: Page) {

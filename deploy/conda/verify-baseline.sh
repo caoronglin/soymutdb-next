@@ -12,7 +12,7 @@ ENV_PREFIX="${SOYMUTDB_MAMBA_PREFIX:-${MAMBA_ROOT_PREFIX:-${HOME}/.conda}/envs/s
 PYTHON_BIN="${ENV_PREFIX}/bin/python"
 API_DIR="${ROOT}/apps/api"
 JOBS_DIR="${ROOT}/packages/jobs-py"
-PROJECT_SITE="${SOYMUTDB_PROJECT_SITE_PACKAGES:-${API_DIR}/.venv/lib/python3.14/site-packages}"
+PROJECT_SITE="${SOYMUTDB_PROJECT_SITE_PACKAGES:-${API_DIR}/.venv/lib/python3.15/site-packages}"
 PG_PORT="${SOYMUTDB_SMOKE_PG_PORT:-55432}"
 API_PORT="${SOYMUTDB_SMOKE_API_PORT:-18000}"
 PG_DIR=""
@@ -27,7 +27,7 @@ elif [[ "${SOYMUTDB_MAMBA_UPDATE:-0}" == "1" ]]; then
 fi
 
 PY_VERSION="$("${PYTHON_BIN}" -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
-[[ "${PY_VERSION}" == "3.14" ]] || { echo "expected Python 3.14, got ${PY_VERSION}" >&2; exit 1; }
+[[ "${PY_VERSION}" == "3.15" ]] || { echo "expected Python 3.15, got ${PY_VERSION}" >&2; exit 1; }
 
 PIP_FLAGS=()
 if [[ -d "${PROJECT_SITE}" ]]; then

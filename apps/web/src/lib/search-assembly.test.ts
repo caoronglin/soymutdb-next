@@ -22,6 +22,21 @@ describe("assembly-scoped search", () => {
     expect(withoutGuard?.name).toBe("v5");
   });
 
+  it("rejects duplicate legacy names rather than taking the first match", () => {
+    const versions = [
+      { id: 4, name: "Wm82", version: "v4", is_default: false },
+      { id: 5, name: "Wm82", version: "v5", is_default: true },
+    ];
+    expect(resolveSearchAssembly(versions, "Wm82")).toBeUndefined();
+    expect(resolveSearchAssembly(versions, "5")?.version).toBe("v5");
+    expect(resolveSearchAssembly(versions, " 4 ")?.version).toBe("v4");
+  });
+
+  it("prefers a stable id over another assembly's numeric-looking name", () => {
+    const versions = [{ id: 4, name: "5" }, { id: 5, name: "Wm82" }];
+    expect(resolveSearchAssembly(versions, "5")?.id).toBe(5);
+  });
+
   it("waits for assemblies to load without guessing a genome", () => {
     expect(resolveSearchAssembly(undefined, "v4")).toBeUndefined();
     expect(resolveSearchAssembly([])).toBeUndefined();

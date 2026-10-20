@@ -77,10 +77,32 @@ _ALLOWED_PROTOCOLS = ["http", "https", "data"]
 #: ``target="_blank"`` must always carry ``rel="noopener noreferrer"``.
 #: bleach cannot add attributes, so this is enforced with a post-clean
 #: rewrite of the (already well-formed) bleach output.
-_REL_NOOPENER_RE = re.compile(
-    r'<a\b(?=[^>]*\btarget=["\']_blank["\'])(?![^>]*\brel=)[^>]*>',
-    re.IGNORECASE,
+#:
+#: The rewrite has to be *quote-aware*: bleach leaves a literal ``>`` inside an
+#: attribute value untouched (``title="a>b"`` survives cleaning), so a plain
+#: ``[^>]*>`` tag matcher ends the tag early and injects the new attribute
+#: into the middle of an existing one.  ``_TAG_BODY`` therefore consumes a
+#: quoted value as a unit and only treats an unquoted ``>`` as the tag end.
+_TAG_BODY = r'(?:[^>"\']|"[^"]*"|\'[^\']*\')*'
+
+_REL_OPEN_LINK_RE = re.compile(
+    rf'<a\b(?={_TAG_BODY}\btarget\s*=\s*["\']_blank["\']){_TAG_BODY}>',
+    re.IGNORECASE | re.DOTALL,
 )
+
+#: Attribute tokeniser used to locate ``rel`` inside a cleaned tag.  Each match
+#: consumes the attribute *including* its quoted value, so the next search
+#: position is always the start of a real attribute and never a substring of a
+#: value (``title="a rel='b'"`` cannot produce a spurious ``rel`` hit).
+_TAG_ATTR_RE = re.compile(
+    r"""\s+(?P<name>[^\s=/>]+)(?:\s*=\s*(?:"(?P<dq>[^"]*)"|'(?P<sq>[^']*)'))?"""
+)
+
+#: An author-supplied ``rel`` never wins over the two tokens this module owns:
+#: ``rel="opener"`` re-enables ``window.opener`` on the opened page, which is
+#: exactly the reverse-tabnabbing vector ``noopener`` closes.
+_REL_OWNED_TOKENS: tuple[str, ...] = ("noopener", "noreferrer")
+_REL_DROPPED_TOKENS: frozenset[str] = frozenset({*_REL_OWNED_TOKENS, "opener"})
 
 
 def _rich_attr_filter(tag: str, name: str, value: str) -> bool:
@@ -105,10 +127,36 @@ def _rich_attr_filter(tag: str, name: str, value: str) -> bool:
     return True
 
 
-def _add_rel_noopener(match: re.Match) -> str:
-    """Insert ``rel="noopener noreferrer"`` into a matched ``<a ...>`` tag."""
+def _force_safe_rel(match: re.Match) -> str:
+    """Rewrite the ``rel`` of a matched ``<a target="_blank">`` tag.
+
+    Any author-supplied ``rel`` is kept except for the tokens this module
+    owns plus ``opener`` (which contradicts ``noopener``); ``noopener`` and
+    ``noreferrer`` are then appended.  Rewriting an existing attribute rather
+    than only adding a missing one is what keeps ``rel="opener"`` — the one
+    value that actively re-enables the opener — from surviving.  When ``rel``
+    is absent the pair is appended before the tag's own ``>``, which the
+    quote-aware matcher has already proven to be the real tag end.
+    """
     tag = match.group(0)
-    return tag[:-1] + ' rel="noopener noreferrer">'
+    rel_attr = next(
+        (
+            attr
+            for attr in _TAG_ATTR_RE.finditer(tag)
+            if attr.group("name").lower() == "rel"
+        ),
+        None,
+    )
+    if rel_attr is None:
+        owned = " ".join(_REL_OWNED_TOKENS)
+        return f'{tag[:-1]} rel="{owned}">'
+
+    quoted = rel_attr.group("dq")
+    group = "dq" if quoted is not None else "sq"
+    carried = (quoted if quoted is not None else rel_attr.group("sq") or "").split()
+    kept = [token for token in carried if token.lower() not in _REL_DROPPED_TOKENS]
+    tokens = " ".join([*kept, *_REL_OWNED_TOKENS])
+    return f"{tag[: rel_attr.start(group)]}{tokens}{tag[rel_attr.end(group):]}"
 
 
 def sanitize_rich_html(html: str) -> str:
@@ -128,7 +176,7 @@ def sanitize_rich_html(html: str) -> str:
         protocols=_ALLOWED_PROTOCOLS,
         strip=True,
     )
-    return _REL_NOOPENER_RE.sub(_add_rel_noopener, cleaned)
+    return _REL_OPEN_LINK_RE.sub(_force_safe_rel, cleaned)
 
 
 __all__ = ["ALLOWED_TAGS", "sanitize_rich_html"]

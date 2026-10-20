@@ -16,6 +16,7 @@ import {
   Button,
   Empty,
   Form,
+  Result,
   Select,
   Space,
   Table,
@@ -162,7 +163,7 @@ function VariantsComponent() {
 
   const columns: TableColumnsType<VariantSummary> = [
     {
-      title: get("variants.variantId", "Variant ID"),
+      title: get("variants.variantId", t("variants.variantId")),
       dataIndex: "variant_id",
       key: "variant_id",
       render: (_, row) => <span className="font-mono text-xs">{row.variant_id.slice(0, 12)}…</span>,
@@ -373,58 +374,77 @@ function VariantsComponent() {
         ) : null}
 
         <div className="mt-4" role="region" aria-label={t("variants.resultsAria")}>
-          <Table<VariantSummary>
-            rowKey="variant_id"
-            columns={columns}
-            dataSource={data}
-            loading={query.isLoading}
-            pagination={false}
-            locale={{
-              emptyText: (
-                <Empty
-                  description={
-                    <Typography.Text type="secondary">
-                      {get("variants.noResults", t("variants.noResults"))}
-                      <br />
-                      <span className="text-xs">{t("common.noResults")}</span>
-                    </Typography.Text>
-                  }
-                />
-              ),
-            }}
-          />
-          <Space className="mt-3" size="small">
-            <Button
-              size="small"
-              icon={<LeftOutlined />}
-              disabled={atFirstPage}
-              onClick={() => {
-                navigate({ to: "/variants", search: { ...search, cursor: prevCursor } });
-                setCursorStack((stack) => (stack.length > 1 ? stack.slice(0, -1) : stack));
-              }}
-            >
-              {t("common.previous")}
-            </Button>
-            <Button
-              size="small"
-              icon={<RightOutlined />}
-              iconPosition="end"
-              disabled={!query.data?.has_more || !query.data?.next_cursor}
-              onClick={() => {
-                const next = query.data?.next_cursor;
-                if (!next) return;
-                setCursorStack((stack) => [...stack, search.cursor]);
-                navigate({ to: "/variants", search: { ...search, cursor: next } });
-              }}
-            >
-              {t("common.next")}
-            </Button>
-            {total != null ? (
-              <Typography.Text type="secondary" className="text-xs">
-                {t("variants.totalCount", { count: total })}
-              </Typography.Text>
-            ) : null}
-          </Space>
+          {query.isError ? (
+            <div role="alert">
+              <Result
+                status="error"
+                title={t("variants.loadError")}
+                extra={
+                  <Button loading={query.isFetching} onClick={() => void query.refetch()}>
+                    {t("common.retry")}
+                  </Button>
+                }
+              />
+            </div>
+          ) : (
+            <>
+              <Table<VariantSummary>
+                rowKey="variant_id"
+                onRow={() =>
+                  ({ "data-testid": "variant-row" }) as React.HTMLAttributes<HTMLElement>
+                }
+                columns={columns}
+                dataSource={data}
+                loading={query.isLoading}
+                pagination={false}
+                locale={{
+                  emptyText: (
+                    <Empty
+                      description={
+                        <Typography.Text type="secondary">
+                          {get("variants.noResults", t("variants.noResults"))}
+                          <br />
+                          <span className="text-xs">{t("common.noResults")}</span>
+                        </Typography.Text>
+                      }
+                    />
+                  ),
+                }}
+              />
+              <Space className="mt-3" size="small">
+                <Button
+                  size="small"
+                  icon={<LeftOutlined />}
+                  disabled={atFirstPage}
+                  onClick={() => {
+                    navigate({ to: "/variants", search: { ...search, cursor: prevCursor } });
+                    setCursorStack((stack) => (stack.length > 1 ? stack.slice(0, -1) : stack));
+                  }}
+                >
+                  {t("common.previous")}
+                </Button>
+                <Button
+                  size="small"
+                  icon={<RightOutlined />}
+                  iconPlacement="end"
+                  disabled={!query.data?.has_more || !query.data?.next_cursor}
+                  onClick={() => {
+                    const next = query.data?.next_cursor;
+                    if (!next) return;
+                    setCursorStack((stack) => [...stack, next]);
+                    navigate({ to: "/variants", search: { ...search, cursor: next } });
+                  }}
+                >
+                  {t("common.next")}
+                </Button>
+                {total != null ? (
+                  <Typography.Text type="secondary" className="text-xs">
+                    {t("variants.totalCount", { count: total })}
+                  </Typography.Text>
+                ) : null}
+              </Space>
+            </>
+          )}
         </div>
       </div>
     </FadeUp>

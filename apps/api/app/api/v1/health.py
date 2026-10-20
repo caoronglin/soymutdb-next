@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.config import get_settings
 from ...core.database import get_db, get_redis
-from ...services.clickhouse_service import ClickHouseService
 
 router = APIRouter(prefix="/health", tags=["health"])
 
@@ -35,7 +34,7 @@ async def readiness(
 ) -> dict[str, object]:
     """Readiness probe with baseline and extended dependency semantics.
 
-    Baseline gates PostgreSQL only; extended also gates ClickHouse and Redis.
+    Baseline gates PostgreSQL only; extended also gates the Redis broker.
     """
     checks: dict[str, dict[str, object]] = {}
     overall = True
@@ -52,19 +51,6 @@ async def readiness(
     # remain ready with PostgreSQL alone and report disabled capabilities instead
     # of treating absent services as an API outage.
     if get_settings().deployment_mode == "extended":
-        # ClickHouse
-        try:
-            ch = ClickHouseService()
-            clickhouse_healthy = await ch.ping()
-            checks["clickhouse"] = {"healthy": clickhouse_healthy, "required": True}
-            if not clickhouse_healthy:
-                overall = False
-        except Exception as exc:
-            checks["clickhouse"] = {
-                "healthy": False, "required": True, "error": type(exc).__name__
-            }
-            overall = False
-
         # Redis
         try:
             redis_healthy = bool(await get_redis().ping())
@@ -75,7 +61,6 @@ async def readiness(
             checks["redis"] = {"healthy": False, "required": True, "error": type(exc).__name__}
             overall = False
     else:
-        checks["clickhouse"] = {"healthy": None, "required": False, "status": "disabled"}
         checks["redis"] = {"healthy": None, "required": False, "status": "disabled"}
 
     if not overall:

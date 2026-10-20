@@ -14,17 +14,17 @@
  */
 import type { AssemblyInfo } from "@soymutdb/api-client";
 
-export type AssemblyResolution =
+export type AssemblyResolution<T extends Pick<AssemblyInfo, "id" | "name"> = AssemblyInfo> =
   | { status: "absent" }
-  | { status: "resolved"; assembly: AssemblyInfo; via: "id" | "name" }
+  | { status: "resolved"; assembly: T; via: "id" | "name" }
   | { status: "unknown" }
-  | { status: "ambiguous"; matches: AssemblyInfo[] };
+  | { status: "ambiguous"; matches: T[] };
 
 /** Resolve a URL parameter (stable id first, then legacy name). */
-export function resolveAssemblyParam(
-  assemblies: readonly AssemblyInfo[],
+export function resolveAssemblyParam<T extends Pick<AssemblyInfo, "id" | "name">>(
+  assemblies: readonly T[],
   raw: string | null | undefined,
-): AssemblyResolution {
+): AssemblyResolution<T> {
   const value = (raw ?? "").trim();
   if (!value) return { status: "absent" };
 

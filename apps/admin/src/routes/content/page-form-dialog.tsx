@@ -129,13 +129,11 @@ export function PageFormDialog({
                 <Select
                   value={values.status}
                   onChange={(v) => setField("status", v as PageStatus)}
-                >
-
-
-                    <Select.Option value="draft">{t("admin.content.statusDraft", { defaultValue: "Draft" })}</Select.Option>
-                    <Select.Option value="published">{t("admin.content.statusPublished", { defaultValue: "Published" })}</Select.Option>
-
-                </Select>
+                  options={[
+                    { value: "draft", label: t("admin.content.statusDraft", { defaultValue: "Draft" }) },
+                    { value: "published", label: t("admin.content.statusPublished", { defaultValue: "Published" }) },
+                  ]}
+                />
               </div>
             ) : null}
             <div className="space-y-1.5 sm:col-span-2">

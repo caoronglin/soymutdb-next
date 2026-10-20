@@ -147,7 +147,7 @@ def test_registry_serializes_known_values_to_canonical_storage_strings() -> None
     from app.core.settings_registry import SettingValidationError, validate_setting_update
 
     assert validate_setting_update("data", "maxExportRecords", 2500) == "2500"
-    assert validate_setting_update("data", "enableClickhouse", "OFF") == "false"
+    assert validate_setting_update("email", "enableNotifications", "OFF") == "false"
     assert validate_setting_update("general", "defaultLanguage", "zh") == "zh"
     assert validate_setting_update("general", "primaryColor", "#ABCDEF") == "#abcdef"
 
@@ -169,15 +169,21 @@ def test_registry_rejects_plaintext_secret_settings() -> None:
         validate_setting_update("email", "smtpPassword", "plain-text-secret")
 
 
-def test_registry_rejects_urls_outside_the_definition_allowlist() -> None:
-    from app.core.settings_registry import SettingValidationError, validate_setting_update
-
-    assert (
-        validate_setting_update("cdn", "url", "https://cdn.example.com/assets/")
-        == "https://cdn.example.com/assets/"
+def test_retired_cdn_section_is_no_longer_registered() -> None:
+    from app.core.settings_registry import (
+        SETTINGS_REGISTRY,
+        SettingValidationError,
+        validate_setting_update,
     )
-    with pytest.raises(SettingValidationError, match="allowlist"):
-        validate_setting_update("cdn", "url", "https://evil.example/assets/")
+
+    assert "cdn.url" not in SETTINGS_REGISTRY
+    assert not [
+        definition
+        for definition in SETTINGS_REGISTRY.values()
+        if definition.section == "cdn"
+    ]
+    with pytest.raises(SettingValidationError, match="Unknown setting"):
+        validate_setting_update("cdn", "url", "https://cdn.example.com/assets/")
 
 
 @pytest.mark.parametrize("value", [True, "0", "enabled", "false"])

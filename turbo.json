@@ -7,7 +7,12 @@
     "SOYMUTDB_PORTAL_ORIGIN",
     "SOYMUTDB_ADMIN_ORIGIN",
     "VITE_SITE_VARIANT",
-    "VITE_BASE_URL"
+    "VITE_BASE_URL",
+    "GOMAXPROCS",
+    "RAYON_NUM_THREADS",
+    "UV_THREADPOOL_SIZE",
+    "OPENBLAS_NUM_THREADS",
+    "OMP_NUM_THREADS"
   ],
   "tasks": {
     "build": {

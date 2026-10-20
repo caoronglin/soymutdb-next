@@ -1,8 +1,9 @@
-"""Capability contract for ClickHouse-backed endpoints (baseline mode).
+"""Capability contract for the legacy ClickHouse adapter (historical lane).
 
-ClickHouse is a *required capability* in extended deployments and an *absent
-capability* in baseline/disposable ones. When the projection is unreachable the
-API must report "capability unavailable" consistently:
+This module covers ``ClickHouseService``, which is no longer part of the
+runtime path (the API reads PostgreSQL natively) and is skipped whenever the
+historical driver is absent. When the legacy projection is unreachable the
+adapter must report "capability unavailable" consistently:
 
 - endpoints whose only data source is the projection return
   ``503 service_unavailable`` — never an unhandled ``500``;
@@ -19,6 +20,12 @@ from __future__ import annotations
 import json
 
 import pytest
+
+pytest.importorskip(
+    "clickhouse_connect.driver.exceptions",
+    reason="Historical driver adapter only; native PostgreSQL boundary tests are independent",
+)
+
 from clickhouse_connect.driver.exceptions import OperationalError
 
 from app.core.exceptions import ServiceUnavailableError

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from clickhouse_connect.driver.exceptions import ClickHouseError
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
@@ -15,7 +15,7 @@ from ..schemas.variant import (
     VariantListResponse,
     VariantResponse,
 )
-from .clickhouse_service import ClickHouseService
+from .postgres_variant_service import PostgresVariantService
 from .release_context import (
     ReleaseContext,
     decode_bound_cursor,
@@ -80,12 +80,11 @@ def decode_cursor(
 class VariantService:
     """High-level variant query service.
 
-    Combines ClickHouse (bulk variant facts) with PostgreSQL (relational
-    metadata) and implements cursor pagination.
+    Reads PostgreSQL facts and implements release-bound cursor pagination.
     """
 
-    def __init__(self, ch: ClickHouseService | None = None) -> None:
-        self.ch = ch or ClickHouseService()
+    def __init__(self, variant_service: PostgresVariantService | None = None) -> None:
+        self.variant_service = variant_service or PostgresVariantService()
 
     async def list_variants(
         self,
@@ -94,7 +93,12 @@ class VariantService:
         *,
         release_context: ReleaseContext,
     ) -> VariantListResponse:
-        """Return a cursor-paginated list of variants."""
+        """Return a cursor-paginated list of variants.
+
+        The caller's session is forwarded to the store, so the page is read
+        through the connection the request already holds. One request never
+        checks out a second pooled connection for the same read.
+        """
         cursor_key: tuple[int, int] | None = None
         if params.cursor:
             cursor_key = decode_cursor(
@@ -103,8 +107,10 @@ class VariantService:
                 params=params,
             )
 
-        rows = await self._ch_query(
-            self.ch.query_variants(
+        rows = await self._variant_query(
+            self._with_session(
+                db,
+                self.variant_service.query_variants,
                 params=params,
                 release_context=release_context,
                 limit=params.limit + 1,  # fetch one extra to detect has_more
@@ -141,9 +147,9 @@ class VariantService:
         *,
         release_context: ReleaseContext,
     ) -> VariantDetail:
-        """Fetch a single variant detail from ClickHouse."""
-        row = await self._ch_query(
-            self.ch.get_variant_by_id(
+        """Fetch one variant from the authoritative release-scoped store."""
+        row = await self._variant_query(
+            self.variant_service.get_variant_by_id(
                 variant_id,
                 release_context=release_context,
             )
@@ -154,6 +160,7 @@ class VariantService:
 
     async def get_variants_by_region(
         self,
+        db: AsyncSession,
         assembly: str,
         chromosome: str,
         start: int,
@@ -165,8 +172,10 @@ class VariantService:
         """Region query – ``assembly`` is required (never hardcoded)."""
         if not assembly:
             raise ValidationError("assembly parameter is required for region queries")
-        rows = await self._ch_query(
-            self.ch.query_variants_by_region(
+        rows = await self._variant_query(
+            self._with_session(
+                db,
+                self.variant_service.query_variants_by_region,
                 release_context=release_context,
                 assembly=assembly,
                 chromosome=chromosome,
@@ -184,8 +193,8 @@ class VariantService:
         release_context: ReleaseContext,
     ) -> int:
         """Return the total count of matching variants (best-effort)."""
-        return await self._ch_query(
-            self.ch.count_variants(
+        return await self._variant_query(
+            self.variant_service.count_variants(
                 params,
                 release_context=release_context,
             )
@@ -196,8 +205,22 @@ class VariantService:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    async def _ch_query(coro):
-        """Run a ClickHouse projection query with capability-aware failure.
+    def _with_session(db: AsyncSession | None, call, **kwargs):
+        """Invoke a store query, forwarding the caller's session.
+
+        The session is forwarded whenever the caller owns one: the store
+        then reads through the connection the request already holds instead
+        of checking out a second one. A caller without a session (a store
+        that manages its own) is called without the extra argument, so the
+        store's own session lifecycle stays in charge of that path.
+        """
+        if db is None:
+            return call(**kwargs)
+        return call(db=db, **kwargs)
+
+    @staticmethod
+    async def _variant_query(coro):
+        """Run a variant projection query with capability-aware failure.
 
         The analytics projection (H01) is a required capability in extended
         deployments but may be absent in baseline/disposable environments.
@@ -207,10 +230,8 @@ class VariantService:
         """
         try:
             return await coro
-        except ClickHouseError as exc:
-            raise ServiceUnavailableError(
-                "Variant analytics projection (ClickHouse) is unavailable"
-            ) from exc
+        except (SQLAlchemyError, OSError, TimeoutError) as exc:
+            raise ServiceUnavailableError("Variant data is unavailable") from exc
 
     @staticmethod
     def _row_to_response(row: dict[str, Any]) -> VariantResponse:

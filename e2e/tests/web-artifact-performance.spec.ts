@@ -66,7 +66,9 @@ test("built public Web artifact stays within initial asset budgets", async ({ pa
   // fetches are captured below for bytes and the browser rejects malformed
   // module responses during execution. Do not fail on duplicated preloads.
   expect(assets.size).toBeGreaterThan(0);
-  const artifactRoot = resolve(import.meta.dirname, "..", "..", "apps", "web", "dist");
+  // `build:sites` writes per-variant trees; the external tree is the production
+  // portal artifact (root base "/"), which the config serves at the origin root.
+  const artifactRoot = resolve(import.meta.dirname, "..", "..", "apps", "web", "dist", "external");
   // Read build output rather than the live DOM: module loading may append lazy
   // chunks after navigation, which are not initial HTML dependencies.
   const initialAssetPaths = [...readFileSync(resolve(artifactRoot, "index.html"), "utf8").matchAll(
@@ -150,7 +152,7 @@ test("built public Web artifact stays within initial asset budgets", async ({ pa
     metrics: report,
   };
   mkdirSync(dirname(reportPath), { recursive: true });
-  writeFileSync(reportPath, JSON.stringify(fullReport, null, 2) + "\\n", "utf8");
+  writeFileSync(reportPath, JSON.stringify(fullReport, null, 2) + "\n", "utf8");
 
   expect(report.resources.initialScriptTransferBytes).toBeLessThanOrEqual(LIMITS.initialScriptTransferBytes);
   expect(report.resources.initialStylesheetTransferBytes).toBeLessThanOrEqual(LIMITS.initialStylesheetTransferBytes);

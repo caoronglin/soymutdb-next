@@ -71,7 +71,7 @@ python3 scripts/check_site_artifact_isolation.py \
 
 **既定约束**
 
-- `VITE_CDN_ENABLED=false`：所有第三方库（Fontsource 字体、echarts、gsap 等）本地打包，CSP 才能保持 `script-src 'self'` 收紧。
+- 第三方库全部本地打包；生产 CSP 保持 `script-src 'self'` 收紧。CDN 构建开关（以及 echarts/gsap 的 CDN 变量）已随引擎退役删除，不要再引入外部脚本域。
 - 生产 build 的 `VITE_API_BASE_URL` 指向**独立的生产 API 域名**。
 - Preview build 的 `VITE_API_BASE_URL` **只能指向 staging API，禁止连生产**。
 - `tunnel-origin` 是 Compose 内部 origin；`cloudflare-tunnel` profile 只负责运行 Tunnel 链路。两者不是前端站点，也不替代 Pages。
@@ -123,7 +123,7 @@ Content-Security-Policy: <见下>
 
 > **meta CSP 与 header CSP 同时生效（取交集）**：门户的 `<meta>` CSP（`index.html` 与 SSG 模板 `base-template.ts`）已与 `_headers` 保持同一份文本。修改其中一处必须同步另一处；只改 header 而漏改 meta，`frame-src`/`connect-src` 会被 meta 的 `default-src 'self'` 截断，iframe 嵌入 jbrowse 将静默失败。
 >
-> 若未来重新启用 `VITE_CDN_ENABLED=true`，需同时在两处 `script-src` 中加入 CDN 域名。
+> 外部脚本域只会在显式引入新的第三方 CDN 时出现；那必须同时修改两处 `script-src` 并经安全评审，不能靠旧构建开关恢复。
 
 ### 2.4 SPA fallback（`_redirects`）
 
@@ -227,7 +227,6 @@ CLOUDFLARE_TUNNEL_HEALTH_URL=https://<API_PUBLIC_ORIGIN>/api/v1/health/live \
 | 变量 | 生产 build | Preview build | 说明 |
 | --- | --- | --- | --- |
 | `VITE_API_BASE_URL` | `https://api.example.com` ✅替换 | `https://api-staging.example.com`（**禁止生产**） | API 源；须在对应后端 `SOYMUTDB_CORS_ORIGINS` 白名单内 |
-| `VITE_CDN_ENABLED` | `false` | `false` | 保持 false，CSP 才能收紧 |
 | `VITE_JBROWSE_URL` | `https://jbrowse.example.com` ✅替换 | staging jbrowse origin | /browse 页 iframe 地址；须在门户 CSP `frame-src` 内 |
 | `VITE_CLOUDFLARE_ANALYTICS_TOKEN` | 可选，建议设置 | 可选（预览也可统计） | Cloudflare Web Analytics beacon token（见 §5.5） |
 

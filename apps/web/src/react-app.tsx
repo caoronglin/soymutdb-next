@@ -24,7 +24,7 @@ import {
   parseMotionPreference,
   resolveMotionDecision,
   type MotionPreference,
-} from "./lib/motion-policy";
+} from "@soymutdb/ui-react";
 
 const DesignSystemProvider = React.lazy(() =>
   import("./lib/design-system-provider").then(({ DesignSystemProvider }) => ({
@@ -98,20 +98,47 @@ function AppReadySignal() {
 
 export default function ReactApp() {
   React.useEffect(() => {
+    let disposed = false;
+    let disposePerf: (() => void) | undefined;
+    const onLoad = () => { if (!disposed) void registerServiceWorker(); };
     if (import.meta.env.PROD) {
-      window.addEventListener("load", () => void registerServiceWorker(), { once: true });
+      if (document.readyState === "complete") onLoad();
+      else window.addEventListener("load", onLoad, { once: true });
     }
 
     if (import.meta.env.PROD) {
       void import("./lib/perf")
         .then(({ initPerfMonitoring }) => {
-          initPerfMonitoring({
+          if (disposed) return;
+          disposePerf = initPerfMonitoring({
             endpoint: resolveAppUrl(import.meta.env.BASE_URL, "/track.gif"),
             sampleRate: 0.25,
           });
         })
         .catch(() => undefined);
     }
+
+    // B4 pageview producer. The dynamic import keeps it out of the non-PROD
+    // graph; the disposed flag drops a late-resolving import so a StrictMode
+    // unmount can never subscribe or send after teardown.
+    let disposePageview: (() => void) | undefined;
+    if (import.meta.env.PROD) {
+      void import("./lib/analytics")
+        .then(({ initPageviewTracking }) => {
+          if (disposed) return;
+          disposePageview = initPageviewTracking(router, {
+            endpoint: resolveAppUrl(import.meta.env.BASE_URL, "/track.gif"),
+          });
+        })
+        .catch(() => undefined);
+    }
+
+    return () => {
+      disposed = true;
+      window.removeEventListener("load", onLoad);
+      disposePerf?.();
+      disposePageview?.();
+    };
   }, []);
 
   return (

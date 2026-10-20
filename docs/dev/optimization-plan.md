@@ -6,7 +6,8 @@
 > 覆盖范围：前端（web/admin/jbrowse）、后端（api/worker/mcp）、共享包、CI/CD、Docker、Nginx
 
 > **2026-09-26 校正（历史文档）**：本文为迁移前（React 期）计划。`packages/i18n` 与 `packages/motion`
-> 已移除，三端现为 Vue 3；测试清单以当前 `packages/` 与各 `package.json` 为准。
+> 已移除。三端曾迁到 Vue 3，Vue 现已完全退役（`scripts/check-vue-retirement.mjs` 断言通过），
+> 当前为 React 19 + Umi Max 4；测试清单以当前 `packages/` 与各 `package.json` 为准。
 
 ---
 

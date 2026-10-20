@@ -33,7 +33,7 @@ from .core.exceptions import (
     validation_exception_handler,
 )
 from .core.metrics import get_metrics_app
-from .core.middleware import MetricsMiddleware, RequestIdMiddleware
+from .core.middleware import MetricsMiddleware, RateLimitMiddleware, RequestIdMiddleware
 from .core.outbox_dispatcher import start_dispatcher
 from .schemas.error import ErrorDetail, ErrorResponse, FieldError, ValidationErrorResponse
 
@@ -101,8 +101,10 @@ PAGINATION_CONTRACTS: dict[tuple[str, str], dict[str, str | bool]] = {
     },
 }
 
-# Only login has a registered fail-closed rate limiter today. Do not document
-# generic rate-limit headers until a limiter actually emits them at runtime.
+# Only login has a *documented* 429 operation.  The global request limiter
+# (see ``core/middleware.py``) can reject any request with the same error
+# envelope, but the OpenAPI contract is not extended here: the generated
+# client would have to be regenerated in the same change.
 RATE_LIMITED_OPERATIONS = {("/api/v1/auth/login", "post")}
 
 
@@ -240,8 +242,8 @@ def _build_openapi_schema(app: FastAPI) -> dict[str, Any]:
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Startup and shutdown lifecycle.
 
-    Database connections (PostgreSQL, ClickHouse, Redis) are lazily
-    initialised on first use; we only need to dispose them on shutdown.
+    Database connections (PostgreSQL, Redis) are lazily initialised on first
+    use; we only need to dispose them on shutdown.
     The transactional-outbox dispatcher runs as a background task and is
     cancelled on shutdown.
     """
@@ -302,6 +304,18 @@ def create_app() -> FastAPI:
     app.openapi = lambda: _build_openapi_schema(app)  # type: ignore[method-assign]
 
     # --- Middleware (order matters: outermost first) ---
+    # NOTE: ``add_middleware`` inserts at the head of the stack, so the LAST
+    # call is the OUTERMOST middleware.  The request rate limiter is added
+    # first and therefore runs innermost, directly in front of the router:
+    #   * ``MetricsMiddleware`` (outermost) still counts the requests the
+    #     limiter rejects, so the 429/503 volume stays visible in
+    #     Prometheus;
+    #   * ``RequestIdMiddleware`` still supplies the request id that the
+    #     error envelope echoes;
+    #   * ``SecurityHeadersMiddleware`` and ``CORSMiddleware`` still add
+    #     their headers to a rejected response, and preflight requests are
+    #     still answered by ``CORSMiddleware`` itself.
+    app.add_middleware(RateLimitMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -321,6 +335,18 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestIdMiddleware)
     # Outermost: records every request (incl. rejected ones) for Prometheus.
     app.add_middleware(MetricsMiddleware)
+
+    # The limiter may only be switched off outside production (production
+    # refuses to start with it disabled).  Make the state visible in the
+    # startup log so a disabled limiter is never a silent surprise.
+    logger.info(
+        "api.rate_limit",
+        env=settings.app_env,
+        enabled=settings.rate_limit_enabled,
+        benchmark_mode=settings.benchmark_mode,
+        public_read_per_minute=settings.public_read_rate_limit_per_minute,
+        write_per_minute=settings.write_rate_limit_per_minute,
+    )
 
     # --- Exception handlers ---
     app.add_exception_handler(SoyMutDBError, soy_mut_db_exception_handler)

@@ -21,10 +21,10 @@ interface AdminLayoutProps {
 export default function AdminLayout({ children }: AdminLayoutProps) {
   return (
     <AdminShell>
-      <div className="w-full min-w-0 space-y-6">
-        <AdminHeader />
+      {(toggleNavigation) => <div className="w-full min-w-0 space-y-6">
+        <AdminHeader onToggleSidebar={toggleNavigation} />
         <div className="w-full min-w-0 space-y-6">{children}</div>
-      </div>
+      </div>}
     </AdminShell>
   );
 }

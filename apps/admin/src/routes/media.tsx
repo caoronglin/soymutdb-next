@@ -36,6 +36,20 @@ const PAGE_SIZE = 24;
 const PURPOSE_OPTIONS = ["news", "editor", "about"] as const;
 type AssetStatus = "ready" | "archived";
 
+/**
+ * Readable fallback for each media purpose.
+ *
+ * The purpose filter is built from a dynamic i18n key
+ * (`admin.media.purposes.<value>`), so the call site must carry a default
+ * value: without one the dropdown showed the raw key
+ * (`admin.media.purposes.news`) instead of a label.
+ */
+const PURPOSE_LABELS: Record<(typeof PURPOSE_OPTIONS)[number], string> = {
+  news: "News",
+  editor: "Editor",
+  about: "About",
+};
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return bytes + " B";
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
@@ -194,7 +208,9 @@ export default function MediaPage() {
               placeholder={t("admin.media.filterPurpose")}
               options={PURPOSE_OPTIONS.map((value) => ({
                 value,
-                label: t("admin.media.purposes." + value),
+                label: t("admin.media.purposes." + value, {
+                  defaultValue: PURPOSE_LABELS[value],
+                }),
               }))}
               onChange={(value) => {
                 setPurpose(value);
@@ -303,11 +319,11 @@ export default function MediaPage() {
             </div>
             {total > PAGE_SIZE ? (
               <div className="flex justify-center">
-                <Button.Group>
+                <Space.Compact>
                   <Button disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>{t("admin.media.previous")}</Button>
                   <Button disabled>{page + " / " + Math.max(1, Math.ceil(total / PAGE_SIZE))}</Button>
                   <Button disabled={page >= Math.ceil(total / PAGE_SIZE)} onClick={() => setPage((value) => value + 1)}>{t("admin.media.next")}</Button>
-                </Button.Group>
+                </Space.Compact>
               </div>
             ) : null}
           </>

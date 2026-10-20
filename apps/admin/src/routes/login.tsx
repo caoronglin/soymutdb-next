@@ -147,8 +147,11 @@ export default function LoginPage() {
     >
       <div
         // Decorative: every word here is repeated in the form panel beside it,
-        // so a screen reader gains nothing from it.
+        // so a screen reader gains nothing from it. Hidden below the tablet
+        // breakpoint by `index.css` so the fixed-width form panel never forces a
+        // horizontal scrollbar on a phone.
         aria-hidden
+        className="admin-login-hero"
         style={{
           display: "flex",
           flexDirection: "column",
@@ -191,6 +194,7 @@ export default function LoginPage() {
       </div>
 
       <div
+        className="admin-login-panel"
         style={{
           display: "flex",
           flexDirection: "column",
@@ -239,6 +243,7 @@ export default function LoginPage() {
                 ]}
               >
                 <Input
+                  data-testid="admin-identifier"
                   prefix={<UserOutlined />}
                   autoComplete="username"
                   placeholder="admin"
@@ -274,6 +279,7 @@ export default function LoginPage() {
                 }
               >
                 <Input.Password
+                  data-testid="admin-password"
                   prefix={<LockOutlined />}
                   autoComplete="current-password"
                   placeholder="••••••••"
@@ -282,7 +288,14 @@ export default function LoginPage() {
               </Form.Item>
 
               <Form.Item style={{ marginBottom: 0 }}>
-                <Button block type="primary" size="large" htmlType="submit" loading={submitting}>
+                <Button
+                  block
+                  type="primary"
+                  size="large"
+                  htmlType="submit"
+                  loading={submitting}
+                  data-testid="admin-login-submit"
+                >
                   {submitting ? (
                     t("admin.login.signingIn", { defaultValue: "Signing in…" })
                   ) : (

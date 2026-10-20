@@ -14,13 +14,3 @@ export function resolveSiteVariant(value: unknown): SiteVariant {
 const configuredVariant = String(import.meta.env?.VITE_SITE_VARIANT ?? "external").trim();
 export const SITE_VARIANT = resolveSiteVariant(configuredVariant);
 export const IS_INTERNAL_SITE = SITE_VARIANT === "internal";
-
-export const SITE_VARIANT_LABELS: Record<SiteVariant, string> = {
-  external: "External site",
-  internal: "Internal site",
-};
-
-export const SITE_VARIANT_LABELS_ZH: Record<SiteVariant, string> = {
-  external: "外部站点",
-  internal: "内部站点",
-};

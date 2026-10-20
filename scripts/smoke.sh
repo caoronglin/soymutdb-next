@@ -110,6 +110,10 @@ smoke_contracts() {
     scripts/test_clickhouse_migration_contracts.py
     scripts/test_import_capability_contracts.py
     scripts/test_motion_policy.py
+    # The self-hosted CJK font subsets are committed assets: a new Chinese UI
+    # string, a dropped manifest or a full-font recommit must fail a gate, not
+    # silently undo the first-load payload reduction.
+    scripts/test_portal_font_subset.py
     scripts/test_site_artifact_isolation.py
     scripts/test_production_artifact_scan.py
     scripts/test_supply_chain_contracts.py
@@ -117,8 +121,17 @@ smoke_contracts() {
     scripts/test_development_compose_contract.py
     scripts/test_kubernetes_delivery_contracts.py
     scripts/test_backup_restore_contracts.py
+    scripts/test_native_backup_runtime.py
     scripts/test_ci_job_contracts.py
+    # The offline browser-gate inventory (scripts/test_artifact_e2e_gate.py)
+    # must fail a build when a gate is dropped from the sweep or the sweep stops
+    # failing closed.
+    scripts/test_artifact_e2e_gate.py
+    # The interpolation guard fails closed on the `conds` vs {{conditions}} class
+    # of bug; its self-test proves each synthetic negative case is caught.
+    scripts/test_i18n_interpolation_guard.py
     scripts/test_dockerfile_contracts.py
+    scripts/test_legacy_worker_test_contract.py
     scripts/test_custom_element_registration_contracts.py
     infra/clickhouse/test_schema_contract.py
   )

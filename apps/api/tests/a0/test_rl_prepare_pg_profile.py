@@ -120,7 +120,7 @@ def test_pgpass_escapes_colon_and_backslash_and_uses_restricted_modes(tmp_path: 
 
     assert os.stat(rl_runtime_root).st_mode & 0o777 == 0o700
     assert os.stat(rl_material.rl_passfile).st_mode & 0o777 == 0o600
-    assert rl_material.rl_passfile.read_text() == (
+    assert rl_material.rl_passfile.read_text(encoding="utf-8") == (
         "127.0.0.1:5432:synthetic_a0:a0_runner:p\\:a\\\\ssword\n"
     )
 

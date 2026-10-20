@@ -6,14 +6,13 @@ build-backend = "hatchling.build"
 name = "soymutdb-worker"
 version = "2.0.0"
 description = "SoyMutDB Celery worker — BLAST, export, ingestion, and statistics tasks"
-requires-python = ">=3.14"
+requires-python = ">=3.15"
 license = { text = "MIT" }
 dependencies = [
     "soymutdb-import-protocol==0.1.0",
     "soymutdb-jobs==0.1.0",
     "celery[redis]>=5.4.0",
     "redis>=5.2.0",
-    "clickhouse-connect>=0.8.0",
     "boto3>=1.35.0",
     "botocore>=1.35.0",
     "pydantic>=2.10.0",
@@ -53,12 +52,13 @@ soymutdb-jobs = { path = "../../packages/jobs-py" }
 dev = [
     "pytest>=8.0.0",
     "pytest-cov>=5.0.0",
+    # PostgreSQL integration runs the API-owned async Alembic migration chain.
+    "alembic>=1.14.0",
+    "asyncpg>=0.30.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "pydantic-settings>=2.6.0",
     "ruff>=0.8.0",
     "mypy>=1.13.0",
-    # Embedded ClickHouse engine used to give the import finalize/staging
-    # protocol REAL MergeTree/SummingMergeTree acceptance evidence without a
-    # server or Docker (verified in-process). Test-only.
-    "chdb>=4.0",
 ]
 # Optional desktop notification channel (D2): OS-native notifications via
 # plyer, gated at runtime by SOYMUTDB_DESKTOP_NOTIFY=true.  Not required for
@@ -66,6 +66,8 @@ dev = [
 notify = [
     "plyer>=2.1",
 ]
+# Historical ClickHouse migration uses its standalone Python 3.14 image;
+# native Python 3.15 backfill reads legacy facts over the standard-library HTTP client.
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/soymutdb_worker"]
@@ -74,14 +76,14 @@ packages = ["src/soymutdb_worker"]
 "src/soymutdb_worker" = "soymutdb_worker"
 
 [tool.ruff]
-target-version = "py314"
+target-version = "py315"
 line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP"]
 
 [tool.mypy]
-python_version = "3.14"
+python_version = "3.15"
 warn_return_any = true
 warn_unused_configs = true
 

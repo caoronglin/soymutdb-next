@@ -1,5 +1,5 @@
 import { WarningOutlined, SafetyOutlined } from "@ant-design/icons";
-import { type ReactNode, useCallback } from "react";
+import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../lib/cn";
 import { Button, Input, Modal, Typography } from "@/lib/antd";
@@ -22,6 +22,14 @@ interface ConfirmDialogProps {
   confirmPhrase?: string;
   /** Additional content rendered above the footer (e.g. details). */
   children?: ReactNode;
+  /**
+   * Failure reason of the confirmed action.
+   *
+   * A rejected write has to explain itself somewhere the operator is already
+   * looking — the dialog stays open after a failure, so the reason belongs
+   * inside it rather than in a transient toast that may be missed.
+   */
+  error?: ReactNode;
   /** Whether the confirm action is currently loading. */
   loading?: boolean;
 }
@@ -47,6 +55,7 @@ export function ConfirmDialog({
   severity = "default",
   confirmPhrase,
   children,
+  error,
   loading = false,
 }: ConfirmDialogProps) {
   const { t } = useTranslation();
@@ -55,22 +64,46 @@ export function ConfirmDialog({
   const confirmLabelText = confirmLabel ?? t("admin.confirm.confirm", { defaultValue: "Confirm" });
   const cancelLabelText = cancelLabel ?? t("admin.confirm.cancel", { defaultValue: "Cancel" });
 
-  const handleConfirm = useCallback(() => {
-    void onConfirm();
-  }, [onConfirm]);
+  const [confirmation, setConfirmation] = useState({ open, phrase: confirmPhrase, value: "" });
+  // Reset on reopen or when the required phrase changes, including dialogs
+  // that remain mounted after a successful mutation.
+  if (confirmation.open !== open || confirmation.phrase !== confirmPhrase) {
+    setConfirmation({ open, phrase: confirmPhrase, value: "" });
+  }
+  const phraseMatches = !confirmPhrase || (
+    confirmation.open === open && confirmation.phrase === confirmPhrase && confirmation.value === confirmPhrase
+  );
+  const handleConfirm = () => {
+    if (!loading && phraseMatches) void onConfirm();
+  };
+  const handleCancel = () => {
+    if (!loading) onOpenChange(false);
+  };
 
   return (
     <Modal
       open={open}
-      onCancel={() => onOpenChange(false)}
+      onCancel={handleCancel}
+      closable={!loading}
+      keyboard={!loading}
+      maskClosable={!loading}
       footer={[
-        <Button key="cancel" onClick={() => onOpenChange(false)} disabled={loading}>{cancelLabelText}</Button>,
-        <Button key="confirm" type="primary" danger={isDestructive} onClick={handleConfirm} disabled={loading} data-confirm-phrase={confirmPhrase}>{loading ? t("admin.confirm.working", { defaultValue: "Working…" }) : confirmLabelText}</Button>,
+        <Button key="cancel" onClick={handleCancel} disabled={loading}>{cancelLabelText}</Button>,
+        <Button key="confirm" type="primary" danger={isDestructive} onClick={handleConfirm} disabled={loading || !phraseMatches}>{loading ? t("admin.confirm.working", { defaultValue: "Working…" }) : confirmLabelText}</Button>,
       ]}
       title={<div className="flex items-start gap-3"><span className={cn("flex size-10 items-center justify-center rounded-full", isDestructive ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary")}>{isCritical ? <SafetyOutlined /> : <WarningOutlined />}</span><span><Typography.Title level={4}>{title}</Typography.Title><Typography.Text type="secondary">{description}</Typography.Text></span></div>}
     >
+      {error ? (
+        <div
+          role="alert"
+          aria-label={t("admin.confirm.errorLabel", { defaultValue: "Action failed" })}
+          className="mb-4 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+        >
+          {error}
+        </div>
+      ) : null}
       {children ? <div className="mb-4 text-sm">{children}</div> : null}
-      {confirmPhrase ? <ConfirmPhraseInput phrase={confirmPhrase} /> : null}
+      {confirmPhrase ? <ConfirmPhraseInput phrase={confirmPhrase} value={confirmation.value} disabled={loading} onChange={(value) => setConfirmation({ open, phrase: confirmPhrase, value })} /> : null}
     </Modal>
   );
 }
@@ -78,10 +111,10 @@ export function ConfirmDialog({
 /**
  * Phrase-confirmation input. Disables the confirm button until the user
  * types the exact required phrase (used for critical operations).
- * Uses a MutationObserver-free approach: the button's disabled state is
- * controlled via a data attribute and CSS.
+ * React owns the phrase and disabled state; direct DOM changes cannot bypass
+ * the pending-action safeguard.
  */
-function ConfirmPhraseInput({ phrase }: { phrase: string }) {
+function ConfirmPhraseInput({ phrase, value, disabled, onChange }: { phrase: string; value: string; disabled: boolean; onChange: (value: string) => void }) {
   const { t } = useTranslation();
   return (
     <div className="space-y-2">
@@ -95,17 +128,9 @@ function ConfirmPhraseInput({ phrase }: { phrase: string }) {
         autoComplete="off"
         spellCheck={false}
         placeholder={phrase}
-        onChange={(e) => {
-          const value = e.target.value;
-          // Walk up to find the confirm button and toggle its disabled state.
-          const dialog = e.currentTarget.closest('[role="dialog"]');
-          const btn = dialog?.querySelector<HTMLButtonElement>(
-            "[data-confirm-phrase]",
-          );
-          if (btn) {
-            btn.disabled = value !== phrase;
-          }
-        }}
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
       />
     </div>
   );

@@ -63,7 +63,17 @@ export const stableT = (
 export const mockTranslation = {
   useTranslation: () => ({
     t: stableT,
-    i18n: { language: "en", changeLanguage: async () => undefined },
+    i18n: {
+      language: "en",
+      changeLanguage: async () => undefined,
+      /**
+       * i18next's fixed-locale translator. A screen that persists one label
+       * per locale (`label_zh` / `label_en`) resolves both through this, so
+       * the double has to provide it or the component throws on the first
+       * render.
+       */
+      getFixedT: () => stableT,
+    },
     ready: true,
   }),
   Trans: ({ children }: { children?: unknown }) => children,

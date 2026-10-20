@@ -57,19 +57,6 @@ export interface InitPayload {
     sessionId?: string;
 }
 
-/** JBrowse -> Portal: current viewport changed. */
-export interface LocusChangePayload {
-    assembly: string;
-    locus: string;
-    /** Optional extension: active track IDs at the time of the change. */
-    tracks?: string[];
-}
-
-/** JBrowse -> Portal: initialisation failed. */
-export interface ErrorPayload {
-    message: string;
-}
-
 /**
  * Post an envelope to the embedding portal frame.
  * No-op when not embedded (top-level window).

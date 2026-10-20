@@ -86,7 +86,7 @@ export function detectLanguage(): SupportedLanguage {
  */
 export function buildBaseI18nOptions(lang: SupportedLanguage = DEFAULT_LANGUAGE) {
   return {
-    initImmediate: false,
+    initAsync: false,
     resources: {
       en: { translation: en, common: en },
       zh: { translation: zh, common: zh },

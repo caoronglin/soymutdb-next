@@ -214,10 +214,12 @@ async def create_dataset_version(
 ) -> DatasetVersionResponse:
     """Record immutable raw-object metadata before any editing begins."""
     _require_admin(current_user)
+    if payload.module_key is not None and get_schema(payload.module_key) is None:
+        raise NotFoundError(f"Unknown module schema '{payload.module_key}'")
     validate_import_shape(
         row_count=payload.row_count,
         column_count=payload.column_count,
-        module_key=None,
+        module_key=payload.module_key,
     )
     dataset = await db.get(DataSet, payload.dataset_id)
     if dataset is None:
@@ -478,6 +480,11 @@ async def validate_draft(
     _require_admin(current_user)
     row = await _load_draft_for_update(db, draft_id)
     _require_mutable_draft(row)
+    if payload.module_key is not None and payload.module_key != row.module_key:
+        raise ValidationError(
+            "Validation module key does not match the import draft",
+            details={"module_key": row.module_key},
+        )
     mappings = [item.model_dump(mode="python") for item in payload.field_mapping]
     validate_import_shape(
         row_count=payload.row_count,

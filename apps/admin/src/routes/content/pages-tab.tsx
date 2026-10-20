@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { http } from "@soymutdb/api-client";
-import { Alert, Badge, Button, Input, ProCard, Select, Typography } from "@/lib/antd";
+import { Skeleton, Alert, Badge, Button, Input, ProCard, Select, Typography } from "@/lib/antd";
 import { ConfirmDialog } from "../../components/confirm-dialog";
 import { DataTable, type DataTableColumn } from "../../components/data-table";
 import { contentKeys } from "./query-keys";
@@ -51,12 +51,18 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<StaticPage | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<StaticPage | null>(null);
+  const [publishTarget, setPublishTarget] = React.useState<{
+    page: StaticPage;
+    action: "publish" | "unpublish";
+  } | null>(null);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const [publishError, setPublishError] = React.useState<string | null>(null);
   const [versionsTarget, setVersionsTarget] = React.useState<StaticPage | null>(
     null,
   );
   const openedEditId = React.useRef<string | undefined>(undefined);
 
-  const { data, isLoading } = useQuery<PageListResponse>({
+  const { data, isLoading, isError, isFetching } = useQuery<PageListResponse>({
     queryKey: contentKeys.pages({ page, status: statusFilter, category: categoryFilter }),
     queryFn: () =>
       http.get<PageListResponse>("/admin/content/pages", {
@@ -67,7 +73,6 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
           category: categoryFilter || undefined,
         },
       }),
-    placeholderData: { items: [], total: 0 },
   });
   const requestedEditQuery = useQuery<StaticPage>({
     queryKey: ["admin", "content-page", search.edit],
@@ -105,6 +110,12 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: contentKeys.all });
       setDeleteTarget(null);
+      setDeleteError(null);
+    },
+    onError: (error) => {
+      // The dialog stays open on a rejected delete and explains the refusal
+      // inside it; a silent failure looked exactly like a successful delete.
+      setDeleteError(error instanceof Error ? error.message : String(error));
     },
   });
 
@@ -113,6 +124,11 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
       http.post(`/admin/content/pages/${id}/publish`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: contentKeys.all });
+      setPublishTarget(null);
+      setPublishError(null);
+    },
+    onError: (error) => {
+      setPublishError(error instanceof Error ? error.message : String(error));
     },
   });
 
@@ -121,6 +137,11 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
       http.post(`/admin/content/pages/${id}/unpublish`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: contentKeys.all });
+      setPublishTarget(null);
+      setPublishError(null);
+    },
+    onError: (error) => {
+      setPublishError(error instanceof Error ? error.message : String(error));
     },
   });
 
@@ -194,6 +215,9 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
   const formLoading = createMutation.isPending || updateMutation.isPending;
   const formError = editing ? updateMutation.error : createMutation.error;
   const totalCount = data?.total ?? 0;
+  // Browser-gate contract for GET /admin/content/pages: "loading" while the
+  // request is in flight, then "ready" (rows or the empty state) or "error".
+  const pageListState = isError ? "error" : isFetching ? "loading" : "ready";
 
   const columns: DataTableColumn<StaticPage>[] = [
     {
@@ -269,7 +293,10 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
               type="text"
               size="small"
               className="size-8 p-0"
-              onClick={() => unpublishMutation.mutate(p.id)}
+              onClick={() => {
+                setPublishError(null);
+                setPublishTarget({ page: p, action: "unpublish" });
+              }}
               title={t("admin.content.unpublish", { defaultValue: "Unpublish" })}
               aria-label={t("admin.content.unpublishPage", { defaultValue: "Unpublish page" })}
               disabled={unpublishMutation.isPending}
@@ -281,7 +308,10 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
               type="text"
               size="small"
               className="size-8 p-0"
-              onClick={() => publishMutation.mutate(p.id)}
+              onClick={() => {
+                setPublishError(null);
+                setPublishTarget({ page: p, action: "publish" });
+              }}
               title={t("admin.content.publish", { defaultValue: "Publish" })}
               aria-label={t("admin.content.publishPage", { defaultValue: "Publish page" })}
               disabled={publishMutation.isPending}
@@ -364,20 +394,20 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
           <Select
+            data-testid="pages-status-filter"
             value={statusFilter}
             onChange={(v) => {
               updateSearch({ ...search, status: v as typeof search.status, page: 1 });
             }}
-          >
-
-
-              <Select.Option value="all">{t("admin.content.statusAll", { defaultValue: "All Statuses" })}</Select.Option>
-              <Select.Option value="draft">{t("admin.content.statusDraft", { defaultValue: "Draft" })}</Select.Option>
-              <Select.Option value="published">{t("admin.content.statusPublished", { defaultValue: "Published" })}</Select.Option>
-              <Select.Option value="archived">{t("admin.content.statusArchived", { defaultValue: "Archived" })}</Select.Option>
-
-          </Select>
+            options={[
+              { value: "all", label: t("admin.content.statusAll", { defaultValue: "All Statuses" }) },
+              { value: "draft", label: t("admin.content.statusDraft", { defaultValue: "Draft" }) },
+              { value: "published", label: t("admin.content.statusPublished", { defaultValue: "Published" }) },
+              { value: "archived", label: t("admin.content.statusArchived", { defaultValue: "Archived" }) },
+            ]}
+          />
           <Input
+            data-testid="pages-category-filter"
             placeholder={t("admin.content.filterCategoryPlaceholder", { defaultValue: "Filter by category..." })}
             value={categoryFilter}
             onChange={(e) => {
@@ -386,27 +416,40 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
             className="h-9 max-w-xs"
           />
           <Badge color="secondary">
-            {t("admin.content.pageCount", { defaultValue: totalCount === 1 ? "{{count}} page" : "{{count}} pages", count: totalCount })}
+            {isError || !data ? "—" : t("admin.content.pageCount", { defaultValue: totalCount === 1 ? "{{count}} page" : "{{count}} pages", count: totalCount })}
           </Badge>
         </div>
-        <Button onClick={openCreate}>
+        <Button data-testid="pages-new" onClick={openCreate}>
           <PlusOutlined className="size-4" />
           {t("admin.content.newPage", { defaultValue: "New Page" })}
         </Button>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={pages}
-        rowKey={(p) => p.id}
-        loading={isLoading}
-        page={page}
-        pageSize={20}
-        total={totalCount}
-        onPageChange={setPage}
-        emptyTitle={t("admin.content.noPagesFound", { defaultValue: "No pages found" })}
-        emptyDescription={t("admin.content.noPagesFoundDesc", { defaultValue: "Create a new static page to get started." })}
-      />
+      <div data-testid="pages-table" data-state={pageListState}>
+      {isError ? (
+        /* A failed list request is not an empty page list. */
+        <div
+          role="alert"
+          data-testid="content-pages-load-error"
+          className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+        >
+          {t("admin.content.loadError", { defaultValue: "The static pages could not be loaded." })}
+        </div>
+      ) : isLoading ? <Skeleton active /> : (
+        <DataTable
+          columns={columns}
+          data={pages}
+          rowKey={(p) => p.id}
+          loading={isLoading}
+          page={page}
+          pageSize={20}
+          total={totalCount}
+          onPageChange={setPage}
+          emptyTitle={t("admin.content.noPagesFound", { defaultValue: "No pages found" })}
+          emptyDescription={t("admin.content.noPagesFoundDesc", { defaultValue: "Create a new static page to get started." })}
+        />
+      )}
+      </div>
 
       {/* Create / Edit form */}
       <PageFormDialog
@@ -429,13 +472,83 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
       {deleteTarget && (
         <ConfirmDialog
           open={Boolean(deleteTarget)}
-          onOpenChange={(open) => !open && setDeleteTarget(null)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setDeleteTarget(null);
+              setDeleteError(null);
+            }
+          }}
           title={t("admin.content.deletePageTitle", { defaultValue: "Delete Page" })}
           description={t("admin.content.deletePageConfirm", { defaultValue: 'Are you sure you want to delete "{{title}}"? This action cannot be undone.', title: deleteTarget.title_en })}
           confirmLabel={t("admin.content.delete", { defaultValue: "Delete" })}
           severity="destructive"
           onConfirm={() => deleteMutation.mutate(deleteTarget.id)}
           loading={deleteMutation.isPending}
+          error={deleteError ? (
+            <span data-testid="content-delete-error">
+              {t("admin.content.deleteFailed", { defaultValue: "The page could not be deleted." })}
+              {" "}
+              {t("common.errorReason", {
+                reason: deleteError,
+                defaultValue: "Server response: {{reason}}",
+              })}
+            </span>
+          ) : null}
+        />
+      )}
+
+      {/* Publish / unpublish confirmation */}
+      {publishTarget && (
+        <ConfirmDialog
+          open={Boolean(publishTarget)}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPublishTarget(null);
+              setPublishError(null);
+            }
+          }}
+          title={
+            publishTarget.action === "publish"
+              ? t("admin.content.publishTitle", { defaultValue: "Publish page" })
+              : t("admin.content.unpublishTitle", { defaultValue: "Unpublish page" })
+          }
+          description={
+            publishTarget.action === "publish"
+              ? t("admin.content.publishConfirm", {
+                  defaultValue: 'Publish "{{title}}"? It becomes visible on the public site.',
+                  title: publishTarget.page.title_en,
+                })
+              : t("admin.content.unpublishConfirm", {
+                  defaultValue: 'Unpublish "{{title}}"? It disappears from the public site.',
+                  title: publishTarget.page.title_en,
+                })
+          }
+          confirmLabel={
+            publishTarget.action === "publish"
+              ? t("admin.content.publish", { defaultValue: "Publish" })
+              : t("admin.content.unpublish", { defaultValue: "Unpublish" })
+          }
+          severity={publishTarget.action === "unpublish" ? "destructive" : "default"}
+          onConfirm={() => {
+            if (publishTarget.action === "publish") {
+              publishMutation.mutate(publishTarget.page.id);
+            } else {
+              unpublishMutation.mutate(publishTarget.page.id);
+            }
+          }}
+          loading={publishMutation.isPending || unpublishMutation.isPending}
+          error={publishError ? (
+            <span data-testid="content-publish-error">
+              {publishTarget.action === "publish"
+                ? t("admin.content.publishFailed", { defaultValue: "The page could not be published." })
+                : t("admin.content.unpublishFailed", { defaultValue: "The page could not be unpublished." })}
+              {" "}
+              {t("common.errorReason", {
+                reason: publishError,
+                defaultValue: "Server response: {{reason}}",
+              })}
+            </span>
+          ) : null}
         />
       )}
 

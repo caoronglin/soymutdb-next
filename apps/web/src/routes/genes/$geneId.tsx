@@ -42,6 +42,7 @@ import {
 import { GeneGenomeView } from "../../components/gene-genome-view";
 import { GeneSeedRequestEntry } from "../../components/gene-seed-request-entry";
 import { FadeUp, ScaleIn } from "../../components/route-motion";
+import { isGeneDetailRecord } from "../../lib/api-contract-guards";
 import { buildJbrowseLocusUrl } from "../../lib/deployment";
 import { formatPosition } from "../../lib/format";
 import { queryKeys } from "../../lib/query-keys";
@@ -95,7 +96,9 @@ function GeneDetailComponent() {
     enabled: !!geneId,
   });
 
-  const gene = geneQuery.data;
+  // A 200 response of the wrong shape (e.g. the search-list envelope) must render
+  // the empty state, not crash the genome view on undefined coordinates.
+  const gene = isGeneDetailRecord(geneQuery.data) ? geneQuery.data : undefined;
 
   // Local-only unpublished test-data preview. The operator asked for these
   // columns (line / mutation-site key / chromosome / position / confidence /
@@ -113,7 +116,7 @@ function GeneDetailComponent() {
     enabled: Boolean(gene?.gene_id),
     retry: false,
   });
-  const mutationSites = mutationSitesQuery.data ?? [];
+  const mutationSites = React.useMemo(() => mutationSitesQuery.data ?? [], [mutationSitesQuery.data]);
   /** Gates the seed-request entry: no obtainable material, no entry. */
   const availableSiteCount = React.useMemo(
     () => mutationSites.filter((site) => site.available).length,
@@ -254,7 +257,7 @@ function GeneDetailComponent() {
   ];
 
   return (
-    <div className="container-prose section-rhythm">
+    <div className="container-prose section-rhythm" data-testid="gene-detail">
       <Link
         to="/genes"
         search={{
@@ -289,10 +292,19 @@ function GeneDetailComponent() {
                 <div className="flex items-center gap-2">
                   <Tag className="m-0 font-mono text-[10px] uppercase">{gene.biotype}</Tag>
                   <Tag className="m-0 font-mono text-[10px]">{gene.chromosome}</Tag>
+                  <Tag data-testid="gene-assembly" className="m-0 font-mono text-[10px]" color="blue">
+                    {gene.assembly_name ?? selectedAssembly?.name ?? assembly ?? "—"}
+                  </Tag>
                 </div>
-                <h1 className="mt-3 font-mono text-3xl font-semibold tracking-tight">
+                <h1 data-testid="gene-id" className="mt-3 font-mono text-3xl font-semibold tracking-tight">
                   {gene.gene_id}
                 </h1>
+                <p
+                  data-testid="gene-coords"
+                  className="mt-1 font-mono text-sm text-muted-foreground"
+                >
+                  {gene.chromosome}:{gene.start_pos}..{gene.end_pos}
+                </p>
                 {gene.symbol ? (
                   <p className="mt-1 font-display text-xl text-muted-foreground">
                     {gene.symbol}
@@ -305,6 +317,7 @@ function GeneDetailComponent() {
                 ) : null}
               </div>
               <Button
+                data-testid="gene-jbrowse"
                 href={jbrowseHref}
                 disabled={!jbrowseHref}
                 icon={<Microscope className="size-4" aria-hidden />}

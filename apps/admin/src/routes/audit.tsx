@@ -1,6 +1,6 @@
-import { SnippetsOutlined, DownloadOutlined, FilterOutlined, GlobalOutlined, RiseOutlined, TeamOutlined, DesktopOutlined, FileTextOutlined } from "@ant-design/icons";
+import { SnippetsOutlined, DownloadOutlined, FilterOutlined, GlobalOutlined, RiseOutlined, TeamOutlined, DesktopOutlined, FileTextOutlined, WarningOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
-import { Badge, Button, Input, PageContainer, ProCard, ProTable, Select, Typography, type ProColumns } from "@/lib/antd";
+import { Skeleton, App, Badge, Button, Input, PageContainer, ProCard, ProTable, Select, Typography, type ProColumns } from "@/lib/antd";
 import { StatCard } from "../components/stat-card";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -79,6 +79,7 @@ function downloadBlob(content: BlobPart, filename: string, mimeType: string): vo
 
 export default function AuditPage() {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
@@ -87,6 +88,7 @@ export default function AuditPage() {
   const [endDate, setEndDate] = useState("");
   const [period, setPeriod] = useState<StatsPeriod>("week");
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const filterParams = useMemo(
     () =>
       buildAuditLogFilterParams({
@@ -99,7 +101,7 @@ export default function AuditPage() {
     [search, actionFilter, ipFilter, startDate, endDate],
   );
 
-  const { data, isLoading } = useQuery<{ items: AuditLog[]; total: number }>({
+  const { data, isLoading, isError: logsFailed, refetch: refetchLogs } = useQuery<{ items: AuditLog[]; total: number }>({
     queryKey: ["admin-audit", page, search, actionFilter, ipFilter, startDate, endDate],
     queryFn: () =>
       http.get("/admin/audit-logs", {
@@ -109,10 +111,14 @@ export default function AuditPage() {
           ...filterParams,
         },
       }),
-    placeholderData: { items: [], total: 0 },
   });
 
-  const { data: stats, isLoading: statsLoading } = useQuery<AuditStats>({
+  const {
+    data: stats,
+    isLoading: statsLoading,
+    isError: statsFailed,
+    refetch: refetchStats,
+  } = useQuery<AuditStats>({
     queryKey: ["admin-audit-stats", period],
     queryFn: () =>
       http.get<AuditStats>("/admin/audit-logs/stats", { params: { period } }),
@@ -176,6 +182,7 @@ export default function AuditPage() {
 
   const handleExportCsv = async () => {
     setExporting(true);
+    setExportError(null);
     try {
       // Let the API stream the complete result in bounded batches instead of
       // materialising an arbitrary 10,000-row JSON response in the browser.
@@ -183,6 +190,14 @@ export default function AuditPage() {
         params: filterParams,
       });
       downloadBlob(blob, "audit-logs.csv", "text/csv");
+    } catch (error) {
+      // Without this the rejection escaped as an unhandled promise and the
+      // operator only saw the button return to its idle state.
+      const reason = error instanceof Error ? error.message : String(error);
+      setExportError(reason);
+      message.error(
+        t("admin.audit.exportFailed", { defaultValue: "The CSV export failed." }),
+      );
     } finally {
       setExporting(false);
     }
@@ -276,29 +291,47 @@ export default function AuditPage() {
           </span>
         </div>
 
-        {/* Statistics summary cards */}
+        {/* Statistics summary cards. A failed statistics request must not be
+            rendered as a set of zeros: "0 logins" reads as a fact about the
+            deployment, so an unknown value is shown as a dash instead. */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label={t("admin.audit.totalLogins", { defaultValue: "Total Logins" })}
-            value={formatNumber(stats?.totalLogins ?? 0)}
+            value={statsFailed || !stats ? "—" : formatNumber(stats?.totalLogins ?? 0)}
             icon={<SnippetsOutlined className="size-5" />}
           />
           <StatCard
             label={t("admin.audit.totalActions", { defaultValue: "Total Actions" })}
-            value={formatNumber(stats?.totalActions ?? 0)}
+            value={statsFailed || !stats ? "—" : formatNumber(stats?.totalActions ?? 0)}
             icon={<RiseOutlined className="size-5" />}
           />
           <StatCard
             label={t("admin.audit.uniqueIps", { defaultValue: "Unique IPs" })}
-            value={formatNumber(stats?.uniqueIps ?? 0)}
+            value={statsFailed || !stats ? "—" : formatNumber(stats?.uniqueIps ?? 0)}
             icon={<GlobalOutlined className="size-5" />}
           />
           <StatCard
             label={t("admin.audit.activeUsers", { defaultValue: "Active Users" })}
-            value={typeof activeUsers === "number" ? formatNumber(activeUsers) : activeUsers}
+            value={logsFailed || !data ? "—" : formatNumber(activeUsers)}
             icon={<TeamOutlined className="size-5" />}
           />
         </div>
+
+        {statsFailed ? (
+          <div
+            role="alert"
+            data-testid="audit-stats-error"
+            className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+          >
+            <WarningOutlined className="size-4" />
+            <span className="flex-1">
+              {t("admin.audit.statsLoadError", { defaultValue: "Audit statistics could not be loaded." })}
+            </span>
+            <Button size="small" onClick={() => void refetchStats()}>
+              {t("common.retry", { defaultValue: "Retry" })}
+            </Button>
+          </div>
+        ) : null}
 
         {/* IP distribution + period selector */}
         <div className="grid gap-4 lg:grid-cols-3">
@@ -313,18 +346,28 @@ export default function AuditPage() {
               </Badge>
             </div>
             <div>
-              <ProTable<AuditStats["ipDistribution"][number]>
-                {...PRO_LIST_SHELL}
-                rowKey="ip"
-                size="small"
-                columns={ipColumns}
-                dataSource={topIps}
-                loading={statsLoading}
-                pagination={false}
-                locale={{
-                  emptyText: t("admin.audit.noIpData", { defaultValue: "No IP distribution data for this period." }),
-                }}
-              />
+              {statsFailed ? (
+                <p
+                  role="alert"
+                  data-testid="audit-ip-distribution-error"
+                  className="text-sm text-destructive"
+                >
+                  {t("admin.audit.statsLoadError", { defaultValue: "Audit statistics could not be loaded." })}
+                </p>
+              ) : statsLoading ? <Skeleton active /> : (
+                <ProTable<AuditStats["ipDistribution"][number]>
+                  {...PRO_LIST_SHELL}
+                  rowKey="ip"
+                  size="small"
+                  columns={ipColumns}
+                  dataSource={topIps}
+                  loading={statsLoading}
+                  pagination={false}
+                  locale={{
+                    emptyText: t("admin.audit.noIpData", { defaultValue: "No IP distribution data for this period." }),
+                  }}
+                />
+              )}
             </div>
           </ProCard>
 
@@ -340,14 +383,15 @@ export default function AuditPage() {
               <p className="mb-3 text-sm text-muted-foreground">
                 {t("admin.audit.statsPeriodDesc", { defaultValue: "Control the aggregation window for the summary cards and IP distribution." })}
               </p>
-              <Select value={period} onChange={(v) => setPeriod(v as StatsPeriod)}>
-
-
-                  <Select.Option value="day">{t("admin.audit.periodDay", { defaultValue: "Day" })}</Select.Option>
-                  <Select.Option value="week">{t("admin.audit.periodWeek", { defaultValue: "Week" })}</Select.Option>
-                  <Select.Option value="month">{t("admin.audit.periodMonth", { defaultValue: "Month" })}</Select.Option>
-
-              </Select>
+              <Select
+                value={period}
+                onChange={(v) => setPeriod(v as StatsPeriod)}
+                options={[
+                  { value: "day", label: t("admin.audit.periodDay", { defaultValue: "Day" }) },
+                  { value: "week", label: t("admin.audit.periodWeek", { defaultValue: "Week" }) },
+                  { value: "month", label: t("admin.audit.periodMonth", { defaultValue: "Month" }) },
+                ]}
+              />
             </div>
           </ProCard>
         </div>
@@ -363,19 +407,20 @@ export default function AuditPage() {
               className="h-9 w-72 pl-8"
             />
           </div>
-          <Select value={actionFilter} onChange={setActionFilter}>
-
-
-              <Select.Option value="all">{t("admin.audit.actionAll", { defaultValue: "All Actions" })}</Select.Option>
-              <Select.Option value="create">{t("admin.audit.actionCreate", { defaultValue: "Create" })}</Select.Option>
-              <Select.Option value="update">{t("admin.audit.actionUpdate", { defaultValue: "Update" })}</Select.Option>
-              <Select.Option value="delete">{t("admin.audit.actionDelete", { defaultValue: "Delete" })}</Select.Option>
-              <Select.Option value="login">{t("admin.audit.actionLogin", { defaultValue: "Login" })}</Select.Option>
-              <Select.Option value="logout">{t("admin.audit.actionLogout", { defaultValue: "Logout" })}</Select.Option>
-              <Select.Option value="export">{t("admin.audit.actionExport", { defaultValue: "Export" })}</Select.Option>
-              <Select.Option value="role_change">{t("admin.audit.actionRoleChange", { defaultValue: "Role Change" })}</Select.Option>
-
-          </Select>
+          <Select
+            value={actionFilter}
+            onChange={setActionFilter}
+            options={[
+              { value: "all", label: t("admin.audit.actionAll", { defaultValue: "All Actions" }) },
+              { value: "create", label: t("admin.audit.actionCreate", { defaultValue: "Create" }) },
+              { value: "update", label: t("admin.audit.actionUpdate", { defaultValue: "Update" }) },
+              { value: "delete", label: t("admin.audit.actionDelete", { defaultValue: "Delete" }) },
+              { value: "login", label: t("admin.audit.actionLogin", { defaultValue: "Login" }) },
+              { value: "logout", label: t("admin.audit.actionLogout", { defaultValue: "Logout" }) },
+              { value: "export", label: t("admin.audit.actionExport", { defaultValue: "Export" }) },
+              { value: "role_change", label: t("admin.audit.actionRoleChange", { defaultValue: "Role Change" }) },
+            ]}
+          />
           <div className="relative">
             <GlobalOutlined className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -403,22 +448,64 @@ export default function AuditPage() {
             />
           </div>
           <Badge color="default">
-            {t("admin.audit.recordsCount", { count: data?.total ?? 0, defaultValue: "{{count}} records" })}
+            {logsFailed || !data
+              ? "—"
+              : t("admin.audit.recordsCount", { count: data?.total ?? 0, defaultValue: "{{count}} records" })}
           </Badge>
         </div>
 
-        <DataTable
-          columns={columns}
-          data={logs}
-          rowKey={(l) => l.id}
-          loading={isLoading}
-          page={page}
-          pageSize={50}
-          total={data?.total ?? 0}
-          onPageChange={setPage}
-          emptyTitle={t("admin.audit.emptyTitle", { defaultValue: "No audit records" })}
-          emptyDescription={t("admin.audit.emptyDescription", { defaultValue: "Audit log entries will appear here as actions are performed." })}
-        />
+        {exportError ? (
+          <div
+            role="alert"
+            data-testid="audit-export-error"
+            className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+          >
+            <p>
+              {t("admin.audit.exportFailed", { defaultValue: "The CSV export failed." })}
+            </p>
+            <p className="mt-1 text-xs">
+              {t("common.errorReason", {
+                reason: exportError,
+                defaultValue: "Server response: {{reason}}",
+              })}
+            </p>
+          </div>
+        ) : null}
+
+        {logsFailed ? (
+          /* A failed request is not an empty log. The compliance screen must
+             never claim that nothing happened because the transport failed. */
+          <div
+            role="alert"
+            data-testid="audit-load-error"
+            className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive"
+          >
+            <p className="font-medium">
+              {t("admin.audit.loadError", { defaultValue: "The audit log could not be loaded." })}
+            </p>
+            <p className="mt-1">
+              {t("admin.audit.loadErrorDesc", {
+                defaultValue: "The request failed, so the records below are unknown rather than empty. Retry to load them.",
+              })}
+            </p>
+            <Button className="mt-3" size="small" onClick={() => void refetchLogs()}>
+              {t("common.retry", { defaultValue: "Retry" })}
+            </Button>
+          </div>
+        ) : isLoading ? <Skeleton active /> : (
+          <DataTable
+            columns={columns}
+            data={logs}
+            rowKey={(l) => l.id}
+            loading={isLoading}
+            page={page}
+            pageSize={50}
+            total={data?.total ?? 0}
+            onPageChange={setPage}
+            emptyTitle={t("admin.audit.emptyTitle", { defaultValue: "No audit records" })}
+            emptyDescription={t("admin.audit.emptyDescription", { defaultValue: "Audit log entries will appear here as actions are performed." })}
+          />
+        )}
       </div>
     </PageContainer>
   );

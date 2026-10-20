@@ -93,7 +93,7 @@ class TestPhaseOneDeploymentBoundary:
 
     def test_compose_injects_password_protected_shared_redis_and_healthcheck(self):
         compose = Path(__file__).parents[3] / "docker-compose.yml"
-        text = compose.read_text()
+        text = compose.read_text(encoding="utf-8")
         mcp_block = re.search(r"(?ms)^  mcp-server:\n(.*?)(?=^  \S|\Z)", text)
         assert mcp_block, "mcp-server service must exist"
         block = mcp_block.group(1)
@@ -105,7 +105,7 @@ class TestPhaseOneDeploymentBoundary:
 
     def test_nginx_mcp_boundary_requires_bearer_without_affecting_health(self):
         config = Path(__file__).parents[3] / "infra/nginx/conf.d/default.conf"
-        text = config.read_text()
+        text = config.read_text(encoding="utf-8")
         slash = text[text.index("location = /mcp/ {"):text.index("location = /mcp {")]
         assert "if ($http_authorization = \"\")" in slash
         assert "return 308 /mcp;" in slash

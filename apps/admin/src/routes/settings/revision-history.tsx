@@ -47,9 +47,12 @@ export function SettingsRevisionHistory({ sections }: { sections: SettingsHistor
         </div>
         <label className="block space-y-1.5">
           <span className="text-sm font-medium">{t("admin.settings.revision.section", { defaultValue: "Section" })}</span>
-          <Select value={section} onChange={setSection} className="w-full">
-            {sections.map((item) => <Select.Option key={item.id} value={item.id}>{item.label}</Select.Option>)}
-          </Select>
+          <Select
+            value={section}
+            onChange={setSection}
+            className="w-full"
+            options={sections.map((item) => ({ value: item.id, label: item.label }))}
+          />
         </label>
         {historyQuery.isLoading ? <p role="status">{t("admin.settings.revision.loading", { defaultValue: "Loading revision history…" })}</p> : null}
         {historyQuery.isError ? <p role="alert" className="text-destructive">{t("admin.settings.revision.loadError", { defaultValue: "Unable to load revision history." })}</p> : null}

@@ -6,29 +6,23 @@
     "**/generated/**",
     "**/node_modules/**",
     "**/playwright-report*/**",
-    "**/test-results*/**"
+    "**/test-results*/**",
+    "packages/charts/src/g2-runtime.ts"
   ],
   "exclude": [
-    "files",
-    "exports",
-    "types",
     "unlisted",
     "binaries"
   ],
   "ignoreExportsUsedInFile": true,
   "ignoreBinaries": [
-    "python3",
-    "playwright"
+    "python3"
   ],
   "ignoreDependencies": [
-    "@soymutdb/shared",
     "@testing-library/jest-dom",
     "@types/react-dom",
-    "ansi-regex",
     "autoprefixer",
     "openapi-typescript",
     "postcss",
-    "postcss-load-config",
     "react-dom",
     "tailwindcss",
     "vite"
@@ -44,7 +38,10 @@
         "scripts/dev/local-preview-server.mjs",
         "tests/load/api-load.js",
         "tests/load/smoke.js",
-        "tests/load/variant-stress.js"
+        "tests/load/variant-stress.js",
+        "scripts/scan-ant-design.mjs",
+        "scripts/webpack/chart-closure-plugin.cjs",
+        "scripts/webpack/chart-split-groups.ts"
       ]
     },
     "e2e": {
@@ -79,7 +76,6 @@
         "config/plugins/defer-html-scripts.cjs",
         "src/umi-entry.tsx",
         "src/routes/**/*.tsx",
-        "src/test/setup.ts",
         "src/test/vitest-env.d.ts"
       ]
     },

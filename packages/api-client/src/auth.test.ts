@@ -382,8 +382,8 @@ describe("auth coordination", () => {
     expect(ss["soymutdb_token"]).toBeUndefined();
     expect(ss["soymutdb_refresh_token"]).toBeUndefined();
 
-    delete (globalThis as any).localStorage;
-    delete (globalThis as any).sessionStorage;
+    delete (globalThis as { localStorage?: unknown }).localStorage;
+    delete (globalThis as { sessionStorage?: unknown }).sessionStorage;
   });
 
   it("setAuthTokens stores in memory only (never persisted)", () => {
@@ -416,7 +416,7 @@ describe("auth coordination", () => {
     expect(getAccessToken()).toBeNull();
     expect(Object.keys(ls)).toHaveLength(0);
 
-    delete (globalThis as any).localStorage;
+    delete (globalThis as { localStorage?: unknown }).localStorage;
   });
 
   it("refreshAccessToken returns false on network failure", async () => {
