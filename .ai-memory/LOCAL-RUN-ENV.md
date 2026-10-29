@@ -362,3 +362,48 @@ Python 3.15 已完成 API / Worker / MCP 本机运行验证；默认 Worker 不�
 `apps/admin` 的 `vitest` 配置用 `pool: "forks"`（CI 正确）。当沙箱同时有其它重任务时，forks worker 可能 spawn 失败：
 `Error: [vitest-pool]: Worker forks emitted error` + `EAGAIN ... spawn node`，此时测试文件可能已全部通过（例如 16/16 files、119 tests）才报错。
 workaround（仅本机）：`pnpm exec vitest run --pool=threads --maxWorkers=1`，本轮 23 files / 172 tests 全绿；不要为此改提交里的 vitest 配置。
+
+## webpack 压缩器线程数与本机 256 核（2026-10-29 补充）
+
+**症状**：本机 `apps/jbrowse`（以及 admin / web 站点构建）打包失败，日志里是
+
+```
+runtime: failed to create new OS thread (have 4 already; errno=11)
+fatal error: newosproc
+...
+ERROR in assets/xxxx.js
+assets/xxxx.js from Terser plugin
+EAGAIN
+Error: EAGAIN
+    at new Worker (node:internal/worker:380:19)
+    at ExperimentalWorker.initialize (.../jest-worker/build/workers/NodeThreadsWorker.js:79:20)
+```
+
+**根因（已实测，不是猜测）**：webpack 自带的 `TerserPlugin` 默认 `parallel: true`，
+其 worker 数 = `os.cpus().length - 1`。本机 `os.cpus().length` = **256** ⇒ 打包要起 255 个
+worker 线程；本机沙箱拒绝这种规模的线程创建，于是每个 async chunk 都报 EAGAIN。
+`ulimit -u` 是 3.8e6、cgroup `pids.max` 是 629145、`/tmp` 与磁盘都正常 —— 限制的是**并发线程数**，
+不是进程数上限。实测证据：把 `os.cpus()` 报成 4 之后，同一棵树的 webpack **12.98s 编译成功**。
+
+**workaround（仅本机，不改仓库）**：用 preload 缩小“可见 CPU 数”，让压缩器的 worker 池变小。
+
+```bash
+mkdir -p .cache/cpu-limit
+cat > .cache/cpu-limit/preload.cjs <<'PRELOAD'
+// Local-only build shim: this workstation reports 256 CPUs, so webpack's
+// minimizer tries to spawn 255 worker threads and the sandbox refuses.
+const os = require("os");
+const limit = Number(process.env.SOYMUTDB_LOCAL_CPU_LIMIT || 4);
+const real = os.cpus();
+if (real.length > limit) {
+  Object.defineProperty(os, "cpus", { value: () => real.slice(0, limit), configurable: true });
+}
+PRELOAD
+export NODE_OPTIONS="-r $PWD/.cache/cpu-limit/preload.cjs"
+```
+
+配合 `GOMAXPROCS=1 RAYON_NUM_THREADS=1 UV_THREADPOOL_SIZE=1` 与
+`pnpm turbo run build --concurrency=1`，三端构建均可完成。
+
+**不要**据此判定代码坏了，也不要为此改仓库里的构建配置：
+CI 镜像（GitHub runner 2–4 核、CNB stage）`cpus-1` 只有个位数 worker，本来就不会触发。

@@ -6,6 +6,8 @@ Repository-wide document entry point: [docs/README.md](../README.md); superseded
 
 ## Start here
 
+**2026-10-20 增量稳定性修复**：[实施计划](plans/2026-10-20-fullstack-stabilization.md) · [批准设计](../superpowers/specs/2026-10-20-fullstack-stabilization-design.md) · [当前检查点](work/2026-10-20-fullstack-stabilization/20-checkpoint.md)。基线为 Draft PR #26 / `57e2bcd`；修复进行中，不代表全线验收通过。
+
 **2026-10-17 追加验收记录**：[非 Docker 验收与脱敏证据](../dev/native-validation-20261017.md)。涵盖客户端零路由债务、前端 1083 tests、真实导出链、原生 PG/S3 灾备和历史回填演练。以下旧计划的状态描述保留其原日期语境，当前实测结论优先查阅该报告与项目状态；不据此将未复核的计划全部结项。生产回填与切换、异地灾备尚未验收，Docker 运行按用户要求排除。
 
 **2026-10-18 文档对账**：Admin Pro 组件、Import Studio、命令面板、原生 PG 变异事实等已在当前工作树实现。本索引只把有代码/测试证据的状态行改为已落地，未重跑的门禁数字仍引用 2026-10-17 报告；对账记录见下方 Record log。
