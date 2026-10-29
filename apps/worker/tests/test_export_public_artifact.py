@@ -71,7 +71,9 @@ def test_export_columns_carry_public_locators_and_provenance():
 
 
 def test_export_query_selects_only_public_columns():
-    query, params = export_task.build_export_query({"release_key": "7"})
+    query, params = export_task.build_export_query(
+        {"release_key": "7", "assembly": "Wm82.a4.v1"}
+    )
 
     assert params["release_id"] == 7
     for forbidden in sorted(export_task.FORBIDDEN_EXPORT_COLUMNS):
@@ -162,31 +164,78 @@ def test_record_mapping_follows_the_declared_column_order():
 # ---------------------------------------------------------------------------
 
 
-def test_record_budget_is_enforced(monkeypatch, tmp_path: Path):
-    monkeypatch.setattr(export_task, "MAX_RECORDS_EXPORT", 1)
-    monkeypatch.setattr(export_task, "get_setting", lambda *a, **k: "exports")
-    monkeypatch.setattr(export_task, "generate_presigned_url", lambda *a, **k: "https://x")
+class _FakeExportSession:
+    """Fake session modelling both the export record and the data query.
 
-    class _Result:
-        rows = [_row(), _row(position=2000)]
+    The export task claims the API-owned record before it works and
+    finalises it afterwards, so the fake has to answer the record's
+    ``SELECT``/``UPDATE`` as well as the variant-fact query.
+    """
 
-        def __iter__(self):
-            return iter(self.rows)
+    def __init__(self, rows: list[tuple], status: str = "pending") -> None:
+        self.rows = rows
+        self.status = status
+        self.updates: list[dict] = []
+        self.commits = 0
 
-        def close(self):
-            pass
+    def execute(self, query, parameters=None, **kwargs):
+        statement = str(query)
+        if "variant_exports" in statement:
+            if statement.upper().startswith("UPDATE"):
+                try:
+                    params = query.compile().params
+                except Exception:  # pragma: no cover — defensive
+                    params = {}
+                if "status" in params:
+                    self.status = params["status"]
+            return _RecordResult(self.status)
+        return _RowsResult(self.rows)
 
-    class _Database:
-        def execute(self, query, parameters=None, **kwargs):
-            return _Result()
+    def commit(self) -> None:
+        self.commits += 1
 
+
+class _RecordResult:
+    """Result of the export-record statements (SELECT row / UPDATE count)."""
+
+    def __init__(self, status: str, started_at=None) -> None:
+        self._status = status
+        self._started_at = started_at
+        self.rowcount = 1
+
+    def first(self):
+        return (self._status, self._started_at)
+
+
+class _RowsResult:
+    """Result of the variant-fact query."""
+
+    def __init__(self, rows: list[tuple]) -> None:
+        self.rows = rows
+
+    def __iter__(self):
+        return iter(self.rows)
+
+    def close(self) -> None:
+        pass
+
+
+def _database_for(session: _FakeExportSession):
     from contextlib import contextmanager
 
     @contextmanager
     def database():
-        yield _Database()
+        yield session
 
-    monkeypatch.setattr(export_task, "get_db", database)
+    return database
+
+
+def test_record_budget_is_enforced(monkeypatch, tmp_path: Path):
+    monkeypatch.setattr(export_task, "MAX_RECORDS_EXPORT", 1)
+    monkeypatch.setattr(export_task, "get_setting", lambda *a, **k: "exports")
+
+    session = _FakeExportSession([_row(), _row(position=2000)])
+    monkeypatch.setattr(export_task, "get_db", _database_for(session))
     # If the budget were not enforced these would run and write the file.
     monkeypatch.setattr(
         export_task, "upload_large_file", lambda *a, **k: pytest.fail("must not upload")
@@ -194,7 +243,7 @@ def test_record_budget_is_enforced(monkeypatch, tmp_path: Path):
 
     with pytest.raises(ValueError) as excinfo:
         export_task.export_variants.run(
-            "export-budget", {"release_key": "7"}, "json", False
+            "export-budget", {"release_key": "7", "assembly": "Wm82.a4.v1"}, "json", False
         )
 
     assert "budget" in str(excinfo.value).lower()
@@ -203,36 +252,15 @@ def test_record_budget_is_enforced(monkeypatch, tmp_path: Path):
 def test_export_writes_a_gzipped_public_artifact(monkeypatch, tmp_path: Path):
     captured: dict = {}
 
-    class _Result:
-        rows = [_row()]
-
-        def __iter__(self):
-            return iter(self.rows)
-
-        def close(self):
-            pass
-
-    class _Database:
-        def execute(self, query, parameters=None, **kwargs):
-            return _Result()
-
     def _upload(local_path: str, s3_path: str) -> None:
         captured["s3_path"] = s3_path
         with open(local_path, "rb") as handle:
             captured["bytes"] = handle.read()
 
-    from contextlib import contextmanager
-
-    @contextmanager
-    def database():
-        yield _Database()
-
-    monkeypatch.setattr(export_task, "get_db", database)
+    session = _FakeExportSession([_row()])
+    monkeypatch.setattr(export_task, "get_db", _database_for(session))
     monkeypatch.setattr(export_task, "get_setting", lambda *a, **k: "exports")
     monkeypatch.setattr(export_task, "upload_large_file", _upload)
-    monkeypatch.setattr(
-        export_task, "generate_presigned_url", lambda *a, **k: "https://example/x"
-    )
     monkeypatch.setattr(export_task.tempfile, "TemporaryDirectory", lambda: _TmpDir(tmp_path))
     # `bind=True` tasks report progress through the Celery result backend, which
     # needs a live broker; the assertion here is on the artifact, not progress.

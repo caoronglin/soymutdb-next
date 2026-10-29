@@ -167,9 +167,9 @@ class ClickHouseService:
         if params.gene_id is not None:
             conditions.append("gene_id = %(gene_id)s")
             qp["gene_id"] = params.gene_id
-        if params.mutant_line_id is not None:
-            conditions.append("mutant_line_surrogate_id = %(ml_id)s")
-            qp["ml_id"] = params.mutant_line_id
+        if params.mutant_line_name is not None:
+            conditions.append("mutant_line_name = %(ml_name)s")
+            qp["ml_name"] = params.mutant_line_name
         if params.variant_type is not None:
             conditions.append("variant_type = %(vtype)s")
             qp["vtype"] = params.variant_type.value

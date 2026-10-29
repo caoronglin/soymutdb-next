@@ -1,7 +1,16 @@
 """Data export tasks.
 
 Supports vcf/tsv/csv/json/bed formats with optional gzip compression.
-Files are uploaded to S3 and pre-signed download URLs are returned.
+Files are uploaded to S3; the API signs download URLs on demand.
+
+The export *record* (owner, status, artifact key, expiry) is owned by the
+API in PostgreSQL; this task advances that record: it claims the export
+before the work starts and finalises it when the artifact is written or the
+run fails. Finished exports are never rebuilt, and duplicate deliveries inside
+the lease do not start another run. Redelivery after lease expiry fails the
+record closed without starting more work. The original process may still
+upload an orphan object, but its late success cannot publish a failed record.
+No automatic execution retry or exactly-once delivery is promised.
 """
 
 from __future__ import annotations
@@ -15,23 +24,36 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from celery import Task
+from soymutdb_jobs.export_artifact import (
+    EXPORT_FORMATS,
+    build_export_artifact_key,
+    build_export_filename,
+)
+from soymutdb_jobs.export_errors import EXPORT_FAILED_MESSAGE
 from sqlalchemy import text
 
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
+from soymutdb_worker.repositories import VariantExportStore
 from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.s3 import (
     delete_object,
-    generate_presigned_url,
     list_objects,
     upload_large_file,
 )
 
 logger = logging.getLogger(__name__)
 
-EXPORT_FORMATS = frozenset({"vcf", "tsv", "csv", "json", "bed"})
 MAX_RECORDS_EXPORT = 100_000_000
 EXPORT_RETENTION_DAYS = 7
+
+class ExportRecordMissingError(RuntimeError):
+    """The command reached the worker without its export record.
+
+    This is a deployment inconsistency (an older API, or a migration that
+    has not run yet), not a transient fault: the request cannot be
+    executed, and it must fail loudly rather than disappear.
+    """
 
 # Column layout returned by build_export_query.
 #
@@ -87,6 +109,8 @@ def build_export_query(filters: dict) -> tuple[str, dict]:
     All user values are bound via ``:name`` placeholders — never
     interpolated into the SQL string.
     """
+    if "mutant_line_id" in filters or "mutant_line_public_id" in filters:
+        raise ValueError("Mutant export filters must be resolved by the API")
     release = filters.get("release_key")
     try:
         release_id = int(release)
@@ -94,13 +118,24 @@ def build_export_query(filters: dict) -> tuple[str, dict]:
         raise ValueError("A resolved release identity is required for public export") from error
     if release_id < 1:
         raise ValueError("A positive release identity is required for public export")
+    assembly = filters.get("assembly")
+    if not isinstance(assembly, str) or not assembly.strip():
+        # The task is a public entry point: anything can enqueue it. Without
+        # an assembly the query would span every namespace of the release
+        # while the export record advertises a single one, so the artifact
+        # would mix coordinate systems under one name.
+        raise ValueError(
+            "An assembly namespace is required for public export: an artifact "
+            "must not span assembly namespaces"
+        )
     conditions = ["v.release_id = :release_id", "r.status = 'published'",
+                  "v.assembly_key = :assembly",
                   "(v.mutant_line_name = '' OR ml.public_id IS NOT NULL)"]
-    params = {"release_id": release_id}
+    params = {"release_id": release_id, "assembly": assembly.strip()}
     for field, column in (
-        ("assembly", "assembly_key"), ("chromosome", "chromosome"),
+        ("chromosome", "chromosome"),
         ("ref", "ref_allele"), ("alt", "alt_allele"), ("gene_id", "gene_id"),
-        ("mutant_line_id", "mutant_line_surrogate_id"),
+        ("mutant_line_name", "mutant_line_name"),
         ("variant_type", "variant_type"), ("consequence", "consequence"), ("impact", "impact"),
     ):
         value = filters.get(field)
@@ -258,7 +293,7 @@ def export_variants(
         compress: Whether to gzip-compress the output.
 
     Returns:
-        dict with export metadata, S3 path, and pre-signed download URL.
+        dict with export metadata and object key (download URLs are API-owned).
     """
     if format not in EXPORT_FORMATS:
         raise ValueError(
@@ -267,14 +302,77 @@ def export_variants(
 
     logger.info("Starting export %s: %s format", export_id, format)
 
+    # The claim is part of the work, so it runs inside the guarded phase: a
+    # claim that itself fails (a database that is briefly unreachable, for
+    # example) must still drive the record to a final state. Leaving it
+    # outside the guard would strand the record in ``pending`` — exactly the
+    # state the submitter waits on forever.
+    try:
+        # Claim the export record before any work.  The claim is what makes a
+        # re-delivered event harmless: a finished export is never rebuilt, and
+        # a live attempt keeps its claim until the lease expires.
+        decision = _claim_export(export_id)
+        if decision == "missing":
+            # The command reached the worker without its record: the API and
+            # the worker are out of step (an older API, or a migration that
+            # has not run).  Failing loudly keeps the request visible instead
+            # of producing no artifact, no failure and no state at all.
+            logger.error(
+                "Export %s has no record; the request cannot be executed", export_id
+            )
+            raise ExportRecordMissingError(
+                f"No export record for {export_id}; the request cannot be executed"
+            )
+        if decision in ("skip", "expired"):
+            if decision == "expired":
+                logger.warning(
+                    "Export %s lease expired; failed without reexecution", export_id
+                )
+            logger.info("Export %s is not claimable; skipping", export_id)
+            return {"export_id": export_id, "status": "skipped"}
+
+        return _run_export(self, export_id, filters, format, compress)
+    except Exception:  # noqa: BLE001 — the record must reach a final state
+        logger.exception("Export %s failed", export_id)
+        _fail_export(export_id)
+        raise
+
+
+def _claim_export(export_id: str) -> str:
+    """Claim the export record for this delivery.
+
+    Returns the store's decision: ``run`` (this delivery owns the run),
+    ``expired`` (a stale running record was failed without reexecution),
+    ``skip`` (finished, failed, or a live attempt still owns the claim) or
+    ``missing`` (there is no record for this command at all).
+    """
+    with get_db() as session:
+        store = VariantExportStore(session)
+        decision = store.begin_run(export_id)
+        session.commit()
+    return decision
+
+
+def _fail_export(export_id: str) -> None:
+    """Record public failure state; the caller logs the original exception."""
+    try:
+        with get_db() as session:
+            store = VariantExportStore(session)
+            store.mark_failed(export_id, error=EXPORT_FAILED_MESSAGE)
+            session.commit()
+    except Exception:  # pragma: no cover — never mask the original failure
+        logger.exception("Could not record the failure of export %s", export_id)
+
+
+def _run_export(
+    task: Task, export_id: str, filters: dict, format: str, compress: bool
+) -> dict:
+    """Produce the artifact and finalise the export record."""
     query, params = build_export_query(filters)
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
-        ext = format
-        filename = f"soymutdb_export_{export_id}.{ext}"
-        if compress:
-            filename += ".gz"
+        filename = build_export_filename(export_id, format, compress)
         output_path = tmpdir_path / filename
 
         # Provenance stamped on the artifact itself (VCF/BED headers and every
@@ -304,7 +402,7 @@ def export_variants(
                     record_count = _write_bed(output_file, rows)
                 elif format == "json":
                     record_count = _write_json(output_file, rows)
-                self.update_state(state="PROGRESS", meta={"records": record_count})
+                task.update_state(state="PROGRESS", meta={"records": record_count})
             finally:
                 output_file.close()
                 result.close()
@@ -313,13 +411,33 @@ def export_variants(
 
         # Upload to S3 (use multipart for large files)
         s3_bucket = get_setting("S3_EXPORT_BUCKET", "exports")
-        s3_path = f"exports/{export_id}/{filename}"
+        s3_path = build_export_artifact_key(export_id, filename)
         upload_large_file(str(output_path), f"{s3_bucket}/{s3_path}")
 
-        # Generate pre-signed URL (24 h)
-        presigned_url = generate_presigned_url(
-            f"{s3_bucket}/{s3_path}", expires_in=86400
-        )
+        # The artifact stays downloadable for the export retention window;
+        # the download URL itself is signed on demand by the API, so no
+        # long-lived link is produced or stored here.
+        expires_at = datetime.now(UTC) + timedelta(days=EXPORT_RETENTION_DAYS)
+        with get_db() as session:
+            store = VariantExportStore(session)
+            recorded = store.mark_succeeded(
+                export_id,
+                artifact_path=s3_path,
+                record_count=record_count,
+                file_size=file_size,
+                expires_at=expires_at,
+            )
+            session.commit()
+        if not recorded:
+            # The guarded update refused: the record is no longer running
+            # (a failure or a takeover won the race).  Say so instead of
+            # reporting a success the record does not carry.
+            logger.warning(
+                "Export %s produced %s but the record was no longer running; "
+                "the artifact was not recorded",
+                export_id,
+                s3_path,
+            )
 
         logger.info(
             "Export %s complete: %d records, %d bytes",
@@ -334,8 +452,7 @@ def export_variants(
             "record_count": record_count,
             "file_size": file_size,
             "s3_path": s3_path,
-            "download_url": presigned_url,
-            "expires_at": (datetime.now(UTC) + timedelta(days=1)).isoformat(),
+            "expires_at": expires_at.isoformat(),
         }
 
 

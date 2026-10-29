@@ -52,6 +52,17 @@ overrides:
   axios: 0.34.0
   immer: 9.0.6
   node-fetch: 2.7.0
+  # GHSA-q3jh-wrc6-jgq8 / GHSA-8r9p-f939-6h3c: follow-redirects < 1.16.1 strips
+  # credential headers from cross-origin redirects with a routine that misses
+  # array-form headers and mis-escapes caller-declared sensitiveHeaders, so
+  # Authorization/Cookie can reach an attacker-controlled host. Reached through
+  # axios (Umi's dev proxy), which this workspace floors at 0.34.0.
+  follow-redirects: 1.16.1
+  # GHSA-5r4p-p66f-jhc7: hono < 4.13.11 decodes the request path a second time
+  # in serveStatic, so a crafted path can be routed as one path and served as
+  # another and middleware on a static prefix does not run. Reached through
+  # @utoo/pack (the Umi 4 bundler).
+  hono: 4.13.11
   "path-to-regexp@^1.7.0": 1.9.0
   "path-to-regexp@^8.0.0": 8.4.2
   # GHSA-68fv-2mgg-jv7q and GHSA-85c8-ppgw-ccpr; verify Vitest pools.
@@ -75,6 +86,32 @@ overrides:
   # covers <=1.1.3); 1.1.3 is the current latest, still better than the 1.0.3
   # Umi/mammoth chain resolved. Recheck when upstream publishes a fix.
   sprintf-js: 1.1.3
+  # GHSA-587h-7wmj-h5pm (and GHSA-698v-4r3x-3vcv, GHSA-r825-w8mm-5pxw,
+  # GHSA-rq7h-c2jc-7f22, GHSA-9jrq-w75r-8gcw): the vulnerable `vite` 7.x
+  # (<=7.3.6) is reached in this tree through exactly one dependency edge,
+  # `@umijs/bundler-vite` -> `vite`. A workspace-wide `vite` override was
+  # rejected because it also rewrites the `vite` peer declarations of
+  # `vitest` 5.0.5 and `@vitejs/plugin-react`, whose range already allows
+  # vite 7 while their resolved edge stays on the catalog's vite 8.3.4.
+  # The `parent>child` selector below pins only that one edge to the patched
+  # 7.3.7; the peer *ranges* stay untouched and the resolved vite 8.3.4 edge
+  # of vitest is unaffected.
+  "@umijs/bundler-vite>vite": 7.3.7
+  # GHSA-27r3-jxmh-p828: body-parser < 1.20.9 leaves the decompression stream
+  # piped with no error listener, so trailing bytes after a compressed body
+  # raise an uncaught exception and terminate the process. Parsing runs before
+  # routing, so no authentication and no matching route is required. Reached
+  # through express (dev-server bundlers only). 1.20.9 is a same-major patch
+  # whose dependency set and engines are identical to 1.20.8, and it satisfies
+  # express's declared `~1.20.5` range; the package has no peer edges.
+  body-parser: 1.20.9
+  # GHSA-w74x-v6f9-j3xg, GHSA-wjr9-j795-jxcr, GHSA-xhq7-xmqj-769h and
+  # GHSA-333x-w4r6-6crp: fast-uri < 3.1.9 (scheme spoofing, host confusion,
+  # relative-path equivalence, suffix scheme injection). Reached through ajv
+  # <- table <- stylelint (lint-time only; stylelint is never invoked here).
+  # 3.1.9 is a same-major patch with identical exports and types, it satisfies
+  # ajv's declared `^3.0.1` range, and the package has no peer edges.
+  fast-uri: 3.1.9
 
 allowBuilds:
   # Umi/Vite-compatible bundling requires esbuild's platform binary.

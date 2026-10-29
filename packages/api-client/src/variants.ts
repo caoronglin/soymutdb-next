@@ -1,3 +1,4 @@
+import type { components } from "./generated/openapi";
 import { http } from "./auth";
 
 export interface VariantSummary {
@@ -79,7 +80,7 @@ export interface VariantFilterParams {
    * Public mutant-line identifier (e.g. `SM7K3ZQ9P2AX`).
    *
    * Sent as `mutant_line_public_id`: the server resolves it to the line's
-   * internal key inside the pinned release. A numeric/internal value is
+   * variant facts inside the pinned release. A numeric/internal value is
    * rejected with 422, so never pass a persistence key here.
    */
   mutant_line_public_id?: string;
@@ -152,4 +153,22 @@ export function searchRegionVariants(
 
 export function createVariantExport(data: unknown): Promise<unknown> {
   return http.post<unknown>("/variants/export", { json: data });
+}
+
+/** Lifecycle state of a submitted export (owner or administrator only). */
+export type VariantExportStatus = components["schemas"]["ExportStatusResponse"];
+
+/** A short-lived download link for a finished export artifact. */
+export type VariantExportDownload = components["schemas"]["ExportDownloadResponse"];
+
+export function getVariantExportStatus(
+  exportId: string,
+): Promise<VariantExportStatus> {
+  return http.get<VariantExportStatus>(`/variants/export/${exportId}`);
+}
+
+export function getVariantExportDownload(
+  exportId: string,
+): Promise<VariantExportDownload> {
+  return http.get<VariantExportDownload>(`/variants/export/${exportId}/download`);
 }

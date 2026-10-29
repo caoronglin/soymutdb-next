@@ -228,6 +228,28 @@ analysis_jobs = Table(
     Column("result_summary", JSON),
 )
 
+#: Owner-scoped variant export records.  The API side owns the migration
+#: (:mod:`app.models.variant_export`); the worker only advances the lifecycle
+#: and records the produced artifact's object key.  ``status`` uses the shared
+#: job vocabulary (``pending``/``running``/``succeeded``/``failed``), matching
+#: the PostgreSQL enum ``variant_export_status_enum``.
+variant_exports = Table(
+    "variant_exports",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("status", String(32)),
+    Column("artifact_path", String(2048)),
+    Column("record_count", Integer),
+    Column("file_size", Integer),
+    Column("error_message", Text),
+    Column("started_at", DateTime(timezone=True)),
+    Column("completed_at", DateTime(timezone=True)),
+    Column("expires_at", DateTime(timezone=True)),
+    # The row's own bookkeeping column: the worker's updates refresh it,
+    # so "last touched" does not stay at creation time.
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+)
+
 blast_hits = Table(
     "blast_hits",
     metadata,
@@ -400,4 +422,5 @@ __all__ = [
     "releases",
     "static_publications",
     "utcnow",
+    "variant_exports",
 ]

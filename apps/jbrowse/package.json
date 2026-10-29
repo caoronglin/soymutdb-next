@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "max dev --host 0.0.0.0 --port 5175",
     "build": "max build && tsx scripts/build-artifact.ts",
-    "test": "node --test antd-migration-contract.test.mjs bridge-contract.test.mjs locus-search.test.mjs vue-retirement-contract.test.mjs",
+    "test": "node --test antd-migration-contract.test.mjs bridge-contract.test.mjs locus-search.test.mjs release-context.test.mjs vue-retirement-contract.test.mjs",
     "preview": "python3 -m http.server --bind ${HOST:-0.0.0.0} ${PORT:-5175} --directory dist",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",

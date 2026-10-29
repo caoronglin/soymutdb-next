@@ -16,6 +16,7 @@ from ..core.exceptions import ServiceUnavailableError, ValidationError
 from ..schemas.variant import VariantFilterParams
 from .release_context import ReleaseContext
 from .variant_repository import _FIELDS, VariantRepository
+from .variant_visibility import PUBLIC_FACT_VISIBILITY
 
 
 def _guard(operation):
@@ -28,10 +29,15 @@ def _guard(operation):
     return wrapped
 
 
-def _release_scope(release_key: str | None) -> tuple[str, dict[str, Any]]:
-    if release_key is None:
-        return "", {}
-    return "WHERE release_id = :release_id", {"release_id": int(release_key)}
+def _release_scope(
+    release_key: str | None, *, public_only: bool = True,
+) -> tuple[str, dict[str, Any]]:
+    conditions = [PUBLIC_FACT_VISIBILITY] if public_only else []
+    values: dict[str, Any] = {}
+    if release_key is not None:
+        conditions.append("release_id = :release_id")
+        values["release_id"] = int(release_key)
+    return ("WHERE " + " AND ".join(conditions) if conditions else ""), values
 
 
 def _cutoff(days: int) -> datetime:
@@ -111,7 +117,8 @@ class PostgresVariantService:
         async with get_session_factory()() as db:
             result = await db.execute(text(
                 f"SELECT {_FIELDS} FROM variant_facts "
-                "WHERE release_id = :release_id AND variant_id = :variant_id"
+                "WHERE release_id = :release_id AND variant_id = :variant_id AND "
+                + PUBLIC_FACT_VISIBILITY
             ), {"release_id": release_context.release_id, "variant_id": identity})
             record = result.mappings().one_or_none()
             if record is None:
@@ -122,7 +129,9 @@ class PostgresVariantService:
             return row
 
     @_guard
-    async def get_dashboard_stats(self, release_key: str | None = None) -> dict[str, Any]:
+    async def get_dashboard_stats(
+        self, release_key: str | None = None, *, public_only: bool = True,
+    ) -> dict[str, Any]:
         """Return the cheap release-scoped variant counters.
 
         The two distinct counts (``total_genes`` / ``total_mutant_lines``) are
@@ -132,7 +141,8 @@ class PostgresVariantService:
         stay available through :meth:`get_dashboard_distinct_counts`, which
         pays that price only when a caller explicitly asks for them.
         """
-        where, values = _release_scope(release_key)
+        # Only the role-checked admin overview opts out of public visibility.
+        where, values = _release_scope(release_key, public_only=public_only)
         sql = (
             "SELECT count(*) AS total_variants, "
             "count(*) FILTER (WHERE variant_type = 'SNP') AS snp_count, "

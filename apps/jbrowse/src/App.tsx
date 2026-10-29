@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { observer } from "mobx-react";
+import { comparer, reaction } from "mobx";
 import {
     createViewState,
     createJBrowseTheme,
@@ -31,7 +32,7 @@ import {
 import {
     buildJBrowseConfig,
     buildJBrowseTheme,
-    DEFAULT_TRACKS,
+    defaultTrackIds,
     type JBrowseAssembly,
     type JBrowseConfig,
     type JBrowseTrack,
@@ -39,10 +40,15 @@ import {
 import {
     parseDeepLink,
     buildDeepLink,
-    parseLocus,
-    formatLocus,
     type DeepLinkParams,
 } from "./deep-link";
+import {
+    assembliesRequestParams,
+    configRequestParams,
+    resolveContextStatus,
+    resolveReleaseScope,
+} from "./release-context";
+import { configuredTrackIds, navigateBrowserView, planPortalInit } from "./bridge-init";
 import {
     postToParent,
     parsePortalMessage,
@@ -141,9 +147,7 @@ function JBrowseApp() {
     const [currentLocus, setCurrentLocus] = useState<string | undefined>(
         initialParams.locus,
     );
-    const [activeTracks, setActiveTracks] = useState<string[]>(
-        initialParams.tracks ?? DEFAULT_TRACKS,
-    );
+    const [activeTracks, setActiveTracks] = useState<string[] | undefined>(initialParams.tracks);
     const [assemblyName, setAssemblyName] = useState<string>(
         initialParams.assembly ?? "",
     );
@@ -153,6 +157,7 @@ function JBrowseApp() {
     const [locusInput, setLocusInput] = useState(initialParams.locus ?? "");
     const [viewState, setViewState] = useState<JBrowseViewState | null>(null);
     const [initError, setInitError] = useState<string | null>(null);
+    const [navigationError, setNavigationError] = useState(false);
     // Bumped by applyInit() when an init message must rebuild the view state
     // (assembly/tracks changes). Locus-only updates navigate instead.
     const [sessionNonce, setSessionNonce] = useState(0);
@@ -160,6 +165,8 @@ function JBrowseApp() {
 
     const readySentViewRef = useRef<JBrowseViewState | null>(null);
     const locusDebounceRef = useRef<number | null>(null);
+    // Monotonic scope tag handed out by the portal; stale scopes are ignored.
+    const scopeEpochRef = useRef<number | undefined>(undefined);
 
     // Resolve the deep link to the canonical assembly identity of a published
     // release.
@@ -172,13 +179,30 @@ function JBrowseApp() {
     // server-authoritative answer. The assembly, however, is never guessed by
     // name: an unknown name is an error, and an absent name adopts the
     // release's declared default assembly.
+    //
+    // The release is pinned *explicitly* on both requests below (an explicit
+    // `release_id` parameter, never a process-wide release pin): the assembly
+    // list and the track configuration must be read from the same release, or
+    // the assembly id resolved from one request names a coordinate namespace
+    // the other request does not serve.
+    const releaseScope = useMemo(() => resolveReleaseScope(release), [release]);
+    // An unusable release gets its own cache slot: it must never reuse the
+    // cached "active" assembly list, and it must not send a request at all.
+    const releaseCacheKey = releaseScope.invalid
+        ? "invalid-release"
+        : (releaseScope.releaseId ?? "active");
+
     const {
         data: assemblies,
         isLoading: assembliesLoading,
         isError: assembliesIsError,
     } = useQuery<AssemblyInfo[]>({
-        queryKey: ["jbrowse-assemblies", release ?? "active"],
-        queryFn: () => http.get<AssemblyInfo[]>("/genes/assemblies"),
+        queryKey: ["jbrowse-assemblies", releaseCacheKey],
+        queryFn: () =>
+            http.get<AssemblyInfo[]>("/genes/assemblies", {
+                params: assembliesRequestParams(releaseScope),
+            }),
+        enabled: !releaseScope.invalid,
         retry: false,
         staleTime: 5 * 60 * 1000,
     });
@@ -205,6 +229,13 @@ function JBrowseApp() {
     const assemblyContextError =
         assembliesIsError || (assemblies != null && assemblyName !== "" && !resolvedAssembly);
 
+    // The configuration request carries the assembly id *and* the release of
+    // the same scope, so the two can never disagree.
+    const configParams = useMemo(
+        () => (assemblyId == null ? null : configRequestParams(releaseScope, assemblyId)),
+        [assemblyId, releaseScope],
+    );
+
     // Fetch the complete, release-scoped JBrowse config from the API. A name-only
     // response or an unavailable request is not safe to turn into a v4 fallback.
     const {
@@ -212,20 +243,21 @@ function JBrowseApp() {
         isLoading: configLoading,
         isError: configIsError,
     } = useQuery<JBrowseConfigResponse>({
-        queryKey: ["jbrowse-config", assemblyId, release ?? "active"],
+        queryKey: ["jbrowse-config", assemblyId, releaseCacheKey],
         queryFn: () =>
             http.get<JBrowseConfigResponse>("/tracks/jbrowse-config", {
-                params: { assembly_id: assemblyId, release_id: release },
+                params: configParams ?? undefined,
             }),
-        enabled: Boolean(assemblyId),
+        enabled: configParams != null && !releaseScope.invalid,
         retry: false,
         staleTime: 5 * 60 * 1000,
     });
 
     const config: JBrowseConfig | null = useMemo(() => {
-        if (!configData || !isCompleteAssembly(configData.assembly)) return null;
+        if (!resolvedAssembly || !configData || !isCompleteAssembly(configData.assembly)
+            || configData.assembly.name !== resolvedAssembly.name) return null;
         return buildJBrowseConfig(configData.assembly, configData.tracks ?? []);
-    }, [configData]);
+    }, [configData, resolvedAssembly]);
 
     // JBrowse theme matching the SoyMutDB green scientific theme.
     const jbrowseTheme = useMemo(
@@ -235,6 +267,7 @@ function JBrowseApp() {
 
     // Latest state snapshot for stable bridge callbacks (avoids stale closures).
     const stateRef = useRef({
+        release,
         assembly: assemblyName,
         tracks: activeTracks,
         locus: currentLocus,
@@ -243,13 +276,14 @@ function JBrowseApp() {
     });
     useEffect(() => {
         stateRef.current = {
+            release,
             assembly: assemblyName,
             tracks: activeTracks,
             locus: currentLocus,
             view: viewState,
             config,
         };
-    }, [activeTracks, assemblyName, config, currentLocus, viewState]);
+    }, [activeTracks, assemblyName, config, currentLocus, release, viewState]);
 
     // Safe track types supported by @jbrowse/react-linear-genome-view corePlugins.
     // This is a runtime safety net complementing validateTrackTypes() in config.ts.
@@ -272,9 +306,24 @@ function JBrowseApp() {
         return { ...track, type: "FeatureTrack" };
     });
 
-    // Initialise the JBrowse view state when config is ready.
-    // We don't block on configLoading — if the API is slow or unavailable,
-    // the default config is used immediately.
+    // A release switch invalidates the session: the assembly id behind the
+    // current view belongs to the previous release's coordinate namespace, and
+    // the previous release's tracks must never stay on screen under the new
+    // one. The view is dropped here and rebuilt from the new release's own
+    // assembly list (and its own configuration) by the effect below.
+    //
+    // Declared *before* the view-state effect so that the reason for the
+    // missing view is computed after this reset, not before it.
+    const previousReleaseRef = useRef<string | undefined>(release);
+    useEffect(() => {
+        if (previousReleaseRef.current === release) return;
+        previousReleaseRef.current = release;
+        setViewState(null);
+        setInitError(null);
+    }, [release]);
+
+    // Initialise only from the resolved release's complete configuration.
+    // Pending intent survives loading; no default/previous-release fallback.
     //
     // createViewState expects:
     //   assembly:  assembly config OBJECT (not a name string)
@@ -288,16 +337,17 @@ function JBrowseApp() {
     useEffect(() => {
         if (!config) {
             setViewState(null);
-            if (!configLoading && !assembliesLoading) {
-                setInitError(
-                    !assemblyName
-                        ? "No assembly could be resolved for the selected release."
-                        : assemblyContextError
-                            ? `Assembly "${assemblyName}" is not part of the selected released genome.`
-                            : configIsError
-                                ? "The release-scoped JBrowse configuration is unavailable."
-                                : "The JBrowse configuration did not include a complete reference assembly.",
-                );
+            if (configLoading || assembliesLoading || (!assemblyName && assemblies?.length)) {
+                setInitError(null);
+            } else {
+                const { message } = resolveContextStatus({
+                    releaseInvalid: releaseScope.invalid,
+                    assembly: assemblyName,
+                    assembliesError: assembliesIsError,
+                    assemblyFound: Boolean(resolvedAssembly),
+                    configError: configIsError,
+                });
+                setInitError(message || null);
             }
             return;
         }
@@ -305,6 +355,19 @@ function JBrowseApp() {
             try {
                 const assemblyConfig = config.assemblies[0];
                 if (!assemblyConfig) throw new Error("The JBrowse configuration has no reference assembly.");
+                const requestedTracks = activeTracks
+                    ?? defaultTrackIds(safeTracks, assemblyConfig.sequence.trackId);
+                const resolvedTracks = configuredTrackIds(
+                    requestedTracks,
+                    safeTracks.map((track) => track.trackId), assemblyConfig.sequence.trackId,
+                );
+                // Never open an empty browser: a selection that does not exist
+                // in the destination release falls back to that release's own
+                // defaults instead of showing a reference-less viewport.
+                const sessionTracks = resolvedTracks.length
+                    ? resolvedTracks
+                    : defaultTrackIds(safeTracks, assemblyConfig.sequence.trackId);
+                setActiveTracks(sessionTracks);
                 const state = createViewState({
                     assembly: assemblyConfig,
                     tracks: safeTracks,
@@ -317,11 +380,7 @@ function JBrowseApp() {
                             id: "linear_genome_view",
                             type: "LinearGenomeView",
                             bpPerPx: 200,
-                            tracks: activeTracks.map((id) => {
-                                const actualId =
-                                    id === "reference_sequence"
-                                        ? assemblyConfig.sequence.trackId
-                                        : id;
+                            tracks: sessionTracks.map((actualId) => {
                                 const track = safeTracks.find((t) => t.trackId === actualId);
                                 return {
                                     id: actualId,
@@ -350,11 +409,14 @@ function JBrowseApp() {
     }, [
         assemblyContextError,
         assemblyName,
+        assembliesIsError,
         assembliesLoading,
         config,
         configIsError,
         configLoading,
         release,
+        releaseScope,
+        resolvedAssembly,
         sessionNonce,
     ]);
 
@@ -368,61 +430,38 @@ function JBrowseApp() {
         if (!payload || typeof payload !== "object") return;
         const s = stateRef.current;
 
-        const tracks = Array.isArray(payload.tracks)
-            ? payload.tracks.filter((x): x is string => typeof x === "string" && x.length > 0)
-            : undefined;
-        const assembly =
-            typeof payload.assembly === "string" && payload.assembly.length > 0
-                ? payload.assembly
-                : undefined;
-        const locus =
-            typeof payload.locus === "string" && payload.locus.length > 0
-                ? payload.locus
-                : undefined;
+        // The portal tags every scope with a monotonic epoch. An init message
+        // from an older scope must never revive coordinates or tracks that
+        // belong to a release the user already left.
+        const incomingEpoch = typeof payload.scopeEpoch === "number" ? payload.scopeEpoch : undefined;
+        if (incomingEpoch != null && scopeEpochRef.current != null
+            && incomingEpoch < scopeEpochRef.current) return;
+        if (incomingEpoch != null) scopeEpochRef.current = incomingEpoch;
 
-        if (typeof payload.release === "string" && payload.release) {
-            setRelease(payload.release);
-        }
-
-        // Filter track ids against what the current config actually provides.
-        if (!s.config) return;
-        const knownTrackIds = new Set<string>();
-        for (const tr of s.config.tracks) knownTrackIds.add(tr.trackId);
-        const refTrackId = s.config.assemblies[0]?.sequence.trackId;
-        if (refTrackId) knownTrackIds.add(refTrackId);
-        const usableTracks = tracks?.filter((id) => knownTrackIds.has(id));
-
-        const sameAssembly = !assembly || assembly === s.assembly;
-        const sameTracks =
-            !usableTracks ||
-            usableTracks.length === 0 ||
-            (usableTracks.length === s.tracks.length &&
-                [...usableTracks].sort().join(",") === [...s.tracks].sort().join(","));
-
-        if (sameAssembly && sameTracks) {
-            // Locus-only update — navigate the existing view.
-            if (locus && locus !== s.locus) {
-                const parsed = parseLocus(locus);
-                const view = s.view?.session?.views?.[0];
-                if (parsed && view?.navTo) {
-                    view.navTo({ refName: parsed.refName, start: parsed.start, end: parsed.end });
-                } else if (view?.navToSearchResults) {
-                    view.navToSearchResults({ input: locus });
-                }
-                setCurrentLocus(locus);
-                setLocusInput(locus);
-            }
+        const next = planPortalInit(s, payload, Boolean(s.view));
+        // Store intent even before any config exists. Never filter destination
+        // tracks against a previous release's config or navigate its old view.
+        stateRef.current = { ...s, ...next, locus: next.rebuild ? next.locus : s.locus, view: next.rebuild ? null : s.view };
+        setRelease(next.release);
+        setAssemblyName(next.assembly);
+        setActiveTracks(next.tracks);
+        setLocusInput(next.locus ?? "");
+        setNavigationError(false);
+        if (next.rebuild) {
+            setCurrentLocus(next.locus);
+            setViewState(null);
+            setInitError(null);
+            setSessionNonce((n) => n + 1);
             return;
         }
-
-        // Full re-init (assembly and/or tracks changed).
-        if (assembly) setAssemblyName(assembly);
-        if (usableTracks && usableTracks.length > 0) setActiveTracks(usableTracks);
-        if (locus) {
-            setCurrentLocus(locus);
-            setLocusInput(locus);
+        if (next.locus && next.locus !== s.locus) {
+            const view = s.view?.session?.views?.[0];
+            if (view) void navigateBrowserView(view, next.locus, s.config?.assemblies[0]?.name, s.view.session.assemblyManager)
+                .then((locus) => {
+                    if (locus && stateRef.current.view === s.view) setCurrentLocus(locus);
+                })
+                .catch(() => { if (stateRef.current.view === s.view) setNavigationError(true); });
         }
-        setSessionNonce((n) => n + 1);
     }, []);
 
     // Listen for `init` messages from the portal. Active only when embedded.
@@ -472,10 +511,17 @@ function JBrowseApp() {
         }
         locusDebounceRef.current = window.setTimeout(() => {
             const s = stateRef.current;
+            if (!s.view || !s.locus) return;
             postToParent(
                 {
                     type: "locus-change",
-                    payload: { assembly: s.assembly, locus: s.locus, tracks: s.tracks },
+                    payload: {
+                        assembly: s.assembly,
+                        locus: s.locus,
+                        tracks: s.tracks,
+                        release: s.release,
+                        scopeEpoch: scopeEpochRef.current,
+                    },
                 },
                 parentOrigin,
             );
@@ -486,7 +532,7 @@ function JBrowseApp() {
                 locusDebounceRef.current = null;
             }
         };
-    }, [currentLocus, isEmbedded, parentOrigin]);
+    }, [currentLocus, activeTracks, assemblyName, release, viewState, isEmbedded, parentOrigin]);
 
     // Subscribe to view changes to keep URL and state in sync.
     useEffect(() => {
@@ -495,24 +541,26 @@ function JBrowseApp() {
         const view = session.views?.[0];
         if (!view) return;
 
-        const dispose = view.subscribeToViewState?.(() => {
-            const visibleLoc = view.visibleLocString;
-            if (visibleLoc && visibleLoc !== currentLocus) {
-                setCurrentLocus(visibleLoc);
-                setLocusInput(visibleLoc);
-            }
-            const tracks = (view.tracks ?? [])
-                .map((t: { configuration?: { trackId?: string } }) => t.configuration?.trackId)
-                .filter((id: unknown): id is string => typeof id === "string");
-            if (tracks.length > 0) {
+        // JBrowse exposes a MobX model, not subscribeToViewState(). Observe
+        // its real viewport/track properties and dispose with this view.
+        return reaction(
+            () => ({
+                locus: view.visibleLocStrings as string | undefined,
+                tracks: (view.tracks ?? [])
+                    .map((track: { configuration?: { trackId?: string } }) => track.configuration?.trackId)
+                    .filter((id: unknown): id is string => typeof id === "string"),
+            }),
+            ({ locus, tracks }) => {
+                if (stateRef.current.view !== viewState) return;
+                if (locus && locus !== stateRef.current.locus) {
+                    setCurrentLocus(locus);
+                    setLocusInput(locus);
+                }
                 setActiveTracks(tracks);
-            }
-        });
-
-        return () => {
-            dispose?.();
-        };
-    }, [viewState, currentLocus]);
+            },
+            { equals: comparer.structural, fireImmediately: true },
+        );
+    }, [viewState]);
 
     // Update the URL when locus, tracks, assembly or release change
     // (replaceState to avoid history spam).
@@ -573,20 +621,16 @@ function JBrowseApp() {
             e.preventDefault();
             const trimmed = locusInput.trim();
             if (!trimmed) return;
-            const parsed = parseLocus(trimmed);
-            if (!parsed) {
-                // Treat as a gene/feature search — JBrowse will handle via text search.
-                viewState?.session?.views?.[0]?.navToSearchResults?.({ input: trimmed });
-                return;
-            }
-            viewState?.session?.views?.[0]?.navTo?.({
-                refName: parsed.refName,
-                start: parsed.start,
-                end: parsed.end,
-            });
-            setCurrentLocus(formatLocus(parsed));
+            const view = viewState?.session?.views?.[0];
+            if (!view) return;
+            setNavigationError(false);
+            void navigateBrowserView(view, trimmed, config?.assemblies[0]?.name, viewState.session.assemblyManager)
+                .then((locus) => {
+                    if (locus && stateRef.current.view === viewState) setCurrentLocus(locus);
+                })
+                .catch(() => { if (stateRef.current.view === viewState) setNavigationError(true); });
         },
-        [locusInput, viewState],
+        [config, locusInput, viewState],
     );
 
     const isLoading = !viewState && !initError;
@@ -630,7 +674,7 @@ function JBrowseApp() {
                         time. */}
                     <Select
                         value={assemblyName || undefined}
-                        onChange={setAssemblyName}
+                        onChange={(assembly: string) => applyInit({ assembly })}
                         className="w-44 shrink-0 font-mono"
                         aria-label="Select reference assembly"
                         loading={assembliesLoading}
@@ -657,10 +701,11 @@ function JBrowseApp() {
                                 aria-label="Genomic location or gene search"
                             />
                         </div>
-                        <Button htmlType="submit" type="primary" size="small" className="shrink-0">
+                        <Button htmlType="submit" type="primary" size="small" disabled={!viewState || Boolean(initError)} className="shrink-0">
                             Go
                         </Button>
                     </form>
+                    {navigationError && <p role="alert" className="basis-full text-sm text-destructive">{t("browser.navigationError")}</p>}
 
                     <div className="ml-auto flex shrink-0 items-center gap-1 sm:ml-0">
                         <Button
@@ -697,7 +742,7 @@ function JBrowseApp() {
                     </span>
                     <span className="text-border">·</span>
                     <span>
-                        {activeTracks.length} active track{activeTracks.length === 1 ? "" : "s"}
+                        {activeTracks?.length ?? 0} active track{activeTracks?.length === 1 ? "" : "s"}
                     </span>
                     <span className="text-border">·</span>
                     <span>Assembly: {assemblyName}</span>
@@ -734,8 +779,8 @@ function JBrowseApp() {
             {/* Footer */}
             <footer className="border-t border-border bg-card px-4 py-2 text-center text-xs text-muted-foreground">
                 Powered by JBrowse 2 · SoyMutDB Genome Browser ·{" "}
-                {activeTracks.length > 0 && (
-                    <span>{activeTracks.length.toLocaleString()} tracks loaded</span>
+                {(activeTracks?.length ?? 0) > 0 && (
+                    <span>{activeTracks?.length.toLocaleString()} tracks loaded</span>
                 )}
             </footer>
         </div>

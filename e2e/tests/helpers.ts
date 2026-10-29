@@ -293,7 +293,7 @@ function isMockedApiRequest(url: URL): boolean {
  */
 export async function mockEntityApis(
   page: Page,
-  options: { assembly?: typeof MOCK_ASSEMBLY } = {},
+  options: { assembly?: typeof MOCK_ASSEMBLY | typeof MOCK_PREVIEW_ASSEMBLY } = {},
 ): Promise<CapturedApiRequest[]> {
   const captured: CapturedApiRequest[] = [];
   const assembly = options.assembly ?? MOCK_ASSEMBLY;

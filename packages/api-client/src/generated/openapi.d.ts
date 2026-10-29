@@ -672,11 +672,9 @@ export interface paths {
          * List Variants
          * @description Search variants with filters and cursor pagination (limit ≤ 200).
          *
-         *     The mutant-line filter takes a **public** identifier. It is resolved to the
-         *     line's internal key inside the resolved published release, so a numeric or
-         *     otherwise internal value is rejected instead of being bound to the variant
-         *     store as if it were a surrogate (which previously matched nothing, or
-         *     nothing, depending on the value).
+         *     The mutant-line filter takes a **public** identifier, resolved to the
+         *     fact's release-scoped line name. A persistence key or historical hash is
+         *     never accepted as a public identifier.
          */
         get: operations["list_variants_api_v1_variants_get"];
         put?: never;
@@ -739,8 +737,53 @@ export interface paths {
         /**
          * Export Variants
          * @description Submit an asynchronous export job (vcf/tsv/csv/json/bed).
+         *
+         *     The job is bound to exactly one assembly namespace: a named assembly
+         *     wins, otherwise the resolved release's own assembly scope is used, and a
+         *     request with neither is refused. See ``filters.assembly`` for the exact
+         *     rule and its limits.
          */
         post: operations["export_variants_api_v1_variants_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/variants/export/{export_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Variant Export Status
+         * @description Return the state of one export (submitter or administrator only).
+         */
+        get: operations["get_variant_export_status_api_v1_variants_export__export_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/variants/export/{export_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Variant Export Download
+         * @description Return a short-lived download link for a completed export.
+         */
+        get: operations["get_variant_export_download_api_v1_variants_export__export_id__download_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1490,6 +1533,16 @@ export interface paths {
         /**
          * List Mutant Lines
          * @description List public mutant lines from the active published release.
+         *
+         *     ``mutagen`` keeps its historical *exact* match semantics. ``q`` is an
+         *     additive free-text filter that matches a case-insensitive substring of
+         *     the public identifier, the name, the cultivar or the mutagen; it narrows
+         *     the very same release-scoped, public-only candidate set and never widens
+         *     it.
+         *
+         *     Both filters leave the response shape untouched: the endpoint still
+         *     answers with a plain ``list[MutantLineResponse]`` (no envelope), so the
+         *     existing clients keep working.
          */
         get: operations["list_mutant_lines_api_v1_mutants_get"];
         put?: never;
@@ -6081,6 +6134,25 @@ export interface components {
             scale: "zscore" | "none";
         };
         /**
+         * ExportDownloadResponse
+         * @description A short-lived download link for a finished export artifact.
+         */
+        ExportDownloadResponse: {
+            /** Export Id */
+            export_id: string;
+            /** Download Url */
+            download_url: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Expires In Seconds */
+            expires_in_seconds: number;
+        };
+        /**
          * ExportRequest
          * @description Payload for requesting an asynchronous variant export.
          */
@@ -6090,7 +6162,7 @@ export interface components {
              * @default tsv
              */
             format: string;
-            filters?: components["schemas"]["VariantFilterParams"];
+            filters?: components["schemas"]["VariantExportFilters"];
             /**
              * Compress
              * @default true
@@ -6108,6 +6180,44 @@ export interface components {
             status: string;
             /** Message */
             message: string;
+        };
+        /**
+         * ExportStatusResponse
+         * @description Owner-visible state of a submitted variant export.
+         *
+         *     ``status`` uses the shared job vocabulary (``pending``/``running``/
+         *     ``succeeded``/``failed``).  The artifact's storage key is deliberately
+         *     absent: only a short-lived download URL is handed out, and only to the
+         *     owner or an administrator.
+         */
+        ExportStatusResponse: {
+            /** Export Id */
+            export_id: string;
+            /** Status */
+            status: string;
+            /** Format */
+            format: string;
+            /** Release Key */
+            release_key: string;
+            /** Assembly Key */
+            assembly_key?: string | null;
+            /** Record Count */
+            record_count?: number | null;
+            /** File Size */
+            file_size?: number | null;
+            /** Error Message */
+            error_message?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Started At */
+            started_at?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
         };
         /**
          * ExternalArticlePlatform
@@ -6165,6 +6275,27 @@ export interface components {
             features?: {
                 [key: string]: boolean;
             };
+        };
+        /**
+         * FieldError
+         * @description Field-level validation error for 422 responses.
+         */
+        FieldError: {
+            /**
+             * Field
+             * @description Dot-joined request field path, e.g. ``query.chromosome``.
+             */
+            field: string;
+            /**
+             * Message
+             * @description Human-readable validation message.
+             */
+            message: string;
+            /**
+             * Type
+             * @description Pydantic error type identifier (e.g. ``string_type``).
+             */
+            type: string;
         };
         /** FieldMappingItem */
         FieldMappingItem: {
@@ -9849,6 +9980,74 @@ export interface components {
             ctx?: Record<string, never>;
         };
         /**
+         * ValidationErrorResponse
+         * @description 422 response: unified envelope plus field-level ``errors``.
+         */
+        ValidationErrorResponse: {
+            error: components["schemas"]["ErrorDetail"];
+            /**
+             * Request Id
+             * @description Correlation id (also echoed in the ``X-Request-ID`` header).
+             */
+            request_id: string;
+            /**
+             * Status Code
+             * @description HTTP status code.
+             */
+            status_code: number;
+            /**
+             * Errors
+             * @description Field-level validation errors (sanitised; no internal structure exposed).
+             */
+            errors?: components["schemas"]["FieldError"][];
+            $defs: {
+                /**
+                 * ErrorDetail
+                 * @description Machine-readable error detail (inside the ``error`` envelope).
+                 */
+                ErrorDetail: {
+                    /**
+                     * Code
+                     * @description Stable machine-readable error code, e.g. ``not_found``.
+                     */
+                    code: string;
+                    /**
+                     * Message
+                     * @description Human-readable error message.
+                     */
+                    message: string;
+                    /**
+                     * Details
+                     * @description Optional structured context (never contains secrets or stack traces).
+                     */
+                    details?: {
+                        [key: string]: unknown;
+                    };
+                };
+                /**
+                 * FieldError
+                 * @description Field-level validation error for 422 responses.
+                 */
+                FieldError: {
+                    /**
+                     * Field
+                     * @description Dot-joined request field path, e.g. ``query.chromosome``.
+                     */
+                    field: string;
+                    /**
+                     * Message
+                     * @description Human-readable validation message.
+                     */
+                    message: string;
+                    /**
+                     * Type
+                     * @description Pydantic error type identifier (e.g. ``string_type``).
+                     */
+                    type: string;
+                };
+            };
+        };
+        /**
          * VariantDetail
          * @description Extended variant information with annotation and linked entities.
          */
@@ -9905,16 +10104,13 @@ export interface components {
             updated_at?: string | null;
         };
         /**
-         * VariantFilterParams
-         * @description Query parameters for filtering and paginating variant queries.
-         *
-         *     Uses an authenticated, release/filter-bound keyset cursor – never OFFSET.
-         *     ``limit`` is capped at 200.
+         * VariantExportFilters
+         * @description Public export filters; reject private keys instead of ignoring them.
          */
-        VariantFilterParams: {
+        VariantExportFilters: {
             /**
              * Assembly
-             * @description Assembly name (e.g. Wm82.a4.v1). Required for region queries.
+             * @description Assembly namespace of the exported file (e.g. ``Wm82.a4.v1``). A named assembly wins; when the request names none, the resolved release's own assembly scope is used; a request whose release declares no scope is refused. One export carries exactly one assembly namespace. The name is checked for length (at most 64 characters) and against the release's own facts: a namespace the release publishes no variants in is refused, because an artifact without rows would claim a namespace the release does not have.
              */
             assembly?: string | null;
             /** Chromosome */
@@ -9929,8 +10125,6 @@ export interface components {
             alt?: string | null;
             /** Gene Id */
             gene_id?: string | null;
-            /** Mutant Line Id */
-            mutant_line_id?: string | null;
             variant_type?: components["schemas"]["VariantType"] | null;
             consequence?: components["schemas"]["ConsequenceType"] | null;
             impact?: components["schemas"]["ImpactLevel"] | null;
@@ -9945,9 +10139,11 @@ export interface components {
             cursor?: string | null;
             /**
              * Limit
-             * @default 100
+             * @description Accepted for compatibility with the variant query filters, but not applied to an export: an artifact contains every record that matches the other filters, bounded by the export budget. A caller that wants a page of rows uses the variant list endpoint.
              */
-            limit: number;
+            limit?: number | null;
+            /** Mutant Line Public Id */
+            mutant_line_public_id?: string | null;
         };
         /**
          * VariantListResponse
@@ -10498,95 +10694,6 @@ export interface components {
          */
         app__schemas__seed_request__SeedRequestUpdate: {
             status: components["schemas"]["app__models__seed_request__SeedRequestStatus"];
-        };
-        /**
-         * FieldError
-         * @description Field-level validation error for 422 responses.
-         */
-        FieldError: {
-            /**
-             * Field
-             * @description Dot-joined request field path, e.g. ``query.chromosome``.
-             */
-            field: string;
-            /**
-             * Message
-             * @description Human-readable validation message.
-             */
-            message: string;
-            /**
-             * Type
-             * @description Pydantic error type identifier (e.g. ``string_type``).
-             */
-            type: string;
-        };
-        /**
-         * ValidationErrorResponse
-         * @description 422 response: unified envelope plus field-level ``errors``.
-         */
-        ValidationErrorResponse: {
-            error: components["schemas"]["ErrorDetail"];
-            /**
-             * Request Id
-             * @description Correlation id (also echoed in the ``X-Request-ID`` header).
-             */
-            request_id: string;
-            /**
-             * Status Code
-             * @description HTTP status code.
-             */
-            status_code: number;
-            /**
-             * Errors
-             * @description Field-level validation errors (sanitised; no internal structure exposed).
-             */
-            errors?: components["schemas"]["FieldError"][];
-            $defs: {
-                /**
-                 * ErrorDetail
-                 * @description Machine-readable error detail (inside the ``error`` envelope).
-                 */
-                ErrorDetail: {
-                    /**
-                     * Code
-                     * @description Stable machine-readable error code, e.g. ``not_found``.
-                     */
-                    code: string;
-                    /**
-                     * Message
-                     * @description Human-readable error message.
-                     */
-                    message: string;
-                    /**
-                     * Details
-                     * @description Optional structured context (never contains secrets or stack traces).
-                     */
-                    details?: {
-                        [key: string]: unknown;
-                    };
-                };
-                /**
-                 * FieldError
-                 * @description Field-level validation error for 422 responses.
-                 */
-                FieldError: {
-                    /**
-                     * Field
-                     * @description Dot-joined request field path, e.g. ``query.chromosome``.
-                     */
-                    field: string;
-                    /**
-                     * Message
-                     * @description Human-readable validation message.
-                     */
-                    message: string;
-                    /**
-                     * Type
-                     * @description Pydantic error type identifier (e.g. ``string_type``).
-                     */
-                    type: string;
-                };
-            };
         };
     };
     responses: never;
@@ -11762,7 +11869,7 @@ export interface operations {
                 ref?: string | null;
                 alt?: string | null;
                 gene_id?: string | null;
-                /** @description Public mutant-line identifier (e.g. SM7QF3Z9P2A). Resolved to the line's internal key server-side; a numeric/internal id is rejected. */
+                /** @description Public mutant-line identifier (e.g. SM7QF3Z9P2A). Resolved server-side within the published release; internal ids are rejected. */
                 mutant_line_public_id?: string | null;
                 variant_type?: components["schemas"]["VariantType"] | null;
                 consequence?: components["schemas"]["ConsequenceType"] | null;
@@ -11926,6 +12033,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExportResponse"];
+                };
+            };
+            /** @description Validation Error. The export is refused and nothing is queued, either because the request body failed schema validation (field-level ``errors`` are listed) or because the request could not be bound to exactly one assembly namespace: no assembly was named and the resolved release declares no scope, the resolved assembly name is longer than the export record can store (at most 64 characters), or the resolved release publishes no variants in that assembly namespace. A domain refusal carries the unified envelope with ``error.code`` ``validation_error`` and no ``errors`` list. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_variant_export_status_api_v1_variants_export__export_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_variant_export_download_api_v1_variants_export__export_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportDownloadResponse"];
                 };
             };
             /** @description Validation Error */
@@ -13303,6 +13490,8 @@ export interface operations {
         parameters: {
             query?: {
                 mutagen?: string | null;
+                q?: string | null;
+                offset?: number;
                 limit?: number;
                 release_id?: number | null;
             };

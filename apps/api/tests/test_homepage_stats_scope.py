@@ -483,8 +483,8 @@ async def test_the_cache_key_carries_the_release_id() -> None:
         stats_module.get_or_set = original
         stats_module.variant_service = original_service
 
-    assert seen[0]["params"] == {"release_id": 7}
-    assert seen[1]["params"] == {"release_id": 8}
+    assert seen[0]["params"] == {"release_id": 7, "variant_visibility": "public-v2"}
+    assert seen[1]["params"] == {"release_id": 8, "variant_visibility": "public-v2"}
     assert seen[0]["params"] != seen[1]["params"]
     assert cache_module.make_cache_key(seen[0]["key"], seen[0]["params"]) != (
         cache_module.make_cache_key(seen[1]["key"], seen[1]["params"])

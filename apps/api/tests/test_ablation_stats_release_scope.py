@@ -220,7 +220,9 @@ async def test_chromosome_density_summary_caches_per_release():
     finally:
         mod.get_or_set = original
 
-    assert seen[0]["params"] == {"release_id": _RELEASE_ID}
+    assert seen[0]["params"] == {
+        "release_id": _RELEASE_ID, "variant_visibility": "public-v2",
+    }
 
 
 # ---------------------------------------------------------------------------

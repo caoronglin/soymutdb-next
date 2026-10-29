@@ -15,7 +15,7 @@ API_DIR="$REPO_ROOT/apps/api"
 API_PYTHON="${SOYMUTDB_API_PYTHON:-$API_DIR/.venv/bin/python}"
 
 echo ">> exporting OpenAPI from backend..."
-export PYTHONPATH="$REPO_ROOT"
+export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 "$API_PYTHON" "$API_DIR/scripts/export_openapi.py" \
   --output "$PKG_DIR/openapi.json" \
   --error-codes-output "$PKG_DIR/error-codes.json"

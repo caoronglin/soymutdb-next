@@ -24,12 +24,17 @@ import {
   FileTextOutlined as FileText,
   PartitionOutlined as Layers,
 } from "@ant-design/icons";
-import { Button, Card, Skeleton, Table, Tag, Typography, type TableColumnsType } from "@/lib/antd";
+import { Button, Card, Select, Skeleton, Table, Tag, Typography, type TableColumnsType } from "@/lib/antd";
 import { FadeUp, Stagger } from "../components/route-motion";
 import { getDownloadFiles, getDownloadUrl } from "@soymutdb/api-client";
 import type { DownloadFile } from "@soymutdb/api-client";
 import { FilePreviewDialog } from "../components/file-viewer/file-preview-dialog";
+import { VariantExportControls } from "../components/variant-export-controls";
 import { safeExternalUrl } from "../lib/url-safety";
+import { assembliesQueryOptions } from "../lib/query-options";
+import { assemblyOptionLabel } from "../lib/assembly-selection";
+import { SITE_VARIANT } from "../lib/site-variant";
+import { useReleaseId } from "../lib/release-scope";
 
 export const Route = createFileRoute("/downloads")({
   component: DownloadsComponent,
@@ -87,6 +92,23 @@ function DownloadsComponent() {
     queryFn: () => getDownloadFiles(),
     staleTime: 60_000,
   });
+
+  // The custom export is bound to exactly one assembly namespace: an export
+  // that could span v4 and v5 would mix coordinate systems in one artifact.
+  // The catalogue supplies the options; the default assembly is the one the
+  // release itself publishes, so the common case needs no interaction.
+  // The pinned release is read reactively: a module read captured a
+  // snapshot that no release switch could invalidate, so the catalogue and
+  // the export would keep answering for a release the tab no longer follows.
+  const releaseId = useReleaseId();
+  const assembliesQuery = useQuery(
+    assembliesQueryOptions({ releaseId, siteVariant: SITE_VARIANT }),
+  );
+  const assemblies = assembliesQuery.data ?? [];
+  const [exportAssemblyId, setExportAssemblyId] = useState<string | undefined>(undefined);
+  const exportAssembly = exportAssemblyId
+    ? assemblies.find((assembly) => String(assembly.id) === exportAssemblyId)
+    : assemblies.find((assembly) => assembly.is_default);
 
   const handleDownload = async (file: DownloadFile) => {
     // Both the signed URL and the stored location are server data: only an
@@ -248,7 +270,7 @@ function DownloadsComponent() {
       </Stagger>
 
       <Card className="mt-6 border-dashed">
-        <div className="flex items-center gap-4 p-6">
+        <div className="flex flex-wrap items-center gap-4 p-6">
           <div className="flex size-10 items-center justify-center rounded-lg bg-accent text-accent-foreground">
             <FileCheck2 className="size-5" aria-hidden />
           </div>
@@ -258,7 +280,33 @@ function DownloadsComponent() {
               {t("downloads.customExportDescription")}
             </p>
           </div>
-          <Button variant="outlined">{t("common.submit")}</Button>
+          <div className="w-full sm:w-64">
+            <label
+              className="mb-1 block text-xs text-muted-foreground"
+              htmlFor="download-export-assembly"
+            >
+              {t("variants.assembly")}
+            </label>
+            <Select
+              id="download-export-assembly"
+              data-testid="download-export-assembly"
+              value={exportAssembly ? String(exportAssembly.id) : undefined}
+              onChange={(value) => setExportAssemblyId(String(value))}
+              loading={assembliesQuery.isLoading}
+              disabled={assembliesQuery.isError || assemblies.length === 0}
+              placeholder={t("search.genes.assemblyPlaceholder")}
+              options={assemblies.map((assembly) => ({
+                value: String(assembly.id),
+                label: assemblyOptionLabel(assembly),
+              }))}
+            />
+          </div>
+        </div>
+        <div className="px-6 pb-6">
+          <VariantExportControls
+            assemblyKey={exportAssembly?.name ?? ""}
+            submitLabel={t("common.submit")}
+          />
         </div>
       </Card>
 

@@ -2094,7 +2094,7 @@
           "variants"
         ],
         "summary": "List Variants",
-        "description": "Search variants with filters and cursor pagination (limit \u2264 200).\n\nThe mutant-line filter takes a **public** identifier. It is resolved to the\nline's internal key inside the resolved published release, so a numeric or\notherwise internal value is rejected instead of being bound to the variant\nstore as if it were a surrogate (which previously matched nothing, or\nnothing, depending on the value).",
+        "description": "Search variants with filters and cursor pagination (limit \u2264 200).\n\nThe mutant-line filter takes a **public** identifier, resolved to the\nfact's release-scoped line name. A persistence key or historical hash is\nnever accepted as a public identifier.",
         "operationId": "list_variants_api_v1_variants_get",
         "parameters": [
           {
@@ -2228,10 +2228,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Public mutant-line identifier (e.g. SM7QF3Z9P2A). Resolved to the line's internal key server-side; a numeric/internal id is rejected.",
+              "description": "Public mutant-line identifier (e.g. SM7QF3Z9P2A). Resolved server-side within the published release; internal ids are rejected.",
               "title": "Mutant Line Public Id"
             },
-            "description": "Public mutant-line identifier (e.g. SM7QF3Z9P2A). Resolved to the line's internal key server-side; a numeric/internal id is rejected."
+            "description": "Public mutant-line identifier (e.g. SM7QF3Z9P2A). Resolved server-side within the published release; internal ids are rejected."
           },
           {
             "name": "variant_type",
@@ -2644,7 +2644,7 @@
           "variants"
         ],
         "summary": "Export Variants",
-        "description": "Submit an asynchronous export job (vcf/tsv/csv/json/bed).",
+        "description": "Submit an asynchronous export job (vcf/tsv/csv/json/bed).\n\nThe job is bound to exactly one assembly namespace: a named assembly\nwins, otherwise the resolved release's own assembly scope is used, and a\nrequest with neither is refused. See ``filters.assembly`` for the exact\nrule and its limits.",
         "operationId": "export_variants_api_v1_variants_export_post",
         "security": [
           {
@@ -2709,6 +2709,65 @@
             }
           },
           "422": {
+            "description": "Validation Error. The export is refused and nothing is queued, either because the request body failed schema validation (field-level ``errors`` are listed) or because the request could not be bound to exactly one assembly namespace: no assembly was named and the resolved release declares no scope, the resolved assembly name is longer than the export record can store (at most 64 characters), or the resolved release publishes no variants in that assembly namespace. A domain refusal carries the unified envelope with ``error.code`` ``validation_error`` and no ``errors`` list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/variants/export/{export_id}": {
+      "get": {
+        "tags": [
+          "variants"
+        ],
+        "summary": "Get Variant Export Status",
+        "description": "Return the state of one export (submitter or administrator only).",
+        "operationId": "get_variant_export_status_api_v1_variants_export__export_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "export_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Export Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
             "description": "Validation Error",
             "content": {
               "application/json": {
@@ -2728,7 +2787,68 @@
               }
             }
           }
-        }
+        },
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/variants/export/{export_id}/download": {
+      "get": {
+        "tags": [
+          "variants"
+        ],
+        "summary": "Get Variant Export Download",
+        "description": "Return a short-lived download link for a completed export.",
+        "operationId": "get_variant_export_download_api_v1_variants_export__export_id__download_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "export_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Export Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportDownloadResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
       }
     },
     "/api/v1/tools/seqfetch": {
@@ -5224,7 +5344,7 @@
           "mutants"
         ],
         "summary": "List Mutant Lines",
-        "description": "List public mutant lines from the active published release.",
+        "description": "List public mutant lines from the active published release.\n\n``mutagen`` keeps its historical *exact* match semantics. ``q`` is an\nadditive free-text filter that matches a case-insensitive substring of\nthe public identifier, the name, the cultivar or the mutagen; it narrows\nthe very same release-scoped, public-only candidate set and never widens\nit.\n\nBoth filters leave the response shape untouched: the endpoint still\nanswers with a plain ``list[MutantLineResponse]`` (no envelope), so the\nexisting clients keep working.",
         "operationId": "list_mutant_lines_api_v1_mutants_get",
         "parameters": [
           {
@@ -5241,6 +5361,34 @@
                 }
               ],
               "title": "Mutagen"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 200
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Q"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
             }
           },
           {
@@ -20970,6 +21118,41 @@
         "title": "ExpPatternResponse",
         "description": "Assembly-labelled expression matrix; ``row_order`` maps display rows to genes."
       },
+      "ExportDownloadResponse": {
+        "properties": {
+          "export_id": {
+            "type": "string",
+            "title": "Export Id"
+          },
+          "download_url": {
+            "type": "string",
+            "title": "Download Url"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "expires_in_seconds": {
+            "type": "integer",
+            "title": "Expires In Seconds"
+          }
+        },
+        "type": "object",
+        "required": [
+          "export_id",
+          "download_url",
+          "filename",
+          "expires_at",
+          "expires_in_seconds"
+        ],
+        "title": "ExportDownloadResponse",
+        "description": "A short-lived download link for a finished export artifact."
+      },
       "ExportRequest": {
         "properties": {
           "format": {
@@ -20979,7 +21162,7 @@
             "default": "tsv"
           },
           "filters": {
-            "$ref": "#/components/schemas/VariantFilterParams"
+            "$ref": "#/components/schemas/VariantExportFilters"
           },
           "compress": {
             "type": "boolean",
@@ -21014,6 +21197,121 @@
         ],
         "title": "ExportResponse",
         "description": "Response after submitting an export job."
+      },
+      "ExportStatusResponse": {
+        "properties": {
+          "export_id": {
+            "type": "string",
+            "title": "Export Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "format": {
+            "type": "string",
+            "title": "Format"
+          },
+          "release_key": {
+            "type": "string",
+            "title": "Release Key"
+          },
+          "assembly_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assembly Key"
+          },
+          "record_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Record Count"
+          },
+          "file_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "File Size"
+          },
+          "error_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Message"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "export_id",
+          "status",
+          "format",
+          "release_key",
+          "created_at"
+        ],
+        "title": "ExportStatusResponse",
+        "description": "Owner-visible state of a submitted variant export.\n\n``status`` uses the shared job vocabulary (``pending``/``running``/\n``succeeded``/``failed``).  The artifact's storage key is deliberately\nabsent: only a short-lived download URL is handed out, and only to the\nowner or an administrator."
       },
       "ExternalArticlePlatform": {
         "type": "string",
@@ -21141,6 +21439,33 @@
         },
         "type": "object",
         "title": "FeatureUpdateRequest"
+      },
+      "FieldError": {
+        "description": "Field-level validation error for 422 responses.",
+        "properties": {
+          "field": {
+            "description": "Dot-joined request field path, e.g. ``query.chromosome``.",
+            "title": "Field",
+            "type": "string"
+          },
+          "message": {
+            "description": "Human-readable validation message.",
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "description": "Pydantic error type identifier (e.g. ``string_type``).",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "field",
+          "message",
+          "type"
+        ],
+        "title": "FieldError",
+        "type": "object"
       },
       "FieldMappingItem": {
         "properties": {
@@ -30728,6 +31053,95 @@
         ],
         "title": "ValidationError"
       },
+      "ValidationErrorResponse": {
+        "$defs": {
+          "ErrorDetail": {
+            "description": "Machine-readable error detail (inside the ``error`` envelope).",
+            "properties": {
+              "code": {
+                "description": "Stable machine-readable error code, e.g. ``not_found``.",
+                "title": "Code",
+                "type": "string"
+              },
+              "message": {
+                "description": "Human-readable error message.",
+                "title": "Message",
+                "type": "string"
+              },
+              "details": {
+                "additionalProperties": true,
+                "description": "Optional structured context (never contains secrets or stack traces).",
+                "title": "Details",
+                "type": "object"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "title": "ErrorDetail",
+            "type": "object"
+          },
+          "FieldError": {
+            "description": "Field-level validation error for 422 responses.",
+            "properties": {
+              "field": {
+                "description": "Dot-joined request field path, e.g. ``query.chromosome``.",
+                "title": "Field",
+                "type": "string"
+              },
+              "message": {
+                "description": "Human-readable validation message.",
+                "title": "Message",
+                "type": "string"
+              },
+              "type": {
+                "description": "Pydantic error type identifier (e.g. ``string_type``).",
+                "title": "Type",
+                "type": "string"
+              }
+            },
+            "required": [
+              "field",
+              "message",
+              "type"
+            ],
+            "title": "FieldError",
+            "type": "object"
+          }
+        },
+        "description": "422 response: unified envelope plus field-level ``errors``.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          },
+          "request_id": {
+            "description": "Correlation id (also echoed in the ``X-Request-ID`` header).",
+            "title": "Request Id",
+            "type": "string"
+          },
+          "status_code": {
+            "description": "HTTP status code.",
+            "title": "Status Code",
+            "type": "integer"
+          },
+          "errors": {
+            "description": "Field-level validation errors (sanitised; no internal structure exposed).",
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            },
+            "title": "Errors",
+            "type": "array"
+          }
+        },
+        "required": [
+          "error",
+          "request_id",
+          "status_code"
+        ],
+        "title": "ValidationErrorResponse",
+        "type": "object"
+      },
       "VariantDetail": {
         "properties": {
           "id": {
@@ -30984,7 +31398,7 @@
         "title": "VariantDetail",
         "description": "Extended variant information with annotation and linked entities."
       },
-      "VariantFilterParams": {
+      "VariantExportFilters": {
         "properties": {
           "assembly": {
             "anyOf": [
@@ -30996,7 +31410,7 @@
               }
             ],
             "title": "Assembly",
-            "description": "Assembly name (e.g. Wm82.a4.v1). Required for region queries."
+            "description": "Assembly namespace of the exported file (e.g. ``Wm82.a4.v1``). A named assembly wins; when the request names none, the resolved release's own assembly scope is used; a request whose release declares no scope is refused. One export carries exactly one assembly namespace. The name is checked for length (at most 64 characters) and against the release's own facts: a namespace the release publishes no variants in is refused, because an artifact without rows would claim a namespace the release does not have."
           },
           "chromosome": {
             "anyOf": [
@@ -31070,17 +31484,6 @@
             ],
             "title": "Gene Id"
           },
-          "mutant_line_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Mutant Line Id"
-          },
           "variant_type": {
             "anyOf": [
               {
@@ -31150,16 +31553,35 @@
             "description": "Opaque signed keyset cursor."
           },
           "limit": {
-            "type": "integer",
-            "maximum": 200.0,
-            "minimum": 1.0,
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 200.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Limit",
-            "default": 100
+            "description": "Accepted for compatibility with the variant query filters, but not applied to an export: an artifact contains every record that matches the other filters, bounded by the export budget. A caller that wants a page of rows uses the variant list endpoint."
+          },
+          "mutant_line_public_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mutant Line Public Id"
           }
         },
+        "additionalProperties": false,
         "type": "object",
-        "title": "VariantFilterParams",
-        "description": "Query parameters for filtering and paginating variant queries.\n\nUses an authenticated, release/filter-bound keyset cursor \u2013 never OFFSET.\n``limit`` is capped at 200."
+        "title": "VariantExportFilters",
+        "description": "Public export filters; reject private keys instead of ignoring them."
       },
       "VariantListResponse": {
         "properties": {
@@ -32547,122 +32969,6 @@
         ],
         "title": "SeedRequestUpdate",
         "description": "Admin status update payload."
-      },
-      "FieldError": {
-        "description": "Field-level validation error for 422 responses.",
-        "properties": {
-          "field": {
-            "description": "Dot-joined request field path, e.g. ``query.chromosome``.",
-            "title": "Field",
-            "type": "string"
-          },
-          "message": {
-            "description": "Human-readable validation message.",
-            "title": "Message",
-            "type": "string"
-          },
-          "type": {
-            "description": "Pydantic error type identifier (e.g. ``string_type``).",
-            "title": "Type",
-            "type": "string"
-          }
-        },
-        "required": [
-          "field",
-          "message",
-          "type"
-        ],
-        "title": "FieldError",
-        "type": "object"
-      },
-      "ValidationErrorResponse": {
-        "$defs": {
-          "ErrorDetail": {
-            "description": "Machine-readable error detail (inside the ``error`` envelope).",
-            "properties": {
-              "code": {
-                "description": "Stable machine-readable error code, e.g. ``not_found``.",
-                "title": "Code",
-                "type": "string"
-              },
-              "message": {
-                "description": "Human-readable error message.",
-                "title": "Message",
-                "type": "string"
-              },
-              "details": {
-                "additionalProperties": true,
-                "description": "Optional structured context (never contains secrets or stack traces).",
-                "title": "Details",
-                "type": "object"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "title": "ErrorDetail",
-            "type": "object"
-          },
-          "FieldError": {
-            "description": "Field-level validation error for 422 responses.",
-            "properties": {
-              "field": {
-                "description": "Dot-joined request field path, e.g. ``query.chromosome``.",
-                "title": "Field",
-                "type": "string"
-              },
-              "message": {
-                "description": "Human-readable validation message.",
-                "title": "Message",
-                "type": "string"
-              },
-              "type": {
-                "description": "Pydantic error type identifier (e.g. ``string_type``).",
-                "title": "Type",
-                "type": "string"
-              }
-            },
-            "required": [
-              "field",
-              "message",
-              "type"
-            ],
-            "title": "FieldError",
-            "type": "object"
-          }
-        },
-        "description": "422 response: unified envelope plus field-level ``errors``.",
-        "properties": {
-          "error": {
-            "$ref": "#/components/schemas/ErrorDetail"
-          },
-          "request_id": {
-            "description": "Correlation id (also echoed in the ``X-Request-ID`` header).",
-            "title": "Request Id",
-            "type": "string"
-          },
-          "status_code": {
-            "description": "HTTP status code.",
-            "title": "Status Code",
-            "type": "integer"
-          },
-          "errors": {
-            "description": "Field-level validation errors (sanitised; no internal structure exposed).",
-            "items": {
-              "$ref": "#/components/schemas/FieldError"
-            },
-            "title": "Errors",
-            "type": "array"
-          }
-        },
-        "required": [
-          "error",
-          "request_id",
-          "status_code"
-        ],
-        "title": "ValidationErrorResponse",
-        "type": "object"
       }
     },
     "securitySchemes": {

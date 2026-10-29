@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from importlib import import_module
 from types import SimpleNamespace
 from typing import Any
@@ -347,22 +348,36 @@ async def test_variant_export_writes_durable_event_pinned_to_release():
     class _Db:
         def __init__(self):
             self.commits = 0
+            self.added = []
 
         async def flush(self):
             pass
 
         def add(self, event):
+            self.added.append(event)
             self.event = event
 
         async def commit(self):
             self.commits += 1
 
+        async def execute(self, *args, **kwargs):
+            # The route asks the release's own facts whether the resolved
+            # namespace exists before it queues anything: an export of a
+            # namespace the release does not publish is refused instead of
+            # producing an empty artifact.
+            class _Result:
+                def first(self):
+                    return (1,)
+
+            return _Result()
+
     db = _Db()
     with patch.object(variants_route, "dispatch_task", create=True) as dispatch:
         response = await variants_route.export_variants(
-            ExportRequest(filters=VariantFilterParams(chromosome="Gm01")),
+            ExportRequest(filters={"chromosome": "Gm01"}),
             db=db,
             release_context=_context(),
+            current_user=SimpleNamespace(id=uuid.uuid4()),
         )
 
     assert response.status == "pending"
@@ -375,11 +390,27 @@ async def test_variant_export_writes_durable_event_pinned_to_release():
         "task_name": variants_route.EXPORT_VARIANTS_TASK,
         "kwargs": {
             "export_id": response.export_id,
-            "filters": {"chromosome": "Gm01", "release_key": "7"},
+            # The release's assembly scope is written into the command's
+            # filters: the worker constrains its SQL by this key, so the
+            # artifact cannot span assembly namespaces.
+            "filters": {
+                "chromosome": "Gm01",
+                "release_key": "7",
+                "assembly": "Wm82.a4.v1",
+            },
             "format": "tsv",
             "compress": True,
         },
     }
+    # The durable export record is written in the same transaction as the
+    # command event, so a committed request always has both.
+    record = next(item for item in db.added if item.__class__.__name__ == "VariantExport")
+    assert str(record.id) == response.export_id
+    assert record.release_key == "7"
+    assert record.assembly_key == "Wm82.a4.v1"
+    # The record and the command state the same namespace.
+    assert record.assembly_key == record.filters["assembly"]
+    assert record.status.value == "pending"
 
 
 class _InMemoryVariantStore:

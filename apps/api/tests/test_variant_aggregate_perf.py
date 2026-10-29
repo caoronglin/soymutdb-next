@@ -83,7 +83,7 @@ def store_on_test_transaction(db_connection, monkeypatch) -> SimpleNamespace:
 
 
 async def _seed_release_data(db: AsyncSession) -> None:
-    """Seed two releases, two mutant lines and their variant facts.
+    """Seed two releases, three mutant lines and their variant facts.
 
     Release 7001 owns three distinct genes and one mutant-line surrogate;
     release 7002 owns a fourth gene and a second surrogate. The aggregates
@@ -117,6 +117,13 @@ async def _seed_release_data(db: AsyncSession) -> None:
         ),
         MutantLine(
             id=OTHER_RELEASE_ID, public_id=SECOND_PUBLIC_LINE_ID, name="agg-line-7002",
+            release_id=OTHER_RELEASE_ID, is_public=True, is_deleted=False,
+        ),
+        # Keep the relational/dashboard distinction: this public line belongs
+        # to the first release but has no variant facts. A fact in release7002
+        # must not borrow visibility from a line in release7001.
+        MutantLine(
+            id=7003, public_id="SM9RF3Z9P2C", name="agg-line-7001-unobserved",
             release_id=RELEASE_ID, is_public=True, is_deleted=False,
         ),
     ])
@@ -127,21 +134,24 @@ async def _seed_release_data(db: AsyncSession) -> None:
             "release_id": RELEASE_ID, "assembly_id": ASSEMBLY_ID, "variant_id": 1,
             "assembly_key": "v5", "chromosome": "Chr01", "position": 100,
             "ref_allele": "A", "alt_allele": "T", "variant_type": "SNP",
-            "gene_id": "Glyma.01G000100", "mutant_line_surrogate_id": RELEASE_ID,
+            "gene_id": "Glyma.01G000100", "mutant_line_surrogate_id": 709926958,
+            "mutant_line_name": "agg-line-7001",
             "consequence": "missense_variant", "impact": "HIGH",
         },
         {
             "release_id": RELEASE_ID, "assembly_id": ASSEMBLY_ID, "variant_id": 2,
             "assembly_key": "v5", "chromosome": "Chr01", "position": 200,
             "ref_allele": "C", "alt_allele": "G", "variant_type": "SNP",
-            "gene_id": "Glyma.01G000100", "mutant_line_surrogate_id": RELEASE_ID,
+            "gene_id": "Glyma.01G000100", "mutant_line_surrogate_id": 709926958,
+            "mutant_line_name": "agg-line-7001",
             "consequence": "missense_variant", "impact": "HIGH",
         },
         {
             "release_id": RELEASE_ID, "assembly_id": ASSEMBLY_ID, "variant_id": 3,
             "assembly_key": "v5", "chromosome": "Chr01", "position": 300,
             "ref_allele": "A", "alt_allele": "AAA", "variant_type": "INS",
-            "gene_id": "Glyma.01G000200", "mutant_line_surrogate_id": RELEASE_ID,
+            "gene_id": "Glyma.01G000200", "mutant_line_surrogate_id": 709926958,
+            "mutant_line_name": "agg-line-7001",
             "consequence": "missense_variant", "impact": "HIGH",
         },
         {
@@ -149,6 +159,7 @@ async def _seed_release_data(db: AsyncSession) -> None:
             "assembly_key": "v5", "chromosome": "Chr01", "position": 400,
             "ref_allele": "TTT", "alt_allele": "A", "variant_type": "DEL",
             "gene_id": "Glyma.01G000300", "mutant_line_surrogate_id": 0,
+            "mutant_line_name": "",
             "consequence": "missense_variant", "impact": "HIGH",
         },
         {
@@ -156,6 +167,7 @@ async def _seed_release_data(db: AsyncSession) -> None:
             "variant_id": 5, "assembly_key": "v5", "chromosome": "Chr02",
             "position": 500, "ref_allele": "G", "alt_allele": "A", "variant_type": "SV",
             "gene_id": "Glyma.02G000100", "mutant_line_surrogate_id": OTHER_RELEASE_ID,
+            "mutant_line_name": "agg-line-7002",
             "consequence": "missense_variant", "impact": "HIGH",
         },
     ])

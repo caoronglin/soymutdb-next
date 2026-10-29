@@ -13,7 +13,27 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("react-i18next", async () => (await import("../test/mocks")).mockTranslation);
-vi.mock("@/lib/antd", async () => (await import("../test/antd-double")));
+vi.mock("@/lib/antd", async () => {
+  const double = await import("../test/antd-double");
+  return {
+    ...double,
+    /**
+     * The shared double renders the pagination as a static marker, so a test
+     * cannot move the operator off page 1. This control reports the page the
+     * double cannot show: a filter change has to answer with page 1, and that
+     * answer only means something after the operator has paged away.
+     */
+    Pagination: (props: { current?: number; onChange?: (page: number) => void }) => (
+      <button
+        type="button"
+        data-testid="pagination-page-3"
+        onClick={() => props.onChange?.(3)}
+      >
+        {String(props.current ?? "")}
+      </button>
+    ),
+  };
+});
 
 const api = vi.hoisted(() => ({
   get: vi.fn(),
@@ -102,5 +122,70 @@ describe("audit log error handling", () => {
     const error = await screen.findByTestId("audit-export-error");
     expect(error).toHaveTextContent("The CSV export failed.");
     expect(error).toHaveTextContent("export failed");
+  });
+});
+
+/** One audit row as the list endpoint returns it. */
+function auditRow(id: string) {
+  return {
+    id,
+    timestamp: "2026-10-24T10:00:00Z",
+    actor: "admin",
+    action: "login",
+    resource: "session",
+    resourceId: id,
+    ipAddress: "127.0.0.1",
+    userAgent: "vitest",
+    status: "success" as const,
+    details: null,
+  };
+}
+
+describe("audit log pagination", () => {
+  it("asks for page 1 again when a filter changes after the operator paged away", async () => {
+    const listRequests: Array<Record<string, unknown>> = [];
+    api.get.mockImplementation(
+      (url: string, options?: { params?: Record<string, unknown> }) => {
+        if (url.endsWith("/stats")) {
+          return Promise.resolve({
+            totalLogins: 3,
+            totalActions: 9,
+            uniqueIps: 2,
+            ipDistribution: [],
+          });
+        }
+        listRequests.push(options?.params ?? {});
+        // 150 records over a 50-row page: page 3 exists, so the page number
+        // under test is a real page of the unfiltered result set.
+        return Promise.resolve({ items: [auditRow("row-1")], total: 150 });
+      },
+    );
+
+    renderPage();
+
+    await waitFor(() => expect(listRequests.length).toBe(1));
+    expect(listRequests[0]).toMatchObject({ page: 1 });
+
+    // The operator moves to page 3 ...
+    fireEvent.click(await screen.findByTestId("pagination-page-3"));
+    await waitFor(() => expect(listRequests.length).toBe(2));
+    expect(listRequests[1]).toMatchObject({ page: 3 });
+
+    // ... and then narrows the result set.
+    fireEvent.change(screen.getByPlaceholderText(/Search by actor, resource, or IP/), {
+      target: { value: "alice" },
+    });
+
+    await waitFor(() => expect(listRequests.length).toBe(3));
+    // The narrowed request asks for page 1: the previous page number belongs
+    // to the previous filter scope, not to the filtered one.
+    expect(listRequests[2]).toMatchObject({ page: 1, search: "alice" });
+    // No request may carry the new filter together with the stale page
+    // number. That request is what makes the compliance screen claim "no
+    // audit records" for a page the filtered result set never had.
+    expect(
+      listRequests.filter((request) => request.search === "alice" && request.page !== 1),
+    ).toEqual([]);
+    expect(listRequests.map((request) => request.page)).toEqual([1, 3, 1]);
   });
 });

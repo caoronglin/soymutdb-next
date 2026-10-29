@@ -11,6 +11,14 @@ from pydantic import BaseModel, Field, field_validator
 
 from ..core.compat import StrEnum
 
+#: Maximum length of an assembly key in the public export contract.
+#:
+#: The export record stores the resolved assembly in
+#: ``variant_exports.assembly_key``, a ``String(64)`` column. A longer name
+#: cannot be persisted, so the API rejects it before the write instead of
+#: letting the database fail the request with a 500.
+MAX_ASSEMBLY_KEY_LENGTH = 64
+
 
 class VariantType(StrEnum):
     """Unified variant type enum."""
@@ -88,7 +96,7 @@ class VariantDetail(VariantResponse):
     updated_at: datetime | None = None
 
 
-class VariantFilterParams(BaseModel):
+class VariantQueryFilters(BaseModel):
     """Query parameters for filtering and paginating variant queries.
 
     Uses an authenticated, release/filter-bound keyset cursor – never OFFSET.
@@ -105,10 +113,6 @@ class VariantFilterParams(BaseModel):
     ref: str | None = Field(default=None, min_length=1, max_length=4096)
     alt: str | None = Field(default=None, min_length=1, max_length=4096)
     gene_id: str | None = None
-    #: Internal surrogate of the mutant line, set by the API *after* resolving a
-    #: public identifier. It is never accepted directly from a client and never
-    #: serialised into a response.
-    mutant_line_id: str | None = None
     variant_type: VariantType | None = None
     consequence: ConsequenceType | None = None
     impact: ImpactLevel | None = None
@@ -134,6 +138,49 @@ class VariantFilterParams(BaseModel):
         if v is not None and min_af is not None and v < min_af:
             raise ValueError("max_af must be >= min_af")
         return v
+
+
+class VariantFilterParams(VariantQueryFilters):
+    """Resolved repository filters, not a client request body.
+
+    ``mutant_line_name`` is set after a release-scoped public-id lookup. It is
+    never accepted directly from a client; historical hash surrogates are not
+    PostgreSQL foreign keys.
+    """
+
+    mutant_line_name: str | None = None
+
+
+class VariantExportFilters(VariantQueryFilters):
+    """Public export filters; reject private keys instead of ignoring them."""
+
+    model_config = {"extra": "forbid"}
+    mutant_line_public_id: str | None = None
+    assembly: str | None = Field(
+        default=None,
+        description=(
+            "Assembly namespace of the exported file (e.g. ``Wm82.a4.v1``). "
+            "A named assembly wins; when the request names none, the resolved "
+            "release's own assembly scope is used; a request whose release "
+            "declares no scope is refused. One export carries exactly one "
+            "assembly namespace. The name is checked for length (at most "
+            f"{MAX_ASSEMBLY_KEY_LENGTH} characters) and against the release's "
+            "own facts: a namespace the release publishes no variants in is "
+            "refused, because an artifact without rows would claim a "
+            "namespace the release does not have."
+        ),
+    )
+    limit: int | None = Field(
+        default=None,
+        ge=1,
+        le=200,
+        description=(
+            "Accepted for compatibility with the variant query filters, but "
+            "not applied to an export: an artifact contains every record that "
+            "matches the other filters, bounded by the export budget. A "
+            "caller that wants a page of rows uses the variant list endpoint."
+        ),
+    )
 
 
 class VariantListResponse(BaseModel):
@@ -193,7 +240,7 @@ class ExportRequest(BaseModel):
     """Payload for requesting an asynchronous variant export."""
 
     format: str = Field(default="tsv", pattern=r"^(vcf|tsv|csv|json|bed)$")
-    filters: VariantFilterParams = Field(default_factory=VariantFilterParams)
+    filters: VariantExportFilters = Field(default_factory=VariantExportFilters)
     compress: bool = True
 
 
@@ -203,3 +250,36 @@ class ExportResponse(BaseModel):
     export_id: str
     status: str
     message: str
+
+
+class ExportStatusResponse(BaseModel):
+    """Owner-visible state of a submitted variant export.
+
+    ``status`` uses the shared job vocabulary (``pending``/``running``/
+    ``succeeded``/``failed``).  The artifact's storage key is deliberately
+    absent: only a short-lived download URL is handed out, and only to the
+    owner or an administrator.
+    """
+
+    export_id: str
+    status: str
+    format: str
+    release_key: str
+    assembly_key: str | None = None
+    record_count: int | None = None
+    file_size: int | None = None
+    error_message: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    expires_at: datetime | None = None
+
+
+class ExportDownloadResponse(BaseModel):
+    """A short-lived download link for a finished export artifact."""
+
+    export_id: str
+    download_url: str
+    filename: str
+    expires_at: datetime
+    expires_in_seconds: int

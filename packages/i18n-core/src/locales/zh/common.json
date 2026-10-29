@@ -311,6 +311,8 @@
     "backToSearch": "返回搜索",
     "viewInBrowser": "在浏览器中查看",
     "export": "导出",
+    "exportRequiresAccount": "请使用研究者账户登录后提交导出任务。",
+    "exportSignIn": "登录",
     "exportTitle": "导出变异数据",
     "exportDesc": "导出符合当前筛选条件的变异",
     "exportFormat": "格式",
@@ -350,7 +352,15 @@
     "previousPage": "上一页",
     "nextPage": "下一页",
     "pageOf": "第 {{page}} 页",
-    "resultsAria": "变异结果"
+    "resultsAria": "变异结果",
+    "exportPending": "导出正在准备中…",
+    "exportRunning": "导出正在执行中…",
+    "exportReady": "导出已完成，可以下载。",
+    "exportFailed": "导出失败。",
+    "exportDownload": "下载导出文件",
+    "exportDownloadFailed": "导出文件下载失败",
+    "exportTakingLong": "该导出任务耗时超出预期，仍可能继续完成。",
+    "exportCheckAgain": "重新检查"
   },
   "mutantLines": {
     "title": "突变系",
@@ -444,6 +454,7 @@
     "timeout": "基因组浏览器未报告就绪。请在下方重试连接。",
     "loadError": "基因组浏览器加载失败。",
     "iframeTitle": "SoyMutDB 基因组浏览器（JBrowse 2）",
+    "navigationError": "无法在所选基因组版本中定位此区间或基因，请检查输入后重试。",
     "contextMissingTitle": "基因组浏览器上下文不可用",
     "contextMissingDescription": "打开 JBrowse 前，请选择明确的基因组组装版本和已发布的数据版本。",
     "openFullBrowser": "在完整浏览器中打开",
@@ -526,7 +537,14 @@
     "defaultTag": "默认",
     "referencePlaceholder": "选择参考序列类型",
     "submitFailed": "提交失败：{{message}}",
-    "proteinOnlyHint": "蛋白质序列比对（DIAMOND blastp）"
+    "proteinOnlyHint": "蛋白质序列比对（DIAMOND blastp）",
+    "hitProteinCoords": "蛋白坐标",
+    "geneSearchReleaseMismatch": "基因搜索使用门户当前发布版本。请使用基因组浏览器查看此作业原发布版本中的位置。",
+    "jbrowse": {
+      "resolving": "正在解析基因组位置…",
+      "unavailable": "该命中在当前发布版本中没有基因组位置。",
+      "resolveFailed": "无法加载基因组位置，请重试。"
+    }
   },
   "releases": {
     "title": "数据版本",
@@ -575,7 +593,7 @@
     "downloadFile": "下载 {{name}}",
     "downloadCount": "{{count}} 次下载",
     "customExportTitle": "需要自定义导出？",
-    "customExportDescription": "可提交异步导出任务，按筛选条件导出最多 1000 万条变异记录。"
+    "customExportDescription": "可提交异步导出任务，导出符合筛选条件的变异集合（最多 1 亿条记录）。"
   },
   "fileViewer": {
     "singleFile": "单个文件",
@@ -874,6 +892,7 @@
     "ambiguousAssembly": "基因组组装名称匹配多个版本：{{matches}}。请按版本标识选择。",
     "assemblyUnavailable": "所请求的基因组组装版本不可用；未发送查询。",
     "assemblyLabel": "基因组版本",
+    "assemblyPlaceholder": "请选择基因组版本",
     "releaseLabel": "数据版本",
     "unknownAssembly": "未知版本",
     "genes": {
@@ -1016,7 +1035,17 @@
     "enterQuery": "输入基因、变异或文献标识符以浏览数据库。",
     "searchFailed": "搜索失败",
     "requestId": "请求 ID",
-    "resultsSection": "搜索结果"
+    "resultsSection": "搜索结果",
+    "typeFilter": {
+      "label": "按类型筛选",
+      "all": "全部类型",
+      "gene": "基因",
+      "variant": "变异",
+      "mutantLine": "突变系",
+      "phenotype": "表型",
+      "publication": "文献"
+    },
+    "internalNotPaginated": "内部目录结果不支持分页。"
   },
   "admin": {
     "title": "管理后台",
@@ -1598,7 +1627,9 @@
         "openPreview": "打开预览",
         "loading": "正在生成预览链接...",
         "renderedTitle": "双语预览",
-        "empty": "暂无可预览内容。"
+        "empty": "暂无可预览内容。",
+        "originMissing": "未配置公开站点地址，无法创建预览链接。",
+        "originMissingHint": "请将 VITE_PUBLIC_URL 设置为公开站点地址（例如 https://www.soymutdb.org）。"
       },
       "form": {
         "titleEn": "标题（英文）",
@@ -3015,7 +3046,8 @@
       "apply": "筛选",
       "clear": "清除",
       "label": "筛选株系",
-      "placeholder": "输入株系名称、品种或诱变方式…"
+      "placeholder": "输入株系名称、品种或诱变方式…",
+      "mutagenExact": "诱变方式（精确）"
     },
     "loading": "正在加载株系…",
     "phenotypes": {
@@ -3032,6 +3064,7 @@
     },
     "resultsAria": "株系检索结果",
     "subtitle": "按品种、诱变方式与表型检索已公开的突变株系。",
-    "title": "突变株系"
+    "title": "突变株系",
+    "resultCount": "共 {{count}} 个突变株系"
   }
 }

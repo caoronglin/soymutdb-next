@@ -684,7 +684,7 @@ def _pct_change(current: float, previous: float) -> float:
 async def _total_variants(db: AsyncSession) -> int:
     """Total variant count: native PostgreSQL projection first, fallback, 0 last."""
     try:
-        variant_stats = await variant_service.get_dashboard_stats()
+        variant_stats = await variant_service.get_dashboard_stats(public_only=False)
         return int(variant_stats.get("total_variants", 0))
     except Exception:
         return await db.scalar(select(func.count(VariantSummary.id))) or 0

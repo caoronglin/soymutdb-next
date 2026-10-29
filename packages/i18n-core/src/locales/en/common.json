@@ -311,6 +311,8 @@
     "backToSearch": "Back to Search",
     "viewInBrowser": "View in Browser",
     "export": "Export",
+    "exportRequiresAccount": "Sign in with a researcher account to submit an export.",
+    "exportSignIn": "Sign in",
     "exportTitle": "Export Variant Data",
     "exportDesc": "Export variants matching current filters",
     "exportFormat": "Format",
@@ -350,7 +352,15 @@
     "previousPage": "Previous",
     "nextPage": "Next",
     "pageOf": "Page {{page}}",
-    "resultsAria": "Variant results"
+    "resultsAria": "Variant results",
+    "exportPending": "Export is being prepared…",
+    "exportRunning": "Export is running…",
+    "exportReady": "Export is ready to download.",
+    "exportFailed": "Export failed.",
+    "exportDownload": "Download export",
+    "exportDownloadFailed": "The export could not be downloaded",
+    "exportTakingLong": "This export is taking longer than expected. It may still finish.",
+    "exportCheckAgain": "Check again"
   },
   "mutantLines": {
     "title": "Mutant Lines",
@@ -444,6 +454,7 @@
     "timeout": "The genome browser did not report ready. Retry the connection below.",
     "loadError": "The genome browser failed to load.",
     "iframeTitle": "SoyMutDB genome browser (JBrowse 2)",
+    "navigationError": "Could not navigate to this location or gene in the selected assembly. Check the input and try again.",
     "contextMissingTitle": "Genome browser context unavailable",
     "contextMissingDescription": "Choose an explicit assembly and published release before opening JBrowse.",
     "openFullBrowser": "Open in full browser",
@@ -526,7 +537,14 @@
     "defaultTag": "Default",
     "referencePlaceholder": "Select a reference sequence type",
     "submitFailed": "Failed to submit: {{message}}",
-    "proteinOnlyHint": "Protein sequence search (DIAMOND blastp)"
+    "proteinOnlyHint": "Protein sequence search (DIAMOND blastp)",
+    "hitProteinCoords": "Protein coords",
+    "geneSearchReleaseMismatch": "Gene search uses the current portal release. Use the genome browser to view this job in its original release.",
+    "jbrowse": {
+      "resolving": "Resolving genome position…",
+      "unavailable": "This hit has no genome position in the selected release.",
+      "resolveFailed": "Could not load the genome position. Please retry."
+    }
   },
   "releases": {
     "title": "Data Releases",
@@ -575,7 +593,7 @@
     "downloadFile": "Download {{name}}",
     "downloadCount": "{{count}} downloads",
     "customExportTitle": "Need a custom export?",
-    "customExportDescription": "Submit an async export job for filtered variant sets up to 10M records."
+    "customExportDescription": "Submit an async export job for the variant sets matching your filters (up to 100 million records)."
   },
   "fileViewer": {
     "singleFile": "Single file",
@@ -874,6 +892,7 @@
     "ambiguousAssembly": "Assembly name matches several versions: {{matches}}. Select a version by its identifier.",
     "assemblyUnavailable": "The requested assembly is unavailable; no query was sent.",
     "assemblyLabel": "Genome version",
+    "assemblyPlaceholder": "Select a genome version",
     "releaseLabel": "Release",
     "unknownAssembly": "Unknown version",
     "genes": {
@@ -1016,7 +1035,17 @@
     "enterQuery": "Enter a gene, variant, or publication to explore the database.",
     "searchFailed": "Search failed",
     "requestId": "Request ID",
-    "resultsSection": "Search results"
+    "resultsSection": "Search results",
+    "typeFilter": {
+      "label": "Filter by type",
+      "all": "All types",
+      "gene": "Genes",
+      "variant": "Variants",
+      "mutantLine": "Mutant lines",
+      "phenotype": "Phenotypes",
+      "publication": "Publications"
+    },
+    "internalNotPaginated": "Internal directory results are not paginated."
   },
   "admin": {
     "title": "Admin Console",
@@ -1598,7 +1627,9 @@
         "openPreview": "Open Preview",
         "loading": "Generating preview link...",
         "renderedTitle": "Bilingual preview",
-        "empty": "Nothing to preview yet."
+        "empty": "Nothing to preview yet.",
+        "originMissing": "The public site URL is not configured, so a preview link cannot be created.",
+        "originMissingHint": "Set VITE_PUBLIC_URL to the public site origin (for example https://www.soymutdb.org)."
       },
       "form": {
         "titleEn": "Title (EN)",
@@ -3015,7 +3046,8 @@
       "apply": "Filter",
       "clear": "Clear",
       "label": "Filter mutant lines",
-      "placeholder": "Search by name, cultivar or mutagen…"
+      "placeholder": "Search by name, cultivar or mutagen…",
+      "mutagenExact": "Mutagen (exact)"
     },
     "loading": "Loading mutant lines…",
     "phenotypes": {
@@ -3032,6 +3064,7 @@
     },
     "resultsAria": "Mutant line search results",
     "subtitle": "Search published mutant lines by cultivar, mutagen and phenotype.",
-    "title": "Mutant lines"
+    "title": "Mutant lines",
+    "resultCount": "{{count}} mutant lines"
   }
 }

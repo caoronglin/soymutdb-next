@@ -71,6 +71,7 @@ from .system_settings import SystemSetting, SystemSettingRevision
 from .table_views import SpeciesInstance, TableViewTemplate
 from .tracks import Track, TrackCategory
 from .variant import MutantLine, Phenotype, VariantSummary
+from .variant_export import VariantExport, VariantExportStatus
 from .variant_facts import analytics_events, variant_facts, variant_facts_staging, web_vitals
 
 __all__ = [
@@ -167,6 +168,8 @@ __all__ = [
     "TrackCategory",
     "Transcript",
     "User",
+    "VariantExport",
+    "VariantExportStatus",
     "VariantSummary",
     "Widget",
     "WidgetCategory",

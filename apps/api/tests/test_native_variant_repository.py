@@ -63,9 +63,17 @@ def test_native_migration_and_unsigned_variant_lookup(monkeypatch):
         try:
             async with engine.begin() as connection:
                 await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
-                await connection.execute(text("CREATE TABLE releases (id INTEGER PRIMARY KEY)"))
+                await connection.execute(text(
+                    "CREATE TABLE releases (id INTEGER PRIMARY KEY, status text NOT NULL)"
+                ))
                 await connection.execute(text("CREATE TABLE assemblies (id INTEGER PRIMARY KEY)"))
-                await connection.execute(text("INSERT INTO releases VALUES (1), (2)"))
+                await connection.execute(text(
+                    "CREATE TABLE mutant_lines (release_id INTEGER, name text, public_id text, "
+                    "is_public boolean, is_deleted boolean)"
+                ))
+                await connection.execute(text(
+                    "INSERT INTO releases VALUES (1, 'published'), (2, 'published')"
+                ))
                 await connection.execute(text("INSERT INTO assemblies VALUES (4), (5)"))
                 await connection.run_sync(_migration, "upgrade")
                 indexes = set((await connection.execute(text(

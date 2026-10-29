@@ -250,8 +250,9 @@ class VariantService:
             allele_frequency=float(row.get("allele_frequency") or 0) or None,
             gene_id=row.get("gene_id"),
             gene_symbol=row.get("gene_symbol"),
-            consequence=row.get("consequence"),
-            impact=row.get("impact"),
+            # Native unannotated facts store empty strings, not enum values.
+            consequence=row.get("consequence") or None,
+            impact=row.get("impact") or None,
         )
 
     @staticmethod
@@ -272,8 +273,9 @@ class VariantService:
             allele_frequency=float(row.get("allele_frequency") or 0) or None,
             gene_id=row.get("gene_id"),
             gene_symbol=row.get("gene_symbol"),
-            consequence=row.get("consequence"),
-            impact=row.get("impact"),
+            # Native unannotated facts store empty strings, not enum values.
+            consequence=row.get("consequence") or None,
+            impact=row.get("impact") or None,
             hgvs_c=row.get("hgvs_c"),
             hgvs_p=row.get("hgvs_p"),
             depth=int(row.get("read_depth") or 0) or None,

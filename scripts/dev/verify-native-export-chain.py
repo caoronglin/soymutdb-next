@@ -191,7 +191,11 @@ async def _find_or_create(
 
     obj = (await session.execute(select(model).filter_by(**match))).scalar_one_or_none()
     if obj is None:
-        session.add(model(**match, **defaults))
+        # The created row must become the return value: the callers below
+        # read ``.id``/``.public_id`` off it, and a freshly seeded database
+        # has no pre-existing row to return.
+        obj = model(**match, **defaults)
+        session.add(obj)
     else:
         for field, value in defaults.items():
             setattr(obj, field, value)
@@ -477,7 +481,9 @@ async def wait_for_task(event_id: str, timeout_seconds: float) -> dict[str, Any]
         "record_count": outcome.get("record_count"),
         "file_size": outcome.get("file_size"),
         "s3_path": outcome.get("s3_path"),
-        "download_url": _redact(outcome.get("download_url"), "presigned URL"),
+        # The task result carries the object key only: the download URL is
+        # signed on demand by the API for the requester, never by the task.
+        "artifact_key": outcome.get("s3_path"),
     }
 
 

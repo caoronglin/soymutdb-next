@@ -15,7 +15,7 @@ TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 echo ">> exporting OpenAPI from backend..."
-export PYTHONPATH="$REPO_ROOT"
+export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 "$API_PYTHON" "$API_DIR/scripts/export_openapi.py" \
   --output "$TMP_DIR/openapi.json"
 

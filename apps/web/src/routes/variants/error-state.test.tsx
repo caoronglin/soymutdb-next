@@ -11,9 +11,19 @@ vi.mock("@tanstack/react-router", () => ({
   }),
   useNavigate: () => vi.fn(),
 }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", () => {
+  // These boundary tests assert keys; keep their translator stable across renders.
+  const translation = { t: (key: string) => key };
+  return { useTranslation: () => translation };
+});
 vi.mock("../../lib/site-content-react", () => ({ useSiteContent: () => ({ get: (_key: string, fallback: string) => fallback }) }));
+vi.mock("../../lib/session-context", () => ({ useSession: () => ({ sessionId: 1 }) }));
 vi.mock("../../components/route-motion", () => ({ FadeUp: ({ children }: { children: React.ReactNode }) => children }));
+vi.mock("../../lib/release-scope", () => ({
+  // The pinned release is a React value, not a module read: the route
+  // has to re-render when an operator publishes a new release.
+  useReleaseId: () => "1",
+}));
 vi.mock("@soymutdb/api-client", () => ({
   getReleaseId: () => "1",
   getAssemblies: async () => [{ id: 1, name: "Wm82.a4.v1", is_default: true }],

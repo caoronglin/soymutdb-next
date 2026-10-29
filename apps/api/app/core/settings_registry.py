@@ -1155,6 +1155,17 @@ _DEFINITIONS = (
         requires_approval=False,
         max_length=256,
     ),
+    _definition(
+        "content",
+        "blast.hitProteinCoords",
+        default="Protein coords",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=256,
+    ),
     # Help page headings + FAQ (explicit keys keep the editor simple).
     _definition(
         "content",

@@ -310,7 +310,7 @@ class TestEndpointCacheIntegration:
         assert result.total_variants == 10
         assert result.last_release_name == "v4.0"
         assert called["name"] == "stats:homepage"
-        assert called["params"] == {"release_id": 7}
+        assert called["params"] == {"release_id": 7, "variant_visibility": "public-v2"}
         assert called["ttl"] is None  # default TTL
 
     async def test_list_releases_cache_hit_skips_db(self, monkeypatch) -> None:
@@ -438,7 +438,9 @@ class TestEndpointCacheIntegration:
         assert result[0].chromosome == "Gm01"
         assert called["name"] == "stats:chromosome-density"
         # The release is resolved server-side, never supplied by the caller.
-        assert called["params"] == {"release_id": _STATS_RELEASE_ID}
+        assert called["params"] == {
+            "release_id": _STATS_RELEASE_ID, "variant_visibility": "public-v2",
+        }
 
     async def test_chromosome_density_cache_key_includes_release(self, monkeypatch) -> None:
         """Distinct ``release_id`` values must produce distinct cache keys."""
@@ -460,7 +462,10 @@ class TestEndpointCacheIntegration:
             db, release_context=_stats_release_context(9)
         )
 
-        assert seen == [{"release_id": 7}, {"release_id": 9}]
+        assert seen == [
+            {"release_id": 7, "variant_visibility": "public-v2"},
+            {"release_id": 9, "variant_visibility": "public-v2"},
+        ]
 
     async def test_release_statistics_cache_hit_skips_db(self, monkeypatch) -> None:
         from app.api.v1 import stats as stats_module

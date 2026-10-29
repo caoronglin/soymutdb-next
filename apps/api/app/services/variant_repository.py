@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..schemas.variant import VariantFilterParams
 from .release_context import ReleaseContext
+from .variant_visibility import PUBLIC_FACT_VISIBILITY
 
 _FIELDS = (
     "variant_id, release_id, assembly_key, chromosome, position, "
@@ -27,13 +28,13 @@ _FIELDS = (
 def _predicates(
     filters: VariantFilterParams, context: ReleaseContext,
 ) -> tuple[str, dict[str, Any]]:
-    conditions = ["release_id = :release_id"]
+    conditions = ["release_id = :release_id", PUBLIC_FACT_VISIBILITY]
     values: dict[str, Any] = {"release_id": context.release_id}
     # These pairs are fixed identifiers, never column names supplied by a user.
     for field, column in (
         ("assembly", "assembly_key"), ("chromosome", "chromosome"),
         ("ref", "ref_allele"), ("alt", "alt_allele"), ("gene_id", "gene_id"),
-        ("mutant_line_id", "mutant_line_surrogate_id"),
+        ("mutant_line_name", "mutant_line_name"),
         ("variant_type", "variant_type"), ("consequence", "consequence"),
         ("impact", "impact"),
     ):

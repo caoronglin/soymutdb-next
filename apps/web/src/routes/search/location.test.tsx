@@ -18,9 +18,13 @@ vi.mock("@tanstack/react-router", () => ({
   useRouter: () => ({ navigate: runtime.navigate }),
   Link: ({ children }: { children: React.ReactNode }) => children,
 }));
-vi.mock("react-i18next", () => ({ useTranslation: () => ({
-  t: (key: string, options?: { matches?: string }) => options?.matches ? `${key}: ${options.matches}` : key,
-}) }));
+vi.mock("react-i18next", () => {
+  // Preserve the key/matches assertions without replacing `t` on every render.
+  const translation = {
+    t: (key: string, options?: { matches?: string }) => options?.matches ? `${key}: ${options.matches}` : key,
+  };
+  return { useTranslation: () => translation };
+});
 vi.mock("../../lib/site-content-react", () => ({ useSiteContent: () => ({ get: (_key: string, fallback: string) => fallback }) }));
 vi.mock("../../components/route-motion", () => ({ FadeUp: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock("../../lib/release-scope", () => ({ useReleaseId: () => "7" }));

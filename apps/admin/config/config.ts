@@ -48,7 +48,7 @@ const viteEnv = {
   PROD: !development,
   VITE_API_BASE_URL: apiBaseUrl || "",
   VITE_BASE_URL: base,
-  VITE_PUBLIC_URL: env.VITE_PUBLIC_URL || base,
+  VITE_PUBLIC_URL: env.VITE_PUBLIC_URL?.trim() || "",
   VITE_REMOTE_INSTANCES_ENABLED: env.VITE_REMOTE_INSTANCES_ENABLED || "false",
   VITE_SOYMUTDB_RELEASE_ID: env.VITE_SOYMUTDB_RELEASE_ID || env.SOYMUTDB_RELEASE_ID || "",
 };

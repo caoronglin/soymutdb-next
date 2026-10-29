@@ -780,51 +780,124 @@ class DeliveryArchitectureTests(unittest.TestCase):
         path.write_text(json.dumps({"advisories": advisories, "metadata": {}}))
         return path
 
+    def _acceptance_fixture_payload(self, dg, *, today, **overrides):
+        """Build a synthetic, fully signed acceptance record.
+
+        The record is fixture data, never a repository acceptance: it names a
+        package that does not exist and an advisory id that is never issued,
+        so no assertion built on it can be satisfied by -- or leak into -- a
+        real risk acceptance. Its expiry sits exactly on the ceiling, so the
+        boundary is exercised as well as the interior.
+        """
+        from datetime import timedelta
+
+        entry = {
+            "advisory": "GHSA-1111-2222-3333",
+            "package": "soymutdb-fixture-package",
+            "vulnerable_range": "<=1.2.3",
+            "title": "synthetic fixture advisory",
+            "introduced_by": "soymutdb-fixture-package@1.0.0",
+            "severity_reached": "high",
+            "reachability": [
+                "Fixture only: the package does not exist in this repository.",
+            ],
+            "rationale": (
+                "Fixture only: this record exists so the acceptance policy can be "
+                "exercised without depending on a live risk acceptance."
+            ),
+            "accepted_by": "fixture-approver",
+            "accepted_on": today.isoformat(),
+            "expires_on": (today + timedelta(days=dg.MAX_ACCEPTANCE_DAYS)).isoformat(),
+            "review": "Fixture only.",
+        }
+        entry.update(overrides)
+        return {"schema_version": 1, "acceptances": [entry]}
+
+    def _write_acceptance_file(self, tmp_path, payload, name="advisory-acceptances.json"):
+        path = Path(tmp_path) / name
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        return path
+
     def test_advisory_acceptance_is_narrow_expiring_and_signed(self) -> None:
         """A signed risk acceptance must behave like a record, not a suppression.
 
-        braces 3.0.3 has no published fix, so the finding can only be
-        acknowledged (accepted by caoronglin on 2026-10-10, expiring 2026-12-09).
-        The mechanism that acknowledges it is asserted here because the failure
-        mode is a gate that silently stops failing — the one outcome nobody
-        would notice in review.
+        The mechanism that acknowledges a finding is asserted here because the
+        failure mode is a gate that silently stops failing -- the one outcome
+        nobody would notice in review.
+
+        The record under test is a fixture this test owns, written to a temp
+        dir. It used to be the live security/advisory-acceptances.json, which
+        tied the contract to that file being non-empty: retiring an acceptance
+        (the correct response to a withdrawn advisory) turned this test red
+        for a reason that had nothing to do with the policy. An empty
+        acceptances list is a legal state; the live record's own legality --
+        and the fact that an empty record grants nothing -- is asserted
+        separately, in
+        test_advisory_acceptance_record_is_legal_when_empty_and_grants_nothing.
         """
         from datetime import date, timedelta
 
         dg = self._load_governance_module()
         today = date(2026, 10, 10)
-        accept = ROOT / "security/advisory-acceptances.json"
 
-        def advisories(module="braces", advisory="GHSA-vfj7-8cjw-p6xm", severity="high"):
+        def advisories(
+            module="soymutdb-fixture-package",
+            advisory="GHSA-1111-2222-3333",
+            severity="high",
+        ):
             return {
                 "1": {
                     "module_name": module, "severity": severity,
                     "github_advisory_id": advisory,
-                    "vulnerable_versions": "<=3.0.3", "patched_versions": None,
+                    "vulnerable_versions": "<=1.2.3", "patched_versions": None,
                 }
             }
 
-        # Baseline: the real file accepts exactly the real finding.
-        self.assertTrue((accept).is_file(), "the acceptance record must be committed")
-        entries = dg.load_advisory_acceptances(accept, today=today)
-        self.assertTrue(entries)
-        for entry in entries:
-            for field in dg.ACCEPTANCE_REQUIRED_FIELDS:
-                self.assertTrue(str(entry.get(field, "")).strip(), f"{field} is required")
-            self.assertTrue(
-                str(entry.get("reachability", "")).strip(),
-                "an acceptance must state why the finding is not reachable",
-            )
-
-        # Narrow: a different advisory in the same package is still a failure.
-        import tempfile
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
+
+            # The fixture is explicitly signed and expires within the ceiling.
+            payload = self._acceptance_fixture_payload(dg, today=today)
+            entry = payload["acceptances"][0]
+            for field in ("accepted_by", "rationale", "reachability"):
+                self.assertTrue(
+                    str(entry.get(field, "")).strip(),
+                    f"the fixture acceptance must be signed with {field}",
+                )
+            self.assertLessEqual(
+                (date.fromisoformat(entry["expires_on"]) - today).days,
+                dg.MAX_ACCEPTANCE_DAYS,
+                "a fixture acceptance must expire within the ceiling it tests",
+            )
+
+            accept = self._write_acceptance_file(tmp_path, payload)
+            entries = dg.load_advisory_acceptances(accept, today=today)
+            self.assertEqual(len(entries), 1)
+            for field in dg.ACCEPTANCE_REQUIRED_FIELDS:
+                self.assertTrue(str(entries[0].get(field, "")).strip(), f"{field} is required")
+
+            # A properly signed, unexpired acceptance accepts exactly its own
+            # finding. Without this the checks below would only prove that the
+            # mechanism refuses everything.
+            passed, findings, accepted = dg.evaluate_advisory_report(
+                self._pnpm_audit_report(dg, tmp_path, advisories=advisories()),
+                entries,
+            )
+            self.assertTrue(
+                passed,
+                f"a signed acceptance must accept its own finding: {findings}",
+            )
+            self.assertEqual(len(accepted), 1)
+            self.assertFalse(accepted[0]["expired"])
+            self.assertEqual(accepted[0]["advisory"], "GHSA-1111-2222-3333")
+            self.assertEqual(accepted[0]["package"], "soymutdb-fixture-package")
+
+            # Narrow: a different advisory in the same package is still a failure.
             passed, findings, _ = dg.evaluate_advisory_report(
                 self._pnpm_audit_report(
                     dg, tmp_path, advisories=advisories(advisory="GHSA-0000-0000-0000")
                 ),
-                dg.load_advisory_acceptances(accept, today=today),
+                entries,
             )
             self.assertFalse(passed, "an unlisted advisory must not be accepted")
             self.assertTrue(any("GHSA-0000-0000-0000" in f for f in findings))
@@ -832,9 +905,9 @@ class DeliveryArchitectureTests(unittest.TestCase):
             # Narrow: a different package under the same advisory likewise.
             passed, _, _ = dg.evaluate_advisory_report(
                 self._pnpm_audit_report(
-                    dg, tmp_path, advisories=advisories(module="micromatch")
+                    dg, tmp_path, advisories=advisories(module="some-other-package")
                 ),
-                dg.load_advisory_acceptances(accept, today=today),
+                entries,
             )
             self.assertFalse(passed, "an acceptance must not transfer to another package")
 
@@ -847,20 +920,21 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 self._pnpm_audit_report(
                     dg, tmp_path, advisories=advisories(severity="moderate")
                 ),
-                dg.load_advisory_acceptances(accept, today=today),
+                entries,
             )
             self.assertFalse(passed)
             self.assertTrue(any("matches no reported finding" in f for f in findings))
 
         # Expiring: an expired entry fails rather than degrading to a warning.
         with tempfile.TemporaryDirectory() as tmp:
-            payload = json.loads(accept.read_text(encoding="utf-8"))
-            payload["acceptances"][0]["expires_on"] = "2026-09-01"
-            stale = Path(tmp) / "acc.json"
-            stale.write_text(json.dumps(payload), encoding="utf-8")
-            entries = dg.load_advisory_acceptances(stale, today=today)
+            tmp_path = Path(tmp)
+            payload = self._acceptance_fixture_payload(
+                dg, today=today, expires_on="2026-09-01"
+            )
+            expired = self._write_acceptance_file(tmp_path, payload)
+            entries = dg.load_advisory_acceptances(expired, today=today)
             passed, findings, accepted = dg.evaluate_advisory_report(
-                self._pnpm_audit_report(dg, Path(tmp), advisories=advisories()),
+                self._pnpm_audit_report(dg, tmp_path, advisories=advisories()),
                 entries,
             )
             self.assertFalse(passed, "an expired acceptance must fail the gate")
@@ -869,12 +943,12 @@ class DeliveryArchitectureTests(unittest.TestCase):
 
         # Bounded: no entry may be written further out than the maximum.
         with tempfile.TemporaryDirectory() as tmp:
-            payload = json.loads(accept.read_text(encoding="utf-8"))
-            payload["acceptances"][0]["expires_on"] = (
-                today + timedelta(days=dg.MAX_ACCEPTANCE_DAYS + 1)
-            ).isoformat()
-            far = Path(tmp) / "acc.json"
-            far.write_text(json.dumps(payload), encoding="utf-8")
+            payload = self._acceptance_fixture_payload(
+                dg,
+                today=today,
+                expires_on=(today + timedelta(days=dg.MAX_ACCEPTANCE_DAYS + 1)).isoformat(),
+            )
+            far = self._write_acceptance_file(Path(tmp), payload)
             with self.assertRaises(dg.AcceptancePolicyError):
                 dg.load_advisory_acceptances(far, today=today)
 
@@ -882,26 +956,104 @@ class DeliveryArchitectureTests(unittest.TestCase):
         for field in ("accepted_by", "rationale", "expires_on", "advisory", "package"):
             with self.subTest(missing=field):
                 with tempfile.TemporaryDirectory() as tmp:
-                    payload = json.loads(accept.read_text(encoding="utf-8"))
+                    payload = self._acceptance_fixture_payload(dg, today=today)
                     payload["acceptances"][0].pop(field)
-                    path = Path(tmp) / "acc.json"
-                    path.write_text(json.dumps(payload), encoding="utf-8")
+                    path = self._write_acceptance_file(Path(tmp), payload)
                     with self.assertRaises(dg.AcceptancePolicyError):
                         dg.load_advisory_acceptances(path, today=today)
 
         # Non-rotting: an entry matching nothing is stale and fails.
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
-            payload = json.loads(accept.read_text(encoding="utf-8"))
-            payload["acceptances"][0]["advisory"] = "GHSA-1111-1111-1111"
-            path = Path(tmp) / "acc.json"
-            path.write_text(json.dumps(payload), encoding="utf-8")
+            payload = self._acceptance_fixture_payload(
+                dg, today=today, advisory="GHSA-3333-3333-3333"
+            )
+            path = self._write_acceptance_file(tmp_path, payload)
             passed, findings, _ = dg.evaluate_advisory_report(
                 self._pnpm_audit_report(dg, tmp_path, advisories=advisories()),
                 dg.load_advisory_acceptances(path, today=today),
             )
             self.assertFalse(passed, "a stale acceptance must fail")
             self.assertTrue(any("matches no reported finding" in f for f in findings))
+
+    def test_advisory_acceptance_record_is_legal_when_empty_and_grants_nothing(self) -> None:
+        """The live acceptance record is data; the policy is the code.
+
+        security/advisory-acceptances.json is expected to be empty whenever no
+        risk is currently accepted, so the contract may not require it to hold
+        an entry. What it must hold is:
+
+          * the file exists and is schema-valid -- schema_version 1 and a list
+            of acceptances -- under the very loader the gate uses;
+          * every entry it does carry is complete: approver, rationale,
+            expiry and a reachability argument;
+          * an empty list is a legal state, not a malformed one; and
+          * an empty list grants nothing: a high finding with no matching
+            acceptance still fails the gate, so retiring an acceptance can
+            never be read as "everything is accepted now".
+        """
+        from datetime import date
+
+        dg = self._load_governance_module()
+        accept = ROOT / "security/advisory-acceptances.json"
+
+        self.assertTrue(accept.is_file(), "the acceptance record must be committed")
+
+        raw = json.loads(accept.read_text(encoding="utf-8"))
+        self.assertEqual(raw.get("schema_version"), 1)
+        self.assertIsInstance(raw.get("acceptances"), list)
+
+        # Loaded with today's date, exactly as the gate loads it, so a record
+        # the production gate would reject fails this contract too.
+        entries = dg.load_advisory_acceptances(accept, today=date.today())
+        for entry in entries:
+            for field in dg.ACCEPTANCE_REQUIRED_FIELDS:
+                self.assertTrue(
+                    str(entry.get(field, "")).strip(),
+                    f"{field} is required on every accepted advisory",
+                )
+            self.assertTrue(
+                str(entry.get("reachability", "")).strip(),
+                "an acceptance must state why the finding is not reachable",
+            )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+
+            # An empty acceptances list is legal: it loads, and it is empty.
+            empty = self._write_acceptance_file(
+                tmp_path, {"schema_version": 1, "acceptances": []}, name="empty.json"
+            )
+            self.assertEqual(dg.load_advisory_acceptances(empty, today=date.today()), [])
+
+            probe = {
+                "1": {
+                    "module_name": "soymutdb-acceptance-probe",
+                    "severity": "high",
+                    "github_advisory_id": "GHSA-probe-probe-probe",
+                    "vulnerable_versions": "<=0.0.1",
+                    "patched_versions": None,
+                }
+            }
+            report = self._pnpm_audit_report(dg, tmp_path, advisories=probe)
+
+            # An empty record grants nothing: the probe finding still fails.
+            passed, findings, accepted = dg.evaluate_advisory_report(
+                report, dg.load_advisory_acceptances(empty, today=date.today())
+            )
+            self.assertFalse(passed, "an empty acceptance record must not pass a high finding")
+            self.assertEqual(accepted, [])
+            self.assertTrue(
+                any("GHSA-probe-probe-probe" in f for f in findings),
+                f"an unaccepted finding must be reported, not dropped: {findings}",
+            )
+
+            # And neither does the live record, whatever it currently holds:
+            # the probe matches no acceptance, so it can never be accepted.
+            passed, findings, accepted = dg.evaluate_advisory_report(report, entries)
+            self.assertFalse(passed, "the live acceptance record must not pass an unlisted finding")
+            self.assertEqual(accepted, [], "no acceptance may match the probe")
+            self.assertTrue(any("GHSA-probe-probe-probe" in f for f in findings))
 
     def test_accepted_advisories_stay_visible_in_gate_output(self) -> None:
         """An accepted finding is printed on pass, not only on failure."""

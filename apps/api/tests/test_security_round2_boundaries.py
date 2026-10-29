@@ -187,8 +187,14 @@ async def test_non_public_and_soft_deleted_mutants_stay_hidden(
 async def test_no_public_response_body_carries_an_internal_id(
     client, db_session, published_release
 ) -> None:
-    """Neither the detail page nor the list leaks the persistence key."""
+    """Neither the detail page nor the list leaks the persistence key.
+
+    The persistence key is pinned to a distinctive value: with a generated
+    surrogate key the substring check would also trip on a single digit that
+    happens to occur in a timestamp, which is a false positive, not a leak.
+    """
     line = MutantLine(
+        id=987654321,
         name="leak-check",
         public_id=LEAK_PUBLIC_ID,
         is_public=True,

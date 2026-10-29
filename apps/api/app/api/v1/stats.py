@@ -62,6 +62,7 @@ from ...services.release_context import (
     get_release_context,
     resolve_release_context,
 )
+from ...services.variant_visibility import public_mutant_visibility, public_summary_visibility
 
 logger = get_logger(__name__)
 
@@ -98,6 +99,7 @@ async def _variant_type_counts_from_pg(
     """
     stmt = (
         select(VariantSummary.variant_type, func.count())
+        .where(public_summary_visibility())
         .group_by(VariantSummary.variant_type)
     )
     if release_id is not None:
@@ -141,12 +143,14 @@ async def _load_dashboard_stats(db: AsyncSession, release_id: int) -> dict:
             .where(Gene.assembly_id.in_(release_assembly_ids))
             .scalar_subquery(),
             select(func.count(MutantLine.id))
-            .where(MutantLine.release_id == release_id)
+            .where(MutantLine.release_id == release_id, public_mutant_visibility())
             .scalar_subquery(),
             select(func.count(Phenotype.id))
             .where(
                 Phenotype.mutant_line_id.in_(
-                    select(MutantLine.id).where(MutantLine.release_id == release_id)
+                    select(MutantLine.id).where(
+                        MutantLine.release_id == release_id, public_mutant_visibility(),
+                    )
                 )
             )
             .scalar_subquery(),
@@ -199,7 +203,7 @@ async def dashboard_stats(
     payload = await get_or_set(
         "stats:dashboard",
         ttl=None,
-        params={"release_id": release_id},
+        params={"release_id": release_id, "variant_visibility": "public-v2"},
         loader=lambda: _load_dashboard_stats(db, release_id),
     )
     return DashboardStats(**payload)
@@ -271,7 +275,7 @@ async def homepage_stats(
     payload = await get_or_set(
         "stats:homepage",
         ttl=None,
-        params={"release_id": release_id},
+        params={"release_id": release_id, "variant_visibility": "public-v2"},
         loader=lambda: _load_homepage_stats(db, release_id),
     )
     return HomepageStats(**payload)
@@ -331,8 +335,7 @@ async def _load_homepage_stats(db: AsyncSession, release_id: int | None = None) 
     # attached to that release.
     public_lines = select(MutantLine.id).where(
         MutantLine.release_id == scope,
-        MutantLine.is_deleted.is_(False),
-        MutantLine.is_public.is_(True),
+        public_mutant_visibility(),
     )
 
     row = (
@@ -348,8 +351,7 @@ async def _load_homepage_stats(db: AsyncSession, release_id: int | None = None) 
                 select(func.count(MutantLine.id))
                 .where(
                     MutantLine.release_id == scope,
-                    MutantLine.is_deleted.is_(False),
-                    MutantLine.is_public.is_(True),
+                    public_mutant_visibility(),
                 )
                 .scalar_subquery(),
                 select(func.count(Release.id))
@@ -503,6 +505,7 @@ async def impact_summary(
         .where(
             VariantSummary.impact.is_not(None),
             VariantSummary.release_id == release_context.release_id,
+            public_summary_visibility(),
         )
         .group_by(VariantSummary.impact)
     )
@@ -538,7 +541,7 @@ async def chromosome_density_summary(
     payload = await get_or_set(
         "stats:chromosome-density",
         ttl=None,
-        params={"release_id": release_id},
+        params={"release_id": release_id, "variant_visibility": "public-v2"},
         loader=lambda: _load_chromosome_density_summary(db, release_id),
     )
     return [ChromosomeDensitySummary.model_validate(item) for item in payload]
@@ -556,6 +559,7 @@ async def _load_chromosome_density_summary(
             func.count(),
         )
         .join(VariantSummary, VariantSummary.chromosome_id == Chromosome.id)
+        .where(public_summary_visibility())
         .group_by(Chromosome.name, Chromosome.length, VariantSummary.variant_type)
         .order_by(Chromosome.name)
     )
@@ -712,7 +716,7 @@ async def mutagen_statistics(
         select(MutantLine.mutagen, func.count())
         .where(
             MutantLine.mutagen.is_not(None),
-            MutantLine.is_deleted.is_(False),
+            public_mutant_visibility(),
             MutantLine.release_id == release_context.release_id,
         )
         .group_by(MutantLine.mutagen)

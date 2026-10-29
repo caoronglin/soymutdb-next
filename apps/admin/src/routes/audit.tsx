@@ -2,7 +2,7 @@ import { SnippetsOutlined, DownloadOutlined, FilterOutlined, GlobalOutlined, Ris
 import { useTranslation } from "react-i18next";
 import { Skeleton, App, Badge, Button, Input, PageContainer, ProCard, ProTable, Select, Typography, type ProColumns } from "@/lib/antd";
 import { StatCard } from "../components/stat-card";
-import { useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { http } from "@soymutdb/api-client";
 import { DataTable, type DataTableColumn } from "../components/data-table";
@@ -64,6 +64,38 @@ type StatsPeriod = "day" | "week" | "month";
 const EMPTY_AUDIT_LOGS: AuditLog[] = [];
 const EMPTY_IP_DISTRIBUTION: AuditStats["ipDistribution"] = [];
 
+/** Rows per page of the audit list; shared by the request and the pager. */
+const AUDIT_PAGE_SIZE = 50;
+
+/**
+ * The raw filter values that scope an audit-log request.
+ *
+ * They are kept as one object (and not as five separate states) because a
+ * filter change and the page reset that belongs to it have to be applied
+ * together: the page number belongs to the filter scope it was counted for.
+ */
+interface AuditFilterScope {
+  search: string;
+  action: string;
+  ipAddress: string;
+  startDate: string;
+  endDate: string;
+}
+
+const EMPTY_FILTER_SCOPE: AuditFilterScope = {
+  search: "",
+  action: "all",
+  ipAddress: "",
+  startDate: "",
+  endDate: "",
+};
+
+/** The filter scope plus the page of that scope the operator is looking at. */
+interface AuditQueryState {
+  scope: AuditFilterScope;
+  page: number;
+}
+
 /** Trigger a client-side file download from a server response. */
 function downloadBlob(content: BlobPart, filename: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });
@@ -80,38 +112,74 @@ function downloadBlob(content: BlobPart, filename: string, mimeType: string): vo
 export default function AuditPage() {
   const { t } = useTranslation();
   const { message } = App.useApp();
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [actionFilter, setActionFilter] = useState("all");
-  const [ipFilter, setIpFilter] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [queryState, setQueryState] = useState<AuditQueryState>({
+    scope: EMPTY_FILTER_SCOPE,
+    page: 1,
+  });
+  const { scope, page } = queryState;
   const [period, setPeriod] = useState<StatsPeriod>("week");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+
+  /**
+   * Apply a filter change and restart the result set at page 1.
+   *
+   * The scope and the page are one state, so the new filter and the reset
+   * page reach the query in the same update. An effect that reset the page
+   * afterwards would first render (and request) the *previous* page with the
+   * new filter — a request for a page the filtered result set may not have,
+   * which is what makes the compliance screen claim "no audit records".
+   */
+  const updateScope = useCallback((patch: Partial<AuditFilterScope>) => {
+    setQueryState((prev) => ({ scope: { ...prev.scope, ...patch }, page: 1 }));
+  }, []);
+
+  /** Move to another page of the current scope; the scope itself is unchanged. */
+  const changePage = useCallback((nextPage: number) => {
+    setQueryState((prev) =>
+      prev.page === nextPage ? prev : { ...prev, page: nextPage },
+    );
+  }, []);
+
   const filterParams = useMemo(
     () =>
       buildAuditLogFilterParams({
-        search,
-        action: actionFilter,
-        ipAddress: ipFilter,
-        startDate,
-        endDate,
+        search: scope.search,
+        action: scope.action,
+        ipAddress: scope.ipAddress,
+        startDate: scope.startDate,
+        endDate: scope.endDate,
       }),
-    [search, actionFilter, ipFilter, startDate, endDate],
+    [scope.search, scope.action, scope.ipAddress, scope.startDate, scope.endDate],
   );
 
   const { data, isLoading, isError: logsFailed, refetch: refetchLogs } = useQuery<{ items: AuditLog[]; total: number }>({
-    queryKey: ["admin-audit", page, search, actionFilter, ipFilter, startDate, endDate],
+    queryKey: ["admin-audit", page, scope.search, scope.action, scope.ipAddress, scope.startDate, scope.endDate],
     queryFn: () =>
       http.get("/admin/audit-logs", {
         params: {
           page,
-          page_size: 50,
+          page_size: AUDIT_PAGE_SIZE,
           ...filterParams,
         },
       }),
   });
+
+  /**
+   * A page that the filtered result set does not have must never be shown as
+   * an empty log: the records exist, they are simply on another page. The
+   * count comes from the server and is not adjusted here.
+   */
+  const total = data?.total ?? 0;
+  const lastPage = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE));
+  const pageBeyondResult =
+    data != null && data.total > 0 && data.items.length === 0 && page > lastPage;
+  useEffect(() => {
+    if (!pageBeyondResult) return;
+    setQueryState((prev) =>
+      prev.page === lastPage ? prev : { ...prev, page: lastPage },
+    );
+  }, [pageBeyondResult, lastPage]);
 
   const {
     data: stats,
@@ -402,14 +470,14 @@ export default function AuditPage() {
             <FilterOutlined className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder={t("admin.audit.searchPlaceholder", { defaultValue: "Search by actor, resource, or IP..." })}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={scope.search}
+              onChange={(e) => updateScope({ search: e.target.value })}
               className="h-9 w-72 pl-8"
             />
           </div>
           <Select
-            value={actionFilter}
-            onChange={setActionFilter}
+            value={scope.action}
+            onChange={(v) => updateScope({ action: v })}
             options={[
               { value: "all", label: t("admin.audit.actionAll", { defaultValue: "All Actions" }) },
               { value: "create", label: t("admin.audit.actionCreate", { defaultValue: "Create" }) },
@@ -425,24 +493,24 @@ export default function AuditPage() {
             <GlobalOutlined className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder={t("admin.audit.ipFilterPlaceholder", { defaultValue: "Filter by IP address..." })}
-              value={ipFilter}
-              onChange={(e) => setIpFilter(e.target.value)}
+              value={scope.ipAddress}
+              onChange={(e) => updateScope({ ipAddress: e.target.value })}
               className="h-9 w-44 pl-8"
             />
           </div>
           <div className="flex items-center gap-1.5">
             <Input
               type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              value={scope.startDate}
+              onChange={(e) => updateScope({ startDate: e.target.value })}
               className="h-9 w-40"
               aria-label={t("admin.audit.startDateLabel", { defaultValue: "Start date" })}
             />
             <span className="text-xs text-muted-foreground">{t("admin.audit.dateRangeSeparator", { defaultValue: "to" })}</span>
             <Input
               type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              value={scope.endDate}
+              onChange={(e) => updateScope({ endDate: e.target.value })}
               className="h-9 w-40"
               aria-label={t("admin.audit.endDateLabel", { defaultValue: "End date" })}
             />
@@ -450,7 +518,7 @@ export default function AuditPage() {
           <Badge color="default">
             {logsFailed || !data
               ? "—"
-              : t("admin.audit.recordsCount", { count: data?.total ?? 0, defaultValue: "{{count}} records" })}
+              : t("admin.audit.recordsCount", { count: total, defaultValue: "{{count}} records" })}
           </Badge>
         </div>
 
@@ -492,16 +560,16 @@ export default function AuditPage() {
               {t("common.retry", { defaultValue: "Retry" })}
             </Button>
           </div>
-        ) : isLoading ? <Skeleton active /> : (
+        ) : isLoading || pageBeyondResult ? <Skeleton active /> : (
           <DataTable
             columns={columns}
             data={logs}
             rowKey={(l) => l.id}
             loading={isLoading}
             page={page}
-            pageSize={50}
-            total={data?.total ?? 0}
-            onPageChange={setPage}
+            pageSize={AUDIT_PAGE_SIZE}
+            total={total}
+            onPageChange={changePage}
             emptyTitle={t("admin.audit.emptyTitle", { defaultValue: "No audit records" })}
             emptyDescription={t("admin.audit.emptyDescription", { defaultValue: "Audit log entries will appear here as actions are performed." })}
           />

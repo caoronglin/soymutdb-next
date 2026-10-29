@@ -25,6 +25,12 @@ const COMPLETED_JOB = {
   parameters: { evalue: 1e-5, max_target_seqs: 50 },
   hit_count: 1,
   submitted_at: "2026-01-02T00:00:00Z",
+  // Provenance of the searched database, exactly as the API returns it
+  // (BlastJobResponse.release_id / .assembly_name): the genome-browser link
+  // is pinned to the release the hits were computed against, so a job from an
+  // older release keeps that release.
+  release_id: 7,
+  assembly_name: "Wm82.a4.v1",
 };
 
 const RUNNING_JOB = {
@@ -37,8 +43,8 @@ const RUNNING_JOB = {
 const HITS = [
   {
     hsp_num: 1,
-    // The API's subject id is the gene accession; the page uses the same value
-    // for the gene column and the JBrowse locus label.
+    // This fixture's protein ID also has an exact gene record. Real protein
+    // IDs need not map; the browser action must resolve rather than infer.
     subject_id: "Glyma.01G000100",
     subject_title: "Glyma.01G000100",
     percent_identity: 98.5,
@@ -115,6 +121,15 @@ async function stubBlastApis(page: Page): Promise<BlastStub> {
     }
     if (path.endsWith(`/blast/jobs/${COMPLETED_JOB.job_id}/results`)) {
       return json({ hits: HITS, total_hits: HITS.length });
+    }
+    if (path.endsWith("/genes/assemblies")) {
+      expect(request.headers()["x-soymutdb-release"]).toBe("7");
+      return json([{ id: 1, name: "Wm82.a4.v1", is_default: true }]);
+    }
+    if (path.endsWith("/genes/Glyma.01G000100")) {
+      expect(request.headers()["x-soymutdb-release"]).toBe("7");
+      expect(url.searchParams.get("assembly_id")).toBe("1");
+      return json({ gene_id: "Glyma.01G000100", assembly_id: 1, chromosome: "chr01", start_pos: 12000, end_pos: 15000 });
     }
     return json({}, 404);
   });
@@ -218,23 +233,14 @@ test.describe("BLAST — signed-in job flow (offline mocked API)", () => {
     await expect(page.getByText("1.00e-20")).toBeVisible();
     await expect(page.getByText("Glyma.01G000100").first()).toBeVisible();
 
-    // JBrowse 2 deep link carries the assembly + the hit locus.
-    const browserLink = page.getByRole("link", { name: /jbrowse/i }).first();
-    await expect(browserLink).toBeVisible();
-    const href = await browserLink.getAttribute("href");
-    // The portal route renders the embedded JBrowse at /browser.
-    expect(href).toContain("/browser?");
-    expect(href).toContain("assembly=Wm82.a4.v1");
-    expect(href).toContain("Glyma.01G000100%3A1000-2000");
-
-    // The hit's gene id is a button that opens the portal's gene search with
-    // the accession prefilled and the search already running.
-    await page.getByRole("button", { name: "Glyma.01G000100" }).first().click();
-    await page.waitForURL(/\/search\/genes/);
-    const geneUrl = new URL(page.url());
-    expect(geneUrl.searchParams.get("q")).toBe("Glyma.01G000100");
-    expect(geneUrl.searchParams.get("assembly")).toBe("Wm82.a4.v1");
-    expect(geneUrl.searchParams.get("run")).toBe("true");
+    // Resolve one exact gene on click, then navigate in the same tab. The
+    // interval is the gene's genomic span, never the protein's AA alignment.
+    await page.getByTestId("blast-gbrowse-link").first().click();
+    await page.waitForURL(/\/browser\?/);
+    const browserUrl = new URL(page.url());
+    expect(browserUrl.searchParams.get("assembly")).toBe("Wm82.a4.v1");
+    expect(browserUrl.searchParams.get("release")).toBe("7");
+    expect(browserUrl.searchParams.get("locus")).toBe("chr01:12000-15000");
 
     expect(pageErrors, "the BLAST job flow must not throw").toEqual([]);
   });
