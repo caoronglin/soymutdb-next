@@ -544,7 +544,9 @@
       "resolving": "正在解析基因组位置…",
       "unavailable": "该命中在当前发布版本中没有基因组位置。",
       "resolveFailed": "无法加载基因组位置，请重试。"
-    }
+    },
+    "submitRequiresLogin": "请登录具有研究者权限的账户后提交 BLAST 任务。",
+    "submitRequiresResearcher": "当前账户没有提交 BLAST 任务的权限。"
   },
   "releases": {
     "title": "数据版本",

@@ -544,7 +544,9 @@
       "resolving": "Resolving genome position…",
       "unavailable": "This hit has no genome position in the selected release.",
       "resolveFailed": "Could not load the genome position. Please retry."
-    }
+    },
+    "submitRequiresLogin": "Sign in with a researcher-capable account to submit BLAST jobs.",
+    "submitRequiresResearcher": "Your account does not have permission to submit BLAST jobs."
   },
   "releases": {
     "title": "Data Releases",
