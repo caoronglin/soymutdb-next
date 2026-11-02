@@ -7,7 +7,7 @@
  * showed the literal strings `admin.media.purposes.news` and friends.
  */
 import * as React from "react";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { en, zh } from "@soymutdb/i18n";
@@ -68,4 +68,20 @@ describe("media purpose filter", () => {
     }
     expect(en.admin.media.purposes.news).not.toBe(zh.admin.media.purposes.news);
   });
+  it("offers a clear-filters action instead of an upload prompt for filtered empty results", async () => {
+    render(<MediaPage />);
+
+    const search = screen.getByPlaceholderText("admin.media.searchPlaceholder");
+    fireEvent.change(search, { target: { value: "missing" } });
+
+    await waitFor(() => {
+      expect(screen.getByText("No media assets match the current filters.")).toBeTruthy();
+    });
+    expect(screen.getByRole("button", { name: "Clear filters" })).toBeTruthy();
+    expect(screen.queryByText("admin.media.uploadFirst")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+    expect((screen.getByPlaceholderText("admin.media.searchPlaceholder") as HTMLInputElement).value).toBe("");
+  });
+
 });

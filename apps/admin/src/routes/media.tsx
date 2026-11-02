@@ -107,6 +107,13 @@ export default function MediaPage() {
   }, [assetStatus, page, purpose, reload, search]);
 
   const resetToFirstPage = () => setPage(1);
+  const hasActiveFilters = search.trim().length > 0 || purpose !== undefined || assetStatus !== "ready";
+  const clearFilters = () => {
+    setSearch("");
+    setPurpose(undefined);
+    setAssetStatus("ready");
+    setPage(1);
+  };
 
   const openEditor = (asset: MediaAsset) => {
     setEditing(asset);
@@ -254,16 +261,22 @@ export default function MediaPage() {
           <ProCard>
             <Empty
               image={<PictureOutlined className="text-4xl text-slate-300" />}
-              description={t("admin.media.empty")}
+              description={hasActiveFilters
+                ? t("admin.media.noMatches", { defaultValue: "No media assets match the current filters." })
+                : t("admin.media.empty")}
             >
-              <FileUpload
-                value={undefined}
-                purpose={uploadPurpose}
-                accept="image/jpeg,image/png,image/webp"
-                maxSizeMB={10}
-                buttonText={t("admin.media.uploadFirst")}
-                onUploaded={handleUploaded}
-              />
+              {hasActiveFilters ? (
+                <Button onClick={clearFilters}>{t("admin.media.clearFilters", { defaultValue: "Clear filters" })}</Button>
+              ) : (
+                <FileUpload
+                  value={undefined}
+                  purpose={uploadPurpose}
+                  accept="image/jpeg,image/png,image/webp"
+                  maxSizeMB={10}
+                  buttonText={t("admin.media.uploadFirst")}
+                  onUploaded={handleUploaded}
+                />
+              )}
             </Empty>
           </ProCard>
         ) : (

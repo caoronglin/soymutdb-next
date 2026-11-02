@@ -233,7 +233,7 @@ export function SiteHeader() {
         scrolled && "site-header--scrolled",
       )}
     >
-      <div className="container-prose flex h-16 items-center gap-4">
+      <div className="container-prose flex h-16 items-center gap-2 px-4 sm:gap-4 sm:px-6">
         {/* Logo */}
         <Link
           to="/"
@@ -354,27 +354,22 @@ export function SiteHeader() {
           })}
         </nav>
 
-        {/* Right cluster. `shrink-0` keeps the controls from being squeezed,
-            and every button is `size="small"` because the default padding made
-            this cluster wider than a 390px viewport, which pushed the whole
-            document into a horizontal scroll. */}
+        {/* Keep responsive visibility on a plain wrapper: AntD's unlayered
+            Button display rule takes precedence over Tailwind utilities. */}
         <div className="ml-auto flex shrink-0 items-center gap-1 md:ml-2">
-          {/* Search (desktop) — triggers command palette */}
-          <Button
-            onClick={openPalette}
-            aria-label={t("nav.quickSearchLabel")}
-            className="hidden h-9 items-center gap-2.5 rounded-lg border-input/70 bg-muted/40 px-3 text-sm text-muted-foreground shadow-sm hover:border-border hover:bg-muted/70 hover:text-foreground md:flex md:w-44 lg:w-56"
-          >
-            <SearchOutlined className="size-4 shrink-0" aria-hidden />
-            <span className="min-w-0 flex-1 truncate text-left">
-              <span className="hidden lg:inline">{t("home.searchPlaceholder")}</span>
-              <span className="lg:hidden">{t("nav.searchPlaceholder")}</span>
-            </span>
-            <span className="ml-auto flex shrink-0 items-center gap-1" aria-hidden>
-              <kbd className="hidden sm:inline-flex">⌘</kbd>
-              <kbd className="hidden sm:inline-flex">K</kbd>
-            </span>
-          </Button>
+          <div className="hidden md:block">
+            <Button
+              onClick={openPalette}
+              aria-label={t("nav.quickSearchLabel")}
+              className="site-header-search"
+            >
+              <SearchOutlined className="size-4 shrink-0" aria-hidden />
+              <span className="min-w-0 flex-1 truncate text-left">
+                {t("nav.searchPlaceholder")}
+              </span>
+              <kbd className="shrink-0 text-xs" aria-hidden>⌘ K</kbd>
+            </Button>
+          </div>
           <LanguageSwitcher
             open={langOpen}
             setOpen={setLangOpen}
@@ -384,6 +379,7 @@ export function SiteHeader() {
           <Button
             type="text"
             size="small"
+            className="site-header-control"
             aria-label={t("nav.theme")}
             onClick={toggleTheme}
             icon={theme === "dark" ? <SunOutlined /> : <MoonOutlined />}
@@ -398,6 +394,7 @@ export function SiteHeader() {
             <Button
               type="text"
               size="small"
+              className="site-header-control"
               aria-label={mobileOpen ? t("nav.closeMenu") : t("nav.openMenu")}
               aria-expanded={mobileOpen}
               aria-controls="mobile-nav"
@@ -531,6 +528,7 @@ function LanguageSwitcher({
       <Button
         type="text"
         size="small"
+        className="site-header-control"
         aria-label={t("nav.language")}
         aria-haspopup="menu"
         aria-expanded={open}

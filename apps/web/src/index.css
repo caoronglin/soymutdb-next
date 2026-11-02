@@ -260,6 +260,49 @@
     --header-shadow-opacity: 0.06;
 }
 
+/* Unlayered, scoped rules keep header sizing predictable alongside AntD. */
+.site-header-search.ant-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    width: 176px;
+    height: 36px;
+    padding-inline: 12px;
+    border-color: var(--border);
+    border-radius: var(--radius-md);
+    background: var(--muted);
+    color: var(--muted-foreground);
+    box-shadow: none;
+    transition: background-color var(--anim-duration-fast), border-color var(--anim-duration-fast);
+}
+
+.site-header-search.ant-btn:hover {
+    border-color: var(--primary);
+    background: var(--accent);
+    color: var(--foreground);
+}
+
+.site-header-control.ant-btn {
+    width: 32px;
+    min-width: 32px;
+    height: 36px;
+    padding: 0;
+}
+
+@media (min-width: 1280px) {
+    .site-header-search.ant-btn {
+        width: 224px;
+    }
+}
+
+@media (max-width: 767px) {
+    .site-header-control.ant-btn {
+        width: 40px;
+        min-width: 40px;
+        height: 44px;
+    }
+}
+
 /* ----------------------------------------------------------------------------
  * Keyframes — only transform & opacity + background-position (shimmer).
  * ------------------------------------------------------------------------- */

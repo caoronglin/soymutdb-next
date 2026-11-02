@@ -10,6 +10,7 @@
 
 
 import { execFileSync } from "node:child_process";
+import { rmSync } from "node:fs";
 import { resolve } from "node:path";
 
 const packageDir = resolve(import.meta.dirname, "..");
@@ -108,6 +109,10 @@ function buildVariant(variant: "external" | "internal") {
     stdio: "inherit",
   });
 }
+
+// A prior single-site max build leaves root-level HTML, headers and assets.
+// Publish only the two fresh variant trees, without stale root-level policies.
+rmSync(resolve(packageDir, "dist"), { recursive: true, force: true });
 
 buildVariant("external");
 buildVariant("internal");

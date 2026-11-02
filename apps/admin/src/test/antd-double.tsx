@@ -111,7 +111,7 @@ export const Result = (props: Props) => (
   </div>
 );
 
-export const Empty = (props: Props) => <div data-testid={testid(props)}>{props.description as React.ReactNode}</div>;
+export const Empty = (props: Props) => <div data-testid={testid(props)}>{props.description as React.ReactNode}{props.children}</div>;
 
 export const Skeleton = (props: Props) => <div data-testid={testid(props)} aria-busy="true" />;
 Skeleton.Image = (props: Props) => <div data-testid={testid(props)} aria-busy="true" />;

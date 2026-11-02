@@ -809,6 +809,9 @@
     "errorReason": "Server response: {{reason}}"
   },
   "footer": {
+    "contactPerson": "Contact person",
+    "phone": "Phone",
+    "email": "Email",
     "description": "Comprehensive multi-species mutant database for functional genomics research",
     "resources": "Resources",
     "documentation": "Documentation",
@@ -1934,10 +1937,12 @@
       "description": "Uploaded assets referenced by news and pages. Archiving removes an asset from the picker without breaking published references.",
       "title": "Media Library",
       "empty": "The media library is empty",
+      "noMatches": "No media assets match the current filters.",
       "loadError": "The media library could not be loaded.",
       "retry": "Retry",
       "upload": "Upload",
       "uploadFirst": "Upload a file to get started.",
+      "clearFilters": "Clear filters",
       "searchPlaceholder": "Search by file name or caption…",
       "filterPurpose": "Filter by purpose",
       "altPlaceholder": "Alt text",

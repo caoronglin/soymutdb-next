@@ -82,6 +82,32 @@ describe("admin root navigation rendering", () => {
     expect(await screen.findByText("guide-body")).toBeTruthy();
   });
 
+  it("announces the current destination after client navigation", async () => {
+    const router = await renderNavigation();
+    const dashboard = screen.getByRole("link", { name: "Dashboard" });
+    const guide = screen.getByRole("link", { name: "Usage guide" });
+    expect(dashboard.getAttribute("aria-current")).toBe("page");
+    expect(guide.hasAttribute("aria-current")).toBe(false);
+
+    await act(async () => { guide.click(); });
+    await waitFor(() => expect(router.state.location.pathname).toBe("/guide"));
+    expect(guide.getAttribute("aria-current")).toBe("page");
+    expect(dashboard.hasAttribute("aria-current")).toBe(false);
+  });
+
+  it("updates the collapse control state and icon when toggled", async () => {
+    await renderNavigation();
+    const collapse = screen.getByRole("button", { name: "Collapse sidebar" });
+    expect(collapse.getAttribute("aria-expanded")).toBe("true");
+    expect(collapse.getAttribute("aria-controls")).toBe("admin-navigation");
+    expect(collapse.querySelector('[data-icon="menu-fold"]')).toBeTruthy();
+
+    await act(async () => { collapse.click(); });
+    const expand = screen.getByRole("button", { name: "Expand sidebar" });
+    expect(expand.getAttribute("aria-expanded")).toBe("false");
+    expect(expand.querySelector('[data-icon="menu-unfold"]')).toBeTruthy();
+  });
+
   it("provides a keyboard skip link to main content", async () => {
     await renderNavigation();
     const link = screen.getByRole("link", { name: "Skip to main content" });

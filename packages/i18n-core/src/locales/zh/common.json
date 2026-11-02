@@ -809,6 +809,9 @@
     "errorReason": "服务器响应：{{reason}}"
   },
   "footer": {
+    "contactPerson": "联系人",
+    "phone": "电话",
+    "email": "电子邮件",
     "description": "用于功能基因组学研究的综合性多物种突变体数据库",
     "resources": "资源",
     "documentation": "文档",
@@ -1934,10 +1937,12 @@
       "description": "新闻与页面引用的已上传素材；归档只从选择器中移除，不破坏已发布的引用。",
       "title": "媒体库",
       "empty": "媒体库为空",
+      "noMatches": "没有符合当前筛选条件的媒体素材。",
       "loadError": "无法加载媒体库。",
       "retry": "重试",
       "upload": "上传",
       "uploadFirst": "请先上传媒体文件。",
+      "clearFilters": "清除筛选",
       "searchPlaceholder": "搜索文件名或说明…",
       "filterPurpose": "按用途筛选",
       "altPlaceholder": "替代文本",

@@ -1,4 +1,4 @@
-import { MenuFoldOutlined } from "@ant-design/icons";
+import { MenuFoldOutlined, MenuUnfoldOutlined } from "@ant-design/icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { ConfigProvider, Drawer, Grid, Layout, Menu, theme } from "../lib/antd";
@@ -36,6 +36,15 @@ export function AdminShell({ children }: {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const isDesktop = screens.lg ?? true;
 
+  // `/` must not prefix-match every route, so it is matched exactly.
+  const selectedKeys = React.useMemo(() => {
+    const hit = NAV_SECTIONS.flatMap((s) => s.items)
+      .filter((item) => item.path === "/" ? pathname === "/" :
+        pathname === item.path || pathname.startsWith(`${item.path}/`))
+      .sort((a, b) => b.path.length - a.path.length)[0];
+    return hit ? [hit.path] : [];
+  }, [pathname]);
+
   const menuItems = React.useMemo(
     () =>
       NAV_SECTIONS.map((section) => ({
@@ -45,20 +54,19 @@ export function AdminShell({ children }: {
         children: section.items.map((item) => ({
           key: item.path,
           icon: React.createElement(item.icon),
-          label: <Link to={item.path} onClick={() => setMobileOpen(false)}>{t(item.labelKey, { defaultValue: item.label })}</Link>,
+          label: (
+            <Link
+              to={item.path}
+              onClick={() => setMobileOpen(false)}
+              aria-current={selectedKeys.includes(item.path) ? "page" : undefined}
+            >
+              {t(item.labelKey, { defaultValue: item.label })}
+            </Link>
+          ),
         })),
       })),
-    [t],
+    [selectedKeys, t],
   );
-
-  // `/` must not prefix-match every route, so it is matched exactly.
-  const selectedKeys = React.useMemo(() => {
-    const hit = NAV_SECTIONS.flatMap((s) => s.items)
-      .filter((item) => item.path === "/" ? pathname === "/" :
-        pathname === item.path || pathname.startsWith(`${item.path}/`))
-      .sort((a, b) => b.path.length - a.path.length)[0];
-    return hit ? [hit.path] : [];
-  }, [pathname]);
 
   const { token } = theme.useToken();
   // Ant Design 6 derives component transitions from its fast/mid/slow duration
@@ -105,6 +113,7 @@ export function AdminShell({ children }: {
         <Link
           to="/"
           aria-label="SoyMutDB"
+          className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           style={{
             display: "flex",
             alignItems: "center",
@@ -147,23 +156,20 @@ export function AdminShell({ children }: {
           onClick={() => setCollapsed((value) => !value)}
           aria-label={collapsed ? t("admin.shell.expandSidebar", { defaultValue: "Expand sidebar" }) : t("admin.shell.collapseSidebar", { defaultValue: "Collapse sidebar" })}
           aria-expanded={!collapsed}
+          aria-controls="admin-navigation"
+          title={collapsed ? t("admin.shell.expandSidebar", { defaultValue: "Expand sidebar" }) : t("admin.shell.collapseSidebar", { defaultValue: "Collapse sidebar" })}
+          className="mx-auto flex h-11 w-[calc(100%-16px)] items-center justify-center rounded-md border-0 bg-transparent text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "100%",
-            height: 44,
-            border: 0,
-            borderBlockStart: `1px solid ${token.colorBorderSecondary}`,
-            background: "transparent",
-            color: token.colorTextSecondary,
+            marginBlock: token.marginXS,
+            transitionDuration: `${durations.fast}s`,
             cursor: "pointer",
           }}
         >
-          <MenuFoldOutlined aria-hidden />
+          {collapsed ? <MenuUnfoldOutlined aria-hidden /> : <MenuFoldOutlined aria-hidden />}
         </button>
 
         <Menu
+          id="admin-navigation"
           mode="inline"
           items={menuItems}
           selectedKeys={selectedKeys}
