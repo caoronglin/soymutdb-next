@@ -33,4 +33,4 @@ Extend the existing asynchronous download service with a no-SQL query builder, p
 
 ## Current PR boundary
 
-This PR is the access-contract and documentation slice. It does not claim anonymous job execution or NCBI BLAST+ completion. Those require a capability model and worker/database changes respectively.
+The follow-up access-mode slice adds anonymous submission/status/results using expiring per-job credentials and the existing outbox/worker, alongside account-owned jobs. See [implementation evidence](blast-anonymous-pr.md). NCBI BLAST+ remains pending; it requires worker/database catalog changes and real nucleotide/protein search verification.
