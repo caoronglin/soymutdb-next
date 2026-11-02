@@ -26,21 +26,19 @@ import { fetchSraRun, fetchSraSamples, type SraRunInfo } from "@soymutdb/api-cli
 import { FadeUp, useReveal } from "../components/route-motion";
 import { startViewTransition } from "../lib/view-transitions";
 
-// <soymutdb-widget> is a custom element registered in main.tsx
-// (side-effect import of ../components/soymutdb-widget). Declare it so
-// JSX usage type-checks under React 19.
-/* eslint-disable @typescript-eslint/no-namespace */
-declare module "react" {
-  namespace JSX {
-    interface IntrinsicElements {
-      "soymutdb-widget": React.DetailedHTMLProps<
-        React.HTMLAttributes<HTMLElement> & { name?: string; params?: string },
-        HTMLElement
-      >;
-    }
-  }
-}
-/* eslint-enable @typescript-eslint/no-namespace */
+// The `soymutdb-widget` custom element used to be rendered here to embed the
+// `sra_run` widget served by GET /api/v1/widget/{name}. Its React renderer was
+// deleted in 25c32e499 during the Vue cutover and never restored, so the JSX
+// below rendered an unregistered, inert element inside a card titled "Additional
+// run metadata". A `declare module "react"` block kept it type-checking, which is
+// how the breakage survived review, typecheck and the unit tests.
+//
+// The backend is still intact (apps/api/app/widgets/, `sra_run` data source and
+// its Jinja2 template), so the widget can be brought back as a real React
+// component. That needs HTML-sanitization review, so it is deliberately not
+// reintroduced here; until then this route must not claim content it cannot
+// render. See scripts/test_custom_element_registration_contracts.py, which fails
+// if a JSX intrinsic element is declared without a matching customElements.define.
 
 const HISTORY_KEY = "soymutdb:sra-history";
 const HISTORY_LIMIT = 10;
@@ -345,28 +343,6 @@ function SraBrowser() {
           </FadeUp>
         </div>
       </div>
-
-      {/* Use Web Component <soymutdb-widget> to embed the sra_run widget */}
-      {activeRun && (
-        <FadeUp delay={0.25} className="mt-8">
-          <Card>
-            <div>
-              <Typography.Title level={2} className="m-0 text-lg">{t("sra.widgetTitle")}</Typography.Title>
-              <Typography.Text className="text-sm text-muted-foreground">
-                {t("sra.widgetDescription")}
-              </Typography.Text>
-            </div>
-            <div>
-              {/* This is a Custom Element registered in soymutdb-widget.ts */}
-              <soymutdb-widget
-                name="sra_run"
-                params={JSON.stringify({ run: activeRun })}
-                key={activeRun}
-              />
-            </div>
-          </Card>
-        </FadeUp>
-      )}
     </div>
   );
 }
