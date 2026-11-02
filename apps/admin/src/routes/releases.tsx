@@ -1,74 +1,78 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getReleaseProvenance, getReleases, type ReleaseSummary } from "@soymutdb/api-client";
-import { formatNumber } from "@soymutdb/shared/format";
-import { Alert, Button, PageContainer, ProCard, ProTable, Space, Tag, Typography, type ProColumns } from "@/lib/antd";
+import { getActiveRelease, getAdminRelease, getAdminReleases } from "@soymutdb/api-client";
+import { formatDate, formatNumber } from "@soymutdb/shared/format";
+import { Alert, Button, Descriptions, PageContainer, ProCard, ProTable, Space, Tag, Typography, type ProColumns } from "@/lib/antd";
 import { useTranslation } from "react-i18next";
 import { PRO_LIST_SHELL } from "../components/pro-table-shell";
-
-function safeExternalUrl(value: string | undefined): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
-  } catch {
-    return null;
-  }
-}
-
-function statusColor(status: ReleaseSummary["status"]): string {
-  if (status === "published") return "green";
-  if (status === "ready" || status === "validated") return "blue";
-  if (status === "rolled_back") return "orange";
-  return "default";
-}
+import { readActiveReleaseId, statusTone, toReleaseRow, toReleaseRows, type ReleaseRow } from "./releases/release-rows";
 
 export default function ReleasesPage() {
   const { t } = useTranslation();
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  // `GET /releases` accepts only `status`; it ignores `page`/`page_size` and
+  // returns the whole list ordered by `published_at` desc
+  // (apps/api/app/api/v1/releases.py::list_releases), so the table paginates
+  // client-side and the request carries no pagination the API would honour.
   const query = useQuery({
     queryKey: ["admin", "releases"],
-    queryFn: () => getReleases({ page: 1, page_size: 100 }),
+    queryFn: () => getAdminReleases(),
   });
-  const provenanceQuery = useQuery({
-    queryKey: ["admin", "release-provenance", selectedId],
-    queryFn: () => getReleaseProvenance(selectedId as string),
+  // The active pointer annotates the list; it is not a page-level dependency,
+  // so a failure here degrades to "no badge" rather than an error screen.
+  const activeQuery = useQuery({
+    queryKey: ["admin", "active-release"],
+    queryFn: () => getActiveRelease(),
+  });
+  // `GET /releases/{release_id}` is served by the API. The route this panel used
+  // to call, `GET /releases/{id}/provenance`, is not served by any router
+  // (packages/api-client/contract-visibility-baseline.json), so every click used
+  // to be a guaranteed 404; the panel now reads the release the API can return.
+  const detailQuery = useQuery({
+    queryKey: ["admin", "release-detail", selectedId],
+    queryFn: () => getAdminRelease(selectedId as string),
     enabled: Boolean(selectedId),
   });
-  const releases = query.data ?? [];
-  const provenance = provenanceQuery.data ?? [];
+  const activeReleaseId = readActiveReleaseId(activeQuery.data);
+  const releases = toReleaseRows(query.data, activeReleaseId);
+  const detail = toReleaseRow(detailQuery.data, activeReleaseId);
 
-  // Read-only list: the only write-free action column is the provenance link,
-  // which opens a read-only panel below. No column opts into ProTable's editor.
-  const columns: ProColumns<ReleaseSummary>[] = [
+  // Read-only list: the only action reads one release through a route the API
+  // serves. No column opts into ProTable's editor, and no lifecycle write
+  // (validate/ready/publish/rollback) is offered here — those live on
+  // `POST /admin/releases/{id}/...`, administrator-only and audited server-side.
+  const columns: ProColumns<ReleaseRow>[] = [
     {
       title: t("releases.releaseName"),
-      dataIndex: "id",
-      key: "id",
+      key: "release",
       editable: false,
-      render: (_id, release) => (
+      render: (_value, release) => (
         <Space orientation="vertical" size={2}>
           <Typography.Text code>{release.id}</Typography.Text>
+          <Typography.Text code type="secondary">{release.version || release.id}</Typography.Text>
           {release.name ? <Typography.Text type="secondary">{release.name}</Typography.Text> : null}
-          {release.is_active ? <Tag color="green">{t("releases.active")}</Tag> : null}
+          {release.isActive ? <Tag color="green">{t("releases.active")}</Tag> : null}
         </Space>
       ),
     },
     {
       title: t("releases.status"),
-      dataIndex: "status",
       key: "status",
       editable: false,
-      render: (_value, release) => <Tag color={statusColor(release.status)}>{t(`releases.statuses.${release.status}`, { defaultValue: release.status })}</Tag>,
+      render: (_value, release) => <Tag color={statusTone(release.status)}>{t(`releases.statuses.${release.status}`, { defaultValue: release.status })}</Tag>,
     },
-    { title: t("releases.assembly"), dataIndex: "assembly_name", key: "assembly_name", editable: false, render: (value) => <Typography.Text code>{value}</Typography.Text> },
     {
       title: t("releases.variantCount"),
-      dataIndex: "variant_count",
       key: "variant_count",
       align: "right",
       editable: false,
-      render: (_value, release) => formatNumber(release.variant_count),
+      render: (_value, release) => formatNumber(release.variantCount),
+    },
+    {
+      title: t("releases.releaseDate"),
+      key: "published_at",
+      editable: false,
+      render: (_value, release) => <Typography.Text>{formatDate(release.publishedAt)}</Typography.Text>,
     },
     {
       title: t("common.actions"),
@@ -77,10 +81,10 @@ export default function ReleasesPage() {
       render: (_value, release) => (
         <Button
           type="link"
-          data-testid={`release-provenance-${release.id}`}
+          data-testid={`release-details-${release.id}`}
           onClick={() => setSelectedId(release.id)}
         >
-          {t("releases.provenance")}
+          {t("releases.viewDetails")}
         </Button>
       ),
     },
@@ -89,7 +93,7 @@ export default function ReleasesPage() {
   return (
     <PageContainer
       title={t("admin.releases", { defaultValue: "Releases" })}
-      subTitle={t("admin.releasesHint", { defaultValue: "Every release the API serves, with the imports and source files that produced it." })}
+      subTitle={t("admin.releasesHint", { defaultValue: "Release versions, publication status and database counts." })}
     >
       {query.isPending ? (
         <ProCard loading data-testid="releases-loading" />
@@ -99,14 +103,14 @@ export default function ReleasesPage() {
           showIcon
           data-testid="releases-error"
           title={t("common.errorDescription")}
-          action={<Button size="small" onClick={() => void query.refetch()} data-testid="releases-retry">{t("common.retry")}</Button>}
+          action={<Button size="small" loading={query.isFetching} onClick={() => void query.refetch()} data-testid="releases-retry">{t("common.retry")}</Button>}
         />
       ) : releases.length === 0 ? (
         <ProCard><Typography.Text type="secondary" data-testid="releases-empty">{t("common.noData")}</Typography.Text></ProCard>
       ) : (
         <ProCard>
           <div data-testid="releases-table">
-            <ProTable<ReleaseSummary>
+            <ProTable<ReleaseRow>
               {...PRO_LIST_SHELL}
               rowKey="id"
               dataSource={releases}
@@ -122,30 +126,39 @@ export default function ReleasesPage() {
       {selectedId ? (
         <ProCard
           style={{ marginTop: 16 }}
-          title={<span data-testid="provenance-heading">{t("releases.provenance")} · <Typography.Text code>{selectedId}</Typography.Text></span>}
-          extra={<Button size="small" data-testid="provenance-close" onClick={() => setSelectedId(null)}>{t("common.close")}</Button>}
+          title={<span data-testid="release-detail-heading">{t("releases.viewDetails")} · <Typography.Text code>{selectedId}</Typography.Text></span>}
+          extra={<Button size="small" data-testid="release-detail-close" onClick={() => setSelectedId(null)}>{t("common.close")}</Button>}
         >
-          {provenanceQuery.isPending ? (
-            <ProCard loading data-testid="provenance-loading" />
-          ) : provenanceQuery.isError ? (
-            <Alert type="error" showIcon data-testid="provenance-error" title={t("common.errorDescription")} />
-          ) : provenance.length === 0 ? (
-            <Typography.Text type="secondary" data-testid="provenance-empty">{t("common.noData")}</Typography.Text>
+          {detailQuery.isPending ? (
+            <ProCard loading data-testid="release-detail-loading" />
+          ) : detailQuery.isError ? (
+            <Alert
+              type="error"
+              showIcon
+              data-testid="release-detail-error"
+              title={t("common.errorDescription")}
+              action={<Button size="small" loading={detailQuery.isFetching} onClick={() => void detailQuery.refetch()} data-testid="release-detail-retry">{t("common.retry")}</Button>}
+            />
+          ) : detail === null ? (
+            <Typography.Text type="secondary" data-testid="release-detail-empty">{t("common.noData")}</Typography.Text>
           ) : (
-            <ul className="grid gap-2" data-testid="provenance-list">
-              {provenance.map((item) => {
-                const url = safeExternalUrl(item.source_url);
-                return (
-                  <li key={item.id} className="rounded-md border border-border p-3 text-sm">
-                    <Typography.Text code>{item.source_type} · {item.source_name}</Typography.Text>
-                    {item.version ? <div><Typography.Text type="secondary">{item.version}</Typography.Text></div> : null}
-                    {url ? (
-                      <div><a href={url} target="_blank" rel="noopener noreferrer" className="break-all">{item.source_url}</a></div>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ul>
+            <Descriptions
+              size="small"
+              column={2}
+              data-testid="release-detail-list"
+              items={[
+                { key: "name", label: t("releases.releaseName"), children: detail.name || "—" },
+                { key: "version", label: t("releases.version", { defaultValue: "Version" }), children: detail.version || "—" },
+                { key: "status", label: t("releases.status"), children: <Tag color={statusTone(detail.status)}>{t(`releases.statuses.${detail.status}`, { defaultValue: detail.status })}</Tag> },
+                { key: "published", label: t("releases.releaseDate"), children: formatDate(detail.publishedAt) },
+                { key: "variants", label: t("releases.variantCount"), children: formatNumber(detail.variantCount) },
+                { key: "genes", label: t("releases.geneCount"), children: formatNumber(detail.geneCount) },
+                { key: "lines", label: t("releases.mutantLineCount"), children: formatNumber(detail.mutantLineCount) },
+                { key: "updated", label: t("common.updated"), children: formatDate(detail.updatedAt) },
+                ...(detail.isActive ? [{ key: "active", label: t("common.status"), children: <Tag color="green">{t("releases.active")}</Tag> }] : []),
+                { key: "description", label: t("releases.description", { defaultValue: "Description" }), span: 2, children: detail.description || "—" },
+              ]}
+            />
           )}
         </ProCard>
       ) : null}

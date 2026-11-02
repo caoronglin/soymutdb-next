@@ -2,15 +2,15 @@
 
 ## 端口
 
-以下来自 `docker-compose.yml`、`docker-compose.dev.yml`、`deploy/.env.example` 与
-各 Vite 配置；`restart`/代理改动后以这些文件为准。
+以下来自 `docker-compose.yml`、`docker-compose.dev.yml`、`deploy/.env.example`、
+各应用 `max dev --port` 配置与 `scripts/dev/local-preview-server.mjs`；
+`restart`/代理改动后以这些文件为准。
 
 | 服务 | 宿主机 | 容器/开发 | 说明 |
 | --- | --- | --- | --- |
 | Nginx | `127.0.0.1:8080` | 80 | 唯一公网入口（HTTPS 由隧道/网关终止） |
 | API（uvicorn） | 不发布 | `8010`（`expose`） | compose 内网经 nginx 访问；新默认端口 **8010**，`8000` 留给其他服务 |
 | PostgreSQL | `127.0.0.1:5432` | 5432 | 权威存储 |
-| ClickHouse | `127.0.0.1:8123` / `127.0.0.1:9000` | 8123 / 9000 | 分析投影 |
 | Redis | `127.0.0.1:6379` | 6379 | 缓存/队列 |
 | MinIO | `127.0.0.1:9001`（S3 API）/ `9002`（控制台） | 9000 / 9001 | 对象存储 |
 | MCP server | 经 nginx `/mcp/*` | 9000 | 工具服务 |
@@ -37,13 +37,17 @@
 | 搜索 | `/search` | 本地 + 联邦（`external=1`），来源状态逐源返回 |
 | 突变系 | `/mutants` | 公开 `public_id` |
 | 工具 | `/blast`、`/tools/seqfetch`、`/tools`（enrichment/exppattern）、`/sra`、`/analyses` | 分析任务走队列 |
-| 内容 | `/site`、`/news`、`/content`、`/page-definitions`、`/publications`、`/downloads` | `/site/branding` 按变体返回品牌快照 |
+| 内容 | `/site`、`/news`、`/content`、`/page-definitions`、`/publications`、`/downloads` | `/site/branding` 按变体返回品牌快照；`/page-definitions` 仅为存量数据保留（ADR-0009） |
 | 站点配置 | `/releases`、`/stats`、`/tracks`、`/table-views` | 发布上下文与表格布局 |
+| 通知/种子 | `/notifications`、`/seeds`、`/seed-requests` | 站内通知与管理端种子申请 |
+| 分析与队列 | `/gwas`、`/jobs`、`/popgen` | 任务经 Celery 队列执行 |
+| 本体/预览数据 | `/ontology`、`/preview/test-data` | 预览数据仅管理端测试用（受鉴权保护） |
 | 管理 | `/admin/*` | 设置、媒体、新闻、导入、发布、审计、插件、实例（`/admin/species-instances`，含 `/{id}/health`） |
 
 已知契约缺口（计划中）：`/variants` 与 `/variants/region` 目前按 assembly **label**
-过滤；稳定 `assembly_id` 入参与 ClickHouse `assembly_key` 规范化尚待后端补齐，前端已用
-id 做 URL/缓存身份并显式拒绝未知/歧义名称。
+过滤；稳定 `assembly_id` 入参尚待后端补齐，前端已用 id 做 URL/缓存身份并显式拒绝未知/
+歧义名称。ClickHouse 只是历史迁移源（`docker-compose.legacy-clickhouse.yml` 的
+`legacy-migration` profile），不出现在默认端口表中。
 
 ## 配置来源
 

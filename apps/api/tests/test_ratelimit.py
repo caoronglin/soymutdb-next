@@ -40,7 +40,12 @@ class FailingRedis:
 
 
 def _settings(
-    *, app_env: str, maximum: int = 2, preview_maximum: int = 2, preview_window: int = 300
+    *,
+    app_env: str,
+    maximum: int = 2,
+    ip_maximum: int = 50,
+    preview_maximum: int = 2,
+    preview_window: int = 300,
 ) -> Settings:
     return Settings(
         app_env=app_env,
@@ -54,6 +59,7 @@ def _settings(
         cors_origins=["https://example.com"],
         login_rate_limit_window=60,
         login_rate_limit_max=maximum,
+        login_ip_rate_limit_max=ip_maximum,
         external_article_preview_rate_limit_window=preview_window,
         external_article_preview_rate_limit_max=preview_maximum,
     )
@@ -88,7 +94,9 @@ async def test_fixed_window_allows_n_then_rejects_n_plus_one() -> None:
         await limiter.enforce(username="Alice", client_ip="192.0.2.10")
 
     assert raised.value.retry_after == 60
-    assert len(redis.keys) == 3
+    # Two budgets per attempt (pair + IP); the failing call consumes the pair
+    # counter and raises before the IP counter runs.
+    assert len(redis.keys) == 5
 
 
 @pytest.mark.asyncio
@@ -105,9 +113,10 @@ async def test_rate_limit_key_normalizes_username_and_distinguishes_ip() -> None
     await limiter.enforce(username="alice", client_ip="192.0.2.11")
     await limiter.enforce(username=None, client_ip="192.0.2.10")
 
-    assert redis.keys[0] == redis.keys[1]
-    assert redis.keys[1] != redis.keys[2]
-    assert redis.keys[0] != redis.keys[3]
+    pair_keys = [key for key in redis.keys if key.startswith("soymutdb:login:ratelimit:")]
+    assert pair_keys[0] == pair_keys[1]
+    assert pair_keys[1] != pair_keys[2]
+    assert pair_keys[0] != pair_keys[3]
 
 
 @pytest.mark.asyncio
@@ -169,3 +178,56 @@ async def test_rate_limit_exception_handler_sets_retry_after_header() -> None:
     assert response.headers["Retry-After"] == "37"
     body = json.loads(bytes(response.body))
     assert body["error"]["code"] == "rate_limit_exceeded"
+
+
+@pytest.mark.asyncio
+async def test_rotating_usernames_from_one_ip_is_bounded_by_the_ip_budget() -> None:
+    """Credential stuffing across many accounts must not reset the budget.
+
+    The pair key alone gives every (username, IP) pair a fresh counter, so an
+    attacker rotating usernames would never hit the per-pair maximum. The
+    per-IP dimension is what bounds the source address.
+    """
+    redis = FakeRedis()
+    limiter = LoginRateLimiter(
+        redis_getter=lambda: redis,
+        settings_getter=lambda: _settings(app_env="prod", maximum=10, ip_maximum=3),
+        clock=lambda: 120.5,
+    )
+
+    for index in range(3):
+        await limiter.enforce(username=f"victim-{index}", client_ip="198.51.100.7")
+
+    with pytest.raises(RateLimitExceededError) as raised:
+        await limiter.enforce(username="victim-3", client_ip="198.51.100.7")
+    assert "network" in str(raised.value)
+
+
+@pytest.mark.asyncio
+async def test_ip_budget_is_isolated_per_source_address() -> None:
+    redis = FakeRedis()
+    limiter = LoginRateLimiter(
+        redis_getter=lambda: redis,
+        settings_getter=lambda: _settings(app_env="prod", maximum=10, ip_maximum=1),
+        clock=lambda: 120.5,
+    )
+
+    await limiter.enforce(username="alice", client_ip="198.51.100.8")
+    await limiter.enforce(username="alice", client_ip="198.51.100.9")
+    with pytest.raises(RateLimitExceededError):
+        await limiter.enforce(username="bob", client_ip="198.51.100.8")
+
+
+@pytest.mark.asyncio
+async def test_same_username_from_different_ips_keeps_independent_pair_budgets() -> None:
+    redis = FakeRedis()
+    limiter = LoginRateLimiter(
+        redis_getter=lambda: redis,
+        settings_getter=lambda: _settings(app_env="prod", maximum=1, ip_maximum=10),
+        clock=lambda: 120.5,
+    )
+
+    await limiter.enforce(username="alice", client_ip="198.51.100.10")
+    await limiter.enforce(username="alice", client_ip="198.51.100.11")
+    with pytest.raises(RateLimitExceededError):
+        await limiter.enforce(username="alice", client_ip="198.51.100.10")

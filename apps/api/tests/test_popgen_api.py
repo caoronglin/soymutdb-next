@@ -90,8 +90,8 @@ FIXTURE_ROWS = [
 ]
 
 
-class FakeCh:
-    """ClickHouse stand-in returning the fixture rows for any region."""
+class FakeVariantStore:
+    """PostgreSQL variant-store stand-in returning the fixture rows for any region."""
 
     def __init__(self, rows=None):
         self.rows = rows if rows is not None else FIXTURE_ROWS
@@ -205,17 +205,17 @@ def test_compute_diversity_windows_hand_calc() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Service-level checks (injected fake ClickHouse)
+# Service-level checks (injected fake PostgreSQL variant store)
 # ---------------------------------------------------------------------------
 
 
-def _service(ch=None) -> PopGenService:
-    return PopGenService(ch=ch or FakeCh())
+def _service(variant_service=None) -> PopGenService:
+    return PopGenService(variant_service=variant_service or FakeVariantStore())
 
 
 async def test_allelefreq_region_mode() -> None:
-    ch = FakeCh()
-    service = _service(ch)
+    store = FakeVariantStore()
+    service = _service(store)
     request = AlleleFreqRequest(
         assembly="GmWm82.a2.v1", chromosome="Gm01", start=1, end=1000
     )
@@ -224,7 +224,7 @@ async def test_allelefreq_region_mode() -> None:
         NullDb(), request, release_context=RELEASE_CONTEXT
     )
 
-    assert ch.calls == 1
+    assert store.calls == 1
     assert response.source == "interval"
     assert response.assembly == "GmWm82.a2.v1"
     assert response.n_variants == 4
@@ -403,7 +403,7 @@ def test_region_schema_requires_exactly_one_mode() -> None:
 
 
 async def test_diversity_empty_region() -> None:
-    service = _service(FakeCh(rows=[]))
+    service = _service(FakeVariantStore(rows=[]))
     request = DiversityRequest(
         assembly="GmWm82.a2.v1", chromosome="Gm01", start=1, end=100
     )

@@ -44,13 +44,11 @@ API_ROOT = Path(__file__).resolve().parents[1]
 
 def _offline_alembic(command: str, revision_range: str) -> str:
     environment = os.environ.copy()
-    site_packages = next((API_ROOT / ".venv/lib").glob("python*/site-packages"))
     workspace_root = API_ROOT.parents[1]
     environment["PYTHONPATH"] = os.pathsep.join(
         [
             str(workspace_root / "packages/jobs-py/src"),
             str(API_ROOT),
-            str(site_packages),
             environment.get("PYTHONPATH", ""),
         ]
     )
@@ -71,6 +69,7 @@ def _offline_alembic(command: str, revision_range: str) -> str:
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     assert result.returncode == 0, result.stderr
     return result.stdout

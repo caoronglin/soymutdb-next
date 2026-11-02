@@ -18,7 +18,7 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - python=3.14          # unified SoyMutDB Python baseline
+  - python=3.15          # unified SoyMutDB Python baseline
   - pip>=24.0
   # DIAMOND is the only aligner in this deployment: blastp protein search only.
   - diamond>=2.1,<3

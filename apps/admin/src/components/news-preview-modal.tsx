@@ -5,7 +5,7 @@
  * Contract: GET /api/v1/admin/news/{id}/preview-token → { preview, exp, url }.
  * The token unlocks the draft on the public detail page without login:
  *   {public_url}/news/{slug}?preview={token}&exp={exp}
- * `public_url` = VITE_PUBLIC_URL (web build origin) or the admin origin.
+ * `public_url` must be the explicit VITE_PUBLIC_URL portal origin; never infer it.
  */
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -16,13 +16,21 @@ import {
   LoadingOutlined,
 } from "@ant-design/icons";
 import { getPreviewToken } from "@soymutdb/api-client";
+import { requireDeploymentOrigin } from "@soymutdb/shared/deployment";
 
 /** Resolve the public web origin (deploy-time override for admin hosting). */
-function publicSiteUrl(): string {
-  const configured = import.meta.env.VITE_PUBLIC_URL as string | undefined;
-  if (configured) return configured.replace(/\/+$/, "");
-  if (typeof window !== "undefined") return window.location.origin;
-  return "";
+function publicSiteUrl(): string | null {
+  try {
+    const configured = import.meta.env.VITE_PUBLIC_URL;
+    const origin = requireDeploymentOrigin(configured, "Public site");
+    // Localhost is an explicit exception in the shared deployment policy.
+    // Keep the portal's configured base path (e.g. a GitHub Pages project).
+    if (!/^https?:\/\//.test(origin)) return null;
+    const basePath = new URL(configured!).pathname.replace(/\/+$/, "");
+    return `${origin}${basePath}`;
+  } catch {
+    return null;
+  }
 }
 
 export interface NewsPreviewModalProps {
@@ -35,23 +43,31 @@ export interface NewsPreviewModalProps {
 export function NewsPreviewModal({ open, article, onClose }: NewsPreviewModalProps) {
   const { t } = useTranslation();
   const { message } = App.useApp();
-  const [token, setToken] = useState<{ preview: string; exp: number } | null>(null);
+  const [token, setToken] = useState<{
+    preview: string; exp: number; articleId: number | string; slug: string;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const portalBaseUrl = publicSiteUrl();
+  const articleId = article?.id;
+  const slug = article?.slug;
 
-  const previewUrl = article && token
-    ? `${publicSiteUrl()}/news/${encodeURIComponent(article.slug)}?preview=${encodeURIComponent(token.preview)}&exp=${token.exp}`
+  // A prop change renders before the effect can clear the previous token.
+  // Bind it to its article so that render cannot expose a mismatched link.
+  const previewUrl = open && portalBaseUrl && token && token.articleId === articleId && token.slug === slug
+    ? `${portalBaseUrl}/news/${encodeURIComponent(token.slug)}?${new URLSearchParams({ preview: token.preview, exp: String(token.exp) })}`
     : null;
 
   useEffect(() => {
-    if (!open || !article) return;
+    setToken(null);
+    setError(null);
+    setLoading(false);
+    if (!open || !portalBaseUrl || articleId == null || slug == null) return;
     let disposed = false;
     setLoading(true);
-    setError(null);
-    setToken(null);
-    getPreviewToken(article.id)
+    getPreviewToken(articleId)
       .then((res) => {
-        if (!disposed) setToken({ preview: res.preview, exp: res.exp });
+        if (!disposed) setToken({ preview: res.preview, exp: res.exp, articleId, slug });
       })
       .catch((err: unknown) => {
         if (!disposed) {
@@ -64,7 +80,7 @@ export function NewsPreviewModal({ open, article, onClose }: NewsPreviewModalPro
     return () => {
       disposed = true;
     };
-  }, [open, article]);
+  }, [open, articleId, slug, portalBaseUrl]);
 
   const copyLink = useCallback(async () => {
     if (!previewUrl) return;
@@ -92,16 +108,15 @@ export function NewsPreviewModal({ open, article, onClose }: NewsPreviewModalPro
           >
             {t("admin.news.preview.copyLink")}
           </Button>
-          {previewUrl ? (
-            <Button
-              icon={<LinkOutlined />}
-              href={previewUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t("admin.news.preview.openPreview")}
-            </Button>
-          ) : null}
+          <Button
+            icon={<LinkOutlined />}
+            href={previewUrl ?? undefined}
+            disabled={!previewUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t("admin.news.preview.openPreview")}
+          </Button>
         </Space>
       }
     >
@@ -111,7 +126,14 @@ export function NewsPreviewModal({ open, article, onClose }: NewsPreviewModalPro
         title={t("admin.news.preview.note")}
         style={{ marginBottom: 16 }}
       />
-      {loading ? (
+      {!portalBaseUrl ? (
+        <Alert
+          type="warning"
+          showIcon
+          title={t("admin.news.preview.originMissing")}
+          description={t("admin.news.preview.originMissingHint")}
+        />
+      ) : loading ? (
         <Typography.Text type="secondary">
           <LoadingOutlined /> {t("admin.news.preview.loading")}
         </Typography.Text>

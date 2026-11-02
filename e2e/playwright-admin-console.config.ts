@@ -38,8 +38,10 @@ export default defineConfig({
   ],
   use: {
     baseURL,
-    // The console catalog and test ids are English; pin the browser locale so
-    // host detection cannot switch i18n and surprise the assertions.
+    // The console is Chinese-first: `apps/admin/src/react-app.tsx` calls
+    // `initI18n("zh")`, so the browser locale cannot switch the catalog. It is
+    // pinned only to keep host detection deterministic across runs — every
+    // assertion in the spec is a `data-testid`, never copy.
     locale: "en-US",
     storageState: process.env.ADMIN_STORAGE_STATE || undefined,
     screenshot: "only-on-failure",

@@ -13,7 +13,6 @@ export const ADMIN_PRIMARY_COLOR_STORAGE_KEY = "soymutdb-admin-primary-color";
 export const ADMIN_PRIMARY_COLOR_EVENT = "soymutdb-admin-primary-color-changed";
 export const ANTD_PRIMARY_OKLCH = BRAND_PRIMARY_OKLCH;
 export const ANTD_PRIMARY_OKLCH_DARK = BRAND_PRIMARY_OKLCH_DARK;
-export const ANTD_FONT_FAMILY = '"HarmonyOS Sans SC", ui-sans-serif, system-ui, sans-serif';
 
 const HEX_COLOR_RE = /^#[0-9a-f]{6}$/i;
 

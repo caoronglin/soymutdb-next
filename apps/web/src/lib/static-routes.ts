@@ -81,11 +81,21 @@ export function injectPageHead(
   if (origin) {
     tags.push(`<link rel="canonical" href="${escapeHtml(new URL(entry.path, origin).toString())}" />`);
   }
+  let document = withTitle;
   if (siteVariant === "internal") {
-    tags.push('<meta name="robots" content="noindex, nofollow, noarchive" />');
+    // The Umi document shell may already carry a robots meta from the app
+    // config. Duplicating it is invalid head markup (and a strict-mode trap
+    // for tests), so upgrade the existing tag to the full policy instead of
+    // appending a second one.
+    const fullPolicy = '<meta name="robots" content="noindex, nofollow, noarchive" />';
+    if (/<meta name="robots"/i.test(document)) {
+      document = document.replace(/<meta name="robots"[^>]*>/i, fullPolicy);
+    } else {
+      tags.push(fullPolicy);
+    }
   }
-  if (tags.length === 0) return withTitle;
-  return withTitle.replace("</head>", `  ${tags.join("\n    ")}\n  </head>`);
+  if (tags.length === 0) return document;
+  return document.replace("</head>", `  ${tags.join("\n    ")}\n  </head>`);
 }
 
 export function renderSitemap(entries: readonly StaticRouteEntry[], origin: string): string {

@@ -14,7 +14,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from soymutdb_jobs.protein_fasta import parse_protein_fasta
+from soymutdb_jobs.protein_fasta import ProteinFastaError, parse_protein_fasta
 
 from soymutdb_worker.tasks import blast
 from tests.test_blast_task import FakeSession, FakeTask, _call_task, _fake_db, _payload
@@ -436,20 +436,29 @@ class TestRealDiamondAcceptsTheNormalizedQuery:
         assert parsed["total_hits"] >= 1
         assert parsed["hits"][0]["subject_id"] == "subject_1"
 
-    def test_engine_rejects_what_the_contract_already_refused(
+    def test_contract_rejects_empty_records_independently_of_engine_version(
         self, diamond_runtime, tmp_path
     ):
-        """Documents why the contract exists, using the real binary.
+        """Older engines fail; DIAMOND 2.2.8 silently ignores the empty record.
 
-        An empty record is what DIAMOND used to report as an opaque
-        ``Missing fields in input line`` only after the job started running.
+        The application must reject it consistently before enqueueing a job.
         """
         index = _real_index(diamond_runtime, tmp_path, PROTEIN, name="subject_1")
         query_path = tmp_path / "query_empty_record.fa"
-        query_path.write_text(f">empty\n>query_2\n{PROTEIN}\n")
+        query = f">empty\n>query_2\n{PROTEIN}\n"
+        with pytest.raises(ProteinFastaError) as rejected:
+            parse_protein_fasta(query)
+        assert rejected.value.code == "protein_fasta_record_empty"
+        query_path.write_text(query)
         output = tmp_path / "out_empty_record.tsv"
-        with pytest.raises(RuntimeError, match="Missing fields in input line"):
+        try:
             blast.run_blast_command(
                 "blastp", index, query_path, output, evalue=1e-5, max_target_seqs=1,
                 num_threads=1,
             )
+        except RuntimeError as error:
+            assert "Missing fields in input line" in str(error)
+        else:
+            parsed = blast.parse_diamond_tabular(output)
+            assert parsed["total_hits"] >= 1
+            assert {hit["query_id"] for hit in parsed["hits"]} == {"query_2"}

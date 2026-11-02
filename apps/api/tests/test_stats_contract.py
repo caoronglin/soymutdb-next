@@ -1,12 +1,13 @@
 """Unit tests for the stats aggregation endpoints (mocked query layer).
 
 These tests call the endpoint functions directly with a mocked SQLAlchemy
-session and a mocked ClickHouse service — no database / testcontainers
+session and a mocked PostgreSQL variant service — no database / testcontainers
 required.  They verify:
 
 - every endpoint returns real aggregates derived from the mock rows;
 - empty input yields the empty structure (zeros / empty lists);
-- ClickHouse unavailability degrades gracefully to the PostgreSQL fallback.
+- variant-projection unavailability degrades gracefully to the PostgreSQL
+  variant_summaries fallback.
 """
 
 from __future__ import annotations
@@ -63,6 +64,39 @@ class FakeDB(AsyncMock):
         self.execute = AsyncMock(side_effect=results or [FakeResult()] * 20)
 
 
+def _homepage_counts(
+    genes: int = 0,
+    mutant_lines: int = 0,
+    releases: int = 0,
+    assemblies: int = 0,
+    seeds: int = 0,
+    published_at: datetime | None = None,
+    version: str | None = None,
+    release_id: int = 7,
+) -> FakeResult:
+    """The single statement ``_load_homepage_stats`` now issues.
+
+    Every aggregate is a scalar subquery of one SELECT, so the whole homepage
+    round trip is one row whose column order matches the loader's unpacking:
+    the five counts, the release date, the release name and the release the
+    aggregate is bound to.
+    """
+    return FakeResult(
+        rows=[
+            (
+                genes,
+                mutant_lines,
+                releases,
+                assemblies,
+                seeds,
+                published_at,
+                version,
+                release_id,
+            )
+        ]
+    )
+
+
 def _release_row(version: str, days_ago: int, variant_count: int) -> FakeResult:
     """Row for the discovery-trend / releases queries."""
     return FakeResult(
@@ -86,7 +120,7 @@ async def test_dashboard_stats_uses_one_count_query_and_omits_user_population():
         ]
     )
     with patch.object(
-        stats_module.ch_service,
+        stats_module.variant_service,
         "get_dashboard_stats",
         new=AsyncMock(return_value={"total_variants": 42}),
     ):
@@ -107,16 +141,16 @@ def _release_context(release_id: int = 7) -> ReleaseContext:
 
 @pytest.mark.asyncio
 class TestHomepageStats:
-    async def test_uses_clickhouse_when_available(self):
+    async def test_uses_variant_service_when_available(self):
         db = FakeDB(
-            scalars=[5, 4, 3, 2, 1],  # genes, lines, releases, assemblies, seeds
             results=[
-                FakeResult(scalar_one_or_none=None),  # latest release
-                FakeResult(rows=[]),  # PG fallback (not used)
+                # genes, lines, releases, assemblies, seeds; no published release
+                _homepage_counts(genes=5, mutant_lines=4, releases=3, assemblies=2, seeds=1),
+                FakeResult(rows=[]),  # PostgreSQL summary fallback (not used)
             ],
         )
         with patch.object(
-            stats_module.ch_service,
+            stats_module.variant_service,
             "get_dashboard_stats",
             new=AsyncMock(
                 return_value={
@@ -129,7 +163,7 @@ class TestHomepageStats:
                 }
             ),
         ):
-            result = await homepage_stats(db=db)
+            result = await homepage_stats(db=db, release_context=_release_context())
 
         assert result.total_variants == 100
         assert result.snp_count == 60
@@ -142,41 +176,42 @@ class TestHomepageStats:
         assert result.seed_accessions == 1
         assert result.last_release_date is None
         assert result.last_release_name is None
+        # One statement replaces the five db.scalar calls the loader used to
+        # make; db.scalar must not come back for a read-hot aggregate.
+        assert db.scalar.await_count == 0
 
-    async def test_clickhouse_down_falls_back_to_postgres(self):
+    async def test_variant_service_down_falls_back_to_postgres(self):
         db = FakeDB(
-            scalars=[0, 0, 0, 0, 0],
             results=[
-                FakeResult(scalar_one_or_none=None),  # latest release
+                _homepage_counts(),
                 FakeResult(rows=[("SNP", 8), ("DEL", 2)]),  # PG variant counts
             ],
         )
         with patch.object(
-            stats_module.ch_service,
+            stats_module.variant_service,
             "get_dashboard_stats",
-            new=AsyncMock(side_effect=RuntimeError("clickhouse unreachable")),
+            new=AsyncMock(side_effect=RuntimeError("variant projection unreachable")),
         ):
-            result = await homepage_stats(db=db)
+            result = await homepage_stats(db=db, release_context=_release_context())
 
         assert result.total_variants == 10
         assert result.snp_count == 8
         assert result.indel_count == 2
         assert result.sv_count == 0
 
-    async def test_clickhouse_down_and_pg_empty_returns_empty_structure(self):
+    async def test_variant_service_down_and_pg_empty_returns_empty_structure(self):
         db = FakeDB(
-            scalars=[0, 0, 0, 0, 0],
             results=[
-                FakeResult(scalar_one_or_none=None),
+                _homepage_counts(),
                 FakeResult(rows=[]),
             ],
         )
         with patch.object(
-            stats_module.ch_service,
+            stats_module.variant_service,
             "get_dashboard_stats",
-            new=AsyncMock(side_effect=RuntimeError("clickhouse unreachable")),
+            new=AsyncMock(side_effect=RuntimeError("variant projection unreachable")),
         ):
-            result = await homepage_stats(db=db)
+            result = await homepage_stats(db=db, release_context=_release_context())
 
         assert result.total_variants == 0
         assert result.snp_count == 0
@@ -185,22 +220,28 @@ class TestHomepageStats:
         assert result.gene_count == 0
 
     async def test_includes_latest_release(self):
-        release = SimpleNamespace(
-            published_at=NOW - timedelta(days=10),
-            version="v2.0",
-        )
+        published_at = NOW - timedelta(days=10)
         db = FakeDB(
-            scalars=[1, 1, 1, 1, 1],
-            results=[FakeResult(scalar_one_or_none=release)],
+            results=[
+                _homepage_counts(
+                    genes=1,
+                    mutant_lines=1,
+                    releases=1,
+                    assemblies=1,
+                    seeds=1,
+                    published_at=published_at,
+                    version="v2.0",
+                ),
+            ],
         )
         with patch.object(
-            stats_module.ch_service,
+            stats_module.variant_service,
             "get_dashboard_stats",
             new=AsyncMock(return_value={"total_variants": 0}),
         ):
-            result = await homepage_stats(db=db)
+            result = await homepage_stats(db=db, release_context=_release_context())
 
-        assert result.last_release_date == release.published_at
+        assert result.last_release_date == published_at
         assert result.last_release_name == "v2.0"
 
 
@@ -326,7 +367,8 @@ class TestMutagenStatistics:
 
 @pytest.mark.asyncio
 class TestChromosomeDensityEndpoint:
-    """The density endpoint is ClickHouse-only, so its degraded path is 503.
+    """The density endpoint reads only the PostgreSQL variant projection, so
+    its degraded path is 503.
 
     It must never fabricate a ``chromosome_length`` of 0 (the response model
     requires >= 1) — that violation previously surfaced as an unhandled 500
@@ -335,7 +377,7 @@ class TestChromosomeDensityEndpoint:
 
     async def test_bins_derive_a_positive_chromosome_length(self):
         with patch.object(
-            stats_module.ch_service,
+            stats_module.variant_service,
             "get_chromosome_density",
             new=AsyncMock(
                 return_value=[
@@ -353,7 +395,7 @@ class TestChromosomeDensityEndpoint:
 
     async def test_empty_bins_still_satisfy_the_response_model(self):
         with patch.object(
-            stats_module.ch_service,
+            stats_module.variant_service,
             "get_chromosome_density",
             new=AsyncMock(return_value=[]),
         ):
@@ -369,7 +411,7 @@ class TestChromosomeDensityEndpoint:
         from app.core.exceptions import ServiceUnavailableError
 
         with patch.object(
-            stats_module.ch_service,
+            stats_module.variant_service,
             "get_chromosome_density",
             new=AsyncMock(side_effect=ServiceUnavailableError("unavailable")),
         ):

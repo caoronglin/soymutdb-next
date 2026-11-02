@@ -33,6 +33,7 @@ import {
   listNews,
   type NewsSummary,
 } from "@soymutdb/api-client";
+import { isNewsDetailRecord } from "../../lib/api-contract-guards";
 import { formatDate } from "../../lib/format";
 import {
   isDetailData,
@@ -92,7 +93,9 @@ function NewsDetailComponent() {
     );
   }, [bootstrapArticle, bootstrap, slug, queryClient]);
 
-  const article = detailQuery.data;
+  // A malformed 200 (list envelope / error body) must render the error Result,
+  // never `article.title_en` on an object that has no title.
+  const article = isNewsDetailRecord(detailQuery.data) ? detailQuery.data : undefined;
   const isZh = i18n.language.toLowerCase().startsWith("zh");
 
   const title = article

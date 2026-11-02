@@ -91,12 +91,12 @@ export function GeneSeedRequestEntry({
           <Statistic
             title={t("genes.seedRequest.ownCount", { defaultValue: "本基因申请次数" })}
             value={own ?? UNKNOWN}
-            valueStyle={{ fontSize: token.fontSizeLG, color: token.colorPrimary }}
+            styles={{ content: { fontSize: token.fontSizeLG, color: token.colorPrimary } }}
           />
           <Statistic
             title={t("genes.seedRequest.totalCount", { defaultValue: "全站申请总数" })}
             value={overall ?? UNKNOWN}
-            valueStyle={{ fontSize: token.fontSize, color: token.colorTextSecondary }}
+            styles={{ content: { fontSize: token.fontSize, color: token.colorTextSecondary } }}
           />
         </Space>
       </Flex>

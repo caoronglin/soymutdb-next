@@ -44,10 +44,22 @@ export function ImportDraftEditor({ draft, onUpdated }: ImportDraftEditorProps) 
 
   useEffect(() => {
     setMapping(JSON.stringify(draft.field_mapping, null, 2));
-    setError(null);
-    setNotice(null);
   }, [draft.id, draft.updated_at, draft.field_mapping]);
 
+  // Only a different draft invalidates the previous operation's feedback. A
+  // refetch of the same draft (the refresh a successful save triggers) must not
+  // erase the success notice that save just produced.
+  useEffect(() => {
+    setError(null);
+    setNotice(null);
+  }, [draft.id]);
+
+  // The server permits mapping/patch/validation writes only while the draft is
+  // still ``draft`` and commits only ``validated``/``ready`` drafts. Mirror that
+  // state machine here instead of offering controls the API will reject with a
+  // 409/400.
+  const editable = draft.status === "draft";
+  const committable = draft.status === "validated" || draft.status === "ready";
   const immutable = draft.status === "committed";
 
   async function run(action: NonNullable<typeof busy>, work: () => Promise<unknown>, success: string) {
@@ -71,19 +83,28 @@ export function ImportDraftEditor({ draft, onUpdated }: ImportDraftEditorProps) 
         Mapping, patches, validation, and publication operate on this persisted draft.
         Immutable source metadata and row counts are not editable here.
       </Typography.Text>
+      {editable ? null : (
+        <Typography.Text type="secondary">
+          {immutable
+            ? "This draft is committed; all editing controls are locked."
+            : committable
+              ? `This draft is ${draft.status}; mapping, patches, and validation are locked. Publication is available below.`
+              : `This draft is ${draft.status}; mapping, patches, validation, and publication are unavailable.`}
+        </Typography.Text>
+      )}
 
       <label className="block text-sm font-medium">
         Field mapping (JSON array)
         <Input.TextArea
           aria-label="Field mapping JSON"
           autoSize={{ minRows: 5, maxRows: 12 }}
-          disabled={immutable || busy !== null}
+          disabled={!editable || busy !== null}
           value={mapping}
           onChange={(event) => setMapping(event.target.value)}
         />
       </label>
       <Button
-        disabled={immutable}
+        disabled={!editable}
         loading={busy === "mapping"}
         onClick={() => run("mapping", () => adminImportStudioApi.updateMapping(draft.id, parseArray<FieldMappingItem>(mapping, "Field mapping")), "Mapping saved to the draft.")}
       >
@@ -95,14 +116,14 @@ export function ImportDraftEditor({ draft, onUpdated }: ImportDraftEditorProps) 
         <Input.TextArea
           aria-label="Data patches JSON"
           autoSize={{ minRows: 4, maxRows: 10 }}
-          disabled={immutable || busy !== null}
+          disabled={!editable || busy !== null}
           value={patches}
           onChange={(event) => setPatches(event.target.value)}
           placeholder='[{"row_key": "row-1", "column_name": "name", "old_value": null, "new_value": "value", "patch_type": "set"}]'
         />
       </label>
       <Button
-        disabled={immutable}
+        disabled={!editable}
         loading={busy === "patches"}
         onClick={() => run("patches", () => adminImportStudioApi.addPatches(draft.id, parseArray<DataPatchItem>(patches, "Data patches")), "Patches saved to the draft.")}
       >
@@ -111,11 +132,12 @@ export function ImportDraftEditor({ draft, onUpdated }: ImportDraftEditorProps) 
 
       <div className="flex flex-wrap items-center gap-2">
         <Button
-          disabled={immutable}
+          disabled={!editable}
           loading={busy === "validate"}
           onClick={() => run("validate", () => adminImportStudioApi.validate(draft.id, {
             row_count: draft.row_count,
             column_count: draft.column_count,
+            module_key: draft.module_key,
             field_mapping: parseArray<FieldMappingItem>(mapping, "Field mapping"),
           }), "Draft validation completed.")}
         >
@@ -133,7 +155,7 @@ export function ImportDraftEditor({ draft, onUpdated }: ImportDraftEditorProps) 
         <Input.TextArea aria-label="Publication config JSON" disabled={immutable || busy !== null} placeholder="Publication config JSON" value={config} onChange={(event) => setConfig(event.target.value)} />
         <Button
           danger
-          disabled={immutable || !sourceId.trim() || !kind.trim()}
+          disabled={!committable || !sourceId.trim() || !kind.trim()}
           loading={busy === "commit"}
           onClick={() => {
             if (!window.confirm("Publish this validated draft? This action is explicit and cannot be undone from the draft editor.")) return;

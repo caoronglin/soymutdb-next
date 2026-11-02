@@ -26,13 +26,11 @@ COLUMN = "build_artifact_url"
 
 def _offline_alembic(command: str, revision_range: str) -> str:
     environment = os.environ.copy()
-    site_packages = next((API_ROOT / ".venv/lib").glob("python*/site-packages"))
     workspace_root = API_ROOT.parents[1]
     environment["PYTHONPATH"] = os.pathsep.join(
         [
             str(workspace_root / "packages/jobs-py/src"),
             str(API_ROOT),
-            str(site_packages),
             environment.get("PYTHONPATH", ""),
         ]
     )
@@ -54,6 +52,7 @@ def _offline_alembic(command: str, revision_range: str) -> str:
         env=environment,
         capture_output=True,
         text=True,
+        encoding="utf-8",
         timeout=300,
     )
     assert result.returncode == 0, result.stderr

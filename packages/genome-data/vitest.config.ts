@@ -7,6 +7,8 @@ export default defineConfig({
     globals: true,
     include: ["src/**/*.test.ts"],
     pool: "forks",
-    poolOptions: { forks: { singleFork: true, maxForks: 1 } },
-  },
+
+    maxWorkers: 1,
+
+      },
 });

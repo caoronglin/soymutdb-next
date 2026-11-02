@@ -1,13 +1,15 @@
 # =====================================================================
 # SoyMutDB Web Frontend Dockerfile
-# node:24.19.0-alpine, pnpm, multi-stage build
+# node:26.13.0-alpine, pnpm, multi-stage build
 # Includes SSG build + gzip pre-compression for gzip_static
 # =====================================================================
 
 # ---------- Stage 1: Dependencies ----------
-FROM node:24.19.0-alpine AS deps
+FROM node:26.13.0-alpine AS deps
 
-RUN corepack enable && corepack prepare pnpm@12.5.1 --activate
+# Node 25+ ships no corepack; this image is on the Node 26 pin, so pnpm comes
+# from the bundled npm at the same reviewed version.
+RUN npm install --global --no-fund --no-audit pnpm@12.11.2 && pnpm --version
 
 WORKDIR /app
 
@@ -23,9 +25,11 @@ COPY packages/ui-react/package.json ./packages/ui-react/
 RUN pnpm install --frozen-lockfile
 
 # ---------- Stage 2: Builder ----------
-FROM node:24.19.0-alpine AS builder
+FROM node:26.13.0-alpine AS builder
 
-RUN corepack enable && corepack prepare pnpm@12.5.1 --activate
+# Node 25+ ships no corepack; this image is on the Node 26 pin, so pnpm comes
+# from the bundled npm at the same reviewed version.
+RUN npm install --global --no-fund --no-audit pnpm@12.11.2 && pnpm --version
 
 WORKDIR /app
 

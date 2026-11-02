@@ -14,26 +14,29 @@ The HTML page is rendered with the shared dominate-based builder from
 from __future__ import annotations
 
 import gzip
-import io
 import json
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
 
 from celery import Task
 from dominate.tags import div, em, main
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
 from soymutdb_worker.tables import (
+    assemblies,
     chromosomes,
     expression_data,
     expression_libraries,
     gene_data_cache,
     gene_homologs,
     genes,
+    releases,
 )
 from soymutdb_worker.utils.db import get_db
 from soymutdb_worker.utils.html_report import HTMLReport
@@ -46,6 +49,16 @@ _GENE_CHUNK = 1000
 
 # Max expression rows shown in the static HTML page
 _MAX_EXPRESSION_ROWS = 50
+
+#: Isolation used for the per-batch gene metadata reads.  ``READ ONLY`` keeps
+#: the transaction from taking row locks, so a long build never blocks
+#: independent writes; ``REPEATABLE READ`` makes every row inside a single
+#: batch see one consistent snapshot.  It must be the first statement issued on
+#: the connection, before any read.
+_SNAPSHOT_ISOLATION_SQL = "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY"
+
+#: The only release status whose artifacts may reach the public bucket.
+_PUBLIC_RELEASE_STATUS = "published"
 
 
 def _comma_or_none(value: Any) -> str:
@@ -311,18 +324,153 @@ def _upload_gzipped(
     content_type: str,
     content_encoding: str = "gzip",
 ) -> None:
-    """Upload gzip-compressed data to S3."""
-    gz_buffer = io.BytesIO()
-    with gzip.GzipFile(fileobj=gz_buffer, mode="wb") as gz_out:
-        gz_out.write(data)
-    gz_buffer.seek(0)
+    """Upload gzip-compressed data to S3 with reproducible bytes.
+
+    ``mtime=0`` keeps the gzip header timestamp fixed, so identical input
+    bytes always produce an identical object body.  That lets content digests
+    stay stable across rebuilds and lets unchanged artifacts keep their cache
+    entry instead of being re-uploaded under a fresh digest.
+    """
+    body = gzip.compress(data, mtime=0)
     s3_client.put_object(
         Bucket=bucket,
         Key=key,
-        Body=gz_buffer.getvalue(),
+        Body=body,
         ContentType=content_type,
         ContentEncoding=content_encoding,
     )
+
+
+# ---------------------------------------------------------------------------
+# Release scope + bounded batch iteration
+# ---------------------------------------------------------------------------
+
+
+@contextmanager
+def _read_only_snapshot() -> Iterator[Any]:
+    """Open a short-lived read-only snapshot for one batch of gene metadata.
+
+    One snapshot per batch, deliberately never one for the whole build.  The
+    worker engine defaults to a single connection (``WORKER_DB_POOL_SIZE``
+    defaults to 1), so holding a session open across the per-gene cache
+    upserts would starve the very writes the batch is feeding.  ``READ ONLY``
+    additionally guarantees the read transaction never takes the row locks a
+    write needs, so the batch walk cannot block independent writes.
+
+    What the snapshot guarantees is narrow: the rows of *one* batch are read
+    from a single consistent PostgreSQL snapshot.  It is not a build-wide or
+    database-wide snapshot.  Each batch opens a new transaction, and the
+    per-gene expression and homolog reads run on their own separate sessions
+    (see :func:`build_static_pages`), so a gene's ancillary rows may reflect a
+    slightly later database state than its metadata row.  Nothing here claims
+    the published set of artifacts is an atomic snapshot of the database.
+    """
+    with get_db() as session:
+        session.execute(text(_SNAPSHOT_ISOLATION_SQL))
+        yield session
+
+
+def _apply_gene_scope(stmt, *, gene_ids, release_id):
+    """Attach the accession filter and the release filter to a gene statement.
+
+    Release scoping joins ``assemblies`` and filters on its API-owned
+    ``release_id``: a gene belongs to exactly one assembly, and the assembly is
+    the unit that carries release identity, so this is the narrowest correct
+    join.  Without ``release_id`` the statement keeps the historical unscoped
+    behaviour used for internal (non-published) cache rebuilds.
+    """
+    if release_id is not None:
+        stmt = stmt.join(assemblies, genes.c.assembly_id == assemblies.c.id).where(
+            assemblies.c.release_id == release_id
+        )
+    if gene_ids is not None:
+        stmt = stmt.where(genes.c.accession.in_(gene_ids))
+    return stmt
+
+
+def gene_metadata_statement(*, gene_ids=None, release_id=None, after_gene_pk=None):
+    """Build one bounded keyset page of gene metadata, ordered by ``gene_pk``.
+
+    ``after_gene_pk`` is the keyset cursor: only genes with a strictly greater
+    primary key are returned, and the page is hard-capped at ``_GENE_CHUNK``
+    rows.  The statement therefore cannot degrade into an unbounded read of
+    the whole gene table, whatever the result size.
+    """
+    stmt = select(
+        genes.c.gene_pk,
+        genes.c.accession,
+        genes.c.assembly_id,
+        genes.c.name,
+        genes.c.biotype,
+        genes.c.start,
+        genes.c.end,
+        genes.c.strand,
+        genes.c.description,
+        chromosomes.c.name.label("chromosome_name"),
+    ).outerjoin(chromosomes, genes.c.chromosome_id == chromosomes.c.id)
+    stmt = _apply_gene_scope(stmt, gene_ids=gene_ids, release_id=release_id)
+    if after_gene_pk is not None:
+        stmt = stmt.where(genes.c.gene_pk > after_gene_pk)
+    return stmt.order_by(genes.c.gene_pk).limit(_GENE_CHUNK)
+
+
+def gene_scope_count_statement(*, gene_ids=None, release_id=None):
+    """Count the genes in exactly the scope the keyset walk will visit.
+
+    The count uses the same predicates as the page statement. Concurrent
+    mutations between batch snapshots can still change the eventual total.
+    """
+    return _apply_gene_scope(
+        select(func.count()).select_from(genes),
+        gene_ids=gene_ids,
+        release_id=release_id,
+    )
+
+
+def iter_gene_batches(*, gene_ids=None, release_id=None):
+    """Walk the selected genes in ``gene_pk`` order, one bounded batch at a time.
+
+    Each batch is read inside its own read-only snapshot, so peak memory stays
+    at ``_GENE_CHUNK`` rows no matter how many genes match.  The snapshots are
+    per batch and therefore not consistent with each other: a gene inserted
+    above the cursor by a concurrent ingest may or may not appear, depending on
+    when its batch is read.
+    """
+    after_gene_pk = None
+    while True:
+        with _read_only_snapshot() as session:
+            batch = session.execute(
+                gene_metadata_statement(
+                    gene_ids=gene_ids,
+                    release_id=release_id,
+                    after_gene_pk=after_gene_pk,
+                )
+            ).all()
+        if not batch:
+            return
+        # Advance the cursor before yielding: the caller catches per-row
+        # failures, so a row that blows up must not stall or rewind the walk.
+        after_gene_pk = batch[-1].gene_pk
+        yield batch
+
+
+def require_published_release(session, release_id) -> None:
+    """Fail closed unless ``release_id`` names an existing, published release.
+
+    Publishing artifacts for a draft, rolled-back, or unknown release would put
+    unreleased content behind a public URL, and falling back to an unscoped
+    namespace would publish something anyway.  Every non-published state raises.
+    """
+    status = session.execute(
+        select(releases.c.status).where(releases.c.id == release_id)
+    ).scalar_one_or_none()
+    if status is None:
+        raise ValueError(f"release {release_id!r} does not exist; refusing to publish")
+    if str(status) != _PUBLIC_RELEASE_STATUS:
+        raise ValueError(
+            f"release {release_id!r} is {str(status)!r}, not {_PUBLIC_RELEASE_STATUS!r}; "
+            "refusing to publish"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -354,6 +502,25 @@ def build_static_pages(
     a release/assembly-scoped prefix so the same accession in v4 and v5
     does not overwrite each other.
 
+    With ``upload_s3=True`` the task fails closed unless ``release_id`` names
+    an existing release whose ``releases.status`` is ``published``: publishing
+    a draft/unknown release, or falling back to an unscoped namespace, would
+    put unreleased content behind a public URL.  With ``upload_s3=False`` the
+    historical unscoped internal-cache mode stays available.  The published
+    status is re-checked before every batch of public uploads, so a release
+    that is rolled back mid-build stops further publishing; artifacts already
+    written before the rollback stay in the bucket (withdrawing them is out of
+    scope for this task).
+
+    Genes are walked with a keyset cursor over ``gene_pk`` in bounded batches
+    of ``_GENE_CHUNK`` rows, each read inside its own short read-only
+    repeatable-read snapshot.  The row count for progress reporting comes from
+    a count over the same scope, and no statement reads the full gene table.
+    Those snapshots are per batch, not per build: each batch opens its own
+    transaction, and the expression/homolog reads and the cache upserts run on
+    their own short sessions.  A build is therefore not an atomic view of the
+    database, and the published artifacts are not claimed to be one.
+
     Object key layout (when ``release_id`` is provided):
       ``{release_id}/{assembly_id}/genes/{accession}.json.gz``
       ``{release_id}/{assembly_id}/genes/{accession}.html.gz``
@@ -363,42 +530,38 @@ def build_static_pages(
 
     Args:
         gene_ids: Specific gene IDs to process, or ``None`` for all genes.
-        release_id: Optional release identifier for the object namespace.
+        release_id: Release identifier.  Scopes the gene query to assemblies
+            of that release and namespaces the object keys.  Required when
+            ``upload_s3`` is true.
         upload_s3: Whether to upload gzipped copies to S3 (default True).
 
     Returns:
         dict with build statistics.
     """
     logger.info(
-        "Building static gene pages (gene_ids=%s, upload_s3=%s)",
+        "Building static gene pages (gene_ids=%s, release_id=%s, upload_s3=%s)",
         "ALL" if gene_ids is None else f"{len(gene_ids)} genes",
+        release_id,
         upload_s3,
     )
 
+    if upload_s3 and release_id is None:
+        raise ValueError(
+            "upload_s3=True requires an explicit release_id; a release-less "
+            "namespace must never be published"
+        )
+
+    # ── Validate release, then size the scope ────────────────────────────
+    with _read_only_snapshot() as session:
+        if upload_s3:
+            require_published_release(session, release_id)
+        total = session.execute(
+            gene_scope_count_statement(gene_ids=gene_ids, release_id=release_id)
+        ).scalar_one()
+
+    # Only after the scope validates: an invalid scope must not touch storage.
     s3_client = get_s3_client() if upload_s3 else None
 
-    # ── Resolve gene list ───────────────────────────────────────────────
-    with get_db() as session:
-        stmt = (
-            select(
-                genes.c.gene_pk,
-                genes.c.accession,
-                genes.c.assembly_id,
-                genes.c.name,
-                genes.c.biotype,
-                genes.c.start,
-                genes.c.end,
-                genes.c.strand,
-                genes.c.description,
-                chromosomes.c.name.label("chromosome_name"),
-            )
-            .outerjoin(chromosomes, genes.c.chromosome_id == chromosomes.c.id)
-        )
-        if gene_ids is not None:
-            stmt = stmt.where(genes.c.accession.in_(gene_ids))
-        gene_rows = session.execute(stmt).all()
-
-    total = len(gene_rows)
     logger.info("Processing %d genes for cache build", total)
 
     if total == 0:
@@ -408,8 +571,14 @@ def build_static_pages(
     processed = 0
     failed = 0
 
-    for idx in range(0, total, _GENE_CHUNK):
-        chunk = gene_rows[idx : idx + _GENE_CHUNK]
+    batches = 0
+    for chunk in iter_gene_batches(gene_ids=gene_ids, release_id=release_id):
+        # Re-confirm the release before every batch of public uploads.  A
+        # release can be rolled back while a long build is running, and a
+        # start-of-run check alone would keep publishing it to the bucket.
+        if s3_client is not None:
+            with get_db() as session:
+                require_published_release(session, release_id)
 
         for row in chunk:
             try:
@@ -502,8 +671,11 @@ def build_static_pages(
                 logger.error("Failed to build cache for gene %s: %s", row.accession, e)
                 failed += 1
 
-        # Report progress for this chunk
-        pct = int((idx + len(chunk)) * 100 / total) if total else 0
+        # Report progress for this chunk.  Rows seen are derived from the batch
+        # walk, never from a full in-memory list of every selected gene.
+        batches += 1
+        seen = min(batches * _GENE_CHUNK, total)
+        pct = int(seen * 100 / total) if total else 0
         self.update_state(
             state="PROGRESS",
             meta={

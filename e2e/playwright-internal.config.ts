@@ -29,7 +29,7 @@ const baseURL = explicitBase || OFFLINE_BASE;
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: /internal-site\.spec\.ts/,
+  testMatch: /(internal-site|route-smoke)\.spec\.ts/,
   workers: 1,
   fullyParallel: false,
   timeout: 60_000,
@@ -55,7 +55,9 @@ export default defineConfig({
         // Serve the internal artifact at the origin ROOT (its baked base is /).
         command: "node static-server.mjs ../apps/web/dist/internal 4175 /",
         url: OFFLINE_BASE,
-        reuseExistingServer: !process.env.CI,
+        // A stale listener on 4175 could silently serve dist/external (visual/
+        // perf use the same artifact recipe); fail instead of testing the wrong tree.
+        reuseExistingServer: false,
         timeout: 30_000,
       },
 });

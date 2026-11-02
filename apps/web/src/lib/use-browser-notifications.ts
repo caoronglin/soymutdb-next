@@ -15,12 +15,6 @@ export function isNotificationSupported(): boolean {
   return typeof window !== "undefined" && "Notification" in window;
 }
 
-/** Current permission state ("default" when unsupported). */
-export function getNotificationPermission(): NotificationPermissionState {
-  if (!isNotificationSupported()) return "default";
-  return Notification.permission;
-}
-
 /**
  * Request notification permission. Call ONLY from a user gesture
  * (click/keydown handler). Resolves to the resulting permission state;

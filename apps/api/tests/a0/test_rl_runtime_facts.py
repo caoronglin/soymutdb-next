@@ -67,7 +67,7 @@ celery -A soymutdb_worker.main worker --loglevel=info
         "docker-compose.yml": """
 services:
   postgres:
-    image: postgres:18.4-alpine
+    image: postgres:18.6-alpine
   api:
     build:
       dockerfile: infra/docker/Dockerfile.api
@@ -168,7 +168,7 @@ def test_rl_collects_static_facts_and_redacts_sensitive_values(tmp_path: rl_Path
     assert rl_report["rl_facts"]["rl_requirements"]["rl_api"]["rl_requires_python"] == ">=3.14"
     assert rl_report["rl_facts"]["rl_requirements"]["rl_worker"]["rl_requires_python"] == ">=3.13"
     assert rl_report["rl_facts"]["rl_node"]["rl_node_requirement"] == ">=20.0.0"
-    assert rl_report["rl_facts"]["rl_compose"]["rl_postgresql_image"] == "postgres:18.4-alpine"
+    assert rl_report["rl_facts"]["rl_compose"]["rl_postgresql_image"] == "postgres:18.6-alpine"
     assert rl_report["rl_facts"]["rl_api_asyncpg"]["rl_present"] is True
     assert (
         rl_report["rl_facts"]["rl_config"]["rl_database_url_default"]["rl_classification"]
@@ -229,6 +229,7 @@ def test_rl_cli_writes_deterministic_json_to_requested_temp_output(tmp_path: rl_
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
     assert rl_result.returncode == 0, rl_result.stderr
@@ -255,6 +256,7 @@ def test_rl_cli_success_exit_status_requires_complete_fixture(tmp_path: rl_Path)
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
     assert rl_result.returncode == 0, rl_result.stderr
@@ -319,6 +321,7 @@ def test_rl_empty_required_python_source_is_blocking_via_cli(
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
     assert rl_result.returncode != 0, rl_result.stderr
@@ -387,6 +390,7 @@ def test_rl_nonempty_required_python_source_missing_structure_is_blocking_via_cl
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
     assert rl_result.returncode != 0, rl_result.stderr
@@ -437,6 +441,7 @@ def rl_run_cli(
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
     assert rl_output.exists()
     rl_report = rl_json.loads(rl_output.read_text(encoding="utf-8"))
@@ -778,6 +783,7 @@ def test_rl_cli_writes_complete_report_then_returns_nonzero_for_blocking_input(
         check=False,
         capture_output=True,
         text=True,
+        encoding="utf-8",
     )
 
     assert rl_result.returncode != 0

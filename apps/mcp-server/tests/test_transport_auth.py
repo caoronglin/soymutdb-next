@@ -104,10 +104,10 @@ def test_streamable_http_accepts_correct_bearer(mcp_server):
 
 def test_reverse_proxy_uses_canonical_path():
     repo_root = Path(__file__).resolve().parents[3]
-    workflow = (repo_root / ".github/workflows/ci.yml").read_text()
-    nginx = (repo_root / "infra/nginx/conf.d/default.conf").read_text()
-    jobs = (repo_root / "scripts/ci-job-steps.sh").read_text()
-    transport = (repo_root / "scripts/mcp-transport-smoke.sh").read_text()
+    workflow = (repo_root / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    nginx = (repo_root / "infra/nginx/conf.d/default.conf").read_text(encoding="utf-8")
+    jobs = (repo_root / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+    transport = (repo_root / "scripts/mcp-transport-smoke.sh").read_text(encoding="utf-8")
 
     # CI delegates job bodies; endpoint assertions belong to the actual owner.
     assert "bash scripts/ci-job-steps.sh run mcp-e2e" in workflow

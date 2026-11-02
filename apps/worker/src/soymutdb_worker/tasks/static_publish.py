@@ -35,14 +35,12 @@ def build_static_release(**kwargs: Any) -> dict[str, Any]:
 
     Args are the outbox-contract kwargs produced by ``request_publication``:
     ``publication_id``, ``target``, ``release_id``, ``page_definition_version``,
-    ``request_id`` — plus ``build_dir``, the directory a real SSG run produced.
+    ``request_id``, and ``build_artifact_url`` for immutable SSG output. The
+    worker downloads and extracts that artifact before validating and promoting
+    it. A co-located builder may instead supply ``build_dir`` directly.
 
-    ``build_dir`` is **required**. The API does not supply it yet (the transport
-    for a worker that does not share a filesystem with the SSG run is still
-    unimplemented), so a publication currently fails closed with
-    ``MissingBuildOutput`` instead of publishing a synthetic placeholder page.
-    That is deliberate: a failed publication is recoverable, a "successful" one
-    that serves nothing is not.
+    Missing or invalid build output records a failed publication; the pipeline
+    never substitutes a placeholder page.
     """
     from soymutdb_worker.tasks.static_publish_impl import run_publication
 

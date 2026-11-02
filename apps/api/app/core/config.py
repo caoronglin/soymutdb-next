@@ -50,6 +50,15 @@ _EXAMPLE_JWT_SECRETS = {
 # accidentally enabling an algorithm that requires an unmaintained crypto path.
 _ALLOWED_JWT_ALGORITHMS = frozenset({"HS256", "HS384", "HS512"})
 
+#: The nginx edge limiter allows 100 requests/second per client for the
+#: ``api`` zone (``infra/nginx/conf.d/default.conf``:
+#: ``limit_req zone=api burst=200 nodelay``), i.e. 6000 requests per minute.
+#: The application-layer anonymous-read budget must never be *lower* than
+#: that rate: a tighter application budget turns the API into the real
+#: bottleneck and makes the edge quota dead configuration.  The invariant is
+#: enforced by :meth:`Settings.validate_security_configuration`.
+EDGE_PUBLIC_READ_RATE_LIMIT_FLOOR_PER_MINUTE = 6000
+
 
 class Settings(BaseSettings):
     """Global application settings.
@@ -133,20 +142,50 @@ class Settings(BaseSettings):
     clickhouse_secure: bool = False
     clickhouse_connect_timeout: int = 10
     clickhouse_send_receive_timeout: int = 30
-    clickhouse_max_execution_time: int = 30
     # Override in deployments; the development default is intentionally non-secret.
     analytics_ip_salt: str = "soymutdb-analytics-dev"
     # Only direct peers listed here may supply a client IP through X-Forwarded-For.
     # The empty default prevents direct callers from spoofing telemetry hashes.
     analytics_trusted_proxy_ips: tuple[str, ...] = ()
-    max_sync_rows: int = 10000
 
     # ----------------------------------------------------------------- Redis
     redis_url: str = "redis://localhost:6379/0"
     cache_ttl_seconds: int = 3600
-    rate_limit_per_minute: int = 60
+
+    # ----------------------------------------------------------- Rate limits
+    # The global inbound request limiter lives in ``app/core/middleware.py``
+    # and is wired into the ASGI stack by ``app/main.py``.  It is graded by
+    # request class (see the plan in
+    # ``docs/superpowers/plans/2026-09-15-phase-1-baseline-security-plan.md``,
+    # section S-2):
+    #   * anonymous public reads -> ``public_read_rate_limit_per_minute``
+    #     and **fail open** while the limiter backend is unavailable;
+    #   * writes (POST/PUT/PATCH/DELETE) -> ``write_rate_limit_per_minute``
+    #     and **fail closed** (503) while the backend is unavailable;
+    #   * ``/api/v1/auth/*`` keeps its own dedicated limiter
+    #     (``app/core/ratelimit.py``) and is therefore not counted here.
+    #: Master switch of the global request limiter.  Production refuses to
+    #: start with it disabled, so there is no way to run a live deployment
+    #: without the request budget.
+    rate_limit_enabled: bool = True
+    #: Marks a non-production deployment as a benchmark run (capacity
+    #: measurements must not be distorted by the request budget).  Production
+    #: refuses to start with it enabled.
+    benchmark_mode: bool = False
+    #: Anonymous public reads (GET/HEAD without a verified principal) per
+    #: peer per minute.  Must stay at or above
+    #: :data:`EDGE_PUBLIC_READ_RATE_LIMIT_FLOOR_PER_MINUTE` (the nginx edge
+    #: ``limit_req`` rate of 100 r/s expressed per minute).
+    public_read_rate_limit_per_minute: int = Field(default=6000, ge=1)
+    #: Write operations (POST/PUT/PATCH/DELETE) per peer per minute.
+    write_rate_limit_per_minute: int = Field(default=120, ge=1)
     login_rate_limit_window: int = Field(default=60, ge=1)
     login_rate_limit_max: int = Field(default=10, ge=1)
+    # Second dimension: one source address must not be able to spray many
+    # usernames. The per-(username, IP) budget above alone never bounds an
+    # attacker who rotates the username, because every pair gets a fresh
+    # counter; this budget bounds the address instead.
+    login_ip_rate_limit_max: int = Field(default=50, ge=1)
     # External article previews issue bounded outbound requests, so they need a
     # tighter per-editor budget than the generic inbound middleware limit.
     external_article_preview_rate_limit_window: int = Field(default=300, ge=1)
@@ -216,18 +255,14 @@ class Settings(BaseSettings):
     cors_origins: Annotated[list[str], NoDecode] = Field(default_factory=list)
 
     # --------------------------------------------------------------- BLAST
-    blast_max_sequences: int = 100
     blast_max_length: int = 100000
     blast_default_db: str = "williams82_cds"
-    blast_bin_dir: str = "/usr/bin"
-    blast_cache_dir: str = "/tmp/blast_cache"
     #: Maximum delivery attempts per BLAST job (broker-level retries only;
     #: the worker itself is idempotent on top of this).
     blast_max_attempts: int = 3
 
     # ---------------------------------------------------------------- GWAS
     #: Maximum delivery attempts per GWAS job (broker-level retries only).
-    gwas_max_attempts: int = 3
 
     # --------------------------------------------------------------- Outbox
     # Transactional outbox: API writes events inside business transactions;
@@ -246,34 +281,13 @@ class Settings(BaseSettings):
     outbox_cleanup_interval_seconds: float = 3600.0
 
     # ----------------------------------------------------- OpenTelemetry
-    otel_enabled: bool = False
-    otel_service_name: str = "soymutdb-api"
-
     # --------------------------------------------------------------- Admin
     admin_email: str = "admin@soymutdb.local"
     admin_password: str = "admin123"
 
-    # ---------------------------------------------------------------- SMTP
-    # Email delivery is opt-in: ``smtp_enabled`` defaults to ``False`` so
-    # dev/staging never send real mail.  With SMTP disabled the worker
-    # renders the messages and writes them under ``logs/emails/`` instead
-    # (locally verifiable).  Production sets SOYMUTDB_SMTP_ENABLED=true plus
-    # the SMTP_* credentials (see deploy/.env.example).
-    smtp_enabled: bool = False
-    smtp_host: str = "localhost"
-    smtp_port: int = 587
-    smtp_username: str | None = None
-    smtp_password: str | None = None
-    smtp_from_email: str = "no-reply@soymutdb.local"
-    smtp_use_tls: bool = True
-    #: Admin notification recipient for contact modules (seed requests …);
-    #: falls back to ``admin_email`` when unset.
-    smtp_admin_to: str | None = None
-
-    @property
-    def smtp_admin_to_effective(self) -> str:
-        """Effective admin notification address (``smtp_admin_to`` or ``admin_email``)."""
-        return self.smtp_admin_to or self.admin_email
+    # SMTP delivery is owned by the worker (``soymutdb_worker.tasks.email``
+    # reads the ``SOYMUTDB_SMTP_*`` environment directly); the API never sends
+    # mail, so it intentionally declares no SMTP settings.
 
     # --------------------------------------------------- Static publication
     # Credentials / locations for the three immutable-publication targets are
@@ -290,10 +304,6 @@ class Settings(BaseSettings):
     cloudflare_pages_account_id: str | None = None
     cloudflare_pages_project: str | None = None
 
-    # --------------------------------------------------------------- CDN
-    cdn_enabled: bool = False
-    cdn_urls: list[str] = Field(default_factory=lambda: [])
-
     # ------------------------------------------------------------- Plugins
     # Plugin code is deployed out-of-band.  Runtime manifests are accepted
     # only when their HMAC signature verifies with this deployment secret.
@@ -307,8 +317,6 @@ class Settings(BaseSettings):
 
     # --------------------------------------------------------- Feature flags
     feature_registration_enabled: bool = True
-    feature_blast_enabled: bool = True
-    feature_seed_requests_enabled: bool = True
 
     @property
     def refresh_cookie_secure_effective(self) -> bool:
@@ -382,7 +390,34 @@ class Settings(BaseSettings):
                 "jwt_algorithm must be one of HS256, HS384, or HS512"
             )
 
+        # The application layer must never be the tighter of the two limits.
+        # The nginx edge limiter allows 100 r/s per client (6000/min); an
+        # application budget below that rate turns the API into the real
+        # bottleneck and makes the edge quota meaningless.
+        if (
+            self.public_read_rate_limit_per_minute
+            < EDGE_PUBLIC_READ_RATE_LIMIT_FLOOR_PER_MINUTE
+        ):
+            validation_errors.append(
+                "public_read_rate_limit_per_minute must be at least "
+                f"{EDGE_PUBLIC_READ_RATE_LIMIT_FLOOR_PER_MINUTE} (the nginx edge "
+                "limit_req rate of 100 r/s expressed per minute)"
+            )
+
         if self.app_env == "prod":
+            # A production deployment must never run without the request
+            # budget, and it must never run in benchmark mode.  Both are
+            # startup failures, not warnings: there is no header-based
+            # bypass for the limiter.
+            if self.benchmark_mode:
+                validation_errors.append(
+                    "benchmark_mode must not be enabled in production"
+                )
+            if not self.rate_limit_enabled:
+                validation_errors.append(
+                    "rate_limit_enabled must not be disabled in production"
+                )
+
             required_fields = [
                 "database_url",
                 "jwt_secret",

@@ -13,7 +13,9 @@ export default function SettingsOverviewPage() {
       })}
     >
       <div className="mx-auto w-full max-w-6xl space-y-6">
-        <div className="grid gap-4 sm:grid-cols-2">
+        {/* This route issues no data query: it is the settings navigation hub, so
+            the domain grid is both its mount marker and its settled marker. */}
+        <div data-testid="settings-domains" className="grid gap-4 sm:grid-cols-2">
           {SETTINGS_DOMAINS.map((domain) => {
             const meta = SETTINGS_DOMAIN_META[domain];
             return (
@@ -32,7 +34,7 @@ export default function SettingsOverviewPage() {
             );
           })}
         </div>
-        <Link to="/settings/legacy" className="text-sm text-primary hover:underline">
+        <Link data-testid="settings-legacy-link" to="/settings/legacy" className="text-sm text-primary hover:underline">
           {t("admin.settings.completeForm", { defaultValue: "Open the complete settings form" })}
         </Link>
       </div>

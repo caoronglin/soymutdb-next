@@ -35,7 +35,7 @@ export interface paths {
          * Readiness
          * @description Readiness probe with baseline and extended dependency semantics.
          *
-         *     Baseline gates PostgreSQL only; extended also gates ClickHouse and Redis.
+         *     Baseline gates PostgreSQL only; extended also gates the Redis broker.
          */
         get: operations["readiness_api_v1_health_ready_get"];
         put?: never;
@@ -672,11 +672,9 @@ export interface paths {
          * List Variants
          * @description Search variants with filters and cursor pagination (limit ≤ 200).
          *
-         *     The mutant-line filter takes a **public** identifier. It is resolved to the
-         *     line's internal key inside the resolved published release, so a numeric or
-         *     otherwise internal value is rejected instead of being bound to ClickHouse as
-         *     if it were a surrogate (which previously matched nothing, or silently
-         *     nothing, depending on the value).
+         *     The mutant-line filter takes a **public** identifier, resolved to the
+         *     fact's release-scoped line name. A persistence key or historical hash is
+         *     never accepted as a public identifier.
          */
         get: operations["list_variants_api_v1_variants_get"];
         put?: never;
@@ -739,8 +737,53 @@ export interface paths {
         /**
          * Export Variants
          * @description Submit an asynchronous export job (vcf/tsv/csv/json/bed).
+         *
+         *     The job is bound to exactly one assembly namespace: a named assembly
+         *     wins, otherwise the resolved release's own assembly scope is used, and a
+         *     request with neither is refused. See ``filters.assembly`` for the exact
+         *     rule and its limits.
          */
         post: operations["export_variants_api_v1_variants_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/variants/export/{export_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Variant Export Status
+         * @description Return the state of one export (submitter or administrator only).
+         */
+        get: operations["get_variant_export_status_api_v1_variants_export__export_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/variants/export/{export_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Variant Export Download
+         * @description Return a short-lived download link for a completed export.
+         */
+        get: operations["get_variant_export_download_api_v1_variants_export__export_id__download_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -882,7 +925,7 @@ export interface paths {
         };
         /**
          * Homepage statistics
-         * @description Aggregate statistics for the public home page. Variant counts come from ClickHouse when available, falling back to the PostgreSQL variant_summaries table; other counts are real PostgreSQL aggregates. Empty results are returned as zeros.
+         * @description Aggregate statistics for the public home page. Variant counts come from the native PostgreSQL variant_facts projection, falling back to the variant_summaries table; other counts are real PostgreSQL aggregates. Empty results are returned as zeros.
          */
         get: operations["homepage_stats_api_v1_stats_homepage_get"];
         put?: never;
@@ -904,8 +947,8 @@ export interface paths {
          * Variant Type Distribution
          * @description Variant type distribution (SNP/INS/DEL/MNV/SV) for a published release.
          *
-         *     The ClickHouse aggregate is bound to the resolved release; previously it
-         *     scanned every release's facts.
+         *     The PostgreSQL variant aggregate is bound to the resolved release;
+         *     previously it scanned every release's facts.
          */
         get: operations["variant_type_distribution_api_v1_stats_variant_types_get"];
         put?: never;
@@ -1072,12 +1115,13 @@ export interface paths {
          * Chromosome Density
          * @description Variant density across a chromosome in the published release.
          *
-         *     Density is computed entirely from the ClickHouse projection, so an
-         *     unavailable projection is reported as capability-unavailable (503). The
-         *     response model also requires a concrete ``chromosome_length``: fabricating
-         *     ``0`` here would both violate the contract and present an empty chromosome
-         *     as a real result. The query is bound to the resolved release, so bins can
-         *     never mix drafts into a published density.
+         *     Density is computed entirely from the PostgreSQL ``variant_facts``
+         *     projection, so an unavailable projection is reported as
+         *     capability-unavailable (503). The response model also requires a concrete
+         *     ``chromosome_length``: fabricating ``0`` here would both violate the
+         *     contract and present an empty chromosome as a real result. The query is
+         *     bound to the resolved release, so bins can never mix drafts into a
+         *     published density.
          */
         get: operations["chromosome_density_api_v1_stats_density_get"];
         put?: never;
@@ -1489,6 +1533,16 @@ export interface paths {
         /**
          * List Mutant Lines
          * @description List public mutant lines from the active published release.
+         *
+         *     ``mutagen`` keeps its historical *exact* match semantics. ``q`` is an
+         *     additive free-text filter that matches a case-insensitive substring of
+         *     the public identifier, the name, the cultivar or the mutagen; it narrows
+         *     the very same release-scoped, public-only candidate set and never widens
+         *     it.
+         *
+         *     Both filters leave the response shape untouched: the endpoint still
+         *     answers with a plain ``list[MutantLineResponse]`` (no envelope), so the
+         *     existing clients keep working.
          */
         get: operations["list_mutant_lines_api_v1_mutants_get"];
         put?: never;
@@ -2427,9 +2481,9 @@ export interface paths {
          * @description High-level system numbers for the admin dashboard.
          *
          *     All values are real aggregations (users/releases from PostgreSQL, variant
-         *     count from ClickHouse with a PostgreSQL fallback).  Change percentages are
-         *     computed between the last 30 days and the previous 30 days; metrics
-         *     without a temporal source report 0.0.
+         *     count from the native PostgreSQL projection with a ``variant_summaries``
+         *     fallback).  Change percentages are computed between the last 30 days and
+         *     the previous 30 days; metrics without a temporal source report 0.0.
          */
         get: operations["admin_dashboard_stats_api_v1_admin_dashboard_stats_get"];
         put?: never;
@@ -2453,8 +2507,8 @@ export interface paths {
          *
          *     - ``import_throughput``: daily import tasks (completed vs. failed) from
          *       the PostgreSQL ``import_tasks`` table.
-         *     - ``query_latency``: daily p50/p95/p99 percentiles from ClickHouse
-         *       analytics events (empty when ClickHouse is unavailable).
+         *     - ``query_latency``: daily p50/p95/p99 percentiles from the PostgreSQL
+         *       analytics events (empty when that query is unavailable).
          *     - ``storage_growth``: no reliable storage source exists yet — empty.
          */
         get: operations["admin_dashboard_series_api_v1_admin_dashboard_series_get"];
@@ -3782,7 +3836,10 @@ export interface paths {
          *             "gene_ids": ["Glyma.01G000100", "Glyma.02G000200"] | null
          *         }
          *
-         *     If ``gene_ids`` is ``None``, all genes will be rebuilt.
+         *     If ``gene_ids`` is ``None``, all genes of the active published release
+         *     will be rebuilt; ``[]`` rebuilds nothing. The build is scoped to a
+         *     published release, so an installation without one is rejected (503)
+         *     instead of queueing work against an unreleased namespace.
          */
         post: operations["trigger_build_api_v1_admin_build_static_post"];
         delete?: never;
@@ -4113,10 +4170,26 @@ export interface paths {
         };
         /**
          * Analytics Summary
-         * @description Aggregate analytics metrics for the admin dashboard.
+         * @description Aggregate visit metrics for the administrator dashboard.
          *
-         *     Returns event totals, unique sessions, breakdowns by type/page/referrer/
-         *     search term, and a daily time series.  Administrator-only.
+         *     Returns event totals, unique sessions, breakdowns by event type, by
+         *     canonical route template and by referrer category, and a daily count
+         *     series.
+         *
+         *     Every label is a fixed constant of this API and never caller data: a route
+         *     template such as ``/mutants/:publicId`` or ``/other``, one of the four
+         *     referrer categories (``direct``, ``search``, ``social``, ``other``), a
+         *     finite event type, or a ``YYYY-MM-DD`` day. Free-text search terms are
+         *     neither queried nor returned, so ``top_searches`` is always empty and
+         *     ``top_searches_available`` is always ``false``.
+         *
+         *     Each section carries an ``*_available`` flag, which is ``false`` when the
+         *     analytics store could not be read: an unavailable store is therefore never
+         *     displayed as a window with no traffic. A referrer category describes a
+         *     client-supplied header hint, not a verified traffic source, and unique
+         *     sessions count opaque cookie sessions, not people.
+         *
+         *     Administrator-only, and the response is ``private, no-store``.
          */
         get: operations["analytics_summary_api_v1_admin_analytics_summary_get"];
         put?: never;
@@ -4889,6 +4962,64 @@ export interface components {
          * @enum {string}
          */
         AnalysisType: "fastp" | "scanpy";
+        /**
+         * AnalyticsBreakdownItem
+         * @description One labelled bucket of an analytics breakdown.
+         *
+         *     ``label`` is always a constant of this API: a canonical route template (or
+         *     ``/other``), one of the four referrer categories, a finite event type, or a
+         *     ``YYYY-MM-DD`` day. A count is never negative, and a label is never a raw
+         *     identifier, query string, URL or free-text search term.
+         */
+        AnalyticsBreakdownItem: {
+            /** Label */
+            label: string;
+            /** Count */
+            count: number;
+        };
+        /**
+         * AnalyticsSummary
+         * @description Aggregate visit metrics over a bounded day window (administrator-only).
+         *
+         *     The seven data sections and the seven ``*_available`` booleans are declared
+         *     here, so the published contract, the generated client and the stored rows
+         *     cannot drift apart. An ``*_available`` flag is ``False`` when the analytics
+         *     store could not be read, which is what keeps "no traffic in this window"
+         *     distinguishable from "could not ask".
+         *
+         *     ``top_searches`` is always empty and ``top_searches_available`` is always
+         *     ``False``: free-text search terms are never queried and never returned.
+         */
+        AnalyticsSummary: {
+            /** Total Events */
+            total_events: number;
+            /** Unique Sessions */
+            unique_sessions: number;
+            /** Events By Type */
+            events_by_type?: components["schemas"]["AnalyticsBreakdownItem"][];
+            /** Top Pages */
+            top_pages?: components["schemas"]["AnalyticsBreakdownItem"][];
+            /** Top Referrers */
+            top_referrers?: components["schemas"]["AnalyticsBreakdownItem"][];
+            /** Top Searches */
+            top_searches?: components["schemas"]["AnalyticsBreakdownItem"][];
+            /** Events By Day */
+            events_by_day?: components["schemas"]["AnalyticsBreakdownItem"][];
+            /** Total Events Available */
+            total_events_available: boolean;
+            /** Unique Sessions Available */
+            unique_sessions_available: boolean;
+            /** Events By Type Available */
+            events_by_type_available: boolean;
+            /** Top Pages Available */
+            top_pages_available: boolean;
+            /** Top Referrers Available */
+            top_referrers_available: boolean;
+            /** Top Searches Available */
+            top_searches_available: boolean;
+            /** Events By Day Available */
+            events_by_day_available: boolean;
+        };
         /** AssemblyResponse */
         AssemblyResponse: {
             /** Id */
@@ -5341,9 +5472,9 @@ export interface components {
             authoritative: "postgresql";
             /**
              * Analytics
-             * @default clickhouse
+             * @default postgresql
              */
-            analytics: "clickhouse" | null;
+            analytics: "postgresql" | null;
         };
         /** DatasetVersionCreateRequest */
         DatasetVersionCreateRequest: {
@@ -5378,6 +5509,8 @@ export interface components {
             source_objects?: {
                 [key: string]: unknown;
             }[];
+            /** Module Key */
+            module_key?: string | null;
         };
         /** DatasetVersionResponse */
         DatasetVersionResponse: {
@@ -6001,6 +6134,25 @@ export interface components {
             scale: "zscore" | "none";
         };
         /**
+         * ExportDownloadResponse
+         * @description A short-lived download link for a finished export artifact.
+         */
+        ExportDownloadResponse: {
+            /** Export Id */
+            export_id: string;
+            /** Download Url */
+            download_url: string;
+            /** Filename */
+            filename: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /** Expires In Seconds */
+            expires_in_seconds: number;
+        };
+        /**
          * ExportRequest
          * @description Payload for requesting an asynchronous variant export.
          */
@@ -6010,7 +6162,7 @@ export interface components {
              * @default tsv
              */
             format: string;
-            filters?: components["schemas"]["VariantFilterParams"];
+            filters?: components["schemas"]["VariantExportFilters"];
             /**
              * Compress
              * @default true
@@ -6028,6 +6180,44 @@ export interface components {
             status: string;
             /** Message */
             message: string;
+        };
+        /**
+         * ExportStatusResponse
+         * @description Owner-visible state of a submitted variant export.
+         *
+         *     ``status`` uses the shared job vocabulary (``pending``/``running``/
+         *     ``succeeded``/``failed``).  The artifact's storage key is deliberately
+         *     absent: only a short-lived download URL is handed out, and only to the
+         *     owner or an administrator.
+         */
+        ExportStatusResponse: {
+            /** Export Id */
+            export_id: string;
+            /** Status */
+            status: string;
+            /** Format */
+            format: string;
+            /** Release Key */
+            release_key: string;
+            /** Assembly Key */
+            assembly_key?: string | null;
+            /** Record Count */
+            record_count?: number | null;
+            /** File Size */
+            file_size?: number | null;
+            /** Error Message */
+            error_message?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Started At */
+            started_at?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
+            /** Expires At */
+            expires_at?: string | null;
         };
         /**
          * ExternalArticlePlatform
@@ -6085,6 +6275,27 @@ export interface components {
             features?: {
                 [key: string]: boolean;
             };
+        };
+        /**
+         * FieldError
+         * @description Field-level validation error for 422 responses.
+         */
+        FieldError: {
+            /**
+             * Field
+             * @description Dot-joined request field path, e.g. ``query.chromosome``.
+             */
+            field: string;
+            /**
+             * Message
+             * @description Human-readable validation message.
+             */
+            message: string;
+            /**
+             * Type
+             * @description Pydantic error type identifier (e.g. ``string_type``).
+             */
+            type: string;
         };
         /** FieldMappingItem */
         FieldMappingItem: {
@@ -6776,6 +6987,8 @@ export interface components {
             column_count: number;
             /** Field Mapping */
             field_mapping?: components["schemas"]["FieldMappingItem"][];
+            /** Module Key */
+            module_key?: string | null;
         };
         /** InternalGeneSearchItem */
         InternalGeneSearchItem: {
@@ -9225,6 +9438,18 @@ export interface components {
             /** Notes */
             notes?: string | null;
         };
+        /**
+         * StaticBuildRequest
+         * @description Body of the static-build trigger.
+         *
+         *     Selection is validated but not resolved: an accession only means something
+         *     against a release, so an unknown (or foreign-release) ID has to reach the
+         *     build exactly as the administrator wrote it and simply not be counted.
+         */
+        StaticBuildRequest: {
+            /** Gene Ids */
+            gene_ids?: string[] | null;
+        };
         /** StaticPageCreate */
         StaticPageCreate: {
             /** Slug */
@@ -9755,6 +9980,74 @@ export interface components {
             ctx?: Record<string, never>;
         };
         /**
+         * ValidationErrorResponse
+         * @description 422 response: unified envelope plus field-level ``errors``.
+         */
+        ValidationErrorResponse: {
+            error: components["schemas"]["ErrorDetail"];
+            /**
+             * Request Id
+             * @description Correlation id (also echoed in the ``X-Request-ID`` header).
+             */
+            request_id: string;
+            /**
+             * Status Code
+             * @description HTTP status code.
+             */
+            status_code: number;
+            /**
+             * Errors
+             * @description Field-level validation errors (sanitised; no internal structure exposed).
+             */
+            errors?: components["schemas"]["FieldError"][];
+            $defs: {
+                /**
+                 * ErrorDetail
+                 * @description Machine-readable error detail (inside the ``error`` envelope).
+                 */
+                ErrorDetail: {
+                    /**
+                     * Code
+                     * @description Stable machine-readable error code, e.g. ``not_found``.
+                     */
+                    code: string;
+                    /**
+                     * Message
+                     * @description Human-readable error message.
+                     */
+                    message: string;
+                    /**
+                     * Details
+                     * @description Optional structured context (never contains secrets or stack traces).
+                     */
+                    details?: {
+                        [key: string]: unknown;
+                    };
+                };
+                /**
+                 * FieldError
+                 * @description Field-level validation error for 422 responses.
+                 */
+                FieldError: {
+                    /**
+                     * Field
+                     * @description Dot-joined request field path, e.g. ``query.chromosome``.
+                     */
+                    field: string;
+                    /**
+                     * Message
+                     * @description Human-readable validation message.
+                     */
+                    message: string;
+                    /**
+                     * Type
+                     * @description Pydantic error type identifier (e.g. ``string_type``).
+                     */
+                    type: string;
+                };
+            };
+        };
+        /**
          * VariantDetail
          * @description Extended variant information with annotation and linked entities.
          */
@@ -9811,16 +10104,13 @@ export interface components {
             updated_at?: string | null;
         };
         /**
-         * VariantFilterParams
-         * @description Query parameters for filtering and paginating variant queries.
-         *
-         *     Uses an authenticated, release/filter-bound keyset cursor – never OFFSET.
-         *     ``limit`` is capped at 200.
+         * VariantExportFilters
+         * @description Public export filters; reject private keys instead of ignoring them.
          */
-        VariantFilterParams: {
+        VariantExportFilters: {
             /**
              * Assembly
-             * @description Assembly name (e.g. Wm82.a4.v1). Required for region queries.
+             * @description Assembly namespace of the exported file (e.g. ``Wm82.a4.v1``). A named assembly wins; when the request names none, the resolved release's own assembly scope is used; a request whose release declares no scope is refused. One export carries exactly one assembly namespace. The name is checked for length (at most 64 characters) and against the release's own facts: a namespace the release publishes no variants in is refused, because an artifact without rows would claim a namespace the release does not have.
              */
             assembly?: string | null;
             /** Chromosome */
@@ -9835,8 +10125,6 @@ export interface components {
             alt?: string | null;
             /** Gene Id */
             gene_id?: string | null;
-            /** Mutant Line Id */
-            mutant_line_id?: string | null;
             variant_type?: components["schemas"]["VariantType"] | null;
             consequence?: components["schemas"]["ConsequenceType"] | null;
             impact?: components["schemas"]["ImpactLevel"] | null;
@@ -9851,9 +10139,11 @@ export interface components {
             cursor?: string | null;
             /**
              * Limit
-             * @default 100
+             * @description Accepted for compatibility with the variant query filters, but not applied to an export: an artifact contains every record that matches the other filters, bounded by the export budget. A caller that wants a page of rows uses the variant list endpoint.
              */
-            limit: number;
+            limit?: number | null;
+            /** Mutant Line Public Id */
+            mutant_line_public_id?: string | null;
         };
         /**
          * VariantListResponse
@@ -10404,95 +10694,6 @@ export interface components {
          */
         app__schemas__seed_request__SeedRequestUpdate: {
             status: components["schemas"]["app__models__seed_request__SeedRequestStatus"];
-        };
-        /**
-         * FieldError
-         * @description Field-level validation error for 422 responses.
-         */
-        FieldError: {
-            /**
-             * Field
-             * @description Dot-joined request field path, e.g. ``query.chromosome``.
-             */
-            field: string;
-            /**
-             * Message
-             * @description Human-readable validation message.
-             */
-            message: string;
-            /**
-             * Type
-             * @description Pydantic error type identifier (e.g. ``string_type``).
-             */
-            type: string;
-        };
-        /**
-         * ValidationErrorResponse
-         * @description 422 response: unified envelope plus field-level ``errors``.
-         */
-        ValidationErrorResponse: {
-            error: components["schemas"]["ErrorDetail"];
-            /**
-             * Request Id
-             * @description Correlation id (also echoed in the ``X-Request-ID`` header).
-             */
-            request_id: string;
-            /**
-             * Status Code
-             * @description HTTP status code.
-             */
-            status_code: number;
-            /**
-             * Errors
-             * @description Field-level validation errors (sanitised; no internal structure exposed).
-             */
-            errors?: components["schemas"]["FieldError"][];
-            $defs: {
-                /**
-                 * ErrorDetail
-                 * @description Machine-readable error detail (inside the ``error`` envelope).
-                 */
-                ErrorDetail: {
-                    /**
-                     * Code
-                     * @description Stable machine-readable error code, e.g. ``not_found``.
-                     */
-                    code: string;
-                    /**
-                     * Message
-                     * @description Human-readable error message.
-                     */
-                    message: string;
-                    /**
-                     * Details
-                     * @description Optional structured context (never contains secrets or stack traces).
-                     */
-                    details?: {
-                        [key: string]: unknown;
-                    };
-                };
-                /**
-                 * FieldError
-                 * @description Field-level validation error for 422 responses.
-                 */
-                FieldError: {
-                    /**
-                     * Field
-                     * @description Dot-joined request field path, e.g. ``query.chromosome``.
-                     */
-                    field: string;
-                    /**
-                     * Message
-                     * @description Human-readable validation message.
-                     */
-                    message: string;
-                    /**
-                     * Type
-                     * @description Pydantic error type identifier (e.g. ``string_type``).
-                     */
-                    type: string;
-                };
-            };
         };
     };
     responses: never;
@@ -11668,7 +11869,7 @@ export interface operations {
                 ref?: string | null;
                 alt?: string | null;
                 gene_id?: string | null;
-                /** @description Public mutant-line identifier (e.g. SM7QF3Z9P2A). Resolved to the line's internal key server-side; a numeric/internal id is rejected. */
+                /** @description Public mutant-line identifier (e.g. SM7QF3Z9P2A). Resolved server-side within the published release; internal ids are rejected. */
                 mutant_line_public_id?: string | null;
                 variant_type?: components["schemas"]["VariantType"] | null;
                 consequence?: components["schemas"]["ConsequenceType"] | null;
@@ -11832,6 +12033,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ExportResponse"];
+                };
+            };
+            /** @description Validation Error. The export is refused and nothing is queued, either because the request body failed schema validation (field-level ``errors`` are listed) or because the request could not be bound to exactly one assembly namespace: no assembly was named and the resolved release declares no scope, the resolved assembly name is longer than the export record can store (at most 64 characters), or the resolved release publishes no variants in that assembly namespace. A domain refusal carries the unified envelope with ``error.code`` ``validation_error`` and no ``errors`` list. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_variant_export_status_api_v1_variants_export__export_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_variant_export_download_api_v1_variants_export__export_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportDownloadResponse"];
                 };
             };
             /** @description Validation Error */
@@ -12100,7 +12381,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Internal Server Error */
@@ -13088,6 +13369,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["ReleaseStatus"] | null;
+                variant?: components["schemas"]["SiteVariant"];
             };
             header?: never;
             path?: never;
@@ -13164,7 +13446,9 @@ export interface operations {
     };
     get_release_api_v1_releases__release_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
             header?: never;
             path: {
                 release_id: number;
@@ -13206,6 +13490,8 @@ export interface operations {
         parameters: {
             query?: {
                 mutagen?: string | null;
+                q?: string | null;
+                offset?: number;
                 limit?: number;
                 release_id?: number | null;
             };
@@ -18733,9 +19019,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": {
-                    [key: string]: unknown;
-                };
+                "application/json": components["schemas"]["StaticBuildRequest"];
             };
         };
         responses: {
@@ -19584,9 +19868,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["AnalyticsSummary"];
                 };
             };
             /** @description Validation Error */

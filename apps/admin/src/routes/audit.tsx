@@ -1,8 +1,8 @@
-import { SnippetsOutlined, DownloadOutlined, FilterOutlined, GlobalOutlined, RiseOutlined, TeamOutlined, DesktopOutlined, FileTextOutlined } from "@ant-design/icons";
+import { SnippetsOutlined, DownloadOutlined, FilterOutlined, GlobalOutlined, RiseOutlined, TeamOutlined, DesktopOutlined, FileTextOutlined, WarningOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
-import { Badge, Button, Input, PageContainer, ProCard, ProTable, Select, Typography, type ProColumns } from "@/lib/antd";
+import { Skeleton, App, Badge, Button, Input, PageContainer, ProCard, ProTable, Select, Typography, type ProColumns } from "@/lib/antd";
 import { StatCard } from "../components/stat-card";
-import { useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { http } from "@soymutdb/api-client";
 import { DataTable, type DataTableColumn } from "../components/data-table";
@@ -64,6 +64,38 @@ type StatsPeriod = "day" | "week" | "month";
 const EMPTY_AUDIT_LOGS: AuditLog[] = [];
 const EMPTY_IP_DISTRIBUTION: AuditStats["ipDistribution"] = [];
 
+/** Rows per page of the audit list; shared by the request and the pager. */
+const AUDIT_PAGE_SIZE = 50;
+
+/**
+ * The raw filter values that scope an audit-log request.
+ *
+ * They are kept as one object (and not as five separate states) because a
+ * filter change and the page reset that belongs to it have to be applied
+ * together: the page number belongs to the filter scope it was counted for.
+ */
+interface AuditFilterScope {
+  search: string;
+  action: string;
+  ipAddress: string;
+  startDate: string;
+  endDate: string;
+}
+
+const EMPTY_FILTER_SCOPE: AuditFilterScope = {
+  search: "",
+  action: "all",
+  ipAddress: "",
+  startDate: "",
+  endDate: "",
+};
+
+/** The filter scope plus the page of that scope the operator is looking at. */
+interface AuditQueryState {
+  scope: AuditFilterScope;
+  page: number;
+}
+
 /** Trigger a client-side file download from a server response. */
 function downloadBlob(content: BlobPart, filename: string, mimeType: string): void {
   const blob = new Blob([content], { type: mimeType });
@@ -79,40 +111,82 @@ function downloadBlob(content: BlobPart, filename: string, mimeType: string): vo
 
 export default function AuditPage() {
   const { t } = useTranslation();
-  const [page, setPage] = useState(1);
-  const [search, setSearch] = useState("");
-  const [actionFilter, setActionFilter] = useState("all");
-  const [ipFilter, setIpFilter] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const { message } = App.useApp();
+  const [queryState, setQueryState] = useState<AuditQueryState>({
+    scope: EMPTY_FILTER_SCOPE,
+    page: 1,
+  });
+  const { scope, page } = queryState;
   const [period, setPeriod] = useState<StatsPeriod>("week");
   const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  /**
+   * Apply a filter change and restart the result set at page 1.
+   *
+   * The scope and the page are one state, so the new filter and the reset
+   * page reach the query in the same update. An effect that reset the page
+   * afterwards would first render (and request) the *previous* page with the
+   * new filter — a request for a page the filtered result set may not have,
+   * which is what makes the compliance screen claim "no audit records".
+   */
+  const updateScope = useCallback((patch: Partial<AuditFilterScope>) => {
+    setQueryState((prev) => ({ scope: { ...prev.scope, ...patch }, page: 1 }));
+  }, []);
+
+  /** Move to another page of the current scope; the scope itself is unchanged. */
+  const changePage = useCallback((nextPage: number) => {
+    setQueryState((prev) =>
+      prev.page === nextPage ? prev : { ...prev, page: nextPage },
+    );
+  }, []);
+
   const filterParams = useMemo(
     () =>
       buildAuditLogFilterParams({
-        search,
-        action: actionFilter,
-        ipAddress: ipFilter,
-        startDate,
-        endDate,
+        search: scope.search,
+        action: scope.action,
+        ipAddress: scope.ipAddress,
+        startDate: scope.startDate,
+        endDate: scope.endDate,
       }),
-    [search, actionFilter, ipFilter, startDate, endDate],
+    [scope.search, scope.action, scope.ipAddress, scope.startDate, scope.endDate],
   );
 
-  const { data, isLoading } = useQuery<{ items: AuditLog[]; total: number }>({
-    queryKey: ["admin-audit", page, search, actionFilter, ipFilter, startDate, endDate],
+  const { data, isLoading, isError: logsFailed, refetch: refetchLogs } = useQuery<{ items: AuditLog[]; total: number }>({
+    queryKey: ["admin-audit", page, scope.search, scope.action, scope.ipAddress, scope.startDate, scope.endDate],
     queryFn: () =>
       http.get("/admin/audit-logs", {
         params: {
           page,
-          page_size: 50,
+          page_size: AUDIT_PAGE_SIZE,
           ...filterParams,
         },
       }),
-    placeholderData: { items: [], total: 0 },
   });
 
-  const { data: stats, isLoading: statsLoading } = useQuery<AuditStats>({
+  /**
+   * A page that the filtered result set does not have must never be shown as
+   * an empty log: the records exist, they are simply on another page. The
+   * count comes from the server and is not adjusted here.
+   */
+  const total = data?.total ?? 0;
+  const lastPage = Math.max(1, Math.ceil(total / AUDIT_PAGE_SIZE));
+  const pageBeyondResult =
+    data != null && data.total > 0 && data.items.length === 0 && page > lastPage;
+  useEffect(() => {
+    if (!pageBeyondResult) return;
+    setQueryState((prev) =>
+      prev.page === lastPage ? prev : { ...prev, page: lastPage },
+    );
+  }, [pageBeyondResult, lastPage]);
+
+  const {
+    data: stats,
+    isLoading: statsLoading,
+    isError: statsFailed,
+    refetch: refetchStats,
+  } = useQuery<AuditStats>({
     queryKey: ["admin-audit-stats", period],
     queryFn: () =>
       http.get<AuditStats>("/admin/audit-logs/stats", { params: { period } }),
@@ -176,6 +250,7 @@ export default function AuditPage() {
 
   const handleExportCsv = async () => {
     setExporting(true);
+    setExportError(null);
     try {
       // Let the API stream the complete result in bounded batches instead of
       // materialising an arbitrary 10,000-row JSON response in the browser.
@@ -183,6 +258,14 @@ export default function AuditPage() {
         params: filterParams,
       });
       downloadBlob(blob, "audit-logs.csv", "text/csv");
+    } catch (error) {
+      // Without this the rejection escaped as an unhandled promise and the
+      // operator only saw the button return to its idle state.
+      const reason = error instanceof Error ? error.message : String(error);
+      setExportError(reason);
+      message.error(
+        t("admin.audit.exportFailed", { defaultValue: "The CSV export failed." }),
+      );
     } finally {
       setExporting(false);
     }
@@ -276,29 +359,47 @@ export default function AuditPage() {
           </span>
         </div>
 
-        {/* Statistics summary cards */}
+        {/* Statistics summary cards. A failed statistics request must not be
+            rendered as a set of zeros: "0 logins" reads as a fact about the
+            deployment, so an unknown value is shown as a dash instead. */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label={t("admin.audit.totalLogins", { defaultValue: "Total Logins" })}
-            value={formatNumber(stats?.totalLogins ?? 0)}
+            value={statsFailed || !stats ? "—" : formatNumber(stats?.totalLogins ?? 0)}
             icon={<SnippetsOutlined className="size-5" />}
           />
           <StatCard
             label={t("admin.audit.totalActions", { defaultValue: "Total Actions" })}
-            value={formatNumber(stats?.totalActions ?? 0)}
+            value={statsFailed || !stats ? "—" : formatNumber(stats?.totalActions ?? 0)}
             icon={<RiseOutlined className="size-5" />}
           />
           <StatCard
             label={t("admin.audit.uniqueIps", { defaultValue: "Unique IPs" })}
-            value={formatNumber(stats?.uniqueIps ?? 0)}
+            value={statsFailed || !stats ? "—" : formatNumber(stats?.uniqueIps ?? 0)}
             icon={<GlobalOutlined className="size-5" />}
           />
           <StatCard
             label={t("admin.audit.activeUsers", { defaultValue: "Active Users" })}
-            value={typeof activeUsers === "number" ? formatNumber(activeUsers) : activeUsers}
+            value={logsFailed || !data ? "—" : formatNumber(activeUsers)}
             icon={<TeamOutlined className="size-5" />}
           />
         </div>
+
+        {statsFailed ? (
+          <div
+            role="alert"
+            data-testid="audit-stats-error"
+            className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+          >
+            <WarningOutlined className="size-4" />
+            <span className="flex-1">
+              {t("admin.audit.statsLoadError", { defaultValue: "Audit statistics could not be loaded." })}
+            </span>
+            <Button size="small" onClick={() => void refetchStats()}>
+              {t("common.retry", { defaultValue: "Retry" })}
+            </Button>
+          </div>
+        ) : null}
 
         {/* IP distribution + period selector */}
         <div className="grid gap-4 lg:grid-cols-3">
@@ -313,18 +414,28 @@ export default function AuditPage() {
               </Badge>
             </div>
             <div>
-              <ProTable<AuditStats["ipDistribution"][number]>
-                {...PRO_LIST_SHELL}
-                rowKey="ip"
-                size="small"
-                columns={ipColumns}
-                dataSource={topIps}
-                loading={statsLoading}
-                pagination={false}
-                locale={{
-                  emptyText: t("admin.audit.noIpData", { defaultValue: "No IP distribution data for this period." }),
-                }}
-              />
+              {statsFailed ? (
+                <p
+                  role="alert"
+                  data-testid="audit-ip-distribution-error"
+                  className="text-sm text-destructive"
+                >
+                  {t("admin.audit.statsLoadError", { defaultValue: "Audit statistics could not be loaded." })}
+                </p>
+              ) : statsLoading ? <Skeleton active /> : (
+                <ProTable<AuditStats["ipDistribution"][number]>
+                  {...PRO_LIST_SHELL}
+                  rowKey="ip"
+                  size="small"
+                  columns={ipColumns}
+                  dataSource={topIps}
+                  loading={statsLoading}
+                  pagination={false}
+                  locale={{
+                    emptyText: t("admin.audit.noIpData", { defaultValue: "No IP distribution data for this period." }),
+                  }}
+                />
+              )}
             </div>
           </ProCard>
 
@@ -340,14 +451,15 @@ export default function AuditPage() {
               <p className="mb-3 text-sm text-muted-foreground">
                 {t("admin.audit.statsPeriodDesc", { defaultValue: "Control the aggregation window for the summary cards and IP distribution." })}
               </p>
-              <Select value={period} onChange={(v) => setPeriod(v as StatsPeriod)}>
-
-
-                  <Select.Option value="day">{t("admin.audit.periodDay", { defaultValue: "Day" })}</Select.Option>
-                  <Select.Option value="week">{t("admin.audit.periodWeek", { defaultValue: "Week" })}</Select.Option>
-                  <Select.Option value="month">{t("admin.audit.periodMonth", { defaultValue: "Month" })}</Select.Option>
-
-              </Select>
+              <Select
+                value={period}
+                onChange={(v) => setPeriod(v as StatsPeriod)}
+                options={[
+                  { value: "day", label: t("admin.audit.periodDay", { defaultValue: "Day" }) },
+                  { value: "week", label: t("admin.audit.periodWeek", { defaultValue: "Week" }) },
+                  { value: "month", label: t("admin.audit.periodMonth", { defaultValue: "Month" }) },
+                ]}
+              />
             </div>
           </ProCard>
         </div>
@@ -358,67 +470,110 @@ export default function AuditPage() {
             <FilterOutlined className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder={t("admin.audit.searchPlaceholder", { defaultValue: "Search by actor, resource, or IP..." })}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={scope.search}
+              onChange={(e) => updateScope({ search: e.target.value })}
               className="h-9 w-72 pl-8"
             />
           </div>
-          <Select value={actionFilter} onChange={setActionFilter}>
-
-
-              <Select.Option value="all">{t("admin.audit.actionAll", { defaultValue: "All Actions" })}</Select.Option>
-              <Select.Option value="create">{t("admin.audit.actionCreate", { defaultValue: "Create" })}</Select.Option>
-              <Select.Option value="update">{t("admin.audit.actionUpdate", { defaultValue: "Update" })}</Select.Option>
-              <Select.Option value="delete">{t("admin.audit.actionDelete", { defaultValue: "Delete" })}</Select.Option>
-              <Select.Option value="login">{t("admin.audit.actionLogin", { defaultValue: "Login" })}</Select.Option>
-              <Select.Option value="logout">{t("admin.audit.actionLogout", { defaultValue: "Logout" })}</Select.Option>
-              <Select.Option value="export">{t("admin.audit.actionExport", { defaultValue: "Export" })}</Select.Option>
-              <Select.Option value="role_change">{t("admin.audit.actionRoleChange", { defaultValue: "Role Change" })}</Select.Option>
-
-          </Select>
+          <Select
+            value={scope.action}
+            onChange={(v) => updateScope({ action: v })}
+            options={[
+              { value: "all", label: t("admin.audit.actionAll", { defaultValue: "All Actions" }) },
+              { value: "create", label: t("admin.audit.actionCreate", { defaultValue: "Create" }) },
+              { value: "update", label: t("admin.audit.actionUpdate", { defaultValue: "Update" }) },
+              { value: "delete", label: t("admin.audit.actionDelete", { defaultValue: "Delete" }) },
+              { value: "login", label: t("admin.audit.actionLogin", { defaultValue: "Login" }) },
+              { value: "logout", label: t("admin.audit.actionLogout", { defaultValue: "Logout" }) },
+              { value: "export", label: t("admin.audit.actionExport", { defaultValue: "Export" }) },
+              { value: "role_change", label: t("admin.audit.actionRoleChange", { defaultValue: "Role Change" }) },
+            ]}
+          />
           <div className="relative">
             <GlobalOutlined className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder={t("admin.audit.ipFilterPlaceholder", { defaultValue: "Filter by IP address..." })}
-              value={ipFilter}
-              onChange={(e) => setIpFilter(e.target.value)}
+              value={scope.ipAddress}
+              onChange={(e) => updateScope({ ipAddress: e.target.value })}
               className="h-9 w-44 pl-8"
             />
           </div>
           <div className="flex items-center gap-1.5">
             <Input
               type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              value={scope.startDate}
+              onChange={(e) => updateScope({ startDate: e.target.value })}
               className="h-9 w-40"
               aria-label={t("admin.audit.startDateLabel", { defaultValue: "Start date" })}
             />
             <span className="text-xs text-muted-foreground">{t("admin.audit.dateRangeSeparator", { defaultValue: "to" })}</span>
             <Input
               type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
+              value={scope.endDate}
+              onChange={(e) => updateScope({ endDate: e.target.value })}
               className="h-9 w-40"
               aria-label={t("admin.audit.endDateLabel", { defaultValue: "End date" })}
             />
           </div>
           <Badge color="default">
-            {t("admin.audit.recordsCount", { count: data?.total ?? 0, defaultValue: "{{count}} records" })}
+            {logsFailed || !data
+              ? "—"
+              : t("admin.audit.recordsCount", { count: total, defaultValue: "{{count}} records" })}
           </Badge>
         </div>
 
-        <DataTable
-          columns={columns}
-          data={logs}
-          rowKey={(l) => l.id}
-          loading={isLoading}
-          page={page}
-          pageSize={50}
-          total={data?.total ?? 0}
-          onPageChange={setPage}
-          emptyTitle={t("admin.audit.emptyTitle", { defaultValue: "No audit records" })}
-          emptyDescription={t("admin.audit.emptyDescription", { defaultValue: "Audit log entries will appear here as actions are performed." })}
-        />
+        {exportError ? (
+          <div
+            role="alert"
+            data-testid="audit-export-error"
+            className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+          >
+            <p>
+              {t("admin.audit.exportFailed", { defaultValue: "The CSV export failed." })}
+            </p>
+            <p className="mt-1 text-xs">
+              {t("common.errorReason", {
+                reason: exportError,
+                defaultValue: "Server response: {{reason}}",
+              })}
+            </p>
+          </div>
+        ) : null}
+
+        {logsFailed ? (
+          /* A failed request is not an empty log. The compliance screen must
+             never claim that nothing happened because the transport failed. */
+          <div
+            role="alert"
+            data-testid="audit-load-error"
+            className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive"
+          >
+            <p className="font-medium">
+              {t("admin.audit.loadError", { defaultValue: "The audit log could not be loaded." })}
+            </p>
+            <p className="mt-1">
+              {t("admin.audit.loadErrorDesc", {
+                defaultValue: "The request failed, so the records below are unknown rather than empty. Retry to load them.",
+              })}
+            </p>
+            <Button className="mt-3" size="small" onClick={() => void refetchLogs()}>
+              {t("common.retry", { defaultValue: "Retry" })}
+            </Button>
+          </div>
+        ) : isLoading || pageBeyondResult ? <Skeleton active /> : (
+          <DataTable
+            columns={columns}
+            data={logs}
+            rowKey={(l) => l.id}
+            loading={isLoading}
+            page={page}
+            pageSize={AUDIT_PAGE_SIZE}
+            total={total}
+            onPageChange={changePage}
+            emptyTitle={t("admin.audit.emptyTitle", { defaultValue: "No audit records" })}
+            emptyDescription={t("admin.audit.emptyDescription", { defaultValue: "Audit log entries will appear here as actions are performed." })}
+          />
+        )}
       </div>
     </PageContainer>
   );

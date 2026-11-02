@@ -1,8 +1,20 @@
-import { useEffect, useRef } from "react";
-import * as echarts from "echarts";
+import * as React from "react";
+import { ChartCanvas } from "@soymutdb/charts";
+import type { ChartDefinition } from "@soymutdb/charts";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/cn";
-import { Empty, ProCard } from "@/lib/antd";
+// Imported relatively, like the other chart helpers in this folder: the
+// console's vitest config has no "@/" alias, and these three components are
+// the ones with regression tests.
+import { Empty, ProCard } from "../../lib/antd";
+import {
+  ADMIN_CHART_HEIGHT,
+  IMPORT_SERIES_COLORS,
+  type ChartSeriesRow,
+  toSeriesRows,
+  useAdminChartAnimation,
+  useAdminChartTheme,
+} from "./chart-adapter";
 export interface ImportThroughputDataPoint {
   date: string;
   imported: number;
@@ -15,103 +27,69 @@ interface ImportThroughputChartProps {
 }
 
 /**
- * ECharts area chart showing daily import throughput (successful vs. failed).
- * Uses the OKLCH chart palette for consistency with the design system.
+ * Area chart showing daily import throughput (successful vs. failed).
+ *
+ * The dashboard endpoint returns one row per day holding both measures, so the
+ * rows are reshaped into the facade's long format: one row per day per series,
+ * grouped by the color field. The two series keep the colors this chart always
+ * used, so the engine swap does not change the palette.
  */
 export function ImportThroughputChart({
   data,
   className,
 }: ImportThroughputChartProps) {
- const chartRef = useRef<HTMLDivElement>(null);
-  const instanceRef = useRef<echarts.ECharts | null>(null);
   const { t } = useTranslation();
+  const importedLabel = t("admin.charts.imported", { defaultValue: "Imported" });
+  const failedLabel = t("admin.charts.failed", { defaultValue: "Failed" });
+  const recordsLabel = t("admin.charts.records", { defaultValue: "Records" });
+  const theme = useAdminChartTheme(IMPORT_SERIES_COLORS);
+  const animation = useAdminChartAnimation();
 
-  useEffect(() => {
-    if (!chartRef.current) return;
-    let disposed = false;
-    void import("echarts").then((echarts) => {
-      if (disposed || !chartRef.current) return;
-      instanceRef.current = echarts.init(chartRef.current);
-    });
-    const resize = () => instanceRef.current?.resize();
-    window.addEventListener("resize", resize);
-    return () => {
-      window.removeEventListener("resize", resize);
-      instanceRef.current?.dispose();
-      disposed = true;
-    };
-  }, []);
+  const rows = React.useMemo<ChartSeriesRow[]>(
+    () =>
+      toSeriesRows(data, [
+        { name: importedLabel, pick: (datum) => datum.imported },
+        { name: failedLabel, pick: (datum) => datum.failed },
+      ]),
+    [data, importedLabel, failedLabel],
+  );
 
-  useEffect(() => {
-    if (!instanceRef.current) return;
-    const isDark =
-      document.documentElement.getAttribute("data-theme") === "dark";
+  const definition = React.useMemo<ChartDefinition>(
+    () => ({
+      kind: "area",
+      x: "date",
+      y: "value",
+      color: "series",
+      categoryOrder: "appearance",
+      palette: IMPORT_SERIES_COLORS,
+      legend: true,
+      valueFormat: "integer",
+      axisLabels: { y: recordsLabel },
+      // BLOCKED(chart-adapter): the ECharts version filled each series with its
+      // own two-stop gradient. The facade declares one gradient per chart, so
+      // adding one here would paint the failed series in the imported series'
+      // green. Left unset until the definition can carry a gradient per series.
+    }),
+    [recordsLabel],
+  );
 
-    instanceRef.current.setOption({
-      tooltip: {
-        trigger: "axis",
-        backgroundColor: isDark ? "#222822" : "#ffffff",
-        borderColor: isDark ? "#3a4a3a" : "#e0e5e0",
-        textStyle: { color: isDark ? "#f0f4f0" : "#1a2b1a" },
-      },
-      legend: {
-        data: [t("admin.charts.imported", { defaultValue: "Imported" }), t("admin.charts.failed", { defaultValue: "Failed" })],
-        textStyle: { color: isDark ? "#a8b8a8" : "#5a6b5a" },
-        top: 0,
-      },
-      grid: { left: 48, right: 16, top: 36, bottom: 32 },
-      xAxis: {
-        type: "category",
-        data: data.map((d) => d.date),
-        axisLine: { lineStyle: { color: isDark ? "#3a4a3a" : "#e0e5e0" } },
-        axisLabel: { color: isDark ? "#a8b8a8" : "#5a6b5a", fontSize: 11 },
-      },
-      yAxis: {
-        type: "value",
-        name: t("admin.charts.records", { defaultValue: "Records" }),
-        axisLine: { lineStyle: { color: isDark ? "#3a4a3a" : "#e0e5e0" } },
-        axisLabel: { color: isDark ? "#a8b8a8" : "#5a6b5a", fontSize: 11 },
-        splitLine: { lineStyle: { color: isDark ? "#2a3a2a" : "#f0f4f0" } },
-      },
-      series: [
-        {
-          name: t("admin.charts.imported", { defaultValue: "Imported" }),
-          type: "line",
-          smooth: true,
-          data: data.map((d) => d.imported),
-          itemStyle: { color: "#2f7d32" },
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: "rgba(47, 125, 50, 0.25)" },
-              { offset: 1, color: "rgba(47, 125, 50, 0.02)" },
-            ]),
-          },
-        },
-        {
-          name: t("admin.charts.failed", { defaultValue: "Failed" }),
-          type: "line",
-          smooth: true,
-          data: data.map((d) => d.failed),
-          itemStyle: { color: "#c0392b" },
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: "rgba(192, 57, 43, 0.2)" },
-              { offset: 1, color: "rgba(192, 57, 43, 0.02)" },
-            ]),
-          },
-        },
-      ],
-    });
-  }, [data, t]);
+  const hasData = data.length > 0;
 
   return (
     <ProCard className={cn(className)} title={t("admin.charts.importThroughput", { defaultValue: "Import Throughput" })}>
-        <div className="relative">
-          <div ref={chartRef} className="h-64 w-full" role="img" aria-label={t("admin.charts.importThroughputAria", { defaultValue: "Import throughput chart" })} />
-          {data.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("admin.charts.noData", { defaultValue: "No chart data" })} /> : null}
+        <div className="relative h-64 w-full">
+          {hasData ? (
+            <ChartCanvas
+              definition={definition}
+              data={rows}
+              label={t("admin.charts.importThroughputAria", { defaultValue: "Import throughput chart" })}
+              height={ADMIN_CHART_HEIGHT}
+              theme={theme}
+              animation={animation}
+            />
+          ) : null}
+          {hasData ? null : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("admin.charts.noData", { defaultValue: "No chart data" })} />}
       </div>
     </ProCard>
   );
 }
-
-export default ImportThroughputChart;

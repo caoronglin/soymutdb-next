@@ -1,0 +1,86 @@
+{
+  "verified": true,
+  "runtime": "native",
+  "scope": "isolated real PostgreSQL18.6 and two independent MinIO processes; not production/offsite",
+  "backup_id": "20261017_144043-8408ac41",
+  "format_version": 3,
+  "archive_sha256": "5e96e292c0e17583112a34dfed2cf27c7ac59ffa22343d5953ddeb679da13e2f",
+  "postgres_tables": 77,
+  "required_buckets": [
+    "genomic-data",
+    "user-tracks",
+    "blast-dbs",
+    "exports",
+    "gwas",
+    "analyses"
+  ],
+  "object_count": 9,
+  "objects": [
+    {
+      "bucket": "genomic-data",
+      "key": "native-dr-proof-20261016/check.bin",
+      "bytes": 38,
+      "sha256": "6d6fc29055bd9ba292e59ff49f21828580302c787fdcce4bbd0cc486a013259c"
+    },
+    {
+      "bucket": "user-tracks",
+      "key": "native-dr-proof-20261016/check.bin",
+      "bytes": 37,
+      "sha256": "7347dc8f7325c6d7c0a454afab3cb79662250ff32da3def6d5940f54300b2d10"
+    },
+    {
+      "bucket": "blast-dbs",
+      "key": "native-dr-proof-20261016/check.bin",
+      "bytes": 35,
+      "sha256": "308c31367995f807d1529dd79a5bb20878f22a7ab3c2aa27687fdc96f78b6dad"
+    },
+    {
+      "bucket": "exports",
+      "key": "exports/4818fbfd-c48e-4306-b888-5ede02f891aa/soymutdb_export_4818fbfd-c48e-4306-b888-5ede02f891aa.tsv",
+      "bytes": 429,
+      "sha256": "70b8ca021f2c0b130275411cfaff79ae79e341944ada65206823936fb97f155f"
+    },
+    {
+      "bucket": "exports",
+      "key": "exports/83be8144-6126-4e3e-a4b9-c702c2b4992d/soymutdb_export_83be8144-6126-4e3e-a4b9-c702c2b4992d.tsv",
+      "bytes": 429,
+      "sha256": "70b8ca021f2c0b130275411cfaff79ae79e341944ada65206823936fb97f155f"
+    },
+    {
+      "bucket": "exports",
+      "key": "exports/b75339a5-28ef-43ee-83af-94417d897822/soymutdb_export_b75339a5-28ef-43ee-83af-94417d897822.tsv",
+      "bytes": 429,
+      "sha256": "70b8ca021f2c0b130275411cfaff79ae79e341944ada65206823936fb97f155f"
+    },
+    {
+      "bucket": "exports",
+      "key": "native-dr-proof-20261016/check.bin",
+      "bytes": 33,
+      "sha256": "e6e938f78e813095a29277871226b757871c6da6887609fa6931614caeb58a8e"
+    },
+    {
+      "bucket": "gwas",
+      "key": "native-dr-proof-20261016/check.bin",
+      "bytes": 30,
+      "sha256": "7fe1d66644b0ab7c1c325008b982e9eca5d657f6ea068b6bf5871d6be5d876e1"
+    },
+    {
+      "bucket": "analyses",
+      "key": "native-dr-proof-20261016/check.bin",
+      "bytes": 34,
+      "sha256": "8d49c8825d58578a04908ec4bdb862f2bd84535f7197d8abacc706e25bfc496f"
+    }
+  ],
+  "independent_verification": {
+    "passed": 115,
+    "failed": 0,
+    "skipped": 0,
+    "exit_code": 0
+  },
+  "negative_policy_tampering": {
+    "rejected": true,
+    "exit_code": 1,
+    "original_policy_restored": true
+  },
+  "restore_incomplete_marker_absent": true
+}

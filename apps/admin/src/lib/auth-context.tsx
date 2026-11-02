@@ -1,4 +1,5 @@
 import * as React from "react";
+import { QueryClientContext } from "@tanstack/react-query";
 import {
   http,
   getAccessToken,
@@ -7,6 +8,8 @@ import {
   restoreSession,
   onAuthLogout,
 } from "@soymutdb/api-client";
+
+import { clearAdminSessionCache } from "./query-client";
 
 /** Authenticated admin user. */
 export interface AuthUser {
@@ -35,6 +38,21 @@ export interface AuthContextValue {
 }
 
 const AuthContext = React.createContext<AuthContextValue | null>(null);
+
+/**
+ * Raised when a login resolves after the session it belonged to has already
+ * been torn down (an explicit logout, or a hard session death).
+ *
+ * The response is discarded rather than installed: its access token arrived
+ * after `clearAuth()` already ran, so honouring it would hand the console a
+ * credential for a session the operator just closed.
+ */
+export class LoginSupersededError extends Error {
+  constructor() {
+    super("The session ended before sign-in completed.");
+    this.name = "LoginSupersededError";
+  }
+}
 
 function adminLoginPath(): string {
   const base = import.meta.env.BASE_URL || "/";
@@ -98,17 +116,73 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = React.useState<boolean>(false);
   const [user, setUser] = React.useState<AuthUser | null>(null);
 
+  /**
+   * Monotonic session generation, bumped on every identity transition: the
+   * start of a login, an explicit logout, and a hard session death.
+   *
+   * AuthProvider outlives individual auth requests, so "is this still the
+   * session I started under?" cannot be answered by an effect-local
+   * "cancelled" flag: that only covers unmount, not the identity changing
+   * underneath a request that is still in flight. Without the generation
+   * check, a slow GET /auth/me (or a login response) that resolves after a
+   * logout writes the previous identity back into the context and repaints the
+   * console as authenticated.
+   *
+   * The generation check discards stale results even when a request has already
+   * completed or its caller has not supplied an AbortSignal.
+   */
+  const sessionGenerationRef = React.useRef(0);
+
+  /**
+   * The mounted query client, or undefined when this provider is rendered
+   * outside a QueryClientProvider. Read from the context directly rather than
+   * through useQueryClient() so the provider stays mountable without one --
+   * the cache boundary degrades to a no-op instead of throwing during render.
+   */
+  const queryClient = React.useContext(QueryClientContext);
+
+  const beginSession = React.useCallback((): number => {
+    sessionGenerationRef.current += 1;
+    return sessionGenerationRef.current;
+  }, []);
+
+  const isStaleSession = React.useCallback(
+    (generation: number): boolean => sessionGenerationRef.current !== generation,
+    [],
+  );
+
+  /**
+   * Tear the session down: invalidate every in-flight auth continuation and
+   * drop the previous identity's cached data, then hand the operator back to
+   * the login page. Shared by the explicit logout and the hard session-death
+   * event so both take exactly the same path.
+   */
+  const endSession = React.useCallback(() => {
+    sessionGenerationRef.current += 1;
+    clearAdminSessionCache(queryClient);
+    setIsAuthenticated(false);
+    setUser(null);
+    if (typeof window !== "undefined") {
+      window.location.href = adminLoginPath();
+    }
+  }, [queryClient]);
+
   // Restore a session from the HttpOnly refresh cookie (single-flight with
   // any in-flight refresh triggered by requests). Failure → anonymous state.
   React.useEffect(() => {
     let cancelled = false;
+    const generation = sessionGenerationRef.current;
     void restoreSession()
       .then(async (ok) => {
-        if (cancelled || !ok) return;
+        if (cancelled || isStaleSession(generation) || !ok) return;
         const token = getAccessToken();
         const fallback = token ? usernameFromToken(token) : null;
         const current = await loadCurrentUser(fallback);
-        if (cancelled) return;
+        // The /auth/me round trip is the window in which a logout, a session
+        // death, or a fresh login can invalidate this restore. loadCurrentUser
+        // swallows transport failures and returns a claim-derived fallback, so
+        // without this check an old identity is written back verbatim.
+        if (cancelled || isStaleSession(generation)) return;
         setIsAuthenticated(true);
         setUser(current);
       })
@@ -118,34 +192,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [isStaleSession]);
 
   // Hard session death (refresh failed while handling a 401) → login page.
-  React.useEffect(
-    () =>
-      onAuthLogout(() => {
-        setIsAuthenticated(false);
-        setUser(null);
-        if (typeof window !== "undefined") {
-          window.location.href = adminLoginPath();
-        }
-      }),
-    [],
-  );
+  React.useEffect(() => onAuthLogout(endSession), [endSession]);
 
   const login = React.useCallback(
     async (username: string, password: string): Promise<AuthUser> => {
+      // Logging in is itself an identity transition: it supersedes a restore
+      // still in flight, so the restore cannot later overwrite the identity
+      // this login establishes.
+      const generation = beginSession();
       const res = await http.post<LoginResponse>("/auth/login", {
         json: { username, password },
       });
+      if (isStaleSession(generation)) throw new LoginSupersededError();
+      // Identity boundary: the previous identity's cached data is dropped
+      // before the new one can be observed by any query.
+      clearAdminSessionCache(queryClient);
       setAccessToken(res.access_token);
       const fallback = usernameFromToken(res.access_token) ?? username;
       const authedUser = (await loadCurrentUser(fallback)) ?? { username: fallback };
+      if (isStaleSession(generation)) throw new LoginSupersededError();
       setIsAuthenticated(true);
       setUser(authedUser);
       return authedUser;
     },
-    [],
+    [beginSession, isStaleSession, queryClient],
   );
 
   const logout = React.useCallback(() => {
@@ -156,12 +229,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         /* local logout proceeds regardless */
       });
     clearAuth();
-    setIsAuthenticated(false);
-    setUser(null);
-    if (typeof window !== "undefined") {
-      window.location.href = adminLoginPath();
-    }
-  }, []);
+    endSession();
+  }, [endSession]);
 
   const value = React.useMemo<AuthContextValue>(
     () => ({ isRestoringSession, isAuthenticated, user, login, logout }),
@@ -179,5 +248,3 @@ export function useAuth(): AuthContextValue {
   }
   return ctx;
 }
-
-export default AuthProvider;

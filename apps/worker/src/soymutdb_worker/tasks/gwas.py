@@ -47,7 +47,6 @@ import uuid
 from contextlib import ExitStack
 from pathlib import Path
 
-import numpy as np
 from celery import Task
 from dominate.tags import script as script_tag
 
@@ -463,6 +462,8 @@ def qq_data(rows: list[dict]) -> dict:
     n = len(rows)
     if n == 0:
         return {"observed": [], "expected": [], "n": 0, "lambda_gc": None}
+    import numpy as np
+
     pvalues = np.asarray([max(float(r["p"] or 1.0), 1e-320) for r in rows], dtype=float)
     observed = np.sort(-np.log10(pvalues))
     ranks = np.arange(1, n + 1, dtype=float)

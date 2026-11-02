@@ -8,7 +8,7 @@ import pytest
 
 ROOT = Path(__file__).parents[3]
 LIB_PATH = ROOT / "deploy/scripts/migrate_clickhouse_lib.py"
-SQL = (ROOT / "infra/clickhouse/upgrade_variant_facts_schema.sql").read_text()
+SQL = (ROOT / "infra/clickhouse/upgrade_variant_facts_schema.sql").read_text(encoding="utf-8")
 spec = importlib.util.spec_from_file_location("migrate_clickhouse_lib", LIB_PATH)
 assert spec is not None and spec.loader is not None
 lib = importlib.util.module_from_spec(spec)

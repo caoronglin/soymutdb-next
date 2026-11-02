@@ -1,4 +1,6 @@
 import { http } from "./auth";
+import { ApiError } from "./client";
+import type { AssemblyInfo, GeneDetail } from "./genes";
 
 export interface BlastDatabase {
   id: string | number;
@@ -8,6 +10,7 @@ export interface BlastDatabase {
   assembly_name?: string | null;
   assembly_version?: string | null;
   assembly_is_default?: boolean | null;
+  release_id?: number | null;
   is_active: boolean;
 }
 
@@ -16,6 +19,8 @@ export interface BlastJob {
   name?: string;
   program: string;
   database: string;
+  release_id?: number | null;
+  assembly_name?: string | null;
   status: "pending" | "running" | "completed" | "failed" | "cancelled" | "expired";
   query_sequence: string | null;
   parameters: Record<string, unknown>;
@@ -113,6 +118,52 @@ export function getBlastHits(
     items: response.hits ?? [],
     total: response.total_hits ?? 0,
   }));
+}
+
+/** A genomic interval proven by a gene record in the searched release/assembly. */
+export interface BlastGenomeTarget {
+  release: string;
+  assembly: string;
+  locus: string;
+}
+
+/**
+ * Resolve lazily on user action, never from DIAMOND subject_start/end (AA).
+ * Protein FASTA IDs need not be gene accessions: exact lookup only, no suffix
+ * stripping or fuzzy mapping. A missing/ambiguous mapping has no browser target.
+ */
+export async function resolveBlastHitGenomeTarget(
+  job: Pick<BlastJob, "release_id" | "assembly_name">,
+  subjectId: string,
+): Promise<BlastGenomeTarget | null> {
+  const releaseId = job.release_id;
+  const assemblyName = job.assembly_name?.trim();
+  if (!Number.isSafeInteger(releaseId) || releaseId == null || releaseId < 1
+      || !assemblyName || !subjectId.trim()) return null;
+  // Explicit request headers override the portal's current global release pin.
+  const headers = { "X-SoyMutDB-Release": String(releaseId) };
+  const assemblies = await http.get<AssemblyInfo[]>("/genes/assemblies", { headers });
+  const matches = assemblies.filter((item) => item.name === assemblyName);
+  if (matches.length !== 1) return null;
+  const assemblyId = Number(matches[0].id);
+  if (!Number.isSafeInteger(assemblyId) || assemblyId < 1) return null;
+  let gene: GeneDetail;
+  try {
+    gene = await http.get<GeneDetail>(`/genes/${encodeURIComponent(subjectId)}`, {
+      params: { assembly_id: assemblyId }, headers,
+    });
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 404 || error.code === "ambiguous_assembly")) return null;
+    throw error;
+  }
+  if (String(gene.assembly_id) !== String(assemblyId)
+      || gene.gene_id !== subjectId || !gene.chromosome?.trim()
+      || !Number.isSafeInteger(gene.start_pos) || !Number.isSafeInteger(gene.end_pos)
+      || gene.start_pos < 1 || gene.end_pos < gene.start_pos) return null;
+  return {
+    release: String(releaseId), assembly: assemblyName,
+    locus: `${gene.chromosome}:${gene.start_pos}-${gene.end_pos}`,
+  };
 }
 
 interface BlastJobApi extends Omit<BlastJob, "id" | "database"> {

@@ -11,11 +11,12 @@ Each test counts real calls on a mocked session — no database required.
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.api.v1 import expression as expression_module
+from app.api.v1 import stats as stats_module
 from app.services.gene_service import GeneService
 from app.services.release_context import ReleaseContext
 from app.services.seqfetch_service import SeqFetchService
@@ -187,3 +188,37 @@ class TestGeneDetailQueryCount:
         assert len(detail.transcripts) == 1
         # Eager-loaded via selectin relationship: no per-transcript queries.
         assert db.execute.await_count == 1
+
+
+@pytest.mark.asyncio
+class TestHomepageStatsQueryCount:
+    """Guard: the homepage aggregate is one round trip, not one per number.
+
+    The loader used to issue seven sequential statements — five ``db.scalar``
+    counts, a release lookup, and the variant aggregate — to read seven values
+    that never depend on each other. The homepage is the most-requested
+    aggregate in the product, and it is re-run on every cache expiry and on every
+    static-site build, so the round trips were paid constantly. Everything
+    relational is now folded into one statement of scalar subqueries; the variant
+    aggregate still owns its own transaction-scoped session by design.
+    """
+
+    async def test_uses_one_relational_statement_and_no_db_scalar(self) -> None:
+        counts = MagicMock()
+        counts.one.return_value = (5, 4, 3, 2, 1, None, None)
+        db = MagicMock()
+        db.scalar = AsyncMock(return_value=0)
+        db.execute = AsyncMock(return_value=counts)
+
+        with patch.object(
+            stats_module,
+            "_variant_type_summary_from_pg",
+            AsyncMock(return_value={"total_variants": 9}),
+        ):
+            payload = await stats_module._load_homepage_stats(db)
+
+        assert payload["gene_count"] == 5
+        assert payload["seed_accessions"] == 1
+        # One statement, and no scalar shortcut that would hide a second trip.
+        assert db.execute.await_count == 1
+        assert db.scalar.await_count == 0

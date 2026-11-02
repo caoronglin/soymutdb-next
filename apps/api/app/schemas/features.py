@@ -20,7 +20,7 @@ class PluginCapabilityResponse(BaseModel):
 
 class DatabaseCapabilitiesResponse(BaseModel):
     authoritative: Literal["postgresql"] = "postgresql"
-    analytics: Literal["clickhouse"] | None = "clickhouse"
+    analytics: Literal["postgresql"] | None = "postgresql"
 
 
 class PublicCapabilitiesResponse(BaseModel):

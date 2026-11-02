@@ -4,9 +4,10 @@
 
 Status: implemented (styles only).
 
-> **2026-09-26 correction (historical note):** this note predates the Vue migration. The React
-> baselines below (`apps/jbrowse/src/App.tsx`, the deleted `genome-browser-widget.tsx`) no longer
-> exist; `apps/jbrowse` is now a Vue 3 shell (`apps/jbrowse/src/App.vue`) over
+> **2026-09-26 correction (historical note):** this note predates the Vue migration. The Vue
+> baselines below (`apps/jbrowse/src/App.vue`, the deleted `genome-browser-widget.tsx`) no longer
+> exist; Vue has since been fully retired (`scripts/check-vue-retirement.mjs` passes) and
+> `apps/jbrowse` is again a React shell (`apps/jbrowse/src/umi-entry.tsx`) over
 > `@soymutdb/genome-view` and `@soymutdb/genome-data`. The style decisions remain the record of
 > that migration step.
 Scope: `packages/genome-view/src/components/**` scoped styles.

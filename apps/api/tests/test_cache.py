@@ -295,16 +295,22 @@ class TestEndpointCacheIntegration:
         async def _fake_get_or_set(name, ttl, loader, **kwargs):
             called["name"] = name
             called["ttl"] = ttl
+            called["params"] = kwargs.get("params")
             return payload
 
         monkeypatch.setattr(stats_module, "get_or_set", _fake_get_or_set)
 
-        result = await stats_module.homepage_stats(db)
+        from app.services.release_context import ReleaseContext
+
+        result = await stats_module.homepage_stats(
+            db, release_context=ReleaseContext(release_id=7, assembly_id=3)
+        )
 
         assert isinstance(result, HomepageStats)
         assert result.total_variants == 10
         assert result.last_release_name == "v4.0"
         assert called["name"] == "stats:homepage"
+        assert called["params"] == {"release_id": 7, "variant_visibility": "public-v2"}
         assert called["ttl"] is None  # default TTL
 
     async def test_list_releases_cache_hit_skips_db(self, monkeypatch) -> None:
@@ -342,7 +348,13 @@ class TestEndpointCacheIntegration:
 
         monkeypatch.setattr(releases_module, "get_or_set", _fake_get_or_set)
 
-        result = await releases_module.list_releases(db, status=None)
+        from fastapi import Response
+
+        from app.core.site_variant import SiteVariant
+
+        result = await releases_module.list_releases(
+            Response(), db=db, status=None, variant=SiteVariant.EXTERNAL, current_user=None
+        )
 
         assert isinstance(result, list)
         assert isinstance(result[0], ReleaseResponse)
@@ -426,7 +438,9 @@ class TestEndpointCacheIntegration:
         assert result[0].chromosome == "Gm01"
         assert called["name"] == "stats:chromosome-density"
         # The release is resolved server-side, never supplied by the caller.
-        assert called["params"] == {"release_id": _STATS_RELEASE_ID}
+        assert called["params"] == {
+            "release_id": _STATS_RELEASE_ID, "variant_visibility": "public-v2",
+        }
 
     async def test_chromosome_density_cache_key_includes_release(self, monkeypatch) -> None:
         """Distinct ``release_id`` values must produce distinct cache keys."""
@@ -448,7 +462,10 @@ class TestEndpointCacheIntegration:
             db, release_context=_stats_release_context(9)
         )
 
-        assert seen == [{"release_id": 7}, {"release_id": 9}]
+        assert seen == [
+            {"release_id": 7, "variant_visibility": "public-v2"},
+            {"release_id": 9, "variant_visibility": "public-v2"},
+        ]
 
     async def test_release_statistics_cache_hit_skips_db(self, monkeypatch) -> None:
         from app.api.v1 import stats as stats_module

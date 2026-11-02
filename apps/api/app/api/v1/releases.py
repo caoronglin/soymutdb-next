@@ -2,34 +2,61 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
+from ...core.exceptions import AuthenticationError
+from ...core.security import require_admin_roles
+from ...core.site_variant import SiteVariant
+from ...models.auth import User
 from ...models.content import Release, ReleaseStatus
 from ...models.data_publishing import ActiveRelease
 from ...schemas.content import ActiveReleaseResponse, ReleaseResponse
 from ...services.cache import get_or_set
+from .deps import get_optional_user, get_user_roles
 
 router = APIRouter(prefix="/releases", tags=["releases"])
 
 
+def _read_scope(response: Response, variant: SiteVariant, user: User | None) -> bool:
+    """Private release metadata is a management capability, never a public cache entry."""
+    if variant is SiteVariant.INTERNAL:
+        if user is None:
+            raise AuthenticationError("Release management requires authentication")
+        require_admin_roles(get_user_roles(user))
+        response.headers["Cache-Control"] = "private, no-store"
+        response.headers["Vary"] = "Authorization"
+        return True
+    response.headers["Cache-Control"] = "public, max-age=60"
+    return False
+
+
 @router.get("", response_model=list[ReleaseResponse])
 async def list_releases(
+    response: Response,
     db: AsyncSession = Depends(get_db),
     status: ReleaseStatus | None = Query(default=None),
+    variant: SiteVariant = Query(default=SiteVariant.EXTERNAL),
+    current_user: User | None = Depends(get_optional_user),
 ) -> list[ReleaseResponse]:
     """List database releases.
 
     Read-hot query cached in Redis (default TTL) keyed by ``status``; a
     Redis failure degrades to a direct query.
     """
+    internal = _read_scope(response, variant, current_user)
+    if internal:
+        payload = await _load_releases(db, status)
+        return [ReleaseResponse.model_validate(item) for item in payload]
+    if status is not None and status != ReleaseStatus.PUBLISHED:
+        return []
     payload = await get_or_set(
         "releases:list",
         ttl=None,
-        params={"status": status.value if status is not None else None},
-        loader=lambda: _load_releases(db, status),
+        params={"variant": SiteVariant.EXTERNAL.value, "status": ReleaseStatus.PUBLISHED.value},
+        loader=lambda: _load_releases(db, ReleaseStatus.PUBLISHED),
     )
     return [ReleaseResponse.model_validate(item) for item in payload]
 
@@ -64,7 +91,7 @@ async def get_active_release(
     if row is None or row.release_id is None:
         return ActiveReleaseResponse()
     release = await db.get(Release, row.release_id)
-    if release is None:
+    if release is None or release.status != ReleaseStatus.PUBLISHED:
         return ActiveReleaseResponse()
     return ActiveReleaseResponse(
         release_id=str(release.id),
@@ -76,9 +103,16 @@ async def get_active_release(
 @router.get("/{release_id}", response_model=ReleaseResponse)
 async def get_release(
     release_id: int,
+    response: Response,
     db: AsyncSession = Depends(get_db),
+    variant: SiteVariant = Query(default=SiteVariant.EXTERNAL),
+    current_user: User | None = Depends(get_optional_user),
 ) -> ReleaseResponse:
-    result = await db.execute(select(Release).where(Release.id == release_id))
+    internal = _read_scope(response, variant, current_user)
+    statement = select(Release).where(Release.id == release_id)
+    if not internal:
+        statement = statement.where(Release.status == ReleaseStatus.PUBLISHED)
+    result = await db.execute(statement)
     release = result.scalar_one_or_none()
     if release is None:
         from ...core.exceptions import NotFoundError

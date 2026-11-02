@@ -42,10 +42,15 @@ export function LocalizationSettingsForm() {
           <>
             <label className="block max-w-sm space-y-1.5">
               <span>Default Language</span>
-              <Select value={defaultLanguage} onChange={setDefaultLanguage} className="w-full">
-                <Select.Option value="en">English</Select.Option>
-                <Select.Option value="zh">中文</Select.Option>
-              </Select>
+              <Select
+                value={defaultLanguage}
+                onChange={setDefaultLanguage}
+                className="w-full"
+                options={[
+                  { value: "en", label: "English" },
+                  { value: "zh", label: "中文" },
+                ]}
+              />
             </label>
             <div className="flex justify-end">
               <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>

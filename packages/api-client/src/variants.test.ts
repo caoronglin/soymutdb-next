@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { http } from "./auth";
-import { searchVariants } from "./variants";
+import {
+  createVariantExport,
+  getVariantExportDownload,
+  getVariantExportStatus,
+  searchVariants,
+} from "./variants";
 
-vi.mock("./auth", () => ({ http: { get: vi.fn() } }));
+vi.mock("./auth", () => ({ http: { get: vi.fn(), post: vi.fn() } }));
 
 describe("variant client contract", () => {
   afterEach(() => vi.clearAllMocks());
@@ -52,5 +57,24 @@ describe("variant client contract", () => {
         limit: 25,
       },
     });
+  });
+
+  it("reads one export's status and its download link", async () => {
+    vi.mocked(http.get).mockResolvedValue({});
+
+    await getVariantExportStatus("export-1");
+    await getVariantExportDownload("export-1");
+
+    expect(http.get).toHaveBeenNthCalledWith(1, "/variants/export/export-1");
+    expect(http.get).toHaveBeenNthCalledWith(2, "/variants/export/export-1/download");
+  });
+
+  it("keeps the submission on the existing endpoint and request shape", async () => {
+    vi.mocked(http.post).mockResolvedValue({});
+    const body = { format: "tsv", compress: true, filters: { assembly: "v4" } };
+
+    await createVariantExport(body);
+
+    expect(http.post).toHaveBeenCalledWith("/variants/export", { json: body });
   });
 });

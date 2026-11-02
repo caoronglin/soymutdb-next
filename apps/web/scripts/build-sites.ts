@@ -10,10 +10,19 @@
 
 
 import { execFileSync } from "node:child_process";
+import { rmSync } from "node:fs";
 import { resolve } from "node:path";
 
 const packageDir = resolve(import.meta.dirname, "..");
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+
+// The PDF viewer loads its worker from `public/pdf.worker.min.mjs` (Umi's
+// webpack has no `?url` import convention); refresh that file before building
+// either variant so it always matches the installed pdfjs-dist.
+execFileSync(process.execPath, ["scripts/sync-pdf-worker.mjs"], {
+  cwd: packageDir,
+  stdio: "inherit",
+});
 
 function buildVariant(variant: "external" | "internal") {
   const isExternal = variant === "external";
@@ -55,6 +64,24 @@ function buildVariant(variant: "external" | "internal") {
     env,
     stdio: "inherit",
   });
+  // Public content pages, external variant only. These two steps write HTML,
+  // so they must run before finalize-csp hashes the documents; the internal
+  // variant is skipped entirely rather than being handed the external
+  // snapshot. With no SOYMUTDB_CONTENT_SNAPSHOT_URL / _FILE configured both
+  // steps log an explicit skip and the artifacts stay exactly as the static
+  // route generator left them.
+  if (isExternal) {
+    execFileSync(pnpmCommand, ["exec", "tsx", "scripts/fetch-content-snapshot.ts"], {
+      cwd: packageDir,
+      env,
+      stdio: "inherit",
+    });
+    execFileSync(pnpmCommand, ["exec", "tsx", "scripts/content-snapshot-build.ts"], {
+      cwd: packageDir,
+      env,
+      stdio: "inherit",
+    });
+  }
   // The rest of the chain is the same one `pnpm build` runs, in the same order:
   // CSP finalization must come after the last HTML writer, and the .gz siblings
   // and the service worker derive from the final bytes. Skipping it here shipped
@@ -82,6 +109,10 @@ function buildVariant(variant: "external" | "internal") {
     stdio: "inherit",
   });
 }
+
+// A prior single-site max build leaves root-level HTML, headers and assets.
+// Publish only the two fresh variant trees, without stale root-level policies.
+rmSync(resolve(packageDir, "dist"), { recursive: true, force: true });
 
 buildVariant("external");
 buildVariant("internal");

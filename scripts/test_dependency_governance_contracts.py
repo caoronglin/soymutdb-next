@@ -118,12 +118,12 @@ def test_graph_cli_generates_four_normalized_machine_graphs(tmp_path: Path) -> N
         {node["id"] for node in oci["nodes"]}
     )
     assert any(
-        node["id"] == "base-image:ghcr.io/astral-sh/uv:0.11.33"
+        node["id"] == "base-image:ghcr.io/astral-sh/uv:0.13.1"
         for node in oci["nodes"]
     )
     assert any(
         edge["relation"] == "copy_from"
-        and edge["to"] == "base-image:ghcr.io/astral-sh/uv:0.11.33"
+        and edge["to"] == "base-image:ghcr.io/astral-sh/uv:0.13.1"
         for edge in oci["edges"]
     )
 

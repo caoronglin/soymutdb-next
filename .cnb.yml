@@ -32,7 +32,7 @@
 # Both delegate to scripts/{start-cloud-dev,acceptance}.sh; see
 # docs/ops/cnb-startup-acceptance.md.
 #
-# Version pins (Node 24.19.0 / pnpm 12.5.1 / Python 3.14 / uv 0.11.33) mirror
+# Version pins (Node 26.13.0 / pnpm 12.11.2 / Python 3.15 / uv 0.13.1) mirror
 # package.json, .nvmrc and the Dockerfiles; the contract test fails when any of
 # these disagree.
 #
@@ -75,8 +75,8 @@ main:
       # place CNB accepts a Dockerfile: a stage-level `image:` is a registry
       # reference handed to `docker pull`, so a repository path in `image:`
       # fails the stage with `invalid reference format` before any script runs.
-      # Stages that need another environment (API on python:3.14, governance on
-      # node:24.19.0) still declare their own `image:` and override this.
+      # Stages that need another environment (API on python:3.15, governance on
+      # node:26.13.0) still declare their own `image:` and override this.
       docker:
         volumes:
           - /cache/pnpm-store
@@ -115,23 +115,48 @@ main:
         # boundary -- there is deliberately no stage-level `volumes:` key. CNB
         # rejects it in Prepare with "Unsupported volume type".
         # The frontend gate closes with the OpenAPI client contract, which
-        # exports the backend schema and therefore needs Python 3.14, and it
+        # exports the backend schema and therefore needs Python 3.15, and it
         # also runs `python3 scripts/check_*.py`. The environment it runs in is
         # the pipeline-level `docker.build` above, which is the only place CNB
         # accepts a Dockerfile; a path in a stage `image:` is handed to
         # `docker pull` and fails with `invalid reference format`. The image must
-        # carry both toolchains: node:24.19.0 has no Python at all, and the
+        # carry both toolchains: node:26.13.0 has no Python at all, and the
         # GitHub mirror only avoids this because actions/setup-python provides one.
         - name: Frontend verification
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
-          image: python:3.14
+          image: python:3.15
           script: bash scripts/ci-job-steps.sh run api-tests
+        # The repo contract suites had no CI coverage at all: nothing invoked
+        # `smoke.sh --profile contracts`, so scripts/test_ci_job_contracts.py
+        # never ran and a commit that dropped the exec bit from a shared script
+        # passed every pipeline. Plain pytest under scripts/, no workspace
+        # install and no service required, so it is its own cheap stage.
+        - name: Contract suites
+        # No image override: this layer needs BOTH pinned interpreters. It runs
+        # pytest against the Python contracts and shells out to node for the
+        # TypeScript helper behind resolveDevAllowedHosts and for the frontend
+        # gate self-test.
+        #
+        # A Python-only stage image (python:3.14 at the time of that run,
+        # python:3.15 today) was the earlier choice and it failed on the
+        # second CNB run of this stage (cnb-t65-1k4ibj79d, 2026-10-10) with
+        # "FileNotFoundError: No such file or directory: 'node'" — 264 contracts
+        # passed, then two could not run at all.
+        #
+        # The pipeline image is the repository's own artifact, built
+        # `FROM python:3.15` with Node 26.13.0 unpacked on top
+        # (.cnb/env/Dockerfile.frontend), so it is the one image carrying both
+        # pins. It is deliberately NOT `FROM node:26.13.0` plus
+        # `COPY --from=python:3.15`: node:26.13.0 is bookworm (glibc 2.36)
+        # while python:3.15 needs glibc 2.38, so the copied interpreter cannot
+        # start — which is exactly why the Dockerfile unpacks a tarball instead.
+          script: bash scripts/ci-job-steps.sh run smoke-contracts
         # No `image:` override on purpose. The gate is BOTH:
         #   * Node-backed -- `pnpm deps:graphs` / `pnpm deps:audit`;
         #   * Python-backed -- `scripts/dependency_governance.py` imports PyYAML
         #     and drives `uv`/`uvx` for the Deptry/license analyzers.
-        # The `node:24.19.0` override that used to be here ships no Python
+        # The `node:26.13.0` override that used to be here ships no Python
         # packaging toolchain (its python3 is the bare node-gyp interpreter,
         # without pip), so the job body could not install its pins and real
         # build cnb-mqg-1k289oe96 died with `ModuleNotFoundError: No module
@@ -146,7 +171,7 @@ main:
         # factor changed. CI timings are shared-container noise and must never
         # be quoted as a performance result — see scripts/verify-db-ab-harness.sh.
         - name: Database A/B harness (reproducibility gate)
-          image: python:3.14
+          image: python:3.15
           script: bash scripts/ci-job-steps.sh run db-ab
 
   # ---------------------------------------------------------------------------
@@ -200,23 +225,48 @@ main:
         # boundary -- there is deliberately no stage-level `volumes:` key. CNB
         # rejects it in Prepare with "Unsupported volume type".
         # The frontend gate closes with the OpenAPI client contract, which
-        # exports the backend schema and therefore needs Python 3.14, and it
+        # exports the backend schema and therefore needs Python 3.15, and it
         # also runs `python3 scripts/check_*.py`. The environment it runs in is
         # the pipeline-level `docker.build` above, which is the only place CNB
         # accepts a Dockerfile; a path in a stage `image:` is handed to
         # `docker pull` and fails with `invalid reference format`. The image must
-        # carry both toolchains: node:24.19.0 has no Python at all, and the
+        # carry both toolchains: node:26.13.0 has no Python at all, and the
         # GitHub mirror only avoids this because actions/setup-python provides one.
         - name: Frontend verification
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
-          image: python:3.14
+          image: python:3.15
           script: bash scripts/ci-job-steps.sh run api-tests
+        # The repo contract suites had no CI coverage at all: nothing invoked
+        # `smoke.sh --profile contracts`, so scripts/test_ci_job_contracts.py
+        # never ran and a commit that dropped the exec bit from a shared script
+        # passed every pipeline. Plain pytest under scripts/, no workspace
+        # install and no service required, so it is its own cheap stage.
+        - name: Contract suites
+        # No image override: this layer needs BOTH pinned interpreters. It runs
+        # pytest against the Python contracts and shells out to node for the
+        # TypeScript helper behind resolveDevAllowedHosts and for the frontend
+        # gate self-test.
+        #
+        # A Python-only stage image (python:3.14 at the time of that run,
+        # python:3.15 today) was the earlier choice and it failed on the
+        # second CNB run of this stage (cnb-t65-1k4ibj79d, 2026-10-10) with
+        # "FileNotFoundError: No such file or directory: 'node'" — 264 contracts
+        # passed, then two could not run at all.
+        #
+        # The pipeline image is the repository's own artifact, built
+        # `FROM python:3.15` with Node 26.13.0 unpacked on top
+        # (.cnb/env/Dockerfile.frontend), so it is the one image carrying both
+        # pins. It is deliberately NOT `FROM node:26.13.0` plus
+        # `COPY --from=python:3.15`: node:26.13.0 is bookworm (glibc 2.36)
+        # while python:3.15 needs glibc 2.38, so the copied interpreter cannot
+        # start — which is exactly why the Dockerfile unpacks a tarball instead.
+          script: bash scripts/ci-job-steps.sh run smoke-contracts
         # No `image:` override on purpose. The gate is BOTH:
         #   * Node-backed -- `pnpm deps:graphs` / `pnpm deps:audit`;
         #   * Python-backed -- `scripts/dependency_governance.py` imports PyYAML
         #     and drives `uv`/`uvx` for the Deptry/license analyzers.
-        # The `node:24.19.0` override that used to be here ships no Python
+        # The `node:26.13.0` override that used to be here ships no Python
         # packaging toolchain (its python3 is the bare node-gyp interpreter,
         # without pip), so the job body could not install its pins and real
         # build cnb-mqg-1k289oe96 died with `ModuleNotFoundError: No module
@@ -231,10 +281,10 @@ main:
         # factor changed. CI timings are shared-container noise and must never
         # be quoted as a performance result — see scripts/verify-db-ab-harness.sh.
         - name: Database A/B harness (reproducibility gate)
-          image: python:3.14
+          image: python:3.15
           script: bash scripts/ci-job-steps.sh run db-ab
         - name: Build the checksummed Pages artifact
-          image: node:24.19.0
+          image: node:26.13.0
           # Both scripts carry a bash shebang and bootstrap their own container
           # (build-pages-artifact.sh runs `pnpm --filter ... build`).
           script: bash scripts/build-pages-artifact.sh && bash scripts/verify-pages-artifact.sh pages-dist
@@ -258,9 +308,19 @@ main:
       stages:
         # A real ClickHouse server is required: the legacy fixture migration and
         # its idempotence proof are hard gates, not simulated.
-        # Python 3.14 to match PYTHON_VERSION: the migration script and its
-        # assertions run on the same interpreter as the rest of the delivery
-        # chain, so a 3.12-only drift cannot hide here.
+        #
+        # This stage deliberately stays on Python 3.14 while every native
+        # service moved to 3.15. The migration library needs clickhouse-connect,
+        # whose newest release (1.10) declares `requires-python >=3.10,<3.15`, so
+        # there is no 3.15 interpreter that can install the driver the gate
+        # asserts with. infra/docker/Dockerfile.migrate-clickhouse is pinned to
+        # 3.14 for the same reason, and this job is its CI counterpart: the
+        # legacy ClickHouse path keeps one interpreter of its own instead of
+        # dragging the native runtime back to 3.14.
+        #
+        # ci-job-steps.sh asserts the 3.14 major.minor on
+        # CLICKHOUSE_MIGRATION_PYTHON before it provisions the driver, so this
+        # pin cannot silently become 3.15 and fail on the missing driver.
         - name: Migrate the legacy ClickHouse fixture
           image: python:3.14
           script: bash scripts/ci-job-steps.sh run clickhouse-migration
@@ -488,21 +548,43 @@ main:
     - name: smoke
       runner:
         cpus: 8
+      # Each stage runs in its own fresh container, so Chromium and the e2e
+      # dependencies are installed *inside* the stage that uses them. The
+      # nightly store volume keeps the root workspace install warm.
+      docker:
+        volumes:
+          - /cache/pnpm-store
       env:
-        SMOKE_BASE_URL: https://soymutdb.example.com
+        # A lingering server must never be reused as the artifact target; the
+        # configs that gate on process.env.CI then fail instead of silently
+        # serving a different tree.
+        CI: "1"
       stages:
-        - name: Install Playwright browsers
-          image: node:24.19.0
-          script: bash -c 'cd e2e && npm ci && npx playwright install --with-deps chromium'
+        # Mirror of the GitHub e2e-smoke schedule job: build every static
+        # artifact and run all offline browser gates. Both providers call the
+        # same script, so a re-rotted gate fails both pipelines.
+        - name: Offline artifact gates (build + browser sweep)
+          image: node:26.13.0
+          script: bash -c 'ARTIFACT_E2E_RETRIES=1 bash scripts/ci-nightly-artifact-gate.sh'
+        # The online smoke needs its own install for the same container reason.
+        # SMOKE_BASE_URL is deliberately NOT set: playwright.config.ts already
+        # defaults to the published demo origin, and entity-detail reads
+        # SMOKE_BASE_URL as a deployed-portal override — exporting it here made
+        # the offline gate test the deployed site instead of the built artifact.
         - name: Run online smoke tests
-          image: node:24.19.0
-          script: bash -c 'cd e2e && CI=1 npx playwright test'
+          image: node:26.13.0
+          script: bash -c 'cd e2e && npm ci && ./node_modules/.bin/playwright install --with-deps chromium && CI=1 ./node_modules/.bin/playwright test'
       failStages:
         - name: Upload smoke failure artifacts
           image: cnbcool/artifact
           settings:
             path: e2e/playwright-report
             name: e2e-smoke-failure
+        - name: Upload offline artifact gate failures
+          image: cnbcool/artifact
+          settings:
+            path: .cache/artifact-e2e
+            name: artifact-e2e-failure
 
 # =============================================================================
 # Repository-level events
@@ -723,18 +805,43 @@ $:
         # boundary -- there is deliberately no stage-level `volumes:` key. CNB
         # rejects it in Prepare with "Unsupported volume type".
         # The frontend gate closes with the OpenAPI client contract, which
-        # exports the backend schema and therefore needs Python 3.14, and it
+        # exports the backend schema and therefore needs Python 3.15, and it
         # also runs `python3 scripts/check_*.py`. The environment it runs in is
         # the pipeline-level `docker.build` above, which is the only place CNB
         # accepts a Dockerfile; a path in a stage `image:` is handed to
         # `docker pull` and fails with `invalid reference format`. The image must
-        # carry both toolchains: node:24.19.0 has no Python at all, and the
+        # carry both toolchains: node:26.13.0 has no Python at all, and the
         # GitHub mirror only avoids this because actions/setup-python provides one.
         - name: Frontend verification
           script: bash scripts/ci-job-steps.sh run frontend
         - name: API + Worker verification
-          image: python:3.14
+          image: python:3.15
           script: bash scripts/ci-job-steps.sh run api-tests
+        # The repo contract suites had no CI coverage at all: nothing invoked
+        # `smoke.sh --profile contracts`, so scripts/test_ci_job_contracts.py
+        # never ran and a commit that dropped the exec bit from a shared script
+        # passed every pipeline. Plain pytest under scripts/, no workspace
+        # install and no service required, so it is its own cheap stage.
+        - name: Contract suites
+        # No image override: this layer needs BOTH pinned interpreters. It runs
+        # pytest against the Python contracts and shells out to node for the
+        # TypeScript helper behind resolveDevAllowedHosts and for the frontend
+        # gate self-test.
+        #
+        # A Python-only stage image (python:3.14 at the time of that run,
+        # python:3.15 today) was the earlier choice and it failed on the
+        # second CNB run of this stage (cnb-t65-1k4ibj79d, 2026-10-10) with
+        # "FileNotFoundError: No such file or directory: 'node'" — 264 contracts
+        # passed, then two could not run at all.
+        #
+        # The pipeline image is the repository's own artifact, built
+        # `FROM python:3.15` with Node 26.13.0 unpacked on top
+        # (.cnb/env/Dockerfile.frontend), so it is the one image carrying both
+        # pins. It is deliberately NOT `FROM node:26.13.0` plus
+        # `COPY --from=python:3.15`: node:26.13.0 is bookworm (glibc 2.36)
+        # while python:3.15 needs glibc 2.38, so the copied interpreter cannot
+        # start — which is exactly why the Dockerfile unpacks a tarball instead.
+          script: bash scripts/ci-job-steps.sh run smoke-contracts
 
   # ---------------------------------------------------------------------------
   # Cloud development — manual entry point
@@ -799,13 +906,13 @@ $:
         - docker
       stages:
         - name: Delivery contracts
-          image: python:3.14
+          image: python:3.15
           script: bash scripts/acceptance.sh --profile contracts
         - name: API + Worker acceptance
-          image: python:3.14
+          image: python:3.15
           script: bash scripts/acceptance.sh --profile backend
         - name: Static artifact acceptance
-          image: node:24.19.0
+          image: node:26.13.0
           script: bash scripts/acceptance.sh --profile static
       endStages:
         - name: Upload acceptance evidence

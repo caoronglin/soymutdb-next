@@ -3,13 +3,26 @@
  *
  * Coverage
  * --------
- *   1. Anonymous deep link: a protected route (/imports) must bounce to
- *      /login with the original target in the `redirect` query, and the login
- *      form must be usable (identifier, password, submit).
- *   2. Authenticated rendering: / (dashboard), /imports, /settings, /news and
- *      /content must mount inside the console chrome, let their data query
- *      settle (loaded, empty or error state — all are valid render outcomes),
- *      and raise no unexpected console error or pageerror.
+ *   1. Anonymous deep link: a protected route (/imports) must render the login
+ *      surface in place of the console chrome. The guard does NOT navigate to
+ *      /login — `RequireAuth` (apps/admin/src/App.tsx) swaps the admin layout for
+ *      `LoginPage`, so the requested path stays in the URL, the console chrome
+ *      (`shell-header`) is absent, and the form (identifier, password, submit)
+ *      is usable and cannot be bypassed with an empty submission.
+ *   2. Authenticated rendering: / (dashboard), /imports, /settings,
+ *      /settings/brand, /news and /content must mount inside the console chrome,
+ *      let their data query settle (ready or error — both are valid render
+ *      outcomes), expose their real controls, and raise no unexpected console
+ *      error or pageerror.
+ *
+ * Anchor policy
+ * -------------
+ * Every selector below is a `data-testid` that the console renders today, or a
+ * `data-state`/`data-pending` attribute the component owning that query publishes
+ * when it settles. The console is Chinese-first (`initI18n("zh")` in
+ * `apps/admin/src/react-app.tsx`), so no assertion here may depend on copy: an
+ * i18n change must not be able to turn a rendering regression into a false pass
+ * or a false failure.
  *
  * This is deliberately separate from `admin-production-login.spec.ts`: that
  * suite serves the emitted `apps/admin/dist` through a local static server and
@@ -96,55 +109,121 @@ interface ConsoleRoute {
   path: string;
   /** Short label for the test title. */
   label: string;
-  /** Language-independent marker that is always present once the view mounts. */
+  /** Stable marker that is always present once the view mounts. */
   anchor: string;
-  /** Marker that appears only after the view's data query settles. */
+  /**
+   * Marker that appears only once the view's data query settled. A settled
+   * query has one of two honest outcomes, and both are asserted: ready (rows,
+   * cards or the route's own empty state) and error (the API refused). A route
+   * that publishes no async state repeats its mount marker and says so.
+   */
   settled: string;
+  /** Further real controls the view must render (its own toolbar). */
+  controls?: readonly string[];
+  /**
+   * Error surface plus its retry control, asserted only when the deployed API
+   * actually failed: a route whose error is a silent empty list has no such
+   * contract and omits this.
+   */
+  errorContract?: { error: string; retry: string };
 }
 
 /**
- * The protected routes this suite gates. Anchors are stable data-testids (or a
- * structural heading) rather than translated copy, so an i18n change cannot
- * turn a rendering regression into a false failure.
+ * The protected routes this suite gates. Every anchor is a `data-testid` (or an
+ * attribute the owning component publishes when its query settles) rather than
+ * translated copy, so an i18n change cannot turn a rendering regression into a
+ * false failure.
  */
 const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   {
+    // Dashboard reads GET /admin/dashboard-stats plus the public homepage stats
+    // for its cards, and GET /admin/dashboard-series for the charts. The cards
+    // publish `data-pending` until both metric queries settle; a failed metric
+    // query still settles (the cards fall back to the "—" placeholder) and is
+    // announced by `dashboard-stats-error` with a retry control.
     path: "/",
     label: "dashboard",
-    anchor: "main h1",
-    settled: '[data-testid="dashboard-releases"], [data-testid="dashboard-error"]',
+    anchor: '[data-testid="dashboard-stats"]',
+    settled: '[data-testid="dashboard-stats"][data-pending="false"]',
+    controls: ['[data-testid="dashboard-trends"]'],
+    errorContract: {
+      error: '[data-testid="dashboard-stats-error"]',
+      retry: '[data-testid="dashboard-stats-retry"]',
+    },
   },
   {
+    // /imports lists GET /admin/imports and offers the new-import action plus
+    // the task search box. The list wrapper publishes `data-state`.
     path: "/imports",
     label: "imports",
     anchor: '[data-testid="imports-new"]',
     settled:
-      '[data-testid="imports-error"], [data-testid="imports-empty"], [data-testid="imports-table"]',
+      '[data-testid="imports-table"][data-state="ready"], [data-testid="imports-table"][data-state="error"]',
+    controls: ['[data-testid="imports-search"]'],
   },
   {
+    // /settings is the settings navigation hub: it issues no data query, so the
+    // domain grid is the mount marker and the link to the full settings form is
+    // the (already-rendered) settled marker.
     path: "/settings",
-    label: "settings",
-    anchor: '[data-testid="settings-brand-link"]',
-    settled:
-      '[data-testid="settings-error"], [data-testid="settings-section-missing"], [data-testid^="settings-section-"]',
+    label: "settings overview",
+    anchor: '[data-testid="settings-domains"]',
+    settled: '[data-testid="settings-legacy-link"]',
   },
   {
+    // /settings/brand is the one settings surface with an explicit
+    // loading/error/ready state machine already marked for tests
+    // (brand-loading → brand-form | brand-load-error).
+    path: "/settings/brand",
+    label: "settings brand",
+    anchor: '[data-testid="brand-variant-external"]',
+    settled: '[data-testid="brand-form"], [data-testid="brand-load-error"]',
+    controls: ['[data-testid="brand-variant-internal"]'],
+    errorContract: {
+      error: '[data-testid="brand-load-error"]',
+      retry: '[data-testid="brand-retry"]',
+    },
+  },
+  {
+    // /news lists GET /admin/news with a title search, a category box and the
+    // status filter; a failed list is surfaced as a toast and an empty table, so
+    // its settled state is the table's own readiness.
     path: "/news",
     label: "news",
-    anchor: '[data-testid="news-status-filter"]',
-    settled: '[data-testid="news-error"], [data-testid="news-empty"], [data-testid="news-table"]',
+    anchor: '[data-testid="news-new"]',
+    settled: '[data-testid="news-table"][data-state="ready"]',
+    controls: [
+      '[data-testid="news-status-filter"]',
+      '[data-testid="news-search"]',
+    ],
   },
   {
+    // /content defaults to its Pages tab, which lists GET /admin/content/pages
+    // behind a status filter and a category filter, next to the New Page action.
     path: "/content",
-    label: "content",
-    anchor: '[data-testid="pages-status-filter"]',
+    label: "content pages",
+    anchor: '[data-testid="content-tabs"]',
     settled:
-      '[data-testid="pages-error"], [data-testid="pages-empty"], [data-testid="pages-table"]',
+      '[data-testid="pages-table"][data-state="ready"], [data-testid="pages-table"][data-state="error"]',
+    controls: [
+      '[data-testid="content-tab-page"]',
+      '[data-testid="pages-status-filter"]',
+      '[data-testid="pages-new"]',
+    ],
   },
 ];
 
+/** Skip a test unless both the deployed console and a signed-in session exist. */
+function skipWithoutDeployment(): void {
+  test.skip(!ADMIN_BASE_URL, "set ADMIN_BASE_URL to the deployed admin console");
+  test.skip(
+    !STORAGE_STATE,
+    "set ADMIN_STORAGE_STATE to a signed-in Playwright storage state",
+  );
+}
+
 test.describe("admin console — anonymous deep link", () => {
-  test("redirects a protected route to the login form with the original target", async ({
+  test("gates a protected route with the login surface and keeps the console chrome hidden", async ({
     browser,
   }) => {
     test.skip(!ADMIN_BASE_URL, "set ADMIN_BASE_URL to the deployed admin console");
@@ -159,17 +238,25 @@ test.describe("admin console — anonymous deep link", () => {
       await page.goto(underBase(ADMIN_BASE_URL, "imports"), { waitUntil: "load" });
       await waitForAppReady(page);
 
-      await expect(page).toHaveURL(/\/login(\?|$)/);
-      const redirectTarget = new URL(page.url()).searchParams.get("redirect");
-      expect(redirectTarget).toBe("/imports");
-
+      // The guard renders the login form in place of the admin layout, so the
+      // requested path is preserved rather than rewritten to /login.
       await expect(page.getByTestId("admin-identifier")).toBeVisible();
       await expect(page.getByTestId("admin-password")).toBeVisible();
       await expect(page.getByTestId("admin-login-submit")).toBeVisible();
+      expect(new URL(page.url()).pathname).toContain("/imports");
+
+      // No protected data may leak through the unauthenticated guard.
+      await expect(page.getByTestId("shell-header")).toHaveCount(0);
+
+      // An empty submission is refused client-side: the guard cannot be walked
+      // past, and the console does not navigate away from the guarded path.
+      await page.getByTestId("admin-login-submit").click();
+      await expect(page.getByTestId("admin-identifier")).toBeVisible();
+      expect(new URL(page.url()).pathname).toContain("/imports");
 
       expect(
         errors,
-        "the guard redirect must not raise unexpected console errors or pageerrors",
+        "the guard must not raise unexpected console errors or pageerrors",
       ).toEqual([]);
     } finally {
       await context.close();
@@ -180,11 +267,7 @@ test.describe("admin console — anonymous deep link", () => {
 test.describe("admin console — authenticated routes", () => {
   for (const route of CONSOLE_ROUTES) {
     test(`${route.label} renders without console errors`, async ({ page }) => {
-      test.skip(!ADMIN_BASE_URL, "set ADMIN_BASE_URL to the deployed admin console");
-      test.skip(
-        !STORAGE_STATE,
-        "set ADMIN_STORAGE_STATE to a signed-in Playwright storage state",
-      );
+      skipWithoutDeployment();
 
       const errors = trackErrors(page);
       await page.goto(underBase(ADMIN_BASE_URL, route.path), { waitUntil: "load" });
@@ -197,9 +280,30 @@ test.describe("admin console — authenticated routes", () => {
       ).toBe(false);
 
       // Console chrome plus the route's own view, then its data query result.
-      await expect(page.getByTestId("admin-sidebar")).toBeVisible();
+      await expect(page.getByTestId("shell-header")).toBeVisible();
       await expect(page.locator(route.anchor).first()).toBeVisible();
       await expect(page.locator(route.settled).first()).toBeVisible({ timeout: 20_000 });
+      for (const control of route.controls ?? []) {
+        await expect(
+          page.locator(control).first(),
+          `${route.path} must render its own controls`,
+        ).toBeVisible();
+      }
+
+      // Once the query has settled its outcome is final: a refused API must say
+      // so, and must offer the retry the view itself renders.
+      if (route.errorContract) {
+        const failed = await page
+          .locator(route.errorContract.error)
+          .first()
+          .isVisible();
+        if (failed) {
+          await expect(
+            page.locator(route.errorContract.retry).first(),
+            `${route.path} must offer a retry when its API failed`,
+          ).toBeVisible();
+        }
+      }
 
       expect(
         errors,

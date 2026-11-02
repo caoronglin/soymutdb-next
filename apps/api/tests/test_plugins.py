@@ -293,7 +293,7 @@ async def test_capabilities_preserves_features_and_adds_plugins_and_databases(
     }
     assert body["databases"] == {
         "authoritative": "postgresql",
-        "analytics": "clickhouse",
+        "analytics": "postgresql",
     }
 
 

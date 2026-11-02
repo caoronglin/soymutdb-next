@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from datetime import date, timedelta
 import json
 import os
 import re
@@ -801,6 +802,39 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
         result_row["reason"] = (
             "passed" if passed else f"{len(findings)} license findings"
         )
+    elif report_available and normalization == "accepted-advisories":
+        try:
+            acceptances = load_advisory_acceptances(
+                ROOT / str(check.get("accept_file", ""))
+            )
+        except (AcceptancePolicyError, json.JSONDecodeError) as exc:
+            # A malformed acceptance file must never read as "nothing to
+            # accept", which would pass the very findings it fails to describe.
+            result_row["status"] = "failed"
+            result_row["reason"] = f"acceptance_policy_invalid:{exc}"
+            result_row["findings"] = [str(exc)]
+        else:
+            try:
+                passed, findings, accepted = evaluate_advisory_report(
+                    report_path, acceptances
+                )
+            except (AcceptancePolicyError, json.JSONDecodeError) as exc:
+                result_row["status"] = "failed"
+                result_row["reason"] = f"acceptance_report_unreadable:{exc}"
+                result_row["findings"] = [str(exc)]
+            else:
+                detail_path = output / f"{name}.findings.log"
+                if findings:
+                    detail_path.write_text("\n".join(findings) + "\n", encoding="utf-8")
+                else:
+                    detail_path.unlink(missing_ok=True)
+                result_row["findings"] = findings
+                result_row["accepted"] = accepted
+                result_row["status"] = "passed" if passed else "failed"
+                result_row["reason"] = (
+                    "passed" if passed
+                    else f"{len(findings)} unaccepted advisory finding(s)"
+                )
     elif normalization is not None:
         result_row["status"] = "failed"
         result_row["reason"] = f"normalization_unavailable:{normalization}"
@@ -808,20 +842,199 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
 
 
 
+# -----------------------------------------------------------------------------
+# Signed advisory acceptances
+# -----------------------------------------------------------------------------
+# A vulnerability with no published fix cannot be remediated, only acknowledged.
+# That acknowledgement is a governance artifact: it names one advisory for one
+# package, records who accepted it and when it stops applying, and states why
+# the finding is not reachable.
+#
+# It is deliberately not a suppression list. Four properties keep it from
+# behaving like one:
+#
+#   * Narrow. Matching is on advisory id AND package. A second high finding in
+#     the same package, or a different advisory, still fails.
+#   * Expiring. An entry past `expires_on` fails the gate rather than degrading
+#     to a warning, and no entry may be written more than MAX_ACCEPTANCE_DAYS
+#     out, so a pass cannot be bought with a far-future date.
+#   * Non-rotting. An entry that no longer matches any reported finding fails as
+#     stale, so an acceptance cannot outlive the problem it was written for.
+#   * Visible. Accepted findings are reported with their expiry, in the evidence
+#     and in the summary, instead of being dropped from the output.
+#
+# None of this may rescue a broken analyzer: the report has to exist and parse,
+# exactly as for license normalization.
+MAX_ACCEPTANCE_DAYS = 90
+ACCEPTANCE_REQUIRED_FIELDS = (
+    "advisory",
+    "package",
+    "vulnerable_range",
+    "rationale",
+    "accepted_by",
+    "accepted_on",
+    "expires_on",
+)
+
+
+class AcceptancePolicyError(ValueError):
+    """The acceptance file is missing, malformed, or over-permissive."""
+
+
+def _parse_iso_date(value: str) -> date:
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError) as exc:
+        raise AcceptancePolicyError(f"not an ISO date: {value!r}") from exc
+
+
+def load_advisory_acceptances(path: Path, *, today: date | None = None) -> list[dict[str, Any]]:
+    """Read and validate the acceptance file, or raise.
+
+    Validation happens before any analyzer runs, so a malformed directive is a
+    policy error rather than a pass that depends on which report is evaluated.
+    """
+    today = today or date.today()
+    if not path.is_file():
+        raise AcceptancePolicyError(f"missing acceptance file {path}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("schema_version") != 1:
+        raise AcceptancePolicyError("unsupported advisory acceptance schema_version")
+    entries = payload.get("acceptances")
+    if not isinstance(entries, list):
+        raise AcceptancePolicyError("advisory acceptances must be a list")
+
+    horizon = today + timedelta(days=MAX_ACCEPTANCE_DAYS)
+    validated: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for index, entry in enumerate(entries):
+        if not isinstance(entry, dict):
+            raise AcceptancePolicyError(f"acceptance #{index} is not an object")
+        missing = [f for f in ACCEPTANCE_REQUIRED_FIELDS if not str(entry.get(f, "")).strip()]
+        if missing:
+            raise AcceptancePolicyError(
+                f"acceptance #{index} ({entry.get('advisory', '?')}) is missing "
+                f"{', '.join(missing)}; an unsigned acceptance is not an acceptance"
+            )
+        key = (str(entry["advisory"]), str(entry["package"]))
+        if key in seen:
+            raise AcceptancePolicyError(f"duplicate acceptance for {key[0]} / {key[1]}")
+        seen.add(key)
+        try:
+            expires = _parse_iso_date(str(entry["expires_on"]))
+            _parse_iso_date(str(entry["accepted_on"]))
+        except AcceptancePolicyError as exc:
+            raise AcceptancePolicyError(f"acceptance {key[0]}: {exc}") from exc
+        if expires > horizon:
+            raise AcceptancePolicyError(
+                f"acceptance {key[0]} expires {expires.isoformat()}, beyond the "
+                f"{MAX_ACCEPTANCE_DAYS}-day maximum ({horizon.isoformat()}); "
+                "a short acceptance and a re-review is the point"
+            )
+        validated.append({**entry, "_expires": expires, "_today": today})
+    return validated
+
+
+def evaluate_advisory_report(
+    report_path: Path, acceptances: list[dict[str, Any]]
+) -> tuple[bool, list[str], list[dict[str, Any]]]:
+    """Split a pnpm audit report into unaccepted findings, text, and accepted.
+
+    Returns (passed, findings, accepted). `accepted` is returned rather than
+    folded into the pass so the summary can keep printing the expiry.
+    """
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    advisories = payload.get("advisories")
+    if not isinstance(advisories, dict):
+        raise AcceptancePolicyError("pnpm audit report has no `advisories` object")
+
+    unaccepted: list[str] = []
+    accepted: list[dict[str, Any]] = []
+    consumed: set[tuple[str, str]] = set()
+    for raw in advisories.values():
+        if raw.get("severity") not in ("high", "critical"):
+            continue
+        advisory = str(raw.get("github_advisory_id") or raw.get("url") or raw.get("id"))
+        package = str(raw.get("module_name"))
+        match = next(
+            (
+                a
+                for a in acceptances
+                if str(a["advisory"]) == advisory and str(a["package"]) == package
+            ),
+            None,
+        )
+        if match is None:
+            unaccepted.append(
+                f"{package}: {raw.get('severity')} {advisory}; "
+                f"vulnerable={raw.get('vulnerable_versions')} "
+                f"fixed={raw.get('patched_versions') or 'unknown'}"
+            )
+            continue
+        consumed.add((advisory, package))
+        expires = match["_expires"]
+        expired = expires < match["_today"]
+        accepted.append(
+            {
+                "advisory": advisory,
+                "package": package,
+                "expires_on": expires.isoformat(),
+                "expired": expired,
+                "accepted_by": str(match["accepted_by"]),
+            }
+        )
+        if expired:
+            unaccepted.append(
+                f"{package}: acceptance for {advisory} expired on "
+                f"{expires.isoformat()} (accepted by {match['accepted_by']}); "
+                "re-review and renew, or fix the dependency"
+            )
+
+    for entry in acceptances:
+        key = (str(entry["advisory"]), str(entry["package"]))
+        if key in consumed:
+            continue
+        if entry["_expires"] < entry["_today"]:
+            continue  # already reported as expired above
+        unaccepted.append(
+            f"{entry['package']}: acceptance for {entry['advisory']} matches no "
+            f"reported finding; delete it — a stale acceptance is not a record "
+            "of a live risk"
+        )
+
+    return not unaccepted, unaccepted, accepted
+
+
 def _audit_failure_evidence(row: dict[str, Any], output: Path) -> list[str]:
     """Bounded actionable diagnostic, never a new pass/fail decision."""
+    # Accepted findings are emitted first, for every check and including a
+    # pass. A gate that only prints them on failure would make a successful run
+    # indistinguishable from one where the advisory had actually been fixed —
+    # which is exactly the state an acceptance must never be mistaken for.
+    accepted_evidence = [
+        "  {}: {} {} (accepted by {}, expires {})".format(
+            item["package"],
+            "EXPIRED" if item.get("expired") else "accepted",
+            item["advisory"],
+            item["accepted_by"],
+            item["expires_on"],
+        )
+        for item in row.get("accepted") or []
+    ]
     if row.get("status") == "passed":
-        return []
+        return accepted_evidence
     name = str(row["name"])
     report = output / str(row.get("report", ""))
     if not report.is_file():
-        return [f"  {name}: report unavailable; see analyzer stderr / CI artifacts"]
+        return accepted_evidence + [
+            f"  {name}: report unavailable; see analyzer stderr / CI artifacts"
+        ]
     try:
         detail = json.loads(report.read_text(encoding="utf-8"))
     except (ValueError, UnicodeError):
-        return [f"  {name}: report is not readable JSON"]
+        return accepted_evidence + [f"  {name}: report is not readable JSON"]
     if not isinstance(detail, dict):
-        return [f"  {name}: unexpected report shape"]
+        return accepted_evidence + [f"  {name}: unexpected report shape"]
     evidence: list[str] = []
     if name == "pnpm-audit":
         advisories = detail.get("advisories") or {}
@@ -854,7 +1067,7 @@ def _audit_failure_evidence(row: dict[str, Any], output: Path) -> list[str]:
     elif name == "pnpm-duplicate-versions":
         if "Run pnpm dedupe" in detail.get("stdout", ""):
             evidence.append("  pnpm dedupe --check recommends lockfile deduplication")
-    return evidence[:40]
+    return (accepted_evidence + evidence)[:40]
 
 
 def run_audits(config_path: Path, output: Path) -> int:

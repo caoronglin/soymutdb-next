@@ -57,6 +57,16 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: resolveKey }),
 }));
 
+// The restored `sra_run` widget fetches /api/v1/widget/sra_run on mount. These
+// tests exercise the rest of the route, so without a stub each one would open a
+// real socket to localhost and depend on nothing listening there. The widget has
+// its own tests; here it just has to fail fast and quietly into its error state.
+beforeEach(() => {
+  vi.stubGlobal("fetch", vi.fn(() =>
+    Promise.resolve(new Response("", { status: 503, statusText: "Service Unavailable" })),
+  ));
+});
+
 vi.mock("../components/route-motion", () => ({
   FadeUp: ({ children }: { children: React.ReactNode }) => children,
   useReveal: () => undefined,

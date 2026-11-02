@@ -28,7 +28,7 @@ export const SETTINGS_DOMAIN_META: Record<SettingsDomain, SettingsDomainMeta> = 
     ],
   },
   appearance: { title: "Appearance", description: "Theme colour and public presentation defaults.", revisionSections: [{ id: "general", label: "General" }] },
-  integrations: { title: "Integrations", description: "External delivery and service configuration.", revisionSections: [{ id: "cdn", label: "CDN configuration" }] },
+  integrations: { title: "Integrations", description: "External delivery and service configuration.", revisionSections: [] },
   security: { title: "Security", description: "Session and account protection settings.", revisionSections: [{ id: "security", label: "Security" }] },
   localization: {
     title: "Localization",
@@ -60,7 +60,6 @@ export type SettingsCard =
   | "data"
   | "email"
   | "security"
-  | "cdn"
   | "filePreview"
   | "content"
   | "footer";
@@ -73,7 +72,6 @@ export const SETTINGS_CARD_DOMAINS: Record<SettingsCard, SettingsDomain[]> = {
   data: ["advanced"],
   email: ["advanced"],
   security: ["security"],
-  cdn: ["integrations"],
   filePreview: ["advanced"],
   content: ["site"],
   footer: ["site"],

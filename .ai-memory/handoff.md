@@ -1,6 +1,174 @@
-# Handoff 检查点 — 2026-10-02 收尾（审计后优化：W0–W4 完成，W6 框架就位）
+# Handoff 检查点 — 2026-10-20（当前，持续开发中）
 
-## 已完成（带证据，全部实跑）
+## 2026-10-20 第 7 轮：坐标搜索稳定 assembly 链接
+
+- 读取 DB-CORE-3 与现有 canonical resolver；同名 v4/v5 不允许 `.find(name || id)` 取第一个结果。新 regression 复现了旧 shared search resolver 的重复名称/数字名称优先级问题。
+- `assembly-selection.ts` 只泛化输入/返回类型，运行时 id-first、唯一 legacy name、unknown/ambiguous 行为不变；`search-assembly.ts` 明确参数改委托它，删除重复匹配逻辑，仅保留无参数时的既有默认选择策略。保留 wrapper 因为 genes/location 仍使用该默认策略，不增加第二套 fallback。
+- location 新链接写 stable assembly ID，旧唯一名称仍能读取并在下次提交归一到 ID；选择器显示 name + version。重复旧名称显示含两个版本的歧义提示，未知名称（含成功返回空 catalog）显示不可用，不发 chromosome/source 查询，不展示错误 namespace 的结果。
+- 回归使用真实 React Query 和 rendered location form，覆盖 v4/v5 正确 namespace 请求/版本标签/URL、歧义不查询、unknown 不默认、唯一旧名称兼容、id 优先于另一个条目的数字名称。
+- external/internal 分别运行 `location.test.tsx`、`search-assembly.test.ts`、`assembly-selection.test.ts`、`functional-invariants.test.ts`：各 **4 files / 26 tests passed**。web query-key guard、scoped whitespace 通过。workspace 完整 `lint typecheck test --concurrency=1` **exit 0，36/36 tasks（33 cached）；web 405 tests，admin 207 tests**，日志 `.cache/gates/workspace-round7.log`。
+- 未改 API、数据库或部署边界，未重建制品/执行浏览器 E2E；JBrowse/sequence 下游整条链路仍需单独验证，不能据本轮 URL 测试宣称完成 DB-CORE-3 全矩阵。
+
+## 2026-10-20 第 6 轮：结果查询失败不能伪装为空结果
+
+- 用户明确要求后续派遣 `mm/minimax-3.1f`。会话工具拒绝该精确路由，`mm` 未列出可用模型；已说明不能擅自换模型。本轮仅在 Lead 完成独立修复，未创建替代模型 subagent。下一轮派遣前需确认指定路由获准。
+- `apps/web/src/routes/variants/index.tsx`：query error 渲染安全、可访问的错误反馈及重试按钮，不再显示空列表/旧总数/分页；重试保留原筛选与游标。后台刷新失败也明确报错，避免旧缓存看起来像当前结果。
+- `apps/web/src/routes/blast.tsx`：hits error 优先于 no-hits 分支，提供原查询重试；只在真实成功空响应时显示没有命中。新增 `blast.hitsLoadError` 中英翻译，不向页面输出原始后端诊断。
+- 回归使用真实 React Query + 网络函数 doubles，覆盖首次失败→重试成功空响应、刷新失败隐藏旧计数/分页、BLAST 失败→重试空响应；断言私有诊断文本不出现。窄测 3 files / 6 tests 通过（包含原有翻页与 assembly 链接测试）。
+- 最新工作区 `pnpm turbo run lint typecheck test --concurrency=1`：**exit 0，36/36 tasks，25 cached；web 397 tests / admin 207 tests**。日志 `.cache/gates/workspace-round6.log`。i18n interpolation、React visible i18n、web query-key、scoped whitespace guards 通过。
+- 本轮没有 API/数据库变更，未重复执行 API 2542/4 的上轮验证；未构建制品或做浏览器 E2E，未提交/推送/部署。总目标继续 active。
+
+## 2026-10-20 第 4–5 轮：失败子任务恢复与集成验证
+
+**未提交、未推送、未部署；总目标仍 active。** 大规模脏工作树包含此前多轮成果，不能整体 `git add`。以下只说明本次修复与验证；下方 2026-10-18 门禁属于历史，不是本轮制品证据。
+
+### 本轮落地
+
+- SSE 每轮查询独立短会话、睡眠/发送帧前归还连接，失败后下一轮可恢复。复审抓到并修复二次缺陷：释放认证事务的 rollback 会过期 ORM User，必须在 rollback 前保存 UUID，而不是在流里访问 User.id。真实 PG：header/query/匿名三组隔离、连接数、连续更新与敏感信息负断言；26 条 SSE 测试通过。删除了仅为旧 doubles 保留的生产 `isinstance` 分支，测试改注入 session factory。
+- 首页统计绑定已发布 release，缓存带 release，排除非公开/删除的 mutant lines，seed 经公开 line 关联，variant counts 同 release。直接调用端点的缓存测试显式传上下文，不向生产代码添加 `Depends` 特判。
+- Gene 列表 LIKE `%`/`_`/反斜杠按字面匹配，禁用无用 transcript/alias selectin 加载。新 planner fixture 修正为 bulk insert 后建立 GIN：否则未刷新的 fastupdate pending list 令小样本选择主键扫描，不能把测试夹具的成本问题误判为索引失效。该文件 26 tests + cache 28 tests 通过。
+- Variant 查询复用请求会话，减少双连接；热聚合不再隐式执行两项无人读取的 DISTINCT，公开 dashboard 响应保留原有关系表统计字段。
+- 注册分级全局限流，公开读 Redis 故障 fail-open，写 fail-closed 503，prod 禁止 benchmark/关闭 limiter。Lead 收窄认证豁免为仅 login，register/refresh/logout/change-password 使用写预算；认证会话测试明确注入预算 Redis double，没有屏蔽生产 middleware。可信 XFF 从右向左剥离配置内的代理，不能信任客户端可伪造的第一个元素；覆盖追加链、多代理、IPv6、非法地址。
+- Admin 恢复中断改动：保存/发布/审计/feature flag/表模板/导入操作的失败反馈；pending/error 不显示为空数据或零计数；ConfirmDialog 使用受控精确短语匹配并阻止 pending 期间确认/关闭。恢复子代理完整验证 32 files / 206 tests、tsc/eslint；随后 Lead 补科学模块 validate payload 的 module_key 与测试。
+- Portal 修复 variants 前后翻页游标、BLAST gene link 携带 assembly/缺失时禁用、5 个实际 analytics key roots 的 release invalidation、命令面板跳到 `/search/gbrowse`、login 使用共享 safeRedirect。Lead 补 DEL/C1 边界测试。analytics 暂保留原有 key 结构，仅修失效分类，尚未迁移到含 release/site 的共享工厂。
+- Import Studio DatasetVersion/validation 支持 module-aware 科学数据形状；generic 限制仍保持；未知模块拒绝、validate 对照持久化模块，OpenAPI/client 已重新生成并 `check:contract` 通过。
+- 原前任 Lead 已删除 25 个 untracked `e2e/dbg*.mjs` 与旧 scan-20261014 输出；本轮修正过宽 ignore，避免把仍被文档引用的 scan-20261015 证据隐藏。**不继续删除历史文件。**
+
+### 最新实跑证据
+
+- API 完整测试：**2542 passed / 4 skipped**，Python 3.15 + PG16，exit 0；`ruff check app` 与本轮新增/修改回归测试通过。
+- OpenAPI/client generate + `check:contract` exit 0、无 handwritten route drift。
+- architecture self-test、web query-key、admin transport/session、i18n interpolation guards 通过。
+- Portal 在 root gate 中 **394 tests passed**。Admin root gate 中 **207 assertions passed，但另有 3 个 unhandled errors，因此该次 workspace gate 是失败，不是通过**。
+- root 失败栈：`file-upload.test.tsx` → rc-component `useDelayState.js:39` 的 timeout → jsdom teardown 后 React 访问 window。单文件原始默认 forks 5/5 通过，说明不能仅凭窄测排除泄漏。已让本文件拥有 fake clock、unmount 后 drain + assert 0 timers；修复后窄测 5/5，**完整 workspace gate exit 0：36/36 tasks（31 cached），Admin 207 tests，无 unhandled errors**。日志 `.cache/gates/workspace-round5-final.log`；未修改全局 pool 或屏蔽异常。
+- 本轮未重建 external/internal/admin 制品，未执行浏览器 E2E、Worker 全套、Docker/生产 backfill，旧数值不得冒充本轮验证。
+
+### 后续优先事项
+
+1. workspace 最终复跑已记录通过；下一轮先检查本轮后的新改动，不要重复使用历史结果证明不同的源代码。
+2. 新制品构建与 public/internal/admin/browser E2E（当前源代码并未自动更新任何既有部署）。
+3. Import Studio 新建入口仍未贯通：需要核实可信 inspection、DataSet 创建/选择与 frozen source metadata，不能凭空填写行数或放宽发布证据。
+4. downloads export Submit 仍无动作；palette focus/a11y、Help FAQ 旧筛选说明、admin 超一页列表分页/国际化仍待处理。variants/BLAST 查询错误态已在第 6 轮修复，location URL canonical assembly 与重复名解析在第 7 轮修复（浏览器 E2E 尚未验证）。
+5. 限流上线评审：写路径 Redis 依赖、预算/代理配置、OpenAPI 429 文档覆盖、非 prod 关闭 limiter 是否须同时 benchmark（旧计划要求 AND，当前实现仍允许独立 master switch）需明确；不据单测宣称生产就绪。
+6. 脏树整理须逐项审阅；字体 split 文件和 OpenAPI snapshots 是契约输入，不是可随意忽略的缓存。历史文档锚点、机器运行手册与未审阅旧改动保留待核实。
+
+## 2026-10-18 历史检查点（原文保留）
+
+> 本节是当前检查点；**下方 2026-10-02 及更早的所有章节一律为历史，保留原文**，其版本、门禁数字与阻塞描述不再代表现状。现状入口：[`docs/dev/project-status.md`](../docs/dev/project-status.md) 与 [`docs/aegis/INDEX.md`](../docs/aegis/INDEX.md)。
+
+## 第 2–3 轮增量（2026-10-18 01:05）
+
+第 2 轮修掉 import Studio 状态机/反馈/Resume base 三处缺陷、公开 capabilities 的 `analytics: clickhouse` 契约、孤儿 CDN/`enableClickhouse` 设置、命令面板死目的地，并做文档真实性校正。
+第 3 轮按用户指示用 mm 提供商 subagent（MiniMax-M3.1-Flash-Preview）做安全/后端性能/前端/架构审计：登录软删除 fail-open、sanitize rel 重写漏洞、基因搜索 trigram 索引失效（`global_search` 1609→164 ms，迁移 0048）与首页统计 7→2 SQL、图表重渲染/命令面板 i18n/死导航、两个新 CI 守卫；Lead 执行技术栈 patch 更新（react 19.3.1、react-query 5.104.3、tiptap 3.32.0、turbo 2.11.8、eslint 10.13.0、root `type: module`）并重建 lockfile + `--frozen-lockfile` 验证。
+
+最新门禁：API **2444 passed / 4 skipped**；Worker **659 / 8 skipped**；`pytest scripts` **512 / 1 skipped / 14 subtests**；工作区 **36/36**（1067 Vitest + 40 JBrowse）；contracts/static smoke PASS；web 双站+admin 构建、artifact/预算/双站隔离 PASS；a11y 10/10。工作树仍未提交。
+
+第四轮（2026-10-18 01:35）已完成：Python patch 更新（fastapi 0.143.3 / sqlalchemy 2.1.5 / httpx2 / worker venv 对齐 + uv.lock）；注册 27 个 portal 已读未注册 content 键并新增 `scripts/check_content_key_contract.py` 守卫（接入 frontend gate）；登录限流增加 per-IP 维度（`login_ip_rate_limit_max`）；NotificationBell 改为 dialog 语义 + 焦点往返 + 单条已读，并修 admin Vitest JSX automatic runtime。
+最新门禁：API **2447 / 4 skipped**；Worker **659 / 8 skipped**；`pytest scripts` **517 / 1 skipped / 14 subtests**；工作区 **36/36**（1070 Vitest + 40 JBrowse，web 372 / admin 172）；contracts 338+5 SMOKE PASS；static smoke PASS；web 双站+admin 构建、artifact/预算/双站隔离、a11y 10/10。
+
+第四轮追加（同日 01:35）：knip `files`/`exports` 类别恢复并清零（删除 query-options 26 个死工厂、format/site-variant/antd-theme/route-motion/deep-link/api-client 聚合 default、news-carousel 未挂载组件、status-badge transitions、jbrowse buildAssembly、charts createProbeChart 等；配置加 entry 与 g2-runtime ignore 并文档化）；API Settings 删除 16 个零消费者字段（含 API 侧 SMTP，邮件归 worker）并同步 deploy 注释与 blast 文档；content registry 删除 37 个无读取方注册键（157→120）。knip exit 0；API 2447/4、Worker 659/8、scripts 517/1/14、workspace 36/36（1070 Vitest + 40 JBrowse）、contracts 338+5 PASS、artifact/a11y 全绿。
+
+第五轮（2026-10-18 01:55）已完成：Playwright E2E 首次在 React 制品跑通——公共套件 31 passed/1 skipped（修 genes.spec 陈旧中文列头断言）、internal 套件重写（旧 spec 是 Vue 时代 testids）3 passed、primer 套件重写 4 passed；顺带修 internal 制品重复 robots meta 缺陷（injectPageHead 升级而非追加 + 单测，标准制品重建后唯一）。knip `types` 类别恢复（只排除 unlisted/binaries，死协议类型清理，exit 0）。最终门禁：API 2447/4、Worker 659/8、scripts 517/1/14、workspace 36/36（1071 Vitest + 40 JBrowse）、contracts 338+5 PASS、static PASS、artifact/a11y 10/10 全绿。
+
+第六轮（2026-10-18 02:05）已完成：文档真实性审计 + wiki 去 Vue/ClickHouse 化（`docs/wiki/architecture.md`、`applications.md` 重写；api-and-ports/deployment-and-ops/multi-instance/README 订正；ADR-0009 历史注记；design/ops 错误路径修复）；`visible-i18n-baseline.json` 删除死 Vue 条目；**ADR-0010** 记录本轮持有的大版本升级与顺序；`pnpm audit` 1 high（braces 已签名接受至 2026-12-09）/7 moderate/1 low，`deps:graphs` passed（完整 `deps:audit` 受沙箱 uvx 工具目录只读 + 进程配额限制，需 CI 复核）；scripts 517/1/14、visible-i18n 守卫全绿。
+
+第七轮（2026-10-18 02:25）已完成：按 ADR-0010 顺序执行 **Vitest 5 + Vite 8**（ADR-0011）——catalog vitest 5.0.5/vite 8.3.4，10 个 vitest.config 迁移 poolOptions→pool forks+maxWorkers:1（保留 isolation），JSX 项目加 `oxc.jsx.runtime=automatic`，补 shared/genome-view/api-client 的 @types/node，平台契约 pin 更新，--poolOptions 旧命令修正；frozen-lockfile 通过。证据：turbo test 11/11（1071）、lint+typecheck 25/25、scripts 517/1/14、web+admin 构建、artifact/static/contracts(338+5)/a11y 10/10 全绿。
+
+第八轮（2026-10-18 02:45）已完成：按 ADR 顺序执行 **i18next 26 + react-i18next 17**（ADR-0012）——i18next 24.2→26.4.7、react-i18next 15.4→17.0.21；initImmediate→initAsync；pnpm supply-chain 显式豁免 react-i18next@17.0.21。证据：turbo lint+typecheck 25/25、turbo test 11/11（1071 全绿）、i18n 守卫、frozen-lockfile、web双站+admin 构建、artifact/static/contracts(338+5)/a11y 10/10、Playwright public 31/1＋internal 3＋primer 4 全绿；pnpm audit 1 high（braces 已接受）/5 moderate/1 low。
+
+第九轮（2026-10-18 02:40）已完成：**zod 3→4.6.7 升级**（ADR-0013，BLAST schema 零改动通过）；**pdfjs 6 评估后暂缓**——v6 API 迁移已实现并类型通过，但制品验证发现 (a) `?url` worker 不被 Umi/webpack 支持、无 worker asset；(b) pdfjs 的 `new URL(".", import.meta.url)` 把构建机绝对路径（file:///mnt/...）带入 dist async chunk（v4 同样存在，既有缺陷）。已回滚到 4.10.38 并在 ADR-0013 记录正确修法（worker 静态资产 + webpack-native Worker + CSP + 绝对路径制品守卫），列为下一轮构建层修复。门禁：workspace 36/36（1071）、scripts 517/1/14、frozen-lockfile、web+admin 构建、artifact/static/contracts(338+5)/a11y 10/10、audit 1 high（braces 已接受）。
+
+第十轮（2026-10-18 02:55）已完成：**pdfjs worker + 构建机绝对路径缺陷修复并落地 pdfjs 6**（ADR-0014）——worker 复制到 public（sync 脚本 + build/dev 链式），viewer 用 BASE_URL workerSrc，删除 `?url`；Umi define 清空 `import.meta.url` 消除 file:/// 构建路径；新增 `check_artifact_build_paths.py`(+5 tests) 接入 frontend gate；容器 nginx 显式 `.mjs`→application/javascript（1h cache）；pdfjs 6 API（loadingTask.destroy/render canvas）迁移，浏览器实测 worker 200 text/javascript 1.26MB 正常启动。门禁：workspace 36/36（1071）、scripts 522/1/14、frozen-lockfile、双站+admin 构建、build-path/artifact/static/contracts(338+5)/internal E2E 3/a11y 10/10 全绿。
+
+第十一轮（2026-10-18 03:05）已完成：`@dnd-kit/sortable` 8→10 + jsdom 29→30（ADR-0015）；剩余持有项给出上游阻塞证据——redis-py 8 被 kombu 5.6.2 `<6.5` 限制（当前 6.4.0 顶格，且 RESP3 默认需单独评审）、TypeScript 7 被 typescript-eslint 8.71.2 peer `<6.1` 阻止、jbrowse major 需 CI jbrowse artifact lane（沙箱无法构建）。门禁：workspace 36/36（1071）、scripts 522/1/14、frozen-lockfile、web双站+admin 构建、artifact/build-path/static/contracts(338+5)/a11y 10/10 全绿。
+
+第十二轮（2026-10-18 03:12）已完成：性能/视觉 E2E 车道修复（web-performance 服务 dist/external + spec artifact root + 报告 `\n` bug 修复；visual 服务 dist/external 于根路径）并取得证据——perf **1 passed**（initial JS 531KB/1.2MB、DCL 66.6ms、load 346ms）、visual **15 passed**；治理审计 17 项 15 passed：`pnpm dedupe` 修复重复版本、deptry 对 legacy ClickHouse 驱动做精确豁免（api/worker Success），worker pip-audit/licenses 两项为沙箱科学计算依赖构建限制。门禁：workspace 36/36（1071）、scripts 522/1/14、frozen-lockfile、web双站+admin 构建、artifact/static/contracts(338+5)/a11y 10/10 全绿。
+
+第十三轮（2026-10-18 03:50）已完成：字体性能优化——portal CSS 本就无 HarmonyOS @font-face（系统 CJK 栈刻意设计），删除 portal 死字体 2.8MB + 失效 preload + 两个未 import 的 style.css；admin 字体按 unicode-range 拆 latin(~15KB,仅 Regular preload)/cjk(~900KB 按需)，subset 脚本改 admin-only、manifest 加 role/parts、CSS 6 faces、绝对 /fonts 引用避免重复资产；guard 重写（5 tests，禁止 portal 回退字体策略）。证据：font --check/guard、perf E2E 1、visual 15、workspace 1071 tests、scripts 523/1/14、contracts 339+5、a11y 10/10 全绿。注意：并发跑重任务会触发沙箱 fork/spawn EAGAIN，门禁需串行。
+
+第十四轮（2026-10-18 04:15）已完成：全路由冒烟（36×en/zh，route-smoke 接入 public/internal E2E）并发现修复真实渲染崩溃——/genes/:geneId 在错误 API 下 undefined.toLocaleString（static-server 把详情路径当搜索列表 + 应用无运行时形状校验）；修复 server 详情 404 + `isGeneDetailRecord` 守卫（4 单测）。证据：public E2E 33/1 skipped、internal 5、perf 1、visual 15、workspace 1075 tests、scripts 523/1/14、contracts 339+5、a11y 10/10 全绿。
+
+第十五轮（2026-10-18 04:30）已完成：运行时形状守卫推广到 mutant/news 详情（isMutantLineDetailRecord / isNewsDetailRecord + 页面接入 + 8 单测）；门禁全绿（workspace 1079 tests、scripts 523/1/14、public E2E 33/1 skip、internal 5、perf 1、visual 15、contracts 339+5、a11y 10/10、frozen lock、双站+admin 构建、artifact 全套）。注意 E2E 专用构建会覆盖 chart-closure manifest，制品门禁前须重跑标准 build:sites。
+
+第十六轮（2026-10-18 04:35）已完成：API 形状弹性 E2E（page.route 注入错误形状 200，3 个详情页断言降级不崩溃）；public 套件 36 passed/1 skipped；标准构建 + artifact 全套重跑 PASS。
+
+第十六轮（2026-10-18 04:55）已完成：依赖安全 floor（postcss-selector-parser 7.1.6 / pbkdf2 3.1.7 / sprintf-js 1.1.3），audit 7→5，剩余无修复项写入治理文档并验证签名接受（braces high 0 unaccepted/1 accepted）；全门禁复跑绿（1079 tests、scripts 523/1/14、双站+admin 构建、artifact、perf 1、visual 15、frozen+dedupe check）。sandbox admin vitest EAGAIN 用 --pool=threads 复跑通过。
+
+第十七轮（2026-10-18 05:10）已完成：复活 admin 制品 E2E（此前全红死配置）并修复两个真实缺陷——登录页手机 240px 横向溢出、admin 无 data-app-ready 信号；登录控件补 testid；新增字体 split 契约 E2E。admin production suite 4 passed，workspace 1079 tests、artifact 全套、static smoke 全绿。jbrowse 构建沙箱 EAGAIN，其字体 subset 仍留给 CI lane。
+
+第三十七轮（2026-10-18 22:00）已完成：analyses 门禁 + 真实 BUG 修复——jobsQuery 挂在 ResearcherGate 外，匿名访客访问 /analyses 会发个人 GET /analyses（401+refresh）再显示门禁；改为 gate 内子组件 AnalysesJobList。用例：匿名零请求、researcher 列表+行→job 页、列表 404 的 localStorage 回退。3 passed、sweep 9/9（251s）、workspace 908。
+
+第三十六轮（2026-10-18 21:50）已完成：portal⇄JBrowse bridge 离线门禁——同源 harness 替换 iframe，验证 init/ready/locus-change→URL、error 可恢复态、missing-context 无 iframe；3 passed、sweep 9/9（246s）。
+
+第三十五轮（2026-10-18 21:40）已完成：admin 认证后 24 路由 shell sweep——mock auth + 数据端点诚实 404，逐路由断言 shell-header/不弹登录/无 pageerror；路由清单取自 App.tsx 手工树（usage-guide→/guide 初跑即暴露）。验证 admin-shell 2 passed、sweep 9/9（242s）。
+
+第三十四轮（2026-10-18 21:35）已完成：BLAST 提交流程离线化——原 skip 的 live 用例改为 mock 登录+jobs+hits 的可执行门禁：POST payload、View results、hits 表、JBrowse /browser 深链、基因搜索跳转；blast 5 passed，sweep 9/9（228s）。
+
+第三十三轮（2026-10-18 21:35）已完成：tools/enrichment 门禁 + 真实 BUG 修复——P 值输入 min=0.000001+step=0.01 使默认 0.05 stepMismatch，原生校验阻止表单提交（工具不可用、无报错）；改 step="any" 并加 checkValidity 回归断言。ORA/GSEA payload、tags、terms 表用例 3 passed；sweep 9/9（224s）、workspace 908、lint/typecheck 25/25。
+
+第三十二轮（2026-10-18 21:20）已完成：i18n 插值守卫——check_i18n_interpolation.py（t() options vs en/zh 占位符，含复数后缀/shorthand/多行，跳过 spread/defaultValue）+ 6 tests（复现 conds vs conditions BUG 形状）；接入 frontend gate 与 smoke contracts。验证 仓库 0 findings、frontend gate PASS、pytest scripts 532/1/14。
+
+第三十一轮（2026-10-18 21:10）已完成：tools/exppattern 门禁 + 真实 i18n 插值 BUG 修复——summaryDesc 参数名 conds→conditions（页面曾显示 `{{conditions}}` 原文）、heatmapAria label 补插值；全量 web/admin t() 插值审计后 0 缺失。验证 2 passed、sweep 9/9（219s）、workspace 908、lint/typecheck 25/25。
+
+第三十轮（2026-10-18 20:55）已完成：tools/seqfetch 门禁——genes/region 两种 POST payload、大结果 download_url、空/>200 客户端拒绝零请求；4 passed、sweep 9/9（217s）。
+
+第二十九轮（2026-10-18 20:35）已完成：downloads 门禁——目录分组渲染、下载 URL scheme 守卫（https 打开/javascript 双 URL 拒绝，window.open 计数不增）、预览 Modal；3 passed，sweep 9/9（212s），lint/typecheck 25/25。
+
+第二十八轮（2026-10-18 20:30）已完成：seed-request 公网写路径离线门禁——deep-link 预填 → 提交 JSON（断言 payload/content-type）→ 成功态；201 gene 客户端拒绝且零请求；补 testid。验证 2 passed、sweep 9/9（207s）、lint/typecheck 25/25。
+
+第二十七轮（2026-10-18 20:10）已完成：JBrowse 线性视图离线门禁——mockJbrowseApis（CORS + assemblies + jbrowse-config，FromConfigSequenceAdapter 内联参考序列）让 createViewState 成功；断言 jbrowse-view[data-view-ready=true]、无 unavailable/pageerror → jbrowse 门禁 2 passed；全量 sweep 9/9（205s）。真实轨道数据仍需部署栈。
+
+第二十六轮（2026-10-18 19:55）已完成：新增第 9 个离线门禁 admin-shell（真实登录 → 认证后 shell 挂载，1 passed）；按 subagent 复审修复 CI 接线：CNB 浏览器自安装（跨 stage 不存活）、移除 SMOKE_BASE_URL 泄漏、PR 上传全量证据、sweep 守卫入 smoke contracts、shared-script 清单、GH pnpm cache/timeout、契约扫描 crontab、CNB volume/CI env、文档 15 configs/9 gates。验证 sweep 9/9（204s）、契约 74 passed、pytest scripts 526/1/14。
+
+第二十五轮（2026-10-18 19:40）已完成：离线 artifact E2E 接入 CI——新增 build-all-static-apps.sh / ci-nightly-artifact-gate.sh，sweep 加 --build；修复 GitHub PR 作业与新 public 门禁不匹配的自引入漂移（改标准制品构建 + 全 8 门禁）；双 provider 接线（GH PR、GH schedule/deploy、CNB 夜间）。验证 build-all rc0、sweep 8/8（200s）、pytest scripts 526/1/14（CI 契约 71 passed）。
+
+第二十四轮（2026-10-18 19:05）已完成：compare 页 provenance 补齐——新增 Assembly（部署 assemblies 查询）与 Release（pin 或 not pinned）行 + 行级 testid + en/zh 键；compare 单测 5 passed、entity-detail E2E 3 passed；web 重建、lint/typecheck 25/25、workspace 908 tests、scripts 526/1/14、artifact sweep 8/8（201s）。仍未做：compare 可选集仍是精选 fixture，release-pinned live comparison 待后端证据 API。
+
+第二十三轮（2026-10-18 19:05）已完成：离线 E2E 一键化——`scripts/verify-artifact-e2e.sh` 串起 8 个 artifact 门禁（结果表/fail-closed/retries/日志目录），package.json `verify:artifact-e2e`，新增 3 个守卫测试防清单漂移，新增 docs/dev/e2e-gates.md（13 配置分类 + static-server 约定）。验证 8/8 全绿 196s；pytest scripts 526 passed/1 skipped/14 subtests。knip JSON 0 issues。
+
+第二十二轮（2026-10-18 19:00）已完成：修复 jbrowse 白屏 BUG——入口脚本在 <head> 无 defer 导致 React #299（部署即白屏，此前无浏览器门禁覆盖）；build-artifact.ts 补 defer、jbrowse 加 AppReadySignal、新增离线 artifact 门禁（1 passed，验证降级态 + split 字体 200）、check_app_shell_assets 增加 blocking-script 检查；jbrowse node tests 40、lint/typecheck 25/25、scripts 523/1/14 全绿。
+
+第二十一轮（2026-10-18 18:40）已完成：jbrowse 字体拆分——沙箱恢复后首次成功构建 jbrowse，发现字体被双份携带（public 13MB + webpack hashed 13MB）；字体脚本扩为 admin+jbrowse，3 个 full woff2 换成 6 个 split（latin~15KB/cjk~900KB），CSS 根绝对 /fonts 引用，删 full 源文件（仓库 -10MB）；jbrowse 制品 31MB→8.0MB，字体实测 200 font/woff2，jbrowse node tests 40 passed，字体守卫 5 passed（覆盖 admin+jbrowse），build-path/app-shell PASS，scripts 523/1/14。
+
+第二十轮（2026-10-18 18:05）已完成：修复真实产品 bug——`ReleaseScopeProvider` 的 release 切换用 `removeQueries()` 会静默取消在途请求，查询永停 pending、observer 孤儿，详情页 200 不渲染（subagent 6/6 隔离矩阵证明；未固定 release 制品每次加载触发，部署 tab 发布时同样中招）。修复为就地 `invalidateQueries({predicate, refetchType:"active"})`、删除死代码、加 mid-flight 回归单测；entity-detail 门禁移除 skip 并修 4 个断言缺陷 → 3 passed。最终证据：public 36/1 skip、internal 5、admin-prod 4、visual 15、perf 1、entity-detail 3、workspace 25/25 + 907 tests、scripts 523/1/14、artifact 全 PASS。工作树未提交。
+
+第十八/十九轮（2026-10-18 17:50）已完成：E2E 门禁盘点 + 修复落地。两个真 bug：① static-server `PREFIX="/"` 使所有 mock 变成 `//api/v1`（全 404）→ 归一化修复；② primer helper 伪造 `/releases/active 200` 导致 reload 后 assemblies 不解析 → 移除该 mock（真实部署 release 形状待部署栈 E2E 验证）。同时修复 primer 目标/BASE/locale/waitForAppReady/reducedMotion、public 根挂载（8 处 BASE + 兜底）、internal reuseExistingServer、visual 4177、perf 4178、.cnb.yml smoke 源、browser testid/local-preview skip/genes 死断言；审计 D3 为假阳性。最终证据：public **36 passed/1 skipped**、internal 5、admin-prod 4、visual 15、perf 1、primer 4（单跑）、workspace lint/typecheck 25/25、tests 907+172、scripts 523/1/14、artifact 全套 PASS。环境：宿主线程配额耗尽时段会出现 Chromium pthread EAGAIN / bwrap EAGAIN（重试/串行可过）。工作树未提交。
+
+下一轮待决策：环境恢复后重建 web 并跑 public/visual/perf/artifact 门禁；已部署栈 E2E 与生产回填/切换；jbrowse major CI 编排（含其 13MB 字体 subset）；工作树提交决策。
+
+## 当前波次（2026-10-18 第 1 轮基线）
+
+工作树中的大规模未提交实现波已由 Lead 在第 1 轮验证为全绿；**未提交、未推送、未部署**。
+
+| 范围 | 落地内容 |
+| --- | --- |
+| 原生 PostgreSQL | 变异事实与匿名分析（migration 0046/0047，`apps/api/app/services/{postgres_variant_service,variant_repository,analytics_*}.py`）；Worker 原生回填/保留期任务 |
+| Admin | 原生 antd 6 外壳、251 个 i18n 键、ProTable/ProDescriptions/ProCard 迁移；裸 `Table` 0 |
+| Import Studio | 服务端 `apps/api/app/api/v1/import_studio.py`（mapping/patches/validate/commit）、客户端 `packages/api-client/src/admin-import-studio.ts`、编辑器 `apps/admin/src/components/import-draft-editor.tsx` 并挂到 `apps/admin/src/routes/imports.tsx:898` |
+| 前端 | 图表迁移到 `@soymutdb/charts`；字体子集化（13.07 MB → 2.81 MB/应用） |
+| 工具链 | Node 26.10.0 / pnpm 12.11.2 / Python 3.15 |
+
+## 第 1 轮门禁（Lead 实跑；本 subagent 未重跑）
+
+- API：**2325 passed / 4 skipped**
+- Worker：**659 passed / 8 skipped**
+- `pytest scripts`：**492 passed / 1 skipped**
+- 工作区 lint/typecheck/test：**36/36**
+- contracts smoke：**PASS**；static smoke：**PASS**
+- 浏览器 a11y：**10/10**
+
+## 仍待
+
+- 生产历史回填、生产切换、目标环境 release/assembly 映射与冻结确认：**未执行**（隔离真实源演练见 `docs/dev/native-validation-20261017.md`）。
+- Docker 镜像/Compose 运行验收：按用户要求排除，未验收。
+- jbrowse 构建在 DSH 沙箱内触发 `EAGAIN`（进程配额，非代码）；MCP 3 项 loopback 传输用例受环境限制。
+- 本波未提交，文档对账（2026-10-18）只改文档，不改代码或 git 状态。
+
+---
+
+## 2026-10-02 检查点（历史，原文保留）
+
+### 已完成（带证据，全部实跑）
 
 | 阶段 | 结果 | 关键证据 |
 | --- | --- | --- |
@@ -9,7 +177,7 @@
 | W2 assembly | ✅ | 10 消费点；运行时 release 切换（新增端点 + 订阅 + 精确失效）；消融 ×2 |
 | W3 会话权限 | ✅ | 五态状态机；匿名零个人请求；并发 401 修复；`effective_roles` |
 | W4 UI/UX | ✅ | i18n 守卫 **39 → 0 文件**；真实浏览器 **10/10**；rowKey 4/4；多行 alt 已覆盖 |
-| W6 框架 | 🔶 | `db_ab_experiment.py` + 37 tests；消融 ×3；**未跑实测，无性能结论** |
+| W6 框架 | 🔶 | `db_ab_experiment.py` + 37 tests；消融 ×3；**未跑实测，无性能结论**（2026-10-18 注：2026-10-05 已在本机 PostgreSQL 跑过合成 20 万行，比值波动 49%，仍**无性能结论**且未入 CI，见 [`2026-10-05-w6-ab-harness.md`](../docs/aegis/baseline/2026-10-05-w6-ab-harness.md)） |
 
 提交（全部已推 `origin/main`，`git rev-list --count origin/main..HEAD` = 0）：
 `160b42e69` `79509b7ec` `e211764f5` `e494b1cb2` `d721dc118` `67b55a51e`
@@ -44,8 +212,10 @@ assemblies-query-options.test.ts,release-scope.tsx,release-scope.test.tsx,analys
 
 ## 未完成 / 阻塞
 
+> **2026-10-18 复核：以下整段为 2026-10-02 状态，已过时。** PostgreSQL 与 psql 可用、Playwright 浏览器可用；API/Worker 全量与浏览器 a11y 已实跑（见本节顶部）。部分条目仍成立（生产回填/切换、Docker 镜像验收、`cnb` 凭据、W5/W7）；“无 psql/无浏览器/无真实后端”不再是阻塞。
+
 - **`cnb` 远端未推送**（cnb.cool 无凭据）。`origin` 已同步到 `67b55a51e`（实测 in-sync）。
-- **无 psql / pgcli / Docker** → 数据库实测未跑，**无任何性能结论**。
+- **无 psql / pgcli / Docker** → 数据库实测未跑，**无任何性能结论**。（2026-10-18：psql/PostgreSQL 与浏览器均可用，API/Worker 全量已实跑；Docker 镜像仍未验收。）
 - **`ant` CLI 缺失** → antd 门面/别名扫描盲区未补。
 - **无真实后端** → 会话/权限/发布切换端到端未验证。
 - **全量 `eslint src` SIGABRT（134）**；**`git diff --check` 因 CRLF 报 2**（真实尾随空格=0）。

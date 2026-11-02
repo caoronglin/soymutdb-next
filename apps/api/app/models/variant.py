@@ -69,7 +69,7 @@ class Consequence(StrEnum):
 class VariantSummary(Base):
     """Light PG table for FK references.
 
-    Bulk variant data lives in ClickHouse (``variant_facts``).
+    Bulk variant data lives in the native PostgreSQL ``variant_facts`` table.
     """
 
     __tablename__ = "variant_summaries"

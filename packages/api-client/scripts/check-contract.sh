@@ -10,12 +10,13 @@ set -euo pipefail
 PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$PKG_DIR/../.." && pwd)"
 API_DIR="$REPO_ROOT/apps/api"
+API_PYTHON="${SOYMUTDB_API_PYTHON:-$API_DIR/.venv/bin/python}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 echo ">> exporting OpenAPI from backend..."
-export PYTHONPATH="$REPO_ROOT"
-"$API_DIR/.venv/bin/python" "$API_DIR/scripts/export_openapi.py" \
+export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+"$API_PYTHON" "$API_DIR/scripts/export_openapi.py" \
   --output "$TMP_DIR/openapi.json"
 
 echo ">> regenerating client types in temp dir..."

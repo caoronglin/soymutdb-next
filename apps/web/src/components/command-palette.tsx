@@ -1,9 +1,23 @@
 /**
  * CommandPalette — Cmd+K / Ctrl+K quick search modal.
  *
- * Simple keyboard-triggered overlay that lets users jump to primary routes
- * or initiate a text search. Uses ESC to close, arrow keys for nav (basic).
- * No external deps — pure React + a few lucide icons.
+ * Keyboard-triggered overlay that lets users jump to primary routes or start
+ * an identifier search. It behaves like the modal it claims to be:
+ *
+ *  - focus moves into the field on open and returns to whatever opened the
+ *    palette when it closes (Escape, the backdrop, or picking a row);
+ *  - Tab / Shift+Tab cycle inside the panel instead of walking out of the
+ *    `aria-modal` overlay into the page behind it;
+ *  - the field is an ARIA combobox: `aria-activedescendant` names the
+ *    highlighted row, so the active option is announced instead of only being
+ *    highlighted with CSS.
+ *
+ * Every visible string comes from the shared catalogs
+ * (`commandPalette.<id>.label` / `commandPalette.<id>.description`, present in
+ * both `en` and `zh`); the English text kept in `QUICK_ACTIONS` is only the
+ * fallback for a missing key.
+ *
+ * No external deps — pure React + a few antd icons.
  */
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -14,21 +28,100 @@ import { cn } from "../lib/cn";
 
 interface QuickAction {
   id: string;
+  /** Locale key for the row title (`commandPalette.<id>.label`). */
+  labelKey: string;
+  /** English fallback for the row title, used when the key is missing. */
   label: string;
-  description?: string;
+  /** Locale key for the one-line description under the title. */
+  descriptionKey: string;
+  /** English fallback for the description, used when the key is missing. */
+  description: string;
   icon: React.ComponentType<{ className?: string }>;
   to?: string;
   searchQuery?: boolean;
 }
 
+/**
+ * The rows are data, not copy: the visible label and description are read
+ * from the catalogs at render time. The English strings stay as the fallback
+ * for a missing key and as extra search terms, so typing "blast" still finds
+ * the BLAST row in a Chinese console.
+ */
 const QUICK_ACTIONS: QuickAction[] = [
-  { id: "browser", label: "Open Genome Browser", description: "Navigate to JBrowse viewer", icon: DeploymentUnitOutlined, to: "/browser" },
-  { id: "genes", label: "Browse Genes", description: "Search gene models", icon: DeploymentUnitOutlined, to: "/genes" },
-  { id: "variants", label: "Search Variants", description: "Query SNP/INDEL catalog", icon: DeploymentUnitOutlined, to: "/variants" },
-  { id: "blast", label: "BLAST Search", description: "Sequence similarity search", icon: DeploymentUnitOutlined, to: "/blast" },
-  { id: "downloads", label: "Download Data", description: "Bulk VCF/FASTA downloads", icon: ArrowRightOutlined, to: "/downloads" },
-  { id: "help", label: "Help & Documentation", description: "User guides & tutorials", icon: ArrowRightOutlined, to: "/help" },
+  {
+    id: "browser",
+    labelKey: "commandPalette.browser.label",
+    label: "Open Genome Browser",
+    descriptionKey: "commandPalette.browser.description",
+    description: "Navigate to JBrowse viewer",
+    icon: DeploymentUnitOutlined,
+    to: "/search/gbrowse",
+  },
+  {
+    id: "genes",
+    labelKey: "commandPalette.genes.label",
+    label: "Browse Genes",
+    descriptionKey: "commandPalette.genes.description",
+    description: "Search gene models",
+    icon: DeploymentUnitOutlined,
+    to: "/genes",
+  },
+  {
+    id: "variants",
+    labelKey: "commandPalette.variants.label",
+    label: "Search Variants",
+    descriptionKey: "commandPalette.variants.description",
+    description: "Query SNP/INDEL catalog",
+    icon: DeploymentUnitOutlined,
+    to: "/variants",
+  },
+  {
+    id: "blast",
+    labelKey: "commandPalette.blast.label",
+    label: "BLAST Search",
+    descriptionKey: "commandPalette.blast.description",
+    description: "Sequence similarity search",
+    icon: DeploymentUnitOutlined,
+    to: "/blast",
+  },
+  {
+    id: "downloads",
+    labelKey: "commandPalette.downloads.label",
+    label: "Download Data",
+    descriptionKey: "commandPalette.downloads.description",
+    description: "Bulk VCF/FASTA downloads",
+    icon: ArrowRightOutlined,
+    to: "/downloads",
+  },
+  {
+    id: "help",
+    labelKey: "commandPalette.help.label",
+    label: "Help & Documentation",
+    descriptionKey: "commandPalette.help.description",
+    description: "User guides & tutorials",
+    icon: ArrowRightOutlined,
+    to: "/help",
+  },
 ];
+
+/** One row of the list: either the search submission or a quick action. */
+type PaletteEntry =
+  | { kind: "search"; id: string }
+  | { kind: "action"; id: string; action: QuickAction; label: string; description: string };
+
+/**
+ * Everything that can take focus inside the panel. The rows themselves are
+ * excluded: they carry `tabindex="-1"` because the combobox keeps focus in
+ * the field and points at the active row with `aria-activedescendant`.
+ */
+const FOCUSABLE_SELECTOR = [
+  'a[href]:not([tabindex="-1"])',
+  'button:not([disabled]):not([tabindex="-1"])',
+  'input:not([disabled]):not([tabindex="-1"])',
+  'select:not([disabled]):not([tabindex="-1"])',
+  'textarea:not([disabled]):not([tabindex="-1"])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(", ");
 
 export function CommandPalette() {
   const { t } = useTranslation();
@@ -38,10 +131,32 @@ export function CommandPalette() {
   const navigate = useNavigate();
   // antd's Input exposes its own imperative handle (`focus`/`blur`).
   const inputRef = React.useRef<InputRef>(null);
+  const panelRef = React.useRef<HTMLDivElement | null>(null);
+  /** The element that had focus when the palette opened; focus goes back there. */
+  const openerRef = React.useRef<HTMLElement | null>(null);
+  const reactId = React.useId();
+  const listboxId = `command-palette-listbox-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
   const resetPalette = React.useCallback(() => {
     setQuery("");
     setActiveIndex(0);
+  }, []);
+
+  /**
+   * Give focus back to the element that opened the palette.
+   *
+   * The trigger may be gone by the time the palette closes — picking a row can
+   * navigate away and unmount it. Focusing a detached node silently drops
+   * focus on `<body>`, which is exactly the failure this restore exists to
+   * prevent, so a disconnected trigger is skipped instead.
+   */
+  const restoreFocus = React.useCallback(() => {
+    const opener = openerRef.current;
+    openerRef.current = null;
+    if (!opener) return;
+    if (!opener.isConnected) return;
+    if (opener === document.body || opener === document.documentElement) return;
+    opener.focus();
   }, []);
 
   const closePalette = React.useCallback(() => {
@@ -50,6 +165,8 @@ export function CommandPalette() {
   }, [resetPalette]);
 
   const openPalette = React.useCallback(() => {
+    const active = document.activeElement;
+    openerRef.current = active instanceof HTMLElement ? active : null;
     resetPalette();
     setOpen(true);
   }, [resetPalette]);
@@ -83,48 +200,119 @@ export function CommandPalette() {
     return () => cancelAnimationFrame(frame);
   }, [open]);
 
-  // Filter actions by query
+  // Closing restores focus; unmounting does too, for the same reason.
+  React.useEffect(() => {
+    if (open) return;
+    restoreFocus();
+  }, [open, restoreFocus]);
+
+  React.useEffect(() => () => restoreFocus(), [restoreFocus]);
+
+  const trimmedQuery = query.trim();
+
+  // Filter actions by query. The haystack carries the rendered copy and the
+  // English fallback, so the palette stays searchable in either language.
   const filtered = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return QUICK_ACTIONS;
-    return QUICK_ACTIONS.filter(
-      (a) =>
-        a.label.toLowerCase().includes(q) ||
-        (a.description?.toLowerCase().includes(q) ?? false),
+    const q = trimmedQuery.toLowerCase();
+    const actions = QUICK_ACTIONS.map((action) => ({
+      action,
+      label: t(action.labelKey, { defaultValue: action.label }),
+      description: t(action.descriptionKey, { defaultValue: action.description }),
+    }));
+    if (!q) return actions;
+    return actions.filter(({ action, label, description }) =>
+      [label, description, action.label, action.description]
+        .join(" ")
+        .toLowerCase()
+        .includes(q),
     );
-  }, [query]);
+  }, [t, trimmedQuery]);
+
+  // One ordered list of rows, so the active index means the same thing for the
+  // arrow keys, `aria-activedescendant` and Enter.
+  const entries = React.useMemo<PaletteEntry[]>(() => {
+    const actionEntries = filtered.map(({ action, label, description }) => ({
+      kind: "action" as const,
+      id: action.id,
+      action,
+      label,
+      description,
+    }));
+    if (!trimmedQuery) return actionEntries;
+    return [{ kind: "search" as const, id: "search" }, ...actionEntries];
+  }, [filtered, trimmedQuery]);
+
+  const lastIndex = Math.max(entries.length - 1, 0);
+  const clampIndex = (index: number) => Math.max(0, Math.min(index, lastIndex));
+  const active = entries[clampIndex(activeIndex)];
+  const activeOptionId = active ? `${listboxId}-option-${active.id}` : undefined;
 
   const handleSelect = React.useCallback(
     (action: QuickAction) => {
       closePalette();
       if (action.to) {
         navigate({ to: action.to as never });
-      } else if (action.searchQuery && query.trim()) {
-        navigate({ to: "/search", search: { q: query.trim() } } as never);
+      } else if (action.searchQuery && trimmedQuery) {
+        navigate({ to: "/search", search: { q: trimmedQuery } } as never);
       }
     },
-    [closePalette, navigate, query],
+    [closePalette, navigate, trimmedQuery],
   );
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const activate = React.useCallback(
+    (entry: PaletteEntry | undefined) => {
+      if (!entry) return;
+      if (entry.kind === "search") {
+        closePalette();
+        void navigate({ to: "/search", search: { q: trimmedQuery } } as never);
+        return;
+      }
+      handleSelect(entry.action);
+    },
+    [closePalette, handleSelect, navigate, trimmedQuery],
+  );
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      const actionOffset = query.trim() ? 1 : 0;
-      const maxIndex = Math.max(0, filtered.length + actionOffset - 1);
-      setActiveIndex((i) => Math.min(i + 1, maxIndex));
+      setActiveIndex((i) => clampIndex(i + 1));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setActiveIndex((i) => Math.max(i - 1, 0));
+      setActiveIndex((i) => clampIndex(i - 1));
     } else if (e.key === "Enter") {
       e.preventDefault();
-      if (activeIndex === 0 && query.trim()) {
-        // Submit search
-        closePalette();
-        navigate({ to: "/search", search: { q: query.trim() } } as never);
-      } else if (filtered[activeIndex - (query.trim() ? 1 : 0)]) {
-        const idx = activeIndex - (query.trim() ? 1 : 0);
-        if (idx >= 0) handleSelect(filtered[idx]);
+      activate(active);
+    }
+  };
+
+  /**
+   * Keep Tab inside the modal. The overlay declares `aria-modal="true"`, so
+   * letting focus walk into the header behind the backdrop would put the focus
+   * ring where the user cannot see it.
+   */
+  const handlePanelKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "Tab") return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const focusable = Array.from(
+      panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+    ).filter((el) => !el.hidden && el.getAttribute("aria-hidden") !== "true");
+    if (focusable.length === 0) {
+      e.preventDefault();
+      return;
+    }
+    const current = document.activeElement as HTMLElement | null;
+    const index = current ? focusable.indexOf(current) : -1;
+    if (e.shiftKey) {
+      if (index <= 0) {
+        e.preventDefault();
+        focusable[focusable.length - 1].focus();
       }
+      return;
+    }
+    if (index === -1 || index === focusable.length - 1) {
+      e.preventDefault();
+      focusable[0].focus();
     }
   };
 
@@ -139,8 +327,10 @@ export function CommandPalette() {
       aria-label={t("commandPalette.label")}
     >
       <div
+        ref={panelRef}
         className="search-modal-panel w-full max-w-xl overflow-hidden rounded-2xl border bg-popover shadow-2xl"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={handlePanelKeyDown}
       >
         {/* Search input */}
         <div className="flex items-center gap-3 border-b px-4 py-3">
@@ -156,6 +346,11 @@ export function CommandPalette() {
             onKeyDown={handleKeyDown}
             placeholder={t("commandPalette.placeholder")}
             className="h-9 flex-1 text-base"
+            role="combobox"
+            aria-expanded="true"
+            aria-autocomplete="list"
+            aria-controls={listboxId}
+            aria-activedescendant={activeOptionId}
             aria-label={t("commandPalette.inputLabel")}
           />
           <kbd>ESC</kbd>
@@ -170,59 +365,78 @@ export function CommandPalette() {
 
         {/* Results */}
         <div className="max-h-[50vh] overflow-y-auto p-2">
-          {/* Search submission option */}
-          {query.trim() && (
-            <Button
-              type="text"
-              block
-              onClick={() => {
-                closePalette();
-                void navigate({ to: "/search", search: { q: query.trim() } });
-              }}
-              className={cn(
-                "h-auto justify-start gap-3 px-3 py-2.5 text-left text-sm",
-                activeIndex === 0 && "bg-accent text-accent-foreground",
-              )}
-            >
-              <SearchOutlined className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-              <span className="flex-1">
-                {t("commandPalette.searchingFor")}{" "}
-                <span className="font-semibold">&ldquo;{query.trim()}&rdquo;</span>
-              </span>
-              <ArrowRightOutlined className="size-3.5 text-muted-foreground" aria-hidden />
-            </Button>
-          )}
-
-          {/* Quick actions */}
-          {(query.trim() ? filtered : QUICK_ACTIONS).map((action, i) => {
-            const idx = i + (query.trim() ? 1 : 0);
-            const Icon = action.icon;
-            return (
-              <Button
-                key={action.id}
-                type="text"
-                block
-                onClick={() => handleSelect(action)}
-                className={cn(
-                  "h-auto justify-start gap-3 px-3 py-2.5 text-left text-sm",
-                  activeIndex === idx && "bg-accent text-accent-foreground",
-                )}
-              >
-                <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                <span className="flex-1">
-                  <span className="font-medium">{action.label}</span>
-                  {action.description && (
-                    <span className="ml-2 text-xs text-muted-foreground">{action.description}</span>
+          <div
+            id={listboxId}
+            role="listbox"
+            aria-label={t("commandPalette.results")}
+            className="flex flex-col"
+          >
+            {entries.map((entry, index) => {
+              const selected = index === clampIndex(activeIndex);
+              const optionId = `${listboxId}-option-${entry.id}`;
+              if (entry.kind === "search") {
+                return (
+                  <Button
+                    key={entry.id}
+                    type="text"
+                    block
+                    role="option"
+                    id={optionId}
+                    aria-selected={selected}
+                    aria-label={t("commandPalette.searchLabel", { query: trimmedQuery })}
+                    tabIndex={-1}
+                    onClick={() => activate(entry)}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    className={cn(
+                      "h-auto justify-start gap-3 px-3 py-2.5 text-left text-sm",
+                      selected && "bg-accent text-accent-foreground",
+                    )}
+                  >
+                    <SearchOutlined className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                    <span className="flex-1">
+                      {t("commandPalette.searchingFor")}{" "}
+                      <span className="font-semibold">&ldquo;{trimmedQuery}&rdquo;</span>
+                    </span>
+                    <ArrowRightOutlined className="size-3.5 text-muted-foreground" aria-hidden />
+                  </Button>
+                );
+              }
+              const Icon = entry.action.icon;
+              return (
+                <Button
+                  key={entry.id}
+                  type="text"
+                  block
+                  role="option"
+                  id={optionId}
+                  aria-selected={selected}
+                  tabIndex={-1}
+                  onClick={() => activate(entry)}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  className={cn(
+                    "h-auto justify-start gap-3 px-3 py-2.5 text-left text-sm",
+                    selected && "bg-accent text-accent-foreground",
                   )}
-                </span>
-                <ArrowRightOutlined className="size-3.5 text-muted-foreground" aria-hidden />
-              </Button>
-            );
-          })}
+                >
+                  <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                  <span className="flex-1">
+                    <span className="font-medium">{entry.label}</span>
+                    {entry.description && (
+                      <span className="ml-2 text-xs text-muted-foreground">{entry.description}</span>
+                    )}
+                  </span>
+                  <ArrowRightOutlined className="size-3.5 text-muted-foreground" aria-hidden />
+                </Button>
+              );
+            })}
+          </div>
 
-          {filtered.length === 0 && !query.trim() ? null : filtered.length === 0 && query.trim() ? (
-            <p className="px-3 py-6 text-center text-sm text-muted-foreground">
-              {t("commandPalette.noResults", { query: query.trim() })}
+          {filtered.length === 0 && trimmedQuery ? (
+            <p
+              role="status"
+              className="px-3 py-6 text-center text-sm text-muted-foreground"
+            >
+              {t("commandPalette.noResults", { query: trimmedQuery })}
             </p>
           ) : null}
         </div>

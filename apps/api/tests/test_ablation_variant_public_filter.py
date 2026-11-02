@@ -1,20 +1,9 @@
 """Public-boundary guards for the variant mutant-line filter.
 
-``variant_facts.mutant_line_surrogate_id`` is a ClickHouse ``UInt32`` holding the
-mutant line's *internal* key. The public API previously accepted
-``?mutant_line_id=`` and bound it to that column verbatim, so:
-
-* a public identifier (``SM7QF3Z9P2A``) was sent as if it were a UInt32 — the
-  filter matched nothing at best;
-* a numeric value was accepted as a filter, letting a caller probe the internal
-  key space through a public endpoint.
-
-The contract now is: the public filter takes a **public** identifier, the server
-resolves it to the internal key inside the resolved published release, and a
-numeric/internal value is rejected with 422 before any lookup.
-
-Unit-level guards (no PostgreSQL): the resolver is driven with a fake session
-that records the statement.
+Historical fact surrogates are hashes, not PostgreSQL primary keys. Public
+identifiers resolve to the fact's line name inside the visible release; neither
+private names nor surrogate keys are accepted from clients. The real PostgreSQL
+HTTP regression lives in test_variant_mutant_identity.py.
 """
 
 from __future__ import annotations
@@ -75,7 +64,7 @@ def test_internal_or_malformed_values_are_rejected_as_client_input(value: str):
         import asyncio
 
         asyncio.run(
-            variants_routes._resolve_mutant_line_key(  # noqa: SLF001
+            variants_routes._resolve_mutant_line_name(  # noqa: SLF001
                 db, value, release_context=_context()
             )
         )
@@ -92,17 +81,17 @@ def _cased(value: str, case: str) -> str:
 
 @pytest.mark.parametrize("case", ["upper", "lower"])
 def test_public_identifiers_are_accepted_case_insensitively(case: str):
-    db = _RecordingDb(value=4242)
+    db = _RecordingDb(value="private-line-name")
 
     import asyncio
 
     resolved = asyncio.run(
-        variants_routes._resolve_mutant_line_key(  # noqa: SLF001
+        variants_routes._resolve_mutant_line_name(  # noqa: SLF001
             db, _cased(_PUBLIC_ID, case), release_context=_context()
         )
     )
 
-    assert resolved == 4242
+    assert resolved == "private-line-name"
 
 
 def test_the_issuer_produces_ids_this_validator_accepts():
@@ -118,12 +107,12 @@ def test_the_issuer_produces_ids_this_validator_accepts():
 
 def test_resolution_filters_by_release_visibility_and_public_id():
     """Ablation: dropping the release predicate resolves a draft release's line."""
-    db = _RecordingDb(value=4242)
+    db = _RecordingDb(value="private-line-name")
 
     import asyncio
 
     asyncio.run(
-        variants_routes._resolve_mutant_line_key(  # noqa: SLF001
+        variants_routes._resolve_mutant_line_name(  # noqa: SLF001
             db, _PUBLIC_ID, release_context=_context()
         )
     )
@@ -144,7 +133,7 @@ def test_an_unknown_public_id_is_a_404_not_a_422():
 
     with pytest.raises(NotFoundError):
         asyncio.run(
-            variants_routes._resolve_mutant_line_key(  # noqa: SLF001
+            variants_routes._resolve_mutant_line_name(  # noqa: SLF001
                 db, _PUBLIC_ID, release_context=_context()
             )
         )
@@ -160,7 +149,7 @@ def test_variant_filter_schema_marks_the_field_internal():
 
     params = VariantFilterParams()
     # Nothing is accepted from a client by default...
-    assert params.mutant_line_id is None
+    assert params.mutant_line_name is None
     # ...and the field carries the internal-only contract in its source docs.
     import inspect
 

@@ -230,5 +230,3 @@ export function ExternalArticleImportModal({
     </Modal>
   );
 }
-
-export default ExternalArticleImportModal;

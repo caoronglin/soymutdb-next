@@ -3,8 +3,8 @@
 from .analytics_service import AnalyticsService
 from .auth_service import AuthService, auth_service
 from .blast_service import BlastService
-from .clickhouse_service import ClickHouseService
 from .gene_service import GeneService
+from .postgres_variant_service import PostgresVariantService
 from .search_service import SearchService
 from .seed_service import SeedService
 from .track_service import TrackService
@@ -14,7 +14,7 @@ __all__ = [
     "AnalyticsService",
     "AuthService",
     "BlastService",
-    "ClickHouseService",
+    "PostgresVariantService",
     "GeneService",
     "SearchService",
     "SeedService",

@@ -37,6 +37,15 @@ def get_database_url() -> str:
         url = url.replace("+asyncpg", "+psycopg2")
     if "+psycopg" in url and "+psycopg2" not in url:
         url = url.replace("+psycopg", "+psycopg2")
+    # A bare ``postgresql://`` carries no driver. SQLAlchemy 2 resolves it to
+    # the psycopg **v3** dialect, but this worker declares ``psycopg2-binary``
+    # and not ``psycopg``: the connection then dies with "No module named
+    # 'psycopg'" instead of connecting. The driver's own default DSN has the
+    # bare form, so this is the shape a deployment most likely writes.
+    if url.startswith("postgresql://"):
+        url = "postgresql+psycopg2://" + url[len("postgresql://"):]
+    elif url.startswith("postgres://"):
+        url = "postgresql+psycopg2://" + url[len("postgres://"):]
     return url
 
 

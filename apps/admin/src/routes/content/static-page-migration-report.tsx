@@ -1,5 +1,6 @@
 import { EyeOutlined } from "@ant-design/icons";
 import { useMutation } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { http } from "@soymutdb/api-client";
 import {
   Alert,
@@ -80,6 +81,7 @@ const migrationColumns: ProColumns<MigrationItem>[] = [
 ];
 
 export function StaticPageMigrationReport() {
+  const { t } = useTranslation();
   const preview = useMutation({
     mutationFn: () =>
       http.post<MigrationReport>("/admin/content/pages/migrate-to-page-builder/dry-run", { json: {} }),
@@ -91,10 +93,10 @@ export function StaticPageMigrationReport() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Typography.Title level={5} className="mb-1 text-sm">
-            Page Builder migration preview
+            {t("admin.content.migrationTitle")}
           </Typography.Title>
           <Typography.Paragraph className="mb-0 text-sm text-muted-foreground">
-            This preview only validates legacy pages and reports draft candidates. It never creates, publishes, or changes source pages.
+            {t("admin.content.migrationBody")}
           </Typography.Paragraph>
         </div>
         <Button
@@ -102,7 +104,7 @@ export function StaticPageMigrationReport() {
           loading={preview.isPending}
           onClick={() => preview.mutate()}
         >
-          Preview migration
+          {t("admin.content.previewMigration")}
         </Button>
       </div>
 

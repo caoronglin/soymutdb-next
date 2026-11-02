@@ -45,6 +45,49 @@ def test_dataset_version_rejects_legacy_xls_code_files_and_bad_checksum() -> Non
         )
 
 
+def test_module_aware_limits_reach_the_scientific_branch() -> None:
+    """A registered module may carry the wider scientific shape.
+
+    The generic page limits must not be baked into the request schemas:
+    ``MAX_SCIENCE_ROWS`` / ``MAX_SCIENCE_COLUMNS`` are unreachable otherwise.
+    """
+    version = DatasetVersionCreateRequest(
+        **{
+            **_valid_dataset_version(),
+            "row_count": 2_000_000,
+            "column_count": 200,
+            "module_key": "genes",
+        }
+    )
+    assert version.module_key == "genes"
+
+    with pytest.raises(PydanticValidationError, match="Generic pages are limited to 50 columns"):
+        DatasetVersionCreateRequest(**{**_valid_dataset_version(), "column_count": 200})
+
+    validation = ImportValidationRequest(
+        row_count=2_000_000,
+        column_count=200,
+        field_mapping=[],
+        module_key="genes",
+    )
+    assert validation.module_key == "genes"
+
+    with pytest.raises(PydanticValidationError, match="Generic pages"):
+        ImportValidationRequest(
+            row_count=2_000_000,
+            column_count=200,
+            field_mapping=[],
+        )
+
+    with pytest.raises(PydanticValidationError, match="less than or equal to 256"):
+        ImportValidationRequest(
+            row_count=10,
+            column_count=257,
+            field_mapping=[],
+            module_key="genes",
+        )
+
+
 def test_draft_and_mapping_contracts_are_bounded() -> None:
     draft = ImportDraftCreateRequest(
         dataset_version_id=uuid.uuid4(),

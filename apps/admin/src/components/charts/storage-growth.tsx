@@ -1,9 +1,20 @@
-import { useEffect, useRef } from "react";
-import * as echarts from "echarts";
+import * as React from "react";
+import { ChartCanvas } from "@soymutdb/charts";
+import type { ChartDefinition, ChartTooltipContext } from "@soymutdb/charts";
 import { useTranslation } from "react-i18next";
 import { cn } from "../../lib/cn";
 import { formatFileSize } from "../../lib/format";
-import { Empty, ProCard } from "@/lib/antd";
+// Relative for the same reason as the sibling charts: this app's vitest config
+// has no "@/" alias.
+import { Empty, ProCard } from "../../lib/antd";
+import {
+  ADMIN_CHART_HEIGHT,
+  STORAGE_SERIES_COLORS,
+  type ChartTrendRow,
+  toTrendRows,
+  useAdminChartAnimation,
+  useAdminChartTheme,
+} from "./chart-adapter";
 export interface StorageGrowthDataPoint {
   date: string;
   bytes: number;
@@ -15,89 +26,66 @@ interface StorageGrowthChartProps {
 }
 
 /**
- * ECharts area chart showing cumulative storage growth over time.
- * Y-axis values are formatted as human-readable file sizes (KB/MB/GB/TB).
+ * Area chart showing cumulative storage growth over time.
+ *
+ * Values are formatted as human-readable file sizes (KB/MB/GB/TB) through the
+ * console's own formatFileSize, both in the tooltip and -- once the facade
+ * carries an axis formatter -- on the y axis.
  */
 export function StorageGrowthChart({ data, className }: StorageGrowthChartProps) {
-  const chartRef = useRef<HTMLDivElement>(null);
-  const instanceRef = useRef<echarts.ECharts | null>(null);
   const { t } = useTranslation();
+  const theme = useAdminChartTheme(STORAGE_SERIES_COLORS);
+  const animation = useAdminChartAnimation();
 
-  useEffect(() => {
-    if (!chartRef.current) return;
-    let disposed = false;
-    void import("echarts").then((echarts) => {
-      if (disposed || !chartRef.current) return;
-      instanceRef.current = echarts.init(chartRef.current);
-    });
-    const resize = () => instanceRef.current?.resize();
-    window.addEventListener("resize", resize);
-    return () => {
-      window.removeEventListener("resize", resize);
-      instanceRef.current?.dispose();
-      disposed = true;
-    };
-  }, []);
+  const rows = React.useMemo<ChartTrendRow[]>(
+    () => toTrendRows(data, (datum) => datum.bytes),
+    [data],
+  );
 
-  useEffect(() => {
-    if (!instanceRef.current) return;
-    const isDark =
-      document.documentElement.getAttribute("data-theme") === "dark";
+  const definition = React.useMemo<ChartDefinition>(
+    () => ({
+      kind: "area",
+      x: "date",
+      y: "value",
+      categoryOrder: "appearance",
+      palette: STORAGE_SERIES_COLORS,
+      legend: false,
+      gradient: { from: "rgba(78, 155, 74, 0.3)", to: "rgba(78, 155, 74, 0.02)" },
+      // BLOCKED(chart-adapter): the y axis used formatFileSize. The facade
+      // resolves axis labels from the serializable valueFormat token, and its
+      // "bytes" token prints KiB/MiB/GiB, which is not the console's output.
+      // The axis formatter prop has been requested; until it lands the axis
+      // stays on the default numeric formatter rather than silently changing
+      // the units. Do not set valueFormat here without checking that.
+    }),
+    [],
+  );
 
-    instanceRef.current.setOption({
-      tooltip: {
-        trigger: "axis",
-        valueFormatter: (v: number) => formatFileSize(v),
-        backgroundColor: isDark ? "#222822" : "#ffffff",
-        borderColor: isDark ? "#3a4a3a" : "#e0e5e0",
-        textStyle: { color: isDark ? "#f0f4f0" : "#1a2b1a" },
-      },
-      grid: { left: 64, right: 16, top: 24, bottom: 32 },
-      xAxis: {
-        type: "category",
-        data: data.map((d) => d.date),
-        boundaryGap: false,
-        axisLine: { lineStyle: { color: isDark ? "#3a4a3a" : "#e0e5e0" } },
-        axisLabel: { color: isDark ? "#a8b8a8" : "#5a6b5a", fontSize: 11 },
-      },
-      yAxis: {
-        type: "value",
-        axisLabel: {
-          color: isDark ? "#a8b8a8" : "#5a6b5a",
-          fontSize: 11,
-          formatter: (v: number) => formatFileSize(v),
-        },
-        axisLine: { lineStyle: { color: isDark ? "#3a4a3a" : "#e0e5e0" } },
-        splitLine: { lineStyle: { color: isDark ? "#2a3a2a" : "#f0f4f0" } },
-      },
-      series: [
-        {
-          name: t("admin.charts.storage", { defaultValue: "Storage" }),
-          type: "line",
-          smooth: true,
-          showSymbol: false,
-          data: data.map((d) => d.bytes),
-          itemStyle: { color: "#4e9b4a" },
-          lineStyle: { width: 2 },
-          areaStyle: {
-            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-              { offset: 0, color: "rgba(78, 155, 74, 0.3)" },
-              { offset: 1, color: "rgba(78, 155, 74, 0.02)" },
-            ]),
-          },
-        },
-      ],
-    });
-  }, [data, t]);
+  const tooltipFormatter = React.useMemo(
+    () =>
+      ({ datum }: ChartTooltipContext) =>
+        formatFileSize(Number(datum.value)),
+    [],
+  );
+
+  const hasData = data.length > 0;
 
   return (
     <ProCard className={cn(className)} title={t("admin.charts.storageGrowth", { defaultValue: "Storage Growth" })}>
-        <div className="relative">
-          <div ref={chartRef} className="h-64 w-full" role="img" aria-label={t("admin.charts.storageGrowthAria", { defaultValue: "Storage growth chart" })} />
-          {data.length === 0 ? <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("admin.charts.noData", { defaultValue: "No chart data" })} /> : null}
+        <div className="relative h-64 w-full">
+          {hasData ? (
+            <ChartCanvas
+              definition={definition}
+              data={rows}
+              label={t("admin.charts.storageGrowthAria", { defaultValue: "Storage growth chart" })}
+              height={ADMIN_CHART_HEIGHT}
+              theme={theme}
+              animation={animation}
+              tooltipFormatter={tooltipFormatter}
+            />
+          ) : null}
+          {hasData ? null : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("admin.charts.noData", { defaultValue: "No chart data" })} />}
       </div>
     </ProCard>
   );
 }
-
-export default StorageGrowthChart;

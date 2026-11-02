@@ -1,10 +1,19 @@
 import * as React from "react";
-import type { EChartsType } from "echarts";
+
+import {
+  ChartCanvas,
+  type ChartAxisFormatter,
+  type ChartAnimationInput,
+  type ChartDatumStyleFn,
+  type ChartCanvasStatus,
+  type ChartTooltipFormatter,
+} from "./ChartCanvas";
 import type { ChartDefinition } from "./definitions";
 import { CHART_HEIGHT } from "./definitions";
+import type { ChartThemeInput } from "./theme";
 
-export interface ChartFigureProps<TDatum = unknown> {
-  /** An ECharts option built by the helpers in `./definitions`. */
+export interface ChartFigureProps<TDatum = Record<string, unknown>> {
+  /** The serializable chart contract built by the helpers in ./definitions. */
   definition: ChartDefinition;
   data: readonly TDatum[];
   /** Accessible name for the graphic. */
@@ -17,6 +26,19 @@ export interface ChartFigureProps<TDatum = unknown> {
   tableRow: (datum: TDatum) => readonly string[];
   emptyText?: string;
   height?: number;
+  /** Already-resolved theme; see ChartCanvas. Never required. */
+  theme?: ChartThemeInput;
+  animation?: ChartAnimationInput;
+  /** Formats value-axis tick labels; pass formatFileSize unchanged. */
+  axisFormatter?: ChartAxisFormatter;
+  datumStyle?: ChartDatumStyleFn;
+  /**
+   * Mirrors the canvas lifecycle so a consumer can drive its own loading
+   * skeleton. The facade does not render a skeleton, so without this the
+   * consumer would have to poll the DOM.
+   */
+  onStatusChange?: (status: ChartCanvasStatus) => void;
+  tooltipFormatter?: ChartTooltipFormatter;
 }
 
 const visuallyHidden: React.CSSProperties = {
@@ -32,10 +54,15 @@ const visuallyHidden: React.CSSProperties = {
 };
 
 /**
- * One chart plus its exact-value alternative. A runtime failure degrades to
- * the same accessible table instead of taking down the containing route.
+ * One chart plus its exact-value alternative.
+ *
+ * The accessibility contract is unchanged from the previous implementation:
+ * role="img" with aria-label and aria-describedby, a details/summary table of
+ * exact values, and the chart-empty / chart-unavailable / chart-values test
+ * ids. A runtime failure degrades to the same accessible table instead of
+ * taking down the containing route.
  */
-export function ChartFigure<TDatum = unknown>({
+export function ChartFigure<TDatum = Record<string, unknown>>({
   definition,
   data,
   label,
@@ -44,83 +71,38 @@ export function ChartFigure<TDatum = unknown>({
   tableRow,
   emptyText = "No data for this selection.",
   height = CHART_HEIGHT,
+  theme,
+  animation,
+  axisFormatter,
+  datumStyle,
+  onStatusChange,
+  tooltipFormatter,
 }: ChartFigureProps<TDatum>) {
-  const chartElement = React.useRef<HTMLDivElement | null>(null);
-  const chartRef = React.useRef<EChartsType | null>(null);
-  const latestDefinition = React.useRef(definition);
   const [chartFailed, setChartFailed] = React.useState(false);
   const descriptionId = React.useId();
   const hasData = data.length > 0;
 
-  latestDefinition.current = definition;
-
-  React.useEffect(() => {
-    if (!hasData || chartFailed || !chartElement.current) return;
-
-    let disposed = false;
-    let chart: EChartsType | null = null;
-    let observer: ResizeObserver | null = null;
-    let fallbackResize: (() => void) | null = null;
-
-    void import("echarts")
-      .then((echarts) => {
-        if (disposed || !chartElement.current) return;
-        try {
-          chart = echarts.init(chartElement.current, undefined, { renderer: "canvas" });
-          chartRef.current = chart;
-          chart.setOption(latestDefinition.current, { notMerge: true });
-          const resize = () => chart?.resize();
-          if (typeof ResizeObserver !== "undefined") {
-            observer = new ResizeObserver(resize);
-            observer.observe(chartElement.current);
-          } else {
-            fallbackResize = resize;
-            window.addEventListener("resize", fallbackResize);
-          }
-          chart.resize();
-        } catch (error) {
-          console.error("[ChartFigure] the chart runtime failed; showing the value table instead", error);
-          setChartFailed(true);
-        }
-      })
-      .catch((error: unknown) => {
-        if (disposed) return;
-        console.error("[ChartFigure] the chart runtime failed; showing the value table instead", error);
-        setChartFailed(true);
-      });
-
-    return () => {
-      disposed = true;
-      observer?.disconnect();
-      if (fallbackResize) window.removeEventListener("resize", fallbackResize);
-      chart?.dispose();
-      if (chartRef.current === chart) chartRef.current = null;
-    };
-  }, [hasData, chartFailed]);
-
-  React.useEffect(() => {
-    const chart = chartRef.current;
-    if (!chart || chartFailed || !hasData) return;
-    try {
-      chart.setOption(definition, { notMerge: true });
-    } catch (error) {
-      console.error("[ChartFigure] the chart update failed; showing the value table instead", error);
-      setChartFailed(true);
-    }
-  }, [definition, chartFailed, hasData]);
+  // A definition change must not resurrect a chart that already failed; the
+  // failure is sticky for the life of the mounted figure.
+  const markFailed = React.useCallback(() => setChartFailed(true), []);
 
   return (
     <figure style={{ margin: 0 }}>
       {hasData && !chartFailed ? (
-        <div
-          role="img"
-          aria-label={label}
-          aria-describedby={description ? descriptionId : undefined}
-          style={{ width: "100%", height }}
-        >
-          {description ? <p id={descriptionId} style={visuallyHidden}>{description}</p> : null}
-          <div ref={chartElement} style={{ width: "100%", height: "100%" }} />
-        </div>
+        <ChartCanvas<TDatum>
+          definition={definition}
+          data={data}
+          label={label}
+          {...(description ? { description } : {})}
+          height={height}
+          {...(theme ? { theme } : {})}
+          {...(animation ? { animation } : {})}
+          {...(axisFormatter ? { axisFormatter } : {})}
+          {...(datumStyle ? { datumStyle } : {})}
+          {...(onStatusChange ? { onStatus: onStatusChange } : {})}
+          {...(tooltipFormatter ? { tooltipFormatter } : {})}
+          onFailure={markFailed}
+        />
       ) : null}
 
       {!hasData ? (
@@ -137,7 +119,7 @@ export function ChartFigure<TDatum = unknown>({
           data-testid="chart-unavailable"
           style={{ border: "1px dashed currentColor", borderRadius: 6, opacity: 0.7, padding: 16, textAlign: "center" }}
         >
-          {/* The fallback has no `role="img"` wrapper, so the description the
+          {/* The fallback has no role="img" wrapper, so the description the
               chart would have exposed to assistive tech must still be in the
               accessibility tree. */}
           {description ? <span id={descriptionId} style={visuallyHidden}>{description}</span> : null}
@@ -169,5 +151,3 @@ export function ChartFigure<TDatum = unknown>({
     </figure>
   );
 }
-
-export default ChartFigure;

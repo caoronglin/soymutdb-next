@@ -1,17 +1,31 @@
 #!/usr/bin/env bash
 # =====================================================================
-# SoyMutDB authoritative backup (format v2)
+# SoyMutDB authoritative backup (format v3)
 # =====================================================================
-# Backs up PostgreSQL, the complete ClickHouse database, and every
-# authoritative S3 bucket. A run is successful only after all components,
+# Backs up the authoritative native PostgreSQL database and every authoritative
+# S3 bucket. PostgreSQL replaced ClickHouse as the system of record, so the
+# default topology has no ClickHouse component and a run that cannot cover
+# every mandatory component fails instead of publishing a partial archive.
+# A run is successful only after all components,
 # manifests, checksums, the final archive, and any configured offsite copy
 # have been verified. node-exporter textfile metrics are updated atomically.
+#
+# The runtime is explicit. SOYMUTDB_BACKUP_RUNTIME (or --runtime) selects
+# compose (the default, unchanged behaviour) or native, which always uses the
+# host PostgreSQL client tools and a host 'mc' binary and never falls back to a
+# container. An unsupported value fails closed before any data is touched.
 #
 # Usage:
 #   bash deploy/scripts/backup.sh
 #   bash deploy/scripts/backup.sh --full   # compatibility alias
+#   bash deploy/scripts/backup.sh --runtime native
+#   bash deploy/scripts/backup.sh --no-repo-env --runtime native
 #
 # Important configuration:
+#   SOYMUTDB_BACKUP_RUNTIME compose (default) | native
+#   SOYMUTDB_BACKUP_REPO_ENV set to 0 to ignore the repository .env
+#   SOYMUTDB_NATIVE_WRITES_STOPPED must be 1 in the native runtime, where the
+#                                compose service table cannot be inspected
 #   BAK_BASE_DIR          local archive root (/opt/soymutdb/backups)
 #   BACKUP_METRICS_DIR    node-exporter textfile directory
 #   BAK_S3_BUCKETS        bucket list; may add buckets but cannot omit required
@@ -35,39 +49,59 @@ err()  { echo -e "${RED}[ERROR] $*${NC}" >&2; }
 die()  { err "$*"; return 1; }
 
 usage() {
-    sed -n '2,24p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,/^set -/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck source=deploy/scripts/mc-auth.sh
 source "${SCRIPT_DIR}/mc-auth.sh"
+# shellcheck source=deploy/scripts/backup-runtime.sh
+source "${SCRIPT_DIR}/backup-runtime.sh"
 
-if [[ -f "${PROJECT_ROOT}/.env" ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "${PROJECT_ROOT}/.env"
-    set +a
-fi
+RUNTIME_ARG=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --runtime)
+            [[ $# -ge 2 ]] || die "--runtime requires a value"
+            RUNTIME_ARG="$2"
+            shift 2
+            ;;
+        --runtime=*) RUNTIME_ARG="${1#*=}"; shift ;;
+        --no-repo-env)
+            SOYMUTDB_BACKUP_REPO_ENV=0
+            shift
+            ;;
+        --help|-h) usage; exit 0 ;;
+        --full)
+            warn "--full is deprecated; authoritative backup is always full."
+            shift
+            ;;
+        "") shift ;;
+        *) die "unknown argument: $1"; exit 1 ;;
+    esac
+done
 
-case "${1:-}" in
-    --help|-h) usage; exit 0 ;;
-    --full) warn "--full is deprecated; authoritative backup is always full." ;;
-    "") ;;
-    *) die "unknown argument: $1"; exit 1 ;;
-esac
-[[ $# -le 1 ]] || { die "too many arguments: $*"; exit 1; }
+backup_runtime_load_repo_env "${PROJECT_ROOT}" || die "repository .env loading was rejected"
+# Resolved before any directory, tool, or data access so an unsupported value
+# or a rejected .env policy cannot start a partial run.
+backup_runtime_require "${RUNTIME_ARG}" || exit 1
 
 readonly REQUIRED_S3_BUCKETS="genomic-data user-tracks blast-dbs exports gwas analyses"
+RUNTIME_RUNTIME_SUMMARY=""
 readonly -a QUIESCED_WRITER_SERVICES=(api worker-default worker-analyses worker-blast worker-ingest beat)
 
-INSTALL_DIR="${SOYMUTDB_INSTALL_DIR:-/opt/soymutdb}"
-if [[ -f "${INSTALL_DIR}/docker-compose.yml" ]]; then
-    COMPOSE_DIR="${INSTALL_DIR}"
-else
-    COMPOSE_DIR="${PROJECT_ROOT}"
+COMPOSE_DIR=""
+COMPOSE_BIN=()
+if ! backup_runtime_is_native; then
+    INSTALL_DIR="${SOYMUTDB_INSTALL_DIR:-/opt/soymutdb}"
+    if [[ -f "${INSTALL_DIR}/docker-compose.yml" ]]; then
+        COMPOSE_DIR="${INSTALL_DIR}"
+    else
+        COMPOSE_DIR="${PROJECT_ROOT}"
+    fi
+    COMPOSE_BIN=(docker compose --project-directory "${COMPOSE_DIR}" -f "${COMPOSE_DIR}/docker-compose.yml")
 fi
-COMPOSE_BIN=(docker compose --project-directory "${COMPOSE_DIR}" -f "${COMPOSE_DIR}/docker-compose.yml")
 
 BAK_BASE_DIR="${BAK_BASE_DIR:-/opt/soymutdb/backups}"
 BACKUP_METRICS_DIR="${BACKUP_METRICS_DIR:-/var/lib/node_exporter/textfile_collector}"
@@ -86,8 +120,6 @@ PG_HOST="${POSTGRES_HOST:-localhost}"
 PG_PORT="${POSTGRES_PORT:-5432}"
 PG_USER="${POSTGRES_USER:-soymutdb}"
 PG_DB="${POSTGRES_DB:-soymutdb}"
-CH_HOST="${CLICKHOUSE_HOST:-localhost}"
-CH_USER="${CLICKHOUSE_USER:-soymutdb}"
 S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9001}"
 S3_ACCESS_KEY="${S3_ACCESS_KEY:-${MINIO_ROOT_USER:-minioadmin}}"
 S3_SECRET_KEY="${S3_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}"
@@ -105,8 +137,6 @@ FINAL_MANIFEST_COPY=""
 FINAL_COMPLETE_FILE=""
 LOCAL_PUBLISH_STARTED=0
 BACKUP_SUCCEEDED=0
-CH_CONTAINER_BACKUP_CREATED=0
-CH_ZIP_NAME=""
 REMOTE_STAGE_URI=""
 REMOTE_STAGE_READY=0
 REMOTE_PUBLISH_STARTED=0
@@ -164,30 +194,12 @@ compose_exec() {
 }
 
 MC_CFG_DIR="${BAK_BASE_DIR}/.mc"
-mc_run() {
-    local env_name
-    local -a docker_env_args=()
-    if command -v mc >/dev/null 2>&1; then
-        mc --config-dir "${MC_CFG_DIR}" "$@"
-    else
-        for env_name in "${MC_ENV_NAMES[@]}"; do
-            docker_env_args+=(--env "${env_name}")
-        done
-        docker run --rm --network host \
-            "${docker_env_args[@]}" \
-            -v "${MC_CFG_DIR}:/root/.mc" \
-            -v "${BAK_BASE_DIR}:${BAK_BASE_DIR}" \
-            minio/mc:RELEASE.2024-01-01T00-00-00Z \
-            --config-dir /root/.mc "$@"
-    fi
-}
+# The runtime library owns the mc routing: compose may fall back to the
+# minio/mc image, native requires a real mc and never starts a container.
+mc_run() { runtime_mc_run "$@"; }
 
 cleanup_run_artifacts() {
     local uri
-    if [[ "${CH_CONTAINER_BACKUP_CREATED}" == "1" && -n "${CH_ZIP_NAME}" ]]; then
-        compose_exec clickhouse rm -f "/var/lib/clickhouse-backups/${CH_ZIP_NAME}" >/dev/null 2>&1 \
-            || warn "could not remove the current ClickHouse staging backup"
-    fi
     safe_remove_staging || true
     [[ -z "${PARTIAL_ARCHIVE}" ]] || rm -f -- "${PARTIAL_ARCHIVE}"
     [[ -z "${PARTIAL_SHA_FILE}" ]] || rm -f -- "${PARTIAL_SHA_FILE}"
@@ -226,6 +238,8 @@ on_exit() {
 }
 trap 'on_exit "$?"' EXIT
 
+RUNTIME_RUNTIME_SUMMARY="PostgreSQL: $(backup_runtime_pg_client_mode), S3: $(backup_runtime_mc_client_mode), writers: $(backup_runtime_writers_attestation)"
+
 mkdir -p "${BAK_BASE_DIR}" "${BACKUP_METRICS_DIR}" "${MC_CFG_DIR}" \
     || die "cannot create backup or metric directories"
 
@@ -251,23 +265,38 @@ for bucket in "${REQUIRED_BUCKET_ARRAY[@]}"; do
         || die "required S3 bucket missing from BAK_S3_BUCKETS: ${bucket}"
 done
 
-for tool in sha256sum tar stat find sort grep python3; do
-    command -v "${tool}" >/dev/null 2>&1 || die "required tool is unavailable: ${tool}"
-done
+# The compose runtime keeps exactly the tool set it always required; the
+# native runtime adds the host PostgreSQL clients it now calls directly.
+RUNTIME_PG_TOOLS=()
+if backup_runtime_is_native; then
+    RUNTIME_PG_TOOLS=(psql pg_dump)
+fi
+backup_runtime_assert_tools sha256sum tar stat find sort grep python3 \
+    "${RUNTIME_PG_TOOLS[@]}" || exit 1
+# A missing mc is fatal in the native runtime and never a container fallback.
+backup_runtime_assert_mc || exit 1
 
+# Compose runtime: the writer services must be observably stopped. Native
+# runtime: the service table is unavailable, so the runtime library requires an
+# explicit operator attestation and a live pg_stat_activity probe instead.
+# Neither path degrades to an unconditional skip.
 assert_writers_stopped() {
     local service running
     [[ "${BACKUP_WRITES_QUIESCED}" == "1" ]] \
-        || die "BACKUP_WRITES_QUIESCED=1 is required after stopping all writers"
+        || { die "BACKUP_WRITES_QUIESCED=1 is required after stopping all writers"; return 1; }
+    backup_runtime_is_native && return 0
     for service in "${QUIESCED_WRITER_SERVICES[@]}"; do
         if ! running="$("${COMPOSE_BIN[@]}" ps --status running -q "${service}" 2>/dev/null)"; then
             die "could not verify writer state for compose service: ${service}"
+            return 1
         fi
-        [[ -z "${running}" ]] \
-            || die "writer service must be stopped before backup: ${service}"
+        if [[ -n "${running}" ]]; then
+            die "writer service must be stopped before backup: ${service}"
+            return 1
+        fi
     done
 }
-assert_writers_stopped
+backup_runtime_assert_writers_stopped || exit 1
 
 STAGING_DIR="${BAK_BASE_DIR}/.staging/${TIMESTAMP}-$$"
 mkdir -p "${STAGING_DIR}"
@@ -275,7 +304,7 @@ mkdir -p "${STAGING_DIR}"
 echo -e "${CYAN}========================================${NC}"
 echo -e "${CYAN}  SoyMutDB Authoritative Backup${NC}"
 echo -e "${CYAN}========================================${NC}"
-echo "  Timestamp:  ${TIMESTAMP}"
+echo "  Runtime:    ${BACKUP_RUNTIME} (${RUNTIME_RUNTIME_SUMMARY})"
 echo "  Host:       ${HOSTNAME_SHORT}"
 echo "  Staging:    ${STAGING_DIR}"
 echo "  S3 buckets: ${S3_BUCKETS[*]}"
@@ -286,20 +315,7 @@ sha256_of() {
     sha256sum "$1" | awk '{print $1}'
 }
 
-pg_query() {
-    local sql="$1"
-    if [[ "${PG_HOST}" == "localhost" || "${PG_HOST}" == "127.0.0.1" ]]; then
-        compose_exec postgres psql -U "${PG_USER}" -d "${PG_DB}" -At -c "${sql}"
-    else
-        PGPASSWORD="${POSTGRES_PASSWORD:-soymutdb_dev_password}" \
-            psql -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}" -d "${PG_DB}" -At -c "${sql}"
-    fi
-}
-
-ch_query() {
-    local sql="$1"
-    compose_exec clickhouse clickhouse-client --user "${CH_USER}" -q "${sql}"
-}
+pg_query() { runtime_pg_query "$1"; }
 
 echo -e "${CYAN}[1/3] PostgreSQL...${NC}"
 PG_TABLE_LIST="${STAGING_DIR}/pg_tables.list"
@@ -325,69 +341,15 @@ PG_TABLES_SNAPSHOTED="$(wc -l < "${PG_ROWS_TSV}" | tr -d ' ')"
 [[ "${PG_TABLES_SNAPSHOTED}" -gt 0 ]] || die "PostgreSQL row snapshot is empty"
 
 PG_DUMP_FILE="${STAGING_DIR}/postgres.dump"
-if [[ "${PG_HOST}" == "localhost" || "${PG_HOST}" == "127.0.0.1" ]]; then
-    if ! compose_exec postgres pg_dump -U "${PG_USER}" -d "${PG_DB}" -Fc > "${PG_DUMP_FILE}"; then
-        die "PostgreSQL pg_dump failed"
-    fi
-else
-    if ! PGPASSWORD="${POSTGRES_PASSWORD:-soymutdb_dev_password}" \
-        pg_dump -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}" -d "${PG_DB}" \
-            -Fc -f "${PG_DUMP_FILE}"; then
-        die "PostgreSQL pg_dump failed"
-    fi
+if ! runtime_pg_dump_to "${PG_DUMP_FILE}"; then
+    die "PostgreSQL pg_dump failed"
 fi
 [[ -s "${PG_DUMP_FILE}" ]] || die "PostgreSQL pg_dump produced an empty file"
 PG_SIZE="$(stat -c%s "${PG_DUMP_FILE}")"
 PG_SHA="$(sha256_of "${PG_DUMP_FILE}")"
 info "PostgreSQL: ${PG_TABLES_SNAPSHOTED} tables, ${PG_SIZE} bytes"
 
-echo -e "${CYAN}[2/3] ClickHouse...${NC}"
-[[ "${CH_HOST}" == "localhost" || "${CH_HOST}" == "127.0.0.1" ]] \
-    || die "database-level ClickHouse backup requires the local compose backup disk"
-CH_ZIP_NAME="soymutdb_${TIMESTAMP}_$$.zip"
-if ! ch_query "BACKUP DATABASE soymutdb TO Disk('backups', '${CH_ZIP_NAME}')" >/dev/null; then
-    die "ClickHouse BACKUP DATABASE failed"
-fi
-CH_CONTAINER_BACKUP_CREATED=1
-compose_exec clickhouse test -s "/var/lib/clickhouse-backups/${CH_ZIP_NAME}" >/dev/null \
-    || die "ClickHouse database backup artifact is missing or empty"
-CH_BACKUP_FILE="${STAGING_DIR}/clickhouse_soymutdb.zip"
-"${COMPOSE_BIN[@]}" cp "clickhouse:/var/lib/clickhouse-backups/${CH_ZIP_NAME}" "${CH_BACKUP_FILE}" \
-    || die "copying the ClickHouse database backup failed"
-[[ -s "${CH_BACKUP_FILE}" ]] || die "copied ClickHouse database backup is empty"
-compose_exec clickhouse rm -f "/var/lib/clickhouse-backups/${CH_ZIP_NAME}" >/dev/null \
-    || die "removing the ClickHouse staging backup failed"
-CH_CONTAINER_BACKUP_CREATED=0
-
-CH_TABLE_LIST="${STAGING_DIR}/clickhouse_tables.list"
-CH_ROWS_TSV="${STAGING_DIR}/clickhouse_rows.tsv"
-if ! ch_query "SELECT name FROM system.tables WHERE database='soymutdb' AND name NOT LIKE '.inner%' ORDER BY name" > "${CH_TABLE_LIST}"; then
-    die "ClickHouse table discovery failed"
-fi
-[[ -s "${CH_TABLE_LIST}" ]] || die "ClickHouse row snapshot would be empty"
-: > "${CH_ROWS_TSV}"
-while IFS= read -r table; do
-    [[ -n "${table}" ]] || die "ClickHouse table discovery returned an empty name"
-    [[ "${table}" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] \
-        || die "ClickHouse row snapshot table identifier is unsafe: ${table}"
-    rows="$(ch_query "SELECT count() FROM soymutdb.\`${table}\`")" \
-        || die "ClickHouse row snapshot failed for ${table}"
-    parts="$(ch_query "SELECT count(DISTINCT partition) FROM system.parts WHERE database='soymutdb' AND table='${table}' AND active=1")" \
-        || die "ClickHouse partition snapshot failed for ${table}"
-    rows="${rows//$'\r'/}"
-    parts="${parts//$'\r'/}"
-    [[ "${rows}" =~ ^[0-9]+$ && "${parts}" =~ ^[0-9]+$ ]] \
-        || die "ClickHouse row snapshot is invalid for ${table}"
-    printf '%s\t%s\t%s\n' "${table}" "${rows}" "${parts}" >> "${CH_ROWS_TSV}"
-done < "${CH_TABLE_LIST}"
-rm -f -- "${CH_TABLE_LIST}"
-CH_TABLES_SNAPSHOTED="$(wc -l < "${CH_ROWS_TSV}" | tr -d ' ')"
-[[ "${CH_TABLES_SNAPSHOTED}" -gt 0 ]] || die "ClickHouse row snapshot is empty"
-CH_SIZE="$(stat -c%s "${CH_BACKUP_FILE}")"
-CH_SHA="$(sha256_of "${CH_BACKUP_FILE}")"
-info "ClickHouse: ${CH_TABLES_SNAPSHOTED} tables, ${CH_SIZE} bytes"
-
-echo -e "${CYAN}[3/3] S3 object data and policies...${NC}"
+echo -e "${CYAN}[2/3] S3 object data and policies...${NC}"
 S3_BUCKETS_FILE="${STAGING_DIR}/s3_buckets.txt"
 S3_MANIFEST_TSV="${STAGING_DIR}/s3_manifest.tsv"
 printf '%s\n' "${S3_BUCKETS[@]}" > "${S3_BUCKETS_FILE}"
@@ -460,15 +422,17 @@ ARTIFACT_MANIFEST_SIZE="$(stat -c%s "${ARTIFACT_MANIFEST}")"
 ARTIFACT_MANIFEST_SHA="$(sha256_of "${ARTIFACT_MANIFEST}")"
 
 S3_MANIFEST_SHA="$(sha256_of "${S3_MANIFEST_TSV}")"
-COMPONENT_HASH="$(printf '%s%s%s' "${PG_SHA}" "${CH_SHA}" "${S3_MANIFEST_SHA}" | sha256sum | cut -c1-8)"
+COMPONENT_HASH="$(printf '%s%s' "${PG_SHA}" "${S3_MANIFEST_SHA}" | sha256sum | cut -c1-8)"
 BACKUP_ID="${TIMESTAMP}-${COMPONENT_HASH}"
 ARCHIVE_NAME="${BACKUP_ID}.tar.gz"
 MANIFEST_FILE="${STAGING_DIR}/manifest.json"
 MANIFEST_TEMP="${MANIFEST_FILE}.partial"
 python3 - "${MANIFEST_TEMP}" "${BACKUP_ID}" "${HOSTNAME_SHORT}" \
-    "${PG_SIZE}" "${PG_TABLES_SNAPSHOTED}" "${CH_SIZE}" "${CH_TABLES_SNAPSHOTED}" \
+    "${PG_SIZE}" "${PG_TABLES_SNAPSHOTED}" \
     "${S3_OBJECT_COUNT}" "${S3_TOTAL_BYTES}" "${ARTIFACT_MANIFEST_SIZE}" \
-    "${ARTIFACT_MANIFEST_SHA}" <<'PY'
+    "${ARTIFACT_MANIFEST_SHA}" "${BACKUP_RUNTIME}" \
+    "$(backup_runtime_pg_client_mode)" "$(backup_runtime_mc_client_mode)" \
+    "$(backup_runtime_writers_attestation)" <<'PY'
 import datetime
 import json
 import sys
@@ -479,22 +443,30 @@ import sys
     hostname,
     pg_size,
     pg_tables,
-    ch_size,
-    ch_tables,
     s3_objects,
     s3_bytes,
     artifact_size,
     artifact_sha,
+    runtime_mode,
+    pg_client,
+    s3_client,
+    writers_attestation,
 ) = sys.argv[1:]
 manifest = {
-    "format_version": 2,
+    "format_version": 3,
     "backup_id": backup_id,
     "created_at": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
     "host": hostname,
-    "tool": "deploy/scripts/backup.sh authoritative-v2",
+    "tool": "deploy/scripts/backup.sh authoritative-v3",
     "consistency": {
         "mode": "writers_quiesced",
-        "scope": "postgres_clickhouse_s3_current_versions",
+        "scope": "postgres_s3_current_versions",
+    },
+    "runtime": {
+        "mode": runtime_mode,
+        "postgres_client": pg_client,
+        "s3_client": s3_client,
+        "writers_attestation": writers_attestation,
     },
     "components": {
         "postgres": {
@@ -503,13 +475,6 @@ manifest = {
             "row_counts_file": "pg_rows.tsv",
             "size": int(pg_size),
             "tables": int(pg_tables),
-        },
-        "clickhouse": {
-            "status": "ok",
-            "file": "clickhouse_soymutdb.zip",
-            "row_counts_file": "clickhouse_rows.tsv",
-            "size": int(ch_size),
-            "tables": int(ch_tables),
         },
         "s3": {
             "status": "ok",
@@ -542,7 +507,7 @@ FINAL_SHA_FILE="${FINAL_ARCHIVE}.sha256"
 FINAL_MANIFEST_COPY="${BAK_BASE_DIR}/${BACKUP_ID}.manifest.json"
 FINAL_COMPLETE_FILE="${FINAL_ARCHIVE}.complete"
 
-echo -e "${CYAN}Packaging and verifying archive...${NC}"
+echo -e "${CYAN}[3/3] Packaging, verifying, and publishing archive...${NC}"
 tar -C "$(dirname "${STAGING_DIR}")" -czf "${PARTIAL_ARCHIVE}" "$(basename "${STAGING_DIR}")" \
     || die "archive creation failed"
 ARCHIVE_SHA="$(sha256_of "${PARTIAL_ARCHIVE}")"
@@ -678,7 +643,7 @@ prune_local() {
     done
     for name in "${names[@]}"; do
         if [[ ! -f "${dir}/${name}.complete" ]]; then
-            keep["${name}"]="not-format-v2"
+            keep["${name}"]="no-complete-marker"
             continue
         fi
         timestamp="${name%.tar.gz}"
@@ -744,6 +709,7 @@ echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}  Backup Complete${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo "  Archive:  ${FINAL_ARCHIVE}"
+echo "  Runtime:  ${BACKUP_RUNTIME} (PostgreSQL: $(backup_runtime_pg_client_mode), S3: $(backup_runtime_mc_client_mode), writers: $(backup_runtime_writers_attestation))"
 echo "  Size:     ${BACKUP_SIZE}"
 echo "  SHA-256:  ${ARCHIVE_SHA}"
 echo "  Manifest: ${FINAL_MANIFEST_COPY}"

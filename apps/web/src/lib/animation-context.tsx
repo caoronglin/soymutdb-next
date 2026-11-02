@@ -12,7 +12,7 @@ import {
     type MotionPreference,
     type MotionSessionCeiling,
     type MotionSignals,
-} from "./motion-policy";
+} from "@soymutdb/ui-react";
 
 export type AnimationIntensity = MotionPreference;
 export interface AnimationPrefs {

@@ -13,7 +13,7 @@
 
 services:
   postgres:
-    image: postgres:18.4-alpine
+    image: postgres:18.6-alpine
     # Migration 0025 runs `CREATE EXTENSION pg_stat_statements`, which fails
     # unless the library is preloaded. The production topology sets the same
     # option; the preview must too, or `alembic upgrade head` cannot reach head.
@@ -35,36 +35,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    restart: unless-stopped
-
-  clickhouse:
-    # Preview-only qualification: 24.8 and 25.8 passed the same migration and
-    # idempotence fixture in CI. Existing CH data volumes may not be safely
-    # downgraded; back up / validate restore before starting this preview.
-    image: clickhouse/clickhouse-server:25.8-alpine
-    environment:
-      CLICKHOUSE_DB: soymutdb
-      CLICKHOUSE_USER: soymutdb
-      CLICKHOUSE_PASSWORD: "${CLICKHOUSE_PASSWORD:-soymutdb_dev_password}"
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-    ports:
-      - "127.0.0.1:8123:8123"
-      - "127.0.0.1:9000:9000"
-    volumes:
-      - preview-chdata:/var/lib/clickhouse
-      - preview-chbackups:/var/lib/clickhouse-backups
-      - ./infra/clickhouse/config.xml:/etc/clickhouse-server/config.d/custom.xml:ro
-      - ./infra/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    ulimits:
-      nofile:
-        soft: 262144
-        hard: 262144
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
     restart: unless-stopped
 
   redis:
@@ -125,8 +95,6 @@ services:
 
 volumes:
   preview-pgdata:
-  preview-chdata:
-  preview-chbackups:
   preview-redisdata:
   preview-redis-celerydata:
   preview-miniodata:

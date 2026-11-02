@@ -8,7 +8,8 @@
 > **上游**：v1.0 工程化改造 · v2.0 性能与动效 · v3.0 桌面客户端 · v4.0 架构与体验 · v5.0 内容与模板
 
 > **2026-09-26 校正（历史文档）**：文中 `packages/i18n` 已移除（现为 `packages/i18n-core`），
-> Tauri 桌面客户端方案已废弃，三端现为 Vue 3。
+> Tauri 桌面客户端方案已废弃。三端曾迁到 Vue 3，Vue 现已完全退役
+> （`scripts/check-vue-retirement.mjs` 断言通过），当前为 React 19 + Umi Max 4。
 
 ---
 
@@ -363,28 +364,30 @@ A-12 管线化 → A-15 行为契约 → S1 Spike → Tauri 客户端
 
 按优先级平铺，含来源、工作量、依赖。**本文档是任务状态的唯一权威来源**——子文档新增任务时同步更新此表。
 
+> **2026-10-18 状态复核**：本表是 2026-10-01 的归档快照。下列 A-09/A-12/A-13/A-17/A-19 等行已按当前代码就地对账并附证据；未复核的行保留原状态。任务级现状以 [`project-status.md`](project-status.md) 与 [`docs/aegis/INDEX.md`](../aegis/INDEX.md) 为准，本表不再单独充当“唯一权威”。
+
 | ID | 任务 | 来源 | 梯队 | 工作量 | 依赖 | 状态 |
 | --- | --- | --- | --- | --- | --- | --- |
 | A-01 | Admin 补 ErrorBoundary | v4.0 P0-1 | 1 | 0.5d | — | 已完成（已验证） |
 | A-02 | `pg_stat_statements` 基线周报 | v4.0 P0-2 | 1 | 1d | — | 已完成（Mamba PostgreSQL 16 preload/扩展、Top-20 周报脚本与 25 万行首份基线已验证） |
 | A-03 | StaticPage 进快照 + SSG | v5.0 P0-1 | 1 | 2–3d | — | 已完成（API 测试已验证） |
 | A-05 | 组件契约单一真相 + CI | v5.0 P0-3 | 1 | 1–2d | — | 已完成（已验证） |
-| A-04 | 查询性能四件套 | v4.0 P0-3 | 2 | 5–7d | A-02 | 进行中（Mamba 0027、25 万行 Bitmap Index Scan、真实 DB 搜索字面量/89.87 ms 调用/continuation cursor；多 source keyset 兼容契约已设计，见 `a04-search-keyset-continuation.md`） |
+| A-04 | 查询性能四件套 | v4.0 P0-3 | 2 | 5–7d | A-02 | 进行中（Mamba 0027、25 万行 Bitmap Index Scan、真实 DB 搜索字面量/89.87 ms 调用；多 source keyset 已在 `SearchService.global_search()` 落地：新搜索签发 sealed v1 cursor、legacy 十进制 cursor 保留 offset 语义，见 `apps/api/app/services/search_service.py:102-128`、`apps/api/tests/test_search_keyset.py`（7 项）与 `test_search_database_integration.py:120`） |
 | A-06 | 模板数据化 | v5.0 P0-2 | 2 | 4–5d | — | 已完成（Mamba 0026、模板 CRUD/builtin 不可变与 seed upsert 真实 DB、模型/API/OpenAPI client 已验证） |
 | A-07 | 设置页拆分 | v4.0 P0-4 | 2 | 3–4d | A-01 | 已完成（四个独立表单及 CDN revisioned settings optimistic patch 已验证） |
 | A-16 | `hash_ip` 盐外置 | C3 勘误 | 2 | 0.5d | — | 已完成（Compose 注入已补） |
-| A-11 | 首屏性能七项 | v2.0 P0 | 3 | 8–10d | — | 进行中（AntD provider 延迟加载后 static-artifact 初始 JS 930 KB（≤1.2 MB guard）、CSS 78.6 KB；仍缺生产 RUM LCP/INP） |
+| A-11 | 首屏性能七项 | v2.0 P0 | 3 | 8–10d | — | 进行中（AntD provider 延迟加载后 static-artifact 初始 JS 930 KB（≤1.2 MB guard）、CSS 78.6 KB；字体子集化已落地，每应用 13.07 MB → 2.81 MB，见 `docs/dev/font-subsetting.md` 与 `scripts/test_portal_font_subset.py`，但尚未达到 §8 M2 的 ≤1.5 MB 目标；仍缺生产 RUM LCP/INP） |
 | A-08 | content.tsx 拆分 | v5.0 §5.2 | 3 | 1–2d | A-01 | 已完成（252 行组件拆分、URL state 与路由组合测试已验证） |
 | A-20 | 导航重构 | v5.0 P1-1 | 3 | 1d | A-06 | 已完成（统一 Content 导航与安全 Legacy Pages 迁移预览已验证） |
-| A-09 | 导入向导重构 | v4.0 P1-1 | 3 | 4–5d | A-01 | 进行中（类型、来源、模块预览、验证报告切片；submit route upload-open contract 已类型验证；Imports dashboard 已有仅暴露 resume-safe metadata 的 server draft list 与 Resume link；`?draft=<id>` 使用既有 getDraft() 加载 persisted state，Mamba API/client/Admin 聚焦测试通过；未在 pre-upload wizard 伪造 DatasetVersion 元数据，mapping/patch/validate/commit editor controls 仍待接入） |
-| A-12 | 横切管线化 | v4.0 P1-3 | 3 | 6–8d | — | 进行中（声明式缓存与六个 Admin 写端点审计策略已验证；路径/方法/角色冻结基线已加入测试） |
+| A-09 | 导入向导重构 | v4.0 P1-1 | 3 | 4–5d | A-01 | 进行中（2026-10-18 复核：mapping/patch/validate/commit 编辑器控件已接入，不再“待接入”——`apps/api/app/api/v1/import_studio.py:379,418,471,499` 提供四个端点，`packages/api-client/src/admin-import-studio.ts:98` 暴露同名客户端，`apps/admin/src/components/import-draft-editor.tsx:75-151` 渲染四组控件并由 `apps/admin/src/routes/imports.tsx:898` 挂到 Resume 面板；剩余：`/imports/new` 仍委托旧上传对话框（`apps/admin/src/routes/imports/import-submit-entry.tsx`），四个 step 组件没有路由/组件使用方（仅 `import-source-step.tsx` 引用 `import-wizard-step.tsx` 的类型）） |
+| A-12 | 横切管线化 | v4.0 P1-3 | 3 | 6–8d | — | 进行中（声明式缓存 `apps/api/app/core/cache_decorator.py` 已就位但仅 `apps/api/app/services/release_context.py:80` 一处使用；声明式审计 5 个 Admin 发布生命周期端点，见 `apps/api/app/api/v1/admin.py:108,148,166,191,216`；路径/方法/角色冻结基线已加入测试；统一 `Page` 抽象仍未落地） |
 | A-10 | StaticPage 迁移器 | v5.0 P1-3 | 4 | 3d | A-03 | 进行中（Mamba 真实 DB 已验证 dry-run、draft-only、源页不变与重试幂等；受治理 apply 设计已批准，仍刻意不暴露 apply endpoint/UI，见 `a10-static-page-migration-apply-governance.md`） |
-| A-13 | 编辑器拖拽 | v5.0 P1-4 | 4 | 3d | A-05 | 进行中（嵌套拖拽、重基准、DnD adapter 与真实 KeyboardSensor lifecycle 已测；artifact PointerSensor 尝试未触发 onDragEnd，E2E 保持 skip） |
+| A-13 | 编辑器拖拽 | v5.0 P1-4 | 4 | 3d | A-05 | 已退役（ADR-0009 退役 page builder/widget 工作流；`/page-builder` 现指向 `apps/admin/src/routes/legacy-unavailable.tsx:10,30`，路由注册见 `apps/admin/src/App.tsx:321`；仓库现存唯一 dnd-kit 用法是 `apps/admin/src/components/news-reorder-modal.tsx:15-28` 的新闻排序，原编辑器拖拽不再适用） |
 | A-14 | SSG 路由动态化 | v5.0 P2-1 | 4 | 2d | A-03 | 已完成（Mamba 真实 DB → published-routes API → embed-page-definitions 静态产物已验证） |
 | A-15 | API 行为契约 | v4.0 P1-4 | 4 | 4–5d | A-12 | 已完成（错误码、幂等、分页、登录限流与文档化的显式安全重试边界已验证） |
-| A-17 | 命令面板 | v4.0 P2-3 | 4 | 3d | A-01 | 进行中（路由、限量基因搜索与用户查询审计；email-like 输入仅能触发 `limit: 5` gene lookup；非编辑态 `B` 侧栏切换安全回归已验证） |
-| A-18 | 前端分层与测试 | v4.0 P2-2 | 4 | 5–7d | A-12 | 进行中（Web + Admin content query key/URL state CI 边界；content list/version keys 保留 `contentKeys.all` invalidation root 的回归测试已验证） |
-| A-19 | 架构守卫入 CI | v4.0 P2-4 | 4 | 2d | A-12 | 进行中（导入边界、服务无环、i18n、六个 Admin 审计路由与九条已审分页 GET 基线均由 CI pytest 硬门禁） |
+| A-17 | 命令面板 | v4.0 P2-3 | 4 | 3d | A-01 | 已完成（`apps/admin/src/components/admin-command-palette.tsx:13-27` 提供路由命令，`:52-60` 用 `searchGenes({ q, limit: 5 })` 限量基因搜索；`use-admin-shell-shortcuts.ts:23-27` 绑定 ⌘K/Ctrl+K；`admin-header.tsx:80-97` 挂载入口。用户查询按 `a17-user-lookup-audit.md` 的决定不新增端点） |
+| A-18 | 前端分层与测试 | v4.0 P2-2 | 4 | 5–7d | A-12 | 进行中（query key 工厂已收口到 `packages/query-keys`，11 项测试；`scripts/check_web_query_keys.py` 与 `scripts/check_admin_content_architecture.py` 由 `scripts/verify-frontend-artifacts.sh:136,139` 在 CI 守门；Web + Admin content URL state 回归见 `apps/admin/src/routes/content/content-management.test.ts`。§4.1 的四级组件分层仍属建议项，未单独验收，故状态保留） |
+| A-19 | 架构守卫入 CI | v4.0 P2-4 | 4 | 2d | A-12 | 已完成（`scripts/verify-backend-tests.sh:70-71` 跑 `check_architecture.py --self-test` 与正式守卫；`scripts/verify-frontend-artifacts.sh:88-90,136,139` 跑 i18n、web query key、Admin transport/session 守卫；分页基线 `apps/api/tests/test_route_pagination_baseline.py` 冻结 9 条 GET。Admin 发布审计为 5 个端点而非旧记的 6 个，见 `admin.py:108,148,166,191,216`） |
 | A-21 | 发布就绪检查 | v5.0 P2-2 | 4 | 2d | A-06 | 进行中（就绪 UI + 权威插件能力检查；Mamba runtime 已报告 PostgreSQL 健康与缺失的 extended 依赖） |
 | A-22 | 构建产物校验断言 | v5.0 P2-3 | 4 | 1d | A-03 | 已完成（定向验证） |
 | S1 | 跨站认证 Spike | v3.0 | 1（建议提前） | 2d | A-15 | 进行中（后端 Go/No-Go harness 已就绪） |

@@ -202,6 +202,15 @@ async def login(
     if not user.is_active:
         raise AuthenticationError("Account is inactive")
 
+    # A soft-deleted row keeps its password hash, so the credential check above
+    # still succeeds. Refuse it here for the same reason get_current_user and
+    # rotate_refresh_token do: issuing a session for a deleted account would
+    # mint a refresh cookie and a ``login`` audit entry for an account the
+    # operator retired. The message is identical to an inactive account so the
+    # two states cannot be told apart from outside.
+    if user.is_deleted:
+        raise AuthenticationError("Account is inactive")
+
     # Successful login — clear any expired legacy database lock.
     if user.locked_until is not None:
         user.locked_until = None

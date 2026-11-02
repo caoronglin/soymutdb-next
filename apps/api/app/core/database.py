@@ -1,7 +1,9 @@
-"""Database infrastructure: SQLAlchemy async engine, ClickHouse client, Redis.
+"""Database infrastructure: SQLAlchemy async engine, Redis, legacy ClickHouse.
 
-All three backends are exposed as lazily-initialised singletons with FastAPI
-dependency-injection helpers so that tests can override them.
+The PostgreSQL engine and Redis are the runtime stores and are exposed as
+lazily-initialised singletons with FastAPI dependency-injection helpers so that
+tests can override them. The ClickHouse client is retained only for the
+historical backfill/test surface; no runtime query path uses it.
 """
 
 from __future__ import annotations
@@ -9,7 +11,6 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-import clickhouse_connect
 from redis.asyncio import Redis, from_url
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -97,7 +98,7 @@ async def get_db() -> AsyncIterator[AsyncSession]:
 
 
 # ---------------------------------------------------------------------------
-# ClickHouse (async client)
+# ClickHouse (async client; legacy backfill/test surface only)
 # ---------------------------------------------------------------------------
 
 
@@ -113,6 +114,10 @@ async def get_clickhouse_client() -> Any:
     """
     global _clickhouse_client
     if _clickhouse_client is None:
+        # Legacy backfill tooling only. Native API queries never load this
+        # optional driver or maintain a second analytics connection.
+        import clickhouse_connect
+
         _clickhouse_client = await clickhouse_connect.get_async_client(
             host=settings.clickhouse_host,
             port=settings.clickhouse_port,
@@ -179,5 +184,8 @@ async def close_db() -> None:
         await _redis.aclose()
         _redis = None
     if _clickhouse_client is not None:
-        await _clickhouse_client.aclose()
+        # ``clickhouse_connect``'s async client exposes ``close()`` (an
+        # awaitable), not ``aclose()``; calling the latter raised
+        # ``AttributeError`` during application shutdown.
+        await _clickhouse_client.close()
         _clickhouse_client = None

@@ -11,11 +11,18 @@ import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useSiteContent } from "../../lib/site-content-react";
-import { DownloadOutlined as Download, LeftOutlined, ReloadOutlined, RightOutlined } from "@ant-design/icons";
+import {
+  CheckOutlined,
+  CopyOutlined,
+  LeftOutlined,
+  ReloadOutlined,
+  RightOutlined,
+} from "@ant-design/icons";
 import {
   Button,
   Empty,
   Form,
+  Result,
   Select,
   Space,
   Table,
@@ -24,18 +31,18 @@ import {
   type TableColumnsType,
 } from "@/lib/antd";
 import {
-  createVariantExport,
-  getReleaseId,
   searchVariants,
   type VariantImpact,
   type VariantSummary,
   type VariantType,
 } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
+import { VariantExportControls } from "../../components/variant-export-controls";
 import { SOYBEAN_CHROMOSOMES, formatPosition } from "../../lib/format";
 import { queryKeys } from "../../lib/query-keys";
 import { SITE_VARIANT } from "../../lib/site-variant";
 import { assemblyOptionLabel, resolveAssemblyParam } from "../../lib/assembly-selection";
+import { useReleaseId } from "../../lib/release-scope";
 
 const VARIANT_TYPES = ["SNP", "INS", "DEL", "MNV", "SV"] as const satisfies readonly VariantType[];
 const IMPACTS = ["HIGH", "MODERATE", "LOW", "MODIFIER"] as const satisfies readonly VariantImpact[];
@@ -73,8 +80,12 @@ function VariantsComponent() {
   ]);
   const prevCursor = cursorStack.length > 1 ? cursorStack[cursorStack.length - 2] : undefined;
   const atFirstPage = search.cursor == null;
+  // The release is read reactively: a plain module read captured a snapshot
+  // that no release switch could invalidate, so the page would keep its
+  // query key bound to a release the tab no longer follows.
+  const releaseId = useReleaseId();
   const assembliesQuery = useQuery(assembliesQueryOptions({
-    releaseId: getReleaseId(),
+    releaseId,
     siteVariant: SITE_VARIANT,
   }));
   const assemblies = assembliesQuery.data ?? [];
@@ -86,7 +97,6 @@ function VariantsComponent() {
       : { status: "absent" as const };
   const selectedAssembly = assemblyResolution.status === "resolved" ? assemblyResolution.assembly : undefined;
   const assemblyName = selectedAssembly?.name ?? "";
-  const releaseId = getReleaseId();
   const filterSignature = [
     search.assembly,
     search.chromosome,
@@ -131,41 +141,38 @@ function VariantsComponent() {
 
   const data = query.data?.items ?? [];
   const total = query.data?.total_count ?? null;
-  const [exportState, setExportState] = React.useState<
-    { status: "idle" } | { status: "loading" } | { status: "success"; message: string } | { status: "error"; message: string }
-  >({ status: "idle" });
-
-  const requestExport = async () => {
-    if (!selectedAssembly) return;
-    setExportState({ status: "loading" });
-    try {
-      const response = (await createVariantExport({
-        format: "tsv",
-        compress: true,
-        filters: {
-          assembly: assemblyName,
-          chromosome: search.chromosome || undefined,
-          impact: search.impact || undefined,
-          variant_type: search.variant_type || undefined,
-          mutant_line_public_id: search.mutant_line_public_id || undefined,
-          limit: 200,
-        },
-      })) as { message?: string; status?: string; export_id?: string };
-      setExportState({
-        status: "success",
-        message: response.message ?? (response.export_id ? `Export ${response.export_id} submitted` : "Export submitted"),
-      });
-    } catch (error) {
-      setExportState({ status: "error", message: error instanceof Error ? error.message : "Export request failed" });
-    }
-  };
-
   const columns: TableColumnsType<VariantSummary> = [
     {
-      title: get("variants.variantId", "Variant ID"),
+      title: get("variants.variantId", t("variants.variantId")),
       dataIndex: "variant_id",
       key: "variant_id",
-      render: (_, row) => <span className="font-mono text-xs">{row.variant_id.slice(0, 12)}…</span>,
+      // The full identifier is the row's public identity: an A/B consensus id
+      // is 20+ characters and a truncated one can no longer be searched,
+      // copied or pasted anywhere. It wraps instead of being cut.
+      render: (_, row) => (
+        <span className="inline-flex items-start gap-1">
+          <span className="font-mono text-xs break-all" data-testid="variant-id">
+            {row.variant_id}
+          </span>
+          <CopyIdentifier value={row.variant_id} />
+        </span>
+      ),
+    },
+    {
+      // The assembly the row was read from. The page queries one assembly at
+      // a time, but the row states its own namespace — the label comes from
+      // the row, never from an assumed page scope.
+      title: get("variants.assembly", t("variants.assembly")),
+      dataIndex: "assembly",
+      key: "assembly",
+      render: (_, row) =>
+        row.assembly ? (
+          <span className="font-mono text-xs break-all" data-testid="variant-assembly">
+            {row.assembly}
+          </span>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        ),
     },
     {
       title: get("variants.chromosomeLabel", t("variants.chromosomeLabel")),
@@ -234,25 +241,17 @@ function VariantsComponent() {
               {get("variants.subtitle", t("variants.subtitle"))}
             </h1>
           </div>
-          <Button
-            icon={<Download className="size-4" aria-hidden />}
-            onClick={() => void requestExport()}
-            loading={exportState.status === "loading"}
-            disabled={!selectedAssembly || assemblyResolution.status !== "resolved"}
-          >
-            {get("variants.export", t("variants.export"))}
-          </Button>
+          <VariantExportControls
+            assemblyKey={assemblyName}
+            filters={{
+              chromosome: search.chromosome || undefined,
+              impact: search.impact || undefined,
+              variant_type: search.variant_type || undefined,
+              mutant_line_public_id: search.mutant_line_public_id || undefined,
+            }}
+            submitLabel={get("variants.export", t("variants.export"))}
+          />
         </div>
-        {exportState.status === "success" || exportState.status === "error" ? (
-          <Typography.Paragraph
-            className="mt-3"
-            type={exportState.status === "error" ? "danger" : "secondary"}
-            data-testid="variant-export-status"
-          >
-            {exportState.message}
-          </Typography.Paragraph>
-        ) : null}
-
         <Form layout="inline" className="mt-8 flex flex-wrap items-center gap-x-4 gap-y-4">
           <Form.Item
             label={get("variants.assembly", t("search.genes.assembly"))}
@@ -373,61 +372,132 @@ function VariantsComponent() {
         ) : null}
 
         <div className="mt-4" role="region" aria-label={t("variants.resultsAria")}>
-          <Table<VariantSummary>
-            rowKey="variant_id"
-            columns={columns}
-            dataSource={data}
-            loading={query.isLoading}
-            pagination={false}
-            locale={{
-              emptyText: (
-                <Empty
-                  description={
-                    <Typography.Text type="secondary">
-                      {get("variants.noResults", t("variants.noResults"))}
-                      <br />
-                      <span className="text-xs">{t("common.noResults")}</span>
+          {query.isError ? (
+            <div role="alert">
+              <Result
+                status="error"
+                title={t("variants.loadError")}
+                extra={
+                  <Button loading={query.isFetching} onClick={() => void query.refetch()}>
+                    {t("common.retry")}
+                  </Button>
+                }
+              />
+            </div>
+          ) : (
+            <>
+              {releaseId ? (
+                <Typography.Text
+                  type="secondary"
+                  className="mb-2 block text-xs"
+                  data-testid="variant-release-scope"
+                >
+                  {`${t("search.releaseLabel")}: ${releaseId}`}
+                </Typography.Text>
+              ) : null}
+              <Table<VariantSummary>
+                rowKey="variant_id"
+                onRow={() =>
+                  ({ "data-testid": "variant-row" }) as React.HTMLAttributes<HTMLElement>
+                }
+                columns={columns}
+                dataSource={data}
+                loading={query.isLoading}
+                pagination={false}
+                // A wide result table must stay readable on a phone: the table
+                // takes its natural width and the region scrolls sideways
+                // instead of squeezing the identifier column into an
+                // unreadable stub.
+                scroll={{ x: "max-content" }}
+                locale={{
+                  emptyText: (
+                    <Empty
+                      description={
+                        <Typography.Text type="secondary">
+                          {get("variants.noResults", t("variants.noResults"))}
+                          <br />
+                          <span className="text-xs">{t("common.noResults")}</span>
+                        </Typography.Text>
+                      }
+                    />
+                  ),
+                }}
+              />
+              <nav aria-label={t("common.pagination")}>
+                <Space className="mt-3" size="small">
+                  <Button
+                    size="small"
+                    icon={<LeftOutlined />}
+                    disabled={atFirstPage}
+                    onClick={() => {
+                      navigate({ to: "/variants", search: { ...search, cursor: prevCursor } });
+                      setCursorStack((stack) => (stack.length > 1 ? stack.slice(0, -1) : stack));
+                    }}
+                  >
+                    {t("common.previous")}
+                  </Button>
+                  <Button
+                    size="small"
+                    icon={<RightOutlined />}
+                    iconPlacement="end"
+                    disabled={!query.data?.has_more || !query.data?.next_cursor}
+                    onClick={() => {
+                      const next = query.data?.next_cursor;
+                      if (!next) return;
+                      setCursorStack((stack) => [...stack, next]);
+                      navigate({ to: "/variants", search: { ...search, cursor: next } });
+                    }}
+                  >
+                    {t("common.next")}
+                  </Button>
+                  {total != null ? (
+                    <Typography.Text type="secondary" className="text-xs">
+                      {t("variants.totalCount", { count: total })}
                     </Typography.Text>
-                  }
-                />
-              ),
-            }}
-          />
-          <Space className="mt-3" size="small">
-            <Button
-              size="small"
-              icon={<LeftOutlined />}
-              disabled={atFirstPage}
-              onClick={() => {
-                navigate({ to: "/variants", search: { ...search, cursor: prevCursor } });
-                setCursorStack((stack) => (stack.length > 1 ? stack.slice(0, -1) : stack));
-              }}
-            >
-              {t("common.previous")}
-            </Button>
-            <Button
-              size="small"
-              icon={<RightOutlined />}
-              iconPosition="end"
-              disabled={!query.data?.has_more || !query.data?.next_cursor}
-              onClick={() => {
-                const next = query.data?.next_cursor;
-                if (!next) return;
-                setCursorStack((stack) => [...stack, search.cursor]);
-                navigate({ to: "/variants", search: { ...search, cursor: next } });
-              }}
-            >
-              {t("common.next")}
-            </Button>
-            {total != null ? (
-              <Typography.Text type="secondary" className="text-xs">
-                {t("variants.totalCount", { count: total })}
-              </Typography.Text>
-            ) : null}
-          </Space>
+                  ) : null}
+                </Space>
+              </nav>
+            </>
+          )}
         </div>
       </div>
     </FadeUp>
+  );
+}
+
+/**
+ * Copy an identifier to the clipboard.
+ *
+ * The identifier is long and wraps inside its cell, so selecting it by hand
+ * is error-prone. A denied clipboard is not an error the user has to solve:
+ * the value stays visible and selectable as plain text.
+ */
+function CopyIdentifier({ value }: { value: string }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = React.useState(false);
+  React.useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  const copy = async () => {
+    try {
+      if (!navigator.clipboard) return;
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch {
+      // Clipboard access denied: the identifier stays selectable as text.
+    }
+  };
+  return (
+    <button
+      type="button"
+      className="shrink-0 text-muted-foreground hover:text-foreground"
+      aria-label={copied ? `${t("common.copied")} ${value}` : `${t("common.copy")} ${value}`}
+      onClick={() => void copy()}
+    >
+      {copied ? <CheckOutlined aria-hidden /> : <CopyOutlined aria-hidden />}
+    </button>
   );
 }
 

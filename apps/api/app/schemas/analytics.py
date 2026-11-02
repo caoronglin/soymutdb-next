@@ -21,6 +21,53 @@ class WebVitalEvent(BaseModel):
     ts: int | None = Field(default=None, ge=0)
 
 
+# ---------------------------------------------------------------------------
+# Admin analytics summary contract (snake_case over the wire)
+# ---------------------------------------------------------------------------
+
+
+class AnalyticsBreakdownItem(BaseModel):
+    """One labelled bucket of an analytics breakdown.
+
+    ``label`` is always a constant of this API: a canonical route template (or
+    ``/other``), one of the four referrer categories, a finite event type, or a
+    ``YYYY-MM-DD`` day. A count is never negative, and a label is never a raw
+    identifier, query string, URL or free-text search term.
+    """
+
+    label: str
+    count: int = Field(..., ge=0)
+
+
+class AnalyticsSummary(BaseModel):
+    """Aggregate visit metrics over a bounded day window (administrator-only).
+
+    The seven data sections and the seven ``*_available`` booleans are declared
+    here, so the published contract, the generated client and the stored rows
+    cannot drift apart. An ``*_available`` flag is ``False`` when the analytics
+    store could not be read, which is what keeps "no traffic in this window"
+    distinguishable from "could not ask".
+
+    ``top_searches`` is always empty and ``top_searches_available`` is always
+    ``False``: free-text search terms are never queried and never returned.
+    """
+
+    total_events: int = Field(..., ge=0)
+    unique_sessions: int = Field(..., ge=0)
+    events_by_type: list[AnalyticsBreakdownItem] = Field(default_factory=list)
+    top_pages: list[AnalyticsBreakdownItem] = Field(default_factory=list)
+    top_referrers: list[AnalyticsBreakdownItem] = Field(default_factory=list)
+    top_searches: list[AnalyticsBreakdownItem] = Field(default_factory=list)
+    events_by_day: list[AnalyticsBreakdownItem] = Field(default_factory=list)
+    total_events_available: bool
+    unique_sessions_available: bool
+    events_by_type_available: bool
+    top_pages_available: bool
+    top_referrers_available: bool
+    top_searches_available: bool
+    events_by_day_available: bool
+
+
 class DashboardStats(BaseModel):
     total_variants: int = Field(..., ge=0)
     total_genes: int = Field(..., ge=0)

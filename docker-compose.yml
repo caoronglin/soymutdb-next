@@ -56,11 +56,6 @@ x-app-runtime: &app-runtime
 
 x-app-env: &app-env
   SOYMUTDB_APP_ENV: prod
-  SOYMUTDB_CLICKHOUSE_HOST: clickhouse
-  SOYMUTDB_CLICKHOUSE_PORT: "8123"
-  SOYMUTDB_CLICKHOUSE_USER: soymutdb
-  SOYMUTDB_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
-  SOYMUTDB_CLICKHOUSE_DATABASE: soymutdb
   # 缓存 Redis（服务名 redis，redis-cache 角色，allkeys-lru 可驱逐）
   SOYMUTDB_REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379/0
   # Celery broker/result 使用独立实例 redis-celery（noeviction + AOF，
@@ -105,7 +100,7 @@ services:
   # calculation. Introduce PgBouncer before sustained horizontal scaling.
   postgres:
     profiles: [ "core" ]
-    image: postgres:18.4-alpine
+    image: postgres:18.6-alpine
     # pg_stat_statements must be preloaded before the extension can collect.
     command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements", "-c", "pg_stat_statements.track=all", "-c", "pg_stat_statements.max=10000"]
     environment:
@@ -127,34 +122,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-    restart: unless-stopped
-
-  clickhouse:
-    profiles: [ "core" ]
-    image: clickhouse/clickhouse-server:24.8-alpine
-    environment:
-      CLICKHOUSE_DB: soymutdb
-      CLICKHOUSE_USER: soymutdb
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
-      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
-    ports:
-      - "127.0.0.1:8123:8123"
-      - "127.0.0.1:9000:9000"
-    volumes:
-      - chdata:/var/lib/clickhouse
-      - chbackups:/var/lib/clickhouse-backups
-      - ./infra/clickhouse/config.xml:/etc/clickhouse-server/config.d/custom.xml:ro
-      - ./infra/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    ulimits:
-      nofile:
-        soft: 262144
-        hard: 262144
-    healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:8123/ping" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 15s
     restart: unless-stopped
 
   # 缓存 Redis（redis-cache 角色）：allkeys-lru 允许驱逐，仅服务 API 缓存/
@@ -267,23 +234,6 @@ services:
     command: [ "alembic", "upgrade", "head" ]
     restart: "no"
 
-  # 一次性 ClickHouse schema 迁移；由 deploy/scripts/upgrade.sh 显式调用。
-  # 运行容器与 clickhouse 共享 Compose 网络，因此可直接解析服务名 clickhouse。
-  migrate-clickhouse:
-    profiles: [ "core" ]
-    # 独立镜像：只含 bash + python3.14 + clickhouse-connect，不再把
-    # ncbi-blast+/samtools/scanpy/leidenalg 与 Celery 入口一起拉下来。
-    # 脚本路径、环境变量与执行顺序保持不变（同一份 migrate-clickhouse.sh）。
-    image: ${MIGRATE_CLICKHOUSE_IMAGE_REF:?MIGRATE_CLICKHOUSE_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
-    depends_on:
-      clickhouse:
-        condition: service_healthy
-    environment:
-      <<: *app-env
-      CH_MIGRATION_SQL: /opt/soymutdb/upgrade_variant_facts_schema.sql
-    command: [ "bash", "/opt/soymutdb/migrate-clickhouse.sh" ]
-    restart: "no"
-
   # ------------------------------------------------------------------
   # Application services
   # ------------------------------------------------------------------
@@ -296,8 +246,6 @@ services:
     image: ${API_IMAGE_REF:?API_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
       postgres:
-        condition: service_healthy
-      clickhouse:
         condition: service_healthy
       redis:
         condition: service_healthy
@@ -357,8 +305,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      clickhouse:
-        condition: service_healthy
       redis-celery:
         condition: service_healthy
       minio:
@@ -392,8 +338,6 @@ services:
     image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
       postgres:
-        condition: service_healthy
-      clickhouse:
         condition: service_healthy
       redis-celery:
         condition: service_healthy
@@ -429,8 +373,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      clickhouse:
-        condition: service_healthy
       redis-celery:
         condition: service_healthy
       minio:
@@ -464,8 +406,6 @@ services:
     image: ${WORKER_IMAGE_REF:?WORKER_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
     depends_on:
       postgres:
-        condition: service_healthy
-      clickhouse:
         condition: service_healthy
       redis-celery:
         condition: service_healthy
@@ -530,7 +470,7 @@ services:
   # 工具为 stub，穿透调用内部 REST API（SOYMUTDB_API_BASE -> api:8010）。
   # 写工具鉴权用 SOYMUTDB_MCP_API_TOKEN（Bearer 透传）；60/min 限流占位，
   # 由 G3 门禁在传输层实现。端口仅容器网络可见（expose，不发布到宿主机——
-  # 宿主 9000 已被 clickhouse 占用）；对外经 nginx /mcp/ 反代（SSE 配置见
+  # 独立端口避免与对象存储发生冲突）；对外经 nginx /mcp/ 反代（SSE 配置见
   # infra/nginx/conf.d/default.conf）。
   # ------------------------------------------------------------------
   mcp-server:
@@ -827,8 +767,6 @@ services:
 
 volumes:
   pgdata:
-  chdata:
-  chbackups:
   redisdata:
   redis-celerydata:
   miniodata:

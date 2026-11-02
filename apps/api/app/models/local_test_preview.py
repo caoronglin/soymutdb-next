@@ -1,7 +1,8 @@
 """Local-only records for the unpublished SoyMutDB test-data preview.
 
 Rows in this table are deliberately separate from ``variant_summaries`` and
-ClickHouse ``variant_facts``. The source TSV provides mutation-site locations
+the native PostgreSQL ``variant_facts`` table. The source TSV provides
+mutation-site locations
 but no reference/alternate alleles, so these rows must never be represented as
 variants or enter a publication release.
 

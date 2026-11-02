@@ -21,9 +21,6 @@ services:
   migrate:
     image: "${MIGRATE_IMAGE:-soymutdb-migrate:local}"
 
-  migrate-clickhouse:
-    image: "${MIGRATE_CLICKHOUSE_IMAGE:-soymutdb-migrate-clickhouse:local}"
-
   api:
     image: "${API_IMAGE:-soymutdb-api:local}"
 

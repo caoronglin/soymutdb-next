@@ -113,7 +113,9 @@
     --code-fg: oklch(0.90 0.01 148);
 }
 
-/* NOTE: @fontsource/* 字体 CSS 已移至 src/main.tsx 以 JS import 方式引入。
+/* NOTE: 界面字体使用 index.css 的系统字体栈（--font-sans / --font-display）；仅 JetBrains Mono
+   由 react-app.tsx 以 `@fontsource/jetbrains-mono` 的 JS import 引入。
+   src/main.tsx 早已移除；@fontsource/inter 与 @fontsource/fraunces 已从依赖中移除。
    Tailwind v4 postcss 内联 node_modules CSS 时会错误改写其内部
    url(./files/...) 相对路径（字体文件无法解析、不进入 dist），
    改为 JS import 后由 Vite 按各 CSS 模块自身路径解析，字体正常打包。 */
@@ -256,6 +258,49 @@
     --header-bg-opacity: 0.85;
     --header-border-opacity: 1;
     --header-shadow-opacity: 0.06;
+}
+
+/* Unlayered, scoped rules keep header sizing predictable alongside AntD. */
+.site-header-search.ant-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    width: 176px;
+    height: 36px;
+    padding-inline: 12px;
+    border-color: var(--border);
+    border-radius: var(--radius-md);
+    background: var(--muted);
+    color: var(--muted-foreground);
+    box-shadow: none;
+    transition: background-color var(--anim-duration-fast), border-color var(--anim-duration-fast);
+}
+
+.site-header-search.ant-btn:hover {
+    border-color: var(--primary);
+    background: var(--accent);
+    color: var(--foreground);
+}
+
+.site-header-control.ant-btn {
+    width: 32px;
+    min-width: 32px;
+    height: 36px;
+    padding: 0;
+}
+
+@media (min-width: 1280px) {
+    .site-header-search.ant-btn {
+        width: 224px;
+    }
+}
+
+@media (max-width: 767px) {
+    .site-header-control.ant-btn {
+        width: 40px;
+        min-width: 40px;
+        height: 44px;
+    }
 }
 
 /* ----------------------------------------------------------------------------

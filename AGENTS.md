@@ -8,7 +8,7 @@ This is a pnpm/Turbo monorepo. Frontend applications live in `apps/web` (public 
 
 SoyMutDB is a bioinformatics database first. Product work must preserve a database-oriented experience: prominent identifier search, filterable and paginated result sets, entity detail pages, stable links, and visible assembly, release, and provenance context. Marketing or editorial content may support these workflows but must not displace them. The normative behavior and test matrix are in `docs/dev/database-core-contract.md`.
 
-PostgreSQL is authoritative for identities, relationships, releases, permissions, and workflow state. ClickHouse is an analytical projection for bulk variant facts; MinIO stores objects; Redis is disposable cache/broker state. Do not introduce another authoritative store or use SQLite for the production/full-development path.
+PostgreSQL is authoritative for identities, relationships, releases, permissions, workflow state, variant facts, and anonymous analytics. Legacy ClickHouse is a migration source; new runtime queries and writes use PostgreSQL. No default Compose topology (production, dev, local, preview) defines a `clickhouse` service; the historical source and the old schema migrator live only in `docker-compose.legacy-clickhouse.yml` behind the explicit `legacy-migration` profile. MinIO stores objects; Redis is disposable cache/broker state. Production cutover requires verified legacy backfill; see `docs/dev/native-postgres-cutover.md`. Do not introduce another authoritative store or use SQLite for the production/full-development path.
 
 Treat biological identity and genomic coordinates as explicit contracts:
 
@@ -55,7 +55,15 @@ See `docs/ops/ci-cd.md` (architecture and release flow) and
 
 ## Build, Test, and Development Commands
 
-Use Node.js 24 (`.nvmrc` pins 24.19.0 and `package.json` permits only `>=24 <25`), Python 3.14+, and the pinned pnpm version (`pnpm@12.5.1`). Install dependencies with `pnpm install`.
+> **Running things on a workstation? Read `.ai-memory/LOCAL-RUN-ENV.md` first.**
+> It records the mamba environments this machine has (one carries a full
+> PostgreSQL server, so the API *can* run here), the exact env vars
+> `max build` needs, which existing start scripts to use instead of writing a
+> throwaway server, and which capabilities (Docker, Redis, port 80) the
+> agent process cannot have. Those gaps have been rediscovered the hard way
+> more than once.
+
+Use Node.js 26 (`.nvmrc` pins 26.13.0 and `package.json` permits only `>=26 <27`), Python 3.15+ (`apps/*/pyproject.toml` declare `requires-python >=3.15`), and the pinned pnpm version (`pnpm@12.11.2`). Install dependencies with `pnpm install`.
 
 ```bash
 pnpm dev:web                                      # public portal
@@ -86,10 +94,16 @@ Database migrations require upgrade/downgrade coverage and a PostgreSQL-backed t
 
 | Component | Version | Declared in |
 | --- | --- | --- |
-| Node | 24.19.0 | `.nvmrc`, `.node-version`, `package.json`, `.cnb.yml` |
-| pnpm | 12.5.1 | `package.json`, `.cnb.yml` |
-| Python | 3.14 | `apps/*/pyproject.toml`, `.cnb.yml` |
-| uv | 0.11.33 | Dockerfiles, governance pipeline |
+| Node | 26.13.0 | `.nvmrc`, `.node-version`, `package.json`, `.cnb.yml` |
+| pnpm | 12.11.2 | `package.json`, `.cnb.yml` |
+| Python | 3.15 | `apps/*/pyproject.toml`, `.cnb.yml` |
+| uv | 0.13.1 | Dockerfiles, governance pipeline |
+
+One deliberate exception: the historical ClickHouse migration lane
+(`infra/docker/Dockerfile.migrate-clickhouse`, the `clickhouse-migration` CI stage/job, and its
+historical Worker engine tests) stays on Python 3.14, because `clickhouse-connect` 1.10 declares
+`requires-python >=3.10,<3.15` and publishes no 3.15 release. It serves only the explicit
+`docker-compose.legacy-clickhouse.yml` overlay and is not part of the default runtime.
 
 ## Commit & Pull Request Guidelines
 
@@ -98,3 +112,14 @@ Follow the history’s Conventional Commit pattern, for example `feat(features):
 ## Security & Configuration Tips
 
 Keep credentials in environment variables or deployment secrets; never commit `.env` files or tokens. Treat `infra/`, `deploy/`, database migrations, authentication, HTML sanitization, and publication/release logic as high-impact areas and include targeted tests plus deployment/health-check validation when changing them.
+
+<!-- BEGIN:turborepo-agent-rules -->
+
+# This is NOT the Turborepo you know
+
+Turborepo configuration, task behavior, and CLI commands can vary between installed versions and may differ from your training data. Resolve the `turbo` package from this file's directory or relevant workspace; in monorepos, it may not be visible from the repository root. For example, run `node -p "require.resolve('turbo/package.json')"` from a workspace that depends on `turbo`.
+
+Read `docs/README.md` inside that installed package first, then read the relevant pages from its `docs/` directory before changing Turborepo configuration or commands. Heed deprecation notices. These bundled docs match the installed package version and are available without network access.
+
+This block is written and re-added by `turbo` before repository-scoped commands when an AI agent is detected. In the Turborepo source repository, its template is defined in `crates/turborepo-cli/src/cli/agent_guidance.rs`. Removing the managed block while updates are enabled means a later qualifying invocation will add it again. Set `"agentGuidance": false` in the root `turbo.json` or `turbo.jsonc` to opt out; this does not remove an existing block. Keep the block committed with your work to avoid an uncommitted change on the next agent invocation.
+<!-- END:turborepo-agent-rules -->

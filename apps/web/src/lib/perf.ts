@@ -105,9 +105,16 @@ export function initPerfMonitoring(options: PerfMonitorOptions = {}): () => void
   if (typeof window === "undefined") return () => {};
 
   const observers: PerformanceObserver[] = [];
+  const listeners: Array<[string, EventListener]> = [];
+  const listen = (type: string, callback: EventListener) => {
+    window.addEventListener(type, callback);
+    listeners.push([type, callback]);
+  };
+  let disposed = false;
   const reported = new Set<string>();
 
   const report = (name: PerfMetric["name"], value: number, id?: string) => {
+    if (disposed) return;
     const key = id ? `${name}:${id}` : name;
     if (reported.has(key)) return;
     reported.add(key);
@@ -128,10 +135,10 @@ export function initPerfMonitoring(options: PerfMonitorOptions = {}): () => void
   const reportLcp = () => {
     if (lcpValue > 0) report("LCP", lcpValue);
   };
-  addEventListener("visibilitychange", () => {
+  listen("visibilitychange", () => {
     if (document.visibilityState === "hidden") reportLcp();
-  }, { once: true });
-  addEventListener("pagehide", reportLcp, { once: true });
+  });
+  listen("pagehide", reportLcp);
 
   // FID — first input delay
   const fidObs = createObserver("first-input", (entries) => {
@@ -151,7 +158,7 @@ export function initPerfMonitoring(options: PerfMonitorOptions = {}): () => void
         // interactionId is optional in older TS DOM types; cast safely.
         const evtEntry = entry as PerformanceEventTiming & { interactionId?: number };
         if (!evtEntry.interactionId) continue;
-        const value = entry.processingStart + entry.duration - entry.startTime;
+        const value = entry.duration;
         if (value > inpValue) inpValue = value;
       }
     }, { durationThreshold: 40, buffered: true } as PerformanceObserverInit);
@@ -160,11 +167,11 @@ export function initPerfMonitoring(options: PerfMonitorOptions = {}): () => void
     /* event timing with interactionId may not be supported */
   }
 
-  addEventListener("visibilitychange", () => {
+  listen("visibilitychange", () => {
     if (document.visibilityState === "hidden" && inpValue > 0) {
       report("INP", inpValue);
     }
-  }, { once: true });
+  });
 
   // CLS — cumulative layout shift (session-windowed)
   let clsValue = 0;
@@ -186,9 +193,9 @@ export function initPerfMonitoring(options: PerfMonitorOptions = {}): () => void
   });
   if (clsObs) observers.push(clsObs);
 
-  addEventListener("visibilitychange", () => {
+  listen("visibilitychange", () => {
     if (document.visibilityState === "hidden") report("CLS", clsValue);
-  }, { once: true });
+  });
 
   // FCP — first contentful paint
   const fcpObs = createObserver("paint", (entries) => {
@@ -214,6 +221,8 @@ export function initPerfMonitoring(options: PerfMonitorOptions = {}): () => void
 
   // Cleanup function
   return () => {
+    disposed = true;
+    for (const [type, callback] of listeners) window.removeEventListener(type, callback);
     for (const obs of observers) {
       try { obs.disconnect(); } catch { /* ignore */ }
     }

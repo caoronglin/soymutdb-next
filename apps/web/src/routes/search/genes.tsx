@@ -176,7 +176,9 @@ function GeneIdSearchComponent() {
     },
   });
 
-  const data = resultsQuery.data?.items ?? [];
+  // `?? []` creates a new array on every render when the query has no data;
+  // memoising keeps the identity stable so downstream useMemo actually memoises.
+  const data = React.useMemo(() => resultsQuery.data?.items ?? [], [resultsQuery.data]);
   const total = resultsQuery.data?.total ?? 0;
 
   // The operator's own source rows for the searched gene IDs. Queried per exact
@@ -219,7 +221,7 @@ function GeneIdSearchComponent() {
     enabled: Boolean(submitted?.q) && !resultsQuery.isLoading && isTestDataPreviewAssembly(selectedAssembly?.name),
     retry: false,
   });
-  const previewSites = previewSitesQuery.data ?? [];
+  const previewSites = React.useMemo(() => previewSitesQuery.data ?? [], [previewSitesQuery.data]);
 
   // The result table IS the operator's source table: one row per source record,
   // joined to its catalogue row so assembly context and the JBrowse entry live
@@ -360,16 +362,18 @@ function GeneIdSearchComponent() {
         const geneId = row.site?.gene_id ?? row.gene?.gene_id;
         if (!geneId) return <span className="text-muted-foreground">—</span>;
         return (
-          <Link
-            to="/genes/$geneId"
-            params={{ geneId }}
-            search={{ assembly: resolvedAssemblyId }}
-            aria-label={t("search.genes.openGene", { geneId })}
-            className="link-underline font-mono text-xs font-medium text-primary"
-            title={geneId}
-          >
-            {geneId}
-          </Link>
+          <span data-testid="gene-row">
+            <Link
+              to="/genes/$geneId"
+              params={{ geneId }}
+              search={{ assembly: resolvedAssemblyId }}
+              aria-label={t("search.genes.openGene", { geneId })}
+              className="link-underline font-mono text-xs font-medium text-primary"
+              title={geneId}
+            >
+              {geneId}
+            </Link>
+          </span>
         );
       },
     },

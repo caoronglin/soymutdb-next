@@ -66,7 +66,7 @@ LOG_DIR="${SOYMUTDB_DEV_LOG_DIR:-${REPO_ROOT}/.dev-logs}"
 # the container's loopback; a developer who wants loopback-only can set these.
 BIND_HOST="${SOYMUTDB_DEV_WEB_HOST:-0.0.0.0}"
 API_BIND_HOST="${SOYMUTDB_DEV_API_HOST:-0.0.0.0}"
-# The data layer (postgres/clickhouse/redis/minio) is what gives the API a
+# The data layer (postgres/redis/minio) is what gives the API a
 # release to serve. Brought up automatically when a Docker daemon is reachable,
 # explicitly skippable, never silently assumed.
 DATA_LAYER="${SOYMUTDB_DEV_DATA_LAYER:-auto}"
@@ -239,7 +239,7 @@ data_layer_start() {
     return 0
   fi
 
-  log "starting the data layer (postgres clickhouse redis minio)"
+  log "starting the data layer (postgres redis minio)"
 
   # The production compose file contains `${NAME:?message}` references for
   # release credentials. It is intentionally not loaded here: Compose
@@ -271,7 +271,6 @@ data_layer_start() {
     fi
   }
   set_default POSTGRES_PASSWORD soymutdb_dev_password
-  set_default CLICKHOUSE_PASSWORD soymutdb_dev_password
   set_default REDIS_PASSWORD soymutdb_dev_password
   set_default MINIO_ROOT_USER soymutdb_dev
   set_default MINIO_ROOT_PASSWORD soymutdb_dev_password
@@ -304,7 +303,7 @@ data_layer_start() {
   local postgres_password_encoded
   postgres_password_encoded="$(LC_ALL=C urlencode "${POSTGRES_PASSWORD}")"
 
-  local data_services=(postgres clickhouse redis minio)
+  local data_services=(postgres redis minio)
 
   # Print the state and the tail of the logs for every service the preview was
   # asked to start. Reporting only "did not become healthy" hides which of the
@@ -348,7 +347,7 @@ data_layer_start() {
     done
     if [[ "${all_healthy}" == "1" ]]; then
       export SOYMUTDB_DATABASE_URL="postgresql+asyncpg://soymutdb:${postgres_password_encoded}@127.0.0.1:5432/soymutdb"
-      log "data layer ready (postgres clickhouse redis minio healthy); SOYMUTDB_DATABASE_URL points at the local PostgreSQL"
+      log "data layer ready (postgres redis minio healthy); SOYMUTDB_DATABASE_URL points at the local PostgreSQL"
       return 0
     fi
     sleep 2
@@ -382,7 +381,7 @@ SoyMutDB cloud development environment is ready (mode: ${MODE}).
   admin console     pnpm dev:admin
   api (FastAPI)     cd apps/api && uvicorn app.main:app --reload --port ${API_PORT}
   data layer        docker compose --project-directory ${REPO_ROOT} --env-file /dev/null -f docker-compose.preview.yml \\
-                    --profile core up -d postgres clickhouse redis minio
+                    --profile core up -d postgres redis minio
   delivery jobs     pnpm ci:jobs
   acceptance        bash scripts/acceptance.sh
 
@@ -483,7 +482,7 @@ case "${MODE}" in
     # environment, so fail with an actionable message instead of a stack trace.
     if [[ -z "${SOYMUTDB_DATABASE_URL:-}" ]]; then
       log "SOYMUTDB_DATABASE_URL is required for api-preview; start the data layer first:"
-      log "  docker compose --project-directory ${REPO_ROOT} --env-file /dev/null -f docker-compose.preview.yml --profile core up -d postgres clickhouse redis minio"
+      log "  docker compose --project-directory ${REPO_ROOT} --env-file /dev/null -f docker-compose.preview.yml --profile core up -d postgres redis minio"
       exit 1
     fi
     launch_background api "${API_PORT}" \

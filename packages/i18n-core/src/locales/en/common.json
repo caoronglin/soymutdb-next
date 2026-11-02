@@ -116,7 +116,9 @@
     "heroInstructions": "Hover a chromosome to inspect variant density; click a band to navigate to that region.",
     "lowDensity": "Low density",
     "highDensity": "High density",
-    "featuredHero": "featured hero"
+    "featuredHero": "featured hero",
+    "latestNews": "Latest news",
+    "newsMeta": "Latest release"
   },
   "genes": {
     "title": "Gene Search",
@@ -243,8 +245,25 @@
     "effectBreakdown": "Effect breakdown for this gene",
     "seedRequest": {
       "availableHint": "{{count}} mutant sites on this gene are marked available",
-      "availableCount": "{{count}} available sites"
-    }
+      "availableCount": "{{count}} available sites",
+      "action": "Request seed",
+      "ownCount": "Requests for this gene",
+      "statsUnavailable": "Request counts are temporarily unavailable; this does not block submitting.",
+      "totalCount": "Requests site-wide"
+    },
+    "mutationSites": {
+      "available": "Available",
+      "chromosome": "Chromosome",
+      "confidence": "Confidence",
+      "feature": "Feature",
+      "geneId": "Gene ID",
+      "openLocus": "Open this insertion locus in the genome view (10 kb either side)",
+      "position": "Position",
+      "queryGene": "Search a gene",
+      "siteKey": "Mutant system (parent + position)"
+    },
+    "mutationSitesTitle": "Mutation sites",
+    "unpublishedPreview": "Unpublished preview"
   },
   "variants": {
     "title": "Variant Search",
@@ -292,6 +311,8 @@
     "backToSearch": "Back to Search",
     "viewInBrowser": "View in Browser",
     "export": "Export",
+    "exportRequiresAccount": "Sign in with a researcher account to submit an export.",
+    "exportSignIn": "Sign in",
     "exportTitle": "Export Variant Data",
     "exportDesc": "Export variants matching current filters",
     "exportFormat": "Format",
@@ -331,7 +352,15 @@
     "previousPage": "Previous",
     "nextPage": "Next",
     "pageOf": "Page {{page}}",
-    "resultsAria": "Variant results"
+    "resultsAria": "Variant results",
+    "exportPending": "Export is being prepared…",
+    "exportRunning": "Export is running…",
+    "exportReady": "Export is ready to download.",
+    "exportFailed": "Export failed.",
+    "exportDownload": "Download export",
+    "exportDownloadFailed": "The export could not be downloaded",
+    "exportTakingLong": "This export is taking longer than expected. It may still finish.",
+    "exportCheckAgain": "Check again"
   },
   "mutantLines": {
     "title": "Mutant Lines",
@@ -425,6 +454,7 @@
     "timeout": "The genome browser did not report ready. Retry the connection below.",
     "loadError": "The genome browser failed to load.",
     "iframeTitle": "SoyMutDB genome browser (JBrowse 2)",
+    "navigationError": "Could not navigate to this location or gene in the selected assembly. Check the input and try again.",
     "contextMissingTitle": "Genome browser context unavailable",
     "contextMissingDescription": "Choose an explicit assembly and published release before opening JBrowse.",
     "openFullBrowser": "Open in full browser",
@@ -433,7 +463,13 @@
     "densityHistogram": "Gene density histogram",
     "requiresJavaScript": "Interactive genome view requires JavaScript.",
     "openJbrowse": "Open JBrowse",
-    "tooltipCounts": "{{position}} — {{count}} variants"
+    "tooltipCounts": "{{position}} — {{count}} variants",
+    "back": "Back",
+    "loadErrorDetail": "This locus could not be loaded. Check the assembly version and coordinates.",
+    "openInNewTab": "Open in a new tab",
+    "retry": "Retry",
+    "stillLoading": "Still loading",
+    "stillLoadingDesc": "Large datasets can take a moment on first paint."
   },
   "blast": {
     "title": "BLAST Search",
@@ -445,6 +481,7 @@
     "tblastn": "TBLASTN (translated protein)",
     "tblastx": "TBLASTX (translated both)",
     "database": "Reference sequence type",
+    "noDatabases": "No databases available",
     "databasePlaceholder": "Select a reference sequence type",
     "inputSequence": "Input Sequence",
     "sequencePlaceholder": "Paste sequence in FASTA format...",
@@ -474,6 +511,7 @@
     "noJobs": "No jobs yet",
     "noJobsAnonymous": "The database list and this form are public; submitting an alignment needs a session.",
     "noHits": "No hits found for this job",
+    "hitsLoadError": "Could not load BLAST hits. Please retry.",
     "resultsTitle": "BLAST Results",
     "alignments": "Alignments",
     "hitTable": "Hit Table",
@@ -499,12 +537,21 @@
     "defaultTag": "Default",
     "referencePlaceholder": "Select a reference sequence type",
     "submitFailed": "Failed to submit: {{message}}",
-    "proteinOnlyHint": "Protein sequence search (DIAMOND blastp)"
+    "proteinOnlyHint": "Protein sequence search (DIAMOND blastp)",
+    "hitProteinCoords": "Protein coords",
+    "geneSearchReleaseMismatch": "Gene search uses the current portal release. Use the genome browser to view this job in its original release.",
+    "jbrowse": {
+      "resolving": "Resolving genome position…",
+      "unavailable": "This hit has no genome position in the selected release.",
+      "resolveFailed": "Could not load the genome position. Please retry."
+    }
   },
   "releases": {
     "title": "Data Releases",
     "subtitle": "Browse all data releases",
     "releaseName": "Release Name",
+    "version": "Version",
+    "description": "Description",
     "releaseDate": "Release Date",
     "status": "Status",
     "variantCount": "Variants",
@@ -546,7 +593,7 @@
     "downloadFile": "Download {{name}}",
     "downloadCount": "{{count}} downloads",
     "customExportTitle": "Need a custom export?",
-    "customExportDescription": "Submit an async export job for filtered variant sets up to 10M records."
+    "customExportDescription": "Submit an async export job for the variant sets matching your filters (up to 100 million records)."
   },
   "fileViewer": {
     "singleFile": "Single file",
@@ -566,7 +613,8 @@
     "fitWidth": "Fit width",
     "title": "File preview",
     "downloadOnly": "Download-only preview",
-    "undecodable": "This compressed, unknown, or binary format is not decoded in the browser."
+    "undecodable": "This compressed, unknown, or binary format is not decoded in the browser.",
+    "downloadOnlyHint": "This file cannot be previewed online. Download it to view."
   },
   "docs": {
     "title": "Documentation",
@@ -751,16 +799,19 @@
     "tableOfContents": "Table of contents",
     "noRouteFor": "No route for {{path}}.",
     "backToHome": "Back to home",
-    "working": {
-      "working": "Working…"
-    },
+    "working": "Working…",
     "home": "SoyMutDB home",
     "zoomIn": "Zoom in",
     "zoomOut": "Zoom out",
     "resetView": "Reset view",
-    "tryAgain": "Try again"
+    "tryAgain": "Try again",
+    "requestId": "Request ID",
+    "errorReason": "Server response: {{reason}}"
   },
   "footer": {
+    "contactPerson": "Contact person",
+    "phone": "Phone",
+    "email": "Email",
     "description": "Comprehensive multi-species mutant database for functional genomics research",
     "resources": "Resources",
     "documentation": "Documentation",
@@ -780,7 +831,8 @@
     "copyright": "© {{year}} SoyMutDB. All rights reserved.",
     "builtWithCare": "Built for multi-species plant research",
     "label": "Footer",
-    "version": "v2.0.0"
+    "version": "v2.0.0",
+    "address": "Address"
   },
   "analytics": {
     "title": "Visual Analytics",
@@ -843,6 +895,7 @@
     "ambiguousAssembly": "Assembly name matches several versions: {{matches}}. Select a version by its identifier.",
     "assemblyUnavailable": "The requested assembly is unavailable; no query was sent.",
     "assemblyLabel": "Genome version",
+    "assemblyPlaceholder": "Select a genome version",
     "releaseLabel": "Release",
     "unknownAssembly": "Unknown version",
     "genes": {
@@ -961,7 +1014,8 @@
       "score": "Score",
       "actions": "Actions",
       "gbrowse": "JBrowse 2",
-      "geneSearch": "Gene search"
+      "geneSearch": "Gene search",
+      "submit": "Submit primer design"
     },
     "blast": {
       "title": "BLAST",
@@ -984,7 +1038,17 @@
     "enterQuery": "Enter a gene, variant, or publication to explore the database.",
     "searchFailed": "Search failed",
     "requestId": "Request ID",
-    "resultsSection": "Search results"
+    "resultsSection": "Search results",
+    "typeFilter": {
+      "label": "Filter by type",
+      "all": "All types",
+      "gene": "Genes",
+      "variant": "Variants",
+      "mutantLine": "Mutant lines",
+      "phenotype": "Phenotypes",
+      "publication": "Publications"
+    },
+    "internalNotPaginated": "Internal directory results are not paginated."
   },
   "admin": {
     "title": "Admin Console",
@@ -1100,7 +1164,7 @@
       "nextActions": "Next actions",
       "pipelineHeadline": "Keep the data pipeline moving",
       "pipelineDesc": "Start from the real operational workflows instead of decorative management pages.",
-      "openResourceCatalog": "Open Resource Catalog",
+      "openImports": "Open imports",
       "trendUnavailable": "Dashboard trend data is unavailable."
     },
     "dashboardStats": {
@@ -1122,7 +1186,9 @@
       "domains": {
         "site": {
           "title": "Site information",
-          "description": "Name, public content, homepage, and footer details."
+          "description": "Name, public content, homepage, and footer details.",
+          "variantNoticeBefore": "Variant-specific site content remains available in the ",
+          "variantNoticeAfter": " while its local editor is extracted."
         },
         "appearance": {
           "title": "Appearance",
@@ -1138,7 +1204,9 @@
         },
         "localization": {
           "title": "Localization",
-          "description": "Default language and site-variant content."
+          "description": "Default language and site-variant content.",
+          "variantNoticeBefore": "Site-variant content selection remains available in the ",
+          "variantNoticeAfter": " while its editor is extracted."
         },
         "advanced": {
           "title": "Advanced",
@@ -1155,7 +1223,6 @@
         "home_internal": "Homepage (internal)",
         "content_external": "Site content (external)",
         "footer_external": "Footer (external)",
-        "cdn": "CDN configuration",
         "security": "Security",
         "data": "Data and storage",
         "email": "Email and notifications",
@@ -1201,7 +1268,7 @@
       "internalSiteSecurityNotice": "Internal content is authenticated and must be deployed behind SSO, Cloudflare Access, VPN, or a private network. This selector is not a substitute for network access control.",
       "externalSiteNotice": "External content is public and can be cached by the edge after a successful audited save.",
       "titleEnglish": "Title (English)",
-      "placeholderAboutTitle": "About SoyMutDB",
+      "placeholderAboutTitle": "About",
       "titleChinese": "Title (Chinese)",
       "summaryEnglish": "Summary (English)",
       "placeholderAboutSummary": "Short introduction shown on the About page",
@@ -1212,13 +1279,12 @@
       "homeContentSection": "Homepage welcome",
       "homeContentSubtitle": "Variant-specific bilingual welcome content for the generated homepage.",
       "homeWelcomeEnglishPlaceholder": "Welcome content in English",
-      "homeWelcomeChinesePlaceholder": "首页欢迎内容（中文）",
+      "homeWelcomeChinesePlaceholder": "Homepage welcome content (Chinese)",
       "dataSection": "Data & Storage",
       "dataSubtitle": "Database and storage configuration",
       "defaultAssembly": "Default Assembly",
       "maxExportRecords": "Max Export Records",
       "cacheTtlSeconds": "Cache TTL (seconds)",
-      "clickhouseAnalytics": "ClickHouse Analytics",
       "enabled": "Enabled",
       "disabled": "Disabled",
       "toggle": "Toggle",
@@ -1236,12 +1302,6 @@
       "twoFactorAuth": "Two-Factor Auth",
       "required": "Required",
       "optional": "Optional",
-      "cdnSection": "CDN Configuration",
-      "cdnSubtitle": "External CDN URLs for frontend assets",
-      "cdnEnabled": "CDN Enabled",
-      "echartsUrl": "ECharts CDN URL",
-      "placeholderEchartsUrl": "https://cdnjs.cloudflare.com/ajax/libs/echarts/5.5.1/echarts.min.js",
-      "cdnNote": "CDN URLs are used at build time. Changes require a rebuild to take effect. For production, consider nginx edge caching as a fallback.",
       "filePreviewSubtitle": "Configure inline file preview behavior",
       "filePreviewFormatsHelp": "Comma-separated list of supported file formats.",
       "siteContentSection": "Site Content",
@@ -1256,7 +1316,9 @@
       "placeholderCopyright": "© {{year}} SoyMutDB. All rights reserved.",
       "settingsSaved": "Settings Saved",
       "settingsSavedDesc": "The {{section}} settings have been updated successfully.",
-      "ok": "OK"
+      "ok": "OK",
+      "placeholderAboutContentChinese": "Full page content in Chinese (rich text / Markdown supported)",
+      "saveFailed": "The {{section}} settings could not be saved. The values on screen are unchanged."
     },
     "analyticsSettings": {
       "title": "Analytics Settings",
@@ -1286,7 +1348,7 @@
       "statusHint1": "Open the portal in a browser → View page source (Ctrl/Cmd+U) → search for \"cloudflareinsights\". Found means the beacon is injected in the current deployment.",
       "statusHint2": "Or check Cloudflare Dashboard → Web Analytics: if the site shows traffic shortly after a deployment, the beacon is working.",
       "legacyTitle": "Legacy self-hosted analytics",
-      "legacyDesc": "The API-side ClickHouse analytics endpoint and the portal /analytics page remain available as a fallback / detail source. Cloudflare Web Analytics is the primary visitor-statistics channel.",
+      "legacyDesc": "The native PostgreSQL analytics endpoints (/analytics, /stats) and the portal /analytics page remain available for on-site data; Cloudflare Web Analytics is the primary visitor-statistics channel.",
       "window": "Time window (days)",
       "loadError": "Analytics is unavailable for this deployment: the summary endpoint could not be reached. No placeholder numbers are shown.",
       "totalEvents": "Total events",
@@ -1295,7 +1357,13 @@
       "topPages": "Top pages",
       "topSearches": "Top searches",
       "topReferrers": "Top referrers",
-      "cloudflareBadge": "Cloudflare"
+      "cloudflareBadge": "Cloudflare",
+      "badgeCloudflare": "Cloudflare Web Analytics",
+      "badgeBeacon": "Beacon (static JS)",
+      "badgeBuildTimeInjection": "Build-time injection",
+      "badgeCookieFree": "Cookie-free",
+      "badgeBuildTime": "Build-time",
+      "badgeRuntimeDetection": "Runtime detection: N/A"
     },
     "file_preview": "File Preview Configuration",
     "file_preview_enabled": "Enable file preview",
@@ -1368,7 +1436,108 @@
         "empty": "No publications yet",
         "deleteTitle": "Delete publication",
         "deleteConfirm": "Delete this publication?"
-      }
+      },
+      "colTitle": "Title",
+      "colStatus": "Status",
+      "colAuthor": "Author",
+      "colPublished": "Published",
+      "colUpdated": "Updated",
+      "colActions": "Actions",
+      "editContent": "Edit content",
+      "deleteContent": "Delete content",
+      "newType": "New {{type}}",
+      "noTypeContent": "No {{type}} content",
+      "noTypeContentDesc": "Create a new {{type}} to get started.",
+      "deleteContentTitle": "Delete Content",
+      "deleteContentConfirm": "Are you sure you want to delete ",
+      "unknownError": "An unknown error occurred",
+      "editPageTitle": "Edit Page",
+      "newPage": "New Page",
+      "editPageDesc": "Editing ",
+      "newPageDesc": "Create a new static page. Bilingual content (EN/ZH) supported.",
+      "labelTitleEnglish": "Title (English) *",
+      "placeholderTitleEnglish": "Page title in English",
+      "labelTitleChinese": "Title (Chinese)",
+      "labelSlug": "Slug *",
+      "slugReadonlyHint": "Slug cannot be changed after creation.",
+      "labelCategory": "Category",
+      "placeholderCategory": "about, help, etc.",
+      "labelSortOrder": "Sort Order",
+      "labelStatus": "Status",
+      "statusDraft": "Draft",
+      "statusPublished": "Published",
+      "labelSummary": "Summary",
+      "placeholderSummary": "Short summary for listings",
+      "labelContentEnglish": "Content (English) *",
+      "placeholderContentEnglish": "Page content in English (Markdown supported)",
+      "labelContentChinese": "Content (Chinese)",
+      "labelEditComment": "Edit Comment",
+      "placeholderDescribeRevision": "Describe this revision",
+      "placeholderInitialVersionNote": "Initial version note",
+      "editCommentHelp": "Saved with the version history for tracking changes.",
+      "saving": "Saving…",
+      "saveOutlinedChanges": "Save Changes",
+      "createPage": "Create Page",
+      "colSlug": "Slug",
+      "colCategory": "Category",
+      "editPage": "Edit page",
+      "unpublish": "Unpublish",
+      "unpublishPage": "Unpublish page",
+      "publish": "Publish",
+      "publishPage": "Publish page",
+      "viewVersions": "View Versions",
+      "viewVersionHistory": "View version history",
+      "deletePage": "Delete page",
+      "staticPages": "Static Pages",
+      "staticPagesDesc": "Manage static pages (e.g. About, Help, FAQ). Each edit creates a version snapshot that can be reviewed and restored.",
+      "editLoading": "Loading the requested page…",
+      "editLoadError": "The requested page could not be loaded.",
+      "statusAll": "All Statuses",
+      "statusArchived": "Archived",
+      "filterCategoryPlaceholder": "Filter by category...",
+      "noPagesFound": "No pages found",
+      "noPagesFoundDesc": "Create a new static page to get started.",
+      "deletePageTitle": "Delete Page",
+      "deletePageConfirm": "Are you sure you want to delete ",
+      "titleEnglish": "Title (English)",
+      "titleChinese": "Title (Chinese)",
+      "summary": "Summary",
+      "contentEnglish": "Content (English)",
+      "contentChinese": "Content (Chinese)",
+      "backToList": "Back to list",
+      "colVersion": "Version",
+      "colComment": "Comment",
+      "colEditedBy": "Edited By",
+      "colCreated": "Created",
+      "view": "View",
+      "viewVersionContent": "View version content",
+      "restore": "Restore",
+      "restoreVersion": "Restore version",
+      "versionHistoryTitle": "Version History",
+      "currentVersionLine": "current version v{{version}}",
+      "noVersionsFound": "No versions found",
+      "noVersionsFoundDesc": "Versions are created automatically when a page is edited.",
+      "close": "Close",
+      "restoreVersionTitle": "Restore Version",
+      "restoreVersionConfirm": "Restore page ",
+      "editedBy": "Edited By",
+      "created": "Created",
+      "itemCount": "{{count}} items",
+      "pageCount": "{{count}} pages",
+      "legacyBadge": "Legacy Pages",
+      "legacyHint": "Existing pages remain editable. The migration preview below is read-only and proposes draft candidates only.",
+      "migrationTitle": "Page Builder migration preview",
+      "migrationBody": "This preview only validates legacy pages and reports draft candidates. It never creates, publishes, or changes source pages.",
+      "previewMigration": "Preview migration",
+      "publishTitle": "Publish page",
+      "publishConfirm": "Publish \"{{title}}\"? It becomes visible on the public site.",
+      "unpublishTitle": "Unpublish page",
+      "unpublishConfirm": "Unpublish \"{{title}}\"? It disappears from the public site.",
+      "publishFailed": "The page could not be published.",
+      "unpublishFailed": "The page could not be unpublished.",
+      "deleteFailed": "The page could not be deleted.",
+      "deleteContentFailed": "The content could not be deleted.",
+      "loadError": "The content list could not be loaded."
     },
     "contentPages": {
       "subtitle": "Create, edit, and publish the static pages the portal renders. Drafts are listed alongside published pages, and publishing is always an explicit action.",
@@ -1416,7 +1585,6 @@
     "news": {
       "title": "News Management",
       "formHelp": "Bilingual Markdown articles. Saving never publishes as a side effect.",
-      "trash": "Deleted articles",
       "restore": "Restore",
       "purge": "Permanently delete",
       "purgeConfirmTitle": "Permanently delete this article?",
@@ -1462,7 +1630,9 @@
         "openPreview": "Open Preview",
         "loading": "Generating preview link...",
         "renderedTitle": "Bilingual preview",
-        "empty": "Nothing to preview yet."
+        "empty": "Nothing to preview yet.",
+        "originMissing": "The public site URL is not configured, so a preview link cannot be created.",
+        "originMissingHint": "Set VITE_PUBLIC_URL to the public site origin (for example https://www.soymutdb.org)."
       },
       "form": {
         "titleEn": "Title (EN)",
@@ -1489,7 +1659,14 @@
         "coverUrlUploadHint": "Upload a cover image, or paste an external URL into the field below.",
         "bodyMarkdown": "Body (Markdown)",
         "langEn": "(en)",
-        "langZh": "(zh)"
+        "langZh": "(zh)",
+        "externalSource": "External article source",
+        "externalSourceHelp": "Preview imports are sanitized and staged as a draft. Review the article and save it before publishing.",
+        "importExternal": "Import from WeChat / X-MOL",
+        "removeExternalSource": "Remove source attribution",
+        "coverAltText": "Cover image alt text",
+        "coverAltTextHelp": "Describe the cover for screen-reader users.",
+        "coverAltTextRequired": "Cover alt text is required"
       },
       "messages": {
         "saveSuccess": "Article saved",
@@ -1509,13 +1686,30 @@
         "title": "Reorder featured articles",
         "hint": "Drag to reorder. Lower position = higher on the homepage.",
         "save": "Apply order",
-        "empty": "No published articles to reorder"
+        "empty": "No published articles to reorder",
+        "drag": "Drag"
       },
       "loading": "Loading articles...",
       "trashEmpty": "The recycle bin is empty.",
-      "empty": "No articles yet. Create the first one."
+      "empty": "No articles yet. Create the first one.",
+      "trash": {
+        "title": "Trash",
+        "empty": "The trash is empty",
+        "loadError": "The trash could not be loaded.",
+        "slug": "Slug",
+        "deletedAt": "Deleted",
+        "restore": "Restore",
+        "restoreTitle": "Restore content",
+        "restoreContent": "Restore this content?",
+        "restoreSuccess": "Restored.",
+        "restoreError": "Could not restore.",
+        "purge": "Delete permanently",
+        "purgeTitle": "Delete permanently",
+        "purgeContent": "This cannot be undone. Delete permanently?",
+        "purgeSuccess": "Deleted permanently.",
+        "purgeError": "Could not delete."
+      }
     },
-    "uploads": "Media Library",
     "about": {
       "title": "About Us Content",
       "description": "Editable 'About us' page content (served by GET /site/about)."
@@ -1559,9 +1753,87 @@
       "docxImportError": "DOCX import failed",
       "clipboardEmpty": "Clipboard is empty",
       "clipboardError": "Could not read clipboard. Paste the text manually.",
-      "markdownPasteSuccess": "Clipboard content applied as Markdown"
+      "markdownPasteSuccess": "Clipboard content applied as Markdown",
+      "imageAltPlaceholder": "Describe this image",
+      "markdown": "Markdown"
     },
-    "tableViews": "Table view templates",
+    "tableViews": {
+      "title": "Table view templates",
+      "tableLabel": "Table",
+      "newTemplate": "New template",
+      "editTemplate": "Edit template",
+      "empty": "This table has no templates yet; the built-in default columns are in use.",
+      "bannerTitle": "Column order, visibility and row actions are configured here; cross-assembly homolog columns (W82_V2 / W82_V4 / DN53_V1) are off by default and can be added as needed.",
+      "bannerDescription": "A saved template takes effect immediately: the portal resolves this column set by species, site variant and release.",
+      "instancesTitle": "Species instances",
+      "instancesBanner": "One console can manage several species databases: register each instance's API / JBrowse / portal address here; the data stays inside each instance.",
+      "name": "Name",
+      "namePlaceholder": "e.g. Mutation sites (with homologs)",
+      "columnsLabel": "Columns (display order; tick to show)",
+      "addColumns": "Add columns",
+      "trailingActions": "Trailing actions",
+      "genePreview": "Gene preview",
+      "releaseLabel": "Release (empty means every release)",
+      "releasePlaceholder": "Leave empty for the published default",
+      "saveTemplate": "Save template",
+      "create": "Create",
+      "registerInstance": "Register instance",
+      "instanceName": "Name",
+      "instanceSpecies": "Species",
+      "instanceSpeciesVariant": "Species / variant",
+      "instanceLocal": "Local instance",
+      "columnName": "Name",
+      "columnDefault": "Default",
+      "columnActions": "Actions",
+      "actionEdit": "Edit",
+      "actionSetDefault": "Set as default",
+      "actionDelete": "Delete",
+      "local": "Local",
+      "actions": "Actions",
+      "species": "Species",
+      "kind": {
+        "mutation_sites": "Mutation sites",
+        "variants": "Variants",
+        "genes": "Genes",
+        "mutant_lines": "Mutant lines"
+      },
+      "column": {
+        "mutant_line_name": "Mutant line",
+        "mutation_system": "Mutation system (line + position)",
+        "chromosome": "Chromosome",
+        "position": "Position",
+        "confidence": "Confidence",
+        "gene_id": "Gene ID",
+        "feature": "Feature",
+        "available": "Available",
+        "variant_id": "Variant ID",
+        "ref": "Reference allele",
+        "alt": "Alternate allele",
+        "variant_type": "Type",
+        "impact": "Impact",
+        "symbol": "Symbol",
+        "biotype": "Biotype",
+        "variant_count": "Variant count",
+        "public_id": "Mutant line",
+        "name": "Name",
+        "mutagen": "Mutagen",
+        "cultivar": "Cultivar",
+        "generation": "Generation",
+        "homolog_W82_V2": "W82_V2 (cross-assembly homolog)",
+        "homolog_W82_V4": "W82_V4 (cross-assembly homolog)",
+        "homolog_DN53_V1": "DN53_V1 (cross-species homolog)"
+      },
+      "promoteTitle": "Set as default template",
+      "promoteConfirm": "Make \"{{name}}\" the default layout for its scope? The portal resolves it first.",
+      "deleteTemplateTitle": "Delete template",
+      "deleteTemplateConfirm": "Delete the template \"{{name}}\"? The portal stops resolving it.",
+      "deleteInstanceTitle": "Unregister instance",
+      "deleteInstanceConfirm": "Unregister the instance \"{{name}}\"? The console stops using it.",
+      "instanceUpdateFailed": "The instance \"{{name}}\" could not be updated.",
+      "instanceDeleteFailed": "The instance \"{{name}}\" could not be unregistered.",
+      "loadError": "The table-view templates could not be loaded.",
+      "instancesLoadError": "The species instances could not be loaded."
+    },
     "tableViewsHint": "Choose the columns each portal table renders. Templates are scoped by species, site variant and release; the cross-assembly homolog columns are opt-in.",
     "table": "Table",
     "species": "Species",
@@ -1589,7 +1861,12 @@
       "sectionMissingTitle": "This settings section is not registered",
       "sectionMissingDescription": "The requested settings section {{section}} is not part of the server-owned settings schema, so it cannot be edited. No other section was opened in its place.",
       "sectionMissingPath": "{{path}}?section={{section}}",
-      "backToDashboard": "Back to dashboard"
+      "backToDashboard": "Back to dashboard",
+      "resourceCatalogTitle": "Resource catalog unavailable",
+      "retiredTitle": "This legacy page is unavailable",
+      "retiredReason": "The page-builder and widget workflow was retired. This route is kept only to explain the change; it does not perform writes.",
+      "dashboard": "Return to dashboard",
+      "importsReference": "Open imports"
     },
     "settingsSections": "Settings sections",
     "settingsSecret": "secret",
@@ -1640,7 +1917,11 @@
       "action": "Action",
       "actionPlaceholder": "Action",
       "actor": "Actor",
-      "readOnly": "Read-only"
+      "readOnly": "Read-only",
+      "loadError": "The audit log could not be loaded.",
+      "loadErrorDesc": "The request failed, so the records below are unknown rather than empty. Retry to load them.",
+      "statsLoadError": "Audit statistics could not be loaded.",
+      "exportFailed": "The CSV export failed."
     },
     "publications": {
       "featured": "featured",
@@ -1651,9 +1932,68 @@
       "deleteTitle": "Delete publication"
     },
     "importsHint": "Every import task this deployment has accepted, server-filtered by status.",
-    "releasesHint": "Every release the API serves, with the imports and source files that produced it.",
+    "releasesHint": "Release versions, publication status and database counts.",
     "media": {
-      "description": "Uploaded assets referenced by news and pages. Archiving removes an asset from the picker without breaking published references."
+      "description": "Uploaded assets referenced by news and pages. Archiving removes an asset from the picker without breaking published references.",
+      "title": "Media Library",
+      "empty": "The media library is empty",
+      "noMatches": "No media assets match the current filters.",
+      "loadError": "The media library could not be loaded.",
+      "retry": "Retry",
+      "upload": "Upload",
+      "uploadFirst": "Upload a file to get started.",
+      "clearFilters": "Clear filters",
+      "searchPlaceholder": "Search by file name or caption…",
+      "filterPurpose": "Filter by purpose",
+      "altPlaceholder": "Alt text",
+      "missingAlt": "Missing alt text",
+      "captionPlaceholder": "Caption",
+      "creditPlaceholder": "Credit / source",
+      "decorative": "Decorative image (no alt text needed)",
+      "copyUrl": "Copy URL",
+      "usage": "Used in",
+      "usageDetail": "Referenced in {{count}} places",
+      "status": {
+        "ready": "Ready",
+        "archived": "Archived"
+      },
+      "archive": "Archive",
+      "archiveTitle": "Archive media",
+      "archiveConfirm": "Archive this media file?",
+      "archiveInUse": "This file is still referenced; archiving will break those references.",
+      "editMetadata": "Edit metadata",
+      "editTitle": "Edit media details",
+      "saveMetadata": "Save",
+      "previous": "Previous",
+      "next": "Next",
+      "messages": {
+        "uploaded": "Uploaded.",
+        "updated": "Saved.",
+        "archived": "Archived.",
+        "copied": "Link copied.",
+        "updateError": "Could not save.",
+        "archiveError": "Could not archive.",
+        "copyError": "Could not copy the link."
+      },
+      "picker": {
+        "title": "Select media",
+        "choose": "Choose an image",
+        "change": "Change",
+        "remove": "Remove",
+        "uploadNew": "Upload new",
+        "empty": "The media library is empty",
+        "loadError": "The media library could not be loaded.",
+        "retry": "Retry",
+        "searchPlaceholder": "Search media…",
+        "selectedImage": "Selected image",
+        "noAltText": "Enter alt text",
+        "missingAlt": "Missing alt text"
+      },
+      "purposes": {
+        "news": "News",
+        "editor": "Editor",
+        "about": "About"
+      }
     },
     "shell": {
       "overview": "Overview",
@@ -1668,6 +2008,7 @@
       "widgetPreview": "Widget Preview",
       "widgetHealth": "Widget Health",
       "navigationAria": "Admin navigation",
+      "skipToContent": "Skip to main content",
       "expandSidebar": "Expand sidebar",
       "collapseSidebar": "Collapse sidebar",
       "collapse": "Collapse",
@@ -1686,7 +2027,53 @@
       "notifications": "Notifications",
       "notificationsAria": "Notifications ({{count}} unread)",
       "markAllRead": "Mark all as read",
-      "notificationsEmpty": "No notifications"
+      "markRead": "Mark read",
+      "markReadAria": "Mark as read: {{title}}",
+      "notificationsEmpty": "No notifications",
+      "toggleTheme": "Toggle theme",
+      "adminUserLabel": "Admin User",
+      "notSignedIn": "Not signed in",
+      "imports": "Imports",
+      "previewTestData": "Test Data Preview",
+      "pages": "Pages",
+      "legacyPages": "Legacy Pages",
+      "news": "News",
+      "publications": "Publications",
+      "settings": "Settings",
+      "featureFlags": "Feature Flags",
+      "analytics": "Analytics"
+    },
+    "commandPalette": {
+      "dialogLabel": "Command palette",
+      "inputLabel": "Search commands and genes",
+      "listLabel": "Available commands",
+      "geneHint": "Published gene record",
+      "commands": {
+        "dashboard": {
+          "label": "Open dashboard",
+          "hint": "Overview and operational metrics"
+        },
+        "import": {
+          "label": "Start a data import",
+          "hint": "Create or inspect import work"
+        },
+        "content": {
+          "label": "Manage content",
+          "hint": "Static pages, news, and publications"
+        },
+        "newNews": {
+          "label": "Create news",
+          "hint": "Draft a new announcement"
+        },
+        "settings": {
+          "label": "Open settings",
+          "hint": "Site and system configuration"
+        },
+        "audit": {
+          "label": "View audit logs",
+          "hint": "Review recent administrative changes"
+        }
+      }
     },
     "usage": {
       "title": "Usage guide",
@@ -1733,6 +2120,10 @@
       }
     },
     "importPage": {
+      "filteredTotal": "Matching tasks",
+      "pageRunning": "Running / queued on this page",
+      "pageCompleted": "Completed on this page",
+      "pageFailed": "Failed on this page",
       "title": "Data Imports",
       "subtitle": "Submit module data imports and monitor historical tasks. Specialized biological importers are not yet available.",
       "newImport": "New Import",
@@ -1764,7 +2155,110 @@
       "releaseIdPlaceholder": "e.g. 42",
       "moduleKeyPlaceholder": "e.g. genes",
       "checksum": "Checksum",
-      "checksumPlaceholder": "SHA-256 of the source file (required)"
+      "checksumPlaceholder": "SHA-256 of the source file (required)",
+      "cancelTaskTitle": "Cancel import task",
+      "cancelTaskConfirm": "Cancel the import task \"{{filename}}\"? A running task is stopped and cannot be resumed.",
+      "retryTaskTitle": "Retry import task",
+      "retryTaskConfirm": "Retry the import task \"{{filename}}\"? A new task is submitted for the same file.",
+      "cancelFailed": "The import task could not be cancelled.",
+      "retryFailed": "The import task could not be retried.",
+      "cancelSucceeded": "The import task was cancelled.",
+      "retrySucceeded": "The import task was queued for a retry.",
+      "loadError": "The import tasks could not be loaded.",
+      "cancelTaskConfirmLabel": "Cancel task"
+    },
+    "charts": {
+      "imported": "Imported",
+      "failed": "Failed",
+      "records": "Records",
+      "importThroughput": "Import Throughput",
+      "importThroughputAria": "Import throughput chart",
+      "noData": "No chart data",
+      "latencyMs": "Latency (ms)",
+      "p50": "P50",
+      "p95": "P95",
+      "p99": "P99",
+      "queryLatency": "Query Latency (P50 / P95 / P99)",
+      "queryLatencyAria": "Query latency percentiles chart",
+      "storage": "Storage",
+      "storageGrowth": "Storage Growth",
+      "storageGrowthAria": "Storage growth chart"
+    },
+    "confirm": {
+      "confirm": "Confirm",
+      "cancel": "Cancel",
+      "working": "Working…",
+      "typePhrasePrefix": "Type",
+      "typePhraseSuffix": "to confirm",
+      "errorLabel": "Action failed"
+    },
+    "ops": {
+      "emptyTitle": "No data",
+      "emptyDescription": "There are no records to display.",
+      "networkErrorDuringUpload": "Network error during upload",
+      "fileMimeRequired": "File MIME type is required",
+      "presignMustUsePost": "Upload presign response must use POST",
+      "importPreviewAria": "Import preview",
+      "featureFlagsTitle": "\\\"Feature Flags\\\"",
+      "featureFlagsSubtitle": "\\\"Enable or disable registered capabilities atomically. Disabling rejects new requests and does not kill running jobs.\\\"",
+      "loadFeatureFlagsFailed": "Failed to load feature flags.",
+      "registeredCapabilities": "Registered capabilities",
+      "loadingFeatureFlags": "Loading feature flags…",
+      "noRegisteredFeatures": "No registered feature flags.",
+      "badgePublic": "public",
+      "badgeInternal": "internal",
+      "disableBehavior": "disable: {{behavior}}",
+      "toggleFeatureAria": "{{action}} {{key}}",
+      "disable": "Disable",
+      "enable": "Enable",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "pluginRuntime": "Plugin runtime",
+      "loadingPluginStatus": "Loading plugin status…",
+      "pluginStatusUnavailable": "Plugin status unavailable",
+      "loadPluginStatusFailed": "Unable to load plugin status.",
+      "pluginReady": "ready",
+      "available": "Available",
+      "unavailable": "Unavailable",
+      "onlyFirst100Rows": "; only the first 100 rows are shown.",
+      "dot": ".",
+      "previewReadOnly": "This preview is read-only; edits are not included in the import.",
+      "validatedModulePreview": "Validated module preview",
+      "noValidPreviewRows": "No valid preview rows were found.",
+      "editCellForRow": "Edit this row",
+      "maxPendingEdits": "Too many unsaved edits",
+      "uploadFailedStatus": "Upload failed",
+      "validatedRows": "{{count}} rows validated",
+      "validationErrors": "{{count}} validation errors",
+      "toggleFeatureFailed": "The {{key}} feature flag could not be updated.",
+      "toggleFeatureUpdated": "The {{key}} feature flag was updated."
+    },
+    "login": {
+      "brandTitle": "SoyMutDB Admin",
+      "signIn": "Sign in",
+      "signingIn": "Signing in…",
+      "enterCredentials": "Enter your administrator credentials to continue.",
+      "heroTitle": "Manage the soybean mutation database",
+      "heroBody": "Import variants, publish releases and curate site content from one console.",
+      "authorizedOnly": "Authorized personnel only.",
+      "username": "Username",
+      "usernameRequired": "Please enter your username",
+      "enterPassword": "Enter a password",
+      "password": "Password",
+      "passwordRequired": "Please enter your password",
+      "passwordTooShort": "Use at least 8 characters",
+      "tooShort": "Too short",
+      "weak": "Weak",
+      "fair": "Fair",
+      "good": "Good",
+      "strong": "Strong",
+      "failed": "Login failed. Please try again.",
+      "invalidCredentials": "Invalid email or password."
+    },
+    "uploads": {
+      "selectFile": "Select a file",
+      "sizeExceeded": "The file is too large",
+      "uploadFailed": "Upload failed"
     }
   },
   "news": {
@@ -2226,114 +2720,46 @@
       "title": "fastp — read QC",
       "subtitle": "Trim and quality-filter FASTQ reads",
       "files": "FASTQ files (single-end: 1 file, paired-end: R1 then R2)",
-      "subtitleLong": {
-        "subtitleLong": "Trim adapters and filter low-quality reads from FASTQ files. Results include a HTML report plus per-run statistics."
-      },
-      "inputFiles": {
-        "inputFiles": "Input files"
-      },
-      "pairedHint": {
-        "pairedHint": "Single-end: one FASTQ file. Paired-end: select R1 and R2 together (R1 first)."
-      },
-      "qualityCutoff": {
-        "qualityCutoff": "Quality cutoff (phred)"
-      },
-      "threads": {
-        "threads": "Threads"
-      },
-      "howItWorks": {
-        "howItWorks": "How it works"
-      },
-      "howStep1": {
-        "howStep1": "Files are uploaded directly to object storage via a pre-signed URL (up to 500 MB each)."
-      },
-      "howStep2": {
-        "howStep2": "A fastp job is queued; you are taken to the result page which refreshes automatically."
-      },
-      "howStep3": {
-        "howStep3": "When finished, the HTML report and summary statistics are available."
-      },
-      "parameters": {
-        "parameters": "Parameters"
-      },
-      "paramTrim": {
-        "paramTrim": "— bases trimmed from read 5′/3′ ends."
-      },
-      "paramQuality": {
-        "paramQuality": "— base quality cutoff (phred score, 0–40; default 15)."
-      },
-      "paramThreads": {
-        "paramThreads": "— CPU threads for the pipeline (1–64)."
-      },
-      "paramNameTrim": {
-        "paramNameTrim": "trim_front1 / trim_tail1"
-      },
-      "paramNameQuality": {
-        "paramNameQuality": "quality_phred"
-      },
-      "paramNameThreads": {
-        "paramNameThreads": "thread"
-      }
+      "subtitleLong": "Quality-control, adapter-trim and summarise paired sequencing data, with a downloadable report.",
+      "inputFiles": "Input files",
+      "pairedHint": "Provide both R1 and R2 files.",
+      "qualityCutoff": "Quality cutoff",
+      "threads": "Threads",
+      "howItWorks": "How it works",
+      "howStep1": "Upload paired FASTQ files",
+      "howStep2": "Set the quality threshold and thread count",
+      "howStep3": "Submit the job and wait for results",
+      "parameters": "Parameters",
+      "paramTrim": "Automatically trim adapter sequence.",
+      "paramQuality": "Reads below this Q value are discarded.",
+      "paramThreads": "Parallel threads, 2 by default.",
+      "paramNameTrim": "Trim adapters",
+      "paramNameQuality": "Minimum quality",
+      "paramNameThreads": "Threads"
     },
     "scanpy": {
       "title": "scanpy — single cell",
       "subtitle": "Filter, select highly variable genes, reduce dimensions and cluster",
       "files": "AnnData .h5ad file",
       "useHvg": "Select highly variable genes",
-      "subtitleLong": {
-        "subtitleLong": "Quality-filter, normalise and cluster a single-cell expression matrix (.h5ad). Results include a UMAP projection, cluster sizes and marker genes."
-      },
-      "inputData": {
-        "inputData": "Input data"
-      },
-      "inputHint": {
-        "inputHint": "One AnnData file in .h5ad format (raw counts or normalised matrix)."
-      },
-      "paramNameMinGene": {
-        "paramNameMinGene": "min_genes"
-      },
-      "paramNameMinCell": {
-        "paramNameMinCell": "min_cells"
-      },
-      "paramNameTop": {
-        "paramNameTop": "n_top_genes"
-      },
-      "resolution": {
-        "resolution": "Resolution"
-      },
-      "useHvgLong": {
-        "useHvgLong": "Use highly variable genes (HVG) before PCA"
-      },
-      "howItWorks": {
-        "howItWorks": "How it works"
-      },
-      "howStep1": {
-        "howStep1": "The .h5ad file is uploaded directly to object storage via a pre-signed URL (max 500 MB)."
-      },
-      "howStep2": {
-        "howStep2": "A scanpy job is queued: filtering → HVG → PCA → Leiden clustering → UMAP."
-      },
-      "howStep3": {
-        "howStep3": "The result page refreshes automatically and shows the UMAP plot, cluster sizes and marker genes."
-      },
-      "parameters": {
-        "parameters": "Parameters"
-      },
-      "paramNameMin": {
-        "paramNameMin": "min_genes / min_cells"
-      },
-      "paramMin": {
-        "paramMin": "— minimum genes per cell and cells per gene after filtering."
-      },
-      "paramTop": {
-        "paramTop": "— HVGs kept for PCA when “use HVG” is enabled."
-      },
-      "paramNameResolution": {
-        "paramNameResolution": "resolution"
-      },
-      "paramResolution": {
-        "paramResolution": "— Leiden clustering resolution (0.1–10; higher = more clusters)."
-      }
+      "subtitleLong": "Quality-control, normalise and cluster single-cell expression data, with interactive cluster output.",
+      "inputData": "Input data",
+      "inputHint": "Accepts count matrices (.h5ad / .mtx) and a cell-annotation file.",
+      "paramNameMinGene": "Minimum genes",
+      "paramNameMinCell": "Minimum cells",
+      "paramNameTop": "Highly variable genes",
+      "resolution": "Resolution",
+      "useHvgLong": "Selecting highly variable genes by expression variance before reducing dimensions markedly stabilises clustering.",
+      "howItWorks": "How it works",
+      "howStep1": "Upload the expression matrix and cell annotations",
+      "howStep2": "Choose dimensionality and clustering resolution",
+      "howStep3": "Submit the job and inspect the clusters",
+      "parameters": "Parameters",
+      "paramNameMin": "Minimum cells",
+      "paramMin": "Minimum cells / genes",
+      "paramTop": "Number of highly variable genes selected by expression variance.",
+      "paramNameResolution": "Resolution",
+      "paramResolution": "Leiden clustering resolution; higher values give finer clusters."
     },
     "job": {
       "title": "Analysis job",
@@ -2374,33 +2800,15 @@
       "annotatedH5ad": "annotated .h5ad",
       "statusLine": "Job status: {{status}}."
     },
-    "indexIntro": {
-      "indexIntro": "Run RNA-seq quality control (fastp) and single-cell clustering (scanpy) pipelines on your uploaded data. Jobs run asynchronously; results appear here once finished."
-    },
-    "newFastp": {
-      "newFastp": "New fastp job"
-    },
-    "newScanpy": {
-      "newScanpy": "New scanpy job"
-    },
-    "jobsErrorTitle": {
-      "jobsErrorTitle": "Could not load analysis jobs"
-    },
-    "jobsErrorHint": {
-      "jobsErrorHint": "The jobs service is unavailable. Please try again shortly."
-    },
-    "submitting": {
-      "submitting": "Submitting job…"
-    },
-    "uploading": {
-      "uploading": "Uploading to object storage…"
-    },
-    "selectFilesFirst": {
-      "selectFilesFirst": "Select files first"
-    },
-    "selectFileFirst": {
-      "selectFileFirst": "Select a file first"
-    },
+    "indexIntro": "Submit sequencing QC and single-cell jobs; results stay in the job list for download at any time.",
+    "newFastp": "New FastQC / fastp job",
+    "newScanpy": "New Scanpy job",
+    "jobsErrorTitle": "The job list could not be loaded",
+    "jobsErrorHint": "Try again shortly. If it keeps failing, contact the site administrator.",
+    "submitting": "Submitting…",
+    "uploading": "Uploading…",
+    "selectFilesFirst": "Select files first",
+    "selectFileFirst": "Select a file first",
     "upload": {
       "pairedHint": "Paired-end: select R1 and R2 together (order: R1 first, R2 second)",
       "removeFile": "Remove {{name}}",
@@ -2500,7 +2908,11 @@
         "protein": "Protein",
         "mutagen": "Mutagen",
         "cultivar": "Cultivar",
-        "phenotype": "Phenotype"
+        "phenotype": "Phenotype",
+        "assembly": "Assembly",
+        "release": "Release",
+        "releaseUnpinned": "not pinned",
+        "assemblyUnknown": "—"
       },
       "removeVariant": "Remove {{id}}",
       "impactDistribution": {
@@ -2548,7 +2960,30 @@
   },
   "genomeView": {
     "window": "Window {{start}}–{{end}} ({{flank}} bp up/downstream) · assembly {{assembly}}",
-    "geneCount": "{{variants}} genes"
+    "geneCount": "{{variants}} genes",
+    "ariaLabel": "Locus genome view",
+    "back": "Back to gene search",
+    "bodyOnly": "Gene body only",
+    "cardTitle": "Locus annotation",
+    "controls": {
+      "panLeft": "Pan left",
+      "panRight": "Pan right",
+      "reset": "Reset",
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out"
+    },
+    "eyebrow": "Genome view",
+    "geneList": "Genes in view",
+    "hasStructure": "Has CDS/UTR",
+    "loadError": "Annotation for this locus could not be loaded.",
+    "missingParams": "The link is missing the assembly version, chromosome or locus parameter.",
+    "noGenes": "No annotated genes in this window.",
+    "title": "Locus genome view",
+    "tracks": {
+      "all": "All",
+      "genes": "Genes",
+      "markers": "Markers"
+    }
   },
   "dataTable": {
     "title": "Data table",
@@ -2572,9 +3007,69 @@
     "impactDescription": "Impact distribution: {{values}}.",
     "variantTypeTitle": "Variant type distribution donut chart",
     "variantTypeDescription": "Variant type distribution: {{values}}.",
+    "variantTypeTotal": "Total",
+    "valueTableToggle": "Show the values as a table",
+    "renderFallback": "— the graphic could not be drawn; the exact values are listed below.",
+    "emptySelection": "No data for this selection.",
+    "axisMin": "min",
+    "axisMax": "max",
+    "ariaMinimum": "minimum",
+    "ariaMaximum": "maximum",
+    "colorRange": "Colour range",
     "heatmapTitle": "Expression heatmap of FPKM values across genes and libraries",
     "heatmapDescription": "Expression heatmap: {{points}} data points across {{genes}} genes and {{libraries}} libraries.",
     "releaseTrendTitle": "Release trend area chart",
     "releaseTrendDescription": "Variant accumulation over {{releases}} releases. Latest cumulative total: {{total}}."
+  },
+  "mutants": {
+    "columns": {
+      "cultivar": "Cultivar",
+      "linkedVariants": "Linked variants",
+      "mutagen": "Mutagen",
+      "name": "Name"
+    },
+    "detail": {
+      "back": "Back to list",
+      "details": "Details",
+      "loading": "Loading mutant line…",
+      "notFound": "This mutant line was not found, or it is not public yet.",
+      "variantFilter": "Filter by variant"
+    },
+    "empty": "No public mutant lines",
+    "emptyFiltered": "No mutant lines match these filters",
+    "error": "The mutant line list could not be loaded",
+    "eyebrow": "Mutant lines",
+    "fields": {
+      "cultivar": "Cultivar",
+      "description": "Description",
+      "generation": "Generation",
+      "mutagen": "Mutagen",
+      "phenotypeSummary": "Phenotype summary",
+      "species": "Species"
+    },
+    "filter": {
+      "apply": "Filter",
+      "clear": "Clear",
+      "label": "Filter mutant lines",
+      "placeholder": "Search by name, cultivar or mutagen…",
+      "mutagenExact": "Mutagen (exact)"
+    },
+    "loading": "Loading mutant lines…",
+    "phenotypes": {
+      "boundary": "Control",
+      "category": "Category",
+      "description": "Description",
+      "empty": "This mutant line has no phenotype data",
+      "error": "Phenotype data could not be loaded",
+      "loading": "Loading phenotypes…",
+      "name": "Trait",
+      "title": "Phenotypes",
+      "unit": "Unit",
+      "value": "Value"
+    },
+    "resultsAria": "Mutant line search results",
+    "subtitle": "Search published mutant lines by cultivar, mutagen and phenotype.",
+    "title": "Mutant lines",
+    "resultCount": "{{count}} mutant lines"
   }
 }

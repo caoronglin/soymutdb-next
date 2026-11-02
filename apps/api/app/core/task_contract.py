@@ -45,17 +45,18 @@ __all__ = [
 def _ensure_jobs_package() -> None:
     """Make ``soymutdb_jobs`` importable from the monorepo checkout.
 
-    The API image does not install ``soymutdb-jobs`` yet; when the package is
-    not importable we fall back to the monorepo source directory.
+    The monorepo source is **preferred over an installed copy**: the shared
+    package is part of this repository, so a stale installation (for
+    example one left in a developer environment before the package gained
+    a module) must not shadow the source that the rest of the checkout
+    actually runs.  In a container image the checkout is copied before the
+    dependencies are installed, so both paths point at the same files.
     """
-    try:
-        import soymutdb_jobs  # noqa: F401
-        return
-    except ImportError:
-        pass
     src = Path(__file__).resolve().parents[4] / "packages" / "jobs-py" / "src"
     if src.is_dir():
-        sys.path.insert(0, str(src))
+        src_str = str(src)
+        if src_str not in sys.path:
+            sys.path.insert(0, src_str)
 
 
 _ensure_jobs_package()

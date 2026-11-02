@@ -24,23 +24,23 @@ import {
 import { Button, Card, Empty, Input, Skeleton, Tag, Typography } from "@/lib/antd";
 import { fetchSraRun, fetchSraSamples, type SraRunInfo } from "@soymutdb/api-client";
 import { FadeUp, useReveal } from "../components/route-motion";
+import { SoyMutDbWidget } from "../components/soymutdb-widget";
 import { startViewTransition } from "../lib/view-transitions";
 
-// <soymutdb-widget> is a custom element registered in main.tsx
-// (side-effect import of ../components/soymutdb-widget). Declare it so
-// JSX usage type-checks under React 19.
-/* eslint-disable @typescript-eslint/no-namespace */
-declare module "react" {
-  namespace JSX {
-    interface IntrinsicElements {
-      "soymutdb-widget": React.DetailedHTMLProps<
-        React.HTMLAttributes<HTMLElement> & { name?: string; params?: string },
-        HTMLElement
-      >;
-    }
-  }
-}
-/* eslint-enable @typescript-eslint/no-namespace */
+// The `sra_run` widget below is the backend's own expanded run view
+// (GET /api/v1/widget/sra_run, apps/api/app/widgets/). It used to be embedded here
+// through a `soymutdb-widget` custom element, whose renderer was deleted in
+// 25c32e499 during the Vue cutover and never restored — so the element mounted
+// inert and this card rendered empty. A `declare module "react"` block kept it
+// type-checking, which is how the breakage survived review, typecheck and the unit
+// tests. f28e38d86 removed the dead embed; it is now a real React component
+// (../components/soymutdb-widget) that sanitizes the server fragment with
+// DOMPurify before insertion. Keep it a component: a dashed JSX tag is always a
+// custom element, and scripts/test_custom_element_registration_contracts.py fails
+// the build for any such tag that no `customElements.define` registers.
+//
+// Note: that suite also refuses the literal tag name in this file, including in a
+// comment, so the element is referred to by name only here.
 
 const HISTORY_KEY = "soymutdb:sra-history";
 const HISTORY_LIMIT = 10;
@@ -346,7 +346,7 @@ function SraBrowser() {
         </div>
       </div>
 
-      {/* Use Web Component <soymutdb-widget> to embed the sra_run widget */}
+      {/* Server-rendered `sra_run` widget: GET /api/v1/widget/sra_run?params={"run":…} */}
       {activeRun && (
         <FadeUp delay={0.25} className="mt-8">
           <Card>
@@ -357,12 +357,7 @@ function SraBrowser() {
               </Typography.Text>
             </div>
             <div>
-              {/* This is a Custom Element registered in soymutdb-widget.ts */}
-              <soymutdb-widget
-                name="sra_run"
-                params={JSON.stringify({ run: activeRun })}
-                key={activeRun}
-              />
+              <SoyMutDbWidget name="sra_run" params={{ run: activeRun }} key={activeRun} />
             </div>
           </Card>
         </FadeUp>

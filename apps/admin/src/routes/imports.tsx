@@ -1,11 +1,14 @@
 import { useTranslation } from "react-i18next";
+import { Link } from "@tanstack/react-router";
 import { CloudUploadOutlined, FileExcelOutlined, DatabaseOutlined, RedoOutlined, CloseCircleOutlined, CheckCircleOutlined, LoadingOutlined, DownloadOutlined } from "@ant-design/icons";
-import { Badge, Button, Input, Modal, PageContainer, Select, Typography } from "@/lib/antd";
+import { Skeleton, Badge, Button, Input, Modal, PageContainer, Select, Typography, App } from "@/lib/antd";
 import { StatCard } from "../components/stat-card";
+import { ConfirmDialog } from "../components/confirm-dialog";
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { http, authRequestBlob, capabilitiesApi, adminImportStudioApi, type ImportDraftListItemResponse, type ImportDraftResponse } from "@soymutdb/api-client";
 import { cn } from "../lib/cn";
+import { summarizeImportPage } from "../lib/import-task-stats";
 import { DataTable, type DataTableColumn } from "../components/data-table";
 import { ImportPreviewTable } from "../components/import-preview-table";
 import { ImportDraftEditor } from "../components/import-draft-editor";
@@ -13,14 +16,19 @@ import { StatusBadge, type TaskStatus } from "../components/status-badge";
 import {
   uploadModuleFile,
   fetchModulePreview,
+  describeUploadSource,
+  type UploadedObject,
   type ModulePreviewResult,
 } from "../lib/module-import-upload";
 import { resolveFeatureState } from "../lib/capability-state";
 import {
   buildImportSubmission,
   createImportIdempotencyKey,
+  describeImportIntent,
   parseDataSetId,
   parseModuleReleaseId,
+  resolveIdempotencyKey,
+  validateModuleImport,
   type ImportSubmission,
 } from "../lib/import-submission";
 
@@ -97,9 +105,6 @@ export const AVAILABLE_SUBMISSION_IMPORT_TYPES = ["module_tsv"] as const;
 export const DEFAULT_SUBMISSION_IMPORT_TYPE: (typeof AVAILABLE_SUBMISSION_IMPORT_TYPES)[number] =
   "module_tsv";
 
-/** File extensions accepted for ``module_tsv`` (multi-format module import). */
-const MODULE_FORMAT_EXTENSIONS = [".tsv", ".txt", ".csv", ".xlsx"] as const;
-
 /** Available template download formats (backend ``format`` query param). */
 const MODULE_TEMPLATE_FORMATS = [
   { value: "tsv", label: "TSV" },
@@ -118,6 +123,7 @@ export interface ImportsPageProps {
 
 export default function ImportsPage({ initialUploadOpen = false }: ImportsPageProps) {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const queryClient = useQueryClient();
   // A resume link names a server-created draft; the legacy upload wizard never
   // supplies or recreates this identifier.
@@ -151,6 +157,19 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
   >(null);
   const previewRequestToken = useRef(0);
 
+  // Synchronous in-flight guard. `uploading` / `submitMutation.isPending` only
+  // disable the button after React re-renders, so two clicks inside one tick
+  // both used to clear every guard and start a second multipart session (and a
+  // second POST /admin/imports).
+  const submittingRef = useRef(false);
+  // Payload signature the current idempotency key was issued for. The API
+  // answers a repeated key with the previously created task, so a key is only
+  // reusable while the intent behind it is unchanged.
+  const idempotencyIntentRef = useRef<string | null>(null);
+  // Last completed browser-direct upload, so retrying a failed submission
+  // reuses the finished object instead of transferring the whole file again.
+  const uploadedSourceRef = useRef<{ identity: string; uploaded: UploadedObject } | null>(null);
+
   // Module template download state
   const [templateModuleKey, setTemplateModuleKey] = useState("genes");
   const [templateFormat, setTemplateFormat] = useState<string>("tsv");
@@ -162,17 +181,22 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
     Map<number, ImportStatus>
   >(new Map());
 
+  // Cancel / retry are confirmed and every rejection is reported.
+  const [cancelTarget, setCancelTarget] = useState<{ id: number; filename: string } | null>(null);
+  const [retryTarget, setRetryTarget] = useState<{ id: number; filename: string } | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<string | null>(null);
+
   // -----------------------------------------------------------------------
   // Queries
   // -----------------------------------------------------------------------
 
-  const { data, isLoading } = useQuery<PaginatedResponse<ImportTask>>({
+  const { data, isLoading, isError, isFetching } = useQuery<PaginatedResponse<ImportTask>>({
     queryKey: ["admin-imports", page, search],
     queryFn: () =>
       http.get("/admin/imports", {
         params: { page, page_size: 20, search },
       }),
-    placeholderData: { items: [], total: 0, page, page_size: 20 },
   });
 
   const draftsQuery = useQuery<ImportDraftListItemResponse[]>({
@@ -206,6 +230,10 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
   const effectiveUploadMode = localUploadEnabled ? uploadMode : "s3";
 
   const tasks = useMemo(() => data?.items ?? [], [data?.items]);
+  // The browser gate keys off the request itself: "loading" while
+  // GET /admin/imports is in flight, then exactly one of "ready" (rows or the
+  // empty state) or "error".
+  const taskListState = isError ? "error" : isFetching ? "loading" : "ready";
   const hasRunning = tasks.some(
     (t) => t.status === "running" || t.status === "queued",
   );
@@ -221,6 +249,7 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
         timeoutMs: 30_000,
       }),
     onSuccess: () => {
+      previewRequestToken.current += 1;
       setShowUpload(false);
       setUploadFilename("");
       setUploadFilePath("");
@@ -236,7 +265,12 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
       setUploading(false);
       setUploadMode("local");
       setPreviewState(null);
+      idempotencyIntentRef.current = null;
+      uploadedSourceRef.current = null;
       queryClient.invalidateQueries({ queryKey: ["admin-imports"] });
+    },
+    onSettled: () => {
+      submittingRef.current = false;
     },
   });
 
@@ -244,6 +278,15 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
     mutationFn: (id: number) => http.delete(`/admin/imports/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-imports"] });
+      setCancelTarget(null);
+      setCancelError(null);
+      message.success(t("admin.importPage.cancelSucceeded", { defaultValue: "The import task was cancelled." }));
+    },
+    onError: (error) => {
+      // The confirmation dialog stays open and explains the refusal; a
+      // rejected cancel used to leave the operator with no signal at all.
+      setCancelError(error instanceof Error ? error.message : String(error));
+      message.error(t("admin.importPage.cancelFailed", { defaultValue: "The import task could not be cancelled." }));
     },
   });
 
@@ -251,6 +294,13 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
     mutationFn: (id: number) => http.post(`/admin/imports/${id}/retry`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin-imports"] });
+      setRetryTarget(null);
+      setRetryError(null);
+      message.success(t("admin.importPage.retrySucceeded", { defaultValue: "The import task was queued for a retry." }));
+    },
+    onError: (error) => {
+      setRetryError(error instanceof Error ? error.message : String(error));
+      message.error(t("admin.importPage.retryFailed", { defaultValue: "The import task could not be retried." }));
     },
   });
 
@@ -301,17 +351,52 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
   // -----------------------------------------------------------------------
 
   function openUploadDialog() {
+    // Every dialog session starts from a clean draft. Previously the modal kept
+    // the previously chosen file, release ID, checksum and preview while minting
+    // a new idempotency key, so reopening let the old file be submitted again as
+    // a second task with no visible trace of what was carried over.
     setUploadDataSetId("1");
     setUploadIdempotencyKey(createImportIdempotencyKey());
+    idempotencyIntentRef.current = null;
+    uploadedSourceRef.current = null;
+    setUploadType(DEFAULT_SUBMISSION_IMPORT_TYPE);
+    setUploadMode("local");
+    setUploadFile(null);
+    setUploadFilename("");
+    setUploadFilePath("");
+    setUploadModuleKey("genes");
+    setUploadReleaseId("");
+    setUploadChecksum("");
+    setUploadError(null);
+    setUploading(false);
+    setUploadProgress(0);
+    invalidatePreview();
     setShowUpload(true);
   }
 
   function submitImport(
     input: Omit<ImportSubmission, "data_set_id" | "idempotency_key" | "release_id">,
     dataSetId: number,
-  ) {
-    const idempotencyKey = uploadIdempotencyKey || createImportIdempotencyKey();
+  ): boolean {
+    const intent = describeImportIntent({
+      filename: input.filename,
+      type: input.type,
+      dataSetId,
+      releaseId: uploadType === "module_tsv" ? uploadReleaseId : undefined,
+      objectKey: input.object_key,
+      filePath: input.file_path,
+      moduleKey: input.module_key,
+      checksum: input.checksum,
+    });
+    const idempotencyKey = resolveIdempotencyKey({
+      currentKey: uploadIdempotencyKey,
+      currentIntent: idempotencyIntentRef.current,
+      nextIntent: intent,
+      createKey: createImportIdempotencyKey,
+    });
+    idempotencyIntentRef.current = intent;
     if (!uploadIdempotencyKey) setUploadIdempotencyKey(idempotencyKey);
+    else if (idempotencyKey !== uploadIdempotencyKey) setUploadIdempotencyKey(idempotencyKey);
     try {
       submitMutation.mutate(
         buildImportSubmission({
@@ -326,8 +411,10 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
           idempotencyKey,
         }),
       );
+      return true;
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "Invalid import submission.");
+      return false;
     }
   }
 
@@ -349,22 +436,41 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
   );
 
   async function handleUploadSubmit() {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    try {
+      // The mutation's `onSettled` releases the guard once the server has
+      // answered a request that was actually sent; every early exit below has
+      // to release it here instead.
+      if (!(await runImportSubmission())) submittingRef.current = false;
+    } catch (error) {
+      submittingRef.current = false;
+      setUploadError(error instanceof Error ? error.message : "Invalid import submission.");
+    }
+  }
+
+  /**
+   * Validate the dialog, upload if the local source changed, and submit.
+   * Returns true only when a request was handed to the mutation (which then
+   * owns releasing the in-flight guard).
+   */
+  async function runImportSubmission(): Promise<boolean> {
     setUploadError(null);
 
     if (!capabilitiesQuery.isSuccess) {
       setUploadError("Import capabilities are unavailable. Refresh and try again.");
-      return;
+      return false;
     }
     if (uploadType === "module_tsv" && !moduleImportEnabled) {
       setUploadError("Module imports are disabled.");
-      return;
+      return false;
     }
     if (uploadType === "module_tsv") {
       try {
         parseModuleReleaseId(uploadReleaseId);
       } catch (error) {
         setUploadError(error instanceof Error ? error.message : "A release ID is required.");
-        return;
+        return false;
       }
     }
     let dataSetId: number;
@@ -372,91 +478,99 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
       dataSetId = parseDataSetId(uploadDataSetId);
     } catch (error) {
       setUploadError(error instanceof Error ? error.message : "A data set ID is required.");
-      return;
+      return false;
     }
 
     if (effectiveUploadMode === "local") {
       if (!uploadFile) {
         setUploadError("Choose a file to upload.");
-        return;
+        return false;
       }
       const filename = uploadFile.name;
-      // Module data imports must use a supported multi-format extension.
+      const moduleKey = uploadModuleKey.trim();
       if (uploadType === "module_tsv") {
-        const ext = filename.toLowerCase().match(/\.[a-z0-9]+$/)?.[0];
-        if (!ext || !(MODULE_FORMAT_EXTENSIONS as readonly string[]).includes(ext)) {
-          setUploadError(
-            `Module data files must use one of ${MODULE_FORMAT_EXTENSIONS.join(" / ")}.`,
-          );
-          return;
-        }
-        if (!uploadModuleKey.trim()) {
-          setUploadError("Module key is required for module data imports.");
-          return;
+        const invalid = validateModuleImport({ filename, moduleKey, sourceMode: "local" });
+        if (invalid) {
+          setUploadError(invalid);
+          return false;
         }
       }
 
-      setUploading(true);
-      setUploadProgress(0);
-      try {
-        // Browser-direct multipart upload — file bytes never hit the API.
-        const uploaded = await uploadModuleFile({
-          filename,
-          type: uploadType,
-          file: uploadFile,
-          dataSetId,
-          onProgress: (p) => setUploadProgress(p.percent),
-        });
-        submitImport(
-          {
+      const uploadIdentity = describeUploadSource({
+        filename,
+        size: uploadFile.size,
+        lastModified: uploadFile.lastModified,
+        type: uploadType,
+        moduleKey: uploadType === "module_tsv" ? moduleKey : undefined,
+        dataSetId,
+      });
+      const alreadyUploaded = uploadedSourceRef.current;
+      let uploaded: UploadedObject;
+      if (alreadyUploaded && alreadyUploaded.identity === uploadIdentity) {
+        // The bytes already reached object storage under this data set's key.
+        // Re-uploading after a failed POST /admin/imports would create a second
+        // object and hand the server an orphan.
+        uploaded = alreadyUploaded.uploaded;
+      } else {
+        setUploading(true);
+        setUploadProgress(0);
+        try {
+          // Browser-direct multipart upload — file bytes never hit the API.
+          uploaded = await uploadModuleFile({
             filename,
             type: uploadType,
-            object_key: uploaded.object_key,
-            module_key: uploadType === "module_tsv" ? uploadModuleKey.trim() : undefined,
-            checksum: uploadType === "module_tsv" ? uploaded.sha256 : undefined,
-          },
-          dataSetId,
-        );
-      } catch (err) {
-        setUploadError(
-          err instanceof Error ? err.message : "CloudUploadOutlined failed.",
-        );
-      } finally {
-        setUploading(false);
+            file: uploadFile,
+            dataSetId,
+            onProgress: (p) => setUploadProgress(p.percent),
+          });
+        } catch (err) {
+          setUploadError(
+            err instanceof Error ? err.message : "CloudUploadOutlined failed.",
+          );
+          return false;
+        } finally {
+          setUploading(false);
+        }
+        uploadedSourceRef.current = { identity: uploadIdentity, uploaded };
       }
-      return;
+      return submitImport(
+        {
+          filename,
+          type: uploadType,
+          object_key: uploaded.object_key,
+          module_key: uploadType === "module_tsv" ? moduleKey : undefined,
+          checksum: uploadType === "module_tsv" ? uploaded.sha256 : undefined,
+        },
+        dataSetId,
+      );
     }
 
     // Advanced S3 URI mode.
     const filename = uploadFilename.trim();
     if (!filename || !uploadFilePath.trim()) {
       setUploadError("Filename and S3 path are required in S3 mode.");
-      return;
+      return false;
     }
+    const moduleKey = uploadModuleKey.trim();
     if (uploadType === "module_tsv") {
-      const ext = filename.toLowerCase().match(/\.[a-z0-9]+$/)?.[0];
-      if (!ext || !(MODULE_FORMAT_EXTENSIONS as readonly string[]).includes(ext)) {
-        setUploadError(
-          `Module data files must use one of ${MODULE_FORMAT_EXTENSIONS.join(" / ")}.`,
-        );
-        return;
-      }
-      if (!uploadModuleKey.trim()) {
-        setUploadError("Module key is required for module data imports.");
-        return;
-      }
-      if (!uploadChecksum.trim()) {
-        setUploadError("Checksum is required for module data imports.");
-        return;
+      const invalid = validateModuleImport({
+        filename,
+        moduleKey,
+        sourceMode: "s3",
+        checksum: uploadChecksum,
+      });
+      if (invalid) {
+        setUploadError(invalid);
+        return false;
       }
     }
 
-    submitImport(
+    return submitImport(
       {
         filename,
         type: uploadType,
         file_path: uploadFilePath.trim(),
-        module_key: uploadType === "module_tsv" ? uploadModuleKey.trim() : undefined,
+        module_key: uploadType === "module_tsv" ? moduleKey : undefined,
         checksum: uploadType === "module_tsv" ? uploadChecksum.trim() : undefined,
       },
       dataSetId,
@@ -466,6 +580,16 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
   function invalidatePreview() {
     previewRequestToken.current += 1;
     setPreviewState(null);
+  }
+
+  /**
+   * Close the dialog and drop any preview still in flight, so a slow response
+   * cannot paint the previous session's rows into the next one.
+   */
+  function closeUploadDialog() {
+    invalidatePreview();
+    setUploadError(null);
+    setShowUpload(false);
   }
 
   /** Request a bounded, read-only validation preview for a local module file. */
@@ -493,14 +617,16 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
       });
   }
 
-  function handleCancel(taskId: number) {
-    if (confirm("Cancel this import task?")) {
-      cancelMutation.mutate(taskId);
-    }
+  function handleCancel(task: ImportTask) {
+    // The native `window.confirm` was an unstyled English prompt inside a
+    // Chinese console; the shared dialog is used instead.
+    setCancelError(null);
+    setCancelTarget({ id: task.id, filename: task.filename });
   }
 
-  function handleRetry(taskId: number) {
-    retryMutation.mutate(taskId);
+  function handleRetry(task: ImportTask) {
+    setRetryError(null);
+    setRetryTarget({ id: task.id, filename: task.filename });
   }
 
   /** DownloadOutlined a module starter template in the selected format. */
@@ -646,7 +772,8 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
               <Button
                 type="text"
                 size="small"
-                onClick={() => handleRetry(t.id)}
+                data-testid="imports-retry-task"
+                onClick={() => handleRetry(t)}
                 disabled={retryMutation.isPending}
               >
                 <RedoOutlined className="size-3.5" />
@@ -660,7 +787,8 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
             <Button
               type="text"
               size="small"
-              onClick={() => handleCancel(t.id)}
+              data-testid="imports-cancel-task"
+              onClick={() => handleCancel(t)}
               disabled={cancelMutation.isPending}
               className="text-destructive hover:text-destructive"
             >
@@ -670,8 +798,13 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
           );
         }
         return (
-          <Button type="text" size="small">
-            Details
+              <Button type="text" size="small">
+                {/* The task detail route reads /admin/imports/{id}; the control
+                    used to have no handler at all, so a finished task had no
+                    reachable detail view. */}
+                <Link to="/imports/$taskId" params={{ taskId: String(t.id) }}>
+                  Details
+                </Link>
           </Button>
         );
       },
@@ -679,19 +812,10 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
   ];
 
   // -----------------------------------------------------------------------
-  // Stats (from paginated data – approximates total counts)
+  // The filtered total spans all pages; status counts describe the visible page.
   // -----------------------------------------------------------------------
 
-  // Note: these stats are computed from the current page, not the full set.
-  // For production accuracy, the backend should expose aggregates.
-  const stats = {
-    total: data?.total ?? 0,
-    running: tasks.filter(
-      (t) => t.status === "running" || t.status === "queued",
-    ).length,
-    failed: tasks.filter((t) => t.status === "failed").length,
-    completed: tasks.filter((t) => t.status === "completed").length,
-  };
+  const stats = summarizeImportPage(tasks, data?.total ?? 0);
 
   // -----------------------------------------------------------------------
   // Render
@@ -702,7 +826,7 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
       title={t("admin.importPage.title")}
       subTitle={t("admin.importPage.subtitle")}
       extra={[
-        <Button key="new-import" type="primary" onClick={openUploadDialog} disabled={!capabilitiesQuery.isSuccess} icon={<CloudUploadOutlined aria-hidden />} aria-label={t("admin.importPage.newImport")}>{t("admin.importPage.newImport")}</Button>,
+        <Button key="new-import" type="primary" data-testid="imports-new" onClick={openUploadDialog} disabled={!capabilitiesQuery.isSuccess} icon={<CloudUploadOutlined aria-hidden />} aria-label={t("admin.importPage.newImport")}>{t("admin.importPage.newImport")}</Button>,
       ]}
     >
       <div className="space-y-6">
@@ -744,20 +868,15 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
             </div>
             <div className="space-y-1.5">
               <label htmlFor="template-format">{t("admin.importPage.format")}</label>
-              <Select value={templateFormat} onChange={setTemplateFormat}>
-
-
-                  {MODULE_TEMPLATE_FORMATS.map((f) => (
-                    <Select.Option
-                      key={f.value}
-                      value={f.value}
-                      disabled={f.value === "xlsx" && !xlsxImportEnabled}
-                    >
-                      {f.label}
-                    </Select.Option>
-                  ))}
-
-              </Select>
+              <Select
+                value={templateFormat}
+                onChange={setTemplateFormat}
+                options={MODULE_TEMPLATE_FORMATS.map((f) => ({
+                  value: f.value,
+                  label: f.label,
+                  disabled: f.value === "xlsx" && !xlsxImportEnabled,
+                }))}
+              />
             </div>
             <Button
               type="default"
@@ -788,14 +907,14 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
 
         {/* Stats */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Total Tasks" value={stats.total} icon={<DatabaseOutlined className="size-5" />} />
+          <StatCard label={t("admin.importPage.filteredTotal", { defaultValue: "Matching tasks" })} value={isError || !data ? "—" : stats.total} icon={<DatabaseOutlined className="size-5" />} />
           <StatCard
-            label="Running"
-            value={stats.running}
+            label={t("admin.importPage.pageRunning", { defaultValue: "Running / queued on this page" })}
+            value={isError || !data ? "—" : stats.running}
             icon={<LoadingOutlined className={cn("size-5", stats.running > 0 && "animate-spin")} />}
           />
-          <StatCard label="Completed" value={stats.completed} icon={<CheckCircleOutlined className="size-5" />} />
-          <StatCard label="Failed" value={stats.failed} icon={<CloseCircleOutlined className="size-5" />} />
+          <StatCard label={t("admin.importPage.pageCompleted", { defaultValue: "Completed on this page" })} value={isError || !data ? "—" : stats.completed} icon={<CheckCircleOutlined className="size-5" />} />
+          <StatCard label={t("admin.importPage.pageFailed", { defaultValue: "Failed on this page" })} value={isError || !data ? "—" : stats.failed} icon={<CloseCircleOutlined className="size-5" />} />
         </div>
 
         {resumeDraftId ? (
@@ -836,15 +955,16 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
                     <Typography.Text strong>{draft.filename}</Typography.Text>
                     <Typography.Text type="secondary" className="ml-2 text-xs">{draft.status} · {draft.row_count} rows · {draft.column_count} columns</Typography.Text>
                   </div>
-                  <Button size="small" href={`/imports?draft=${encodeURIComponent(draft.id)}`}>{t("admin.importPage.resume")}</Button>
+                  <Button size="small" href={`${import.meta.env.BASE_URL.replace(/\/$/, "")}/imports?draft=${encodeURIComponent(draft.id)}`}>{t("admin.importPage.resume")}</Button>
                 </li>
               ))}
             </ul>
-          ) : !draftsQuery.isLoading ? <Typography.Text type="secondary">{t("admin.importPage.noDrafts")}</Typography.Text> : null}
+          ) : draftsQuery.isSuccess ? <Typography.Text type="secondary">{t("admin.importPage.noDrafts")}</Typography.Text> : null}
         </section>
 
         {/* Search */}
         <Input
+          data-testid="imports-search"
           placeholder={t("admin.importPage.searchPlaceholder")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -852,21 +972,34 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
         />
 
         {/* Table */}
-        <DataTable
-          columns={columns}
-          data={tasks}
-          rowKey={(t) => String(t.id)}
-          loading={isLoading}
-          page={page}
-          pageSize={20}
-          total={data?.total ?? 0}
-          onPageChange={setPage}
-          emptyTitle="No import tasks"
-          emptyDescription="Submit a new import to get started."
-        />
+        <div data-testid="imports-table" data-state={taskListState}>
+        {isError ? (
+          /* A failed request is not an empty task list. */
+          <div
+            role="alert"
+            data-testid="imports-load-error"
+            className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
+          >
+            {t("admin.importPage.loadError", { defaultValue: "The import tasks could not be loaded." })}
+          </div>
+        ) : isLoading ? <Skeleton active /> : (
+          <DataTable
+            columns={columns}
+            data={tasks}
+            rowKey={(t) => String(t.id)}
+            loading={isLoading}
+            page={page}
+            pageSize={20}
+            total={data?.total ?? 0}
+            onPageChange={setPage}
+            emptyTitle="No import tasks"
+            emptyDescription="Submit a new import to get started."
+          />
+        )}
+        </div>
 
         {/* CloudUploadOutlined dialog */}
-        <Modal open={showUpload} onCancel={() => setShowUpload(false)}>
+        <Modal open={showUpload} onCancel={closeUploadDialog}>
           <div>
             <div>
               <Typography.Title level={5}>{t("admin.importPage.newImport")}</Typography.Title>
@@ -884,20 +1017,12 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
                   aria-label={t("admin.importPage.importType")}
                   value={uploadType}
                   onChange={(v) => setUploadType(v as ImportType)}
-                >
-
-
-                    {AVAILABLE_SUBMISSION_IMPORT_TYPES.map((type) => (
-                      <Select.Option
-                        key={type}
-                        value={type}
-                        disabled={!moduleImportEnabled}
-                      >
-                        {TYPE_LABELS[type]}
-                      </Select.Option>
-                    ))}
-
-                </Select>
+                  options={AVAILABLE_SUBMISSION_IMPORT_TYPES.map((type) => ({
+                    value: type,
+                    label: TYPE_LABELS[type],
+                    disabled: !moduleImportEnabled,
+                  }))}
+                />
               </div>
 
               <div className="space-y-1.5">
@@ -922,13 +1047,11 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
                 <Select
                   value={effectiveUploadMode}
                   onChange={(v) => setUploadMode(v as "local" | "s3")}
-                >
-
-
-                    <Select.Option value="local" disabled={!localUploadEnabled}>{t("admin.importPage.localFile")}</Select.Option>
-                    <Select.Option value="s3">{t("admin.importPage.s3Uri")}</Select.Option>
-
-                </Select>
+                  options={[
+                    { value: "local", label: t("admin.importPage.localFile"), disabled: !localUploadEnabled },
+                    { value: "s3", label: t("admin.importPage.s3Uri") },
+                  ]}
+                />
               </div>
 
               {effectiveUploadMode === "local" ? (
@@ -1101,7 +1224,7 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
             <div>
               <Button
                 type="default"
-                onClick={() => setShowUpload(false)}
+                onClick={closeUploadDialog}
                 disabled={submitMutation.isPending}
               >
                 Cancel
@@ -1141,6 +1264,69 @@ export default function ImportsPage({ initialUploadOpen = false }: ImportsPagePr
             ) : null}
           </div>
         </Modal>
+
+        {/* Cancel confirmation */}
+        {cancelTarget && (
+          <ConfirmDialog
+            open={Boolean(cancelTarget)}
+            onOpenChange={(open) => {
+              if (!open) {
+                setCancelTarget(null);
+                setCancelError(null);
+              }
+            }}
+            title={t("admin.importPage.cancelTaskTitle", { defaultValue: "Cancel import task" })}
+            description={t("admin.importPage.cancelTaskConfirm", {
+              defaultValue: 'Cancel the import task "{{filename}}"? A running task is stopped and cannot be resumed.',
+              filename: cancelTarget.filename,
+            })}
+            confirmLabel={t("admin.importPage.cancelTaskConfirmLabel", { defaultValue: "Cancel task" })}
+            severity="destructive"
+            onConfirm={() => cancelMutation.mutate(cancelTarget.id)}
+            loading={cancelMutation.isPending}
+            error={cancelError ? (
+              <span data-testid="imports-cancel-error">
+                {t("admin.importPage.cancelFailed", { defaultValue: "The import task could not be cancelled." })}
+                {" "}
+                {t("common.errorReason", {
+                  reason: cancelError,
+                  defaultValue: "Server response: {{reason}}",
+                })}
+              </span>
+            ) : null}
+          />
+        )}
+
+        {/* Retry confirmation */}
+        {retryTarget && (
+          <ConfirmDialog
+            open={Boolean(retryTarget)}
+            onOpenChange={(open) => {
+              if (!open) {
+                setRetryTarget(null);
+                setRetryError(null);
+              }
+            }}
+            title={t("admin.importPage.retryTaskTitle", { defaultValue: "Retry import task" })}
+            description={t("admin.importPage.retryTaskConfirm", {
+              defaultValue: 'Retry the import task "{{filename}}"? A new task is submitted for the same file.',
+              filename: retryTarget.filename,
+            })}
+            confirmLabel={t("common.retry", { defaultValue: "Retry" })}
+            onConfirm={() => retryMutation.mutate(retryTarget.id)}
+            loading={retryMutation.isPending}
+            error={retryError ? (
+              <span data-testid="imports-retry-error">
+                {t("admin.importPage.retryFailed", { defaultValue: "The import task could not be retried." })}
+                {" "}
+                {t("common.errorReason", {
+                  reason: retryError,
+                  defaultValue: "Server response: {{reason}}",
+                })}
+              </span>
+            ) : null}
+          />
+        )}
       </div>
     </PageContainer>
   );

@@ -2,8 +2,10 @@
 # =====================================================================
 # SoyMutDB JBrowse standalone app — reproducible multi-stage build
 # =====================================================================
-FROM node:24.19.0-alpine AS base
-RUN corepack enable && corepack prepare pnpm@12.5.1 --activate
+FROM node:26.13.0-alpine AS base
+# Node 25+ ships no corepack, and this image is on the Node 26 pin, so pnpm is
+# installed with the bundled npm at the same reviewed version.
+RUN npm install --global --no-fund --no-audit pnpm@12.11.2 && pnpm --version
 WORKDIR /app
 
 # ---- deps stage: install the complete workspace from the root lockfile

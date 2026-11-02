@@ -18,7 +18,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 from urllib.parse import quote, urlencode
 
-from sqlalchemy import and_, case, desc, func, literal, or_, select
+from sqlalchemy import and_, case, desc, func, literal, or_, select, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -287,40 +287,62 @@ def _is_exact_accession(query: str) -> bool:
     return 0 < len(stripped) <= 64 and " " not in stripped
 
 
-def _gene_match_conditions(
+def _gene_match_query(
     query: str,
     pattern: str,
     *,
     release_id: int,
     assembly_id: int | None,
-) -> list:
-    """WHERE terms shared by gene search and its assembly distribution.
+):
+    """Return a subquery of the ``gene_pk``s a release-scoped search matches.
 
     Extracted so the ambiguity aggregate and the page query can never drift
     apart: both must apply the identical text/alias/release scope.
+
+    The text arm and the curated-alias arm are ``UNION``-ed rather than ``OR``-ed
+    on purpose. PostgreSQL cannot turn an ``OR`` list containing a SubPlan into a
+    bitmap index condition: the whole disjunction collapses into a filter on a
+    scan node, so adding the alias test to the text test made every
+    identifier-shaped search — the normal case for a search box — read
+    ``genes`` end to end and silently bypass the trigram indexes migration 0046
+    exists to provide. Measured on 300k genes with ``EXPLAIN (ANALYZE,
+    BUFFERS)``: the ``OR`` form planned ``Index Scan using ix_gene_accession``
+    with ``Rows Removed by Filter: 299999`` at 760 ms, the ``UNION`` form planned
+    ``BitmapOr`` over ``ix_genes_accession_trgm`` / ``ix_genes_name_trgm`` /
+    ``ix_genes_description_trgm`` at 9 ms — and forced ``enable_seqscan = off``
+    did not recover the ``OR`` form, so this is a structural limit, not a cost
+    estimate. Alias equality is still curated data only, never similarity.
+
+    ``lower(alias)`` is matched through the functional index added by migration
+    0048; without it this arm would scan ``gene_aliases`` on every search.
     """
+    scope = [Assembly.release_id == release_id]
+    if assembly_id is not None:
+        scope.append(Gene.assembly_id == assembly_id)
     text_match = or_(
         Gene.accession.ilike(pattern, escape="\\"),
         Gene.name.ilike(pattern, escape="\\"),
         Gene.description.ilike(pattern, escape="\\"),
     )
-    conditions: list = [text_match]
-    if _is_exact_accession(query):
-        # Curated alias equality widens the candidate set; matching never
-        # falls back to string similarity.
-        alias_exists = (
-            select(GeneAlias.gene_id)
-            .where(
-                GeneAlias.gene_id == Gene.gene_pk,
+    text_arm = (
+        select(Gene.gene_pk)
+        .join(Assembly, Assembly.id == Gene.assembly_id)
+        .where(and_(text_match, *scope))
+    )
+    if not _is_exact_accession(query):
+        return text_arm
+    alias_arm = (
+        select(Gene.gene_pk)
+        .join(Assembly, Assembly.id == Gene.assembly_id)
+        .join(GeneAlias, GeneAlias.gene_id == Gene.gene_pk)
+        .where(
+            and_(
                 func.lower(GeneAlias.alias) == func.lower(query.strip()),
+                *scope,
             )
-            .exists()
         )
-        conditions = [or_(text_match, alias_exists)]
-    conditions.append(Assembly.release_id == release_id)
-    if assembly_id is not None:
-        conditions.append(Gene.assembly_id == assembly_id)
-    return conditions
+    )
+    return union_all(text_arm, alias_arm)
 
 
 class SearchService:
@@ -707,9 +729,16 @@ class SearchService:
         site_variant: SiteVariant = SiteVariant.EXTERNAL,
     ) -> list[SearchHit]:
         """Search genes with exact > alias > text match typing."""
-        conditions = _gene_match_conditions(
-            query, pattern, release_id=release_id, assembly_id=assembly_id
-        )
+        # The match set arrives as one indexable subquery instead of an OR of
+        # text tests and a correlated alias EXISTS; see _gene_match_query for
+        # the measured reason.
+        conditions: list = [
+            Gene.gene_pk.in_(
+                _gene_match_query(
+                    query, pattern, release_id=release_id, assembly_id=assembly_id
+                )
+            )
+        ]
         exact_match = (
             func.lower(Gene.accession) == func.lower(query.strip())
             if _is_exact_accession(query)
@@ -921,13 +950,16 @@ class SearchService:
 
         Ambiguity is a property of the whole match set, not of the current
         page: ``limit=1`` must still report that two assemblies match.
+
+        The release scope now lives entirely inside the shared match subquery,
+        so the ``assemblies`` join this query used for the release filter is
+        gone: ``Gene.gene_pk`` already carries the assembly.
         """
         stmt = (
             select(Gene.assembly_id, func.count())
-            .join(Assembly, Assembly.id == Gene.assembly_id)
             .where(
-                and_(
-                    *_gene_match_conditions(
+                Gene.gene_pk.in_(
+                    _gene_match_query(
                         query, pattern, release_id=release_id, assembly_id=None
                     )
                 )

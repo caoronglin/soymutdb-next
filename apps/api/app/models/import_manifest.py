@@ -2,9 +2,9 @@
 
 ADR-0005. The manifest is the authoritative record of one *logical* import:
 its semantic fingerprint, lifecycle state, and expected/written row counts.
-ClickHouse ``MergeTree`` has no native dedup and the SummingMergeTree summary
-tables double-count on duplicate inserts, so this manifest is the exactly-once
-guard and the source of publish-visibility for the portal.
+The historical ClickHouse loader had no native dedup and its SummingMergeTree
+summary tables double-counted on duplicate inserts, so this manifest is the
+exactly-once guard and the source of publish-visibility for the portal.
 """
 
 from __future__ import annotations

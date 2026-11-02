@@ -58,9 +58,12 @@ def test_queue_depth_collector_only_accepts_redis_brokers():
     assert metrics._is_redis_broker("memory://") is False
 
 
-def test_start_metrics_server_is_idempotent():
+def test_start_metrics_server_is_idempotent(monkeypatch):
     from soymutdb_worker import metrics
 
+    # Another collected module may have imported metrics before this module's
+    # environment setup. Always bind an ephemeral port in this test.
+    monkeypatch.setattr(metrics, "METRICS_PORT", 0)
     metrics.start_metrics_server()
     assert metrics._started is True
     metrics.start_metrics_server()  # second call must be a no-op

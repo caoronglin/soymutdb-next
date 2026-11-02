@@ -1,0 +1,5 @@
+{
+  "real_worker_metrics": [
+    "soymutdb_worker_tasks_total{queue=\"export\"} 2.0"
+  ]
+}

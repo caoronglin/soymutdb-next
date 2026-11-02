@@ -1,16 +1,28 @@
 #!/usr/bin/env bash
 # =====================================================================
-# SoyMutDB restore verification (authoritative format v2)
+# SoyMutDB restore verification (authoritative formats v3 and legacy v2)
 # =====================================================================
 # Validates archive/component integrity, mandatory snapshot rows, restored
-# PostgreSQL and ClickHouse counts, and every S3 bucket/object. S3 checks are
+# PostgreSQL counts, and every S3 bucket/object. Format v2 archives also carry
+# a ClickHouse component whose counts are verified, but only when the operator
+# passes --allow-legacy-v2; without a reachable ClickHouse target the run
+# fails instead of degrading to a partial pass. S3 checks are
 # skipped only by the explicit drill flags below; a skipped run is reported as
 # such and is never labeled "all checks passed".
 #
+#
+# The runtime is explicit. SOYMUTDB_BACKUP_RUNTIME (or --runtime, which wins)
+# selects compose (the default, unchanged behaviour) or native, which always
+# uses the host PostgreSQL client tools and a host 'mc' binary and never falls
+# back to a container. An unsupported value fails closed before any check runs.
+#
 # Usage:
 #   bash deploy/scripts/verify-restore.sh <backup.tar.gz>
+#   bash deploy/scripts/verify-restore.sh --runtime native <backup.tar.gz>
+#   bash deploy/scripts/verify-restore.sh --no-repo-env --runtime native <backup.tar.gz>
 #   bash deploy/scripts/verify-restore.sh --skip-s3 <backup.tar.gz>
 #   bash deploy/scripts/verify-restore.sh --skip-s3-checksum <backup.tar.gz>
+#   bash deploy/scripts/verify-restore.sh --allow-legacy-v2 <legacy-v2.tar.gz>
 # =====================================================================
 set -Eeuo pipefail
 umask 077
@@ -30,13 +42,26 @@ readonly REQUIRED_S3_BUCKETS="genomic-data user-tracks blast-dbs exports gwas an
 
 SKIP_S3=0
 SKIP_S3_CHECKSUM=0
+ALLOW_LEGACY_V2=0
+RUNTIME_ARG=""
 BACKUP_FILE=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --skip-s3) SKIP_S3=1; shift ;;
         --skip-s3-checksum) SKIP_S3_CHECKSUM=1; shift ;;
+        --allow-legacy-v2) ALLOW_LEGACY_V2=1; shift ;;
+        --runtime)
+            [[ $# -ge 2 ]] || die "--runtime requires a value"
+            RUNTIME_ARG="$2"
+            shift 2
+            ;;
+        --runtime=*) RUNTIME_ARG="${1#*=}"; shift ;;
+        --no-repo-env)
+            SOYMUTDB_BACKUP_REPO_ENV=0
+            shift
+            ;;
         --help|-h)
-            sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '2,/^set -/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         -*) die "unknown option: $1" ;;
@@ -55,36 +80,47 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # shellcheck source=deploy/scripts/mc-auth.sh
 source "${SCRIPT_DIR}/mc-auth.sh"
-if [[ -f "${PROJECT_ROOT}/.env" ]]; then
-    set -a
-    # shellcheck disable=SC1091
-    source "${PROJECT_ROOT}/.env"
-    set +a
-fi
+# shellcheck source=deploy/scripts/backup-runtime.sh
+source "${SCRIPT_DIR}/backup-runtime.sh"
 
-INSTALL_DIR="${SOYMUTDB_INSTALL_DIR:-/opt/soymutdb}"
-if [[ -f "${INSTALL_DIR}/docker-compose.yml" ]]; then
-    COMPOSE_DIR="${INSTALL_DIR}"
-else
-    COMPOSE_DIR="${PROJECT_ROOT}"
+# --no-repo-env / SOYMUTDB_BACKUP_REPO_ENV=0 keeps the repository .env out of a
+# verification run so an isolated drill cannot inherit operator state.
+backup_runtime_load_repo_env "${PROJECT_ROOT}" || die "repository .env loading was rejected"
+backup_runtime_require "${RUNTIME_ARG}" || exit 1
+
+COMPOSE_DIR=""
+COMPOSE_BIN=()
+if ! backup_runtime_is_native; then
+    INSTALL_DIR="${SOYMUTDB_INSTALL_DIR:-/opt/soymutdb}"
+    if [[ -f "${INSTALL_DIR}/docker-compose.yml" ]]; then
+        COMPOSE_DIR="${INSTALL_DIR}"
+    else
+        COMPOSE_DIR="${PROJECT_ROOT}"
+    fi
+    COMPOSE_BIN=(docker compose --project-directory "${COMPOSE_DIR}" -f "${COMPOSE_DIR}/docker-compose.yml")
 fi
-COMPOSE_BIN=(docker compose --project-directory "${COMPOSE_DIR}" -f "${COMPOSE_DIR}/docker-compose.yml")
 
 BAK_BASE_DIR="${BAK_BASE_DIR:-/opt/soymutdb/backups}"
 PG_HOST="${POSTGRES_HOST:-localhost}"
 PG_PORT="${POSTGRES_PORT:-5432}"
 PG_USER="${POSTGRES_USER:-soymutdb}"
 PG_DB="${POSTGRES_DB:-soymutdb}"
-CH_HOST="${CLICKHOUSE_HOST:-localhost}"
+CH_HOST="${CLICKHOUSE_HOST:-}"
 CH_PORT="${CLICKHOUSE_PORT:-8123}"
 CH_USER="${CLICKHOUSE_USER:-soymutdb}"
 S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9001}"
 S3_ACCESS_KEY="${S3_ACCESS_KEY:-minioadmin}"
 S3_SECRET_KEY="${S3_SECRET_KEY:-minioadmin}"
 
-for tool in python3 sha256sum stat; do
-    command -v "${tool}" >/dev/null 2>&1 || die "required tool is unavailable: ${tool}"
-done
+# The compose runtime keeps exactly the tool set it always required; the
+# native runtime adds the host PostgreSQL client it now calls directly.
+RUNTIME_PG_TOOLS=()
+if backup_runtime_is_native; then
+    RUNTIME_PG_TOOLS=(psql)
+fi
+backup_runtime_assert_tools python3 sha256sum stat "${RUNTIME_PG_TOOLS[@]}" || exit 1
+# A missing mc is fatal in the native runtime and never a container fallback.
+backup_runtime_assert_mc || exit 1
 
 VERIFY_DIR="$(mktemp -d)"
 trap 'rm -rf -- "${VERIFY_DIR}"' EXIT
@@ -119,7 +155,8 @@ verify_archive_sidecar() {
 echo -e "${CYAN}========================================${NC}"
 echo -e "${CYAN}  SoyMutDB Restore Verification${NC}"
 echo -e "${CYAN}========================================${NC}"
-echo "  Backup: ${BACKUP_FILE}"
+echo "  Backup:  ${BACKUP_FILE}"
+echo "  Runtime: ${BACKUP_RUNTIME} (PostgreSQL: $(backup_runtime_pg_client_mode), S3: $(backup_runtime_mc_client_mode))"
 echo ""
 verify_archive_sidecar
 
@@ -208,14 +245,27 @@ validate_relative_path() {
     done
 }
 
-[[ "$(manifest_get format_version)" == "2" ]] \
-    || die "unsupported manifest format_version (authoritative v2 required)"
+BACKUP_FORMAT_VERSION="$(manifest_get format_version)"
+LEGACY_V2=0
+case "${BACKUP_FORMAT_VERSION}" in
+    3) ;;
+    2)
+        [[ "${ALLOW_LEGACY_V2}" == "1" ]] \
+            || die "archive is legacy format v2; re-run with --allow-legacy-v2 to verify it explicitly (format v3 is the authoritative default)"
+        LEGACY_V2=1
+        ;;
+    *) die "unsupported manifest format_version: ${BACKUP_FORMAT_VERSION}" ;;
+esac
 [[ "$(manifest_get consistency.mode)" == "writers_quiesced" ]] \
     || die "backup consistency mode is not safe for authoritative verification"
 BACKUP_ID="$(manifest_get backup_id)"
 [[ "${BACKUP_ID}" == "${COMPLETE_BACKUP_ID}" ]] \
     || die "backup completion marker backup_id mismatch"
-for component in postgres clickhouse s3; do
+declare -a REQUIRED_COMPONENTS=(postgres s3)
+if [[ "${LEGACY_V2}" == "1" ]]; then
+    REQUIRED_COMPONENTS=(postgres clickhouse s3)
+fi
+for component in "${REQUIRED_COMPONENTS[@]}"; do
     status="$(manifest_get "components.${component}.status")" \
         || die "missing ${component} component status"
     [[ "${status}" == "ok" ]] \
@@ -256,30 +306,53 @@ verify_artifact_manifest() {
 verify_artifact_manifest
 check "all archived artifact checksums" 0
 info "Manifest backup_id=${BACKUP_ID}"
+ARCHIVE_RUNTIME="$(manifest_get runtime.mode || true)"
+ARCHIVE_WRITERS="$(manifest_get runtime.writers_attestation || true)"
+if [[ -n "${ARCHIVE_RUNTIME}" ]]; then
+    info "Archive runtime: ${ARCHIVE_RUNTIME} (writers: ${ARCHIVE_WRITERS:-unspecified})"
+    if [[ "${ARCHIVE_RUNTIME}" != "${BACKUP_RUNTIME}" ]]; then
+        # Not a failure: an archive taken in one runtime may legitimately be
+        # verified from another. It is surfaced so the operator can see it.
+        warn "archive was produced in the ${ARCHIVE_RUNTIME} runtime but this run uses ${BACKUP_RUNTIME}"
+    fi
+else
+    info "Archive runtime: not attested (pre-runtime archive)"
+fi
 
 PG_ROWS_REL="$(manifest_get components.postgres.row_counts_file)"
 PG_TABLES_EXPECTED="$(manifest_get components.postgres.tables)"
-CH_ROWS_REL="$(manifest_get components.clickhouse.row_counts_file)"
-CH_TABLES_EXPECTED="$(manifest_get components.clickhouse.tables)"
 S3_MANIFEST_REL="$(manifest_get components.s3.manifest_file)"
 # manifest key: "buckets_file"
 S3_BUCKETS_REL="$(manifest_get components.s3.buckets_file)"
 S3_OBJECTS_EXPECTED="$(manifest_get components.s3.object_count)"
 S3_BYTES_EXPECTED="$(manifest_get components.s3.total_bytes)"
 S3_CHECKSUM_ALGORITHM="$(manifest_get components.s3.checksum_algorithm)"
-for relative in "${PG_ROWS_REL}" "${CH_ROWS_REL}" "${S3_MANIFEST_REL}" "${S3_BUCKETS_REL}"; do
+declare -a SNAPSHOT_RELPATHS=("${PG_ROWS_REL}" "${S3_MANIFEST_REL}" "${S3_BUCKETS_REL}")
+CH_ROWS_REL=""
+CH_TABLES_EXPECTED=0
+if [[ "${LEGACY_V2}" == "1" ]]; then
+    CH_ROWS_REL="$(manifest_get components.clickhouse.row_counts_file)"
+    CH_TABLES_EXPECTED="$(manifest_get components.clickhouse.tables)"
+    SNAPSHOT_RELPATHS+=("${CH_ROWS_REL}")
+fi
+for relative in "${SNAPSHOT_RELPATHS[@]}"; do
     validate_relative_path "${relative}" || die "manifest contains an unsafe component path"
 done
-[[ "${PG_TABLES_EXPECTED}" =~ ^[1-9][0-9]*$ && "${CH_TABLES_EXPECTED}" =~ ^[1-9][0-9]*$ ]] \
+[[ "${PG_TABLES_EXPECTED}" =~ ^[1-9][0-9]*$ ]] \
+    || die "row snapshot table counts must be positive"
+[[ "${LEGACY_V2}" != "1" || "${CH_TABLES_EXPECTED}" =~ ^[1-9][0-9]*$ ]] \
     || die "row snapshot table counts must be positive"
 [[ "${S3_OBJECTS_EXPECTED}" =~ ^[0-9]+$ && "${S3_BYTES_EXPECTED}" =~ ^[0-9]+$ ]] \
     || die "S3 manifest totals are invalid"
 [[ "${S3_CHECKSUM_ALGORITHM}" == "sha256" ]] || die "S3 object checksums must use sha256"
 
 PG_ROWS_FILE="${VERIFY_SRC}/${PG_ROWS_REL}"
-CH_ROWS_FILE="${VERIFY_SRC}/${CH_ROWS_REL}"
 S3_MANIFEST="${VERIFY_SRC}/${S3_MANIFEST_REL}"
 S3_BUCKETS_FILE="${VERIFY_SRC}/${S3_BUCKETS_REL}"
+CH_ROWS_FILE=""
+if [[ "${LEGACY_V2}" == "1" ]]; then
+    CH_ROWS_FILE="${VERIFY_SRC}/${CH_ROWS_REL}"
+fi
 
 validate_pg_snapshot() {
     local table count extra rows=0
@@ -309,7 +382,9 @@ validate_ch_snapshot() {
         || die "ClickHouse row snapshot table count mismatch"
 }
 validate_pg_snapshot
-validate_ch_snapshot
+if [[ "${LEGACY_V2}" == "1" ]]; then
+    validate_ch_snapshot
+fi
 
 [[ -s "${S3_BUCKETS_FILE}" ]] || die "S3 bucket manifest is empty"
 read -r -a REQUIRED_BUCKET_ARRAY <<< "${REQUIRED_S3_BUCKETS}"
@@ -357,18 +432,12 @@ compose_exec() {
     "${COMPOSE_BIN[@]}" exec -T "${service}" "$@"
 }
 
-pg_query() {
-    local sql="$1"
-    if [[ "${PG_HOST}" == "localhost" || "${PG_HOST}" == "127.0.0.1" ]]; then
-        compose_exec postgres psql -U "${PG_USER}" -d "${PG_DB}" -At -c "${sql}"
-    else
-        PGPASSWORD="${POSTGRES_PASSWORD:-soymutdb_dev_password}" \
-            psql -h "${PG_HOST}" -p "${PG_PORT}" -U "${PG_USER}" -d "${PG_DB}" -At -c "${sql}"
-    fi
-}
+pg_query() { runtime_pg_query "$1"; }
 
 ch_query() {
     local sql="$1"
+    [[ -n "${CH_HOST}" ]] \
+        || die "a ClickHouse query was requested without a ClickHouse host; a missing component is never reported as verified"
     if [[ "${CH_HOST}" == "localhost" || "${CH_HOST}" == "127.0.0.1" ]]; then
         compose_exec clickhouse clickhouse-client --user "${CH_USER}" -q "${sql}"
     else
@@ -378,25 +447,38 @@ ch_query() {
 }
 
 MC_CFG_DIR="${BAK_BASE_DIR}/.mc"
-mc_run() {
-    local env_name
-    local -a docker_env_args=()
-    if command -v mc >/dev/null 2>&1; then
-        mc --config-dir "${MC_CFG_DIR}" "$@"
-    else
-        for env_name in "${MC_ENV_NAMES[@]}"; do
-            docker_env_args+=(--env "${env_name}")
-        done
-        docker run --rm --network host \
-            "${docker_env_args[@]}" \
-            -v "${MC_CFG_DIR}:/root/.mc" \
-            -v "${BAK_BASE_DIR}:${BAK_BASE_DIR}" \
-            minio/mc:RELEASE.2024-01-01T00-00-00Z \
-            --config-dir /root/.mc "$@"
-    fi
-}
+# The runtime library owns the mc routing: compose may fall back to the
+# minio/mc image, native requires a real mc and never starts a container.
+mc_run() { runtime_mc_run "$@"; }
 
-echo -e "${CYAN}[1/3] PostgreSQL row counts...${NC}"
+assert_legacy_clickhouse_target() {
+    [[ "${LEGACY_V2}" == "1" ]] || return 0
+    local services
+    if backup_runtime_is_native; then
+        die "legacy format v2 carries a ClickHouse component and can only be verified in the compose runtime"
+    fi
+    local legacy_compose="${VERIFY_LEGACY_COMPOSE_FILE:-${COMPOSE_DIR}/docker-compose.legacy-clickhouse.yml}"
+    if [[ -n "${VERIFY_LEGACY_COMPOSE_FILE:-}" && ! -f "${legacy_compose}" ]]; then
+        die "the explicitly configured legacy compose overlay is missing"
+    fi
+    if [[ -f "${legacy_compose}" ]]; then
+        COMPOSE_BIN+=(-f "${legacy_compose}")
+    fi
+    [[ -n "${CH_HOST}" ]] \
+        || die "legacy v2 verification needs an explicit ClickHouse host (CLICKHOUSE_HOST); a missing component is never reported as verified"
+    if ! services="$("${COMPOSE_BIN[@]}" config --services 2>/dev/null)"; then
+        die "could not read the compose service list needed for legacy v2 ClickHouse verification"
+    fi
+    grep -qx -- clickhouse <<< "${services}" \
+        || die "legacy v2 verification requires a clickhouse service in the compose file; the component is missing and cannot be reported as verified"
+}
+assert_legacy_clickhouse_target
+
+if [[ "${LEGACY_V2}" == "1" ]]; then
+    echo -e "${CYAN}[1/3] PostgreSQL row counts...${NC}"
+else
+    echo -e "${CYAN}[1/2] PostgreSQL row counts...${NC}"
+fi
 while IFS=$'\t' read -r table expected extra; do
     [[ -n "${table}" ]] || continue
     if actual="$(pg_query "SELECT count(*) FROM ${table}" 2>/dev/null)"; then
@@ -411,6 +493,7 @@ while IFS=$'\t' read -r table expected extra; do
     fi
 done < "${PG_ROWS_FILE}"
 
+if [[ "${LEGACY_V2}" == "1" ]]; then
 echo -e "${CYAN}[2/3] ClickHouse rows and partitions...${NC}"
 while IFS=$'\t' read -r table expected_rows expected_parts extra; do
     [[ -n "${table}" ]] || continue
@@ -435,8 +518,13 @@ while IFS=$'\t' read -r table expected_rows expected_parts extra; do
         check "ClickHouse ${table} partition query" 1
     fi
 done < "${CH_ROWS_FILE}"
+fi
 
-echo -e "${CYAN}[3/3] S3 objects...${NC}"
+if [[ "${LEGACY_V2}" == "1" ]]; then
+    echo -e "${CYAN}[3/3] S3 objects...${NC}"
+else
+    echo -e "${CYAN}[2/2] S3 objects...${NC}"
+fi
 if [[ "${SKIP_S3}" == "1" ]]; then
     SKIP_COUNT=$((SKIP_COUNT + 1))
     warn "EXPLICIT SKIP: S3 target verification was skipped (--skip-s3); use only for an isolated drill."
@@ -448,6 +536,17 @@ else
         CHECK_DIR="${VERIFY_DIR}/s3-check"
         mkdir -p "${CHECK_DIR}"
         for bucket in "${S3_BUCKETS[@]}"; do
+            policy_file="${CHECK_DIR}/${bucket}.policy.json"
+            if ! mc_run anonymous get-json "s3dst/${bucket}" > "${policy_file}" 2>/dev/null; then
+                check "S3 ${bucket} policy read" 1
+            elif ! expected_policy="$(runtime_policy_json "${VERIFY_SRC}/s3_policy_${bucket}.json")" \
+                || ! actual_policy="$(runtime_policy_json "${policy_file}")"; then
+                check "S3 ${bucket} policy format" 1
+            elif [[ "${expected_policy}" != "${actual_policy}" ]]; then
+                check "S3 ${bucket} policy mismatch" 1
+            else
+                check "S3 ${bucket} policy" 0
+            fi
             listing="${CHECK_DIR}/${bucket}.jsonl"
             if ! mc_run ls --recursive --json "s3dst/${bucket}/" > "${listing}" 2>/dev/null; then
                 check "S3 ${bucket} listing" 1

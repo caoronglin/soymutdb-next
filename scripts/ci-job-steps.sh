@@ -49,10 +49,10 @@ export REPO_ROOT
 # cannot `source` a checked-out script until after the checkout step. Keeping one
 # copy here plus one in .cnb.yml + one in ci.yml is guarded by
 # scripts/test_ci_job_contracts.py, which fails when the three disagree.
-NODE_VERSION="${SOYMUTDB_CI_NODE_VERSION:-24.19.0}"
-PNPM_VERSION="${SOYMUTDB_CI_PNPM_VERSION:-12.5.1}"
-PYTHON_VERSION="${SOYMUTDB_CI_PYTHON_VERSION:-3.14}"
-UV_VERSION="${SOYMUTDB_CI_UV_VERSION:-0.11.33}"
+NODE_VERSION="${SOYMUTDB_CI_NODE_VERSION:-26.13.0}"
+PNPM_VERSION="${SOYMUTDB_CI_PNPM_VERSION:-12.11.2}"
+PYTHON_VERSION="${SOYMUTDB_CI_PYTHON_VERSION:-3.15}"
+UV_VERSION="${SOYMUTDB_CI_UV_VERSION:-0.13.1}"
 export NODE_VERSION PNPM_VERSION PYTHON_VERSION UV_VERSION
 
 # --- container lifecycle ------------------------------------------------------
@@ -86,8 +86,8 @@ log() { printf '[ci-job-steps] %s\n' "$*" >&2; }
 # `pnpm deps:graphs|deps:audit` shell out to scripts/dependency_governance.py,
 # which imports PyYAML AND drives `uv`/`uvx` for the Deptry/license analyzers.
 # The GitHub mirror installs both explicitly
-# (`python -m pip install --quiet PyYAML==6.0.3 uv==0.11.33`), but the CNB
-# governance stage ran in `node:24.19.0`, whose only Python is the bare
+# (`python -m pip install --quiet PyYAML==6.0.3 uv==0.13.1`), but the CNB
+# governance stage ran in `node:26.13.0`, whose only Python is the bare
 # interpreter from the base image (for node-gyp, with no pip) -- so the job
 # died before any analyzer ran:
 #
@@ -99,6 +99,23 @@ log() { printf '[ci-job-steps] %s\n' "$*" >&2; }
 # `UV_VERSION` is the same pin the Dockerfiles and `check-toolchain-pins.py`
 # enforce, so the analyzers cannot run on a different uv than production.
 GOVERNANCE_PYYAML_VERSION="${SOYMUTDB_CI_PYYAML_VERSION:-${SOYMUTDB_CI_GOVERNANCE_PYYAML_VERSION:-6.0.3}}"
+
+# The contracts layer runs pytest, and the `python:3.15` stage image ships no
+# test runner. CNB build cnb-66s-1k4i8rfii (2026-10-10) failed the smoke-contracts
+# stage with "pytest is required for the contracts smoke layer" — the job existed
+# and was wired into both providers, but had never actually executed, so its
+# prerequisites were never exercised. Every other contract import is either
+# stdlib or vendored in scripts/ (compose_loader.py), so pytest is the whole gap.
+# Matches the floor in apps/api/pyproject.toml ("pytest>=8.0.0").
+CONTRACTS_PYTEST_VERSION="${SOYMUTDB_CI_PYTEST_VERSION:-9.1.1}"
+
+# PyYAML is the second requirement, and it is not obvious: `compose_loader` is
+# vendored under scripts/, so the compose and Dockerfile contracts import it as
+# if it were a third-party package, and it in turn imports yaml. The contracts
+# layer therefore needs PyYAML even though the only pytest targets are repo
+# files. Both pins are enforced together by
+# scripts/test_ci_job_contracts.py::test_contracts_job_provisions_every_import_it_needs,
+# which reads the layer's import graph instead of trusting this comment.
 
 # Debian-based `node:*` images ship a bare `python3` (for node-gyp) without the
 # `pip` module. A bare `python3 -m pip` therefore fails there, so bootstrap pip
@@ -118,6 +135,51 @@ governance_pip_install() {
   shift
   PIP_NO_CACHE_DIR=1 PIP_ROOT_USER_ACTION=ignore PIP_DISABLE_PIP_VERSION_CHECK=1 \
     "${interpreter}" -m pip install --quiet --break-system-packages "$@"
+}
+
+ensure_contracts_python() {
+  local interpreter
+  interpreter="$(command -v python3 || true)"
+  [[ -n "${interpreter}" ]] || {
+    log "the contracts stage image must provide python3"
+    return 1
+  }
+  if ! interpreter_matches_pin "${interpreter}"; then
+    log "cannot run the contract suites: ${interpreter} is $("${interpreter}" -V 2>&1), not ${PYTHON_VERSION}"
+    return 1
+  fi
+
+  local -a required=(
+    "pytest==${CONTRACTS_PYTEST_VERSION}"
+    "PyYAML==${GOVERNANCE_PYYAML_VERSION}"
+  )
+  local -a missing=()
+  local spec
+  for spec in "${required[@]}"; do
+    case "${spec}" in
+      pytest*) "${interpreter}" -m pytest --version >/dev/null 2>&1 || missing+=("${spec}") ;;
+      *) "${interpreter}" -c "import yaml" >/dev/null 2>&1 || missing+=("${spec}") ;;
+    esac
+  done
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    ensure_governance_pip "${interpreter}" || return 1
+    log "installing ${missing[*]} for the contract suites"
+    governance_pip_install "${interpreter}" "${missing[@]}" || return 1
+  fi
+
+  # Verified, not assumed: scripts/smoke.sh checks this itself and would
+  # otherwise fail with a bare "pytest is required", which reads as a missing
+  # test dependency rather than a stage that never provisioned one. PyYAML
+  # fails later and further away -- as a collection error naming an unrelated
+  # contract file -- which is why it is checked here too.
+  "${interpreter}" -m pytest --version >/dev/null 2>&1 || {
+    log "pytest is still not runnable by ${interpreter}; the contracts gate cannot run"
+    return 1
+  }
+  "${interpreter}" -c "import yaml" >/dev/null 2>&1 || {
+    log "PyYAML is still not importable by ${interpreter}; the compose contracts cannot run"
+    return 1
+  }
 }
 
 ensure_governance_python() {
@@ -172,6 +234,7 @@ ensure_governance_python() {
 JOBS=(
   frontend
   api-tests
+  smoke-contracts
   dependency-governance
   compose-acceptance
   clickhouse-migration
@@ -207,7 +270,7 @@ frontend_install() {
 #
 # The GitHub mirror escapes this because `actions/setup-python` puts a system
 # `python3` on PATH and the workflow prepares the venv by hand; CNB runs the
-# gate in `node:24.19.0`, which has no Python at all. Bootstrap the venv exactly
+# gate in `node:26.13.0`, which has no Python at all. Bootstrap the venv exactly
 # where check-contract.sh already looks for it, from the same closed dependency
 # set the API job installs, so no gate is skipped and the contract is still
 # checked on every provider.
@@ -355,6 +418,24 @@ dependency_governance_env() {
   export VITE_JBROWSE_BASE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL}"
 }
 
+# -----------------------------------------------------------------------------
+# smoke-contracts — repo contract suites (the gate that had no CI coverage)
+# -----------------------------------------------------------------------------
+smoke_contracts_run() {
+  # scripts/test_ci_job_contracts.py asserts, among other things, that every
+  # shared script is executable and strict. It runs only under
+  # `smoke.sh --profile contracts`, and no CI job invoked that profile, so a
+  # commit that dropped the exec bit from scripts/smoke.sh or
+  # scripts/check-production-artifact.sh passed every pipeline and reached main.
+  # This job is the coverage that made that class of regression shippable.
+  #
+  # The contracts layer is plain pytest under scripts/; it needs no workspace
+  # install, no API venv and no service, which is why it can run as its own cheap
+  # stage instead of being appended to a heavier job.
+  ensure_contracts_python
+  bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts
+}
+
 dependency_governance_step() {
   # `pnpm deps:*` needs an installed workspace, and this is a different container
   # from the frontend job: bootstrap instead of assuming.
@@ -485,6 +566,24 @@ clickhouse_migration_run() {
   export SOYMUTDB_CLICKHOUSE_DATABASE=soymutdb
   export CLICKHOUSE_MIGRATION_PYTHON="${CLICKHOUSE_MIGRATION_PYTHON:-python}"
 
+  # This job is the CI counterpart of infra/docker/Dockerfile.migrate-clickhouse,
+  # and both are pinned to Python 3.14 on purpose while every native service
+  # moved to 3.15: clickhouse-connect's newest release (1.10) declares
+  # `requires-python >=3.10,<3.15`, so no 3.15 interpreter can install the
+  # driver this gate asserts with. Assert the major.minor here instead of
+  # trusting the stage image, because the failure that guard prevents is quiet:
+  # pip only reports that no matching distribution exists, which reads like a
+  # flaky index rather than a runtime that has to be moved back.
+  CLICKHOUSE_MIGRATION_PYTHON_VERSION="${SOYMUTDB_CLICKHOUSE_MIGRATION_PYTHON_VERSION:-3.14}"
+  if ! "${CLICKHOUSE_MIGRATION_PYTHON}" -c "import sys; sys.exit(
+    0 if sys.version_info[:2] == tuple(int(p) for p in '${CLICKHOUSE_MIGRATION_PYTHON_VERSION}'.split('.')[:2])
+    else 1
+  )"; then
+    echo "[ci-job-steps] clickhouse-migration needs Python ${CLICKHOUSE_MIGRATION_PYTHON_VERSION} on CLICKHOUSE_MIGRATION_PYTHON (${CLICKHOUSE_MIGRATION_PYTHON}): clickhouse-connect publishes no 3.15 release." >&2
+    echo "[ci-job-steps] Pin the stage image (and infra/docker/Dockerfile.migrate-clickhouse) back to that version, or set SOYMUTDB_CLICKHOUSE_MIGRATION_PYTHON_VERSION once the driver ships 3.15 wheels." >&2
+    return 1
+  fi
+
   # The migration script and its assertions import `clickhouse_connect`, but the
   # job image (python:3.14) does not ship it. Provision it in this SHARED body
   # so CNB and GitHub get the same dependency: the GitHub job used to
@@ -501,6 +600,9 @@ clickhouse_migration_run() {
   python "${REPO_ROOT}/scripts/assert-clickhouse-migration.py"
   bash "${REPO_ROOT}/deploy/scripts/migrate-clickhouse.sh"
   python "${REPO_ROOT}/scripts/assert-clickhouse-migration.py" --idempotent
+  # chdb's Python shims stop at 3.14. Preserve the real historical finalize
+  # and VCF contracts here, independently of the native Python 3.15 backend.
+  bash "${REPO_ROOT}/scripts/verify-legacy-worker-tests.sh"
 }
 
 # -----------------------------------------------------------------------------

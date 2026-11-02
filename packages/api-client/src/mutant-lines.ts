@@ -49,11 +49,24 @@ export interface PhenotypeResponse {
 
 /** Query parameters accepted by GET /mutants. */
 export interface ListMutantLinesParams {
+  /** Exact mutagen match (historical semantics, unchanged). */
   mutagen?: string;
+  /**
+   * Free-text search: a case-insensitive substring of the name, cultivar or
+   * mutagen. The server narrows the same release-scoped, public-only set.
+   */
+  q?: string;
+  /** Row offset of the first returned row (0-based). */
+  offset?: number;
   limit?: number;
 }
 
-/** List public mutant lines. */
+/**
+ * List public mutant lines.
+ *
+ * Every parameter of {@link ListMutantLinesParams} is forwarded to the API
+ * as-is; the response stays a plain array (`list[MutantLineResponse]`).
+ */
 export function listMutantLines(
   params: ListMutantLinesParams = {},
 ): Promise<MutantLineResponse[]> {

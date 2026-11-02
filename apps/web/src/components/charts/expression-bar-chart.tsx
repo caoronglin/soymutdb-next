@@ -1,110 +1,67 @@
 /**
  * ExpressionBarChart — grouped bar chart of mean FPKM by tissue and treatment.
  * Lazy-loaded via React.lazy in routes that use it.
+ *
+ * Drawn by @soymutdb/charts. The grouping rule (first value wins, missing
+ * combinations filled with zero), the sorted categories and the "Mean FPKM"
+ * axis title are unchanged; only the engine and the row shape behind them
+ * moved.
  */
+import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { useMemo } from "react";
-import type { EChartsOption } from "echarts";
-import { useECharts } from "../../lib/use-echarts";
+import { ChartCanvas } from "@soymutdb/charts";
 import { Empty } from "@/lib/antd";
 import { cn } from "@/lib/cn";
+import {
+  PORTAL_CHART_HEIGHT,
+  formatExpressionTooltip,
+  portalExpressionDefinition,
+  toPortalExpressionRows,
+  usePortalChartAnimation,
+  usePortalChartLoading,
+  usePortalChartTheme,
+} from "./portal-chart-adapter";
 
 export interface ExpressionBarChartProps {
   data: Array<{ tissue: string; mean_fpkm: number; treatment: string }>;
   className?: string;
 }
 
-export function ExpressionBarChart({ data, className }: ExpressionBarChartProps) {  const { t } = useTranslation();
+// Built once, not per render: `ChartCanvas` lists `tooltipFormatter` in the
+// dependency array of the effect that updates the live chart, so a factory call
+// written inline in the JSX re-ran a full G2 re-render on every parent render.
+const tooltipFormatter = formatExpressionTooltip();
 
-  // Group once so series construction does not repeatedly scan all input rows.
-  const { treatments, tissues, valuesByTreatment } = useMemo(() => {
-    const treatmentSet = new Set<string>();
-    const tissueSet = new Set<string>();
-    const values = new Map<string, Map<string, number>>();
-    for (const datum of data) {
-      treatmentSet.add(datum.treatment);
-      tissueSet.add(datum.tissue);
-      const byTissue = values.get(datum.treatment) ?? new Map<string, number>();
-      // Preserve the first value to retain the historic Array.find behavior.
-      if (!byTissue.has(datum.tissue)) byTissue.set(datum.tissue, datum.mean_fpkm);
-      values.set(datum.treatment, byTissue);
-    }
-    return {
-      treatments: [...treatmentSet].sort(),
-      tissues: [...tissueSet].sort(),
-      valuesByTreatment: values,
-    };
-  }, [data]);
+export function ExpressionBarChart({ data, className }: ExpressionBarChartProps) {
+  const { t } = useTranslation();
+  const host = React.useRef<HTMLDivElement | null>(null);
+  const theme = usePortalChartTheme();
+  const animation = usePortalChartAnimation();
 
-  const option: EChartsOption = {
-    tooltip: {
-      trigger: "axis",
-      axisPointer: { type: "shadow" },
-      formatter: (params) => {
-        const items = Array.isArray(params) ? params : [params];
-        return items
-          .map((p) => {
-            const pp = p as { seriesName: string; value: number };
-            return `${pp.seriesName}: ${pp.value.toFixed(2)} FPKM`;
-          })
-          .join("<br/>");
-      },
-    },
-    legend: {
-      data: treatments,
-      top: 0,
-      textStyle: { fontSize: 12, color: "var(--muted-foreground)" },
-    },
-    grid: { left: 60, right: 16, top: 40, bottom: 48 },
-    xAxis: {
-      type: "category",
-      data: tissues,
-      axisLabel: {
-        fontSize: 10,
-        color: "var(--muted-foreground)",
-        rotate: tissues.length > 6 ? 30 : 0,
-      },
-      axisLine: { lineStyle: { color: "var(--border)" } },
-      axisTick: { alignWithLabel: true },
-    },
-    yAxis: {
-      type: "value",
-      name: "Mean FPKM",
-      nameTextStyle: { fontSize: 10, color: "var(--muted-foreground)" },
-      axisLabel: {
-        fontSize: 10,
-        color: "var(--muted-foreground)",
-      },
-      splitLine: { lineStyle: { color: "var(--border)", type: "dashed" } },
-    },
-    series: treatments.map((treatment, i) => ({
-      name: treatment,
-      type: "bar" as const,
-      barWidth: `${Math.max(8, 80 / treatments.length)}%`,
-      itemStyle: {
-        color: [`var(--chart-1)`, `var(--chart-2)`, `var(--chart-3)`, `var(--chart-4)`, `var(--chart-5)`][i % 5],
-        borderRadius: [2, 2, 0, 0],
-      },
-      data: tissues.map(
-        (tissue) => valuesByTreatment.get(treatment)?.get(tissue) ?? 0,
-      ),
-    })),
-  };
-
-  const { ref, loading } = useECharts(option, [data]);
+  const rows = React.useMemo(() => toPortalExpressionRows(data), [data]);
+  // The old chart rotated the tissue labels only once there were more than six
+  // of them, so the rule is a function of the category count, not of the data.
+  const tissueCount = React.useMemo(() => new Set(data.map((d) => d.tissue)).size, [data]);
+  const definition = React.useMemo(() => portalExpressionDefinition(tissueCount), [tissueCount]);
+  const loading = usePortalChartLoading(host, rows.length > 0);
 
   return (
     <figure className={cn("relative", className)}>
-      <div
-        ref={ref}
-        className="h-72 w-full"
-        role="img"
-        aria-label={t("charts.expressionBarTitle")}
-      />
-      {loading ? (
-        <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden />
-      ) : null}
-      {data.length === 0 && !loading ? <Empty className="absolute inset-0 flex items-center justify-center" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
+      <div ref={host} className="h-72 w-full">
+        {rows.length > 0 ? (
+          <ChartCanvas
+            definition={definition}
+            data={rows}
+            label={t("charts.expressionBarTitle")}
+            height={PORTAL_CHART_HEIGHT}
+            theme={theme}
+            animation={animation}
+            tooltipFormatter={tooltipFormatter}
+          />
+        ) : null}
+      </div>
+      {loading ? <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden /> : null}
+      {data.length === 0 ? <Empty className="absolute inset-0 flex items-center justify-center" image={Empty.PRESENTED_IMAGE_SIMPLE} /> : null}
       <figcaption className="sr-only">
         {t("charts.expressionBarDescription")} {" "}
         {data.map((d) => `${d.tissue} ${d.treatment} ${d.mean_fpkm.toFixed(2)}`).join(", ")}.
@@ -112,5 +69,3 @@ export function ExpressionBarChart({ data, className }: ExpressionBarChartProps)
     </figure>
   );
 }
-
-export default ExpressionBarChart;

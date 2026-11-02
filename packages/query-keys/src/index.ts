@@ -219,6 +219,13 @@ export const queryKeys = {
         context.variantType ?? null,
         context.mutantLinePublicId ?? null,
       ] as const,
+    // One export request has its own lifecycle (pending → running → succeeded
+    // | failed); the export id is the only identity it has, and the key must
+    // not be shared with the variant list.  The session scope is part of the
+    // key because the record is owner-scoped: a later session must not read
+    // the previous account's export state from the cache.
+    export: (exportId: string | null, sessionId?: number | null) =>
+      [...queryKeys.variants.all(), "export", exportId ?? null, sessionId ?? null] as const,
   },
 } as const;
 

@@ -5,6 +5,8 @@ export default defineConfig({
     // The sandbox reports fork/thread limits intermittently; a single fork per
     // run keeps the shared-package suite deterministic under `pnpm test`.
     pool: "forks",
-    poolOptions: { forks: { singleFork: true } },
-  },
+
+    maxWorkers: 1,
+
+      },
 });

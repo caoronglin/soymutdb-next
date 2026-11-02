@@ -188,8 +188,7 @@ describe("queryKeys", () => {
     expect(queryKeys.variants.list({ ...base, cursor: "c1" })).not.toEqual(key);
   });
 
-  it("scopes news caches by category, page and page size", () => {
-    const base = { category: "update", page: 1, pageSize: 10 };
+  it("scopes news caches by category, page and page size", () => {    const base = { category: "update", page: 1, pageSize: 10 };
     const listKey = queryKeys.news.list(base);
     expect(queryKeys.news.list({ ...base, category: "news" })).not.toEqual(listKey);
     expect(queryKeys.news.list({ ...base, page: 2 })).not.toEqual(listKey);
@@ -210,5 +209,22 @@ describe("queryKeys", () => {
     const detail = queryKeys.news.detail("release-2026-09");
     expect(detail).toContain("release-2026-09");
     expect(detail[2]).toBe("detail");
+  });
+
+  it("scopes the export cache by export id and session", () => {
+    // The export record is owner-scoped: the id identifies the request and
+    // the session identifies the account that may read it.
+    const key = queryKeys.variants.export("export-1", 7);
+    expect(queryKeys.variants.export("export-2", 7)).not.toEqual(key);
+    expect(queryKeys.variants.export("export-1", 8)).not.toEqual(key);
+    // It must not collide with the variant list cache.
+    expect(queryKeys.variants.export("export-1", 7)).not.toEqual(
+      queryKeys.variants.list({
+        assemblyId: "1",
+        releaseId: null,
+        siteVariant: "external",
+        page: 1,
+      }),
+    );
   });
 });

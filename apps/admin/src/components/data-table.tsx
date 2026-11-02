@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from "react";
-import { Empty, Pagination, ProTable, type ProColumns } from "@/lib/antd";
+import { Empty, Pagination, ProTable, type ProColumns, type TableProps } from "@/lib/antd";
 import { cn } from "../lib/cn";
 import { useTranslation } from "react-i18next";
 
@@ -25,6 +25,17 @@ interface DataTableProps<T extends object> {
   emptyTitle?: string;
   emptyDescription?: string;
   onRowClick?: (row: T) => void;
+  /**
+   * Horizontal scroll configuration of the table body.
+   *
+   * Defaults to `max-content`: a wide console table keeps its column widths
+   * and the body scrolls sideways instead of collapsing every column into a
+   * few unreadable pixels on a narrow screen. A route that needs a different
+   * behaviour (a fixed pixel width, a vertical scroll area) passes its own
+   * value; the default only applies when the prop is absent, so the existing
+   * callers keep working unchanged.
+   */
+  scroll?: TableProps<T>["scroll"];
   className?: string;
 }
 
@@ -45,6 +56,7 @@ export function DataTable<T extends object>({
   emptyTitle,
   emptyDescription,
   onRowClick,
+  scroll,
   className,
 }: DataTableProps<T>) {
   const { t } = useTranslation();
@@ -86,6 +98,9 @@ export function DataTable<T extends object>({
         pagination={false}
         cardBordered={false}
         size="small"
+        // Wide console tables keep their column widths; the body scrolls
+        // sideways on a narrow screen instead of squeezing every column.
+        scroll={scroll ?? { x: "max-content" }}
         locale={{
           emptyText: (
             <Empty
@@ -119,5 +134,3 @@ export function DataTable<T extends object>({
     </div>
   );
 }
-
-export default DataTable;

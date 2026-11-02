@@ -1,0 +1,255 @@
+{
+  "date": "2026-10-15",
+  "scope": "Completed local test artifacts only; tracked sources and active environments retained",
+  "removed": [
+    {
+      "path": ".a1-audit.err",
+      "kind": "file",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": ".a1-meta.json",
+      "kind": "file",
+      "bytes": 8957,
+      "sha256": "bc98002f6c914849ca92af660e87797c5c5499a54f52fe30cee49ae91029887c"
+    },
+    {
+      "path": ".a1-probe-backup",
+      "kind": "directory",
+      "bytes": 28066
+    },
+    {
+      "path": ".a1-audit.json",
+      "kind": "file",
+      "bytes": 55521,
+      "sha256": "cf38a60ca40d3aa688bd174c568b135b1912b6f82a5a957d3473ec403c43fdda"
+    },
+    {
+      "path": "apps/.a1-isolated.log",
+      "kind": "file",
+      "bytes": 1151,
+      "sha256": "148a4a97520cc560924bd2f34a9047f7d997ac0540258452333f54072ab83b2f"
+    },
+    {
+      "path": "apps/.a1-baseline-chunks.txt",
+      "kind": "file",
+      "bytes": 992,
+      "sha256": "b341342730732fccdc5873b481e5d4248d59d9b3e1b2de032e20eb0c5214705e"
+    },
+    {
+      "path": "apps/.a1-baseline-stats.json",
+      "kind": "file",
+      "bytes": 10337994,
+      "sha256": "98d159ab9f890ba9778466d4e6a2e91b3045e883724cb97edb5dbc1603e6b34d"
+    },
+    {
+      "path": "apps/.a1-dist-guard-before.sha256",
+      "kind": "file",
+      "bytes": 4209,
+      "sha256": "58a70927ab0b0708d80ca59ad5f5d26bf23981523c6ed226e7d0589500fb82e2"
+    },
+    {
+      "path": "apps/.a1-baseline2.log",
+      "kind": "file",
+      "bytes": 2325,
+      "sha256": "8e7bdcd327f8a251c2a10d80a5ed77ba8859b7256f2def338a60de848ce5eb47"
+    },
+    {
+      "path": "apps/.a1-restored.log",
+      "kind": "file",
+      "bytes": 1977,
+      "sha256": "dcc0dd6e2fdb87d9fdcad3b1deb54d04363a721771f0c98cb26f3015922d4f2f"
+    },
+    {
+      "path": "apps/.a1-browser-skill.log",
+      "kind": "file",
+      "bytes": 17579,
+      "sha256": "34243ed8ab696a9060fd7aebaf5d5765db0a615a4cca2b7a07d3d53d70a5fb3e"
+    },
+    {
+      "path": "apps/.a1-isolated-chunks.txt",
+      "kind": "file",
+      "bytes": 1251,
+      "sha256": "481c929652e75748e9b1f30d2e60f35859b21e29ca8913941a4791365341ec16"
+    },
+    {
+      "path": "apps/.a1-dist-guard-after.sha256",
+      "kind": "file",
+      "bytes": 4209,
+      "sha256": "58a70927ab0b0708d80ca59ad5f5d26bf23981523c6ed226e7d0589500fb82e2"
+    },
+    {
+      "path": "apps/.a1-runtime.log",
+      "kind": "file",
+      "bytes": 1005,
+      "sha256": "2fda43e943f4a6df8a520543cc4061a6b300e479071c9e6d1c5ef64baa65b734"
+    },
+    {
+      "path": "apps/.a1-probe-stats.json",
+      "kind": "file",
+      "bytes": 14825164,
+      "sha256": "0ca1762ce3bb5ac172580e992f401f931ece3c96f80e14a1478bae2c907efa31"
+    },
+    {
+      "path": "apps/.a1-charts-tests.log",
+      "kind": "file",
+      "bytes": 3452,
+      "sha256": "0c8aef1e1b2299ffac2754fafb66f0b1e9d6e87385d2c820b9a354d5d1e4aa0c"
+    },
+    {
+      "path": "apps/.a1-runtime-stats.json",
+      "kind": "file",
+      "bytes": 9232748,
+      "sha256": "1ba23e0479d67f49a7c725cccb708e7b551b961569b549dea598d89628ea7508"
+    },
+    {
+      "path": "apps/.a1-isolated-stats.json",
+      "kind": "file",
+      "bytes": 19002527,
+      "sha256": "ed91815652b54d1b5c86b355169ae4bd87169d00e98c354d76cb79013820deb5"
+    },
+    {
+      "path": "apps/.a1-probe.log",
+      "kind": "file",
+      "bytes": 2172,
+      "sha256": "609377aadfee5e4e259372bda043893faf9982da978293aa38186960d9919346"
+    },
+    {
+      "path": "apps/.a1-probe-chunks.txt",
+      "kind": "file",
+      "bytes": 1118,
+      "sha256": "8421b60a3e9445965b8b2557f84c004a4d500a14d4b4c1a72083766d5f1a270e"
+    },
+    {
+      "path": "apps/.a1-baseline.log",
+      "kind": "file",
+      "bytes": 2014,
+      "sha256": "4e7f24bdf3df271bce669317bba82a8714a3caa4fc5664596e52511e5017d84d"
+    },
+    {
+      "path": "apps/.a1-dist-guard-a2.sha256",
+      "kind": "file",
+      "bytes": 4209,
+      "sha256": "58a70927ab0b0708d80ca59ad5f5d26bf23981523c6ed226e7d0589500fb82e2"
+    },
+    {
+      "path": "apps/.a1-baseline.start",
+      "kind": "file",
+      "bytes": 11,
+      "sha256": "b84849dc875e954a92398383402e1a28c258ee317e0390b8066e6744ca247152"
+    },
+    {
+      "path": "apps/.a1-dist-guard-final.sha256",
+      "kind": "file",
+      "bytes": 4209,
+      "sha256": "58a70927ab0b0708d80ca59ad5f5d26bf23981523c6ed226e7d0589500fb82e2"
+    },
+    {
+      "path": "apps/.a1-optimized-typecheck.log",
+      "kind": "file",
+      "bytes": 354,
+      "sha256": "fc1300244a6f9fd45a39a063b9b7ab3022809435e080bb07822d443b5162b5ee"
+    },
+    {
+      "path": ".ph",
+      "kind": "directory",
+      "bytes": 220590388
+    },
+    {
+      "path": ".cache/uv-c3",
+      "kind": "directory",
+      "bytes": 2071853596
+    },
+    {
+      "path": "apps/admin/dist-upgrade",
+      "kind": "directory",
+      "bytes": 31410552
+    },
+    {
+      "path": "apps/web/dist-upgrade-external",
+      "kind": "directory",
+      "bytes": 19014905
+    },
+    {
+      "path": "apps/web/dist-facade-browser",
+      "kind": "directory",
+      "bytes": 14648216
+    },
+    {
+      "path": "apps/web/dist-a1-baseline",
+      "kind": "directory",
+      "bytes": 19100352
+    },
+    {
+      "path": "apps/web/dist-a1-isolated",
+      "kind": "directory",
+      "bytes": 15010913
+    },
+    {
+      "path": "apps/web/dist-a1-runtime",
+      "kind": "directory",
+      "bytes": 14620313
+    },
+    {
+      "path": "apps/web/dist-internal",
+      "kind": "directory",
+      "bytes": 14033342
+    },
+    {
+      "path": "e2e/func.mjs",
+      "kind": "file",
+      "bytes": 1751,
+      "sha256": "3e56804a80eed5022a2a5144de41abc95286eeb22053dcac899d17025abc472c"
+    },
+    {
+      "path": "e2e/portal.mjs",
+      "kind": "file",
+      "bytes": 1302,
+      "sha256": "17bac3ddacd99fb94c15ca6846c14c0c578f74074539a3b161999273d3f9d04f"
+    },
+    {
+      "path": "e2e/r.mjs",
+      "kind": "file",
+      "bytes": 478,
+      "sha256": "58dccaa9b987988e8aa9a9c380876b24667a5a8d5cb2e149f6eb5087e8b2a185"
+    },
+    {
+      "path": "packages/charts/.a1-probe-exports.mjs",
+      "kind": "file",
+      "bytes": 258,
+      "sha256": "fb7d8df3ba363c629f88c4b659c3e3dd7292f8562ef38a6fe8d52c4555f6b2b6"
+    },
+    {
+      "path": "apps/web/src/routes/a1-budget-probe.tsx",
+      "kind": "file",
+      "bytes": 431,
+      "sha256": "cc8555592c69dac38273b69ccc7eb377c5c6a90db222ea9fb39da41a2f66a5be"
+    },
+    {
+      "path": "packages/charts/src/a1-antv-budget-probe.tsx",
+      "kind": "file",
+      "bytes": 2607,
+      "sha256": "364f1962c9146d0b469b62c43beea469c7ca11f2e5e7b021c0e7dd351759a34f"
+    },
+    {
+      "path": "packages/charts/src/facade-browser-probe.tsx",
+      "kind": "file",
+      "bytes": 2370,
+      "sha256": "1e5b6deb1a9ced15ced7007ddf195372ed13aec47c1ec76e2f8a93e657b5b27a"
+    }
+  ],
+  "bytes_reclaimed": 2473834988,
+  "terminated_stale_test_processes": 13,
+  "terminated_completed_preview_processes": 2,
+  "terminated_stale_inspection_processes": 1,
+  "retained": [
+    "apps/admin/dist",
+    "apps/web/dist",
+    "docs/dev/ant-design-scan-20261014",
+    ".mamba-root/envs/py315",
+    "/tmp/uv-cache-315",
+    "PostgreSQL validation clusters",
+    "Admin preview 8210"
+  ]
+}

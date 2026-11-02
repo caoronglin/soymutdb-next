@@ -59,7 +59,7 @@ jobs:
   e2e:
     name: Online smoke test (gh-pages)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     # workflow_run fires for every Pages workflow conclusion. Only smoke-test a
     # successful Pages deployment triggered from this repository's main branch;
     # this prevents a no-op foreign/non-main Pages run from testing an old site.
@@ -78,12 +78,18 @@ jobs:
       - name: Setup Node 24
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24.19.0
+          node-version: 26.13.0
           # e2e installs with npm (independent package), so cache the npm
           # store keyed on e2e/package-lock.json — NOT the pnpm store (this
           # job never installs the root workspace).
           cache: npm
           cache-dependency-path: e2e/package-lock.json
+
+      # The nightly gate builds the workspace; cache the pnpm store so the cold
+      # frozen-lockfile install does not dominate the job budget.
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
+        with:
+          version: 12.11.2
 
       - name: Install e2e dependencies (independent package)
         working-directory: e2e
@@ -99,6 +105,11 @@ jobs:
       - name: Wait for GitHub Pages propagation (post-deploy runs only)
         if: github.event_name == 'workflow_run'
         run: sleep 60
+
+      - name: Offline artifact gates (build + browser sweep)
+        env:
+          ARTIFACT_E2E_RETRIES: "1"
+        run: bash scripts/ci-nightly-artifact-gate.sh
 
       - name: Run online smoke tests
         working-directory: e2e
@@ -130,38 +141,37 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1
         with:
-          version: 12.5.1
+          version: 12.11.2
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24.19.0
+          node-version: 26.13.0
           cache: pnpm
       - name: Frozen workspace install
         run: pnpm install --frozen-lockfile
-      - name: Build current PR public artifact (demo, same-origin API mock)
-        env:
-          VITE_DEPLOYMENT_MODE: demo
-          VITE_BASE_URL: /soymutdb-next/
-          VITE_API_BASE_URL: http://localhost:4173/soymutdb-next/api/v1
-          VITE_JBROWSE_BASE_URL: http://localhost:4173/soymutdb-next/soymutdb-jbrowse/
-        run: pnpm --filter @soymutdb/web build
+      # Build every artifact the offline gates serve (web external+internal,
+      # admin, jbrowse) through the shared script so both providers run the same
+      # bytes and no gate ever sees a half-built tree.
+      - name: Build static artifacts (demo)
+        run: bash scripts/build-all-static-apps.sh
       - name: Install offline browser suite
         working-directory: e2e
         run: npm ci
       - name: Install Chromium
         working-directory: e2e
         run: npx playwright install --with-deps chromium
-      - name: Run PR's built-artifact browser acceptance
-        working-directory: e2e
+      - name: Run every offline artifact browser gate
         env:
           CI: "1"
-        run: npx playwright test -c playwright-public.config.ts
+          ARTIFACT_E2E_RETRIES: "1"
+        run: bash scripts/verify-artifact-e2e.sh
       - name: Upload PR browser failures
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: pr-artifact-e2e-failure
           path: |
-            e2e/playwright-report-public
-            e2e/test-results-public
+            .cache/artifact-e2e
+            e2e/playwright-report-*
+            e2e/test-results-*
           if-no-files-found: ignore
           retention-days: 14

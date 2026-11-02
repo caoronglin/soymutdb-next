@@ -19,7 +19,7 @@ name: soymutdb-api
 channels:
   - conda-forge
 dependencies:
-  - python=3.14          # pyproject requires-python = ">=3.14"
+  - python=3.15          # pyproject requires-python = ">=3.15"
   - pip>=24.0
   # 系统/构建依赖：conda-forge 对下方包均提供预编译 wheel，通常无需额外
   # 系统包；如遇源码编译报错，可补装 gcc_linux-64 / libpq / openssl。

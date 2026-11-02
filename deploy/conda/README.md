@@ -8,6 +8,14 @@
 
 ---
 
+## M3 独立 OmicVerse 资格 profile
+
+[omicverse/README.md](omicverse/README.md) 由本目录拥有，固化 OmicVerse 2.3.2 /
+PyDESeq2 0.5.4、Python 3.14 与 uv 0.11.33 的独立 CPU-only hash-lock 和有界 toy smoke。
+这是 **uv/pip 环境资格 profile，不是 conda solver 资格**，不改通用 mamba/conda 环境、
+API/worker Python pin 或部署入口；caller 在忽略目录提供全新环境/证据路径。
+不代表 pyDEG adapter、队列、持久化、API/UI、镜像或生产切流（M4–M7）完成。
+
 ## 1. 适用场景与定位
 
 | 场景 | 推荐路径 |

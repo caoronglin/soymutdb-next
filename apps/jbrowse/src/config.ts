@@ -124,19 +124,6 @@ export const DEFAULT_ASSEMBLY: JBrowseAssembly = {
  * Build an assembly config for the given assembly name, using default data URLs.
  * Falls back to DEFAULT_ASSEMBLY if the name is not recognised.
  */
-export function buildAssembly(name: string): JBrowseAssembly {
-    if (name === DEFAULT_ASSEMBLY.name) return DEFAULT_ASSEMBLY;
-    // For other assembly names, clone the default but override the name.
-    return {
-        ...DEFAULT_ASSEMBLY,
-        name,
-        sequence: {
-            ...DEFAULT_ASSEMBLY.sequence,
-            trackId: `reference_sequence_${name.replace(/[^a-zA-Z0-9]/g, "_")}`,
-        },
-    };
-}
-
 /** The three file locations a BgzipFastaAdapter needs to read chrom sizes. */
 export interface SequenceFileLocations {
     readonly fasta: string;
@@ -384,6 +371,29 @@ export function validateTrackTypes(tracks: JBrowseTrack[]): JBrowseTrack[] {
  * @param tracks Additional tracks to include alongside the reference track.
  * @returns Complete JBrowse configuration with Trix search index.
  */
+/** A small default selection derived only from the destination configuration. */
+export function defaultTrackIds(
+    tracks: readonly Pick<JBrowseTrack, "trackId" | "type" | "name" | "category">[],
+    referenceId: string,
+): string[] {
+    // The API does not order its track list, so selection must not depend on
+    // arrival order: sort by track id, then prefer the annotation/variant
+    // track that the release actually labels as such.
+    const ordered = [...tracks].sort((a, b) => a.trackId < b.trackId ? -1 : a.trackId > b.trackId ? 1 : 0);
+    const label = (track: Pick<JBrowseTrack, "name" | "category">) =>
+        [track.name ?? "", ...(track.category ?? [])].join(" ").toLowerCase();
+    const pick = (type: string, keywords: string[]) => {
+        const candidates = ordered.filter((track) => track.type === type);
+        return candidates.find((track) => keywords.some((word) => label(track).includes(word)))?.trackId
+            ?? candidates[0]?.trackId;
+    };
+    return [...new Set([
+        referenceId,
+        pick("FeatureTrack", ["gene", "annotation", "gff"]),
+        pick("VariantTrack", ["variant", "vcf", "snp"]),
+    ].filter((id): id is string => Boolean(id)))];
+}
+
 export function buildJBrowseConfig(
     assembly: JBrowseAssembly = DEFAULT_ASSEMBLY,
     tracks: JBrowseTrack[] = ALL_TRACKS,
@@ -411,9 +421,10 @@ export function buildJBrowseConfig(
         merged.push(trackWithAssembly);
     }
 
+    const validatedTracks = validateTrackTypes(merged);
     return {
         assemblies: [assembly],
-        tracks: validateTrackTypes(merged),
+        tracks: validatedTracks,
         aggregateTextSearchAdapters: [buildTrixAdapter(assembly.name)],
         defaultSession: {
             name: "SoyMutDB",
@@ -421,14 +432,10 @@ export function buildJBrowseConfig(
                 id: "linear_genome_view",
                 type: "LinearGenomeView",
                 bpPerPx: 200,
-                tracks: DEFAULT_TRACKS.map((id) => {
-                    // Map "reference_sequence" to the actual reference trackId.
-                    const actualId = id === "reference_sequence"
-                        ? assembly.sequence.trackId
-                        : id;
+                tracks: defaultTrackIds(validatedTracks, assembly.sequence.trackId).map((actualId) => {
                     return {
                         id: actualId,
-                        type: merged.find((t) => t.trackId === actualId)?.type ?? "FeatureTrack",
+                        type: validatedTracks.find((t) => t.trackId === actualId)?.type ?? "FeatureTrack",
                         displays: [],
                     };
                 }),

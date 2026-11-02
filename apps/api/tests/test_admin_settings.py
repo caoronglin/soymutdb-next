@@ -138,17 +138,17 @@ class TestGetSettings:
     async def test_get_settings_returns_dict(self, client, mock_session):
         """Settings are returned as a key-value dict."""
         setting = MagicMock()
-        setting.key = "cdn.url"
-        setting.value = "https://cdn.example.com"
+        setting.key = "blast.default_db"
+        setting.value = "williams82_cds"
 
         result = MagicMock()
         result.scalars.return_value.all.return_value = [setting]
         mock_session.execute.return_value = result
 
-        response = await client.get("/api/v1/admin/settings/cdn")
+        response = await client.get("/api/v1/admin/settings/blast")
         assert response.status_code == 200
         data = response.json()
-        assert data == {"url": "https://cdn.example.com"}
+        assert data == {"default_db": "williams82_cds"}
 
     async def test_get_settings_unknown_section_is_rejected(self, client, mock_session):
         """An unregistered section cannot expose arbitrary historical rows."""
@@ -199,7 +199,7 @@ class TestGetSettings:
 
         client._transport.app.dependency_overrides[get_current_user] = override_get_current_user
 
-        response = await client.get("/api/v1/admin/settings/cdn")
+        response = await client.get("/api/v1/admin/settings/blast")
         assert response.status_code == 403
         data = response.json()
         assert "error" in data
@@ -227,34 +227,34 @@ class TestUpdateSettings:
 
         with patch("app.services.settings_service.log_action", new_callable=AsyncMock) as mock_log:
             response = await client.put(
-                "/api/v1/admin/settings/cdn",
-                json={"url": "https://cdn.example.com"},
+                "/api/v1/admin/settings/blast",
+                json={"default_db": "williams82_cds"},
             )
 
         assert response.status_code == 200
         data = response.json()
-        assert data["url"] == "https://cdn.example.com"
+        assert data["default_db"] == "williams82_cds"
 
         # Verify SystemSetting was added to the session
         assert mock_session.add.called
         added_setting = next(
             call.args[0]
             for call in mock_session.add.call_args_list
-            if getattr(call.args[0], "key", None) == "cdn.url"
+            if getattr(call.args[0], "key", None) == "blast.default_db"
         )
-        assert added_setting.key == "cdn.url"
-        assert added_setting.value == "https://cdn.example.com"
+        assert added_setting.key == "blast.default_db"
+        assert added_setting.value == "williams82_cds"
 
         # Verify audit log was recorded
         mock_log.assert_awaited_once()
-        assert mock_log.call_args[1]["action"] == "settings_update:cdn"
+        assert mock_log.call_args[1]["action"] == "settings_update:blast"
 
     async def test_update_settings_existing_key(self, client, mock_session):
         """Existing key-value pairs are updated."""
         # The endpoint batch-fetches existing rows via `.scalars().all()`.
         existing_row = MagicMock()
-        existing_row.key = "cdn.url"
-        existing_row.value = "https://cdn.example.com"
+        existing_row.key = "blast.default_db"
+        existing_row.value = "williams82_cds"
         existing = MagicMock()
         existing.scalars.return_value.all.return_value = [existing_row]
 
@@ -264,13 +264,13 @@ class TestUpdateSettings:
 
         with patch("app.services.settings_service.log_action", new_callable=AsyncMock):
             response = await client.put(
-                "/api/v1/admin/settings/cdn",
-                json={"url": "https://cdn-new.example.com"},
+                "/api/v1/admin/settings/blast",
+                json={"default_db": "williams82_cds_v2"},
             )
 
         assert response.status_code == 200
         # The existing row's value should have been updated
-        assert existing_row.value == "https://cdn-new.example.com"
+        assert existing_row.value == "williams82_cds_v2"
         assert existing_row.updated_by is not None
 
     async def test_update_settings_multiple_keys(self, client, mock_session):
@@ -308,8 +308,8 @@ class TestUpdateSettings:
         client._transport.app.dependency_overrides[get_current_user] = override_get_current_user
 
         response = await client.put(
-            "/api/v1/admin/settings/cdn",
-            json={"url": "https://cdn.example.com"},
+            "/api/v1/admin/settings/blast",
+            json={"default_db": "williams82_cds"},
         )
         assert response.status_code == 403
 
@@ -390,14 +390,14 @@ class TestUpdateSettings:
         mock_session.execute.assert_not_awaited()
         mock_session.add.assert_not_called()
 
-    async def test_update_settings_rejects_non_allowlisted_url(self, client, mock_session):
+    async def test_update_settings_rejects_retired_cdn_section(self, client, mock_session):
         response = await client.put(
             "/api/v1/admin/settings/cdn",
-            json={"url": "https://attacker.example/payload.js"},
+            json={"url": "https://cdn.example.com"},
         )
 
         assert response.status_code == 422
-        assert "allowlist" in response.json()["error"]["message"]
+        assert "Unknown setting" in response.json()["error"]["message"]
         mock_session.execute.assert_not_awaited()
         mock_session.add.assert_not_called()
 
@@ -430,7 +430,7 @@ async def test_settings_schema_exposes_typed_non_secret_contract(client, mock_se
         "max_length": 10_000,
     }
     assert "smtpPassword" not in body["sections"]["email"]["fields"]
-    assert body["sections"]["cdn"]["fields"]["url"]["allowed_url_hosts"]
+    assert "cdn" not in body["sections"]
     assert body["sections"]["geo"]["fields"]["defaultCrawlerPolicy"] == {
         "kind": "enum",
         "default": "deny",
@@ -505,7 +505,7 @@ async def test_settings_validate_normalizes_values_without_database_access(clien
         "/api/v1/admin/settings/validate",
         json={
             "section": "data",
-            "values": {"maxExportRecords": "200", "enableClickhouse": "off"},
+            "values": {"maxExportRecords": "200"},
         },
     )
 
@@ -513,7 +513,7 @@ async def test_settings_validate_normalizes_values_without_database_access(clien
     assert response.json() == {
         "section": "data",
         "valid": True,
-        "values": {"maxExportRecords": 200, "enableClickhouse": False},
+        "values": {"maxExportRecords": 200},
     }
     mock_session.execute.assert_not_awaited()
 
@@ -541,7 +541,6 @@ async def test_settings_validate_returns_the_sanitized_storage_value(client, moc
     [
         ("general", {"unregistered": "value"}, "Unknown setting"),
         ("email", {"smtpPassword": "do-not-store-me"}, "deployment secret"),
-        ("cdn", {"url": "https://attacker.example/payload.js"}, "allowlist"),
     ],
 )
 async def test_settings_validate_is_fail_closed(client, mock_session, section, values, message):
@@ -560,15 +559,15 @@ async def test_settings_validate_is_fail_closed(client, mock_session, section, v
 @pytest.mark.asyncio
 async def test_settings_patch_rejects_unsafe_values_before_version_query(client, mock_session):
     response = await client.patch(
-        "/api/v1/admin/settings/cdn",
+        "/api/v1/admin/settings/data",
         json={
             "expected_version": 0,
-            "values": {"url": "https://attacker.example/payload.js"},
+            "values": {"maxExportRecords": 0},
         },
     )
 
     assert response.status_code == 422
-    assert "allowlist" in response.json()["error"]["message"]
+    assert "must be >= 1" in response.json()["error"]["message"]
     mock_session.execute.assert_not_awaited()
     mock_session.add.assert_not_called()
 
@@ -592,7 +591,7 @@ async def test_settings_patch_rejects_invalid_live_snapshot_before_mutation(
             mock_session,
             section="data",
             expected_version=0,
-            values={"enableClickhouse": True},
+            values={"maxExportRecords": 200},
             actor_id=uuid.uuid4(),
             ip_address=None,
         )
@@ -613,7 +612,7 @@ async def test_settings_patch_creates_first_version_and_audit(client, mock_sessi
         "/api/v1/admin/settings/data",
         json={
             "expected_version": 0,
-            "values": {"maxExportRecords": 200, "enableClickhouse": False},
+            "values": {"maxExportRecords": 200},
         },
     )
 
@@ -621,19 +620,17 @@ async def test_settings_patch_creates_first_version_and_audit(client, mock_sessi
     assert response.json() == {
         "section": "data",
         "version": 1,
-        "values": {"maxExportRecords": 200, "enableClickhouse": False},
+        "values": {"maxExportRecords": 200},
     }
     added = [call.args[0] for call in mock_session.add.call_args_list]
     setting_rows = [item for item in added if hasattr(item, "key")]
     assert {row.key: row.value for row in setting_rows} == {
         "data.maxExportRecords": "200",
-        "data.enableClickhouse": "false",
     }
     revision = next(item for item in added if hasattr(item, "snapshot"))
     assert revision.version == 1
     assert revision.snapshot == {
         "maxExportRecords": "200",
-        "enableClickhouse": "false",
     }
     audit = next(item for item in added if getattr(item, "action", None) == "settings_patch")
     assert audit.action == "settings_patch"
@@ -804,7 +801,7 @@ async def test_settings_rollback_revalidates_historical_snapshot(client, mock_se
     current = MagicMock(version=2)
     target = MagicMock(
         version=1,
-        snapshot={"url": "https://attacker.example/legacy-payload.js"},
+        snapshot={"maxExportRecords": "not-an-integer"},
     )
     current_result = MagicMock()
     current_result.scalar_one_or_none.return_value = current
@@ -815,12 +812,12 @@ async def test_settings_rollback_revalidates_historical_snapshot(client, mock_se
     mock_session.execute.side_effect = [current_result, target_result, live_result]
 
     response = await client.post(
-        "/api/v1/admin/settings/cdn/rollback",
+        "/api/v1/admin/settings/data/rollback",
         json={"expected_version": 2, "target_version": 1, "reason": "unsafe"},
     )
 
     assert response.status_code == 422
-    assert "allowlist" in response.json()["error"]["message"]
+    assert "must be an integer" in response.json()["error"]["message"]
     mock_session.add.assert_not_called()
     mock_session.commit.assert_not_awaited()
 

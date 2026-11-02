@@ -9,8 +9,10 @@ columns the worker needs, always validating transitions with the shared
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timedelta
 from typing import Any
 
+from soymutdb_jobs.export_errors import EXPORT_FAILED_MESSAGE
 from sqlalchemy import delete, insert, select, text, update
 
 from soymutdb_worker.shared import JobStatus, JobStatusUpdate, transition_allowed
@@ -22,6 +24,7 @@ from soymutdb_worker.tables import (
     import_tasks,
     notifications,
     utcnow,
+    variant_exports,
 )
 
 # ---------------------------------------------------------------------------
@@ -83,6 +86,19 @@ _ANALYSES_SHARED_TO_DB: dict[JobStatus, str] = {
 _RUN = "run"      # transition applied, start work
 _RESUME = "resume"  # already running (redelivery of a lost attempt), start work
 _SKIP = "skip"    # terminal/unknown job, do not run
+
+#: Decision returned by ``VariantExportStore.begin_run`` when the export
+#: record does not exist at all.  This is not a "nothing to do" case: it
+#: means the command reached the worker without its record, so the request
+#: must fail loudly instead of vanishing.
+_MISSING = "missing"
+
+#: How long a running export keeps its claim.  A delivery that arrives
+#: while the previous attempt is still inside this window belongs to a
+#: *duplicate* dispatch, not to a lost attempt, and must not start a second
+#: export of the same request. Past the window a redelivery fails the record
+#: closed: process death cannot be inferred from elapsed time, so no takeover.
+EXPORT_CLAIM_LEASE_SECONDS = 3600
 
 
 class BlastJobStore:
@@ -245,6 +261,206 @@ class BlastHitStore:
             rows = [{**hit, "job_id": jid} for hit in hits]
             self._session.execute(insert(blast_hits), rows)
         return len(hits)
+
+
+class VariantExportStore:
+    """Narrow repository over ``variant_exports``.
+
+    The API owns the record (owner, provenance, requested filters); the worker
+    only advances the lifecycle and records the produced artifact.  Every
+    write is a guarded UPDATE keyed on the current status. Redeliveries do
+    not start another execution or overwrite terminal records through this
+    store; external object writes are not a database transaction.
+
+    ``status`` uses the shared job vocabulary directly
+    (``pending``/``running``/``succeeded``/``failed``) — the same spelling the
+    API stores, so the two sides cannot drift.
+    """
+
+    def __init__(self, session) -> None:
+        self._session = session
+
+    def get_status(self, export_id: str | uuid.UUID) -> JobStatus | None:
+        row = self._session.execute(
+            text("SELECT status FROM variant_exports WHERE id = :eid"),
+            {"eid": str(export_id)},
+        ).first()
+        if row is None:
+            return None
+        try:
+            return JobStatus(row[0])
+        except ValueError:
+            return None
+
+    def get_claim_state(
+        self, export_id: str | uuid.UUID
+    ) -> tuple[JobStatus | None, datetime | None]:
+        """Return the record's status and when the current attempt started."""
+        row = self._session.execute(
+            text("SELECT status, started_at FROM variant_exports WHERE id = :eid"),
+            {"eid": str(export_id)},
+        ).first()
+        if row is None:
+            return None, None
+        try:
+            status = JobStatus(row[0])
+        except ValueError:
+            return None, None
+        return status, row[1]
+
+    def begin_run(self, export_id: str | uuid.UUID) -> str:
+        """Idempotently claim the export for execution.
+
+        Returns ``run`` (claimed now), ``expired`` (stale running record
+        failed closed), ``skip`` (terminal or a live attempt owns the claim),
+        or ``missing`` (the record does not exist at all).
+
+        A *failed* export is never re-run: this batch ships no automatic
+        execution retry and no manual retry endpoint, so a failure is the
+        submitter's final answer.
+
+        A delivery that arrives while the previous attempt is still inside
+        its lease is a **duplicate dispatch**, not a lost attempt: the
+        outbox is at-least-once, so the same command can be handed to the
+        broker twice.  Such a delivery must not start a second export of
+        the same request — that would duplicate the work and race the
+        ``mark_succeeded`` update. A redelivery after the lease instead
+        fails the record without starting work. The original process may
+        still be alive; its late success cannot overwrite the failed state.
+        Users recover by submitting a new export, never automatic replay.
+        """
+        current, started_at = self.get_claim_state(export_id)
+        if current is None:
+            return _MISSING
+        if current in (
+            JobStatus.SUCCEEDED,
+            JobStatus.FAILED,
+            JobStatus.CANCELLED,
+        ):
+            return _SKIP
+        if current == JobStatus.RUNNING:
+            lease_until = utcnow() - timedelta(seconds=EXPORT_CLAIM_LEASE_SECONDS)
+            if started_at is not None and started_at > lease_until:
+                return _SKIP  # a live attempt still owns the claim
+            return "expired" if self._expire_run(export_id, started_at) else _SKIP
+        if not transition_allowed(current, JobStatus.RUNNING):
+            return _SKIP
+        applied = self.update_status(
+            export_id,
+            JobStatusUpdate(status=JobStatus.RUNNING, started_at=utcnow()),
+            expected=current,
+        )
+        return _RUN if applied else _SKIP
+
+    def _expire_run(
+        self, export_id: str | uuid.UUID, observed_started_at: datetime | None
+    ) -> bool:
+        """Fail the observed stale claim without starting a second execution.
+
+        Guard both status and timestamp, so an intervening success or lease
+        change is never overwritten. NULL timestamps are fail-closed too.
+        """
+        result = self._session.execute(
+            update(variant_exports)
+            .where(
+                variant_exports.c.id == str(export_id),
+                variant_exports.c.status == JobStatus.RUNNING.value,
+                variant_exports.c.started_at.is_not_distinct_from(observed_started_at),
+            )
+            .values(
+                status=JobStatus.FAILED.value,
+                error_message=EXPORT_FAILED_MESSAGE,
+                completed_at=utcnow(),
+                updated_at=utcnow(),
+            )
+        )
+        return bool(getattr(result, "rowcount", 0))
+
+    def update_status(
+        self,
+        export_id: str | uuid.UUID,
+        update_: JobStatusUpdate,
+        *,
+        expected: JobStatus | None,
+    ) -> bool:
+        """Validate with the shared transition matrix, then apply a guarded UPDATE."""
+        current = self.get_status(export_id)
+        if current is None or current != expected:
+            return False
+        if not transition_allowed(current, update_.status):
+            return False
+        values: dict[str, Any] = {
+            "status": update_.status.value,
+            "updated_at": utcnow(),
+        }
+        if update_.last_error is not None:
+            values["error_message"] = update_.last_error[:4000]
+        if update_.started_at is not None:
+            values["started_at"] = update_.started_at
+        if update_.completed_at is not None:
+            values["completed_at"] = update_.completed_at
+        result = self._session.execute(
+            update(variant_exports)
+            .where(
+                variant_exports.c.id == str(export_id),
+                variant_exports.c.status == expected.value,
+            )
+            .values(**values)
+        )
+        return bool(getattr(result, "rowcount", 0))
+
+    def mark_succeeded(
+        self,
+        export_id: str | uuid.UUID,
+        *,
+        artifact_path: str,
+        record_count: int,
+        file_size: int,
+        expires_at: datetime,
+    ) -> bool:
+        """Record the finished artifact (object key, size, expiry)."""
+        current = self.get_status(export_id)
+        if current != JobStatus.RUNNING:
+            return False
+        if not transition_allowed(current, JobStatus.SUCCEEDED):
+            return False
+        result = self._session.execute(
+            update(variant_exports)
+            .where(
+                variant_exports.c.id == str(export_id),
+                variant_exports.c.status == JobStatus.RUNNING.value,
+            )
+            .values(
+                status=JobStatus.SUCCEEDED.value,
+                artifact_path=artifact_path,
+                record_count=int(record_count),
+                file_size=int(file_size),
+                completed_at=utcnow(),
+                expires_at=expires_at,
+                updated_at=utcnow(),
+            )
+        )
+        return bool(getattr(result, "rowcount", 0))
+
+    def mark_failed(self, export_id: str | uuid.UUID, *, error: str) -> bool:
+        """Record a failure so the submitter sees a final state, not a spinner."""
+        current = self.get_status(export_id)
+        if current is None or not transition_allowed(current, JobStatus.FAILED):
+            return False
+        result = self._session.execute(
+            update(variant_exports)
+            .where(
+                variant_exports.c.id == str(export_id),
+                variant_exports.c.status == current.value,
+            )
+            .values(
+                status=JobStatus.FAILED.value,
+                error_message=error[:4000],
+                completed_at=utcnow(),
+                updated_at=utcnow(),
+            )
+        )
+        return bool(getattr(result, "rowcount", 0))
 
 
 class AnalysisJobStore:

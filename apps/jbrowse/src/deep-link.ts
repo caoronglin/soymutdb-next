@@ -142,6 +142,24 @@ export function parseLocus(locus: string): ParsedLocus | null {
 }
 
 /**
+ * Parse a JBrowse location string that may list several regions.
+ * JBrowse renders multi-region viewports as space-separated loc strings
+ * (e.g. "chr01:100..200 chr02:300..400"); a single region is the common case.
+ * @returns the parsed regions, or null when the input is not a location.
+ */
+export function parseLocusList(locus: string): ParsedLocus[] | null {
+    const tokens = locus.trim().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return null;
+    const parsed: ParsedLocus[] = [];
+    for (const token of tokens) {
+        const one = parseLocus(token);
+        if (!one) return null;
+        parsed.push(one);
+    }
+    return parsed;
+}
+
+/**
  * Format a parsed locus back into a 1-based inclusive string.
  */
 export function formatLocus(locus: ParsedLocus): string {
@@ -210,13 +228,3 @@ function toURLSearchParams(record: Record<string, unknown>): URLSearchParams {
     return search;
 }
 
-export default {
-    parseDeepLink,
-    buildDeepLink,
-    parseLocus,
-    formatLocus,
-    toZeroBased,
-    toOneBased,
-    calculateViewWindow,
-    pointToLocus,
-};

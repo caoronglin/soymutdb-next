@@ -1,13 +1,16 @@
 import { WarningOutlined, CloseOutlined, CheckOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, PageContainer, ProCard, Typography } from "@/lib/antd";
+import { App, Badge, Button, PageContainer, ProCard, Typography } from "@/lib/antd";
 import { capabilitiesApi, type FeatureDefinitionResponse } from "@soymutdb/api-client";
 import { resolvePluginState } from "../lib/capability-state";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export default function FeaturesPage() {
   const { t } = useTranslation();
+  const { message } = App.useApp();
   const queryClient = useQueryClient();
+  const [toggleFailure, setToggleFailure] = useState<{ key: string; reason: string } | null>(null);
   const featuresQuery = useQuery({
     queryKey: ["admin-features"],
     queryFn: capabilitiesApi.adminGet,
@@ -20,7 +23,31 @@ export default function FeaturesPage() {
   const mutation = useMutation({
     mutationFn: (feature: FeatureDefinitionResponse) =>
       capabilitiesApi.adminUpdate({ [feature.key]: !feature.enabled }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["admin-features"] }),
+    onSuccess: (_data, feature) => {
+      setToggleFailure(null);
+      // The public capability snapshot is a different cache entry from the
+      // admin registry, and it is read with a 30 s stale window by this screen
+      // and by the import page. Without this invalidation a capability that
+      // was just disabled keeps being offered for up to half a minute.
+      void queryClient.invalidateQueries({ queryKey: ["admin-features"] });
+      void queryClient.invalidateQueries({ queryKey: ["public-capabilities"] });
+      message.success(
+        t("admin.ops.toggleFeatureUpdated", {
+          key: feature.key,
+          defaultValue: "The {{key}} feature flag was updated.",
+        }),
+      );
+    },
+    onError: (error, feature) => {
+      const reason = error instanceof Error ? error.message : String(error);
+      setToggleFailure({ key: feature.key, reason });
+      message.error(
+        t("admin.ops.toggleFeatureFailed", {
+          key: feature.key,
+          defaultValue: "The {{key}} feature flag could not be updated.",
+        }),
+      );
+    },
   });
 
   return (
@@ -35,6 +62,31 @@ export default function FeaturesPage() {
               <WarningOutlined className="size-4" /> {t("admin.ops.loadFeatureFlagsFailed", { defaultValue: "Failed to load feature flags." })}
             </div>
           </ProCard>
+        ) : null}
+        {toggleFailure ? (
+          <div
+            role="alert"
+            data-testid="feature-toggle-error"
+            className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive"
+          >
+            <WarningOutlined className="mt-0.5 size-4 shrink-0" />
+            <div>
+              <p>
+                {t("admin.ops.toggleFeatureFailed", {
+                  key: toggleFailure.key,
+                  defaultValue: "The {{key}} feature flag could not be updated.",
+                })}
+              </p>
+              {toggleFailure.reason ? (
+                <p className="mt-1 text-xs">
+                  {t("common.errorReason", {
+                    reason: toggleFailure.reason,
+                    defaultValue: "Server response: {{reason}}",
+                  })}
+                </p>
+              ) : null}
+            </div>
+          </div>
         ) : null}
         <ProCard>
           <Typography.Title level={5}>{t("admin.ops.registeredCapabilities", { defaultValue: "Registered capabilities" })}</Typography.Title>

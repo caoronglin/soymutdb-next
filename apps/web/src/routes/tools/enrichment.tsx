@@ -11,20 +11,35 @@ import { assembliesQueryOptions } from "../../lib/query-options";
  *     (e.g. log2FC); requires values aligned 1:1 with genes and a minimum
  *     term size (min_genes).
  *
- * Results render as a significance plot (bubble / bar of -log10(q), ECharts
- * lazy-loaded via useECharts) plus the DataTable of enriched terms.
+ * Results render as a significance plot (bubble / bar of -log10(q), drawn by
+ * the shared @soymutdb/charts facade, which imports its engine lazily) plus the
+ * DataTable of enriched terms.
  */
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
 import { useMemo } from "react";
-import type { EChartsOption } from "echarts";
 import { NodeIndexOutlined, RiseOutlined, CaretRightOutlined, LoadingOutlined, RedoOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Card, Empty, Input, Result, Select, Tabs, Tag, Typography } from "@/lib/antd";
 import { useToast } from "@/lib/toast";
 import { DataTable } from "../../components/data-table";
-import { useECharts } from "../../lib/use-echarts";
+import {
+  buildEnrichmentCanvasData,
+  buildEnrichmentChartDefinition,
+  ENRICHMENT_CANVAS_TABLE_COLUMNS,
+  enrichmentCanvasTableRow,
+  enrichmentCanvasTooltipFormatter,
+  enrichmentDatumStyle,
+} from "../../components/charts/tool-chart-definitions";
+import { ToolChartFigure } from "../../components/charts/tool-chart-figure";
+import {
+  enrichmentDescription,
+  enrichmentFormatP as fmtP,
+  enrichmentFormatSigned as fmtSigned,
+  type EnrichmentChartRow as ChartRow,
+  type EnrichmentChartView,
+} from "../../components/charts/tool-enrichment-mapping";
 import { runEnrichment } from "./api";
 import type {
   EnrichmentResponse,
@@ -50,16 +65,6 @@ interface ResultRow {
   es?: number;
   nes?: number;
   genes: string[];
-}
-
-/** Row shape consumed by the ECharts components. */
-interface ChartRow {
-  id: string;
-  name: string;
-  p: number;
-  q: number;
-  size: number;
-  es?: number;
 }
 
 function parseGenes(raw: string): string[] {
@@ -98,38 +103,6 @@ function parseGeneValues(raw: string): ParsedGeneValues {
   }
   if (pairs.length === 0) return { pairs, error: "empty" };
   return { pairs };
-}
-
-function fmtP(v: number): string {
-  if (v === 0) return "0";
-  if (v < 0.001) return v.toExponential(2);
-  return v.toFixed(4);
-}
-
-function fmtSigned(v: number | undefined): string {
-  if (v === undefined || Number.isNaN(v)) return "–";
-  return `${v >= 0 ? "+" : ""}${v.toFixed(3)}`;
-}
-
-/** Escape term names for the ECharts HTML tooltip. */
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-/** -log10(q), clamped: q=0 (underflow) renders at the 10 ceiling. */
-function logQ(q: number): number {
-  return q <= 0 ? 10 : Math.min(10, -Math.log10(q));
-}
-
-/** Truncated label shared by the y axis and the series data (ECharts
- *  category matching requires identical strings). */
-function termLabel(name: string, id: string): string {
-  const label = name || id;
-  return label.length > 40 ? `${label.slice(0, 40)}…` : label;
 }
 
 function EnrichmentComponent() {
@@ -505,7 +478,11 @@ function EnrichmentComponent() {
                     type="number"
                     min={0.000001}
                     max={1}
-                    step="0.01"
+                    // `step="any"`: with a fixed step the browser blocks native
+                    // form submission on a step mismatch (min=0.000001 + step
+                    // 0.01 made the default 0.05 invalid, so the tool could not
+                    // run at all). Validation lives in onSubmit, not the step.
+                    step="any"
                     value={pThreshold}
                     onChange={(e) => setPThreshold(e.target.value)}
                     className="font-mono"
@@ -708,142 +685,43 @@ function EnrichmentComponent() {
 }
 
 /**
- * ECharts significance plot — bubble (x = -log10(q), y = term, size = member
- * gene count) or horizontal bar of -log10(q).  echarts itself is lazy-loaded
- * by useECharts (dynamic import inside the hook), so no static echarts
- * import here.
+ * Significance plot — bubble (x = -log10(q), y = term, radius from the member
+ * gene count) or horizontal bar of -log10(q).
+ *
+ * The contract and its rows come from components/charts/
+ * tool-chart-definitions; the numbers behind them live in
+ * tool-enrichment-mapping, which is where they are unit-tested.
  */
-function EnrichmentSignificanceChart({
+export function EnrichmentSignificanceChart({
   rows,
   isGsea,
   view,
 }: {
   rows: ChartRow[];
   isGsea: boolean;
-  view: "bubble" | "bar";
+  view: EnrichmentChartView;
 }) {
   const { t } = useTranslation();
 
-  const option: EChartsOption = useMemo(() => {
-    // Most significant term first (top of the y axis).
-    const sorted = [...rows].sort((a, b) => a.q - b.q);
-    const labels = sorted.map((r) => termLabel(r.name, r.id)).reverse();
-    const maxSize = Math.max(1, ...sorted.map((r) => r.size));
-    const colorFor = (r: ChartRow): string =>
-      isGsea ? (r.es !== undefined && r.es < 0 ? "var(--impact-low)" : "var(--chart-1)") : "var(--chart-2)";
-
-    const tooltipFormatter = (params: unknown) => {
-      const p = params as { data: { value: unknown[] } };
-      const v = p.data.value;
-      const [x, , size, fullName, q, pv, es, nes] = v as [
-        number,
-        string,
-        number,
-        string,
-        number,
-        number,
-        number | null,
-        number | null,
-      ];
-      const lines = [
-        `<div style="max-width:320px;font-weight:600;word-break:break-word">${escapeHtml(fullName)}</div>`,
-        `<div style="color:var(--muted-foreground);margin-top:2px">-log10(q): <b>${x.toFixed(2)}</b> · q: <b>${fmtP(q)}</b> · p: <b>${fmtP(pv)}</b> · size: <b>${size}</b></div>`,
-      ];
-      if (isGsea) {
-        lines.push(
-          `<div style="color:var(--muted-foreground);margin-top:2px">ES: <b>${es === null ? "–" : fmtSigned(es)}</b> · NES: <b>${nes === null ? "–" : fmtSigned(nes)}</b></div>`,
-        );
-      }
-      return lines.join("");
-    };
-
-    const baseGrid = { left: 8, right: 24, top: 8, bottom: 44 };
-    const yAxis = {
-      type: "category" as const,
-      data: labels,
-      inverse: true,
-      axisLabel: {
-        fontSize: 10,
-        color: "var(--muted-foreground)",
-        width: 150,
-        overflow: "truncate" as const,
-      },
-      axisLine: { lineStyle: { color: "var(--border)" } },
-    };
-    const xAxis = {
-      type: "value" as const,
-      name: t("tools.enrichment.gsea.chartX"),
-      min: 0,
-      nameTextStyle: { fontSize: 10, color: "var(--muted-foreground)" },
-      axisLabel: { fontSize: 10, color: "var(--muted-foreground)" },
-      splitLine: { lineStyle: { color: "var(--border)", type: "dashed" as const } },
-    };
-
-    if (view === "bubble") {
-      return {
-        tooltip: { trigger: "item", formatter: tooltipFormatter },
-        grid: baseGrid,
-        xAxis,
-        yAxis,
-        series: [
-          {
-            name: t("tools.enrichment.gsea.chartX"),
-            type: "scatter",
-            data: sorted.map((r) => ({
-              value: [
-                logQ(r.q),
-                termLabel(r.name, r.id),
-                r.size,
-                r.name || r.id,
-                r.q,
-                r.p,
-                r.es ?? null,
-                null,
-              ],
-              symbolSize: 8 + 16 * Math.sqrt(r.size / maxSize),
-              itemStyle: { color: colorFor(r) },
-            })),
-          },
-        ],
-      };
-    }
-
-    return {
-      tooltip: { trigger: "item", formatter: tooltipFormatter },
-      grid: baseGrid,
-      xAxis,
-      yAxis,
-      series: [
-        {
-          name: t("tools.enrichment.gsea.chartX"),
-          type: "bar",
-          barWidth: "60%",
-          data: sorted.map((r) => ({
-            value: [logQ(r.q), termLabel(r.name, r.id), r.size, r.name || r.id, r.q, r.p, r.es ?? null, null],
-            itemStyle: { color: colorFor(r), borderRadius: [0, 2, 2, 0] },
-          })),
-        },
-      ],
-    };
-  }, [rows, isGsea, view, t]);
-
-  const { ref, loading } = useECharts(option, [rows, isGsea, view]);
-
+  // ToolChartFigure owns the accessible figure, the loading skeleton, the
+  // exact-value table and the empty / unavailable states; the definition and
+  // the rows are built by the shared tool-chart adapter so the chart's
+  // semantics have one home.
   return (
-    <figure className="relative">
-      <div
-        ref={ref}
-        className="h-80 w-full"
-        role="img"
-        aria-label={t("tools.enrichment.gsea.chartTitle")}
-      />
-      {loading ? (
-        <div className="skeleton-pulse absolute inset-0 rounded-lg bg-muted/40" aria-hidden />
-      ) : null}
-      <figcaption className="sr-only">
-        {t("tools.enrichment.gsea.chartTitle")}:{" "}
-        {rows.map((r) => `${r.name || r.id} ${logQ(r.q).toFixed(2)} ${r.size}`).join(", ")}.
-      </figcaption>
-    </figure>
+    <ToolChartFigure
+      definition={buildEnrichmentChartDefinition(rows, {
+        isGsea,
+        view,
+        axisTitle: t("tools.enrichment.gsea.chartX"),
+      })}
+      data={buildEnrichmentCanvasData(rows, { isGsea })}
+      label={t("tools.enrichment.gsea.chartTitle")}
+      description={`${t("tools.enrichment.gsea.chartTitle")}: ${enrichmentDescription(rows)}.`}
+      tableColumns={ENRICHMENT_CANVAS_TABLE_COLUMNS}
+      tableRow={enrichmentCanvasTableRow}
+      height={320}
+      tooltipFormatter={enrichmentCanvasTooltipFormatter(isGsea)}
+      datumStyle={enrichmentDatumStyle}
+    />
   );
 }

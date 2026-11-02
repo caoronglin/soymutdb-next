@@ -9,6 +9,7 @@ import {
   resolveDevAllowedHosts,
 } from "@soymutdb/shared/deployment";
 import { resolveSiteVariant } from "../src/lib/site-variant";
+import { chartSupportCacheGroups } from "../../../scripts/webpack/chart-split-groups";
 
 type WebpackChain = Parameters<NonNullable<Parameters<typeof defineConfig>[0]["chainWebpack"]>>[0];
 
@@ -67,10 +68,15 @@ export default defineConfig({
   hash: true,
   title: siteVariant === "internal" ? "SoyMutDB Internal Portal" : "SoyMutDB",
   favicons: [`${base}favicon.svg`],
+  // The public portal deliberately renders with the system CJK stack for first
+  // paint (see the font note in src/index.css): its CSS declares no HarmonyOS
+  // @font-face, so a font preload here would download a file nothing uses. The
+  // self-hosted HarmonyOS subsets are admin-only.
+  links: [],
   routes: [
-    { path: "/", component: "@/umi-entry" },
-    { path: "/*", component: "@/umi-entry" },
-  ],
+        { path: "/", component: "@/umi-entry" },
+        { path: "/*", component: "@/umi-entry" },
+      ],
   metas: [
     { "http-equiv": "Content-Security-Policy", content: csp },
     ...(siteVariant === "internal" ? [{ name: "robots", content: "noindex,nofollow" }] : []),
@@ -83,7 +89,13 @@ export default defineConfig({
   // "getOwnPropertyDescriptors(undefined)" -> blank page. Terser keeps
   // helpers inside the module/chunk scope, so the collision cannot form.
   jsMinifier: "terser",
-  plugins: [resolve(__dirname, "plugins/defer-html-scripts.cjs")],
+  plugins: [
+    resolve(__dirname, "plugins/defer-html-scripts.cjs"),
+    // Chart dependency closure instrumentation. Registration only: it writes
+    // .build/chart-closure/<app>-<variant>.json at the end of the compilation
+    // and never changes the module graph or the emitted bytes.
+    resolve(__dirname, "../../../scripts/webpack/chart-closure-plugin.cjs"),
+  ],
   extraPostCSSPlugins: [tailwindcss()],
   mfsu: false,
   layout: false,
@@ -107,6 +119,12 @@ export default defineConfig({
     memo.optimization.splitChunks({
       chunks: "all",
       cacheGroups: {
+        // Keep the facade out of the application route chunk. The chart gate
+        // charges whole downloaded chunks, including any unrelated modules.
+        // These engine dependencies also appear in general vendor chunks.
+        // Separate their initial and async consumers so extracting them does
+        // not make async-only chart helpers part of the initial download.
+        ...chartSupportCacheGroups(),
         // React core only. Routing libraries used to share this group, which
         // made the "react" budget measure React + react-router +
         // @tanstack/react-router together (105KB gzip) — too coarse to tell a
@@ -143,10 +161,15 @@ export default defineConfig({
           priority: 20,
           enforce: true,
         },
+        // Chart engine budget. AntV G2 is the only production engine; the ECharts
+        // terms are retired because no portal module imports them any more.
+        // Priority is above `ui` (20) on purpose — the `ui` test also matches the
+        // `@ant-design` scope, so a lower priority would hand `@ant-design/plots`
+        // to the antd group and under-report the engine.
         charts: {
-          test: /[\\/]node_modules[\\/](?:echarts|zrender)[\\/]/,
+          test: /[\\/]node_modules[\\/](?:@antv[\\/]|@ant-design[\\/]plots[\\/])/,
           name: "charts",
-          priority: 15,
+          priority: 22,
           enforce: true,
         },
       },
@@ -154,6 +177,11 @@ export default defineConfig({
   },
   define: {
     "import.meta.env": JSON.stringify(viteEnv),
+    // pdf.js has a Node-only branch (`process.getBuiltinModule("module")
+    // .createRequire(import.meta.url)`). Webpack inlines that `import.meta.url`
+    // as a file:// build-machine path in the browser bundle. The branch never
+    // runs in a browser; blank the identifier so no local path is emitted.
+    "import.meta.url": JSON.stringify(""),
     __SITE_VARIANT__: JSON.stringify(siteVariant),
     __SOYMUTDB_INTERNAL_SITE__: JSON.stringify(siteVariant === "internal"),
     "process.env.SITE_VARIANT": JSON.stringify(siteVariant),

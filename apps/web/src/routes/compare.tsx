@@ -3,6 +3,7 @@
  * side-by-side with an impact/mutation-type distribution chart.
  */
 import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
 import {
@@ -18,7 +19,10 @@ import {
 import { Button, Card, Checkbox, Empty, Table, Tag, Typography } from "@/lib/antd";
 import { FadeUp, useReveal } from "../components/route-motion";
 import { startViewTransition } from "../lib/view-transitions";
+import { getReleaseId } from "@soymutdb/api-client";
 import { COMPARE_VARIANTS, type CompareVariant } from "../lib/compare-data";
+import { assembliesQueryOptions } from "../lib/query-options";
+import { SITE_VARIANT } from "../lib/site-variant";
 
 const MAX_COMPARE = 4;
 
@@ -73,10 +77,48 @@ function ComparePage() {
     .map((id) => COMPARE_VARIANTS.find((v) => v.id === id))
     .filter((v): v is CompareVariant => Boolean(v));
 
+  // Provenance the curated dataset cannot carry: the deployment's assembly and
+  // release pin are shown explicitly so "curated demo data" is never mistaken
+  // for a release-pinned comparison. Live release-pinned comparison is still a
+  // gap (see docs/dev/project-status.md); this at least keeps the context
+  // honest and visible.
+  const releaseId = getReleaseId();
+  const assembliesQuery = useQuery(
+    assembliesQueryOptions({ releaseId, siteVariant: SITE_VARIANT }),
+  );
+  const contextAssembly =
+    assembliesQuery.data?.find((assembly) => assembly.is_default) ?? assembliesQuery.data?.[0];
+  const contextRelease = releaseId ?? t("compare.curated.fields.releaseUnpinned", {
+    defaultValue: "not pinned",
+  });
+  const contextAssemblyLabel =
+    contextAssembly?.name ??
+    t("compare.curated.fields.assemblyUnknown", { defaultValue: "—" });
+
   // The comparison grid is transposed: antd's Table takes fields as rows and
   // the selected variants as columns, so each row carries one rendered cell per
   // variant.
   const comparisonRows: ComparisonRow[] = [
+    {
+      key: "assembly",
+      label: t("compare.curated.fields.assembly", { defaultValue: "Assembly" }),
+      icon: <Dna className="size-3.5" />,
+      cells: selectedVariants.map((v) => (
+        <span key={v.id} data-testid="compare-row-assembly-value" className="font-mono text-xs">
+          {contextAssemblyLabel}
+        </span>
+      )),
+    },
+    {
+      key: "release",
+      label: t("compare.curated.fields.release", { defaultValue: "Release" }),
+      icon: <Activity className="size-3.5" />,
+      cells: selectedVariants.map((v) => (
+        <span key={v.id} data-testid="compare-row-release-value" className="font-mono text-xs">
+          {contextRelease}
+        </span>
+      )),
+    },
     {
       key: "gene",
       label: t("compare.curated.fields.gene"),
@@ -277,10 +319,16 @@ function ComparePage() {
                       <BarChart3 className="size-4" /> {t("compare.curated.comparisonTitle")}
                     </Typography.Title>
                   </div>
+                  <div data-testid="compare-table">
                   <Table<ComparisonRow>
                     size="small"
                     bordered
                     rowKey="key"
+                    // Row-level hooks let the browser gate assert the provenance
+                    // rows without depending on translated copy.
+                    onRow={(row) =>
+                      ({ "data-testid": `compare-row-${row.key}` }) as React.HTMLAttributes<HTMLElement>
+                    }
                     pagination={false}
                     scroll={{ x: "max-content" }}
                     columns={[
@@ -306,6 +354,7 @@ function ComparePage() {
                     ]}
                     dataSource={comparisonRows}
                   />
+                  </div>
                 </Card>
               </FadeUp>
 

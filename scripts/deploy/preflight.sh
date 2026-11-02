@@ -53,7 +53,7 @@ pnpm_v="$(pnpm --version)"
 py_v="$(python3 --version)"
 nvmrc="$(cat .nvmrc 2>/dev/null || true)"
 if [[ -n "${nvmrc}" && "${node_v#v}" != "${nvmrc}"* ]]; then
-    # .nvmrc pins 24.19.0; only warn, real gates are enforced by CI/toolchain.
+    # .nvmrc pins 26.13.0; only warn, real gates are enforced by CI/toolchain.
     echo "WARN: node ${node_v} vs .nvmrc ${nvmrc}"
 fi
 echo "TOOLCHAIN: node=${node_v} pnpm=${pnpm_v} ${py_v}"

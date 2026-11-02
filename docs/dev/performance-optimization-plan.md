@@ -6,7 +6,8 @@
 > 定位：本文档只处理**性能与动效**。`docs/dev/optimization-plan.md`（v1.0）处理的是正确性与工程卫生，两者不重叠。
 > 代码基线：`main` @ 2026-08-29，Python 86.7k 行 / TS·TSX 70.9k 行，6 个 app + 5 个共享包。
 
-> **2026-09-26 校正（历史文档）**：`packages/motion` 与 `packages/i18n` 已移除，三端现为 Vue 3；
+> **2026-09-26 校正（历史文档）**：`packages/motion` 与 `packages/i18n` 已移除。三端曾迁到 Vue 3，
+> Vue 现已完全退役（`scripts/check-vue-retirement.mjs` 断言通过），当前为 React 19 + Umi Max 4；
 > 文中动效/路由组件路径为迁移前记录，现状以 `apps/*/src` 为准。
 
 ---

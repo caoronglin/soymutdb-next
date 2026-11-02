@@ -7,14 +7,14 @@ type IconComponent = React.ComponentType<{
   style?: React.CSSProperties;
   "aria-hidden"?: boolean | "true" | "false";
 }>;
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useAdminShellShortcuts } from "./use-admin-shell-shortcuts";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { http } from "@soymutdb/api-client";
+import { http, markNotificationsRead } from "@soymutdb/api-client";
 import { cn } from "../lib/cn";
-import { Button } from "@/lib/antd";
+import { Button, Grid } from "@/lib/antd";
 import { useAuth } from "../lib/auth-context";
 import { InstanceContextBadge } from "./instance-context-badge";
 interface AdminHeaderProps {
@@ -35,6 +35,7 @@ interface AdminHeaderProps {
 export function AdminHeader({ onToggleSidebar }: AdminHeaderProps) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const screens = Grid.useBreakpoint();
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     if (typeof document === "undefined") return "light";
@@ -59,12 +60,18 @@ export function AdminHeader({ onToggleSidebar }: AdminHeaderProps) {
   };
 
   return (
-    <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-card/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-card/80">
-      {onToggleSidebar ? (
+    // `shell-header` is the console chrome contract for browser gates: it is the
+    // one element every authed route renders, and it is absent on /login because
+    // the auth guard renders the login surface without the AdminShell.
+    <header
+      data-testid="shell-header"
+      className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border bg-card/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-card/80"
+    >
+      {onToggleSidebar && !(screens.lg ?? true) ? (
         <Button
           type="text"
           shape="circle"
-          className="lg:hidden"
+          style={{ minWidth: 44, minHeight: 44 }}
           onClick={onToggleSidebar}
           aria-label={t("admin.shell.toggleSidebarAria", { defaultValue: "Toggle sidebar" })}
         >
@@ -75,16 +82,15 @@ export function AdminHeader({ onToggleSidebar }: AdminHeaderProps) {
       <InstanceContextBadge />
 
       <div className="ml-auto flex items-center gap-1">
-        <Button
+        {screens.sm ? <Button
           aria-label={t("admin.shell.openCommandPalette", { defaultValue: "Open command palette" })}
-          className="hidden sm:inline-flex"
           icon={<SearchOutlined className="size-4" />}
           onClick={() => setCommandPaletteOpen(true)}
           type="text"
         >
           <span className="text-xs text-muted-foreground">{t("admin.shell.commandPalette", { defaultValue: "Commands" })}</span>
           <kbd className="ml-1 rounded border border-border px-1 text-[10px] text-muted-foreground">⌘K</kbd>
-        </Button>
+        </Button> : null}
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
         <NotificationBell />
         <UserMenu />
@@ -115,6 +121,7 @@ function ThemeToggle({
     <Button
       type="text"
       shape="circle"
+      style={{ minWidth: 44, minHeight: 44 }}
       onClick={onToggle}
       aria-label={theme === "light" ? t("admin.shell.toggleThemeToDark", { defaultValue: "Switch to dark theme" }) : t("admin.shell.toggleThemeToLight", { defaultValue: "Switch to light theme" })}
       title={t("admin.shell.toggleTheme", { defaultValue: "Toggle theme" })}
@@ -151,11 +158,14 @@ interface AdminNotificationList {
   unread_count: number;
 }
 
-function NotificationBell() {
+export function NotificationBell() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const panelId = useId();
+  const bellId = useId();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
   const unreadQuery = useQuery({
     queryKey: ["admin-notifications-unread"],
@@ -171,13 +181,20 @@ function NotificationBell() {
     staleTime: 10_000,
   });
 
+  const invalidateNotifications = () => {
+    queryClient.invalidateQueries({ queryKey: ["admin-notifications-unread"] });
+    queryClient.invalidateQueries({ queryKey: ["admin-notifications-list"] });
+  };
+
   const markAllMutation = useMutation({
     mutationFn: () =>
       http.post<{ marked: number }>("/notifications/read", { json: { all: true } }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["admin-notifications-unread"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-notifications-list"] });
-    },
+    onSuccess: invalidateNotifications,
+  });
+
+  const markOneMutation = useMutation({
+    mutationFn: (notificationId: string) => markNotificationsRead({ ids: [notificationId] }),
+    onSuccess: invalidateNotifications,
   });
 
   const unreadCount = unreadQuery.data?.unread_count ?? 0;
@@ -193,14 +210,35 @@ function NotificationBell() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // The panel is a labelled dialog, not an ARIA menu: its rows are status
+  // updates and buttons, not a list of commands. Escape closes it and returns
+  // focus to the bell; focus moves into the panel when it opens so keyboard
+  // users are not left behind on the trigger.
+  useEffect(() => {
+    if (!open) return;
+    panelRef.current?.focus();
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+        document.getElementById(bellId)?.focus();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open, bellId]);
+
   return (
     <div ref={ref} className="relative">
       <Button
+        id={bellId}
         type="text"
         shape="circle"
         onClick={() => setOpen((prev) => !prev)}
         aria-label={t("admin.shell.notificationsAria", { defaultValue: "Notifications ({{count}} unread)", count: unreadCount })}
+        aria-controls={panelId}
         aria-expanded={open}
+        aria-haspopup="dialog"
       >
         <BellOutlined className="size-4" />
         {unreadCount > 0 ? (
@@ -212,8 +250,13 @@ function NotificationBell() {
 
       {open ? (
         <div
-          className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-lg border border-border bg-popover shadow-lg"
-          role="menu"
+          ref={panelRef}
+          id={panelId}
+          tabIndex={-1}
+          aria-label={t("admin.shell.notifications", { defaultValue: "Notifications" })}
+          aria-modal="false"
+          className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-lg border border-border bg-popover shadow-lg focus-visible:outline-none"
+          role="dialog"
         >
           <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
             <p className="text-sm font-semibold">{t("admin.shell.notifications", { defaultValue: "Notifications" })}</p>
@@ -256,6 +299,17 @@ function NotificationBell() {
                     {new Date(n.created_at).toLocaleString()}
                   </p>
                 </div>
+                {!n.read_at ? (
+                  <button
+                    type="button"
+                    className="shrink-0 text-[11px] font-medium text-primary hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                    aria-label={t("admin.shell.markReadAria", { defaultValue: "Mark as read: {{title}}", title: n.title })}
+                    disabled={markOneMutation.isPending}
+                    onClick={() => markOneMutation.mutate(n.id)}
+                  >
+                    {t("admin.shell.markRead", { defaultValue: "Mark read" })}
+                  </button>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -367,5 +421,3 @@ function UserMenu() {
     </div>
   );
 }
-
-export default AdminHeader;

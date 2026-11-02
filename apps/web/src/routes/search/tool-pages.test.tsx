@@ -117,7 +117,7 @@ describe("two active search tools", () => {
   it("does not run a gene query under the default genome when the deep link names an unknown one", () => {
     runtime.search = { q: "Glyma.01G000100", assembly: "missing", run: true };
     render(<GenePage />);
-    expect(screen.getByRole("alert").textContent).toBe("search.assemblyUnavailable");
+    expect(screen.getByRole("alert").textContent).toBe("The requested assembly is unavailable; no query was sent.");
     expect(runtime.queries.find((item) => item.queryKey.includes("search"))?.enabled).toBe(false);
   });
 
@@ -132,7 +132,7 @@ describe("two active search tools", () => {
   it("rejects an unknown location assembly without issuing a source-site query", async () => {
     runtime.search = { assembly: "missing", chromosome: "chr01", start: 1, end: 20, run: true };
     render(<LocationPage />);
-    expect(screen.getByRole("alert").textContent).toBe("search.assemblyUnavailable");
+    expect(screen.getByRole("alert").textContent).toBe("The requested assembly is unavailable; no query was sent.");
     await waitFor(() => expect(runtime.queries.find((item) => item.queryKey.includes("search-region-preview-sites"))?.enabled).toBe(false));
   });
 

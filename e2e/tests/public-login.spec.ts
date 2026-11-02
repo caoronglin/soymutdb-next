@@ -9,7 +9,7 @@
 import { expect, test, type Page, type Request } from "@playwright/test";
 import { waitForAppReady } from "./helpers";
 
-const BASE = "/soymutdb-next";
+const BASE = "";
 const LOGIN_ENDPOINT = "/api/v1/auth/login";
 
 const VALID_CREDENTIALS = {
@@ -101,7 +101,7 @@ test.describe("public production artifact — login", () => {
     const { status } = await submitLogin(page, VALID_CREDENTIALS);
 
     expect(status).toBe(200);
-    await expect(page).toHaveURL(/\/soymutdb-next\/analyses$/);
+    await expect(page).toHaveURL(/\/analyses$/);
     await expectHealthyLoginSurface(page, pageErrors);
   });
 

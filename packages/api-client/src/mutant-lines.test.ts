@@ -24,6 +24,14 @@ describe("mutant line client contract", () => {
     expect(isMutantLineId("a".repeat(33))).toBe(false);
   });
 
+  it("forwards literal text and offset without changing the list response", async () => {
+    const rows = [{ public_id: "SMSEARCH01", name: "Leaf", cultivar: "Jack", mutagen: "EMS", variant_count: 0 }];
+    vi.mocked(http.get).mockResolvedValue(rows);
+    const params = { q: "%_leaf", mutagen: "EMS", offset: 100, limit: 51 };
+    expect(await listMutantLines(params)).toBe(rows);
+    expect(http.get).toHaveBeenCalledWith("/mutants", { params });
+  });
+
   it("uses the canonical mutant endpoints and list parameters", async () => {
     vi.mocked(http.get).mockResolvedValue([]);
 

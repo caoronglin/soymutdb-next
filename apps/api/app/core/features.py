@@ -31,9 +31,6 @@ FEATURES: Final[dict[str, FeatureDefinition]] = {
     "page_builder": FeatureDefinition(
         "page_builder", True, True, "Render published PageDefinition components."
     ),
-    "search.external": FeatureDefinition(
-        "search.external", True, True, "Enable federated external search providers."
-    ),
     "imports.module_tsv": FeatureDefinition(
         "imports.module_tsv", True, True, "Enable schema-driven module imports."
     ),

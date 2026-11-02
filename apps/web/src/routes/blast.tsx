@@ -5,9 +5,17 @@
  * frozen shared UI components. TanStack Query data flow and zod
  * validation logic unchanged.
  *
- * Completed jobs expose a hits table (GET /blast/jobs/{id}/hits) with an
- * actions column: "JBrowse 2" opens /browser at the hit's subject coordinates
- * (new tab) and "Gene search" deep-links /search/genes?q=<subject id>.
+ * The recent-jobs list is a native <ul>/<li>: AntD 6 deprecated List and the
+ * rows are plain markup, so no AntD replacement component is involved.
+ *
+ * Completed jobs expose a results table. "JBrowse 2" resolves an exact gene
+ * in the job's release/assembly before same-tab navigation to its genomic
+ * interval; DIAMOND protein-space coordinates are never used as genome bp.
+ *
+ * The "JBrowse 2" link carries the job's own release next to its assembly:
+ * the hit coordinates belong to the release the job searched, so the genome
+ * browser must read that release's assembly list and tracks. A job that
+ * states no such context gets no link and a visible reason instead.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -21,7 +29,7 @@ import {
   Empty,
   Form,
   Input,
-  List,
+  Result,
   Select,
   Skeleton,
   Table,
@@ -34,6 +42,8 @@ import {
   submitBlastJob,
   getBlastJobs,
   getBlastHits,
+  resolveBlastHitGenomeTarget,
+  type BlastHit,
   BLAST_PROGRAMS,
   apiBaseUrl,
   getAccessToken,
@@ -42,7 +52,8 @@ import {
 import { FadeUp } from "../components/route-motion";
 import { useSiteContent } from "../lib/site-content-react";
 import { useCurrentUser } from "../lib/use-current-user";
-import { buildJbrowseLocusUrl, resolveAppUrl } from "../lib/deployment";
+import { resolveAppUrl } from "../lib/deployment";
+import { useReleaseId } from "../lib/release-scope";
 import { ensurePermission, showNotification } from "../lib/use-browser-notifications";
 import { z } from "zod";
 
@@ -56,50 +67,12 @@ export const Route = createFileRoute("/blast")({
 const POLL_INTERVAL_MS = 5_000;
 const ACTIVE_STATUSES = new Set(["pending", "running"]);
 
-/**
- * BlastDatabase response from the backend (GET /blast/databases) carries
- * assembly metadata — see apps/api/app/schemas/blast.py:
- * BlastDatabaseResponse { id, name, db_type, assembly_id, is_active,
- * assembly_name, assembly_version, assembly_is_default }.
- * The api-client type does not include these fields yet (Wave 2-D backend
- * change), so we extend it locally instead of touching packages/*.
- */
-type BlastDatabaseWithAssembly = {
-  id: number | string;
-  name: string;
-  is_active: boolean;
-  assembly_name?: string | null;
-  assembly_version?: string | null;
-  assembly_is_default?: boolean | null;
-};
-
-/**
- * Loose hit type for the hits table. The backend returns `subject_*` fields
- * (apps/api/app/schemas/blast.py BlastHit) while the api-client BlastHit
- * type still uses the legacy `target_*` names — read both defensively
- * instead of touching packages/api-client.
- */
-type BlastHitLoose = {
-  id?: string | number;
-  hsp_num?: number;
-  subject_id?: string;
-  subject_title?: string;
-  target_id?: string;
-  target_title?: string;
-  percent_identity?: number;
-  identity_percent?: number;
-  alignment_length?: number;
-  mismatches?: number;
-  gap_opens?: number;
-  query_start?: number;
-  query_end?: number;
-  subject_start?: number;
-  subject_end?: number;
-  target_start?: number;
-  target_end?: number;
-  evalue?: number;
-  bit_score?: number;
-  score?: number;
+/** The release and assembly a job's hits belong to. */
+type JobContext = {
+  /** The job's own release id, as the string the deep link carries. */
+  release: string;
+  /** The assembly the job's database belongs to. */
+  assembly: string;
 };
 
 // The only executable program is DIAMOND blastp (protein vs protein). The
@@ -190,14 +163,14 @@ function BlastComponent() {
     staleTime: 30 * 60 * 1000,
   });
 
-  const databases = (databasesQuery.data ?? []) as unknown as BlastDatabaseWithAssembly[];
+  const databases = (databasesQuery.data ?? []);
   const activeDatabases = databases.filter((d) => d.is_active);
 
   const databaseOptions: { value: string; label: React.ReactNode; disabled?: boolean }[] =
     databasesQuery.isLoading
       ? [{ value: "__loading__", label: get("ui.loading", t("common.loading")), disabled: true }]
       : activeDatabases.length === 0
-        ? [{ value: "__empty__", label: get("ui.noResults", "No databases available"), disabled: true }]
+        ? [{ value: "__empty__", label: get("ui.noResults", t("blast.noDatabases")), disabled: true }]
         : activeDatabases.map((d) => ({
             value: String(d.id),
             label: (
@@ -216,7 +189,7 @@ function BlastComponent() {
   // Default to the database flagged as the assembly default (fallback: first active).
   React.useEffect(() => {
     if (form.database) return;
-    const active = (databasesQuery.data ?? []).filter((d) => d.is_active) as unknown as BlastDatabaseWithAssembly[];
+    const active = (databasesQuery.data ?? []).filter((d) => d.is_active);
     if (active.length === 0) return;
     const def = active.find((d) => d.assembly_is_default) ?? active[0];
     if (def) setForm((f) => ({ ...f, database: String(def.id) }));
@@ -365,54 +338,91 @@ function BlastComponent() {
     queryKey: ["blast-hits", selectedJob?.id],
     queryFn: async () => {
       const res = await getBlastHits(selectedJob!.id, { limit: 100, offset: 0 });
-      return (res.items ?? []) as unknown as BlastHitLoose[];
+      return res.items ?? [];
     },
     enabled: selectedJob != null,
     staleTime: 60_000,
   });
 
-  // The job stores the database *name*; map back to its assembly for the
-  // JBrowse 2 deep link (name match first, then id match).
-  const assemblyForJob = (job: BlastJob): string | undefined => {
-    const byName = databases.find((d) => d.name === job.database);
-    if (byName?.assembly_name) return byName.assembly_name;
-    const byId = databases.find((d) => String(d.id) === String(job.database));
-    return byId?.assembly_name ?? undefined;
+  /**
+   * The release/assembly context a job's hits belong to.
+   *
+   * The job carries its own provenance — the release and assembly of the
+   * database it searched — so a job submitted against release A keeps
+   * release A after the active release moved to B: the hit coordinates are
+   * A's coordinates.
+   *
+   * The currently listed databases are deliberately NOT used as a substitute.
+   * That list belongs to the active release, and a database name that exists
+   * in both releases would re-label an old job with the new release's
+   * assembly — exactly the "old results, new coordinates" mix-up the release
+   * contract forbids.
+   *
+   * `null` means "no trustworthy context": the caller must then offer no
+   * link instead of guessing one.
+   */
+  const contextForJob = (job: BlastJob): JobContext | null => {
+    const { release_id: releaseId } = job;
+    const assembly = job.assembly_name?.trim();
+    if (releaseId == null || !Number.isInteger(releaseId) || releaseId < 1) return null;
+    if (!assembly) return null;
+    return { release: String(releaseId), assembly };
   };
 
-  const hitSubjectId = (hit: BlastHitLoose): string | undefined =>
-    hit.subject_id ?? hit.target_id;
-  const hitStart = (hit: BlastHitLoose): number | undefined =>
-    hit.subject_start ?? hit.target_start;
-  const hitEnd = (hit: BlastHitLoose): number | undefined =>
-    hit.subject_end ?? hit.target_end;
-
-  /** /browser deep link for a hit, or null when coordinates are missing. */
-  const browserUrlFor = (job: BlastJob, hit: BlastHitLoose): string | null => {
-    const assembly = assemblyForJob(job);
-    const chr = hitSubjectId(hit);
-    const start = hitStart(hit);
-    const end = hitEnd(hit);
-    if (!assembly || !chr || start == null || end == null) return null;
-    return buildJbrowseLocusUrl(import.meta.env.BASE_URL, {
-      assembly,
-      locus: `${chr}:${start}-${end}`,
-    }).href;
+  const currentRelease = useReleaseId();
+  const [resolvingHit, setResolvingHit] = React.useState<string | null>(null);
+  const [navigationError, setNavigationError] = React.useState<string | null>(null);
+  const navigationAttempt = React.useRef(0);
+  React.useEffect(() => {
+    navigationAttempt.current += 1;
+    setResolvingHit(null);
+    setNavigationError(null);
+    return () => { navigationAttempt.current += 1; };
+  }, [selectedJob?.id]);
+  const openGenomeBrowser = async (job: BlastJob, hit: BlastHit) => {
+    const attempt = ++navigationAttempt.current;
+    setResolvingHit(hit.subject_id);
+    setNavigationError(null);
+    try {
+      const target = await resolveBlastHitGenomeTarget(job, hit.subject_id);
+      if (attempt !== navigationAttempt.current) return;
+      if (!target) {
+        setNavigationError(t("blast.jbrowse.unavailable"));
+        return;
+      }
+      // Same-tab navigation avoids popup blockers after the async lookup.
+      await navigate({ to: "/browser", search: target });
+    } catch {
+      if (attempt === navigationAttempt.current) setNavigationError(t("blast.jbrowse.resolveFailed"));
+    } finally {
+      if (attempt === navigationAttempt.current) setResolvingHit(null);
+    }
   };
 
   const hits = hitsQuery.data ?? [];
   const inputSequenceId = selectedJob ? fastaHeaderId(selectedJob.query_sequence) : undefined;
-  const hitsColumns: TableColumnsType<BlastHitLoose> = [
+  const hitsColumns: TableColumnsType<BlastHit> = [
     {
-      // Wireframe: 基因组版本 (assembly)
+      // Wireframe: 基因组版本 (assembly) — shown with the release the job was
+      // computed against, so a reader can tell which release the hit belongs
+      // to before following any link.
       title: t("search.genes.colAssembly"),
       key: "assembly",
       width: 160,
-      render: () => (
-        <span className="font-mono text-xs text-muted-foreground">
-          {selectedJob ? assemblyForJob(selectedJob) ?? "—" : "—"}
-        </span>
-      ),
+      render: () => {
+        const context = selectedJob ? contextForJob(selectedJob) : null;
+        if (!context) {
+          return <span className="font-mono text-xs text-muted-foreground">—</span>;
+        }
+        return (
+          <span className="font-mono text-xs text-muted-foreground">
+            {context.assembly}
+            <span className="block text-[10px]">
+              {`${t("search.releaseLabel")} ${context.release}`}
+            </span>
+          </span>
+        );
+      },
     },
     {
       // Wireframe: 输入序列ID (query FASTA header id, same for every hit)
@@ -430,13 +440,27 @@ function BlastComponent() {
       key: "identity",
       width: 110,
       render: (_, hit) => {
-        const identity = hit.percent_identity ?? hit.identity_percent;
+        const identity = hit.percent_identity;
         return identity != null ? (
           <span className="font-mono text-xs">{identity.toFixed(1)}%</span>
         ) : (
           <span className="text-muted-foreground">—</span>
         );
       },
+    },
+    {
+      // The alignment coordinates are amino-acid positions of the subject
+      // protein. They are deliberately labelled as protein coordinates: they
+      // are not genome positions, and the genome browser link below resolves
+      // the gene itself rather than these offsets.
+      title: get("blast.hitProteinCoords", t("blast.hitProteinCoords")),
+      key: "proteinCoords",
+      width: 150,
+      render: (_, hit) => (
+        <span className="font-mono text-xs">
+          {hit.subject_start}-{hit.subject_end}
+        </span>
+      ),
     },
     {
       // Wireframe: E值
@@ -457,7 +481,9 @@ function BlastComponent() {
       key: "gene",
       width: 180,
       render: (_, hit) => {
-        const geneId = hitSubjectId(hit);
+        const geneId = hit.subject_id;
+        const context = selectedJob ? contextForJob(selectedJob) : null;
+        const canSearch = context != null && context.release === currentRelease;
         // The identifier is shown whole. It used to go through
         // `compactGeneId(geneId, 18)`, which cut `Glyma.066015200`-length and
         // longer accessions with an ellipsis — the one string on this row a
@@ -467,13 +493,13 @@ function BlastComponent() {
           <Button
             size="small"
             className="h-auto whitespace-normal break-all py-1 text-left font-mono text-xs"
-            title={geneId ?? undefined}
-            disabled={!geneId}
+            title={canSearch ? geneId : t("blast.geneSearchReleaseMismatch")}
+            disabled={!geneId || !canSearch}
             onClick={() => {
-              if (!geneId) return;
+              if (!geneId || !context || !canSearch) return;
               navigate({
                 to: "/search/genes",
-                search: { q: geneId, run: true },
+                search: { q: geneId, assembly: context.assembly, run: true },
               });
             }}
           >
@@ -488,16 +514,17 @@ function BlastComponent() {
       key: "gbrowse",
       width: 140,
       render: (_, hit) => {
-        const browserUrl = selectedJob ? browserUrlFor(selectedJob, hit) : null;
+        const context = selectedJob ? contextForJob(selectedJob) : null;
         return (
           <Button
             size="small"
-            disabled={!browserUrl}
-            href={browserUrl ?? undefined}
-            target="_blank"
-            rel="noopener noreferrer"
+            data-testid="blast-gbrowse-link"
+            disabled={!context || !hit.subject_id?.trim() || resolvingHit != null}
+            loading={resolvingHit === hit.subject_id}
+            onClick={() => { if (selectedJob) void openGenomeBrowser(selectedJob, hit); }}
+            title={context ? undefined : t("browser.contextMissingDescription")}
           >
-            {t("blast.actions.gbrowse")}
+            {t(resolvingHit === hit.subject_id ? "blast.jbrowse.resolving" : "blast.actions.gbrowse")}
           </Button>
         );
       },
@@ -680,10 +707,12 @@ function BlastComponent() {
           ) : jobs.length === 0 ? (
             <Empty description={get("ui.noResults", t("blast.noJobs"))} />
           ) : (
-            <List<BlastJob>
-              dataSource={jobs}
-              renderItem={(job) => (
-                <List.Item key={job.id}>
+            // Native <ul>/<li> rather than AntD 6's deprecated List. The
+            // empty state is the sibling branch above, so this list is only
+            // reached with at least one job.
+            <ul className="m-0 list-none p-0">
+              {jobs.map((job) => (
+                <li key={job.id} className="py-3">
                   <div className="flex w-full items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-mono text-xs">{job.id.slice(0, 12)}…</p>
@@ -707,9 +736,9 @@ function BlastComponent() {
                       ) : null}
                     </div>
                   </div>
-                </List.Item>
-              )}
-            />
+                </li>
+              ))}
+            </ul>
           )}
         </Card>
 
@@ -725,13 +754,41 @@ function BlastComponent() {
               </Typography.Text>
             }
           >
+            {/*
+              A job that states no release/assembly context cannot offer a
+              trustworthy genome-browser link. The state is announced instead
+              of silently dropping the column, so the reader knows the link is
+              unavailable rather than missing.
+            */}
+            {selectedJob && !contextForJob(selectedJob) ? (
+              <Alert
+                className="mb-4"
+                type="warning"
+                showIcon
+                title={t("browser.contextMissingTitle")}
+                description={t("browser.contextMissingDescription")}
+              />
+            ) : null}
+            {navigationError ? <Alert className="mb-4" type="error" showIcon title={navigationError} /> : null}
             {hitsQuery.isLoading ? (
               <Skeleton active paragraph={{ rows: 4 }} title={false} />
+            ) : hitsQuery.isError ? (
+              <div role="alert">
+                <Result
+                  status="error"
+                  title={t("blast.hitsLoadError")}
+                  extra={
+                    <Button loading={hitsQuery.isFetching} onClick={() => void hitsQuery.refetch()}>
+                      {t("common.retry")}
+                    </Button>
+                  }
+                />
+              </div>
             ) : hits.length === 0 ? (
               <Empty description={get("ui.noResults", t("blast.noHits"))} />
             ) : (
-              <Table<BlastHitLoose>
-                rowKey={(hit) => String(hit.id ?? hit.hsp_num ?? 0)}
+              <Table<BlastHit>
+                rowKey={(hit) => String(hit.hsp_num)}
                 columns={hitsColumns}
                 dataSource={hits}
                 loading={hitsQuery.isFetching}

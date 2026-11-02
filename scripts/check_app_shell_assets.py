@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import tempfile
 from html.parser import HTMLParser
@@ -31,6 +32,30 @@ APPS: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("apps/admin", "config/config.ts", ("dist",)),
     ("apps/jbrowse", "config/config.ts", ("dist",)),
 )
+
+_SCRIPT_TAG = re.compile(r"<script\b([^>]*)>", re.IGNORECASE)
+_DEFERRED = re.compile(r"\b(?:defer|async)\b|type\s*=\s*[\"']module[\"']", re.IGNORECASE)
+
+
+def blocking_entry_scripts(html: str) -> list[str]:
+    """External scripts that would run before the document body exists.
+
+    A classic `<script src=...>` in `<head>` without `defer`/`async` executes
+    immediately and cannot see `<div id="root">`; React then aborts with error
+    #299 and the SPA renders a blank page. The genome-browser build shipped
+    exactly that (its entry scripts lost `defer`), which no gate caught until
+    the artifact browser gate was added. Inline scripts are exempt: they are
+    CSP-hashed and depend on their position.
+    """
+    blocking: list[str] = []
+    for tag in _SCRIPT_TAG.findall(html):
+        if not re.search(r"\bsrc\s*=", tag):
+            continue
+        if _DEFERRED.search(tag):
+            continue
+        blocking.append(tag.strip())
+    return blocking
+
 
 class _IconParser(HTMLParser):
     """Recognize the HTML rel token set, including Umi's ``shortcut icon``."""
@@ -75,13 +100,20 @@ def check_shell(
         if not index.is_file():
             failures.append(f"{app_dir.name}: built {dist.name}/index.html is missing")
             continue
-        href = icon_href(index.read_text(encoding="utf-8"))
+        html = index.read_text(encoding="utf-8")
+        href = icon_href(html)
         if href is None:
             failures.append(f'{app_dir.name}: built {dist.name}/index.html declares no <link rel="icon">')
             continue
         name = href.rsplit("/", 1)[-1]
         if not name or not (dist / name).is_file():
             failures.append(f"{app_dir.name}: built {dist.name}/{name or 'favicon'} is missing")
+        blocking = blocking_entry_scripts(html)
+        if blocking:
+            failures.append(
+                f"{app_dir.name}: built {dist.name}/index.html has a blocking entry script "
+                f"({blocking[0]}); add defer so React can find the mount node"
+            )
 
 
 def run() -> list[str]:
@@ -137,6 +169,19 @@ def self_test() -> int:
         (dist / "index.html").write_text("<head></head>", encoding="utf-8")
         check_shell(app, config, (dist,), failures)
         assert any("declares no" in item for item in failures), failures
+
+        # Blocking entry scripts fail; deferred (or module) scripts pass.
+        for html, should_fail in (
+            ('<head><link rel="icon" href="/favicon.svg"><script src="/assets/app.js"></script></head>', True),
+            ('<head><link rel="icon" href="/favicon.svg"><script src="/assets/app.js" defer></script></head>', False),
+            ('<head><link rel="icon" href="/favicon.svg"><script type="module" src="/assets/app.js"></script></head>', False),
+        ):
+            failures.clear()
+            (dist / "index.html").write_text(html, encoding="utf-8")
+            (dist / "favicon.svg").write_text("<svg/>", encoding="utf-8")
+            check_shell(app, config, (dist,), failures)
+            has_blocking_failure = any("blocking entry script" in item for item in failures)
+            assert has_blocking_failure is should_fail, (html, failures)
 
         failures.clear()
         (app / "public" / "favicon.svg").unlink()

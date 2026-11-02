@@ -19,12 +19,24 @@
  * own — a deployment that pins nothing keeps following the server default,
  * which is the documented behaviour for an unpinned site.
  *
- * ## What is dropped
+ * ## What is invalidated
  *
  * Only queries whose key carries a release. A blanket `invalidateQueries()`
  * would refetch public content and personal data that the switch does not
  * affect; `releaseScopedKeys()` below is the predicate both this module and its
  * tests use, so the two cannot drift.
+ *
+ * The switch invalidates IN PLACE and refetches the active observers. It must
+ * never `removeQueries()` — that was the original implementation and it is a
+ * real bug: `Query#destroy()` cancels an in-flight fetch *silently*, so the
+ * query never dispatches success or error, the observer is orphaned when the
+ * cache entry is removed (query-core 5 has no `onQueryRemoved` hook), and a
+ * route whose detail read was in flight at switch time stays on its loading
+ * skeleton forever. It reproduced on every page load of an unpinned artifact
+ * (the build-time pin starts null, the first `/releases/active` probe flips
+ * it) and would equally hit a deployed tab when an operator publishes while a
+ * read is in flight. Kept as `invalidateQueries({ predicate, refetchType:
+ * "active" })` so isolation is preserved without destroying observed queries.
  */
 import * as React from "react";
 import { QueryClient } from "@tanstack/react-query";
@@ -60,6 +72,12 @@ export const RELEASE_SCOPED_PREFIXES: ReadonlyArray<readonly unknown[]> = [
   queryKeys.mutants.all(),
   queryKeys.variants.all(),
   ["analytics"],
+  // Analytics routes still use these app-local roots rather than a shared family.
+  ["chromosome-density"],
+  ["homepage-stats"],
+  ["variant-type-summary"],
+  ["impact-summary"],
+  ["discovery-trend"],
   ["gene-search"],
   ["search-region"],
 ];
@@ -101,17 +119,6 @@ export function useReleaseId(): string | null {
   return useReleaseScope().releaseId;
 }
 
-/** Drop every cached entry whose identity is bound to a release. */
-export function dropReleaseScopedQueries(queryClient: QueryClient): string[] {
-  const dropped: string[] = [];
-  for (const query of queryClient.getQueryCache().getAll()) {
-    if (!isReleaseScopedKey(query.queryKey)) continue;
-    dropped.push(JSON.stringify(query.queryKey));
-    queryClient.removeQueries({ queryKey: query.queryKey, exact: true });
-  }
-  return dropped;
-}
-
 export interface ReleaseScopeProviderProps {
   children: React.ReactNode;
   queryClient: QueryClient;
@@ -145,14 +152,13 @@ export function ReleaseScopeProvider({
         if (!mounted.current) return;
         setRelease(next);
         setSwitchCount((count) => count + 1);
-        dropReleaseScopedQueries(queryClient);
-        // Only the release-scoped families re-run. A blanket `refetchQueries()`
-        // would also refetch public news and personal data that the switch
-        // does not affect — which is what the first version of this code did,
-        // and what this predicate exists to prevent.
-        void queryClient.refetchQueries({
+        // Invalidate in place: the release-bound entries are marked stale and
+        // the active observers re-run under the new release key. Never
+        // `removeQueries()` here — see the module header: destroying a query
+        // with a fetch in flight leaves it pending forever.
+        void queryClient.invalidateQueries({
           predicate: (query) => isReleaseScopedKey(query.queryKey),
-          type: "active",
+          refetchType: "active",
         });
       }),
     [queryClient],

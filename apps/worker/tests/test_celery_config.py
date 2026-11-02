@@ -81,6 +81,15 @@ def test_default_result_expires_is_seven_days(monkeypatch) -> None:
     assert 86400 <= mod.celery_app.conf.result_expires <= 7 * 86400
 
 
+def test_native_retention_is_loaded_and_scheduled_hourly() -> None:
+    mod = _reload_worker()
+    assert "soymutdb_worker.tasks.native_retention" in mod.celery_app.conf.include
+    assert mod.celery_app.conf.beat_schedule["cleanup-native-retention"] == {
+        "task": "soymutdb_worker.tasks.native_retention.cleanup",
+        "schedule": 3600,
+    }
+
+
 def test_analyses_tasks_route_to_dedicated_queue(monkeypatch) -> None:
     """fastp/scanpy analyses tasks must route to the ``analyses`` queue."""
     mod = _reload_worker()

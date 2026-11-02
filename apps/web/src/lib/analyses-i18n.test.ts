@@ -12,7 +12,7 @@
 import { describe, expect, it } from "vitest";
 import { createInstance } from "i18next";
 
-import { catalogs, buildBaseI18nOptions } from "@soymutdb/i18n-core";
+import { buildBaseI18nOptions } from "@soymutdb/i18n-core";
 
 function instance(language: "en" | "zh") {
   const i18n = createInstance();

@@ -4,8 +4,8 @@ import { assembliesQueryOptions, assemblyChromosomesQueryOptions } from "../../l
  *
  * URL-backed and shareable (Phase 4): reads `assembly`, `chromosome`,
  * `start`, `end`, and `run` search params. A parameterized URL restores form
- * state and runs once; the form submit opens a parameterized `/search/location`
- * URL in a new tab with `noopener`.
+ * state and runs once; the form submit updates `/search/location` in place
+ * using the stable assembly id so a shared URL cannot collapse v4/v5 names.
  *
  * Result columns follow the approved reference order:
  *   Genome assembly → Chromosome → Position → Mutation feature → Gene ID →
@@ -40,6 +40,7 @@ import { formatNumber } from "../../lib/format";
 import { buildJbrowseLocusUrl } from "../../lib/deployment";
 import { SITE_VARIANT } from "../../lib/site-variant";
 import { resolveSearchAssembly } from "../../lib/search-assembly";
+import { assemblyOptionLabel, resolveAssemblyParam } from "../../lib/assembly-selection";
 import { useReleaseId } from "../../lib/release-scope";
 
 interface LocationSearchParams {
@@ -91,7 +92,8 @@ function LocationSearchComponent() {
   const selectedAssembly: AssemblyInfo | undefined = assemblies.find(
     (a) => String(a.id) === String(assemblyId),
   );
-  const linkedAssembly = resolveSearchAssembly(assemblies, urlAssembly);
+  const linkResolution = resolveAssemblyParam(assemblies, urlAssembly);
+  const linkedAssembly = linkResolution.status === "resolved" ? linkResolution.assembly : undefined;
 
   React.useEffect(() => {
     if (assemblyId || urlAssembly || assemblies.length === 0) return;
@@ -263,15 +265,14 @@ function LocationSearchComponent() {
     },
   ];
 
-  // Search updates this page in place: the region is applied to the local
-  // result state immediately, while `replace` keeps the URL shareable without
-  // stacking a history entry per submit.
+  // Search updates the URL in place; submitted results derive from that URL.
+  // Names remain display labels, never the identity of a new shared link.
   const submit = () => {
     if (!selectedAssembly || !chromosome || start == null || end == null) return;
     if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 1 || end < start) return;
     void router.navigate({
       to: "/search/location",
-      search: { assembly: selectedAssembly.name, chromosome, start, end, run: true },
+      search: { assembly: String(selectedAssembly.id), chromosome, start, end, run: true },
     });
   };
 
@@ -325,7 +326,7 @@ function LocationSearchComponent() {
                 value: String(a.id),
                 label: (
                   <span className="flex items-center gap-2">
-                    <span>{a.name}</span>
+                    <span>{assemblyOptionLabel(a)}</span>
                     {a.is_default ? (
                       <Tag className="m-0 text-[9px] uppercase">{t("home.defaultAssembly")}</Tag>
                     ) : null}
@@ -402,12 +403,16 @@ function LocationSearchComponent() {
           <Typography.Text type="secondary" className="mt-2 block text-xs">
             {get("search.location.formatHint", t("search.location.formatHint"))}
           </Typography.Text>
-          {assembliesQuery.isError || (urlAssembly && assemblies.length > 0 && !linkedAssembly) ? (
+          {assembliesQuery.isError ? (
+            <Alert className="mt-3" type="error" showIcon title={t("home.assembliesUnavailable")} />
+          ) : assembliesQuery.isSuccess && (linkResolution.status === "unknown" || linkResolution.status === "ambiguous") ? (
             <Alert
               className="mt-3"
               type="error"
               showIcon
-              title={t(urlAssembly && !linkedAssembly && assemblies.length > 0 ? "search.assemblyUnavailable" : "home.assembliesUnavailable")}
+              title={linkResolution.status === "ambiguous"
+                ? t("search.ambiguousAssembly", { matches: linkResolution.matches.map(assemblyOptionLabel).join(", ") })
+                : t("search.assemblyUnavailable")}
             />
           ) : null}
           {chromosomesQuery.isError ? (

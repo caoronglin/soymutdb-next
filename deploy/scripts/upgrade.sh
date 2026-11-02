@@ -7,13 +7,12 @@
 #   2. 发布前预检（JWT/CORS/凭据，与 API fail-fast 校验对齐）
 #   3. 镜像 manifest 预检
 #   4. 拉取新镜像
-#   4. 数据备份（deploy/scripts/backup.sh；首次部署且无运行容器时跳过）
-#   5. 数据备份
-#   6. 停止应用并运行一次性迁移（docker compose run --rm migrate + migrate-clickhouse）
-#   6. 启动服务（docker compose up -d）
+#   5. PostgreSQL + S3 数据备份（首次部署且无运行容器时跳过）
+#   6. 停止应用并运行一次性迁移（docker compose run --rm migrate）
+#      迁移后验证原生事实完整性（verify_native_cutover），失败则不启动
 #   7. 启动服务
 #   8. readiness 轮询（失败自动回滚旧镜像并退出非零）
-#   8. 业务 smoke（deploy/scripts/healthcheck.sh）
+#   9. 业务 smoke（deploy/scripts/healthcheck.sh）
 #  10. 记录发布结果（OCI digest refs、迁移版本、时间 -> .release-state.json）
 #
 # Usage:
@@ -136,7 +135,7 @@ echo -e "${CYAN}[2/10] Pre-flight checks...${NC}"
 # explicit: a release that updates only the digests of the *running* services must
 # not leave the migrations on an older image.
 for rl_required_ref in API_IMAGE_REF WORKER_IMAGE_REF MIGRATE_IMAGE_REF \
-    MIGRATE_CLICKHOUSE_IMAGE_REF MCP_IMAGE_REF JBROWSE_IMAGE_REF; do
+    MCP_IMAGE_REF JBROWSE_IMAGE_REF; do
     [[ -n "${!rl_required_ref:-}" ]] || fail "${rl_required_ref} is required (image@sha256)"
 done
 
@@ -159,7 +158,6 @@ if [[ "${MINIO_ROOT_USER:-minioadmin}" == "minioadmin" || "${MINIO_ROOT_PASSWORD
     fail "MINIO_ROOT_USER / MINIO_ROOT_PASSWORD must not use the default 'minioadmin' (API fail-fast)"
 fi
 if [[ "${POSTGRES_PASSWORD:-}" == "soymutdb_dev_password" || \
-      "${CLICKHOUSE_PASSWORD:-}" == "soymutdb_dev_password" || \
       "${REDIS_PASSWORD:-}" == "soymutdb_dev_password" || \
       "${MINIO_ROOT_USER:-}" == "minioadmin" || \
       "${MINIO_ROOT_PASSWORD:-}" == "minioadmin" || \
@@ -168,7 +166,7 @@ if [[ "${POSTGRES_PASSWORD:-}" == "soymutdb_dev_password" || \
     fail "one or more credentials still use a known development default"
 fi
 
-for rl_credential in POSTGRES_PASSWORD CLICKHOUSE_PASSWORD REDIS_PASSWORD \
+for rl_credential in POSTGRES_PASSWORD REDIS_PASSWORD \
     MINIO_ROOT_USER MINIO_ROOT_PASSWORD GRAFANA_USER GRAFANA_PASSWORD \
     SOYMUTDB_ADMIN_PASSWORD; do
     rl_credential_value="${!rl_credential:-}"
@@ -183,7 +181,7 @@ echo -e "${GREEN}  Pre-flight checks passed.${NC}"
 # ---------------------------------------------------------------------
 echo -e "${CYAN}[3/10] Checking image manifests...${NC}"
 for rl_image in "${API_IMAGE_REF}" "${WORKER_IMAGE_REF}" "${MIGRATE_IMAGE_REF}" \
-    "${MIGRATE_CLICKHOUSE_IMAGE_REF}" "${MCP_IMAGE_REF}" "${JBROWSE_IMAGE_REF}"; do
+    "${MCP_IMAGE_REF}" "${JBROWSE_IMAGE_REF}"; do
     [[ "${rl_image}" =~ @sha256:[0-9a-f]{64}$ ]] || \
         fail "image reference must be immutable image@sha256: ${rl_image}"
     # One `docker manifest inspect` per DISTINCT repository: the four service
@@ -195,7 +193,7 @@ done
 echo -e "${GREEN}  Image manifests OK.${NC}"
 
 echo -e "${CYAN}[4/10] Pulling images...${NC}"
-"${COMPOSE[@]}" pull api migrate migrate-clickhouse worker-default worker-analyses worker-blast worker-ingest beat mcp-server jbrowse || \
+"${COMPOSE[@]}" pull api migrate worker-default worker-analyses worker-blast worker-ingest beat mcp-server jbrowse || \
     fail "docker compose pull failed - check registry access and digest refs"
 echo -e "${GREEN}  Images pulled.${NC}"
 
@@ -232,8 +230,8 @@ done
 migration_version="$("${COMPOSE[@]}" run --rm --no-deps migrate alembic current 2>/dev/null | tail -1)"
 echo -e "${GREEN}  Migrations complete (head: ${migration_version}).${NC}"
 
-echo -e "${CYAN}  Running ClickHouse schema migration with validation gates...${NC}"
-"${COMPOSE[@]}" run --rm migrate-clickhouse || fail "ClickHouse migration failed; readiness/startup not attempted"
+echo -e "${CYAN}  Verifying native PostgreSQL variant cutover...${NC}"
+"${COMPOSE[@]}" run --rm --no-deps migrate python -m app.scripts.verify_native_cutover || fail "native variant cutover verification failed; startup not attempted"
 
 # ---------------------------------------------------------------------
 # Step 6a: 记录旧版本（用于失败回滚）
@@ -241,7 +239,6 @@ echo -e "${CYAN}  Running ClickHouse schema migration with validation gates...${
 OLD_API_REF=""
 OLD_WORKER_REF=""
 OLD_MIGRATE_REF=""
-OLD_MIGRATE_CH_REF=""
 OLD_MCP_REF=""
 OLD_JBROWSE_REF=""
 # Read one `"<key>": "<value>"` out of the recorded release state.
@@ -256,7 +253,6 @@ if [[ -f "${STATE_FILE}" ]]; then
     # those services are one-shot and their previous incarnation was the API or
     # worker image anyway.
     OLD_MIGRATE_REF="$(state_ref migrate_image_ref)"
-    OLD_MIGRATE_CH_REF="$(state_ref migrate_clickhouse_image_ref)"
     OLD_MCP_REF="$(state_ref mcp_image_ref)"
     OLD_JBROWSE_REF="$(state_ref jbrowse_image_ref)"
 fi
@@ -277,7 +273,7 @@ rollback() {
     # 信息会是"required variable POSTGRES_PASSWORD is missing"，与真正的原因
     # （回滚本身）毫无关系。因此显式复用已加载的值。
     #
-    # migrate / migrate-clickhouse 的旧引用来自 .release-state.json：写入过该
+    # migrate 的旧引用来自 .release-state.json：写入过该
     # 字段的版本才换得回去，缺失时保持当前引用（这两个服务是一次性的，上一代
     # 就是 api/worker 镜像本身，没有"更旧的迁移镜像"可回）。
     #
@@ -289,7 +285,6 @@ rollback() {
     MCP_IMAGE_REF="${OLD_MCP_REF}" \
     JBROWSE_IMAGE_REF="${OLD_JBROWSE_REF}" \
     MIGRATE_IMAGE_REF="${OLD_MIGRATE_REF:-${MIGRATE_IMAGE_REF}}" \
-    MIGRATE_CLICKHOUSE_IMAGE_REF="${OLD_MIGRATE_CH_REF:-${MIGRATE_CLICKHOUSE_IMAGE_REF}}" \
     POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
     CLICKHOUSE_PASSWORD="${CLICKHOUSE_PASSWORD}" \
     REDIS_PASSWORD="${REDIS_PASSWORD}" \
@@ -356,12 +351,11 @@ cat > "${STATE_FILE}" <<EOF
   "api_image_ref": "${API_IMAGE_REF}",
   "worker_image_ref": "${WORKER_IMAGE_REF}",
   "migrate_image_ref": "${MIGRATE_IMAGE_REF}",
-  "migrate_clickhouse_image_ref": "${MIGRATE_CLICKHOUSE_IMAGE_REF}",
   "mcp_image_ref": "${MCP_IMAGE_REF}",
   "jbrowse_image_ref": "${JBROWSE_IMAGE_REF}",
   "api_digest": "${api_digest}",
   "migration_version": "${migration_version}",
-  "services": ["api", "migrate", "migrate-clickhouse", "worker-default", "worker-analyses", "worker-blast", "worker-ingest", "beat", "mcp-server", "nginx"],
+  "services": ["api", "migrate", "worker-default", "worker-analyses", "worker-blast", "worker-ingest", "beat", "mcp-server", "nginx"],
   "released_at": "${released_at}"
 }
 EOF
@@ -369,7 +363,6 @@ echo -e "${GREEN}  Release recorded: ${STATE_FILE}${NC}"
 echo "    api_image_ref:     ${API_IMAGE_REF}"
 echo "    worker_image_ref:  ${WORKER_IMAGE_REF}"
 echo "    migrate_image_ref: ${MIGRATE_IMAGE_REF}"
-echo "    migrate_ch_ref:    ${MIGRATE_CLICKHOUSE_IMAGE_REF}"
 echo "    api_digest:        ${api_digest}"
 echo "    migration_version: ${migration_version}"
 echo "    released_at:       ${released_at}"

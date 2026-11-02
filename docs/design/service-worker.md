@@ -1,6 +1,6 @@
 # Service Worker 静态资源缓存（apps/web）
 
-> 实现：`apps/web/public/sw.js`（模板）→ 构建期 `scripts/gen-sw.js` 注入 → `dist/sw.js`
+> 实现：`apps/web/public/sw.js`（模板）→ 构建期 `apps/web/scripts/gen-sw.js` 注入 → `dist/sw.js`
 > 注册：`apps/web/src/react-app.tsx`（production + 开关，window load 后延迟注册）
 > 参考：MDN [Service Worker API](https://developer.mozilla.org/en-US/docs/Web/API/Service_Worker_API)、[Cache API](https://developer.mozilla.org/en-US/docs/Web/API/Cache)
 
@@ -32,7 +32,7 @@ hash 判定正则：`/\/assets\/[^/]+[._-][A-Za-z0-9_-]{8,}(?:\.async)?\.[a-z0-9
 - **activate**：删除所有 `soymutdb-static-v*` 中非当前版本者（版本轮换），随后 `clients.claim()` 控制所有已打开页面。
 - **版本轮换与站点隔离**：`CACHE_VERSION = siteVariant + 构建时间戳 + precache 清单内容 sha256 前 8 位`。静态与运行时缓存都按变体命名；查找只在当前变体的 cache 内执行，不使用 `caches.match()` 跨缓存查询。
 
-## 4. 构建集成（scripts/gen-sw.js）
+## 4. 构建集成（apps/web/scripts/gen-sw.js）
 
 构建链（`apps/web/package.json`）：
 

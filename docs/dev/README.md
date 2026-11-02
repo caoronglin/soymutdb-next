@@ -1,24 +1,29 @@
 # SoyMutDB 开发者文档
 
+当前验收入口：[2026-10-17 非 Docker 验收](native-validation-20261017.md)，包含验证计数、真实服务证据、复现命令和生产边界；历史全量测试见 [2026-10-15–16 整体验收](fullstack-validation-20261015.md)。本机启动前先读仓库 `.ai-memory/LOCAL-RUN-ENV.md`。
+
 使用 PI AGENT 执行时，见 [`pi-agent-runbook.md`](pi-agent-runbook.md)，其中提供系统提示词、硬性约束及启动/续跑模板。
 
 数据库核心能力交给智能体实施时，先读 [`database-execution-handoff.md`](database-execution-handoff.md)：
 包含当前缺口、执行约束、三个执行者的职责、依赖顺序及验收标准（2026-09-08）。
 
-当前主链由 Web 门户、Web-only Admin、FastAPI、Celery、PostgreSQL/ClickHouse、MinIO、Redis、MCP 和
+当前主链由 Web 门户、Web-only Admin、FastAPI、Celery、PostgreSQL、MinIO、Redis、MCP 和
 GitHub Pages 组成。架构、状态机、契约、CI 和部署见 [`architecture-and-deployment.md`](architecture-and-deployment.md)。
+ClickHouse 仅保留为显式历史迁移源，新运行时查询与写入使用 PostgreSQL；切换约束见 [原生 PostgreSQL 切换手册](native-postgres-cutover.md)。
 
 生物信息学数据库优先的产品契约、突变体公开/内部双 ID 边界、v4/v5 assembly 搜索语义，以及强制测试与
 验收流程见 [`database-core-contract.md`](database-core-contract.md)。修改突变体、基因、变异、搜索、release
 或 external/internal 站点行为时，应先读这份文档。
 
-Admin 页面、API 绑定、数据库关系、Page Builder 模板和性能配置见 [`admin-architecture.md`](admin-architecture.md)。
+Admin 页面、API 绑定、数据库关系、内容页定义（PageDefinition）和性能配置见 [`admin-architecture.md`](admin-architecture.md)。Page Builder 的编辑 UI 已按 [ADR-0009](../adr/0009-retire-page-builder-and-widgets.md) 退役，`/page-builder` 只保留说明页；服务端页面定义与迁移报告仍在。
 人类可读的服务、包、数据库、队列与插件关系图，以及 CI 机器依赖图合同见
 [`../design/dependency-graphs.md`](../design/dependency-graphs.md)。
 
 ## 优化与设计方案
 
-**入口**：[`optimization-master-plan.md`](optimization-master-plan.md)（v6.0 总纲）——优先级、依赖、冲突裁决、勘误与任务清单都在这里。**先读它**，再按需查阅子文档。
+**优化方案（历史）**：[`optimization-master-plan.md`](optimization-master-plan.md)（v6.0 总纲）——优先级、依赖、冲突裁决、勘误与任务清单。该文档已归档，以下子文档按需查阅；**现状读 [`project-status.md`](project-status.md)**。
+
+> **2026-10-18 状态注记**：总纲附录 A 是 2026-10-01 快照，归档后已实现的任务（如 Import Studio、Admin Pro 组件、命令面板）在那张表里就地补了证据，但历史排期与工作量不再更新；任务级现状见 [`docs/aegis/INDEX.md`](../aegis/INDEX.md)。
 
 五份子文档各有边界，只负责详细设计，不写优先级：
 

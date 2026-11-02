@@ -52,7 +52,7 @@
 #
 # Environment
 #   SOYMUTDB_TEST_DATABASE_URL  caller-provided database; skips the bootstrap
-#   SOYMUTDB_PG_DOCKER_IMAGE    postgres image (default postgres:18.4-alpine)
+#   SOYMUTDB_PG_DOCKER_IMAGE    postgres image (default postgres:18.6-alpine)
 #   SOYMUTDB_PG_PORT            loopback port (default 5432)
 #   SOYMUTDB_PG_CONTAINER       container name (default soymutdb-pg-test)
 # =============================================================================
@@ -61,7 +61,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-PG_IMAGE="${SOYMUTDB_PG_DOCKER_IMAGE:-postgres:18.4-alpine}"
+PG_IMAGE="${SOYMUTDB_PG_DOCKER_IMAGE:-postgres:18.6-alpine}"
 PG_PORT="${SOYMUTDB_PG_PORT:-5432}"
 PG_CONTAINER="${SOYMUTDB_PG_CONTAINER:-soymutdb-pg-test}"
 PG_USER="soymutdb"

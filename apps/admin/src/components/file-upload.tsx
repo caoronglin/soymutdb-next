@@ -183,17 +183,24 @@ export default function FileUpload({
     }
   };
 
-  const handleRemove: UploadProps["onRemove"] = (file) => {
-    const current = valueRef.current;
-    const urls = Array.isArray(current)
-      ? current
-      : current
-        ? [current]
-        : [];
-    const removed = file.url ?? file.name;
-    const next = urls.filter((u) => u !== removed);
-    emit(next.length === 0 ? undefined : maxCount > 1 ? next : next[0]);
-    return true;
+  /**
+   * The list is rendered from `value`, so `onChange` is where antd's reported
+   * list is translated back into the controlled public-URL value.
+   *
+   * Additions are deliberately not handled here: with a controlled `fileList`
+   * antd never resolves in-flight entries (its `onSuccess`/`onError` handlers
+   * bail out when the file is absent from the merged list), and selecting a file
+   * in single mode also trims the previous entry because of `maxCount`. The URL
+   * of a new file is therefore published by `customRequest`, after the server
+   * has verified it. A removal is the one event that drops an already published
+   * URL from the list, and antd reports it with `status: "removed"`.
+   */
+  const handleChange: UploadProps["onChange"] = ({ file, fileList: nextFileList }) => {
+    if (file.status !== "removed") return;
+    const urls = nextFileList
+      .map((item) => item.url)
+      .filter((url): url is string => Boolean(url));
+    emit(urls.length === 0 ? undefined : maxCount > 1 ? urls : urls[0]);
   };
 
   return (
@@ -203,7 +210,7 @@ export default function FileUpload({
       maxCount={maxCount}
       fileList={fileList}
       customRequest={customRequest}
-      onRemove={handleRemove}
+      onChange={handleChange}
       beforeUpload={(file) => {
         if (rawSizeExceeds(file, maxSizeMB)) {
           message.error(

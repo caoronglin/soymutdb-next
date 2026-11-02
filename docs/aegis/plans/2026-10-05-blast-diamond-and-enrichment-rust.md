@@ -2,9 +2,9 @@
 
 状态：已进入实现；统计截断修复完成。**2026-10-06：比对链路收敛为 DIAMOND
 `blastp` 单一引擎**（NCBI BLAST 的代码、镜像与 conda 依赖均已移除），详见 A 段。
-Rust 和 pyDEG 的生产切流尚未完成，且两者都还卡在各自的前置条件上。
+**2026-10-09：M2 实验候选已实现，但真实注释重放的完整 ASGI 请求 p95 未达到 ≥20% 改善，保留优化 Python；M3 隔离环境资格通过，带方法与资源限制。M4–M7 及生产切流未执行。**
 
-本文件是此项工作的唯一计划与审计入口，取代此前版本中未获证据支持的判断。既有数据库、对象存储和队列权威关系保持不变；本轮没有迁移或删除业务数据，没有提交或推送代码。
+本文件是此项工作的唯一计划与审计入口，取代此前版本中未获证据支持的判断。既有数据库、对象存储和队列权威关系保持不变；未迁移或删除业务数据。下文较早“不提交/推送”“真实负载仍缺”的表述为当时记录：用户随后明确授权全部当前改动提交并先推送，`2c5f0f15e4e344e33f9d616d4226610aa43f6ff9` 已于 2026-10-08 推送至 `origin/main`；最新 M2/M3 实证见末尾。
 
 ## 审计发现与处理
 
@@ -172,7 +172,7 @@ Biopython 的其他成熟操作。初稿仍保留 API/service 的旧字符校验
 依据用户“优化核心算法、做好迁移任务计划”的要求，先交付 B1 的 Python 优化，
 再按证据推进 Biopython、Rust 候选与 omicverse pyDEG。生产迁移尚未执行。
 参考 `docs/dev/database-core-contract.md` 和本计划；保留用户并行修改的 W0 baseline。
-起始工作树为 `main` / `7ec14b41f`，已有未提交改动，继续使用原工作区，不提交或推送。
+历史初始工作树为 `main` / `7ec14b41f`，当时保留未提交改动；后续用户已授权提交/推送。M2/M3 实施起点为 `main` / `2c5f0f15e`，且该提交已与 `origin/main` 一致，满足“先推送，再开始做”的顺序。
 
 数据权威不变：PostgreSQL 管 job/权限/release，MinIO 管输入与产物，Redis 为
 可丢弃队列，ClickHouse 不新增统计或差异表达权威状态。API 继续拥有富集统计
@@ -186,11 +186,11 @@ TDD Route：`off / skipped`，未要求严格 test-first；每个任务均有回
 
 | 任务 | 当前状态 / 依赖 | 代码或配置 owner | 产物与退出条件 |
 | --- | --- | --- | --- |
-| M0 环境与负载盘点 | 环境/工具已验证；真实负载仍缺 | [profiler](../../../scripts/profile_enrichment_workload.py) | 既往 fixture 测量不证明生产 p95；导入 owner 缺失判断已撤回，≥20% 原门槛保留；新报告明确 database replay 与 synthetic |
-| M0-1 既有导入链路加固 | 2026-10-08 收敛切片；根门禁证据见下 | [API 服务](../../../apps/api/app/services/gene_annotation_import_service.py)、[CLI](../../../scripts/import_annotations.py) | 重复 worker owner 已按确认退役；仅 draft、不可变/幂等、dry-run、解析字节摘要与实际行数核对；真实上游文件仍缺 |
+| M0 环境与负载盘点 | 2026-10-09：真实 Wm82 v4 GO 快照已核实并导入隔离库；固定重放，不是用户流量 | [profiler](../../../scripts/profile_enrichment_workload.py) | 61,090 pairs / 26,028 annotated genes / 1,506 terms；SQL/映射/核分段及完整 ASGI 请求分别测量；≥20% 原门槛保留 |
+| M0-1 既有导入链路加固 | 2026-10-08 收敛切片；2026-10-09 真实快照 dry-run/import 成功 | [API 服务](../../../apps/api/app/services/gene_annotation_import_service.py)、[CLI](../../../scripts/import_annotations.py) | draft 导入、dry-run 无残留、精确输入 SHA256/存储行数一致；新建实验库独立于业务数据，隔离 fixture 发布不证明生产发布资格 |
 | M1 蛋白 FASTA 边界 | 提交结构/字符边界已实现；推送前修正后的 fresh 证据见下；C1 完整资格仍未满足 | [共享契约](../../../packages/jobs-py/src/soymutdb_jobs/protein_fasta.py)、API `schemas/blast.py`、worker `tasks/blast.py` | API/service/worker 共用规则，拒绝空记录、重复 ID、Unicode 非残基；`query_len` 为明确的项目计数，不是引擎 qlen；输入 checksum 与记录级结果身份尚未闭合 |
-| M2 Rust 批量候选 | 待执行，依赖 M0 真实负载 | API 统计 owner、benchmark；crate 位置在选择边界后确定 | 同一批量输入对拍；比较 PyO3 与进程成本，记录取消/故障/RSS；先验收候选，不接线上请求 |
-| M3 omicverse 环境资格 | 待执行，可独立于 M2 | `deploy/conda/`；新增 pyDEG 环境配置为拟新增文件 | 固定经 resolver 验证的 omicverse 版本及锁文件；真实 import + toy counts 全流程；主项目 Python pin 不降级 |
+| M2 Rust 批量候选 | 实验实现/对拍/完整 ASGI 比较完成；性能切流门禁 **No-Go** | [候选 crate](../../../packages/enrichment-core/README.md)；API 统计 owner 保持 Python | PyO3 真 batch 与同核 JSON CLI；6 Rust + 30 Python；相同请求/并发的 p95 改善未达 ≥20%，不接生产、无 fallback |
+| M3 omicverse 环境资格 | 隔离 host 资格通过，保留科学/资源 caveats | [资格 profile](../../../deploy/conda/omicverse/README.md) | omicverse 2.3.2 / PyDESeq2 0.5.4 / Python 3.14.8 / uv 0.11.33；131 包 hash-sync、真实 import/normalize/toy ttest 与 fresh raw-count DEseq2；不是生产 worker/default-method/镜像资格 |
 | M4 pyDEG 计算 adapter | 待执行，依赖 M3 | 拟新增 worker `tasks/analyses/pydeg.py` | genes×samples 原始 counts、metadata/contrast 校验；公开 API 真调用；统一结果、失败和 provenance，不用 Scanpy 代替 |
 | M5 作业/持久化契约 | 待执行，依赖 M4 输出契约 | `packages/jobs-py/src/soymutdb_jobs/{contract,schemas}.py`，API model/schema/service，worker store | task/queue/payload/analysis type 同步；真实 PostgreSQL migration 与旧 job 读取；outbox 原子投递、重送幂等、取消/重试验收 |
 | M6 API/client/界面闭环 | 待执行，依赖 M5 | OpenAPI、`packages/api-client`、现有 `/analyses` | 参数、上传、状态、取消、结果下载；assembly/release/对照方向可见；研究者权限与跨用户负向测试，双站制品和 E2E |
@@ -629,3 +629,116 @@ SOYMUTDB_TEST_DATABASE_URL=<测试库 URL> bash scripts/verify-backend-tests.sh
 真实 DIAMOND 冒烟默认跳过，只有显式给出 `SOYMUTDB_TEST_DIAMOND_BIN` 时才执行；
 `SOYMUTDB_REQUIRE_DIAMOND_SMOKE=1` 会在二进制缺失时直接失败，使"跳过"无法冒充
 "通过"。
+
+## M2 / M3 实验交付与门禁结论（2026-10-09）
+
+### 推送顺序与范围
+
+用户授权的原 73 个源码/文档路径以 `2c5f0f15e4e344e33f9d616d4226610aa43f6ff9`
+先推送至 `origin/main`，远端 SHA 与本地一致、左右差异 `0 0`，之后才开始 M2/M3。
+续跑时两个中断任务没有被冒称交付：Rust 起初仅有包配置，M3 tracked profile 尚不存在。
+本切片仅新增实验 crate 与隔离资格配置，并更新本计划；API/worker 生产环境、统计
+owner、主 Python pin、业务库、队列与界面不变。TDD `off / skipped`。
+
+### M0 真实快照前置已满足，但重放不是用户流量
+
+上游：[LegumeInfo Wm82.gnm4.ann1.T8TQ](https://data.legumeinfo.org/Glycine/max/annotations/Wm82.gnm4.ann1.T8TQ/)，
+同版本参考：[Wm82.gnm4.4PTR](https://data.legumeinfo.org/Glycine/max/genomes/Wm82.gnm4.4PTR/)。
+公开 README / GFF 证明 Wm82.a4.v1；原 GFF 与 transcript Name→Parent→gene Name
+关系用于 gene GO 投影，**不使用 a4→a2 跨版本名称表推断同版本等价**。
+
+- GO 投影 **61,090 pairs / 26,028 annotated genes / 1,506 GO terms**；输入 SHA256
+  `ea7d4572f234fa3afd7b3503b38e5bc3884fbe048168cc65632c978b1e0ebd0f`。
+- 原 annotation gzip SHA256 `6786570e22f4ae50e7b4812f22cbad86f60d5ca993cded93ff735063e23d0de4`；
+  GFF gzip `97cc35ac8fc6c76d449188829623826ab9b2783fd9d6ff00e3b3559c76a55cfd`。
+  官方 MD5 已核对；保留原 GO IDs，无祖先展开/自动 remap。102 obsolete 与 36 alt IDs
+  及未明确历史 GO/evidence-method 版本为来源 caveats；2026 GO 描述查找不冒称历史注释版本。
+- 同版本主 FASTA 官方 MD5 通过，SHA256
+  `c271571ddb792a896357485e5bd22f4c995d8326cf9595e2ae2ab3de440ef980`。
+  BioPython 得到真实序列长度；52,872 GFF genes 的坐标全部在对应序列范围内，94 个含基因染色体/contig。
+- 全新实验库 `soymutdb_m2_20261009_094827` 迁移至 head；draft fixture seed 后，canonical
+  [CLI](../../../scripts/import_annotations.py) dry-run/import 均 exit 0。dry-run 无残留；实际仅
+  一个 scoped set，metadata 与存储均 61,090 行，输入摘要一致。随后只在新建实验库把该
+  fixture 标记 published 以执行真实公共 release resolver，**不是生产发布流程资格**。
+- 原来源/解析材料：[provenance](../../../.validation/m2-upstream-20261008/provenance.json)；
+  [实验 scope](../../../.validation/m2-benchmark-20261009/scope.json)。本地原始数据、环境、证据不提交。
+
+### M2：候选可运行，完整路径收益不足，保留 Python
+
+[实验 crate](../../../packages/enrichment-core/README.md) 只有一个纯 `[N,K,n,k]` SF 核，
+供 PyO3 真 batch 和 JSON EOF CLI 共用；Python BH 不迁。固定 Rust/cargo 1.99.0、
+PyO3 0.29.3、实际 Cargo lock；N≤2M、100K rows、50M support steps 与 CLI 16MiB
+明确拒绝越限而非截断尾部。GIL 释放、原子 invalid/cancel、深尾正值已实测。
+
+规格审查先于独立质量审查，均无阻断；主代理修正测试 Ruff import/check=False 与
+Rustfmt 后，独立目录重新构建 wheel/CLI：**6 Rust + 30 Python passed，pip check exit 0**，
+[最终源构建记录](../../../.validation/m2-lead-20261009/verify.log)。原始构建/资产保留，未覆盖；
+完整性能矩阵测的是格式化前的同算法候选，不冒称最终新 SHA 的性能矩阵已重跑。
+生产 Python 核/独立 oracle/profiler 回归 **81 passed**（2.80s，含真实 PostgreSQL），
+[回归日志](../../../.validation/m2-lead-20261009/api-regression-pg.log)。第一次未传测试库 URL
+导致 2 个 Docker fixture setup errors（79 passed），通过已有显式 PostgreSQL 测试入口
+及另一个全新测试库修正；未修改断言或跳过集成。Ruff、bash syntax、架构守卫与 self-test
+通过；此次生产 API/worker 源码无变动，不重标旧全树/前端结果为本次 fresh 门禁。
+
+完整 ASGI 路径包含真实 app middleware/router/validation、published release resolver、
+PostgreSQL scoped annotation 读取、映射、SF、Python BH 与响应序列化/压缩。
+临时 batch 接缝仅在实验进程内生效；没有生产 adapter/engine selector/fallback。
+优化 Python / SciPy batch / PyO3 batch / 同核子进程各 **512 次测量请求**，相同固定
+请求目录（50/250/500 genes、p≤.05/1）与并发 1/4，每层 64 samples，单 CPU/线程预算。
+Redis 7.4.11 为 localhost 独立 64MiB disposable cache，不复用业务 cache。
+
+| 对照 | 完整请求 p95 改善范围（相对优化 Python） | API 峰值 RSS KiB |
+| --- | --- | --- |
+| 优化 Python | 基线 | 321,208 |
+| SciPy batch | −10.287% ～ −3.610% | 355,956 |
+| PyO3 batch | −1.234% ～ +1.460% | 322,788 |
+| JSON 子进程 batch | −4.283% ～ +0.566% | 322,932 |
+
+完整 JSON 的 term 顺序、成员、counts、阈值结论与 metadata 相同；数值按 `rel=1e-9,
+abs=0` 通过，最大绝对差 PyO3/子进程 `8.89e-11`，SciPy `4.70e-11`。
+[完整矩阵/对拍](../../../.validation/m2-benchmark-20261009/comparison-summary.json)。
+独立 [阶段 profiler](../../../.validation/m2-benchmark-20261009/stages.json) 为不同固定
+500-annotated-gene 重放：SQL median 132.7ms、映射 25.5ms、数值核 13.0ms，生产计算
+parity 通过；这不是完整 HTTP p95 的数学上限，不据此降低 20% 门槛。
+
+HTTP native exception / malformed batch 均 500、无部分结果/标记泄漏/静默 Python fallback；
+故障后恢复 200；真实 SQL 请求 ASGI cancellation 可复现。原 CLI SIGTERM/EOF/退出码与
+Python signal/GIL 测试通过。[故障记录](../../../.validation/m2-benchmark-20261009/fault-probes.json)。
+这不证明同步 native HTTP disconnect 或 worker/job cancellation；子进程 RSS 的 fork
+高水位也不等于额外独占内存。TCP、容器/跨 host ABI、生产资源与流量均未资格化。
+
+**性能切流 No-Go：没有任何 strata 达到 ≥20%；RSS 也不宣称“不恶化”。保留优化
+Python 为唯一生产核，不接 Rust，不新增自动 fallback。** 后续仅在新证据满足原性能、
+数值、资源、取消与部署门禁并获授权时重新考虑切流；不是为了纯核提速修改业务 SQL。
+
+### M3：固定 profile 的独立全新环境资格通过
+
+[资格 profile](../../../deploy/conda/omicverse/README.md) 固定 omicverse 2.3.2、
+PyDESeq2 0.5.4、Python 3.14.8 与 uv 0.11.33；实际 hash-sync **131 包**，无 easy/full/GPU
+extras。不是未经 solver 验证的 conda YAML，也不修改通用 mamba/主项目 Python pin。
+主代理再建独立 NEW env，hash-sync/pip check/真实 toy 各 exit 0；smoke **12.036s，
+峰值 child RSS 463,180 KiB**。[资源执行记录](../../../.validation/m3-lead-20261009/evidence/smoke/command.json)。
+
+实际 import→normalize→ttest 与 fresh 原始整数 counts 的 DEseq2 均执行；200 genes×8
+samples，ttest 199 行 / DEseq2 200 行中 199 finite，均 40 显著、20 正/20 负，独立 BH 核对。
+normalize 保留 caller/raw_data，但 self.data 为 float；同对象 DEseq2 的整数错误按原样
+验证，未 rounding/monkeypatch。ttest 先 NaN p→0 后 BH 再删 NA，较先删 NA 的 BH 最大差
+0.00516047；DEseq2 忽略 multipletests_method，PyDESeq2 BH 已核对。**未选生产默认方法。**
+
+公开 `PYTHON_CPU_COUNT=1` 在 child 启动前固定，并限制 affinity/BLAS/OMP/Numba/LOKY
+为 1；这是 OmicVerse 未向 DeseqStats 传 n_cpus、默认曾生成 256 进程的实际修复，不是
+仅凭 affinity 的假设。8GiB 是 per-process 虚拟内存上限，180s smoke timeout，进程组清理；
+不是生产 cgroup 总内存预算。NEW 路径拒绝既有 prefix、dangling symlink/nesting；Ruff、
+bash syntax 与超时负向检查通过。[科学 manifest](../../../.validation/m3-lead-20261009/evidence/toy/qualification.json)。
+
+**结论仅限 Linux x86_64 host 的实验环境资格（置信度 B）**：公开科学参考数据、
+输入 adapter/异常矩阵、持久化/作业取消、API/UI、镜像与生产资格未做。M4–M7 保留待执行；
+不把本次 toy/env smoke 当上线。复杂度增量限制在独立实验核/资格 runner，未增加在线
+统计 owner 或另一权威存储；父计划仍是唯一决策与审计入口。
+
+Aegis workspace 结构 checker exit 1：29 项既有 index/governance 文本告警。
+对 `TaskStartSnapshot=2c5f0f15e` 的只读 archive（补齐 Git 不记录的相同空目录）使用
+相同 checker，输出逐字相同，无本切片新增告警；不修改无关 baseline/索引，不冒称
+工作区结构全部通过。[当前结构记录](../../../.validation/m2-lead-20261009/workspace-check.log)
+与 [起点对照](../../../.validation/m2-lead-20261009/workspace-baseline-check.log)。任务专用
+Redis 已 SHUTDOWN NOSAVE 并正常退出；原环境、数据、证据与既有 PostgreSQL 服务保留。

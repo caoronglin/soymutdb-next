@@ -1,0 +1,57 @@
+# Explicit legacy source topology. Never part of the native runtime stack.
+# Load with docker-compose.yml only for migration, using --profile legacy-migration.
+# Existing named volumes are retained; changing configuration deletes no data.
+x-legacy-clickhouse-env: &legacy-clickhouse-env
+  SOYMUTDB_CLICKHOUSE_HOST: clickhouse
+  SOYMUTDB_CLICKHOUSE_PORT: "8123"
+  SOYMUTDB_CLICKHOUSE_USER: soymutdb
+  SOYMUTDB_CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required for legacy migration}
+  SOYMUTDB_CLICKHOUSE_DATABASE: soymutdb
+
+services:
+  clickhouse:
+    profiles: [ "legacy-migration" ]
+    image: clickhouse/clickhouse-server:24.8-alpine
+    environment:
+      CLICKHOUSE_DB: soymutdb
+      CLICKHOUSE_USER: soymutdb
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:?CLICKHOUSE_PASSWORD is required}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ports:
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
+    volumes:
+      - chdata:/var/lib/clickhouse
+      - chbackups:/var/lib/clickhouse-backups
+      - ./infra/clickhouse/config.xml:/etc/clickhouse-server/config.d/custom.xml:ro
+      - ./infra/clickhouse/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:8123/ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  migrate-clickhouse:
+    profiles: [ "legacy-migration" ]
+    # 独立镜像：只含 bash + python3.14 + clickhouse-connect，不再把
+    # ncbi-blast+/samtools/scanpy/leidenalg 与 Celery 入口一起拉下来。
+    # 脚本路径、环境变量与执行顺序保持不变（同一份 migrate-clickhouse.sh）。
+    image: ${MIGRATE_CLICKHOUSE_IMAGE_REF:?MIGRATE_CLICKHOUSE_IMAGE_REF is required as image@sha256 - see deploy/.env.example}
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    environment:
+      <<: *legacy-clickhouse-env
+      CH_MIGRATION_SQL: /opt/soymutdb/upgrade_variant_facts_schema.sql
+    command: [ "bash", "/opt/soymutdb/migrate-clickhouse.sh" ]
+    restart: "no"
+
+volumes:
+  chdata:
+  chbackups:

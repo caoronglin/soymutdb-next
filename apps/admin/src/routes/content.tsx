@@ -45,22 +45,29 @@ export default function ContentPage() {
         {isLegacyRoute ? (
           <>
             <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
-              <span className="mr-2 rounded-full bg-muted px-2 py-1 text-xs font-medium">Legacy Pages</span>
+              <span className="mr-2 rounded-full bg-muted px-2 py-1 text-xs font-medium">{t("admin.content.legacyBadge")}</span>
               <Typography.Text type="secondary">
-                Existing pages remain editable. The migration preview below is read-only and proposes draft candidates only.
+                {t("admin.content.legacyHint")}
               </Typography.Text>
             </div>
             <StaticPageMigrationReport />
           </>
         ) : (
           <>
-            <div className="flex items-center gap-1 border-b border-border">
+            <div
+              role="tablist"
+              data-testid="content-tabs"
+              className="flex items-center gap-1 border-b border-border"
+            >
               {(Object.keys(TYPE_CONFIG) as ContentType[]).map((typeKey) => {
                 const Icon = TYPE_CONFIG[typeKey].icon;
                 return (
                   <button
                     key={typeKey}
                     type="button"
+                    role="tab"
+                    aria-selected={tab === typeKey}
+                    data-testid={`content-tab-${typeKey}`}
                     onClick={() => setTab(typeKey)}
                     className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
                       tab === typeKey

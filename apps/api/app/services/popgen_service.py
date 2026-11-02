@@ -1,11 +1,16 @@
 """Population-genetics service: LD, nucleotide diversity, allele frequencies.
 
-Data source: the ClickHouse ``variant_facts`` store (per-variant rows with
-``allele_frequency`` / ``ref_allele`` / ``alt_allele``) via the existing
-:class:`app.services.clickhouse_service.ClickHouseService` region query;
-relational metadata (gene → chromosome/interval resolution) comes from
-PostgreSQL.  All numeric aggregation happens in numpy with small, pure
-helpers that are directly unit-testable.
+Data sources (all PostgreSQL, the authoritative runtime store):
+
+* relational metadata (gene → chromosome/interval resolution, release scope)
+  from the PostgreSQL identity/relationship tables;
+* per-variant rows from the native PostgreSQL ``variant_facts`` projection
+  (``allele_frequency`` / ``ref_allele`` / ``alt_allele``) via the
+  :class:`app.services.postgres_variant_service.PostgresVariantService` region
+  query.
+
+All numeric aggregation happens in numpy with small, pure helpers that are
+directly unit-testable.
 
 Design notes (honest about the data model):
 - ``variant_facts`` stores **per-variant allele frequencies, not per-sample
@@ -40,7 +45,7 @@ from ..schemas.popgen import (
     LdResponse,
     LdVariant,
 )
-from .clickhouse_service import ClickHouseService
+from .postgres_variant_service import PostgresVariantService
 from .release_context import ReleaseContext
 
 #: Column names returned by ``query_variants_by_region`` that popgen reads.
@@ -62,8 +67,8 @@ _REGION_COLUMNS = frozenset(
 class PopGenService:
     """Population-genetics aggregation over the variants store."""
 
-    def __init__(self, ch: ClickHouseService | None = None) -> None:
-        self.ch = ch or ClickHouseService()
+    def __init__(self, variant_service: PostgresVariantService | None = None) -> None:
+        self.variant_service = variant_service or PostgresVariantService()
 
     # ------------------------------------------------------------------ #
     # Region resolution
@@ -147,7 +152,7 @@ class PopGenService:
             request,
             release_context=release_context,
         )
-        rows = await self.ch.query_variants_by_region(
+        rows = await self.variant_service.query_variants_by_region(
             release_context=release_context,
             assembly=region["assembly"],
             chromosome=region["chromosome"],
@@ -159,7 +164,7 @@ class PopGenService:
 
     @staticmethod
     def _clean_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Normalise region rows to plain floats/ints (ClickHouse may return
+        """Normalise region rows to plain floats/ints (PostgreSQL may return
         ``Decimal``/``None`` values)."""
         cleaned: list[dict[str, Any]] = []
         for row in rows:

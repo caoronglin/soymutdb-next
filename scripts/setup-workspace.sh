@@ -50,7 +50,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-PNPM_VERSION="${SOYMUTDB_CI_PNPM_VERSION:-12.5.1}"
+PNPM_VERSION="${SOYMUTDB_CI_PNPM_VERSION:-12.11.2}"
 PNPM_STORE_DIR="${SOYMUTDB_CI_PNPM_STORE_DIR:-/cache/pnpm-store}"
 # The repo .npmrc pins a mirror; CI must use the registry the lockfile was
 # resolved against.
@@ -130,18 +130,32 @@ fi
 # -----------------------------------------------------------------------------
 # 1. Make pnpm available in THIS container
 # -----------------------------------------------------------------------------
-# corepack ships the package manager shim; the version is pinned so a stage can
-# never resolve a different pnpm than package.json declares.
-corepack enable
-corepack prepare "pnpm@${PNPM_VERSION}" --activate
+# corepack is NOT assumed. Node 25+ removed it from the distribution, so on the
+# Node 26 pin `corepack enable` dies with `corepack: command not found` (CNB
+# build cnb-on5-1k4i8kkap, 2026-10-10). npm is still bundled with Node, so it
+# installs the same pinned version. corepack is still preferred when present so
+# an older pinned image keeps resolving pnpm the way it was reviewed to.
+if command -v corepack >/dev/null 2>&1; then
+  corepack enable
+  corepack prepare "pnpm@${PNPM_VERSION}" --activate
+else
+  log "corepack unavailable on this Node; installing pnpm ${PNPM_VERSION} with npm"
+  npm install --global --no-fund --no-audit "pnpm@${PNPM_VERSION}"
+fi
 
 # Verify rather than assume. The failure mode this replaces was a bare
 # `pnpm: command not found` three stages later, which reads as a script bug
 # instead of a container-lifecycle bug.
 command -v pnpm >/dev/null 2>&1 || {
-  log "corepack did not put pnpm on PATH; the stage cannot build"
+  log "pnpm ${PNPM_VERSION} could not be put on PATH; the stage cannot build"
   exit 1
 }
+# The pin is the contract, not just the existence of a pnpm binary.
+installed_pnpm="$(pnpm --version 2>/dev/null || true)"
+if [[ "${installed_pnpm}" != "${PNPM_VERSION}" ]]; then
+  log "pnpm ${PNPM_VERSION} required but '${installed_pnpm:-none}' is on PATH; the stage cannot build"
+  exit 1
+fi
 
 # -----------------------------------------------------------------------------
 # 2. Point pnpm at the persistent store

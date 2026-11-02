@@ -26,14 +26,11 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     // Serial execution in a single forked child: keeps per-file module
     // isolation while avoiding worker IPC issues on newer Node runtimes.
-    pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true,
-        maxForks: 1,
-      },
-    },
-    // Belt and braces: if a future Vitest changes resolution order, the values
+    pool: "forks",
+    // Vitest 5 removed `poolOptions`; one forked worker keeps the
+    // suite serial (isolation stays on: files share global mocks otherwise).
+    maxWorkers: 1,
+        // Belt and braces: if a future Vitest changes resolution order, the values
     // are still blanked for the test environment.
     env: {
       VITE_API_BASE_URL: '',

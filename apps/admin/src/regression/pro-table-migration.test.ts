@@ -141,6 +141,7 @@ const CONVERGED_CARD_PAGES = [
   "components/charts/storage-growth.tsx",
   "components/stat-card.tsx",
   "routes/analytics-settings.tsx",
+  "routes/login.tsx",
   "routes/content/pages-tab.tsx",
   "routes/features.tsx",
   "routes/news/$id.tsx",
@@ -167,19 +168,16 @@ const CONVERGED_CARD_PAGES = [
  *   are repeated tiles with a `cover` image, not sections, and `ProCard` has no
  *   `cover` prop, so moving them would drop the thumbnail rather than restyle it.
  *   The filter bar and the empty state on that page *were* converted.
- * - `routes/login.tsx` — the centred sign-in panel. It is an auth screen with no
- *   console around it, the same reason it is exempt from `PageContainer`.
+ * - `routes/login.tsx` used to be exempted here for its centred sign-in Card.
+ *   The Pro split-panel rewrite (2026-10-10) removed that Card, so the exemption
+ *   no longer describes anything; the page is now in `CONVERGED_CARD_PAGES`,
+ *   which asserts the Card count stays at zero rather than at one.
  */
 const BARE_CARD_ALLOWANCE: Record<string, { count: number; converted: number; reason: string }> = {
   "routes/media.tsx": {
     count: 2,
     converted: 2,
     reason: "media grid tiles (skeleton + asset), which need `cover`",
-  },
-  "routes/login.tsx": {
-    count: 1,
-    converted: 0,
-    reason: "centred sign-in panel, not a content section",
   },
 };
 

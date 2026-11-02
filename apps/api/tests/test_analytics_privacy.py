@@ -34,7 +34,8 @@ def test_client_ip_ignores_spoofed_xff_from_direct_peer(monkeypatch) -> None:
         lambda: SimpleNamespace(analytics_trusted_proxy_ips=()),
     )
 
-    assert analytics._client_ip(_request(peer_ip="198.51.100.7", xff="203.0.113.9")) == "198.51.100.7"
+    direct = _request(peer_ip="198.51.100.7", xff="203.0.113.9")
+    assert analytics._client_ip(direct) == "198.51.100.7"
 
 
 def test_client_ip_accepts_first_xff_value_from_configured_proxy(monkeypatch) -> None:

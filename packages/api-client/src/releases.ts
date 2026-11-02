@@ -1,21 +1,7 @@
 import { http } from "./auth";
+import type { components } from "./generated/openapi";
 
-export interface ReleaseSummary {
-  id: string;
-  name: string;
-  description?: string;
-  assembly_id: string;
-  assembly_name: string;
-  // The release lifecycle vocabulary is owned by the backend database enum
-  // (app/models/content.py ReleaseStatus) and surfaced by ReleaseResponse.
-  status: "draft" | "validated" | "ready" | "published" | "rolled_back";
-  release_date?: string;
-  variant_count: number;
-  gene_count: number;
-  mutant_line_count: number;
-  is_active: boolean;
-  created_at: string;
-}
+export type ReleaseSummary = components["schemas"]["ReleaseResponse"];
 
 export interface ReleaseDetail extends ReleaseSummary {
   provenance?: string;
@@ -24,21 +10,8 @@ export interface ReleaseDetail extends ReleaseSummary {
   extra?: Record<string, unknown>;
 }
 
-export interface ReleaseProvenance {
-  id: string;
-  release_id: string;
-  source_type: string;
-  source_name: string;
-  source_url?: string;
-  description?: string;
-  version?: string;
-  accession_date: string;
-}
-
 export interface ReleaseListParams {
-  only_active?: boolean;
-  page?: number;
-  page_size?: number;
+  status?: ReleaseSummary["status"];
 }
 
 /** The release the public surface currently serves (`active_release` singleton). */
@@ -69,10 +42,18 @@ export function getRelease(releaseId: string): Promise<ReleaseDetail> {
   return http.get<ReleaseDetail>(`/releases/${releaseId}`);
 }
 
-export function getReleaseProvenance(releaseId: string): Promise<ReleaseProvenance[]> {
-  return http.get<ReleaseProvenance[]>(`/releases/${releaseId}/provenance`);
+/** Administrator-only private metadata; bypasses all shared server caches. */
+export function getAdminReleases(params: ReleaseListParams = {}): Promise<ReleaseSummary[]> {
+  return http.get<ReleaseSummary[]>("/releases", { params: { ...params, variant: "internal" } });
 }
 
-// NOTE: there is no `/releases/current` or `/releases/{id}/stats` route on the
-// API. The active release is the `is_active` row of `getReleases()`; a function
-// that points at a missing route is a 422 waiting for the next caller.
+export function getAdminRelease(releaseId: string): Promise<ReleaseDetail> {
+  return http.get<ReleaseDetail>(`/releases/${releaseId}`, { params: { variant: "internal" } });
+}
+
+// NOTE: this module may only touch the three routes the releases router
+// actually registers — GET "" , GET "/active" and GET "/{release_id}" (see
+// "apps/api/app/api/v1/releases.py"). There is no "/releases/current",
+// "/releases/{id}/stats" or "/releases/{id}/provenance" route: read the active
+// pointer through getActiveRelease() and release metadata through getRelease().
+// Release administration lives on a separate "/admin/releases" router.

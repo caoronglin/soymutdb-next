@@ -130,7 +130,7 @@ export function MediaPicker({
         onCancel={() => setOpen(false)}
         footer={null}
         width={860}
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="space-y-4">
           <Input
@@ -226,5 +226,3 @@ export function MediaPicker({
     </div>
   );
 }
-
-export default MediaPicker;

@@ -38,12 +38,12 @@ __all__ = [
 
 
 def _ensure_jobs_package() -> None:
-    """Add ``packages/jobs-py/src`` to ``sys.path`` when not importable."""
-    try:
-        import soymutdb_jobs  # noqa: F401
-        return
-    except ImportError:
-        pass
+    """Prefer the monorepo ``packages/jobs-py/src`` over an installed copy.
+
+    The shared package belongs to this repository; an installation left
+    behind by an earlier revision must not shadow the source the rest of
+    the checkout runs.
+    """
     src = Path(__file__).resolve().parents[4] / "packages" / "jobs-py" / "src"
     if src.is_dir() and str(src) not in sys.path:
         sys.path.insert(0, str(src))

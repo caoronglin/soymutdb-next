@@ -15,14 +15,21 @@ from app.api.v1.import_studio import (
     create_dataset_version,
     create_draft,
     list_drafts,
+    validate_draft,
 )
-from app.core.exceptions import AuthorizationError, ConflictError
+from app.core.exceptions import (
+    AuthorizationError,
+    ConflictError,
+    NotFoundError,
+    ValidationError,
+)
 from app.models.import_studio import ImportDraftStatus
 from app.schemas.import_studio import (
     DataPatchCreateRequest,
     DatasetVersionCreateRequest,
     ImportCommitRequest,
     ImportDraftCreateRequest,
+    ImportValidationRequest,
 )
 
 
@@ -154,6 +161,148 @@ async def test_create_dataset_version_and_draft_offline() -> None:
     assert draft.module_key is None
     assert draft.row_count == 10
     assert db.committed == 2
+
+
+@pytest.mark.asyncio
+async def test_create_dataset_version_rejects_an_unknown_module_schema() -> None:
+    db = _FakeDB()
+
+    with pytest.raises(NotFoundError, match="Unknown module schema"):
+        await create_dataset_version(
+            DatasetVersionCreateRequest(
+                dataset_id=1,
+                filename="wide.tsv",
+                object_key="s3://bucket/wide.tsv",
+                checksum_sha256="a" * 64,
+                source="NCBI RefSeq",
+                license=None,
+                mime_type="text/tab-separated-values",
+                row_count=10,
+                column_count=5,
+                source_objects=[],
+                module_key="not-a-registered-module",
+            ),
+            db=db,  # type: ignore[arg-type]
+            current_user=_admin(),  # type: ignore[arg-type]
+        )
+
+    assert db.added == []
+    assert db.committed == 0
+
+
+@pytest.mark.asyncio
+async def test_create_dataset_version_accepts_a_registered_scientific_shape() -> None:
+    """The scientific limits must be reachable for a registered module."""
+    captured: list[tuple[int, int]] = []
+
+    class _CapturingDB(_FakeDB):
+        def add(self, row: object) -> None:
+            # Capture before the fake refresh overwrites the shape.
+            captured.append((row.row_count, row.column_count))  # type: ignore[attr-defined]
+            super().add(row)
+
+    db = _CapturingDB()
+
+    await create_dataset_version(
+        DatasetVersionCreateRequest(
+            dataset_id=1,
+            filename="wide.tsv",
+            object_key="s3://bucket/wide.tsv",
+            checksum_sha256="a" * 64,
+            source="NCBI RefSeq",
+            license=None,
+            mime_type="text/tab-separated-values",
+            row_count=2_000_000,
+            column_count=200,
+            source_objects=[],
+            module_key="genes",
+        ),
+        db=db,  # type: ignore[arg-type]
+        current_user=_admin(),  # type: ignore[arg-type]
+    )
+
+    assert captured == [(2_000_000, 200)]
+    assert db.committed == 1
+
+
+class _MutableDraftDB:
+    """Minimal draft store for the validation endpoint."""
+
+    def __init__(self, module_key: str | None) -> None:
+        self.row = SimpleNamespace(
+            id=uuid.uuid4(),
+            dataset_version_id=uuid.uuid4(),
+            module_key=module_key,
+            filename="genes.tsv",
+            object_key="s3://bucket/genes.tsv",
+            checksum_sha256="a" * 64,
+            source="NCBI RefSeq",
+            license="CC0",
+            mime_type="text/tab-separated-values",
+            row_count=10,
+            column_count=5,
+            field_mapping=[],
+            validation={},
+            status=ImportDraftStatus.DRAFT.value,
+            committed_at=None,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        self.committed = 0
+
+    async def execute(self, _statement: object) -> _Result:
+        return _Result(self.row)
+
+    def add(self, _row: object) -> None:
+        raise AssertionError("validation must not create records")
+
+    async def commit(self) -> None:
+        self.committed += 1
+
+    async def refresh(self, _row: object) -> None:
+        return None
+
+
+@pytest.mark.asyncio
+async def test_validate_draft_rejects_a_module_key_mismatch() -> None:
+    db = _MutableDraftDB("genes")
+
+    with pytest.raises(ValidationError, match="module key does not match"):
+        await validate_draft(
+            db.row.id,
+            ImportValidationRequest(
+                row_count=10,
+                column_count=5,
+                field_mapping=[],
+                module_key="other-module",
+            ),
+            db=db,  # type: ignore[arg-type]
+            current_user=_admin(),  # type: ignore[arg-type]
+        )
+
+    assert db.committed == 0
+
+
+@pytest.mark.asyncio
+async def test_validate_draft_uses_the_draft_module_key_for_the_shape_limit() -> None:
+    """A registered scientific draft may exceed the generic page limits."""
+    db = _MutableDraftDB("genes")
+
+    await validate_draft(
+        db.row.id,
+        ImportValidationRequest(
+            row_count=2_000_000,
+            column_count=200,
+            field_mapping=[],
+            module_key="genes",
+        ),
+        db=db,  # type: ignore[arg-type]
+        current_user=_admin(),  # type: ignore[arg-type]
+    )
+
+    assert db.committed == 1
+    assert db.row.row_count == 2_000_000
+    assert db.row.column_count == 200
 
 
 class _ExistingDraftDB:

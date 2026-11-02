@@ -7,7 +7,12 @@
  * Run with: node --test bridge-contract.test.mjs
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { configuredTrackIds, navigateBrowserView, planPortalInit } from "./src/bridge-init.ts";
+import { defaultTrackIds } from "./src/config.ts";
 
 import {
   BRIDGE_SOURCE_BROWSER,
@@ -29,6 +34,127 @@ import {
 
 const BASE = "https://portal.test/browser";
 const PORTAL_ORIGIN = "https://portal.test";
+
+test("navigation delegates 1-based loci to native cross-chromosome navigation", async () => {
+  const calls = [];
+  await navigateBrowserView({ navToLocString: (...args) => calls.push(args), navToSearchString: () => assert.fail("not a gene query") }, "chr02:1-100", "v5");
+  assert.deepEqual(calls, [["chr02:1-100", "v5"]]);
+});
+test("a multi-region JBrowse viewport is still a location, not a gene query", async () => {
+  const calls = [];
+  await navigateBrowserView({ navToLocString: (...args) => calls.push(args), navToSearchString: () => assert.fail("not a gene query") }, "chr01:100..200 chr02:300..400", "v5");
+  assert.deepEqual(calls, [["chr01:100..200 chr02:300..400", "v5"]]);
+});
+test("native search receives the live Assembly object and emits its visible genomic locus", async () => {
+  const calls = [];
+  const assembly = { name: "v5", allRefNamesWithLowerCase: ["chr01"] };
+  const view = { visibleLocStrings: "chr01:100..200", navToLocString: () => assert.fail("not a locus"), navToSearchString: (query) => calls.push(query) };
+  const locus = await navigateBrowserView(view, "Glyma.01G000100", "v5", { waitForAssembly: async (name) => { assert.equal(name, "v5"); return assembly; } });
+  assert.deepEqual(calls, [{ input: "Glyma.01G000100", assembly }]);
+  assert.equal(calls[0].assembly, assembly);
+  assert.equal(locus, "chr01:100..200");
+  assert.notEqual(locus, "Glyma.01G000100");
+});
+test("the viewport property is the installed plural API, not an invented singular one", async () => {
+  const view = { visibleLocStrings: "chr01:1..2", navToLocString() {}, navToSearchString() {} };
+  assert.equal("visibleLocString" in view, false);
+  assert.equal(await navigateBrowserView(view, "chr01:1-2", "v5"), "chr01:1..2");
+});
+test("the installed JBrowse model exposes the viewport under the name this app reads", () => {
+  const require = createRequire(import.meta.url);
+  // The view model ships in the plugin package, which the app reaches through
+  // the React entry point it depends on.
+  const pluginRequire = createRequire(require.resolve("@jbrowse/react-linear-genome-view"));
+  const entry = pluginRequire.resolve("@jbrowse/plugin-linear-genome-view");
+  const types = readFileSync(join(dirname(entry), "LinearGenomeView", "model.d.ts"), "utf8");
+  assert.match(types, /visibleLocStrings/);
+  assert.doesNotMatch(types, /visibleLocString\b/, "the singular property does not exist in JBrowse 2.18");
+});
+test("native search fails visibly if the live Assembly model is unavailable", async () => {
+  await assert.rejects(navigateBrowserView({ navToLocString() {}, navToSearchString() { assert.fail("no model"); } }, "gene", "v5", { waitForAssembly: async () => undefined }), /not available/);
+});
+test("navigation failures propagate for visible retryable UI handling", async () => {
+  await assert.rejects(navigateBrowserView({ navToLocString: async () => { throw new Error("not found"); }, navToSearchString: () => {} }, "chr02:1-100", "v5"), /not found/);
+});
+
+const initialState = { release: "4", assembly: "Wm82.a4.v1", tracks: ["old-track"], locus: "chr01:100-200" };
+test("init retains assembly/tracks/locus before configuration is available", () => {
+  const next = planPortalInit(initialState, { release: "9", assembly: "Wm82.a5.v1", tracks: ["new-track"], locus: "chr02:500-900" }, false);
+  assert.deepEqual(next, { release: "9", assembly: "Wm82.a5.v1", tracks: ["new-track"], locus: "chr02:500-900", rebuild: true });
+  assert.deepEqual(configuredTrackIds(next.tracks, ["new-track", "seq-v5"], "seq-v5"), ["new-track"]);
+});
+test("init rebuilds on release-only changes even when the assembly name is reused", () => {
+  const next = planPortalInit(initialState, { release: "9" }, true);
+  assert.equal(next.rebuild, true);
+  assert.equal(next.release, "9");
+  assert.equal(next.locus, undefined, "old release coordinates cannot be silently relabelled");
+});
+test("init drops old coordinates on assembly changes unless explicitly replaced", () => {
+  assert.equal(planPortalInit(initialState, { assembly: "v5" }, true).locus, undefined);
+  assert.equal(planPortalInit(initialState, { assembly: "v5", locus: "chr02:1-100" }, true).locus, "chr02:1-100");
+});
+test("init locus-only changes keep the live view only within the same scope", () => {
+  const next = planPortalInit(initialState, { locus: "chr01:300-400" }, true);
+  assert.equal(next.rebuild, false);
+  assert.equal(next.release, "4");
+  assert.deepEqual(next.tracks, ["old-track"]);
+  assert.equal(planPortalInit(initialState, { locus: "chr01:300-400" }, false).rebuild, true);
+});
+test("legacy portal empty tracks retain a same-scope selection rather than clearing the browser", () => {
+  const next = planPortalInit(initialState, { tracks: [] }, true);
+  assert.equal(next.rebuild, false);
+  assert.deepEqual(next.tracks, initialState.tracks);
+});
+test("scope switches with omitted or legacy-empty tracks adopt destination defaults", () => {
+  assert.equal(planPortalInit(initialState, { release: "9" }, true).tracks, undefined);
+  assert.equal(planPortalInit(initialState, { release: "9", tracks: [] }, true).tracks, undefined);
+});
+test("equivalent track sets do not rebuild or change view order", () => {
+  const current = { ...initialState, tracks: ["b", "a", "a"] };
+  const next = planPortalInit(current, { tracks: ["a", "b"] }, true);
+  assert.equal(next.rebuild, false);
+  assert.deepEqual(next.tracks, current.tracks);
+});
+test("defaults use actual destination reference, feature and variant IDs, not v4-era aliases", () => {
+  const tracks = [
+    { trackId: "reference_sequence_9", type: "ReferenceSequenceTrack", name: "Reference" },
+    { trackId: "track_42", type: "FeatureTrack", name: "Gene models", category: ["Genes"] },
+    { trackId: "track_43", type: "VariantTrack", name: "Variants", category: ["Variants"] },
+    { trackId: "track_44", type: "AlignmentsTrack", name: "Alignments", category: ["Alignments"] },
+  ];
+  assert.deepEqual(defaultTrackIds(tracks, "reference_sequence_9"), ["reference_sequence_9", "track_42", "track_43"]);
+  assert.deepEqual(defaultTrackIds([], "reference_sequence_9"), ["reference_sequence_9"]);
+});
+test("default tracks do not depend on the order the API returned them in", () => {
+  const tracks = [
+    { trackId: "track_9", type: "FeatureTrack", name: "Phenotypes", category: ["Phenotypes"] },
+    { trackId: "track_2", type: "FeatureTrack", name: "Gene models", category: ["Genes"] },
+    { trackId: "track_7", type: "VariantTrack", name: "Variants", category: ["Variants"] },
+  ];
+  const forward = defaultTrackIds(tracks, "ref");
+  const reversed = defaultTrackIds([...tracks].reverse(), "ref");
+  assert.deepEqual(forward, reversed);
+  assert.deepEqual(forward, ["ref", "track_2", "track_7"]);
+});
+test("init merges successive pending messages without losing destination context", () => {
+  const pending = planPortalInit(initialState, { release: "9", assembly: "v5", tracks: ["new-track"] }, false);
+  const next = planPortalInit(pending, { locus: "chr03:1-900" }, false);
+  assert.equal(next.release, "9");
+  assert.equal(next.assembly, "v5");
+  assert.deepEqual(next.tracks, ["new-track"]);
+  assert.equal(next.locus, "chr03:1-900");
+});
+test("destination config filters unknown tracks and resolves its own reference alias", () => {
+  assert.deepEqual(configuredTrackIds(["old-track", "new-track", "reference_sequence", "seq-v5"], ["new-track", "seq-v5"], "seq-v5"), ["new-track", "seq-v5"]);
+  assert.deepEqual(configuredTrackIds(["old-track"], ["new-track"], "seq-v5"), []);
+});
+test("init sanitizes types but retains invalid release text for fail-closed validation", () => {
+  const next = planPortalInit(initialState, { release: "bad", tracks: [null, "", "new", "new"], assembly: 1, locus: false }, true);
+  assert.equal(next.release, "bad");
+  assert.equal(next.rebuild, true);
+  assert.equal(next.assembly, initialState.assembly);
+  assert.deepEqual(next.tracks, ["new"]);
+});
 
 /** Swap globalThis.window for the duration of fn, restoring it afterwards. */
 function withWindow(value, fn) {

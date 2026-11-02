@@ -15,7 +15,7 @@ export interface PluginCapability {
 
 export interface DatabaseCapabilities {
   authoritative: "postgresql";
-  analytics: "clickhouse" | null;
+  analytics: "postgresql" | null;
 }
 
 export interface PublicCapabilitiesResponse {

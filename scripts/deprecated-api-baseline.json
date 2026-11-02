@@ -1,0 +1,42 @@
+{
+  "comment": [
+    "Grandfathered occurrences of upstream APIs that already emit a DeprecationWarning.",
+    "Each entry is a ratchet: the guard fails when a rule's observed count EXCEEDS its",
+    "budget, so the debt may shrink but never grow. Lower a number after a fix; never raise",
+    "one to make a build pass. Evidence for every rule is recorded in",
+    "docs/dev/architecture-and-deployment.md and reproduced by running the API suite with",
+    "`-W default::DeprecationWarning -W default::PendingDeprecationWarning`."
+  ],
+  "budgets": {
+    "fastapi-orjson-response": {
+      "paths": ["apps/api/app"],
+      "pattern": "\\bORJSONResponse\\b",
+      "max_occurrences": 2,
+      "why": "FastAPI deprecates ORJSONResponse now that Pydantic serializes straight to JSON bytes when a response model or return type is set. apps/api/app/main.py:20,294. Removing it requires every route to declare a response model or return type."
+    },
+    "sqlalchemy-noload-loader": {
+      "paths": ["apps/api/app/models"],
+      "pattern": "lazy\\s*=\\s*[\"']noload[\"']",
+      "max_occurrences": 24,
+      "why": "SQLAlchemy 2.1 deprecates the `noload` loader strategy (returns None for related items). The replacement is `lazy=\"raise_on_sql\"` or `lazy=\"selectin\"`; both change runtime relationship access, so this is a behaviour review, not a mechanical swap."
+    },
+    "testcontainers-legacy-postgres-import": {
+      "paths": ["apps/api/tests", "apps/worker/tests"],
+      "pattern": "from\\s+testcontainers\\.postgres\\s+import",
+      "max_occurrences": 1,
+      "why": "testcontainers deprecates the `testcontainers.postgres` module in favour of `testcontainers.community.postgres`. apps/api/tests/conftest.py:45. Import path only; no assertion changes."
+    },
+    "httpx-per-request-cookies": {
+      "paths": ["apps/api/tests"],
+      "pattern": "\\bcookies\\s*=",
+      "max_occurrences": 7,
+      "why": "httpx 0.28 and Starlette 1.8 deprecate passing `cookies=` on a single request; the cookie jar must be set on the client instance. apps/api/tests/test_security_round2_auth.py and test_analytics_pixel_ingress.py."
+    },
+    "pytest-blanket-deprecation-ignore": {
+      "paths": ["apps/api"],
+      "pattern": "ignore::(Pending)?DeprecationWarning",
+      "max_occurrences": 4,
+      "why": "apps/api/pytest.ini and apps/api/pyproject.toml both blanket-ignore DeprecationWarning and PendingDeprecationWarning, so the suite cannot observe the five upstream deprecations listed above. Narrow this to the specific known warnings before deleting it."
+    }
+  }
+}

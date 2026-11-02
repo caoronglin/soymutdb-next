@@ -23,6 +23,7 @@ from datetime import UTC, datetime
 import pytest
 from starlette.requests import Request
 
+from app.api.v1 import jobs as jobs_module
 from app.core.exceptions import AuthenticationError
 from app.core.security import RoleName, create_access_token
 from app.models.auth import Role, User
@@ -62,6 +63,15 @@ class FakeDbSession:
         self.user = user
         self.job_rows = list(job_rows or [])
         self.last_stmt = None
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def rollback(self):
+        return None
 
     async def execute(self, stmt, params=None):
         self.last_stmt = stmt
@@ -143,7 +153,7 @@ class TestRecentJobUpdates:
             ],
         )
 
-        events = await _recent_job_updates(session, user)  # type: ignore[arg-type]
+        events = await _recent_job_updates(session, user.id)  # type: ignore[arg-type]
 
         assert [e["job_type"] for e in events] == ["blast", "gwas"]
         assert events[0] == {
@@ -167,7 +177,7 @@ class TestRecentJobUpdates:
 
         user = _make_user()
         session = FakeDbSession(user=user, job_rows=[])
-        await _recent_job_updates(session, user)  # type: ignore[arg-type]
+        await _recent_job_updates(session, user.id)  # type: ignore[arg-type]
 
         # All three UNION branches bind their user filter (PG_UUID columns
         # compile to bound parameters, never literals).
@@ -233,10 +243,11 @@ class TestOptionalSseUser:
 
 @pytest.mark.asyncio
 class TestJobEventFrames:
-    async def test_anonymous_emits_heartbeat_frame(self) -> None:
+    async def test_anonymous_emits_heartbeat_frame(self, monkeypatch) -> None:
         from app.api.v1.jobs import job_events
 
         session = FakeDbSession(user=None, job_rows=[])
+        monkeypatch.setattr(jobs_module, "get_session_factory", lambda: lambda: session)
         response = await job_events(_AlwaysConnected(), session, None)  # type: ignore[arg-type]
         try:
             chunk = await _read_first_frame(response.body_iterator)
@@ -245,7 +256,7 @@ class TestJobEventFrames:
 
         assert chunk == ": ping\n\n"
 
-    async def test_authenticated_pushes_job_update_frame(self) -> None:
+    async def test_authenticated_pushes_job_update_frame(self, monkeypatch) -> None:
         import json
 
         from app.api.v1.jobs import job_events
@@ -256,6 +267,7 @@ class TestJobEventFrames:
             user=user,
             job_rows=[Row("blast", job_id, "running", datetime.now(UTC))],
         )
+        monkeypatch.setattr(jobs_module, "get_session_factory", lambda: lambda: session)
         response = await job_events(_AlwaysConnected(), session, user)  # type: ignore[arg-type]
         try:
             chunk = await _read_first_frame(response.body_iterator)
@@ -270,7 +282,7 @@ class TestJobEventFrames:
         assert payload["status"] == "running"
         assert payload["updated_at"] is not None
 
-    async def test_multi_update_frame_per_job(self) -> None:
+    async def test_multi_update_frame_per_job(self, monkeypatch) -> None:
         from app.api.v1.jobs import job_events
 
         user = _make_user()
@@ -282,6 +294,7 @@ class TestJobEventFrames:
                 Row("gwas", uuid.uuid4(), "failed", updated),
             ],
         )
+        monkeypatch.setattr(jobs_module, "get_session_factory", lambda: lambda: session)
         response = await job_events(_AlwaysConnected(), session, user)  # type: ignore[arg-type]
         try:
             frames = []

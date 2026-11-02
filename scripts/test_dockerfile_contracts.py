@@ -26,9 +26,11 @@ BUILD_RELEASE_IMAGE = ROOT / "scripts/build-release-image.sh"
 GOLDEN = ROOT / "scripts/release-contract.golden.sh"
 COMPOSE = ROOT / "docker-compose.yml"
 ENV_EXAMPLE = ROOT / "deploy/.env.example"
+WORKER_DOCKERFILE = ROOT / "infra/docker/Dockerfile.worker"
+WORKER_LOCK = ROOT / "apps/worker/uv.lock"
 
 sys.path.insert(0, str(ROOT / "scripts"))
-from compose_loader import load_compose  # noqa: E402
+from compose_loader import load_compose
 
 
 def _image_entries() -> list[tuple[str, str, str]]:
@@ -83,6 +85,7 @@ def test_image_list_entries_point_at_committed_dockerfiles() -> None:
             cwd=ROOT,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert ignored.returncode != 0, f"{dockerfile} is ignored by .gitignore"
         tracked = subprocess.run(
@@ -90,6 +93,7 @@ def test_image_list_entries_point_at_committed_dockerfiles() -> None:
             cwd=ROOT,
             capture_output=True,
             text=True,
+            check=False,
         )
         assert tracked.returncode == 0, f"{dockerfile} is not tracked by git"
         # The build context must exist and must contain the Dockerfile's dir.
@@ -171,7 +175,7 @@ def test_migrate_dockerfile_keeps_the_alembic_contract() -> None:
     # stage is fine (it copies the finished venv, not sources) — and the
     # distinction matters, because the rule the check enforces is "the venv was
     # installed from the tree that is shipped", not "this file contains one COPY".
-    builder = text[: text.index("FROM python:3.14.6-slim AS runtime")]
+    builder = text[: text.index("FROM python:3.15.0-slim AS runtime")]
     after_sync = builder[sync_position:]
     # The sources themselves are the ONE allowed late copy: the venv was built
     # with `--no-install-project`, so the project's own code has to arrive
@@ -202,6 +206,11 @@ def test_migrate_clickhouse_dockerfile_is_not_a_second_worker() -> None:
             encoding="utf-8"
         )
     )
+    # Deliberately NOT 3.15 with the other service images. clickhouse-connect
+    # (the only import this image needs) publishes no 3.15 release, so the
+    # legacy migrator keeps the 3.14 base it has always had. Every other image
+    # moved to 3.15; assert the split rather than let a bulk find/replace
+    # silently take this lane with it.
     assert "FROM python:3.14.6-slim" in text
 
     for heavy in (
@@ -341,7 +350,6 @@ def test_local_build_override_discards_the_release_image_requirement() -> None:
         "beat": "soymutdb-worker:local",
         "mcp-server": "soymutdb-mcp:local",
         "migrate": "soymutdb-migrate:local",
-        "migrate-clickhouse": "soymutdb-migrate-clickhouse:local",
     }
     for service_name, local_tag in local_buildable.items():
         # Release services reference signed digests and declare no build, so a
@@ -364,7 +372,6 @@ def test_local_build_override_discards_the_release_image_requirement() -> None:
         "WORKER_IMAGE",
         "MCP_IMAGE",
         "MIGRATE_IMAGE",
-        "MIGRATE_CLICKHOUSE_IMAGE",
     ):
         assert f"${{{variable}:-" in local_override, variable
 
@@ -381,6 +388,7 @@ def test_local_build_override_discards_the_release_image_requirement() -> None:
 
 def test_compose_migration_services_use_their_own_digest_references() -> None:
     services = load_compose(COMPOSE)["services"]
+    services = {**services, **load_compose(ROOT / "docker-compose.legacy-clickhouse.yml")["services"]}
     env = {}
     for line in ENV_EXAMPLE.read_text(encoding="utf-8").splitlines():
         if line and not line.startswith("#") and "=" in line:
@@ -455,7 +463,7 @@ def test_compose_loader_understands_platform_tags() -> None:
 
 
 def test_precompress_refreshes_stale_archives(tmp_path: Path) -> None:
-    """`precompress.sh` must refresh a stale .gz and stay safe to re-run.
+    r"""`precompress.sh` must refresh a stale .gz and stay safe to re-run.
 
     `gzip -k` refuses to overwrite an existing .gz ("already exists; not
     overwritten") and leaves the OLD body in place, so a changed source kept its
@@ -507,3 +515,289 @@ def test_precompress_refreshes_stale_archives(tmp_path: Path) -> None:
     third = run()
     assert third.returncode == 0, third.stderr
     assert gzip.decompress(archive.read_bytes()) == updated
+
+
+# ----------------------------------------------------------------------
+# Worker image: the CPython 3.15 science stack
+#
+# CPython 3.15 has no manylinux wheels for the worker's scientific stack, so
+# the worker image compiles six sdists. The failure that guards against is
+# silent and expensive: the image used to install build-essential alone and
+# carried a comment asserting that "manylinux wheels are used and no
+# compilation happens", so the first real image build died inside a sdist
+# compile step (no HDF5 for h5py, no Arrow C++ for pyarrow) with a C compiler
+# error rather than with a missing package name.
+# ----------------------------------------------------------------------
+
+# distribution -> the builder-stage input it needs, one entry per claim the
+# Dockerfile's build-dependency comment makes.
+SDIST_ONLY_SCIENCE_STACK = {
+    "pandas": "build-essential",
+    "h5py": "libhdf5-dev",
+    "cyvcf2": "liblzma-dev",
+}
+
+
+def _lock_block(package: str) -> str:
+    """One [[package]] entry of a uv lockfile."""
+    blocks = WORKER_LOCK.read_text(encoding="utf-8").split("\n\n[[package]]\n")
+    for block in blocks:
+        if block.startswith(f'name = "{package}"\n'):
+            return block
+    raise AssertionError(f"{package} is not in {WORKER_LOCK.name}")
+
+
+def _lock_version(package: str) -> str:
+    """The version a [[package]] entry pins, which is its second line."""
+    version = re.search(r'^version = "([^"]+)"', _lock_block(package), re.MULTILINE)
+    assert version, f"{package} has no version in {WORKER_LOCK.name}"
+    return version.group(1)
+
+
+def _worker_builder_instructions() -> str:
+    text = _instructions(WORKER_DOCKERFILE.read_text(encoding="utf-8"))
+    return text[text.index("AS builder") : text.index("FROM python:3.15.0-slim AS runtime")]
+
+
+def _worker_runtime_instructions() -> str:
+    text = _instructions(WORKER_DOCKERFILE.read_text(encoding="utf-8"))
+    return text[text.index("FROM python:3.15.0-slim AS runtime") :]
+
+
+def test_worker_image_supplies_what_its_sdist_only_dependencies_compile_against() -> None:
+    """The build dependencies must exist, and the claim that they are needed must be true.
+
+    Read from the lockfile rather than from a fixed version list: if one of
+    these ever publishes a cp315 wheel the test fails, because the apt list in
+    the Dockerfile would then be unverified prose.
+    """
+    builder = _worker_builder_instructions()
+
+    for package, requirement in SDIST_ONLY_SCIENCE_STACK.items():
+        block = _lock_block(package)
+        assert not re.search(r"cp315-cp315-manylinux[^\"]*x86_64", block), (
+            f"{package} publishes wheels for cp315 now; revisit the worker's "
+            "source-build dependencies instead of keeping a stale apt list"
+        )
+        assert requirement in builder, (
+            f"{package} builds from source in the worker image and needs "
+            f"{requirement}, which the builder stage does not provide"
+        )
+
+    # h5py resolves HDF5 through pkg-config, and Debian trixie (the base of
+    # python:3.15.0-slim) names that file hdf5-serial.pc, not hdf5.pc. Left to
+    # h5py's own default the lookup fails with "No pkgconfig information for
+    # hdf5".
+    assert "HDF5_PKGCONFIG_NAME=hdf5-serial" in builder
+    assert "libhdf5-dev" in builder
+    # The one assumption in the pkg-config path -- that the serial flavour's
+    # -L plus h5py's own -lhdf5 -lhdf5_hl resolve -- is checked at build time
+    # rather than trusted, because Debian moved HDF5 to per-flavour paths in
+    # trixie (1.14.5).
+    assert "pkg-config --exists hdf5-serial" in builder
+    assert "-lhdf5 -lhdf5_hl" in builder, (
+        "the builder must link the exact libraries h5py links, so a renamed "
+        "Debian HDF5 flavour fails with a link error instead of a mystery"
+    )
+
+    raw = WORKER_DOCKERFILE.read_text(encoding="utf-8")
+    assert "manylinux wheels are used and no compilation happens" not in raw, (
+        "the worker image compiles six sdists on CPython 3.15; the comment "
+        "claiming no compilation happens is what hid the missing headers"
+    )
+
+
+def test_worker_arrow_uses_a_locked_cp315_wheel_without_duplicate_cpp_build() -> None:
+    text = _instructions(WORKER_DOCKERFILE.read_text(encoding="utf-8"))
+    block = _lock_block("pyarrow")
+    assert re.search(r"pyarrow-[^\"]+-cp315-cp315-manylinux[^\"]*x86_64", block)
+    assert "AS arrow-cpp" not in text
+    assert "COPY --from=arrow-cpp" not in text
+    assert "PYARROW_CPP_HOME" not in text
+
+
+
+def test_worker_numpy_build_headers_follow_the_locked_distribution() -> None:
+    builder = _worker_builder_instructions()
+    assert "numpy/_core/lib/pkgconfig" in builder
+    assert 'p["name"] == "numpy"' in builder
+    assert 'numpy==${numpy_version}' in builder
+    assert "--only-binary=:all:" in builder
+
+
+
+def test_worker_runtime_installs_the_libraries_the_source_builds_do_not_vendor() -> None:
+    """A build-time -dev package becomes a named runtime library, or nothing.
+
+    The builder's -dev packages die with the builder stage, so each shared
+    library the compiled extensions link needs a name in the runtime stage.
+    Those names track what the compiled objects actually need: Debian's g++
+    links the C++ runtime dynamically, h5py links libhdf5_serial.so.310 (Debian
+    trixie ships HDF5 1.14.5), and leidenalg/python-igraph need the OpenMP
+    runtime. A Debian release that moves HDF5 to a new series has to rename
+    libhdf5-310 here, and this assertion is what makes that rename deliberate.
+    """
+    runtime = _worker_runtime_instructions()
+
+    for package, builds_against in (
+        ("libstdc++6", "the C++ extensions libarrow, matplotlib and cyvcf2"),
+        ("libgomp1", "the OpenMP runtime of leidenalg/python-igraph"),
+        ("libhdf5-310", "h5py's libhdf5_serial.so.310"),
+    ):
+        assert package in runtime, (
+            f"{package} is missing from the runtime stage, but {builds_against} "
+            "links it; the image would build and then fail on first use"
+        )
+
+    # The checks run in the runtime image, not the builder: importing the stack
+    # after the -dev packages are gone is what proves the vendored/non-vendored
+    # split is complete. They exercise every codec the Arrow stage enables, so a
+    # codec cannot disappear from the build without the image build failing.
+    assert "/opt/venv/bin/python -c" in runtime, (
+        "the runtime stage must import and exercise the science stack, or a "
+        "missing shared library is only discovered in production"
+    )
+    for codec in ("snappy", "gzip", "zstd", "lz4", "brotli"):
+        assert f'"{codec}"' in runtime, f"the capability check no longer covers {codec}"
+    for module in (
+        "anndata",
+        "cyvcf2",
+        "h5py",
+        "igraph",
+        "leidenalg",
+        "llvmlite",
+        "matplotlib",
+        "numba",
+        "numpy",
+        "pandas",
+        "polars",
+        "pysam",
+        "pyarrow",
+        "scanpy",
+        "scipy",
+    ):
+        assert module in runtime, f"the capability check no longer imports {module}"
+
+
+def test_worker_science_stack_gates_run_as_the_service_account() -> None:
+    """The gates must reproduce production, not root, and leave nothing behind.
+
+    scanpy jits its kernels with cache=True *during import*, and numba's default
+    cache location is __pycache__ beside the source file. /opt/venv is
+    root-owned and read-only for uid 1000, so the observed failure is a
+    RuntimeError at import time in production while an import gate run as root
+    passes. Hence two separate demands: the image gives the service account a
+    writable numba cache, and the gates run after the USER switch.
+    """
+    runtime = _worker_runtime_instructions()
+
+    assert "ENV NUMBA_CACHE_DIR=" in runtime, (
+        "the runtime stage must give uid 1000 a writable numba cache; without "
+        "it, importing scanpy raises 'no locator available for file' in "
+        "production and nowhere else"
+    )
+    numba_cache = re.search(r"ENV NUMBA_CACHE_DIR=(\S+)", runtime).group(1)
+    assert numba_cache.startswith("/tmp/"), (
+        f"numba writes cache files at runtime; {numba_cache} would bake a "
+        "writable path into the image or fail for the service account"
+    )
+
+    # Both gates, after USER soymutdb: an import that works as root and fails
+    # for the service account is a gate that gates nothing.
+    user = runtime.index("USER soymutdb")
+    gates = [m.start() for m in re.finditer(r"/opt/venv/bin/python -c", runtime)]
+    assert len(gates) == 2, (
+        "expected an import gate and a round-trip gate in the runtime stage, "
+        f"found {len(gates)}"
+    )
+    assert all(position > user for position in gates), (
+        "a science-stack gate runs before USER soymutdb; it would prove the "
+        "image works for root and not for the account the worker runs as"
+    )
+
+    # Thread caps: the gates link OpenMP/BLAS and compile numba kernels on a
+    # shared CI builder.
+    for variable in (
+        "OMP_NUM_THREADS=1",
+        "OPENBLAS_NUM_THREADS=1",
+        "MKL_NUM_THREADS=1",
+        "NUMBA_NUM_THREADS=1",
+        "RAYON_NUM_THREADS=1",
+    ):
+        assert variable in runtime, f"the gates must cap {variable.split('=')[0]}"
+
+    # Scratch in, scratch out: verification artifacts must not survive into
+    # the image, and must be removed even when an assertion fails.
+    assert runtime.count('scratch="$(mktemp -d)"') == 2
+    assert runtime.count("trap 'rm -rf") == 2, (
+        "each gate must remove its scratch directory through a trap, so a "
+        "failing assertion does not leave artifacts in the image"
+    )
+    assert runtime.count('${NUMBA_CACHE_DIR:-/nonexistent}') == 2, (
+        "importing scanpy compiles kernels into NUMBA_CACHE_DIR; the gates "
+        "must clear it too, or root-owned JIT cache files are baked into the "
+        "image for the service account"
+    )
+    assert "/tmp/verify-" not in runtime, (
+        "verification artifacts must live in the scratch directory, not at a "
+        "fixed path inside the image"
+    )
+
+
+def test_worker_builder_resolves_python_through_pkg_config() -> None:
+    """pkg-config must answer for the image's own interpreter.
+
+    meson-python asks pkg-config for python3 while checking that Cython
+    compiles against the Python being built. A python3-dev for another CPython
+    in the image answers with /usr/include/python3.x and the pandas/matplotlib
+    build dies inside generated code with an error naming neither Python nor
+    pkg-config. /usr/local leads the search path, and the guard turns whatever
+    is left into an error that names it.
+    """
+    builder = _worker_builder_instructions()
+
+    assert "PKG_CONFIG_PATH=/usr/local/lib/pkgconfig" in builder
+    assert "pkg-config --variable=includedir python3" in builder, (
+        "the builder must check which python3 pkg-config resolves; a Debian "
+        "python3-dev silently breaks the meson-python builds otherwise"
+    )
+    assert "/usr/local/include/python3" in builder, (
+        "the guard must accept this image's own CPython include directory"
+    )
+
+
+def test_worker_build_width_is_a_build_arg_not_the_host_core_count() -> None:
+    """Compile width has to be overridable and bounded, not read from nproc.
+
+    Arrow C++ and the pandas/matplotlib/pyarrow Cython sources are the memory
+    peak of this image. The builder's nproc is the host's core count while the
+    limit that actually bites is the container's memory, so nproc is the one
+    value guaranteed to be wrong in exactly the environment where the build
+    runs. Both compile stages therefore take BUILD_JOBS, and the sdist builds
+    additionally run one at a time.
+    """
+    text = _instructions(WORKER_DOCKERFILE.read_text(encoding="utf-8"))
+
+    stages = re.findall(
+        r"FROM [^\n]+ AS (arrow-cpp|builder)\b(.*?)(?=FROM |\Z)", text, re.DOTALL
+    )
+    assert {name for name, _ in stages} == {"builder"}
+    for name, body in stages:
+        jobs = re.search(r"ARG BUILD_JOBS=(\d+)", body)
+        assert jobs, f"the {name} stage declares no BUILD_JOBS"
+        assert int(jobs.group(1)) <= 8, (
+            f"the {name} stage defaults to {jobs.group(1)} parallel compiles; "
+            "the point of the default is to stay inside a small builder"
+        )
+
+    assert "nproc" not in text, (
+        "the worker image must not size its compile width from the host's "
+        "core count; use --build-arg BUILD_JOBS=<n>"
+    )
+
+    sync = next(line for line in text.splitlines() if "uv sync --frozen" in line)
+    assert 'CMAKE_BUILD_PARALLEL_LEVEL="${BUILD_JOBS}"' in sync
+    assert "UV_CONCURRENT_BUILDS=1" in sync, (
+        "the six sdists must build one at a time; running them concurrently "
+        "peaks at the same memory with less headroom"
+    )

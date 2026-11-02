@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Alert, Descriptions, Empty, Skeleton, Table, type TableColumnsType } from "@/lib/antd";
 import { getMutantLine, getMutantLinePhenotypes, getReleaseId, isMutantLineId, type PhenotypeResponse } from "@soymutdb/api-client";
+import { isMutantLineDetailRecord } from "../../lib/api-contract-guards";
 import { FadeUp } from "../../components/route-motion";
 import { queryKeys } from "../../lib/query-keys";
 import { SITE_VARIANT } from "../../lib/site-variant";
@@ -48,23 +49,30 @@ function MutantDetail() {
     { title: t("mutants.phenotypes.description"), dataIndex: "description", key: "description", render: displayValue },
   ];
 
+  // The generated type is a build-time contract only: a list/page envelope or a
+  // proxy error body can arrive as a 200. Render the not-found state instead of
+  // dereferencing a malformed record.
+  const line = isMutantLineDetailRecord(lineQuery.data) ? lineQuery.data : undefined;
+
   if (mutantLineId && lineQuery.isLoading) {
     return <main className="container-prose py-10 md:py-14" aria-busy="true"><Skeleton active paragraph={{ rows: 7 }} aria-label={t("mutants.detail.loading")} /></main>;
   }
 
-  if (!mutantLineId || lineQuery.isError || !lineQuery.data) {
+  if (!mutantLineId || lineQuery.isError || !line) {
     return <main className="container-prose py-10 md:py-14"><Empty description={t("mutants.detail.notFound")} /></main>;
   }
-
-  const line = lineQuery.data;
   return (
     <FadeUp>
-      <main className="container-prose py-10 md:py-14">
+      <main className="container-prose py-10 md:py-14" data-testid="mutant-detail">
         <Link to="/mutants" search={{ mutagen: "" }} className="text-sm font-medium text-primary hover:underline">{t("mutants.detail.back")}</Link>
         <div className="mt-5">
           <p className="eyebrow">{t("mutants.eyebrow")}</p>
-          <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">{line.name}</h1>
-          <p className="mt-2 font-mono text-sm text-muted-foreground" data-public-id={line.public_id}>
+          <h1 data-testid="mutant-name" className="mt-2 font-display text-4xl font-semibold tracking-tight">{line.name}</h1>
+          <p
+            className="mt-2 font-mono text-sm text-muted-foreground"
+            data-public-id={line.public_id}
+            data-testid="mutant-public-id"
+          >
             {t("mutantLines.lineId")}: {line.public_id}
           </p>
         </div>

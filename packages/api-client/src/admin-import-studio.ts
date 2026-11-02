@@ -13,6 +13,11 @@ export interface DatasetVersionCreateRequest {
   row_count: number;
   column_count: number;
   source_objects: Array<Record<string, unknown>>;
+  /**
+   * Selects the shape limits for the immutable version. A registered
+   * module may carry the wider scientific limits; a generic page may not.
+   */
+  module_key?: string | null;
 }
 
 export interface DatasetVersionResponse {
@@ -136,6 +141,8 @@ export const adminImportStudioApi = {
       row_count: number;
       column_count: number;
       field_mapping: FieldMappingItem[];
+      /** Must match the draft's module key when provided. */
+      module_key?: string | null;
     },
   ) {
     return http.post<ImportDraftResponse>(

@@ -10,6 +10,8 @@ export default defineConfig({
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     passWithNoTests: true,
     pool: "forks",
-    poolOptions: { forks: { singleFork: true, maxForks: 1 } },
-  },
+
+    maxWorkers: 1,
+
+      },
 });

@@ -35,6 +35,7 @@ import { resolveJbrowseBaseUrl } from "../lib/deployment";
 import { SOYBEAN_CHROMOSOMES } from "../lib/format";
 import {
     buildInitMessage,
+    scopeSafeInitPayload,
     parseJbrowseMessage,
     newSessionId,
     type InitPayload,
@@ -69,7 +70,7 @@ export const Route = createFileRoute("/browser")({
                       .filter(Boolean);
         return {
             assembly: search.assembly == null ? "" : String(search.assembly).trim(),
-            locus: rawLocus == null ? "chr01" : String(rawLocus),
+            locus: rawLocus == null ? "" : String(rawLocus),
             tracks: tracks && tracks.length > 0 ? tracks : undefined,
             release: search.release == null ? CONFIGURED_RELEASE : String(search.release),
             returnTo: search.returnTo == null ? undefined : String(search.returnTo),
@@ -127,14 +128,16 @@ export function browserContextMissing(params: {
 /** Build the iframe URL from session params (deep-link contract). */
 function buildJbrowseUrl(params: {
     assembly: string;
-    locus: string;
+    locus?: string;
     tracks?: string[];
     release?: string;
     portalOrigin?: string;
 }): string {
     const url = new URL(JBROWSE_BASE, URL_BASE);
     url.searchParams.set("assembly", params.assembly);
-    url.searchParams.set("locus", params.locus);
+    // An empty locus means "no explicit coordinates": the browser opens on the
+    // destination's own default instead of a hardcoded chromosome.
+    if (params.locus) url.searchParams.set("locus", params.locus);
     if (params.tracks && params.tracks.length > 0) {
         url.searchParams.set("tracks", params.tracks.join(","));
     }
@@ -159,12 +162,18 @@ function BrowserComponent() {
 
     const iframeRef = React.useRef<HTMLIFrameElement | null>(null);
     const initSentRef = React.useRef(false);
+    // Scope bookkeeping: the epoch tags the current release/assembly scope,
+    // the last payload records what the embedded browser actually received.
+    const scopeKeyRef = React.useRef("");
+    const scopeEpochRef = React.useRef(0);
+    const lastInitRef = React.useRef<InitPayload | undefined>(undefined);
     // What JBrowse last told us it is showing (locus/assembly/tracks). Used to
     // avoid echo loops when URL updates originate from the iframe itself.
     const jbrowseMirrorRef = React.useRef({
         assembly: search.assembly,
         locus: search.locus,
         tracks: (search.tracks ?? []).join(","),
+        release: search.release,
     });
     const latestRef = React.useRef({ search, status });
     latestRef.current = { search, status };
@@ -175,7 +184,7 @@ function BrowserComponent() {
     const [session, setSession] = React.useState(() => ({
         assembly: search.assembly,
         locus: search.locus,
-        tracks: search.tracks ?? [],
+        tracks: search.tracks,
         release: search.release,
     }));
 
@@ -184,7 +193,7 @@ function BrowserComponent() {
         () => buildJbrowseUrl({ ...session, portalOrigin }),
         [session, portalOrigin],
     );
-    const newTabSrc = React.useMemo(() => buildJbrowseUrl({ ...session }), [session]);
+    const newTabSrc = React.useMemo(() => buildJbrowseUrl(search), [search]);
     const safeReturn = React.useMemo(() => safeReturnTo(search.returnTo), [search.returnTo]);
 
     /** Send the full deep-link state into the iframe (idempotent for JBrowse). */
@@ -192,13 +201,24 @@ function BrowserComponent() {
         (s: BrowserSearchParams) => {
             const iframe = iframeRef.current;
             if (!iframe?.contentWindow) return;
-            const payload: InitPayload = {
+            // Every scope change gets a new epoch so the embedded browser can
+            // reject messages that belong to a release the user already left.
+            const scopeKey = `${s.release ?? ""}|${s.assembly ?? ""}`;
+            if (scopeKey !== scopeKeyRef.current) {
+                scopeKeyRef.current = scopeKey;
+                scopeEpochRef.current += 1;
+            }
+            const raw: InitPayload = {
                 assembly: s.assembly,
                 locus: s.locus,
-                tracks: s.tracks ?? [],
+                // Do not synthesize [] when the URL did not select tracks.
+                tracks: s.tracks,
                 release: s.release,
                 sessionId,
+                scopeEpoch: scopeEpochRef.current,
             };
+            const payload = scopeSafeInitPayload(raw, lastInitRef.current);
+            lastInitRef.current = payload;
             iframe.contentWindow.postMessage(buildInitMessage(payload), JBROWSE_ORIGIN);
         },
         [sessionId],
@@ -253,26 +273,28 @@ function BrowserComponent() {
                         console.warn("[Browser] Ignoring malformed locus-change message", msg);
                         return;
                     }
+                    // A delayed viewport event from an older scope must not
+                    // overwrite the current coordinates. The epoch is exact
+                    // (it also separates release 4 -> 9 -> 4 cycles); the
+                    // release field stays as the legacy fallback.
+                    if (payload.scopeEpoch != null && payload.scopeEpoch !== scopeEpochRef.current) return;
+                    if (payload.release != null && payload.release !== latest.search.release) return;
+                    const assembly = typeof payload.assembly === "string" && payload.assembly
+                        ? payload.assembly : latest.search.assembly;
+                    const tracks = Array.isArray(payload.tracks) ? payload.tracks : latest.search.tracks;
+                    const tracksKey = (tracks ?? []).join(",");
                     jbrowseMirrorRef.current = {
-                        assembly:
-                            typeof payload.assembly === "string"
-                                ? payload.assembly
-                                : latest.search.assembly,
-                        locus: payload.locus,
-                        tracks: Array.isArray(payload.tracks)
-                            ? payload.tracks.join(",")
-                            : (latest.search.tracks ?? []).join(","),
+                        assembly, locus: payload.locus, tracks: tracksKey, release: latest.search.release,
                     };
-                    if (payload.locus !== latest.search.locus) {
+                    if (payload.locus !== latest.search.locus || assembly !== latest.search.assembly
+                        || tracksKey !== (latest.search.tracks ?? []).join(",")) {
                         navigate({
                             to: "/browser",
                             search: {
                                 ...latest.search,
+                                assembly,
                                 locus: payload.locus,
-                                tracks:
-                                    Array.isArray(payload.tracks) && payload.tracks.length > 0
-                                        ? payload.tracks
-                                        : latest.search.tracks,
+                                tracks,
                             },
                             replace: true,
                         });
@@ -300,7 +322,8 @@ function BrowserComponent() {
         if (
             search.locus === mirror.locus &&
             search.assembly === mirror.assembly &&
-            tracksKey === mirror.tracks
+            tracksKey === mirror.tracks &&
+            search.release === mirror.release
         ) {
             return;
         }
@@ -312,13 +335,14 @@ function BrowserComponent() {
         setSession({
             assembly: search.assembly,
             locus: search.locus,
-            tracks: search.tracks ?? [],
+            tracks: search.tracks,
             release: search.release,
         });
         jbrowseMirrorRef.current = {
             assembly: search.assembly,
             locus: search.locus,
             tracks: (search.tracks ?? []).join(","),
+            release: search.release,
         };
         setIframeKey((k) => k + 1);
     }, [search]);
@@ -362,7 +386,15 @@ function BrowserComponent() {
                                 {t("browser.back")}
                             </Button>
                         )}
-                        <Button type="default" size="small" href={newTabSrc} target="_blank" rel="noopener noreferrer" icon={<ExternalLink className="size-4" aria-hidden />}>
+                        {/*
+                          `browser-open-new-tab` is the canonical new-tab link for the
+                          embed contract (asserted by e2e/tests/portal-browser-embed.spec.ts:
+                          the standalone shell URL must stay free of internal identifiers).
+                          The timeout/error overlays below render the same link but carry
+                          their own distinct ids, so this testid is never duplicated in
+                          the DOM.
+                        */}
+                        <Button type="default" size="small" data-testid="browser-open-new-tab" href={newTabSrc} target="_blank" rel="noopener noreferrer" icon={<ExternalLink className="size-4" aria-hidden />}>
                             {t("browser.openInNewTab")}
                         </Button>
                     </div>
@@ -462,7 +494,10 @@ function BrowserComponent() {
                                     <Button type="default" size="small" onClick={handleRetry} icon={<Loader2 className="size-4" aria-hidden />}>
                                         {t("browser.retry")}
                                     </Button>
-                                    <Button type="default" size="small" href={newTabSrc} target="_blank" rel="noopener noreferrer" icon={<ExternalLink className="size-4" aria-hidden />}>
+                                    {/* Distinct id from the header `browser-open-new-tab`:
+                                        this copy only exists in the timeout state, which the
+                                        embed spec treats as a hard failure. */}
+                                    <Button type="default" size="small" data-testid="browser-open-new-tab-timeout" href={newTabSrc} target="_blank" rel="noopener noreferrer" icon={<ExternalLink className="size-4" aria-hidden />}>
                                         {t("browser.openInNewTab")}
                                     </Button>
                                 </div>
@@ -486,7 +521,10 @@ function BrowserComponent() {
                                     <Button type="default" size="small" onClick={handleRetry} icon={<Loader2 className="size-4" aria-hidden />}>
                                         {t("browser.retry")}
                                     </Button>
-                                    <Button type="default" size="small" href={newTabSrc} target="_blank" rel="noopener noreferrer" icon={<ExternalLink className="size-4" aria-hidden />}>
+                                    {/* Distinct id from the header `browser-open-new-tab`:
+                                        this copy only exists in the error state, which the
+                                        embed spec treats as a hard failure. */}
+                                    <Button type="default" size="small" data-testid="browser-open-new-tab-error" href={newTabSrc} target="_blank" rel="noopener noreferrer" icon={<ExternalLink className="size-4" aria-hidden />}>
                                         {t("browser.openInNewTab")}
                                     </Button>
                                 </div>

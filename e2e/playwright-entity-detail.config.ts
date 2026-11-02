@@ -25,11 +25,13 @@ import { defineConfig } from "@playwright/test";
  */
 /**
  * Offline default target: the built public artifact served by the repo's own
- * static server (same recipe as playwright-public.config.ts). It lets this
- * suite run with no deployed stack; the spec installs deterministic API mocks
- * when no explicit base was supplied.
+ * static server. `build-sites.ts` writes the two site variants to
+ * `dist/{external,internal}`, so the old `dist` root is a stale single-site
+ * leftover with no index.html; serve `dist/external` at the origin root, the
+ * same recipe `playwright-web-performance.config.ts` and
+ * `playwright-visual.config.ts` use.
  */
-const OFFLINE_BASE = "http://localhost:4176/soymutdb-next/";
+const OFFLINE_BASE = "http://localhost:4176/";
 
 const explicitBase = (
   process.env.PORTAL_BASE_URL ??
@@ -64,7 +66,7 @@ export default defineConfig({
   webServer: explicitBase
     ? undefined
     : {
-        command: "node static-server.mjs ../apps/web/dist 4176 /soymutdb-next",
+        command: "node static-server.mjs ../apps/web/dist/external 4176 /",
         url: OFFLINE_BASE,
         reuseExistingServer: !process.env.CI,
         timeout: 30_000,

@@ -166,7 +166,8 @@ describe("admin PageContainer coverage (A1)", () => {
     const root = readSource("routes/__root.tsx");
     expect(root).not.toMatch(/PAGE_TITLES/);
     expect(root).not.toMatch(/<AdminHeader\s+title=/);
-    expect(root).toMatch(/<AdminHeader\s*\/>/);
+    // Global navigation controls are shell props; page titles still belong to PageContainer.
+    expect(root).toMatch(/<AdminHeader\b[^>]*\/>/);
 
     const header = readSource("components/admin-header.tsx");
     expect(header).not.toMatch(/title\?:\s*string/);

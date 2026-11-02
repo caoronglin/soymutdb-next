@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "_comment": [
+    "Signed risk acceptances for vulnerability findings that have no available fix.",
+    "",
+    "This file is NOT a suppression list. An entry here changes one specific",
+    "finding from `failed` to `accepted`, and nothing else: a different",
+    "advisory, a different package, or a second high finding in the same package",
+    "still fails the gate. Every entry must carry an approver, a date, a",
+    "reachability argument and an expiry, and the gate fails when an entry is",
+    "expired, when required fields are missing, or when an entry no longer",
+    "matches any reported finding (stale entries fail, so an acceptance cannot",
+    "outlive the problem it was written for).",
+    "",
+    "`expires_on` may not be more than MAX_ACCEPTANCE_DAYS in the future.",
+    "Raising this file's ceiling is a reviewable diff like any other."
+  ],
+  "acceptances": []
+}

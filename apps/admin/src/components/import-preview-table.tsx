@@ -338,5 +338,3 @@ export function ImportPreviewTable({
     </div>
   );
 }
-
-export default ImportPreviewTable;

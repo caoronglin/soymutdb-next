@@ -169,6 +169,12 @@ test.describe("portal /browser — JBrowse iframe embed", () => {
     expectNoInternalIdentifiers(page.url(), "the portal /browser URL");
     expectNoInternalIdentifiers(shellUrl.toString(), "the shell iframe src");
 
+    // The header new-tab link (`data-testid="browser-open-new-tab"` in
+    // apps/web/src/routes/browser.tsx) is the only element carrying that id in
+    // the ready state reached above: the timeout/error overlays that repeat the
+    // link use the suffixed `browser-open-new-tab-timeout` /
+    // `browser-open-new-tab-error` ids. antd renders an anchor for a Button with
+    // `href`, so `href` is the real attribute to read.
     const newTabHref = await page.getByTestId("browser-open-new-tab").getAttribute("href");
     expect(newTabHref, "the open-in-new-tab link must have an href").toBeTruthy();
     const newTabUrl = new URL(newTabHref as string, underBase(PORTAL_BASE_URL, "browser"));

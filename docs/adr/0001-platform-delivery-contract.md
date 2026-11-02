@@ -21,10 +21,10 @@ pnpm install before release.
 
 ### Toolchain
 
-- Node.js 24.19.0 is the repository and CI runtime. `.nvmrc`,
+- Node.js 26.13.0 is the repository and CI runtime. `.nvmrc`,
   `.node-version`, `package.json`, and every Node-based workflow express the
   same Node 24 LTS line.
-- pnpm 12.5.1 is exact in `packageManager`, the engine contract, and CI. The
+- pnpm 12.11.2 is exact in `packageManager`, the engine contract, and CI. The
   workspace migrated from pnpm 11.21.0 in Phase B (`plan.md`): the lockfile is
   now a two-document file and `pnpm-workspace.yaml` is the workspace policy
   source; every scanner/report has to read both documents.

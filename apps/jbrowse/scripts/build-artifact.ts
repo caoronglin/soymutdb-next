@@ -60,8 +60,27 @@ const allHashes = new Set<string>();
 const htmlPaths = walkHtml(distDir);
 if (htmlPaths.length === 0) throw new Error(`JBrowse artifact has no HTML documents: ${distDir}`);
 
+/**
+ * Defer every external entry script.
+ *
+ * Umi emitted the genome-browser entry scripts in `<head>` WITHOUT `defer`
+ * (the portal/admin builds emit deferred scripts). A blocking classic script in
+ * `<head>` executes before `<body><div id="root">` exists, so React aborts with
+ * error #299 ("Target container is not a DOM element") and the app never mounts
+ * — a blank page in every deployment. Deferring preserves execution order and
+ * runs the entry after the document is parsed; the browser gate
+ * `playwright-jbrowse-artifact.config.ts` now fails if the handoff never fires.
+ */
+function deferExternalScripts(html: string): string {
+  return html.replace(/<script\b([^>]*)>/gi, (tag: string, attrs: string) => {
+    if (!/\bsrc\s*=/.test(attrs)) return tag; // inline script: CSP-hashed, order kept
+    if (/\b(?:defer|async|type\s*=\s*["']module["'])\b/i.test(attrs)) return tag;
+    return `<script${attrs} defer>`;
+  });
+}
+
 for (const path of htmlPaths) {
-  const html = readFileSync(path, "utf8");
+  const html = deferExternalScripts(readFileSync(path, "utf8"));
   const hashes = collectInlineScriptHashes(html);
   for (const hash of hashes) allHashes.add(hash);
   writeFileSync(path, setMetaPolicy(html, withScriptHashes(basePolicy, hashes), path), "utf8");

@@ -6,10 +6,11 @@
 
 ## 当前注册项
 
+> `search.external` 已于 2026-10-18 退役：联邦外部搜索已永久下线，该开关没有任何读取方，无法关闭任何行为，因此不再注册。
+
 | key | 默认 | 可公开 | 关闭语义 |
 |---|---:|---:|---|
 | `page_builder` | on | 是 | 新公开 PageDefinition 请求停止/回退 seed |
-| `search.external` | on | 是 | 新外部搜索请求拒绝，内部搜索不受影响 |
 | `imports.module_tsv` | on | 是 | 新 module 导入拒绝，运行中的任务不终止 |
 | `imports.module_xlsx` | on | 是 | 新 xlsx 导入拒绝，txt/tsv/csv 不受影响 |
 | `imports.local_upload` | on | 是 | 新浏览器直传拒绝，S3 URI 高级模式仍可按策略使用 |

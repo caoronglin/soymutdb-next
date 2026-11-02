@@ -19,7 +19,7 @@ from pathlib import Path
 
 # Make both the repo root (for the `tools` package) and apps/api (for the
 # `app` package) importable regardless of the current working directory.
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 API_DIR = Path(__file__).resolve().parents[1]
 for path in (str(API_DIR), str(REPO_ROOT)):
     if path not in sys.path:
@@ -44,7 +44,7 @@ def main() -> int:
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     schema = app.openapi()
-    output.write_text(json.dumps(schema, indent=2))
+    output.write_text(json.dumps(schema, indent=2), encoding="utf-8")
     print(f"openapi exported -> {output}")
 
     if args.error_codes_output:
@@ -52,7 +52,10 @@ def main() -> int:
 
         error_codes_output = Path(args.error_codes_output)
         error_codes_output.parent.mkdir(parents=True, exist_ok=True)
-        error_codes_output.write_text(json.dumps(error_code_catalog(), indent=2, sort_keys=True) + "\n")
+        error_codes_output.write_text(
+            json.dumps(error_code_catalog(), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
         print(f"error-code catalog exported -> {error_codes_output}")
     return 0
 
