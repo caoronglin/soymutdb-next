@@ -59,7 +59,7 @@ stages:
     script: bash scripts/acceptance.sh --profile backend
 
   - name: Static artifact acceptance
-    image: node:26.10.0
+    image: node:26.13.0
     script: bash scripts/acceptance.sh --profile static
 
 endStages:

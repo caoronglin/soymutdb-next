@@ -37,7 +37,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # The authoritative pins. Everything else is checked against these.
-EXPECTED_NODE = "26.10.0"
+EXPECTED_NODE = "26.13.0"
 EXPECTED_PNPM = "12.11.2"
 EXPECTED_PYTHON_MIN = (3, 15)
 
@@ -79,7 +79,7 @@ BUILD_ENV_DOCKERFILES = (
 
 # (dockerfile, tag the base image must use) for the frontend environment. It
 # starts from the Python image and installs Node from the official release
-# tarball, because `COPY --from=python:3.15` into a node:26.10.0 base cannot
+# tarball, because `COPY --from=python:3.15` into a node:26.13.0 base cannot
 # work: the two sit on different Debian generations and the copied interpreter
 # needs a glibc the older base does not have.
 FRONTEND_BUILD_ENV = ".cnb/env/Dockerfile.frontend"
@@ -91,8 +91,8 @@ FRONTEND_BUILD_ENV_BASE = "python:3.15"
 # fails when the two disagree, so a checksum can never be edited to fit a
 # tampered tarball without also editing this file and a reviewer seeing it.
 NODE_TARBALL_SHA256 = {
-    "x64": "ca70e9e349de048b9522abb3adc05b3bd6f43c5ffd3ec57916c7da292f59f022",
-    "arm64": "7a6353f63eb3d04765004b4adf172616243e4522434635cb1d26288658b04ab5",
+    "x64": "d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997",
+    "arm64": "406fe3fbde1c054adff8b297c16fdb5af6659db327c1ac8acd46b56ef1af9a92",
 }
 
 # Shared scripts that carry a SOYMUTDB_CI_*_VERSION default.
@@ -363,7 +363,7 @@ def check_cnb_pipeline_node_images(errors: list[str]) -> None:
             _fail(errors, f"missing CNB pipeline source: {path.name}")
             continue
         text = path.read_text(encoding="utf-8")
-        # Match a full semver only: prose like `` `node:26.10.0` `` in a comment
+        # Match a full semver only: prose like `` `node:26.13.0` `` in a comment
         # must not be scraped as an image tag with stray punctuation attached.
         for tag in sorted(set(re.findall(r"\bnode:(\d+\.\d+\.\d+)", text))):
             if tag != EXPECTED_NODE:

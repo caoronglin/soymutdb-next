@@ -198,7 +198,7 @@ while IFS='=' read -r key value; do export "${key}=${value}"; done <<< "${PG_ENV
 * `scripts/dependency_governance.py` 既 `import yaml`（读锁文件与策略），又用
   `uv`/`uvx` 跑 Deptry / license 分析器。
 
-早期 stage 用了 `image: node:26.10.0` 覆盖。基础镜像里的 `python3` 是给 node-gyp
+早期 stage 用了 `image: node:26.13.0` 覆盖。基础镜像里的 `python3` 是给 node-gyp
 用的**裸解释器**，没有 pip、没有 site-packages，于是真实构建
 `cnb-mqg-1k289oe96` 直接死在导入阶段：
 
@@ -286,7 +286,7 @@ CNB 文档明确"任务级仅支持 `image` 配置，不支持 `dockerfile`"。�
 
 * 需要 Dockerfile 的 stage，其 `image:` 必须**留空**，由流水线级
   `docker.build.dockerfile` 提供默认环境。
-* 同一流水线里需要别的环境（API 用 `python:3.15`、governance 用 `node:26.10.0`）
+* 同一流水线里需要别的环境（API 用 `python:3.15`、governance 用 `node:26.13.0`）
   的 stage，**保留自己的 `image:`** 覆盖默认值，语义与之前完全一致。
 * `docker.build.by` 只列 Dockerfile 本身：stage 体通过 `scripts/` 自行引导工具链，
   Dockerfile 是唯一能改变门禁运行环境的输入。
@@ -304,7 +304,7 @@ CNB 文档明确"任务级仅支持 `image` 配置，不支持 `dockerfile`"。�
 | 文件 | 用途 | 内容边界 |
 | --- | --- | --- |
 | `.cnb/env/Dockerfile.build-tools` | 镜像构建/扫描/SBOM/签名 stage 的构建环境 | 基础镜像为 `docker:<pin>-cli` + bash/curl/jq/python3；**不含任何密钥** |
-| `.cnb/env/Dockerfile.frontend` | 前端/依赖治理/契约门禁的构建环境 | `python:3.15` + 官方 Node 26.10.0 tarball（校验和固定）+ **预热好的 pnpm store**（`VOLUME /cache/pnpm-store`）；**不含任何密钥** |
+| `.cnb/env/Dockerfile.frontend` | 前端/依赖治理/契约门禁的构建环境 | `python:3.15` + 官方 Node 26.13.0 tarball（校验和固定）+ **预热好的 pnpm store**（`VOLUME /cache/pnpm-store`）；**不含任何密钥** |
 | `.cnb/env/release.yml` | 发布流水线/手动按钮导入的**非密钥**配置 | 只有 `SOYMUTDB_OIDC_ISSUER`：`cosign verify` 要 pin 的 OIDC trust root。keyless 签名没有长期私钥；真实凭据仍只在平台 secret store |
 
 两点容易误判：
@@ -599,7 +599,7 @@ bash scripts/smoke.sh --list
 
 | 组件 | 版本 | 位置 |
 | --- | --- | --- |
-| Node | 26.10.0 | `.nvmrc` / `.node-version` / `package.json` / 容器镜像 |
+| Node | 26.13.0 | `.nvmrc` / `.node-version` / `package.json` / 容器镜像 |
 | pnpm | 12.11.2 | `package.json` / `setup-workspace.sh` |
 | Python | 3.15 | `pyproject.toml`（`requires-python >=3.15`）/ `api.yml` / 镜像 tag |
 | uv | 0.13.1 | Dockerfile / 治理流水线 |
@@ -618,7 +618,7 @@ python3 scripts/check-toolchain-pins.py --json   # 机器可读
 ```
 
 它同时校验 `.nvmrc` 与 `.node-version` 互相一致——这两个文件分别由 nvm 与
-asdf/volta/mise 读取，此前已经漂移过，没有任何东西会发现。`Node 26.10.0 /
+asdf/volta/mise 读取，此前已经漂移过，没有任何东西会发现。`Node 26.13.0 /
 pnpm 12.11.2` 这些写入 `.cnb.yml` 或流水线文件的字面量，另由
 `scripts/test_ci_job_contracts.py` 锁定（例如禁止再出现 `node:22`、
 `python:3.12`）。

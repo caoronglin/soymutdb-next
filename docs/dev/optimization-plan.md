@@ -59,7 +59,7 @@
 - name: Setup Node 24
   uses: actions/setup-node@v4
   with:
-    node-version: 26.10.0
+    node-version: 26.13.0
     cache: pnpm
 
 - name: Cache Turbo

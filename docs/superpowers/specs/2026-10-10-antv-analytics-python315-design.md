@@ -354,7 +354,7 @@ delivery contract for no benefit.
 Promotion to a real migration requires, as one separately-approved slice: a 3.15
 `uv.lock` re-resolve for every project, the biology stack either shipping 3.15 wheels or
 moving to conda-forge, `.cnb.yml` image bumps validated against the recorded glibc
-constraint (`.cnb.yml:150-151`: node 26.10.0 is bookworm/glibc 2.36, python 3.14 needs
+constraint (`.cnb.yml:150-151`: node 26.13.0 is bookworm/glibc 2.36, python 3.14 needs
 2.38, so a 3.15 Debian base is a strictly newer baseline and the constraint must be
 re-verified, not assumed), and all three `Dockerfile` families bumped together.
 

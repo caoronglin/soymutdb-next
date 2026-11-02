@@ -2,7 +2,7 @@
 
 ## Current JS patch observation — 2026-10-25
 
-Subsequent user-authorized verification on Node 26.10.0 / pnpm 12.11.2 / Python 3.15.0 rebuilt both portal variants, admin and JBrowse successfully, passed their scoped regression/type/lint and artifact checks, and repeated the acceptance-policy readback on the same audit JSON using Python 3.15. **The frontend translation-test-double contract still fails on 10 test files**, so this is not a full green pipeline. See the [integration verification receipt](../../.cache/integration-verification-20261025/SUMMARY.md); no database, server, install or Git mutation was performed in that verification lane.
+Subsequent user-authorized verification on Node 26.13.0 / pnpm 12.11.2 / Python 3.15.0 rebuilt both portal variants, admin and JBrowse successfully, passed their scoped regression/type/lint and artifact checks, and repeated the acceptance-policy readback on the same audit JSON using Python 3.15. **The frontend translation-test-double contract still fails on 10 test files**, so this is not a full green pipeline. See the [integration verification receipt](../../.cache/integration-verification-20261025/SUMMARY.md); no database, server, install or Git mutation was performed in that verification lane.
 
 This dated observation supersedes older live-status statements below; the earlier batch records remain historical. The workspace now pins `body-parser: 1.20.9` and `fast-uri: 3.1.9`, retaining the follow-redirects/hono floors and parent-scoped Vite override. The interrupted implementation left successful lock-delta, frozen-install and dedupe logs; peer checking still exited 1.
 
@@ -474,7 +474,7 @@ The full governance runner additionally requires network access to the package r
 ### JS side, as run for the `follow-redirects` / `hono` batch
 
 ```bash
-# Node 26.10.0 (.nvmrc pin) and pnpm 12.11.2 (package.json pin)
+# Node 26.13.0 (.nvmrc pin) and pnpm 12.11.2 (package.json pin)
 pnpm install --lockfile-only                                    # regenerate the lock
 pnpm install --frozen-lockfile --ignore-scripts                 # lock is up to date + installable
 pnpm dedupe --check                                             # blocking duplicate-version gate
@@ -489,7 +489,7 @@ Same toolchain and the same first four commands; the additions are the gate
 evaluation and the dual-site artifact build:
 
 ```bash
-# Node 26.10.0 (.nvmrc pin) and pnpm 12.11.2 (package.json pin)
+# Node 26.13.0 (.nvmrc pin) and pnpm 12.11.2 (package.json pin)
 pnpm install --lockfile-only                                    # regenerate the lock
 pnpm install --frozen-lockfile --ignore-scripts                 # lock is up to date + installable
 pnpm dedupe --check                                             # blocking duplicate-version gate

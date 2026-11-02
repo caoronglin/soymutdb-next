@@ -448,7 +448,7 @@ def test_development_web_and_admin_are_standalone_node_services() -> None:
 
     for service_name, port in (("web", "5173:5173"), ("admin", "5174:5174")):
         service = dev_services[service_name]
-        assert service["image"] == "node:26.10.0-alpine"
+        assert service["image"] == "node:26.13.0-alpine"
         assert service["working_dir"] == "/app"
         assert service["ports"] == [port]
         assert "pnpm install --frozen-lockfile" in service["command"]

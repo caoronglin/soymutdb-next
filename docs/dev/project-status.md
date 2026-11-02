@@ -6,7 +6,7 @@
 
 | 范围 | 最近证据 |
 | --- | --- |
-| 工具链与数据主链 | Node 26.10.0 / pnpm 12.11.2 / Python 3.15；PostgreSQL 为权威库，ClickHouse 仅用于历史迁移 |
+| 工具链与数据主链 | Node 26.13.0 / pnpm 12.11.2 / Python 3.15；PostgreSQL 为权威库，ClickHouse 仅用于历史迁移 |
 | 客户端与前端（10-17） | fresh OpenAPI 与手写路由三类 drift 均为 0；工作区 lint/typecheck/test 36/36 任务，1083 tests |
 | 后端全量（10-16） | API 2326 passed / 3 历史驱动场景 skipped；Worker 657 passed / 0 skipped；MCP 66 passed / 0 skipped。历史驱动另在 Python 3.14 专用通道 33 passed；详见 [整体验收](fullstack-validation-20261015.md) |
 | 本轮 Worker 回归（10-17） | 信号指标、配置、延迟导入和发布传输共 44 passed；这是切片，未冒充重新执行全量 |

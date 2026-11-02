@@ -10,7 +10,7 @@ import yaml
 from compose_loader import load_compose
 
 ROOT = Path(__file__).resolve().parents[1]
-NODE_VERSION = "26.10.0"
+NODE_VERSION = "26.13.0"
 PNPM_VERSION = "12.11.2"
 PROFILES = {"core", "jbrowse", "blast", "analyses", "mcp", "cloudflare-tunnel"}
 UPGRADE = ROOT / "deploy/scripts/upgrade.sh"
@@ -1036,7 +1036,7 @@ def test_platform_delivery_adr_records_decisions_and_rollback() -> None:
     adr = (ROOT / "docs/adr/0001-platform-delivery-contract.md").read_text(encoding="utf-8")
 
     assert "Status: Accepted" in adr
-    assert "Node.js 26.10.0" in adr
+    assert "Node.js 26.13.0" in adr
     assert f"pnpm {PNPM_VERSION}" in adr
     assert "Ant Design 6" in adr
     assert "image@sha256" in adr

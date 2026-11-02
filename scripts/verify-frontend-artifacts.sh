@@ -15,7 +15,7 @@
 # Every gate is hard: a failure exits non-zero immediately with the failing gate
 # named. No gate may be skipped to make a pipeline green.
 #
-# Requirements: pnpm 12.11.2, Node 26.10.0, Python 3.15 (OpenAPI export).
+# Requirements: pnpm 12.11.2, Node 26.13.0, Python 3.15 (OpenAPI export).
 # Usage: bash scripts/verify-frontend-artifacts.sh
 # Env:    SOYMUTDB_CI_SKIP_CONTRACT=1 skips only the OpenAPI client check, which
 #         requires the API virtualenv; used by build-only callers.

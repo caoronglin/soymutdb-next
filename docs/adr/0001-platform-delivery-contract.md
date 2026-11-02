@@ -21,7 +21,7 @@ pnpm install before release.
 
 ### Toolchain
 
-- Node.js 26.10.0 is the repository and CI runtime. `.nvmrc`,
+- Node.js 26.13.0 is the repository and CI runtime. `.nvmrc`,
   `.node-version`, `package.json`, and every Node-based workflow express the
   same Node 24 LTS line.
 - pnpm 12.11.2 is exact in `packageManager`, the engine contract, and CI. The

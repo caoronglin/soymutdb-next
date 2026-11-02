@@ -222,7 +222,7 @@ services:
       - ./apps/api/app:/app/apps/api/app:ro
 
   web:
-    image: node:26.10.0-alpine
+    image: node:26.13.0-alpine
     working_dir: /app
     init: true
     environment:
@@ -238,7 +238,7 @@ services:
       - "5173:5173"
 
   admin:
-    image: node:26.10.0-alpine
+    image: node:26.13.0-alpine
     working_dir: /app
     init: true
     environment:

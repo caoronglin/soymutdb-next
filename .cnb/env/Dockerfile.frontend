@@ -11,7 +11,7 @@
 #   `app.main`'s OpenAPI document from `apps/api/.venv/bin/python`. The gate
 #   therefore needs BOTH toolchains in one container.
 #
-#   The stage used to run on `node:26.10.0`, which carries no Python, so the
+#   The stage used to run on `node:26.13.0`, which carries no Python, so the
 #   build failed with:
 #
 #     scripts/check-contract.sh: line 18: /workspace/apps/api/.venv/bin/python:
@@ -22,7 +22,7 @@
 #   both providers run identical bytes instead of one silently skipping a gate.
 #
 # Design: Python base, Node installed from the official tarball
-#   An earlier revision took the opposite shape — `FROM node:26.10.0` plus
+#   An earlier revision took the opposite shape — `FROM node:26.13.0` plus
 #   `COPY --from=python:3.15 /usr/local /usr/local` — and the image build failed
 #   on the first real CNB run:
 #
@@ -32,7 +32,7 @@
 #
 #   `COPY --from` moves the interpreter's binary and shared libraries but NOT
 #   the C library underneath them. python:3.15 sits on a newer Debian (glibc
-#   2.38+) than node:26.10.0 (bookworm, glibc 2.36), so the copied interpreter
+#   2.38+) than node:26.13.0 (bookworm, glibc 2.36), so the copied interpreter
 #   could never load. Installing a shared-library list was necessary but not
 #   sufficient, and glibc itself cannot be swapped in a `COPY`.
 #
@@ -57,9 +57,9 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # https://nodejs.org/dist/<version>/SHASUMS256.txt and are verified before the
 # tarball is unpacked: `curl | tar` would let a mirror swap the binary under a
 # reviewed pin.
-ARG NODE_VERSION=26.10.0
-ARG NODE_SHA256_X64=ca70e9e349de048b9522abb3adc05b3bd6f43c5ffd3ec57916c7da292f59f022
-ARG NODE_SHA256_ARM64=7a6353f63eb3d04765004b4adf172616243e4522434635cb1d26288658b04ab5
+ARG NODE_VERSION=26.13.0
+ARG NODE_SHA256_X64=d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997
+ARG NODE_SHA256_ARM64=406fe3fbde1c054adff8b297c16fdb5af6659db327c1ac8acd46b56ef1af9a92
 # Must match PNPM_VERSION in scripts/{setup-workspace,ci-job-steps}.sh and
 # package.json's packageManager; scripts/check-toolchain-pins.py enforces it.
 ARG PNPM_VERSION=12.11.2
@@ -155,7 +155,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml .npmrc ./
 # pnpm is installed with npm, NOT corepack.
 #
 # Node 25+ no longer ships corepack in its distribution, so `corepack enable`
-# here failed with `corepack: command not found` on the Node 26.10.0 tarball
+# here failed with `corepack: command not found` on the Node 26.13.0 tarball
 # (CNB build cnb-on5-1k4i8kkap, stage Prepare, 2026-10-10) and the pipeline
 # image could not be built at all. npm is still bundled with Node, and
 # `npm install -g pnpm@<pinned>` puts the exact reviewed version on PATH --

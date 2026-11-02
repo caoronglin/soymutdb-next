@@ -140,7 +140,7 @@ Content-Security-Policy: <见下>
 1. Cloudflare 账号；门户 / jbrowse / admin 的生产域名解析到 Pages（`*.example.com` 建议用独立子域：`www`、`jbrowse`、`admin`）。
 2. 自管后端已上线：生产 API 域名与 staging API 域名均已配置 HTTPS（refresh cookie 为 `Secure`）。
 3. 后端 CORS 白名单：生产 `SOYMUTDB_CORS_ORIGINS` 含生产前端 origin；staging `SOYMUTDB_CORS_ORIGINS` 含 staging/preview 前端 origin。
-4. 仓库环境：pnpm 11.21.0（与 `packageManager` 一致），Node 26.10.0。
+4. 仓库环境：pnpm 11.21.0（与 `packageManager` 一致），Node 26.13.0。
 
 ### 3.1 发布渠道边界
 
@@ -206,7 +206,7 @@ CLOUDFLARE_TUNNEL_HEALTH_URL=https://<API_PUBLIC_ORIGIN>/api/v1/health/live \
 3. **Root directory**：留空（仓库根，pnpm workspace 需要根 lockfile）。
 4. **Build command**（见下表）；**Build output directory**：`apps/<app>/dist`。
 5. **Environment variables**：按 §5 配置。
-6. 设置 `NODE_VERSION=26.10.0`，并在 build command 中先 `corepack enable`（仓库声明了 `packageManager: pnpm@11.21.0`，corepack 会按其锁定 pnpm 版本）。
+6. 设置 `NODE_VERSION=26.13.0`，并在 build command 中先 `corepack enable`（仓库声明了 `packageManager: pnpm@11.21.0`，corepack 会按其锁定 pnpm 版本）。
 
 | 项目 | Build command | 输出目录 |
 | --- | --- | --- |

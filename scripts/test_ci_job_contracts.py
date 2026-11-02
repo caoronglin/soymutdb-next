@@ -23,7 +23,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
-NODE_VERSION = "26.10.0"
+NODE_VERSION = "26.13.0"
 PNPM_VERSION = "12.11.2"
 PYTHON_VERSION = "3.15"
 
@@ -728,12 +728,12 @@ class DeliveryArchitectureTests(unittest.TestCase):
         passed and two could not run.
 
         The pipeline image is the correct host: .cnb/env/Dockerfile.frontend is
-        `FROM python:3.15` with Node 26.10.0 unpacked on top, so it is the only
+        `FROM python:3.15` with Node 26.13.0 unpacked on top, so it is the only
         image in the pipeline carrying both pins.
 
         Two wrong-looking fixes are ruled out here rather than left to review:
         re-adding `python:3.15` fails the assertion, and so does swapping the
-        `FROM` to `node:26.10.0` with a copied interpreter, which cannot start
+        `FROM` to `node:26.13.0` with a copied interpreter, which cannot start
         across the glibc 2.36 / 2.38 boundary.
         """
         cnb = yaml.safe_load((ROOT / ".cnb.yml").read_text(encoding="utf-8"))
@@ -753,7 +753,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertEqual(
             base.group(1), "python:3.15",
             "the pipeline image must be built FROM python:3.15 and carry Node on "
-            "top; node:26.10.0 is glibc 2.36 and cannot host a copied 3.15 "
+            "top; node:26.13.0 is glibc 2.36 and cannot host a copied 3.15 "
             "interpreter that needs 2.38",
         )
         self.assertIn("node --version", dockerfile)
@@ -1090,7 +1090,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         """No image build, compose service or CI job may shell out to corepack.
 
         Node 25 removed corepack from the distribution. Raising the pin to
-        26.10.0 therefore broke every path that did `corepack enable`: the CNB
+        26.13.0 therefore broke every path that did `corepack enable`: the CNB
         pipeline image failed at stage Prepare with
         `corepack: command not found` (build cnb-on5-1k4i8kkap, 2026-10-10) and
         no gate ran at all.
@@ -1831,7 +1831,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # The governance job body must bootstrap the Python modules its own
         # `pnpm deps:*` scripts import. The GitHub mirror installs
         # `PyYAML==6.0.3 uv==0.13.1` by hand; the CNB stage ran in
-        # `node:26.10.0`, which has no PyYAML and no pip, and died with
+        # `node:26.13.0`, which has no PyYAML and no pip, and died with
         # `ModuleNotFoundError: No module named 'yaml'`.
         self.assertIn("ensure_governance_python", bodies["dependency_governance_step"])
         governance_python = bodies["ensure_governance_python"]
@@ -1920,7 +1920,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         `verify-frontend-artifacts.sh` closes with
         `pnpm --filter @soymutdb/api-client check:contract`, and that script
         exports the backend OpenAPI document from `apps/api/.venv/bin/python`.
-        CNB ran the gate in `node:26.10.0`, which carries no Python, so the venv
+        CNB ran the gate in `node:26.13.0`, which carries no Python, so the venv
         could neither exist nor be created. The GitHub mirror escaped the same
         failure only because `actions/setup-python` installs an interpreter.
 
@@ -2087,7 +2087,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 f"{dockerfile_path} must carry Python for the OpenAPI contract gate",
             )
             # Node is installed from the official release tarball, not from a
-            # `FROM node:` base: python:3.15 and node:26.10.0 sit on different
+            # `FROM node:` base: python:3.15 and node:26.13.0 sit on different
             # Debian generations, and `COPY --from` cannot carry the C library
             # the copied interpreter needs, so the reverse composition dies with
             # `GLIBC_2.38 not found`. Assert the version arrives pinned AND that
