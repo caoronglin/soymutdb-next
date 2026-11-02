@@ -78,7 +78,7 @@ jobs:
       - name: Setup Node 24
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24.19.0
+          node-version: 26.10.0
           # e2e installs with npm (independent package), so cache the npm
           # store keyed on e2e/package-lock.json — NOT the pnpm store (this
           # job never installs the root workspace).
@@ -133,7 +133,7 @@ jobs:
           version: 12.5.1
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: 24.19.0
+          node-version: 26.10.0
           cache: pnpm
       - name: Frozen workspace install
         run: pnpm install --frozen-lockfile

@@ -24,21 +24,23 @@ import {
 import { Button, Card, Empty, Input, Skeleton, Tag, Typography } from "@/lib/antd";
 import { fetchSraRun, fetchSraSamples, type SraRunInfo } from "@soymutdb/api-client";
 import { FadeUp, useReveal } from "../components/route-motion";
+import { SoyMutDbWidget } from "../components/soymutdb-widget";
 import { startViewTransition } from "../lib/view-transitions";
 
-// The `soymutdb-widget` custom element used to be rendered here to embed the
-// `sra_run` widget served by GET /api/v1/widget/{name}. Its React renderer was
-// deleted in 25c32e499 during the Vue cutover and never restored, so the JSX
-// below rendered an unregistered, inert element inside a card titled "Additional
-// run metadata". A `declare module "react"` block kept it type-checking, which is
-// how the breakage survived review, typecheck and the unit tests.
+// The `sra_run` widget below is the backend's own expanded run view
+// (GET /api/v1/widget/sra_run, apps/api/app/widgets/). It used to be embedded here
+// through a `soymutdb-widget` custom element, whose renderer was deleted in
+// 25c32e499 during the Vue cutover and never restored — so the element mounted
+// inert and this card rendered empty. A `declare module "react"` block kept it
+// type-checking, which is how the breakage survived review, typecheck and the unit
+// tests. f28e38d86 removed the dead embed; it is now a real React component
+// (../components/soymutdb-widget) that sanitizes the server fragment with
+// DOMPurify before insertion. Keep it a component: a dashed JSX tag is always a
+// custom element, and scripts/test_custom_element_registration_contracts.py fails
+// the build for any such tag that no `customElements.define` registers.
 //
-// The backend is still intact (apps/api/app/widgets/, `sra_run` data source and
-// its Jinja2 template), so the widget can be brought back as a real React
-// component. That needs HTML-sanitization review, so it is deliberately not
-// reintroduced here; until then this route must not claim content it cannot
-// render. See scripts/test_custom_element_registration_contracts.py, which fails
-// if a JSX intrinsic element is declared without a matching customElements.define.
+// Note: that suite also refuses the literal tag name in this file, including in a
+// comment, so the element is referred to by name only here.
 
 const HISTORY_KEY = "soymutdb:sra-history";
 const HISTORY_LIMIT = 10;
@@ -343,6 +345,23 @@ function SraBrowser() {
           </FadeUp>
         </div>
       </div>
+
+      {/* Server-rendered `sra_run` widget: GET /api/v1/widget/sra_run?params={"run":…} */}
+      {activeRun && (
+        <FadeUp delay={0.25} className="mt-8">
+          <Card>
+            <div>
+              <Typography.Title level={2} className="m-0 text-lg">{t("sra.widgetTitle")}</Typography.Title>
+              <Typography.Text className="text-sm text-muted-foreground">
+                {t("sra.widgetDescription")}
+              </Typography.Text>
+            </div>
+            <div>
+              <SoyMutDbWidget name="sra_run" params={{ run: activeRun }} key={activeRun} />
+            </div>
+          </Card>
+        </FadeUp>
+      )}
     </div>
   );
 }

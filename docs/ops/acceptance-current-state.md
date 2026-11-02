@@ -31,7 +31,7 @@
 | Gate | 判定 | 负责人 | 证据来源（受跟踪） | 说明 |
 |---|---|---|---|---|
 | G0 | ✅ Met | qa + data-platform | `docs/ops/first-release-data-plan.md` §2 | Release 命名/范围已冻结定义层；DB 实际 release 待种子 + D1 校验 |
-| G1 | ⚠️ 待实证 | build-release | `docs/ops/production-readiness.md` + t4 | Node 24.19.0/pnpm 11.21.0/uv 固定；Dockerfile 统一；本机无 docker，待 CI docker build |
+| G1 | ⚠️ 待实证 | build-release | `docs/ops/production-readiness.md` + t4 | Node 26.10.0/pnpm 11.21.0/uv 固定；Dockerfile 统一；本机无 docker，待 CI docker build |
 | G2 | ⚠️ 待实证 | build-release | t4 | `docker compose config` 全 profile 待 CI 实证（本机无 docker） |
 | G3 | ⚠️ 待实证 | build-release | t4/t9 | gen-prod-secrets.sh/upgrade.sh bash -n + shellcheck 0 告警；全量脚本扫描待 CI |
 | G5 | ✅ Met | frontend-platform | t5 | 生产严格模式 fail-closed + release-manifest.ts(SHA-256)；CI vitest 待跑 |

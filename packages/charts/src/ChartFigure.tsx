@@ -169,5 +169,3 @@ export function ChartFigure<TDatum = unknown>({
     </figure>
   );
 }
-
-export default ChartFigure;

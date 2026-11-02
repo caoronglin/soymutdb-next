@@ -33,7 +33,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # The authoritative pins. Everything else is checked against these.
-EXPECTED_NODE = "24.19.0"
+EXPECTED_NODE = "26.10.0"
 EXPECTED_PNPM = "12.5.1"
 EXPECTED_PYTHON_MIN = (3, 14)
 
@@ -49,7 +49,7 @@ BUILD_ENV_DOCKERFILES = (
 
 # (dockerfile, tag the base image must use) for the frontend environment. It
 # starts from the Python image and installs Node from the official release
-# tarball, because `COPY --from=python:3.14` into a node:24.19.0 base cannot
+# tarball, because `COPY --from=python:3.14` into a node:26.10.0 base cannot
 # work: the two sit on different Debian generations and the copied interpreter
 # needs a glibc the older base does not have.
 FRONTEND_BUILD_ENV = ".cnb/env/Dockerfile.frontend"
@@ -61,8 +61,8 @@ FRONTEND_BUILD_ENV_BASE = "python:3.14"
 # fails when the two disagree, so a checksum can never be edited to fit a
 # tampered tarball without also editing this file and a reviewer seeing it.
 NODE_TARBALL_SHA256 = {
-    "x64": "14b342e71204f811bde6153be8e04b62aef63c236fef92b55f9c83154b409647",
-    "arm64": "01443c1e1a29e531ccad5a46fefa6df490d2189c49f7955904aecdbb0fe86fdc",
+    "x64": "ca70e9e349de048b9522abb3adc05b3bd6f43c5ffd3ec57916c7da292f59f022",
+    "arm64": "7a6353f63eb3d04765004b4adf172616243e4522434635cb1d26288658b04ab5",
 }
 
 # Shared scripts that carry a SOYMUTDB_CI_*_VERSION default.
@@ -286,6 +286,31 @@ def check_pin_sources(errors: list[str]) -> None:
                 )
 
 
+def check_cnb_pipeline_node_images(errors: list[str]) -> None:
+    """Every ``node:`` image tag in the CNB pipeline must be the repository pin.
+
+    ``scripts/test_platform_delivery_contracts.py`` already asserts this, but
+    this script is the named toolchain authority and is run on its own (preflight,
+    developer machines). Without it, editing a pipeline back to a stale Node
+    release left this checker reporting "OK" while the repository pin was no
+    longer what CI actually built or tested with.
+    """
+    sources = [ROOT / ".cnb.yml"] + sorted((ROOT / ".cnb/pipelines").glob("*.yml"))
+    for path in sources:
+        if not path.is_file():
+            _fail(errors, f"missing CNB pipeline source: {path.name}")
+            continue
+        text = path.read_text(encoding="utf-8")
+        # Match a full semver only: prose like `` `node:26.10.0` `` in a comment
+        # must not be scraped as an image tag with stray punctuation attached.
+        for tag in sorted(set(re.findall(r"\bnode:(\d+\.\d+\.\d+)", text))):
+            if tag != EXPECTED_NODE:
+                _fail(
+                    errors,
+                    f"{path.name}: node image tag {tag!r} != {EXPECTED_NODE!r}",
+                )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="emit a JSON result")
@@ -299,6 +324,7 @@ def main() -> int:
     check_build_env_images(errors)
     check_build_env_toolchain_tags(errors)
     check_pin_sources(errors)
+    check_cnb_pipeline_node_images(errors)
     check_workflow_pins(errors)
 
     if args.json:

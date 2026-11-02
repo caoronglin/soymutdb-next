@@ -147,5 +147,3 @@ export const RELEASE_TRANSITIONS: Record<ReleaseStatus, ReleaseStatus[]> = {
 export function canTransition(from: ReleaseStatus, to: ReleaseStatus): boolean {
   return RELEASE_TRANSITIONS[from]?.includes(to) ?? false;
 }
-
-export default StatusBadge;

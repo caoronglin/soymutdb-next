@@ -286,7 +286,7 @@ CNB 文档明确"任务级仅支持 `image` 配置，不支持 `dockerfile`"。�
 
 * 需要 Dockerfile 的 stage，其 `image:` 必须**留空**，由流水线级
   `docker.build.dockerfile` 提供默认环境。
-* 同一流水线里需要别的环境（API 用 `python:3.14`、governance 用 `node:24.19.0`）
+* 同一流水线里需要别的环境（API 用 `python:3.14`、governance 用 `node:26.10.0`）
   的 stage，**保留自己的 `image:`** 覆盖默认值，语义与之前完全一致。
 * `docker.build.by` 只列 Dockerfile 本身：stage 体通过 `scripts/` 自行引导工具链，
   Dockerfile 是唯一能改变门禁运行环境的输入。
@@ -581,7 +581,7 @@ bash scripts/smoke.sh --list
 
 | 组件 | 版本 | 位置 |
 | --- | --- | --- |
-| Node | 24.19.0 | `.nvmrc` / `.node-version` / `package.json` / 容器镜像 |
+| Node | 26.10.0 | `.nvmrc` / `.node-version` / `package.json` / 容器镜像 |
 | pnpm | 11.21.0 | `package.json` / `setup-workspace.sh` |
 | Python | 3.14 | `pyproject.toml` / `api.yml` / 镜像 tag |
 | uv | 0.11.33 | Dockerfile / 治理流水线 |
@@ -596,7 +596,7 @@ python3 scripts/check-toolchain-pins.py --json   # 机器可读
 ```
 
 它同时校验 `.nvmrc` 与 `.node-version` 互相一致——这两个文件分别由 nvm 与
-asdf/volta/mise 读取，此前已经漂移过，没有任何东西会发现。`Node 24.19.0 /
+asdf/volta/mise 读取，此前已经漂移过，没有任何东西会发现。`Node 26.10.0 /
 pnpm 11.21.0` 这些写入 `.cnb.yml` 或流水线文件的字面量，另由
 `scripts/test_ci_job_contracts.py` 锁定（例如禁止再出现 `node:22`、
 `python:3.12`）。

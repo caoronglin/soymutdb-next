@@ -183,5 +183,3 @@ function SidebarSection({
     </div>
   );
 }
-
-export default AdminSidebar;

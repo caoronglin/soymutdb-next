@@ -47,8 +47,14 @@ import { formatPosition } from "../../lib/format";
 import { queryKeys } from "../../lib/query-keys";
 import { SITE_VARIANT } from "../../lib/site-variant";
 
-const ExpressionBarChart = React.lazy(
-  () => import("../../components/charts/expression-bar-chart"),
+// The chart module exports the component by name only: its `export default` of
+// the same symbol was removed so the file carries no duplicate export. `lazy`
+// needs a module whose `default` is the component, so adapt here instead of
+// keeping a second export.
+const ExpressionBarChart = React.lazy(() =>
+  import("../../components/charts/expression-bar-chart").then((module) => ({
+    default: module.ExpressionBarChart,
+  })),
 );
 
 export const Route = createFileRoute("/genes/$geneId")({

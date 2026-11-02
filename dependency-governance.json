@@ -281,7 +281,9 @@
         "mode": "stdout",
         "path": "pnpm-audit.json",
         "format": "json"
-      }
+      },
+      "normalize": "accepted-advisories",
+      "accept_file": "security/advisory-acceptances.json"
     },
     {
       "name": "pip-audit-api",

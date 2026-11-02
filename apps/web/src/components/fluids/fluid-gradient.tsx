@@ -283,5 +283,3 @@ export function FluidGradient({
     </div>
   );
 }
-
-export default FluidGradient;

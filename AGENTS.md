@@ -55,7 +55,7 @@ See `docs/ops/ci-cd.md` (architecture and release flow) and
 
 ## Build, Test, and Development Commands
 
-Use Node.js 24 (`.nvmrc` pins 24.19.0 and `package.json` permits only `>=24 <25`), Python 3.14+, and the pinned pnpm version (`pnpm@12.5.1`). Install dependencies with `pnpm install`.
+Use Node.js 26 (`.nvmrc` pins 26.10.0 and `package.json` permits only `>=26 <27`), Python 3.14+, and the pinned pnpm version (`pnpm@12.5.1`). Install dependencies with `pnpm install`.
 
 ```bash
 pnpm dev:web                                      # public portal
@@ -86,7 +86,7 @@ Database migrations require upgrade/downgrade coverage and a PostgreSQL-backed t
 
 | Component | Version | Declared in |
 | --- | --- | --- |
-| Node | 24.19.0 | `.nvmrc`, `.node-version`, `package.json`, `.cnb.yml` |
+| Node | 26.10.0 | `.nvmrc`, `.node-version`, `package.json`, `.cnb.yml` |
 | pnpm | 12.5.1 | `package.json`, `.cnb.yml` |
 | Python | 3.14 | `apps/*/pyproject.toml`, `.cnb.yml` |
 | uv | 0.11.33 | Dockerfiles, governance pipeline |

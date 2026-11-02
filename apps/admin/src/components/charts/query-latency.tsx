@@ -107,5 +107,3 @@ export function QueryLatencyChart({ data, className }: QueryLatencyChartProps) {
     </ProCard>
   );
 }
-
-export default QueryLatencyChart;

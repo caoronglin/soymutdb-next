@@ -76,5 +76,3 @@ export function ImpactDistribution({ data, className }: ImpactDistributionProps)
     </figure>
   );
 }
-
-export default ImpactDistribution;

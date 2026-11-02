@@ -36,5 +36,3 @@ export function RichEditor(props: RichEditorProps) {
     </Suspense>
   );
 }
-
-export default RichEditor;

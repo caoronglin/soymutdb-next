@@ -179,5 +179,3 @@ export function useAuth(): AuthContextValue {
   }
   return ctx;
 }
-
-export default AuthProvider;

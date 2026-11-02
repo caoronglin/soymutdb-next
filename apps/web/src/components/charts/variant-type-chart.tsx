@@ -86,5 +86,3 @@ export function VariantTypeChart({ data, className }: VariantTypeChartProps) {  
     </figure>
   );
 }
-
-export default VariantTypeChart;

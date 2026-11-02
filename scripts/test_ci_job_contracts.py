@@ -15,6 +15,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -22,7 +23,7 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 
-NODE_VERSION = "24.19.0"
+NODE_VERSION = "26.10.0"
 PNPM_VERSION = "12.5.1"
 PYTHON_VERSION = "3.14"
 
@@ -634,6 +635,390 @@ class DeliveryArchitectureTests(unittest.TestCase):
         ):
             self.assertIn(event, fallback, event)
 
+    def test_contracts_job_provisions_every_import_it_needs(self) -> None:
+        """The contracts stage must provision the layer's whole dependency set.
+
+        `smoke-contracts` runs `scripts/smoke.sh --profile contracts` on a
+        `python:3.14` stage, which ships neither a test runner nor PyYAML. The
+        job has to provision both, and both were found the expensive way:
+        CNB build `cnb-66s-1k4i8rfii` (2026-10-10) failed in 11s on missing
+        pytest, and the fix then failed again on missing PyYAML -- because
+        `compose_loader` is vendored under scripts/ and imports yaml, so a
+        compose contract imports PyYAML while appearing to import only repo
+        code.
+
+        Two CI round trips to discover two requirements is the failure mode this
+        replaces. The set is now derived from the layer's own import graph, so
+        adding a contract that imports a new third-party package fails here
+        rather than on the pipeline, where the symptom names an unrelated file.
+        """
+        import ast
+        import sys
+
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        # The gating suites of the contracts layer, read from smoke.sh rather
+        # than restated here so the two cannot drift.
+        function = smoke.split("smoke_contracts() {", 1)[1]
+        block = function.split("environment_bound=(", 1)[0]
+        targets = re.findall(r"^\s+((?:scripts|infra)/[A-Za-z0-9_./-]+\.py)\s*$",
+                             block, flags=re.MULTILINE)
+        assert targets, "failed to read the contracts layer suite list from smoke.sh"
+
+        third_party = set()
+        stdlib = set(getattr(sys, "stdlib_module_names", ()))
+        for relative in targets:
+            path = ROOT / relative
+            if not path.exists():
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    roots = [alias.name.split(".")[0] for alias in node.names]
+                elif isinstance(node, ast.ImportFrom):
+                    if node.level:  # relative import: repo code, not a package
+                        continue
+                    roots = [(node.module or "").split(".")[0]]
+                else:
+                    continue
+                for root in roots:
+                    if not root or root in stdlib:
+                        continue
+                    if (ROOT / "scripts" / f"{root}.py").exists():
+                        continue  # vendored under scripts/
+                    if (ROOT / root).is_dir() or (ROOT / "tools" / root).exists():
+                        continue  # repo package
+                    third_party.add(root)
+
+        # Modules pytest itself needs are never our problem.
+        third_party -= {"pytest"}
+
+        self.assertTrue(third_party == {"yaml"}, f"unexpected contracts deps: {third_party}")
+
+        shared = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        # Scope every assertion below to ensure_contracts_python. Searching the
+        # whole file passes for the wrong reason: PyYAML is also installed by
+        # ensure_governance_python, so dropping it from the contracts bootstrap
+        # would leave the string present and the guard silent. That hole was
+        # found by ablation, not by reading.
+        body = shared.split("ensure_contracts_python() {", 1)[1].split("\n}\n", 1)[0]
+        self.assertTrue(body, "ensure_contracts_python disappeared from ci-job-steps.sh")
+        provisioners = {"yaml": "PyYAML==${GOVERNANCE_PYYAML_VERSION}"}
+        for module in third_party:
+            self.assertIn(
+                provisioners[module], body,
+                f"contracts layer imports {module} but ensure_contracts_python provisions no pin for it",
+            )
+        # And the test runner itself, pinned and post-verified.
+        self.assertRegex(shared, r'CONTRACTS_PYTEST_VERSION="\$\{[^}]*:-[0-9]+\.[0-9]+\.[0-9]+\}"')
+        self.assertIn('"pytest==${CONTRACTS_PYTEST_VERSION}"', body)
+        self.assertIn("pytest is still not runnable by", body)
+        self.assertIn("PyYAML is still not importable by", body)
+
+    def test_contract_suites_stage_carries_both_pinned_interpreters(self) -> None:
+        """The contracts stage must be able to run the contracts layer it hosts.
+
+        The layer is not Python-only: `resolveDevAllowedHosts` is TypeScript,
+        and one case shells out to node to run the frontend gate self-test. The
+        stage was declared `image: python:3.14`, which has no node, so CNB
+        build `cnb-t65-1k4ibj79d` (2026-10-10) reported
+        "FileNotFoundError: No such file or directory: 'node'" — 264 contracts
+        passed and two could not run.
+
+        The pipeline image is the correct host: .cnb/env/Dockerfile.frontend is
+        `FROM python:3.14` with Node 26.10.0 unpacked on top, so it is the only
+        image in the pipeline carrying both pins.
+
+        Two wrong-looking fixes are ruled out here rather than left to review:
+        re-adding `python:3.14` fails the assertion, and so does swapping the
+        `FROM` to `node:26.10.0` with a copied interpreter, which cannot start
+        across the glibc 2.36 / 2.38 boundary.
+        """
+        cnb = yaml.safe_load((ROOT / ".cnb.yml").read_text(encoding="utf-8"))
+        stage = next(
+            st for st in cnb["main"]["pull_request"][0]["stages"]
+            if st["name"] == "Contract suites"
+        )
+        self.assertNotIn(
+            "image", stage,
+            "the contracts stage must inherit the pipeline image, which carries "
+            "both the pinned Python and the pinned Node",
+        )
+
+        dockerfile = (ROOT / ".cnb/env/Dockerfile.frontend").read_text(encoding="utf-8")
+        base = re.search(r"(?m)^FROM\s+(\S+)", dockerfile)
+        self.assertIsNotNone(base, "Dockerfile.frontend has no FROM")
+        self.assertEqual(
+            base.group(1), "python:3.14",
+            "the pipeline image must be built FROM python:3.14 and carry Node on "
+            "top; node:26.10.0 is glibc 2.36 and cannot host a copied 3.14 "
+            "interpreter that needs 2.38",
+        )
+        self.assertIn("node --version", dockerfile)
+
+        # The mirror must agree, or the two providers stop executing the same
+        # stage on the same image.
+        verify = yaml.safe_load((ROOT / ".cnb/pipelines/verify.yml").read_text(encoding="utf-8"))
+        mirror = next(
+            st for st in verify["stages"] if st["name"] == "Contract suites"
+        )
+        self.assertNotIn("image", mirror)
+
+    def _load_governance_module(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "dep_governance_under_test", ROOT / "scripts/dependency_governance.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    def _pnpm_audit_report(self, dg, tmp_path, *, advisories):
+        path = tmp_path / "pnpm-audit.json"
+        path.write_text(json.dumps({"advisories": advisories, "metadata": {}}))
+        return path
+
+    def test_advisory_acceptance_is_narrow_expiring_and_signed(self) -> None:
+        """A signed risk acceptance must behave like a record, not a suppression.
+
+        braces 3.0.3 has no published fix, so the finding can only be
+        acknowledged (accepted by caoronglin on 2026-10-10, expiring 2026-12-09).
+        The mechanism that acknowledges it is asserted here because the failure
+        mode is a gate that silently stops failing — the one outcome nobody
+        would notice in review.
+        """
+        from datetime import date, timedelta
+
+        dg = self._load_governance_module()
+        today = date(2026, 10, 10)
+        accept = ROOT / "security/advisory-acceptances.json"
+
+        def advisories(module="braces", advisory="GHSA-vfj7-8cjw-p6xm", severity="high"):
+            return {
+                "1": {
+                    "module_name": module, "severity": severity,
+                    "github_advisory_id": advisory,
+                    "vulnerable_versions": "<=3.0.3", "patched_versions": None,
+                }
+            }
+
+        # Baseline: the real file accepts exactly the real finding.
+        self.assertTrue((accept).is_file(), "the acceptance record must be committed")
+        entries = dg.load_advisory_acceptances(accept, today=today)
+        self.assertTrue(entries)
+        for entry in entries:
+            for field in dg.ACCEPTANCE_REQUIRED_FIELDS:
+                self.assertTrue(str(entry.get(field, "")).strip(), f"{field} is required")
+            self.assertTrue(
+                str(entry.get("reachability", "")).strip(),
+                "an acceptance must state why the finding is not reachable",
+            )
+
+        # Narrow: a different advisory in the same package is still a failure.
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            passed, findings, _ = dg.evaluate_advisory_report(
+                self._pnpm_audit_report(
+                    dg, tmp_path, advisories=advisories(advisory="GHSA-0000-0000-0000")
+                ),
+                dg.load_advisory_acceptances(accept, today=today),
+            )
+            self.assertFalse(passed, "an unlisted advisory must not be accepted")
+            self.assertTrue(any("GHSA-0000-0000-0000" in f for f in findings))
+
+            # Narrow: a different package under the same advisory likewise.
+            passed, _, _ = dg.evaluate_advisory_report(
+                self._pnpm_audit_report(
+                    dg, tmp_path, advisories=advisories(module="micromatch")
+                ),
+                dg.load_advisory_acceptances(accept, today=today),
+            )
+            self.assertFalse(passed, "an acceptance must not transfer to another package")
+
+            # Severity downgrade: the finding stops being gated, so the
+            # acceptance stops being load-bearing and must be reported stale.
+            # Failing here is the point -- it forces the record to be deleted
+            # instead of outliving the risk, and it is what stops an acceptance
+            # from being quietly parked while a package gets worse again.
+            passed, findings, _ = dg.evaluate_advisory_report(
+                self._pnpm_audit_report(
+                    dg, tmp_path, advisories=advisories(severity="moderate")
+                ),
+                dg.load_advisory_acceptances(accept, today=today),
+            )
+            self.assertFalse(passed)
+            self.assertTrue(any("matches no reported finding" in f for f in findings))
+
+        # Expiring: an expired entry fails rather than degrading to a warning.
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = json.loads(accept.read_text(encoding="utf-8"))
+            payload["acceptances"][0]["expires_on"] = "2026-09-01"
+            stale = Path(tmp) / "acc.json"
+            stale.write_text(json.dumps(payload), encoding="utf-8")
+            entries = dg.load_advisory_acceptances(stale, today=today)
+            passed, findings, accepted = dg.evaluate_advisory_report(
+                self._pnpm_audit_report(dg, Path(tmp), advisories=advisories()),
+                entries,
+            )
+            self.assertFalse(passed, "an expired acceptance must fail the gate")
+            self.assertTrue(any("expired" in f for f in findings))
+            self.assertTrue(accepted and accepted[0]["expired"])
+
+        # Bounded: no entry may be written further out than the maximum.
+        with tempfile.TemporaryDirectory() as tmp:
+            payload = json.loads(accept.read_text(encoding="utf-8"))
+            payload["acceptances"][0]["expires_on"] = (
+                today + timedelta(days=dg.MAX_ACCEPTANCE_DAYS + 1)
+            ).isoformat()
+            far = Path(tmp) / "acc.json"
+            far.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaises(dg.AcceptancePolicyError):
+                dg.load_advisory_acceptances(far, today=today)
+
+        # Unsigned: a missing approver is a policy error, never a silent accept.
+        for field in ("accepted_by", "rationale", "expires_on", "advisory", "package"):
+            with self.subTest(missing=field):
+                with tempfile.TemporaryDirectory() as tmp:
+                    payload = json.loads(accept.read_text(encoding="utf-8"))
+                    payload["acceptances"][0].pop(field)
+                    path = Path(tmp) / "acc.json"
+                    path.write_text(json.dumps(payload), encoding="utf-8")
+                    with self.assertRaises(dg.AcceptancePolicyError):
+                        dg.load_advisory_acceptances(path, today=today)
+
+        # Non-rotting: an entry matching nothing is stale and fails.
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            payload = json.loads(accept.read_text(encoding="utf-8"))
+            payload["acceptances"][0]["advisory"] = "GHSA-1111-1111-1111"
+            path = Path(tmp) / "acc.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            passed, findings, _ = dg.evaluate_advisory_report(
+                self._pnpm_audit_report(dg, tmp_path, advisories=advisories()),
+                dg.load_advisory_acceptances(path, today=today),
+            )
+            self.assertFalse(passed, "a stale acceptance must fail")
+            self.assertTrue(any("matches no reported finding" in f for f in findings))
+
+    def test_accepted_advisories_stay_visible_in_gate_output(self) -> None:
+        """An accepted finding is printed on pass, not only on failure."""
+        dg = self._load_governance_module()
+        row = {
+            "name": "pnpm-audit",
+            "status": "passed",
+            "report": "pnpm-audit.json",
+            "accepted": [
+                {
+                    "package": "braces",
+                    "advisory": "GHSA-vfj7-8cjw-p6xm",
+                    "expires_on": "2026-12-09",
+                    "expired": False,
+                    "accepted_by": "caoronglin",
+                }
+            ],
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            evidence = dg._audit_failure_evidence(row, Path(tmp))
+            self.assertTrue(evidence, "a passing run must still report what it accepted")
+            joined = " ".join(evidence)
+            self.assertIn("GHSA-vfj7-8cjw-p6xm", joined)
+            self.assertIn("2026-12-09", joined)
+            self.assertIn("caoronglin", joined)
+
+        # And the policy must actually point the check at the record.
+        policy = json.loads((ROOT / "dependency-governance.json").read_text(encoding="utf-8"))
+        audit = next(c for c in policy["checks"] if c["name"] == "pnpm-audit")
+        self.assertEqual(audit.get("normalize"), "accepted-advisories")
+        self.assertTrue((ROOT / audit["accept_file"]).is_file())
+
+    def test_no_build_path_depends_on_corepack(self) -> None:
+        """No image build, compose service or CI job may shell out to corepack.
+
+        Node 25 removed corepack from the distribution. Raising the pin to
+        26.10.0 therefore broke every path that did `corepack enable`: the CNB
+        pipeline image failed at stage Prepare with
+        `corepack: command not found` (build cnb-on5-1k4i8kkap, 2026-10-10) and
+        no gate ran at all.
+
+        Nothing caught it. Every local gate passed, because the dev machine had
+        a leftover corepack 0.34.5 from an unrelated Node install, and the only
+        signal was a pipeline that could not build its own image.
+
+        pnpm must come from `npm install -g pnpm@<pinned>`, which is what the
+        reviewed pin resolves to either way. scripts/setup-workspace.sh is the
+        one exception: it keeps a corepack branch for older pinned images, and
+        this test tolerates it because the call sits inside a
+        `command -v corepack` guard that npm-installed pnpm cannot reach.
+        """
+        import re as _re
+
+        targets = [
+            ".cnb/env/Dockerfile.frontend",
+            "apps/jbrowse/Dockerfile",
+            "infra/docker/Dockerfile.web",
+            "infra/docker/Dockerfile.admin",
+            "docker-compose.dev.yml",
+            "docker-compose.yml",
+            ".github/workflows/ci.yml",
+            ".github/workflows/baseline-validation.yml",
+            ".github/workflows/e2e-smoke.yml",
+        ]
+        for relative in targets:
+            path = ROOT / relative
+            if not path.exists():
+                continue
+            # Strip comments so prose explaining the corepack removal, or the
+            # build log that records it, does not trip the assertion.
+            text = path.read_text(encoding="utf-8")
+            code = _re.sub(r"^\s*#.*$", "", text, flags=_re.MULTILINE)
+            for call in ("corepack enable", "corepack prepare", "corepack pnpm"):
+                self.assertNotIn(call, code, f"{relative} still calls `{call}`")
+
+        # The one sanctioned corepack path must actually be guarded, or this
+        # exception becomes a silent dependency again.
+        setup = (ROOT / "scripts/setup-workspace.sh").read_text(encoding="utf-8")
+        self.assertIn("command -v corepack", setup)
+        self.assertIn('npm install --global --no-fund --no-audit "pnpm@${PNPM_VERSION}"', setup)
+
+    def test_contract_suites_run_in_both_pipelines(self) -> None:
+        """`smoke.sh --profile contracts` must execute in CI on both providers.
+
+        scripts/test_ci_job_contracts.py — which asserts that every shared script
+        is executable and strict — runs only under that profile. Until the
+        smoke-contracts job existed, no pipeline invoked it, so the suite could
+        not fail a build and commits 00429d35e / 62d0dd3e3 shipped shared
+        scripts with a cleared exec bit.
+
+        Each provider must delegate through scripts/ci-job-steps.sh rather than
+        call the profile directly, so both run identical bytes.
+        """
+        jobs = subprocess.run(
+            ["bash", str(ROOT / "scripts/ci-job-steps.sh"), "list"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.split()
+        self.assertIn("smoke-contracts", jobs)
+
+        call = "bash scripts/ci-job-steps.sh run smoke-contracts"
+        self.assertIn(call, _workflow_text("ci.yml"))
+        self.assertIn(call, _flatten(_cnb()))
+
+        # The job body must stay a delegation. Inline pytest invocation would be
+        # a second owner for the same gate, which is what
+        # test_no_duplicate_verification_logic_between_providers forbids. Only
+        # `run:` lines count; a comment may still explain what the profile is.
+        run_lines = [
+            line
+            for line in _workflow_text("ci.yml").splitlines()
+            if re.match(r"\s*run:", line)
+        ]
+        self.assertFalse(
+            [line for line in run_lines if "smoke.sh --profile contracts" in line],
+            "the contracts profile must be reached through ci-job-steps.sh, "
+            "not invoked directly in the workflow",
+        )
+
     def test_toolchain_pins_agree_across_pipelines_and_manifests(self) -> None:
         package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
         self.assertEqual(package["packageManager"], f"pnpm@{PNPM_VERSION}")
@@ -645,7 +1030,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         cnb = _cnb_text()
         self.assertIn(f"node:{NODE_VERSION}", cnb)
         self.assertIn(f"python:{PYTHON_VERSION}", cnb)
-        for stale in ("node:20", "node:22", "pnpm@10", "python:3.12"):
+        for stale in ("node:20", "node:22", "node:24", "pnpm@10", "python:3.12"):
             self.assertNotIn(stale, cnb, stale)
 
         # The pnpm version is no longer inlined into every CNB stage: the
@@ -1286,7 +1671,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # The governance job body must bootstrap the Python modules its own
         # `pnpm deps:*` scripts import. The GitHub mirror installs
         # `PyYAML==6.0.3 uv==0.11.33` by hand; the CNB stage ran in
-        # `node:24.19.0`, which has no PyYAML and no pip, and died with
+        # `node:26.10.0`, which has no PyYAML and no pip, and died with
         # `ModuleNotFoundError: No module named 'yaml'`.
         self.assertIn("ensure_governance_python", bodies["dependency_governance_step"])
         governance_python = bodies["ensure_governance_python"]
@@ -1375,7 +1760,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         `verify-frontend-artifacts.sh` closes with
         `pnpm --filter @soymutdb/api-client check:contract`, and that script
         exports the backend OpenAPI document from `apps/api/.venv/bin/python`.
-        CNB ran the gate in `node:24.19.0`, which carries no Python, so the venv
+        CNB ran the gate in `node:26.10.0`, which carries no Python, so the venv
         could neither exist nor be created. The GitHub mirror escaped the same
         failure only because `actions/setup-python` installs an interpreter.
 
@@ -1542,7 +1927,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 f"{dockerfile_path} must carry Python for the OpenAPI contract gate",
             )
             # Node is installed from the official release tarball, not from a
-            # `FROM node:` base: python:3.14 and node:24.19.0 sit on different
+            # `FROM node:` base: python:3.14 and node:26.10.0 sit on different
             # Debian generations, and `COPY --from` cannot carry the C library
             # the copied interpreter needs, so the reverse composition dies with
             # `GLIBC_2.38 not found`. Assert the version arrives pinned AND that
@@ -1550,7 +1935,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
             # reviewed pin.
             self.assertRegex(
                 docker_text,
-                r"(?m)^ARG NODE_VERSION=24\.19\.0$",
+                rf"(?m)^ARG NODE_VERSION={re.escape(NODE_VERSION)}$",
                 f"{dockerfile_path} must pin Node to the repository version",
             )
             self.assertIn(

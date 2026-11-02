@@ -112,5 +112,3 @@ export function ExpressionBarChart({ data, className }: ExpressionBarChartProps)
     </figure>
   );
 }
-
-export default ExpressionBarChart;

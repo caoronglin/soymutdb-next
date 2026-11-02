@@ -226,5 +226,3 @@ export function MediaPicker({
     </div>
   );
 }
-
-export default MediaPicker;

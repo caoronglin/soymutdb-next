@@ -351,5 +351,3 @@ export function AntdHome() {
     </div>
   );
 }
-
-export default AntdHome;
