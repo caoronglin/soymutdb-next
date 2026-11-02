@@ -127,21 +127,15 @@ export default tseslint.config(
         // packages/ui 退役豁免清单（2026-08-09 冻结时点已存在、仍引用
         // @soymutdb/ui 的 apps/web 文件）。逐路由迁移后删除条目。
         files: [
-            "apps/web/src/main.tsx",
             "apps/web/src/lib/format.ts",
             "apps/web/src/lib/analyses-upload.ts",
             "apps/web/src/components/site-header.tsx",
             "apps/web/src/components/error-boundary.tsx",
-            "apps/web/src/components/chromosome-hero.tsx",
             "apps/web/src/components/stat-card.tsx",
-            "apps/web/src/components/genome-browser-widget.tsx",
-            "apps/web/src/components/track-viewer.tsx",
-            "apps/web/src/components/animation-control.tsx",
             "apps/web/src/components/data-table.tsx",
             "apps/web/src/components/command-palette.tsx",
             "apps/web/src/components/analyses/upload-dropzone.tsx",
             "apps/web/src/components/analyses/researcher-gate.tsx",
-            "apps/web/src/components/charts/expression-heatmap.tsx",
             "apps/web/src/components/charts/variant-type-chart.tsx",
             "apps/web/src/components/charts/expression-bar-chart.tsx",
             "apps/web/src/components/charts/impact-distribution.tsx",
