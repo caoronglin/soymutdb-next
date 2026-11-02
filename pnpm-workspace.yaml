@@ -57,7 +57,11 @@ overrides:
   # array-form headers and mis-escapes caller-declared sensitiveHeaders, so
   # Authorization/Cookie can reach an attacker-controlled host. Reached through
   # axios (Umi's dev proxy), which this workspace floors at 0.34.0.
-  follow-redirects: 1.16.1
+  # GHSA-mrwp-f3q8-3g9p (high): follow-redirects <= 1.16.1 additionally drops
+  # cross-realm `sensitiveHeaders` arrays and lets caller-declared credentials
+  # follow a redirect, so a redirected request can still carry the secret.
+  # 1.16.2 is a same-minor patch that satisfies axios's declared `^1.15.6`.
+  follow-redirects: 1.16.2
   # GHSA-5r4p-p66f-jhc7: hono < 4.13.11 decodes the request path a second time
   # in serveStatic, so a crafted path can be routed as one path and served as
   # another and middleware on a static prefix does not run. Reached through
@@ -74,7 +78,11 @@ overrides:
   "react-router@6": 6.30.6
   "react-router-dom@6": 6.30.6
   "@remix-run/router": 1.23.3
-  decode-uri-component: 0.5.0
+  # GHSA-qr28-fpjm-wq7f (high): decode-uri-component <= 0.5.0 spends quadratic
+  # time on a run of percent-encoded characters, so a crafted query string is a
+  # denial of service. Reached through @umijs/history -> query-string, which
+  # declares `^0.5.0`; 0.5.1 is a same-minor patch with identical exports.
+  decode-uri-component: 0.5.1
   # GHSA-rj75-hqrm-r3gf: ReDoS through crafted CSS selectors. The vulnerable
   # 6.x copy is reached through Umi's postcss-preset-env; 7.1.6 is the patched
   # floor and the plugins only use the stable parse/walk API.
@@ -112,6 +120,21 @@ overrides:
   # 3.1.9 is a same-major patch with identical exports and types, it satisfies
   # ajv's declared `^3.0.1` range, and the package has no peer edges.
   fast-uri: 3.1.9
+  # GHSA-97r2-qh9m-474h, GHSA-wp97-x4hv-qvhp, GHSA-7rv5-mrxv-xcr9 (high) and
+  # GHSA-f86p-h4j2-7qgj, GHSA-9wx9-5pv9-3349: seroval's `fromJSON` /
+  # `fromCrossJSON` deserializer trusts a node-supplied array length and
+  # sequence count, and `AsyncIteratorFactoryInstance` invokes
+  # `source.on(listener)` without a type check, so a crafted payload is an
+  # unauthenticated event-loop denial of service. Reached through
+  # @tanstack/react-router -> @tanstack/router-core, which declares `^1.0`;
+  # 1.6.12 is a patch inside that range and clears every listed advisory.
+  seroval: 1.6.12
+  # GHSA-6pq8-jhm2-2vcw: qs <= 6.16.0 throws an uncaught TypeError from
+  # `stringify()` when an array element carries a non-callable own `toString`,
+  # which turns a request body into a denial of service. Reached through
+  # express -> body-parser (`~6.16.0`) and node-libs-browser -> url
+  # (`^6.12.3`); 6.16.2 satisfies both declared ranges.
+  qs: 6.16.2
 
 allowBuilds:
   # Umi/Vite-compatible bundling requires esbuild's platform binary.
