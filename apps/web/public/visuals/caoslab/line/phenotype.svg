@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="表型测量"><title>表型测量</title><defs>
+<linearGradient id="leaf" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#9CDDA5"/><stop offset=".52" stop-color="#42A88B"/><stop offset="1" stop-color="#127A78"/></linearGradient>
+<linearGradient id="sea" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#B7F1EA"/><stop offset=".55" stop-color="#67BEDC"/><stop offset="1" stop-color="#387FC6"/></linearGradient>
+<linearGradient id="gold" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#FFE3A2"/><stop offset="1" stop-color="#D6A94E"/></linearGradient>
+</defs><g fill="none" stroke="#208D88" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M27 55V28 M27 36 C13 41 9 27 9 22 C24 17 29 26 27 36Z M27 32 C31 21 40 17 49 16 C49 29 40 34 27 32Z M44 55h13 M52 10v45 M47 13h10 M47 24h7 M47 35h10 M47 46h7"/><circle cx="27" cy="24" r="3" fill="#73BA9A" stroke="#73BA9A"/></g></svg>

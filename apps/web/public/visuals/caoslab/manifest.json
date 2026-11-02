@@ -1,0 +1,101 @@
+{
+  "collection": "SoyMutDB × Caoslab — original conceptual SVG visual assets",
+  "created": "2026-10-09",
+  "scope": "Static, original illustrations only; no published experimental measurements",
+  "provenance": "Assistant-authored vector SVG design informed by user brief and public Caoslab research themes. These are not official Caoslab trademarks or reproductions of published figures.",
+  "licenseNote": "Original artwork for this repository; verify institutional branding approval before presenting it as an official Caoslab mark.",
+  "source": "https://www.x-mol.com/groups/Caoslab/research",
+  "basePath": "/visuals/caoslab",
+  "assets": [
+    {
+      "id": "A01",
+      "file": "botanical/soybean-genomics-hero.svg",
+      "concept": "Soybean genomic hero",
+      "placement": "Public homepage decorative feature",
+      "viewBox": "900 560",
+      "alt_zh": "大豆植株、DNA 与染色体的概念示意",
+      "alt_en": "Conceptual soybean plant, DNA and chromosome artwork"
+    },
+    {
+      "id": "A02",
+      "file": "botanical/domestication-concept.svg",
+      "concept": "Wild germplasm to breeding",
+      "placement": "Research theme section",
+      "viewBox": "900 490",
+      "alt_zh": "野生资源与育种创新的概念示意",
+      "alt_en": "Conceptual progression from germplasm research to crop breeding"
+    },
+    {
+      "id": "A03",
+      "file": "soft/epigenetic-regulation.svg",
+      "concept": "Epigenetic regulation",
+      "placement": "Research concept section",
+      "viewBox": "900 520",
+      "alt_zh": "DNA、核小体与修饰标记的概念示意",
+      "alt_en": "Conceptual DNA, nucleosomes and regulatory marks"
+    },
+    {
+      "id": "A04",
+      "file": "soft/multiomics-integration.svg",
+      "concept": "Multi-omics integration",
+      "placement": "Research topic section",
+      "viewBox": "900 550",
+      "alt_zh": "植物、基因组与多组学数据网络的概念示意",
+      "alt_en": "Conceptual plant, genome and multi-omics network"
+    },
+    {
+      "id": "I01",
+      "file": "line/gene-search.svg",
+      "concept": "Gene search",
+      "placement": "Web feature card",
+      "viewBox": "64 64",
+      "alt_zh": "基因搜索",
+      "alt_en": "Gene search"
+    },
+    {
+      "id": "I02",
+      "file": "line/variant.svg",
+      "concept": "Variant",
+      "placement": "Web feature card",
+      "viewBox": "64 64",
+      "alt_zh": "变异位点",
+      "alt_en": "Variant locus"
+    },
+    {
+      "id": "I03",
+      "file": "line/mutant.svg",
+      "concept": "Mutant",
+      "placement": "Web feature card",
+      "viewBox": "64 64",
+      "alt_zh": "突变体",
+      "alt_en": "Mutant"
+    },
+    {
+      "id": "I04",
+      "file": "line/phenotype.svg",
+      "concept": "Phenotype",
+      "placement": "Web feature card",
+      "viewBox": "64 64",
+      "alt_zh": "表型测量",
+      "alt_en": "Phenotype measurement"
+    },
+    {
+      "id": "I05",
+      "file": "line/genome-browser.svg",
+      "concept": "Genome browser",
+      "placement": "Web feature card",
+      "viewBox": "64 64",
+      "alt_zh": "基因组浏览",
+      "alt_en": "Genome browser"
+    },
+    {
+      "id": "I06",
+      "file": "line/download.svg",
+      "concept": "Data download",
+      "placement": "Web feature card",
+      "viewBox": "64 64",
+      "alt_zh": "数据下载",
+      "alt_en": "Data download"
+    }
+  ]
+}

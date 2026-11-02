@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="基因组浏览"><title>基因组浏览</title><defs>
+<linearGradient id="leaf" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#9CDDA5"/><stop offset=".52" stop-color="#42A88B"/><stop offset="1" stop-color="#127A78"/></linearGradient>
+<linearGradient id="sea" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#B7F1EA"/><stop offset=".55" stop-color="#67BEDC"/><stop offset="1" stop-color="#387FC6"/></linearGradient>
+<linearGradient id="gold" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#FFE3A2"/><stop offset="1" stop-color="#D6A94E"/></linearGradient>
+</defs><g fill="none" stroke="#208D88" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="11" width="50" height="42" rx="6"/><path d="M7 22h50 M16 16h1 M23 16h1 M31 16h1 M15 34h34 M15 44h34"/><rect x="22" y="30" width="8" height="8" rx="2" fill="#78BBCA" stroke="#78BBCA"/><rect x="39" y="40" width="8" height="8" rx="2" fill="#EDC373" stroke="#EDC373"/></g></svg>

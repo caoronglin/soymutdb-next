@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="突变体"><title>突变体</title><defs>
+<linearGradient id="leaf" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#9CDDA5"/><stop offset=".52" stop-color="#42A88B"/><stop offset="1" stop-color="#127A78"/></linearGradient>
+<linearGradient id="sea" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#B7F1EA"/><stop offset=".55" stop-color="#67BEDC"/><stop offset="1" stop-color="#387FC6"/></linearGradient>
+<linearGradient id="gold" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#FFE3A2"/><stop offset="1" stop-color="#D6A94E"/></linearGradient>
+</defs><g fill="none" stroke="#208D88" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"><path d="M31 56V27 M32 41 C18 44 12 33 10 19 C24 18 32 27 32 41Z M31 34 C37 16 47 13 57 12 C58 27 49 36 31 34Z M32 56 h-17 m17 0h16"/><circle cx="45" cy="21" r="4" fill="#E5B85E" stroke="#E5B85E"/></g></svg>
