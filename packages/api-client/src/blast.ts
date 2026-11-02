@@ -1,5 +1,5 @@
 import { http } from "./auth";
-import { ApiError } from "./client";
+import { ApiError, request } from "./client";
 import type { AssemblyInfo, GeneDetail } from "./genes";
 
 export interface BlastDatabase {
@@ -69,10 +69,81 @@ export interface BlastJobListResponse {
 export interface BlastHitListResponse {
   items: BlastHit[];
   total: number;
+  download_url?: string | null;
+}
+
+export interface PublicBlastSubmitResponse {
+  job: BlastJob;
+  access_token: string;
+  expires_at: string;
+}
+
+export interface PublicBlastResultResponse extends BlastHitListResponse {
+  job_id: string;
+  status: BlastJob["status"];
+  error_message?: string | null;
 }
 
 export function getBlastDatabases(): Promise<BlastDatabase[]> {
   return http.get<BlastDatabase[]>("/blast/databases");
+}
+
+/** Public database discovery never participates in auth refresh or logout. */
+export function getPublicBlastDatabases(): Promise<BlastDatabase[]> {
+  return request<BlastDatabase[]>("/blast/databases", { auth: false, cache: "no-store", credentials: "omit" });
+}
+
+function publicHeaders(accessToken: string): HeadersInit {
+  return { "X-Blast-Token": accessToken };
+}
+
+export type PublicBlastJobParams = Omit<BlastJobParams, "program"> & { program: "blastp" };
+
+export function submitPublicBlastJob(params: PublicBlastJobParams): Promise<PublicBlastSubmitResponse> {
+  if (params.program !== "blastp") throw new Error("Public BLAST supports blastp only");
+  return request<{ job: BlastJobApi; access_token: string; expires_at: string }>("/blast/public/jobs", {
+    method: "POST",
+    auth: false,
+    cache: "no-store",
+    credentials: "omit",
+    json: {
+      program: params.program,
+      database: params.database,
+      query_sequence: params.sequence,
+      parameters: {
+        evalue: params.e_value,
+        max_target_seqs: params.max_hits,
+      },
+    },
+  }).then((response) => ({ ...response, job: normalizeJob(response.job) }));
+}
+
+export function getPublicBlastJob(jobId: string, accessToken: string): Promise<BlastJob> {
+  return request<BlastJobApi>(`/blast/public/jobs/${encodeURIComponent(jobId)}`, {
+    auth: false,
+    cache: "no-store",
+    credentials: "omit",
+    headers: publicHeaders(accessToken),
+  }).then(normalizeJob);
+}
+
+export function getPublicBlastResults(
+  jobId: string,
+  accessToken: string,
+  params: { limit?: number; offset?: number } = {},
+): Promise<PublicBlastResultResponse> {
+  return request<PublicBlastResultApi>(`/blast/public/jobs/${encodeURIComponent(jobId)}/results`, {
+    auth: false,
+    cache: "no-store",
+    credentials: "omit",
+    headers: publicHeaders(accessToken),
+    params,
+  }).then((response) => ({
+    ...response,
+    items: response.hits ?? [],
+    total: response.total_hits ?? 0,
+    download_url: response.download_url,
+  }));
 }
 
 export function submitBlastJob(params: BlastJobParams): Promise<BlastJob> {
@@ -117,6 +188,7 @@ export function getBlastHits(
   }).then((response) => ({
     items: response.hits ?? [],
     total: response.total_hits ?? 0,
+    download_url: response.download_url,
   }));
 }
 
@@ -175,7 +247,14 @@ interface BlastJobApi extends Omit<BlastJob, "id" | "database"> {
 interface BlastResultApi {
   hits: BlastHit[] | null;
   total_hits: number | null;
+  download_url?: string | null;
 }
+
+type PublicBlastResultApi = BlastResultApi & {
+  job_id: string;
+  status: BlastJob["status"];
+  error_message?: string | null;
+};
 
 function normalizeJob(job: BlastJobApi | BlastJob): BlastJob {
   if ("id" in job) return job;

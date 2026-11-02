@@ -1,4 +1,4 @@
-import { getBlastHits, getBlastJob, getBlastJobs, resolveBlastHitGenomeTarget, submitBlastJob } from "./blast";
+import { getBlastHits, getBlastJob, getBlastJobs, getPublicBlastDatabases, getPublicBlastJob, getPublicBlastResults, resolveBlastHitGenomeTarget, submitBlastJob, submitPublicBlastJob } from "./blast";
 import { setReleaseId } from "./client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -36,6 +36,40 @@ describe("BLAST client contract", () => {
     });
   });
 
+
+  it("rejects unsupported public programs before making a request", async () => {
+    expect(() => submitPublicBlastJob({ program: "blastn" as "blastp", database: "protein-v4", sequence: "MKKLLLLLLLL" })).toThrow("blastp only");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("uses public BLAST endpoints without auth refresh or URL tokens", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(json({ job: { job_id: "public-job", database_id: 1, status: "pending" }, access_token: "secret-token", expires_at: "2030-01-01T00:00:00Z" }));
+    const created = await submitPublicBlastJob({ program: "blastp", database: "protein-v4", sequence: "MKKLLLLLLLL", e_value: 1e-5, max_hits: 50 });
+    expect(created.job.id).toBe("public-job");
+    const [input, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    expect(String(input)).toContain("/blast/public/jobs");
+    expect(String(input)).not.toContain("secret-token");
+    expect(new Headers(init.headers).get("Authorization")).toBeNull();
+    expect(init.credentials).toBe("omit");
+    expect(init.cache).toBe("no-store");
+
+    vi.mocked(fetch).mockResolvedValueOnce(json({ job_id: "public-job", database_id: 1, status: "completed" }));
+    await getPublicBlastJob("public-job", "secret-token");
+    const [, statusInit] = vi.mocked(fetch).mock.calls[1] as [string, RequestInit];
+    expect(new Headers(statusInit.headers).get("X-Blast-Token")).toBe("secret-token");
+    expect(String(vi.mocked(fetch).mock.calls[1][0])).not.toContain("secret-token");
+
+    vi.mocked(fetch).mockResolvedValueOnce(json({ job_id: "public-job", status: "completed", hits: [], total_hits: 0, download_url: "https://objects.example/raw.tsv" }));
+    const result = await getPublicBlastResults("public-job", "secret-token", { limit: 25, offset: 0 });
+    expect(result.download_url).toBe("https://objects.example/raw.tsv");
+    expect(new URL(String(vi.mocked(fetch).mock.calls[2][0]), "http://localhost").searchParams.get("limit")).toBe("25");
+
+    vi.mocked(fetch).mockResolvedValueOnce(json([]));
+    await getPublicBlastDatabases();
+    const [, databaseInit] = vi.mocked(fetch).mock.calls[3] as [string, RequestInit];
+    expect(databaseInit.credentials).toBe("omit");
+    expect(new Headers(databaseInit.headers).get("Authorization")).toBeNull();
+  });
   function json(body: unknown, status = 200) {
     return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   }

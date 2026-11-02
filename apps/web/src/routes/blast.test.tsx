@@ -16,7 +16,7 @@ const runtime = vi.hoisted(() => ({
   currentUser: { email: "user@example.org", is_superuser: false, effective_roles: ["researcher"] as string[] } as { email: string; is_superuser: boolean; effective_roles: string[] } | null,
   submit: vi.fn(),
 }));
-vi.mock("@tanstack/react-router", () => ({ createFileRoute: () => (options: unknown) => ({ options }), useNavigate: () => runtime.navigate }));
+vi.mock("@tanstack/react-router", () => ({ createFileRoute: () => (options: unknown) => ({ options }), useNavigate: () => runtime.navigate, Link: ({ children }: { children: React.ReactNode }) => <a href="/search/blast">{children}</a> }));
 vi.mock("react-i18next", () => {
   // These boundary tests assert keys; keep their translator stable across renders.
   const translation = { t: (key: string) => key };

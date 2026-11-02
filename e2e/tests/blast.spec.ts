@@ -1,9 +1,9 @@
 /**
- * BLAST E2E — full form at /blast, the /search/blast compatibility route, FASTA
+ * BLAST E2E — account form at /blast, anonymous /search/blast entry, FASTA
  * validation, and result cross-links.
  *
  * The full form renders offline (no databases → empty select + disabled submit
- * guard). `/search/blast` redirects to the canonical full form at `/blast`.
+ * guard). `/search/blast` executes anonymous capability-authorized jobs.
  * Job submission and result cross-links use an offline mocked API.
  */
 import { test, expect, type Page } from "@playwright/test";
@@ -93,7 +93,7 @@ async function stubBlastApis(page: Page): Promise<BlastStub> {
       return json({ access_token: "e2e-access-token", expires_in: 900 });
     }
     if (path.endsWith("/auth/refresh")) return json({ access_token: "e2e-access-token", expires_in: 900 });
-    if (path.endsWith("/auth/me")) return json({ username: TEST_EMAIL, email: TEST_EMAIL, role: "user" });
+    if (path.endsWith("/auth/me")) return json({ username: TEST_EMAIL, email: TEST_EMAIL, role_name: "researcher", effective_roles: ["viewer", "researcher"] });
     if (path.endsWith("/jobs/events")) {
       // EventSource fallback: no stream in the static artifact.
       return route.fulfill({ status: 204, headers, body: "" });
@@ -165,12 +165,12 @@ test.describe("BLAST — form and routing", () => {
     await expect(page.getByRole("textbox", { name: "Input Sequence" })).toBeVisible();
   });
 
-  test("/search/blast redirects to the canonical full form", async ({ page }) => {
+  test("/search/blast keeps the anonymous entry separate", async ({ page }) => {
     await gotoReady(page, `${BASE}/search/blast`);
-    await expect(page).toHaveURL(/\/blast$/);
-    await expect(page.getByRole("textbox", { name: "Input Sequence" })).toBeVisible();
-    await expect(page.getByTestId("blast-program")).toBeVisible();
-    await expect(page.getByTestId("blast-database")).toBeVisible();
+    await expect(page).toHaveURL(/\/search\/blast$/);
+    await expect(page.getByRole("heading", { name: "Anonymous BLAST" })).toBeVisible();
+    await expect(page.getByPlaceholder("Paste a protein FASTA sequence")).toBeVisible();
+    await expect(page.getByRole("link", { name: /signed-in workflow/i })).toBeVisible();
   });
 
   test("empty FASTA never reaches the API", async ({ page }) => {
@@ -184,8 +184,7 @@ test.describe("BLAST — form and routing", () => {
     // The contract is that an incomplete form never reaches the API. The client
     // rejects it locally through schema/FASTA validation, so assert the absence
     // of a request rather than a particular disabled styling.
-    await page.getByTestId("blast-submit").click();
-    await page.waitForTimeout(500);
+    await expect(page.getByTestId("blast-submit")).toBeDisabled();
     expect(submissions).toEqual([]);
   });
 });
@@ -239,9 +238,71 @@ test.describe("BLAST — signed-in job flow (offline mocked API)", () => {
     await page.waitForURL(/\/browser\?/);
     const browserUrl = new URL(page.url());
     expect(browserUrl.searchParams.get("assembly")).toBe("Wm82.a4.v1");
-    expect(browserUrl.searchParams.get("release")).toBe("7");
+    // TanStack serializes numeric-looking string values as JSON strings.
+    // Assert the decoded release value used by the browser route.
+    expect(String(JSON.parse(browserUrl.searchParams.get("release")!))).toBe("7");
     expect(browserUrl.searchParams.get("locus")).toBe("chr01:12000-15000");
 
     expect(pageErrors, "the BLAST job flow must not throw").toEqual([]);
   });
+});
+
+
+test("anonymous BLAST submits, polls and downloads without account calls", async ({ page }) => {
+  const privateCalls: string[] = [];
+  let submissions = 0;
+  const token = "browser-memory-capability";
+  await page.route(/\/api\/v1\//, async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const headers = {
+      "access-control-allow-origin": request.headers()["origin"] ?? "*",
+      "access-control-allow-headers": "content-type,x-soymutdb-release,x-blast-token",
+      "access-control-allow-methods": "GET,POST,OPTIONS",
+    };
+    if (request.method() === "OPTIONS") return route.fulfill({ status: 204, headers });
+    const json = (body: unknown, status = 200) => route.fulfill({
+      status, headers, contentType: "application/json", body: JSON.stringify(body),
+    });
+    expect(url.search).not.toContain(token);
+    if (url.pathname.includes("/blast/jobs") || url.pathname.endsWith("/auth/me") || url.pathname.endsWith("/jobs/events")) {
+      privateCalls.push(url.pathname);
+    }
+    if (url.pathname.endsWith("/blast/databases")) return json([{
+      id: 1, name: "Wm82_v4_protein", db_type: "prot", assembly_id: 1,
+      assembly_name: "Wm82.a4.v1", release_id: 7, is_active: true,
+    }]);
+    if (url.pathname.endsWith("/blast/public/jobs") && request.method() === "POST") {
+      submissions++;
+      expect(request.headers()["authorization"]).toBeUndefined();
+      expect(request.postDataJSON().program).toBe("blastp");
+      return json({ job: { ...COMPLETED_JOB, status: "running" }, access_token: token,
+        expires_at: new Date(Date.now() + 3600000).toISOString() }, 201);
+    }
+    if (url.pathname.includes("/blast/public/jobs/")) {
+      expect(request.headers()["x-blast-token"]).toBe(token);
+      expect(request.headers()["authorization"]).toBeUndefined();
+      if (url.pathname.endsWith("/results")) return json({ job_id: COMPLETED_JOB.job_id,
+        status: "completed", hits: HITS, total_hits: 1,
+        download_url: "https://objects.example/anonymous-results.tsv" });
+      return json(COMPLETED_JOB);
+    }
+    return json({}, 404);
+  });
+  await gotoReady(page, "/search/blast");
+  await page.getByRole("textbox", { name: /Input Sequence$/ }).fill(">query\nMKVLAAGIVGLNLGGK");
+  await page.getByRole("button", { name: "Run BLAST", exact: true }).click();
+  await expect(page.getByText("Glyma.01G000100")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Download raw results" })).toHaveAttribute(
+    "href", "https://objects.example/anonymous-results.tsv",
+  );
+  expect(submissions).toBe(1);
+  expect(privateCalls).toEqual([]);
+  expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain(token);
+  expect(page.url()).not.toContain(token);
+  await page.screenshot({ path: "test-results-public/blast-anonymous-desktop.png", fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByRole("heading", { name: "Anonymous BLAST" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
+  await page.screenshot({ path: "test-results-public/blast-anonymous-mobile.png", fullPage: true });
 });

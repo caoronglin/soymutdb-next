@@ -17,7 +17,7 @@
  * browser must read that release's assembly list and tracks. A job that
  * states no such context gets no link and a visible reason instead.
  */
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
@@ -542,6 +542,7 @@ function BlastComponent() {
         <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
           {t("blast.subtitle")}
         </h1>
+        <div className="mt-3"><Link to="/search/blast">{t("blast.publicWorkflow")}</Link></div>
 
         <Card className="mt-8">
           <Card.Meta

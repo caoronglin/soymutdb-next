@@ -546,7 +546,8 @@
       "resolveFailed": "无法加载基因组位置，请重试。"
     },
     "submitRequiresLogin": "请登录具有研究者权限的账户后提交 BLAST 任务。",
-    "submitRequiresResearcher": "当前账户没有提交 BLAST 任务的权限。"
+    "submitRequiresResearcher": "当前账户没有提交 BLAST 任务的权限。",
+    "publicWorkflow": "匿名运行 BLAST"
   },
   "releases": {
     "title": "数据版本",
@@ -3073,5 +3074,28 @@
     "subtitle": "按品种、诱变方式与表型检索已公开的突变株系。",
     "title": "突变株系",
     "resultCount": "共 {{count}} 个突变株系"
+  },
+  "blastPublic": {
+    "eyebrow": "公开序列搜索",
+    "title": "匿名 BLAST",
+    "subtitle": "无需创建账户即可运行一次蛋白质搜索。任务处理期间请保持此页面打开。",
+    "formTitle": "搜索蛋白质数据库",
+    "sequencePlaceholder": "粘贴蛋白质 FASTA 序列",
+    "submit": "运行 BLAST",
+    "newSearch": "新建搜索",
+    "databaseRequired": "请选择蛋白质数据库。",
+    "sequenceRequired": "请输入至少 10 个字符的蛋白质序列。",
+    "submitFailed": "公开 BLAST 任务提交失败。",
+    "databasesFailed": "无法加载公开 BLAST 数据库。",
+    "statusTitle": "任务状态",
+    "accessFailed": "公开结果不可用或访问令牌无效。",
+    "expired": "公开 BLAST 访问已过期",
+    "expiredHint": "请新建搜索以获取新的临时结果令牌。",
+    "running": "worker 正在处理序列…",
+    "resultsTitle": "公开 BLAST 结果",
+    "download": "下载原始结果",
+    "release": "数据版本",
+    "loginWorkflow": "登录后可使用个人任务历史。",
+    "resultsNotReady": "公开结果尚未准备好。"
   }
 }
