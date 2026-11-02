@@ -1,6 +1,6 @@
 # Plant comparative genomics feature comparison
 
-Research date: 2026-11-03. External capabilities below are based on the linked first-party pages and are recorded as observed capabilities, not promises about SoyMutDB.
+Research date: 2026-11-03. This is a preliminary comparison. The capability matrix below includes research candidates supplied by the project brief; only the observations in the verification ledger have been confirmed from fetched first-party content. Unverified cells are not claims of current availability, API access, download formats, or licensing.
 
 | Database | Scientific domain | Main functions | Data types | Search / visualization | API / downloads | Provenance / license | SoyMutDB equivalent | Priority |
 |---|---|---|---|---|---|---|---|---|
@@ -17,13 +17,26 @@ Research date: 2026-11-03. External capabilities below are based on the linked f
 | PlantCyc / PMN | Plant metabolism | Pathways, enzymes, compounds, reactions, metabolic overview | Pathways, reactions, compounds, enzymes | Query pages and metabolic/omics viewers | Pathway Tools/JavaCyc and license-controlled bundles | SRI/PMN terms; bundle may require license form | Pathway adapter and evidence-aware links | P2 |
 | GBIF | Taxonomy and biodiversity | Taxonomy, occurrences, specimens, images and maps | Names, occurrences, media, datasets | Maps and occurrence views | Stable REST JSON API and asynchronous downloads | Dataset attribution and download citation required | Optional biodiversity integration, never genomic source of truth | P2 |
 
+## Verification ledger
+
+| Resource | Verified in this audit | Uncertainty / implementation complexity |
+|---|---|---|
+| Ensembl Plants | Compara documentation lists gene trees, orthology, families, whole-genome alignments and synteny | Redirected to June 2026 archive; live tools announce maintenance. REST, converters and license terms still need separate verification. High complexity. |
+| PLAZA | Homepage lists latest 5.1 instances and archived versions | Individual family/analysis/API/download capabilities need instance documentation. High complexity. |
+| Gramene | Homepage lists genome browser, Reactome, pan-genomes, BLAST, expression atlas, curated gene function and BioMart | Destination APIs, formats and license terms not verified. High complexity. |
+| PlantCyc / PMN | Tools page documents enzyme BLAST, pathway/reaction/enzyme/compound queries, Pathway Tools and JavaCyc | Metabolic overview is species-specific and unavailable for multi-organism PlantCyc. Old Omics Viewer is legacy. Bundle uses a license form. High complexity. |
+| GBIF | API reference documents species, occurrence, image and map APIs; REST JSON and async downloads | Dataset license/citation and exact export format must be checked per download. Optional external adapter; medium complexity. |
+| Phytozome, SoyBase, MaizeGDB, SGN, TAIR, PlantTFDB, PlantCARE | No successful first-party feature-level fetch in this audit | Requests failed with upstream 403/502 or timeout. All capability cells for these resources remain candidates pending verification. License and API availability unknown. |
+
+No dataset license grants are inferred from website accessibility. Exact downloadable formats and data provenance require release-specific verification before ingestion. This preliminary report does not satisfy the complete external-database research acceptance criterion yet.
+
 ## Current versus proposed SoyMutDB behavior
 
 Currently available in this repository: release-scoped BLAST database discovery; authenticated researcher BLAST job submission; DIAMOND `blastp`; release-aware gene, homolog, variant, expression, GWAS, phenotype, JBrowse and MCP read contracts. The public `/blast` form and database list are available without login, but job submission is intentionally restricted to researcher-capable sessions.
 
 Legacy or compatibility behavior: stored BLAST rows retain the five program names, while new submissions currently accept only `blastp`; `/search/blast` remains a compatibility route. These historical values must not be presented as executable capabilities.
 
-External functionality: the table records features observed on external sites. None of these observations imply that SoyMutDB has imported their data or accepted their licenses.
+External functionality: the verification ledger records observed features; other matrix entries remain research candidates. None of these observations imply that SoyMutDB has imported their data or accepted their licenses.
 
 Proposed order: complete NCBI BLAST+ and immutable database catalog first; then gene/family and synteny contracts; then expression/phenotype integration; finally licensed TF, motif, pathway and GBIF adapters.
 
