@@ -51,7 +51,7 @@ import {
 } from "@soymutdb/api-client";
 import { FadeUp } from "../components/route-motion";
 import { useSiteContent } from "../lib/site-content-react";
-import { useCurrentUser } from "../lib/use-current-user";
+import { grantsResearcher, useCurrentUser } from "../lib/use-current-user";
 import { resolveAppUrl } from "../lib/deployment";
 import { useReleaseId } from "../lib/release-scope";
 import { ensurePermission, showNotification } from "../lib/use-browser-notifications";
@@ -146,6 +146,10 @@ function BlastComponent() {
   // bounced the whole page to /login and made the published route unreachable.
   const { user, isLoading: currentUserLoading } = useCurrentUser();
   const isSignedIn = user != null;
+  // The API remains the authority, but avoid presenting an action that the
+  // current session can never authorize. Anonymous visitors retain the
+  // public database/form experience; researcher-capable users retain submit.
+  const canSubmit = user != null && grantsResearcher(user);
   // Defaults to blastp: protein/protein is the only program this deployment
   // executes, and DIAMOND is the only aligner behind it.
   const [form, setForm] = React.useState({
@@ -654,6 +658,8 @@ function BlastComponent() {
                   size="large"
                   data-testid="blast-submit"
                   loading={submitMutation.isPending}
+                  disabled={!canSubmit}
+                  title={!isSignedIn ? t("blast.submitRequiresLogin") : !canSubmit ? t("blast.submitRequiresResearcher") : undefined}
                   icon={<Play className="size-4" aria-hidden />}
                 >
                   {get("blast.submit", t("blast.submit"))}
@@ -661,6 +667,16 @@ function BlastComponent() {
                 <Button size="large" onClick={clearForm}>{t("blast.clear")}</Button>
               </div>
             </Form.Item>
+
+            {!currentUserLoading && !canSubmit ? (
+              <Form.Item className="mb-0 mt-4">
+                <Alert
+                  type="info"
+                  showIcon
+                  message={isSignedIn ? t("blast.submitRequiresResearcher") : t("blast.submitRequiresLogin")}
+                />
+              </Form.Item>
+            ) : null}
 
             {submitMutation.isError ? (
               <Form.Item className="mb-0 mt-4">

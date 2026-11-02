@@ -13,6 +13,8 @@ const runtime = vi.hoisted(() => ({
   hits: vi.fn(),
   resolveTarget: vi.fn(),
   currentRelease: "9",
+  currentUser: { email: "user@example.org", is_superuser: false, effective_roles: ["researcher"] as string[] } as { email: string; is_superuser: boolean; effective_roles: string[] } | null,
+  submit: vi.fn(),
 }));
 vi.mock("@tanstack/react-router", () => ({ createFileRoute: () => (options: unknown) => ({ options }), useNavigate: () => runtime.navigate }));
 vi.mock("react-i18next", () => {
@@ -23,7 +25,10 @@ vi.mock("react-i18next", () => {
 vi.mock("../lib/site-content-react", () => ({ useSiteContent: () => ({ get: (_key: string, fallback: string) => fallback }) }));
 vi.mock("../components/route-motion", () => ({ FadeUp: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock("../lib/release-scope", () => ({ useReleaseId: () => runtime.currentRelease }));
-vi.mock("../lib/use-current-user", () => ({ useCurrentUser: () => ({ user: { email: "user@example.org" }, isLoading: false }) }));
+vi.mock("../lib/use-current-user", () => ({
+  useCurrentUser: () => ({ user: runtime.currentUser, isLoading: false }),
+  grantsResearcher: (user: { is_superuser?: boolean; effective_roles?: string[] }) => user.is_superuser === true || user.effective_roles?.includes("researcher") === true,
+}));
 vi.mock("@soymutdb/api-client", () => ({
   BLAST_PROGRAMS: [{ value: "blastp", label: "BLASTP" }], apiBaseUrl: "/api/v1", getAccessToken: () => null,
   // The database list belongs to the ACTIVE release (release 9) — it must
@@ -44,7 +49,7 @@ vi.mock("@soymutdb/api-client", () => ({
   }),
   getBlastHits: runtime.hits,
   resolveBlastHitGenomeTarget: runtime.resolveTarget,
-  submitBlastJob: vi.fn(),
+  submitBlastJob: runtime.submit,
 }));
 import { Route } from "./blast";
 const Page = (Route.options as { component: React.ComponentType }).component;
@@ -54,6 +59,9 @@ beforeEach(() => {
   runtime.jobRelease = 4;
   runtime.currentRelease = "9";
   runtime.navigate.mockReset();
+  runtime.submit.mockReset();
+  runtime.currentUser = { email: "user@example.org", is_superuser: false, effective_roles: ["researcher"] };
+  vi.stubGlobal("EventSource", class { addEventListener() {} close() {} });
   runtime.resolveTarget.mockReset().mockImplementation(async (job: { release_id: number; assembly_name: string }) => ({ release: String(job.release_id), assembly: job.assembly_name, locus: "chr01:12000-15000" }));
   runtime.hits.mockReset().mockResolvedValue({ items: [{ subject_id: "Glyma.01G000100", subject_start: 1, subject_end: 100 }] });
 });
@@ -67,6 +75,28 @@ async function renderHits(): Promise<QueryClient> {
   fireEvent.click(await screen.findByRole("button", { name: /blast.viewResults/ }));
   return client;
 }
+
+it("keeps the form public while preventing anonymous submission", async () => {
+  runtime.currentUser = null;
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><Page /></QueryClientProvider>);
+  const submit = await screen.findByTestId("blast-submit");
+  expect((submit as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByText("blast.submitRequiresLogin")).toBeTruthy();
+  expect(runtime.submit).not.toHaveBeenCalled();
+  client.clear();
+});
+
+it("keeps submission restricted to researcher-capable sessions", async () => {
+  runtime.currentUser = { email: "viewer@example.org", is_superuser: false, effective_roles: ["viewer"] };
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><Page /></QueryClientProvider>);
+  const submit = await screen.findByTestId("blast-submit");
+  expect((submit as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.getByText("blast.submitRequiresResearcher")).toBeTruthy();
+  expect(runtime.submit).not.toHaveBeenCalled();
+  client.clear();
+});
 
 it.each(["Wm82.a4.v1", undefined])("keeps gene search assembly-scoped (%s)", async (assembly) => {
   runtime.jobAssembly = assembly;
