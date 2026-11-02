@@ -21,6 +21,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..core.blast_capability import PUBLIC_JOB_MARKER, verify_blast_capability
 from ..core.config import get_settings
 from ..core.exceptions import AuthorizationError, NotFoundError, ValidationError
 from ..core.security import RoleName, has_role
@@ -237,7 +238,7 @@ class BlastService:
     async def submit_job(
         self,
         db: AsyncSession,
-        user_id: uuid.UUID,
+        user_id: uuid.UUID | None,
         request: BlastSubmitRequest,
         *,
         release_context: ReleaseContext,
@@ -266,6 +267,10 @@ class BlastService:
         # boundary; re-check here for programmatic callers.
         validate_sequence_charset(request.query_sequence, request.program.value)
 
+        if user_id is None and len(request.query_sequence) > settings.blast_public_max_length:
+            raise ValidationError(
+                f"Public query exceeds max length {settings.blast_public_max_length}"
+            )
         worker_params = _worker_parameters(request.parameters, request.program)
         job = BlastJob(
             id=uuid.uuid4(),
@@ -273,10 +278,15 @@ class BlastService:
             program=request.program.value,
             database_id=blast_db.id,
             query_sequence=request.query_sequence,
-            parameters=worker_params,
+            parameters=(
+                {**worker_params, PUBLIC_JOB_MARKER: True} if user_id is None else worker_params
+            ),
             status=BlastJobStatus.PENDING,
             submitted_at=datetime.now(UTC),
-            expires_at=datetime.now(UTC) + timedelta(days=7),
+            expires_at=datetime.now(UTC) + (
+                timedelta(seconds=settings.blast_public_token_ttl_seconds)
+                if user_id is None else timedelta(days=7)
+            ),
         )
         db.add(job)
         await db.flush()
@@ -322,13 +332,24 @@ class BlastService:
         job_id: uuid.UUID,
         user_id: uuid.UUID | None = None,
         user_roles: list[str] | None = None,
+        *,
+        public_token: str | None = None,
     ) -> BlastJobResponse:
+        if public_token is not None:
+            verify_blast_capability(public_token, job_id)
         result = await db.execute(select(BlastJob).where(BlastJob.id == job_id))
         job = result.scalar_one_or_none()
         if job is None:
             raise NotFoundError(f"BLAST job {job_id} not found")
-        self._authorize_job(job.user_id, user_id, user_roles)
-        return self._job_to_response(job)
+        self._authorize_read(job, user_id, user_roles, public_token)
+        response = self._job_to_response(job)
+        if public_token is not None:
+            response.result_url = None
+            response.error_message = self._public_error(job.error_message)
+        if self._expired(job):
+            response.status = BlastSchemaJobStatus.EXPIRED
+            response.result_url = None
+        return response
 
     async def list_jobs(
         self,
@@ -373,6 +394,7 @@ class BlastService:
         *,
         limit: int = 50,
         offset: int = 0,
+        public_token: str | None = None,
     ) -> BlastResultResponse:
         """Retrieve the status-aware result envelope for a BLAST job.
 
@@ -380,12 +402,18 @@ class BlastService:
         completed jobs carry a real hit list — an empty list means BLAST
         genuinely produced zero hits.
         """
+        capability_expiry = (
+            verify_blast_capability(public_token, job_id) if public_token is not None else None
+        )
         result = await db.execute(select(BlastJob).where(BlastJob.id == job_id))
         job = result.scalar_one_or_none()
         if job is None:
             raise NotFoundError(f"BLAST job {job_id} not found")
-        self._authorize_job(job.user_id, user_id, user_roles)
-
+        self._authorize_read(job, user_id, user_roles, public_token)
+        error_message = (
+            self._public_error(job.error_message) if public_token is not None
+            else _sanitize_error(job.error_message)
+        )
         base = BlastResultResponse(
             job_id=str(job.id),
             status=BlastSchemaJobStatus(job.status),
@@ -393,10 +421,13 @@ class BlastService:
             database_id=job.database_id,
             query_id="query",
             query_len=job.query_len,
-            error_message=_sanitize_error(job.error_message),
+            error_message=error_message,
             completed_at=job.completed_at,
         )
 
+        if self._expired(job):
+            base.status = BlastSchemaJobStatus.EXPIRED
+            return base
         if job.status != BlastJobStatus.COMPLETED:
             return base
 
@@ -423,10 +454,16 @@ class BlastService:
 
         download_url = None
         if job.result_path:
+            deadline = min(
+                value for value in (job.expires_at, capability_expiry,
+                                    datetime.now(UTC) + timedelta(hours=1))
+                if value is not None
+            )
+            ttl = int((deadline - datetime.now(UTC)).total_seconds())
             download_url = generate_presigned_url(
                 f"{settings.s3_blast_bucket}/{job.result_path}",
-                expires_in=3600,
-            )
+                expires_in=max(1, ttl),
+            ) if ttl > 0 else None
 
         return BlastResultResponse(
             job_id=str(job.id),
@@ -468,8 +505,30 @@ class BlastService:
         )
 
     @staticmethod
+    def _expired(job: BlastJob) -> bool:
+        return job.status == BlastJobStatus.EXPIRED or (
+            job.expires_at is not None and job.expires_at <= datetime.now(UTC)
+        )
+
+    @staticmethod
+    def _public_error(message: str | None) -> str | None:
+        # Worker diagnostics may contain local index paths; no diagnostic text
+        # is needed to poll an anonymous job safely.
+        return "BLAST search failed" if message else None
+
+    @classmethod
+    def _authorize_read(cls, job, user_id, user_roles, public_token) -> None:
+        if public_token is not None:
+            if job.user_id is not None or (job.parameters or {}).get(PUBLIC_JOB_MARKER) is not True:
+                raise AuthorizationError("This capability cannot access this BLAST job")
+            return
+        cls._authorize_job(job.user_id, user_id, user_roles)
+
+    @staticmethod
     def _authorize_job(owner_id, user_id, user_roles) -> None:
-        if owner_id != user_id and not has_role(user_roles, RoleName.ADMINISTRATOR):
+        if not has_role(user_roles or [], RoleName.ADMINISTRATOR) and (
+            owner_id is None or user_id is None or owner_id != user_id
+        ):
             raise AuthorizationError("You do not have permission to access this BLAST job")
 
     @staticmethod
@@ -486,7 +545,10 @@ class BlastService:
             database_id=job.database_id,
             database=database.name if database is not None else None,
             query_sequence=job.query_sequence,
-            parameters=job.parameters or {},
+            parameters={
+                key: value for key, value in (job.parameters or {}).items()
+                if key != PUBLIC_JOB_MARKER
+            },
             hit_count=job.hit_count or 0,
             submitted_at=job.submitted_at,
             started_at=job.started_at,

@@ -328,6 +328,8 @@ def create_app() -> FastAPI:
             "Range",
             "X-Requested-With",
             "X-Request-ID",
+            "X-Blast-Token",
+            "X-SoyMutDB-Release",
         ],
     )
     app.add_middleware(GZipMiddleware, minimum_size=1024)

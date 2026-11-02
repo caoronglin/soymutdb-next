@@ -9,7 +9,7 @@ URL for the raw MinIO object.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -85,7 +85,7 @@ def _make_job(status: BlastJobStatus, *, result_path: str | None = None) -> Blas
             if status in (BlastJobStatus.COMPLETED, BlastJobStatus.FAILED)
             else None
         ),
-        expires_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC) + timedelta(days=7),
         hit_count=2 if status == BlastJobStatus.COMPLETED else 0,
         query_len=120 if status == BlastJobStatus.COMPLETED else None,
     )

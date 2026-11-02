@@ -257,6 +257,12 @@ class Settings(BaseSettings):
     # --------------------------------------------------------------- BLAST
     blast_max_length: int = 100000
     blast_default_db: str = "williams82_cds"
+    # Public capability jobs share the existing worker, with a separate peer budget.
+    blast_public_enabled: bool = True
+    blast_public_max_length: int = Field(default=10000, ge=10, le=100000)
+    blast_public_token_ttl_seconds: int = Field(default=86400, ge=1, le=86400)
+    blast_public_rate_limit_max: int = Field(default=5, ge=1)
+    blast_public_rate_limit_window: int = Field(default=3600, ge=1)
     #: Maximum delivery attempts per BLAST job (broker-level retries only;
     #: the worker itself is idempotent on top of this).
     blast_max_attempts: int = 3

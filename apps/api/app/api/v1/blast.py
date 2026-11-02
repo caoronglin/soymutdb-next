@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...core.blast_capability import issue_blast_capability, verify_blast_capability
+from ...core.config import get_settings
 from ...core.database import get_db
+from ...core.exceptions import NotFoundError, ValidationError
+from ...core.ratelimit import public_blast_rate_limiter, resolve_trusted_peer_ip
 from ...core.security import RoleName
 from ...models.auth import User
 from ...schemas.blast import (
@@ -16,13 +20,16 @@ from ...schemas.blast import (
     BlastJobResponse,
     BlastResultResponse,
     BlastSubmitRequest,
+    PublicBlastSubmission,
 )
 from ...services.blast_service import BlastService
 from ...services.release_context import ReleaseContext, get_release_context
 from .deps import get_current_user, get_user_roles, require_role
+from .public_blast_route import PublicBlastRoute
 
 router = APIRouter(prefix="/blast", tags=["blast"])
 service = BlastService()
+public_router = APIRouter(route_class=PublicBlastRoute)
 
 
 def _private(response: Response) -> None:
@@ -62,9 +69,7 @@ async def submit_blast_job(
     never search another release's (including unreleased) database.
     """
     _private(response)
-    return await service.submit_job(
-        db, current_user.id, request, release_context=release_context
-    )
+    return await service.submit_job(db, current_user.id, request, release_context=release_context)
 
 
 @router.get("/jobs", response_model=BlastJobListResponse)
@@ -118,3 +123,82 @@ async def get_blast_results(
     return await service.get_result(
         db, job_id, current_user.id, get_user_roles(current_user), limit=limit, offset=offset
     )
+
+
+def _public_private(response: Response) -> None:
+    response.headers["Cache-Control"] = "private, no-store"
+    response.headers["Vary"] = "X-Blast-Token"
+
+
+def _require_public_blast() -> None:
+    if not get_settings().blast_public_enabled:
+        raise NotFoundError("Public BLAST is disabled")
+
+
+@public_router.post(
+    "/public/jobs",
+    response_model=PublicBlastSubmission,
+    status_code=201,
+    dependencies=[Depends(_require_public_blast)],
+)
+async def submit_public_blast_job(
+    payload: BlastSubmitRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
+) -> PublicBlastSubmission:
+    """Submit an explicitly anonymous job, even when a bearer session is present.
+
+    Save the returned capability and send it as X-Blast-Token when polling.
+    There is no public listing. Publication/release validation and execution
+    reuse the same service, outbox and worker as private jobs.
+    """
+    _public_private(response)
+    settings = get_settings()
+    if len(payload.query_sequence) > settings.blast_public_max_length:
+        raise ValidationError(f"Public query exceeds max length {settings.blast_public_max_length}")
+    peer = resolve_trusted_peer_ip(request, settings.analytics_trusted_proxy_ips)
+    await public_blast_rate_limiter.enforce(client_ip=peer)
+    job = await service.submit_job(db, None, payload, release_context=release_context)
+    token, expires_at = issue_blast_capability(uuid.UUID(job.job_id))
+    return PublicBlastSubmission(job=job, access_token=token, expires_at=expires_at)
+
+
+@public_router.get(
+    "/public/jobs/{job_id}",
+    response_model=BlastJobResponse,
+    dependencies=[Depends(_require_public_blast)],
+)
+async def get_public_blast_job(
+    job_id: uuid.UUID,
+    response: Response,
+    access_token: str | None = Header(default=None, alias="X-Blast-Token"),
+    db: AsyncSession = Depends(get_db),
+) -> BlastJobResponse:
+    _public_private(response)
+    verify_blast_capability(access_token, job_id)
+    return await service.get_job(db, job_id, public_token=access_token)
+
+
+@public_router.get(
+    "/public/jobs/{job_id}/results",
+    response_model=BlastResultResponse,
+    dependencies=[Depends(_require_public_blast)],
+)
+async def get_public_blast_results(
+    job_id: uuid.UUID,
+    response: Response,
+    access_token: str | None = Header(default=None, alias="X-Blast-Token"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+) -> BlastResultResponse:
+    _public_private(response)
+    verify_blast_capability(access_token, job_id)
+    return await service.get_result(
+        db, job_id, limit=limit, offset=offset, public_token=access_token
+    )
+
+
+router.include_router(public_router)

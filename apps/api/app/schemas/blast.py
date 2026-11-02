@@ -228,6 +228,14 @@ class BlastJobResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PublicBlastSubmission(BaseModel):
+    """The capability is returned once; send it only in X-Blast-Token."""
+
+    job: BlastJobResponse
+    access_token: str
+    expires_at: datetime
+
+
 class BlastJobListResponse(BaseModel):
     items: list[BlastJobResponse] = Field(default_factory=list)
     total: int

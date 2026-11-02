@@ -375,6 +375,27 @@ class ExternalArticlePreviewRateLimiter(LoginRateLimiter):
         )
 
 
+class PublicBlastRateLimiter(LoginRateLimiter):
+    """Dedicated per-peer budget for resource-consuming anonymous searches."""
+
+    async def enforce(self, *, client_ip: str | None) -> None:  # type: ignore[override]
+        settings = self._settings_getter()
+        await self._enforce(
+            identity=None,
+            client_ip=client_ip,
+            window=settings.blast_public_rate_limit_window,
+            maximum=settings.blast_public_rate_limit_max,
+            namespace="blast-public-submit",
+            unavailable_message="Public BLAST submission quota is unavailable; retry later",
+            exceeded_message="Too many public BLAST submissions. Please retry later.",
+        )
+
+
+public_blast_rate_limiter = PublicBlastRateLimiter(
+    redis_getter=_default_redis_getter, settings_getter=_default_settings_getter
+)
+
+
 login_rate_limiter = LoginRateLimiter()
 external_article_preview_rate_limiter = ExternalArticlePreviewRateLimiter()
 
@@ -581,6 +602,7 @@ __all__ = [
     "FALLBACK_MAX_KEYS",
     "ExternalArticlePreviewRateLimiter",
     "LoginRateLimiter",
+    "PublicBlastRateLimiter",
     "READ_METHODS",
     "REQUEST_BUCKET_PUBLIC_READ",
     "REQUEST_BUCKET_WRITE",
@@ -593,5 +615,6 @@ __all__ = [
     "is_exempt_path",
     "login_rate_limiter",
     "request_rate_limiter",
+    "public_blast_rate_limiter",
     "resolve_trusted_peer_ip",
 ]
