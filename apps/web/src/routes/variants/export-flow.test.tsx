@@ -183,8 +183,35 @@ describe("variant export lifecycle", () => {
     fireEvent.click(screen.getByRole("button", { name: /variants.export$/ }));
     await waitFor(() => expect(runtime.createVariantExport).toHaveBeenCalledTimes(1));
 
+    // The success line is rendered from the resolved response, and the click
+    // is what starts that promise: query it asynchronously. Reading it with
+    // `getByTestId` immediately after `waitFor(called)` raced the microtask
+    // and failed on whichever runner was slow enough to lose.
     expect(runtime.exportStatus).toBeUndefined();
-    expect(screen.getByTestId("variant-export-status").textContent).toContain(
+    expect((await screen.findByTestId("variant-export-status")).textContent).toContain(
+      "Export job submitted",
+    );
+    view.unmount();
+  });
+
+  it("shows the submitted status even when the request resolves late", async () => {
+    // A loaded runner can resolve the request well after the mock call is
+    // observed. The status must still appear once the response is applied.
+    const pending = deferred<{ export_id: string; status: string; message: string }>();
+    runtime.createVariantExport.mockReturnValue(pending.promise);
+    const view = render(<Page />);
+
+    fireEvent.click(screen.getByRole("button", { name: /variants.export$/ }));
+    expect(screen.queryByTestId("variant-export-status")).toBeNull();
+    await act(async () => {
+      pending.resolve({
+        export_id: "export-1",
+        status: "pending",
+        message: "Export job submitted",
+      });
+    });
+
+    expect((await screen.findByTestId("variant-export-status")).textContent).toContain(
       "Export job submitted",
     );
     view.unmount();
@@ -254,7 +281,10 @@ describe("variant export lifecycle", () => {
     const view = render(<Page />);
     fireEvent.click(screen.getByRole("button", { name: /variants.export$/ }));
     await waitFor(() => expect(runtime.createVariantExport).toHaveBeenCalledTimes(1));
-    expect(screen.getByTestId("variant-export-progress")).toBeTruthy();
+    // The same race the success line above was fixed for: `exportId` is set in
+    // the same post-`await` block, so the progress block appears a microtask
+    // after `waitFor(called)` returns.
+    expect(await screen.findByTestId("variant-export-progress")).toBeTruthy();
 
     // Another account signs in: the previous account's export must not
     // keep being polled.

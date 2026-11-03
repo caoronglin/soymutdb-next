@@ -253,46 +253,23 @@ list_jobs() {
 # system-deps — the compiler prerequisites a later stage's pip install needs
 # -----------------------------------------------------------------------------
 # CPython 3.15 publishes no manylinux wheels for the worker's science stack
-# (h5py, cyvcf2, pyarrow, leidenalg, ...), so every `pip install apps/worker[dev]`
-# compiles sdists. The worker *image* provides build-essential + libhdf5-dev
-# (deploy/docker/Dockerfile.worker); the `api-tests` stage is a bare
-# `python:3.15` and provides neither, so real build cnb-8sk-1k6gv3vju-002 failed
-# inside the gate that PRs must pass:
+# (h5py, cyvcf2, pandas, numcodecs, ...), so every `pip install apps/worker[dev]`
+# compiles sdists. The backend test gate and the dependency governance gate both
+# reach scripts/install-worker-science-build-deps.sh: that one script owns the
+# package list (matching infra/docker/Dockerfile.worker) and is idempotent, so
+# CNB's fresh-container stages and the GitHub mirror install identical bytes.
 #
-#   Loading library to get build settings and version: libhdf5.so
+# Real build cnb-8sk-1k6gv3vju-002 died in the backend gate with
 #   error: libhdf5.so: cannot open shared object file: No such file or directory
-#   ERROR: Failed building wheel for h5py
+# and the governance license analyzer died building cyvcf2's bundled htslib
+# with only the HDF5 packages present. Both are covered by the shared recipe.
 #
-# The step is a no-op where the headers already exist (the GitHub mirror
-# installs them through apt as root in its own job; a developer machine usually
-# has them), and it never installs anything at run time. Package names are the
-# Debian families the Dockerfile pins, so drift shows up as a failing PR rather
-# than a mystery wheel-build error.
+# NOTE: CNB gives each stage a fresh container, so this job body does NOT prepare
+# the stages after it. `dependency_governance_step` calls the same prerequisite
+# script itself for exactly that reason.
 system_deps_run() {
-  if pkg-config --exists hdf5-serial 2>/dev/null; then
-    log "HDF5 development files are already present; nothing to install"
-    return 0
-  fi
-
-  local sudo_prefix=""
-  if [ "$(id -u)" -ne 0 ]; then
-    if command -v sudo >/dev/null 2>&1; then
-      sudo_prefix="sudo"
-    else
-      log "cannot install HDF5 development files: not root and no sudo"
-      return 1
-    fi
-  fi
-
-  if ! command -v apt-get >/dev/null 2>&1; then
-    log "cannot install HDF5 development files: apt-get is unavailable"
-    return 1
-  fi
-
-  log "installing build-essential + libhdf5-dev for the CPython ${PYTHON_VERSION} sdist builds"
-  ${sudo_prefix} apt-get update
-  ${sudo_prefix} env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    build-essential libhdf5-dev pkg-config
+  export HDF5_PKGCONFIG_NAME="${HDF5_PKGCONFIG_NAME:-hdf5-serial}"
+  bash "${REPO_ROOT}/scripts/install-worker-science-build-deps.sh"
 }
 
 # -----------------------------------------------------------------------------
@@ -489,6 +466,16 @@ dependency_governance_step() {
   ensure_workspace
   ensure_governance_python
   dependency_governance_env
+
+  # The Python license/vulnerability analyzers run `uv run --project apps/worker`,
+  # which compiles the whole science stack from sdists on CPython 3.15. That
+  # needs the same C/HDF5/htslib toolchain as the worker image; CNB gives every
+  # stage a fresh container, so the earlier "Compiler prerequisites" stage does
+  # not carry over. Without this, python-licenses-worker reports
+  # `normalization_unavailable:license-expressions` because the analyzer crashed
+  # building cyvcf2's bundled htslib before it could write a report.
+  export HDF5_PKGCONFIG_NAME="${HDF5_PKGCONFIG_NAME:-hdf5-serial}"
+  bash "${REPO_ROOT}/scripts/install-worker-science-build-deps.sh"
 
   # e2e/ is intentionally outside the pnpm workspace, but Knip 5 discovers
   # its Playwright config via package.json and imports it to analyze entrypoints.

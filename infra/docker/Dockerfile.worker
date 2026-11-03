@@ -27,6 +27,10 @@ ENV PYTHONUNBUFFERED=1 \
 #   libbz2-dev       cyvcf2 0.34 builds a bundled htslib,
 #   liblzma-dev      and htslib's configure picks up the system zlib/bzip2/xz
 #                    when their headers are present.
+#   autoconf
+#   automake         htslib's bundled configure runs autoreconf / libtoolize;
+#   libtool          without autotools the cyvcf2 CMake build fails at
+#                    "cyvcf2: building bundled htslib".
 #   libpq-dev        pg_config for psycopg2-binary.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -37,6 +41,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libbz2-dev \
     liblzma-dev \
     libhdf5-dev \
+    autoconf \
+    automake \
+    libtool \
     && rm -rf /var/lib/apt/lists/*
 
 # h5py links with `-lhdf5 -lhdf5_hl` and takes only the include/-L paths from

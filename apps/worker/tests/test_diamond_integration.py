@@ -48,9 +48,10 @@ def test_only_protein_protein_is_executable(program):
         blast.validate_program(program)
 
 
-def test_blastp_is_the_whole_diamond_program_set():
+def test_diamond_executes_blastp_only():
     """DIAMOND stays protein-only; the union includes NCBI's nucleotide programs."""
     assert blast.ENGINE_PROGRAMS["diamond"] == frozenset({"blastp"})
+    assert blast.DIAMOND_PROGRAMS == frozenset({"blastp"})
     assert blast.validate_program("blastp") == "blastp"
     assert blast.validate_program("blastp", "diamond") == "blastp"
     for program in ("blastn", "blastx", "tblastn", "tblastx"):
@@ -108,7 +109,6 @@ def test_no_blast_only_symbols_remain():
         "ALLOWED_PARAMS",
         "BLAST_BIN_DIR",
         "BLAST_ENGINE",
-        "DIAMOND_PROGRAMS",
     ):
         assert not hasattr(blast, gone), f"{gone} still exists after retirement"
 
