@@ -41,10 +41,16 @@
 #   (registry login, signing, publication) is main-push, tag or manual only.
 # =============================================================================
 main:
-  # ---------------------------------------------------------------------------
-  # Pull requests — verification only, no credentials, nothing published
-  # ---------------------------------------------------------------------------
   pull_request:
+    - docker:
+        image: cnbcool/default-npc:latest
+      stages:
+        - name: npc go
+          type: npc:go
+          options:
+            role: 代码审查员
+            systemPrompt: 你是一个专业的代码审查员，请审查代码变更并给出改进建议
+            userPrompt: 审查本次 PR 的代码变更，给出改进建议
     - name: verify
       # 16 cores: pnpm install + turbo build + three vitest projects + Python.
       runner:
