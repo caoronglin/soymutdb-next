@@ -952,3 +952,81 @@ def test_governance_failures_show_exact_packages_without_changing_verdict(tmp_pa
 
     row.update(name="missing-tool", report="nonexistent.json")
     assert "report unavailable" in module._audit_failure_evidence(row, tmp_path)[0]
+
+
+def test_declared_license_probe_reads_metadata_without_importing_a_distribution(
+    tmp_path: Path,
+) -> None:
+    """The probe must not execute the code of the package it is describing.
+
+    The probe used to enumerate `importlib.metadata.distributions(path=...)`.
+    Resolving a distribution imports it, so running the probe against the
+    worker graph imported `soymutdb_worker`, the probe subprocess exited
+    non-zero, and every one of the 55 worker distributions projected as
+    `UNKNOWN` (build cnb-u4g-1k6h29nbb-001) -- a licensing verdict produced by a
+    probe that never ran.
+
+    Proves both halves: the probe never imports the distribution's module, and
+    it still reads a PEP 639 `License-Expression` out of `*.dist-info/METADATA`.
+    """
+    governance = _governance_module()
+    site = tmp_path / "site"
+    package = site / "probe_package"
+    package.mkdir(parents=True)
+    # Importing this would fail the test loudly, which is the point.
+    (package / "__init__.py").write_text(
+        "raise SystemExit('the license probe must not import distributions')\n",
+        encoding="utf-8",
+    )
+    dist_info = site / "probe_package-1.0.dist-info"
+    dist_info.mkdir()
+    (dist_info / "METADATA").write_text(
+        "Metadata-Version: 2.4\n"
+        "Name: probe-package\n"
+        "Version: 1.0\n"
+        "License-Expression: MIT\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", governance.PROBE_SCRIPT],
+        cwd=str(tmp_path),
+        env={**os.environ, "PYTHONPATH": str(site), "VIRTUAL_ENV": str(site)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    declared = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert declared["probe-package"]["license_expression"] == "MIT"
+    assert declared["probe-package"]["declared"] == "MIT"
+
+
+def test_declared_license_probe_failure_is_explained_not_silent(capsys) -> None:
+    """A probe that cannot run must say so instead of reporting `UNKNOWN`.
+
+    When the probe fails, `_declared_license` keeps the analyzer's `UNKNOWN` for
+    every package, so the gate reports a wall of licensing findings that has
+    nothing to do with licensing. The failure is printed to stderr so the next
+    reader sees the real cause.
+    """
+    governance = _governance_module()
+    original = governance.subprocess.run
+
+    class _Failed:
+        returncode = 1
+        stdout = ""
+        stderr = "RuntimeError: the worker cannot import on this interpreter\n"
+
+    try:
+        governance.subprocess.run = lambda *a, **k: _Failed()  # type: ignore[assignment]
+        probe = governance._probe_declared_licenses(
+            ["uv", "run", "--project", "apps/worker", "pip-licenses"]
+        )
+    finally:
+        governance.subprocess.run = original  # type: ignore[assignment]
+
+    assert probe == {}
+    captured = capsys.readouterr()
+    assert "declared-license probe failed" in captured.err
+    assert "the worker cannot import on this interpreter" in captured.err
