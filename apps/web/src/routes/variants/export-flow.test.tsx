@@ -194,6 +194,29 @@ describe("variant export lifecycle", () => {
     view.unmount();
   });
 
+  it("shows the submitted status even when the request resolves late", async () => {
+    // A loaded runner can resolve the request well after the mock call is
+    // observed. The status must still appear once the response is applied.
+    const pending = deferred<{ export_id: string; status: string; message: string }>();
+    runtime.createVariantExport.mockReturnValue(pending.promise);
+    const view = render(<Page />);
+
+    fireEvent.click(screen.getByRole("button", { name: /variants.export$/ }));
+    expect(screen.queryByTestId("variant-export-status")).toBeNull();
+    await act(async () => {
+      pending.resolve({
+        export_id: "export-1",
+        status: "pending",
+        message: "Export job submitted",
+      });
+    });
+
+    expect((await screen.findByTestId("variant-export-status")).textContent).toContain(
+      "Export job submitted",
+    );
+    view.unmount();
+  });
+
   it("shows the finished export and downloads it through a signed link", async () => {
     runtime.createVariantExport.mockResolvedValue({
       export_id: "export-1",
