@@ -558,7 +558,7 @@ function BlastComponent() {
             >
 
               <div className="grid gap-2 md:grid-cols-2">
-                <Select aria-label={t("blastPublic.engine")} value={form.engine} onChange={(value: BlastEngine) => setForm((f) => ({ ...f, engine: value, database: "" }))} options={[{ value: "ncbi_blast", label: "NCBI BLAST+" }, { value: "diamond", label: "DIAMOND (blastp)", disabled: form.program !== "blastp" }]} />
+                <Select aria-label={t("blastPublic.engine")} value={form.engine} onChange={(value: BlastEngine) => setForm((f) => ({ ...f, engine: value, database: "" }))} options={[{ value: "ncbi_blast", label: t("blastSearch.engineNcbi") }, { value: "diamond", label: t("blastSearch.engineDiamondBlastp"), disabled: form.program !== "blastp" }]} />
                 <Select aria-label={t("blastPublic.program")} value={form.program} onChange={(value: BlastProgram) => setForm((f) => ({ ...f, program: value, database: "" }))} options={BLAST_PROGRAMS.filter((item) => form.engine === "ncbi_blast" || item.id === "blastp").map((item) => ({ value: item.id, label: item.label }))} />
               </div>
             </Form.Item>

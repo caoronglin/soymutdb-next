@@ -3114,6 +3114,9 @@
     "fasta": {
       "emptyRecord": "A FASTA record has a header but no sequence."
     },
-    "downloadFilenameHint": "Raw aligner output (tab-separated)"
+    "downloadFilenameHint": "Raw aligner output (tab-separated)",
+    "engineNcbi": "NCBI BLAST+",
+    "engineDiamond": "DIAMOND",
+    "engineDiamondBlastp": "DIAMOND (blastp)"
   }
 }

@@ -3114,6 +3114,9 @@
     "fasta": {
       "emptyRecord": "有一条 FASTA 记录只有头、没有序列。"
     },
-    "downloadFilenameHint": "比对原始输出（制表符分隔）"
+    "downloadFilenameHint": "比对原始输出（制表符分隔）",
+    "engineNcbi": "NCBI BLAST+",
+    "engineDiamond": "DIAMOND",
+    "engineDiamondBlastp": "DIAMOND（blastp）"
   }
 }

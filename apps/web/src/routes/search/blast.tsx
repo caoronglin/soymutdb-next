@@ -154,7 +154,7 @@ function PublicBlastComponent() {
       <Card title={t("blastPublic.formTitle")}>
         <Form layout="vertical" onFinish={() => void submit()}>
           <div className="grid gap-x-6 md:grid-cols-2">
-            <Form.Item label={t("blastPublic.engine")}><Select aria-label={t("blastPublic.engine")} value={engine} onChange={(value: BlastEngine) => setEngine(value)} options={[{ value: "ncbi_blast", label: "NCBI BLAST+" }, { value: "diamond", label: "DIAMOND (blastp)", disabled: program !== "blastp" }]} /></Form.Item>
+            <Form.Item label={t("blastPublic.engine")}><Select aria-label={t("blastPublic.engine")} value={engine} onChange={(value: BlastEngine) => setEngine(value)} options={[{ value: "ncbi_blast", label: t("blastSearch.engineNcbi") }, { value: "diamond", label: t("blastSearch.engineDiamondBlastp"), disabled: program !== "blastp" }]} /></Form.Item>
             <Form.Item label={t("blastPublic.program")}><Select aria-label={t("blastPublic.program")} value={program} onChange={(value: BlastProgram) => setProgram(value)} options={BLAST_PROGRAMS.filter((item) => engine === "ncbi_blast" || item.id === "blastp").map((item) => ({ value: item.id, label: item.label }))} /></Form.Item>
           </div>
           <Form.Item label={t("blast.database")} htmlFor="public-blast-database" required>
