@@ -884,6 +884,10 @@ def test_root_scripts_and_knip_configuration_are_executable_contracts() -> None:
     )
     assert knip["$schema"].endswith("/knip@5/schema.json")
     assert "**/dist/**" in knip["ignore"]
+    # The antd vi-double is reached only through a mock specifier, which knip
+    # cannot follow. Registering it as an entrypoint keeps its 57 exports out of
+    # the unused-export report; without it the Dependency governance gate fails.
+    assert "src/test/antd-double.tsx" in knip["workspaces"]["apps/admin"]["entry"]
 
 
 def test_evidence_is_generated_and_uploaded_before_image_builds() -> None:
