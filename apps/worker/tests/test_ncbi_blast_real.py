@@ -11,6 +11,18 @@ from soymutdb_worker.ncbi_blast import run_search
 BIN = Path(
     os.getenv("SOYMUTDB_TEST_NCBI_BIN_DIR", ".cache/blast-catalog-pr/tools/ncbi-blast-2.17.0+/bin")
 ).absolute()
+
+# The runner already disables NCBI's network usage report and local config
+# discovery. Fixture-only ``makeblastdb`` calls must do the same, otherwise a
+# real binary blocks on telemetry DNS for ~30s and exceeds the test timeout.
+OFFLINE_BLAST_ENV = {
+    "PATH": "/usr/bin:/bin",
+    "LANG": "C",
+    "LC_ALL": "C",
+    "BLAST_USAGE_REPORT": "false",
+    "NCBI_DONT_USE_NCBIRC": "1",
+    "NCBI_DONT_USE_LOCAL_CONFIG": "1",
+}
 DNA = (
     "ATG" + "GCTGAAAAGGTTCTGGATGGTGACTTTGCTAAGAAGATTGGTGAAAAGGTTGATGCTGGTGTTGATGTTGCT"
     "GAAAAGGTTGATGGTGCTAAGGCTGTTGAAAAGGCTGATGTTGGTGCTGATGAAAAGGTTGCTGATGTTGAAAAG"
@@ -63,6 +75,7 @@ def test_real_all_five_known_hit(tmp_path, program, dbtype, query):
         check=True,
         capture_output=True,
         timeout=20,
+        env=OFFLINE_BLAST_ENV,
     )
     q = tmp_path / "query.fa"
     q.write_text(">query\n" + query + "\n")
@@ -102,6 +115,7 @@ def test_real_reverse_blastn_and_no_hit(tmp_path):
         check=True,
         capture_output=True,
         timeout=20,
+        env=OFFLINE_BLAST_ENV,
     )
     query = tmp_path / "query.fa"
     query.write_text(">reverse\n" + reverse + "\n")

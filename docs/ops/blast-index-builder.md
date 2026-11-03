@@ -1,6 +1,6 @@
 # Preparing immutable NCBI BLAST+ indexes
 
-The operator tool prepares and verifies NCBI indexes. It does **not** register databases, enqueue Celery jobs or enable NCBI search. The search API still accepts DIAMOND `blastp` only. NCBI, nucleotide, building and failed catalog entries are excluded from current search discovery and submission. Do not assign an NCBI prefix to a DIAMOND catalog row.
+The operator tool prepares and verifies immutable NCBI indexes. It does **not** register databases or enqueue Celery jobs by itself; an operator registers a ready catalog row and configures `NCBI_BLAST_DATABASE_PATHS` on the worker. NCBI BLAST+ is the default search engine for all five programs; DIAMOND `blastp` remains an explicitly selected backend. Building and failed catalog entries are excluded from search discovery and submission. Do not assign an NCBI prefix to a DIAMOND catalog row, or a DIAMOND index to an NCBI row.
 
 ## Prerequisites and trust boundary
 
@@ -56,7 +56,7 @@ The manifest contains relative artifact names and no source/index filesystem pat
 
 FASTA parsing holds bounded source/normalized copies in parent memory. Parent RSS scales with FASTA size; use an external process/container memory limit when required. Index/binary hashing uses 1 MiB chunks. Per-call wall limits are not a single whole-build deadline. NCBI usage reporting and local configuration lookup are disabled in the child environment; secrets and ambient environment variables are not forwarded. Failed live children are terminated and reaped, and failed staging is removed. Hard process/machine crashes may leave `.build-*` or `.verify-*` staging; remove such directories only after checking that no builder owns them. Never remove a published identity to repair a live job implicitly.
 
-The current source ceiling and in-memory parser are not a validated whole-soybean-genome ingestion claim. Large datasets require an explicit streaming/partitioning design and workload verification. This PR does not claim production throughput, object-store publication or all-five-program search readiness.
+The current source ceiling and in-memory parser are not a validated whole-soybean-genome ingestion claim. Large datasets require an explicit streaming/partitioning design and workload verification. All five NCBI programs have been verified against small synthetic fixtures (see `docs/implementation/blast-verification-pr.md`); this does not claim production-scale throughput, automatic object-store publication or a bundled multi-species dataset.
 
 ## Migration and rollback
 

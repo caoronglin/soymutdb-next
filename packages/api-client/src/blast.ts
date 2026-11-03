@@ -19,7 +19,7 @@ export function hasCompatibleBlastQueryAlphabet(sequence: string, program: Blast
   const body = sequence.split(/\r?\n/).filter((line) => !line.trimStart().startsWith(">")).join("").replace(/\s/g, "");
   return BLAST_PROGRAM_COMPATIBILITY[program].query === "nucl"
     ? /^[ACGTNRYSWKMBDHVU]+$/i.test(body)
-    : /^[ACDEFGHIKLMNPQRSTVWYBZX*\-]+$/i.test(body);
+    : /^[ACDEFGHIKLMNPQRSTVWYBZX*-]+$/i.test(body);
 }
 
 export interface BlastDatabase {

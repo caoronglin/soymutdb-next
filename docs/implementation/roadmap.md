@@ -1,17 +1,23 @@
 # Incremental implementation roadmap
 
-## Phase 0: baseline and audit (current)
+## Phase 0: baseline and audit (complete)
 
 - Audited the existing BLAST API, service, model, worker, frontend, MCP manifest and tests.
 - Confirmed release-scoped database discovery, transactional outbox, idempotent worker writes and authenticated researcher job ownership.
-- Confirmed current engine is DIAMOND `blastp`; NCBI BLAST+ is not yet implemented.
-- Preserved public form/database discovery while making the submit affordance reflect the server capability contract.
+- Recorded the test baseline on Python 3.15 (see [`blast-verification-pr.md`](blast-verification-pr.md)).
+- Completed a first-party external-database research pass; see [`../research/plant-database-feature-comparison.md`](../research/plant-database-feature-comparison.md). Unverifiable sources remain labelled candidates.
 
-## Phase 1: BLAST+
+## Phase 1: BLAST+ (implemented, verified in this PR)
 
-Add the immutable database catalog fields and migrations; build indexes asynchronously with `makeblastdb`; add validated all-program schemas; implement NCBI execution/parsing and explicit DIAMOND selection; add real nucleotide/protein integration fixtures; add cancellation, retry, release-isolation and download-expiry tests.
+- NCBI BLAST+ executes all five standard programs against real 2.17.0+ binaries.
+- DIAMOND `blastp` is retained as an explicitly selected backend; both engines remain available in the API, client, frontend and MCP contracts.
+- Immutable `makeblastdb`/`blastdbcmd` index catalog with additive migrations `0050`/`0051`.
+- Program-specific parameter validation shared by API and worker; argument-array-only execution with resource caps.
+- Two access modes: authenticated account jobs (`/blast`) and capability-authorized anonymous jobs (`/search/blast`), both over the same outbox/worker pipeline.
+- Real nucleotide and protein integration searches, index construction, PostgreSQL HSP persistence, duplicate-delivery idempotency, cancellation, quota and release-isolation tests.
+- External research report distinguishes verified observations from candidates; no dataset ingestion or license claims are made.
 
-## Phase 2: gene center
+## Phase 2: gene center (next)
 
 Compose sequence, annotation, homolog, expression, variant, phenotype and publication sections on the existing gene routes. Preserve assembly switching and evidence labels.
 
@@ -31,6 +37,12 @@ Add PlantTFDB, PlantCARE, PlantCyc and optional GBIF adapters only after source 
 
 Extend the existing asynchronous download service with a no-SQL query builder, provenance manifests, cursor pagination, accessibility and performance gates.
 
-## Current PR boundary
+## Delivery notes
 
-The follow-up access-mode slice adds anonymous submission/status/results using expiring per-job credentials and the existing outbox/worker, alongside account-owned jobs. See [implementation evidence](blast-anonymous-pr.md). The next preparation slice adds explicit catalog metadata and an operator-only immutable NCBI index builder; see [catalog/index preparation evidence](blast-index-catalog-pr.md). NCBI search execution, asynchronous index lifecycle and object-store publication remain pending. Real nucleotide/protein index construction does not establish five-program search acceptance.
+Earlier slices were delivered as separate commits on `main`: anonymous
+capability authorization, catalog/index preparation, and NCBI execution. This
+PR closes the verification gap: it makes the opt-in real-binary tests reliable
+offline, aligns the architecture/roadmap documents with the implemented state,
+records a first-party research ledger, and reports actual pass counts. It does
+not replace the existing delivery pipeline or add a second job queue/storage
+backend.
