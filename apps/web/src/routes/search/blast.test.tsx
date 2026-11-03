@@ -153,3 +153,62 @@ it("offers both search engines from the catalog", async () => {
   expect((await screen.findAllByText("NCBI BLAST+")).length).toBeGreaterThan(0);
   expect((await screen.findAllByText("DIAMOND (blastp)")).length).toBeGreaterThan(0);
 });
+
+it("shows results under the form without a second step, and names the job", async () => {
+  api.submit.mockResolvedValue({ job: completed, access_token: "memory-only-token", expires_at: "2999-01-01T00:00:00Z" });
+  api.results.mockResolvedValue({
+    job_id: "public-job",
+    status: "completed",
+    items: [{ subject_id: "Glyma.01G000100", hsp_num: 1, percent_identity: 99, alignment_length: 100, evalue: 1e-20, bit_score: 120 }],
+    total: 1,
+    download_url: null,
+  });
+  renderPage();
+  await screen.findByText("protein-v4");
+  fireEvent.change(screen.getByPlaceholderText("Paste a protein FASTA sequence"), { target: { value: "MKKLLLLLLLL" } });
+  fireEvent.click(screen.getByRole("button", { name: "Run BLAST" }));
+  // No second click: the hit row is already rendered under the form.
+  expect(await screen.findByText("Glyma.01G000100")).toBeTruthy();
+  // The results card names the job it belongs to, and states its status inline
+  // instead of in a separate panel.
+  expect(screen.getByText("Results for job public-job")).toBeTruthy();
+  expect(screen.getByText("completed")).toBeTruthy();
+});
+
+it("attaches every validation failure to the control that caused it", async () => {
+  renderPage();
+  await screen.findByText("protein-v4");
+  fireEvent.change(screen.getByPlaceholderText("Paste a protein FASTA sequence"), { target: { value: "MKK" } });
+  fireEvent.click(screen.getByRole("button", { name: "Run BLAST" }));
+  expect(await screen.findByText("Enter a sequence with at least 10 characters.")).toBeTruthy();
+
+  // Out-of-range parameters land on the parameter fields, not the sequence.
+  fireEvent.change(screen.getByPlaceholderText("Paste a protein FASTA sequence"), { target: { value: "MKKLLLLLLLL" } });
+  fireEvent.change(screen.getByLabelText("E-value threshold"), { target: { value: "0" } });
+  fireEvent.click(screen.getByRole("button", { name: "Run BLAST" }));
+  expect(await screen.findByText("Use a positive E-value up to 1000 and 1–500 maximum hits.")).toBeTruthy();
+  expect(api.submit).not.toHaveBeenCalled();
+});
+
+it("counts the FASTA records the query will submit", async () => {
+  renderPage();
+  await screen.findByText("protein-v4");
+  fireEvent.change(screen.getByPlaceholderText("Paste a protein FASTA sequence"), {
+    target: { value: ">q1\nMKKLLLLLLLL\n>q2\nMKVLAAGIVGL" },
+  });
+  // The count is reported next to the input, so nobody has to count headers.
+  expect((await screen.findByText(/FASTA record/)).textContent).toBe("2 FASTA records");
+});
+
+it("offers no download affordance when the completed job has no artifact", async () => {
+  api.submit.mockResolvedValue({ job: completed, access_token: "memory-only-token", expires_at: "2999-01-01T00:00:00Z" });
+  api.results.mockResolvedValue({ job_id: "public-job", status: "completed", items: [], total: 0, download_url: null });
+  renderPage();
+  await screen.findByText("protein-v4");
+  fireEvent.change(screen.getByPlaceholderText("Paste a protein FASTA sequence"), { target: { value: "MKKLLLLLLLL" } });
+  fireEvent.click(screen.getByRole("button", { name: "Run BLAST" }));
+  await screen.findByText("No hits found for this job");
+  expect(screen.queryByRole("link", { name: /Download raw results/ })).toBeNull();
+  // The absence is stated, not left to the reader to infer from a missing button.
+  expect(screen.getByText("This job stored no downloadable artifact.")).toBeTruthy();
+});

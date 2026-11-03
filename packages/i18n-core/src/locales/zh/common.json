@@ -548,7 +548,10 @@
     },
     "submitRequiresLogin": "请登录具有研究者权限的账户后提交 BLAST 任务。",
     "submitRequiresResearcher": "当前账户没有提交 BLAST 任务的权限。",
-    "publicWorkflow": "匿名运行 BLAST"
+    "publicWorkflow": "匿名运行 BLAST",
+    "engine": "搜索引擎",
+    "jobStatus": "状态",
+    "parametersHint": "默认值适合先看一眼；除非需要不同灵敏度，否则不必改动。"
   },
   "releases": {
     "title": "数据版本",
@@ -3099,7 +3102,12 @@
     "loginWorkflow": "登录后可使用个人任务历史。",
     "resultsNotReady": "公开结果尚未准备好。",
     "engine": "搜索引擎",
-    "program": "搜索程序"
+    "program": "搜索程序",
+    "fastaDetected": "{{count}} 条 FASTA 记录",
+    "noArtifact": "该任务没有可下载的产物。",
+    "resultsFor": "任务 {{job}} 的结果",
+    "artifactHint": "该任务的原始比对输出（制表符分隔）。",
+    "sequenceTooShort": "请输入至少 10 个字符的序列。"
   },
   "blastSearch": {
     "proteinInput": "蛋白质 FASTA 查询",
@@ -3110,14 +3118,14 @@
     "incompatible": "不支持此引擎和程序组合。",
     "invalidParameters": "E 值需大于 0 且不超过 1000，最大命中数需为 1–500。",
     "engineUnknown": "引擎未知",
+    "engineNcbi": "NCBI BLAST+",
+    "engineDiamond": "DIAMOND",
     "provenance": "数据库上下文",
     "invalidAlphabet": "查询序列字母与所选程序不匹配。",
     "fasta": {
       "emptyRecord": "有一条 FASTA 记录只有头、没有序列。"
     },
     "downloadFilenameHint": "比对原始输出（制表符分隔）",
-    "engineNcbi": "NCBI BLAST+",
-    "engineDiamond": "DIAMOND",
     "engineDiamondBlastp": "DIAMOND（blastp）"
   }
 }
