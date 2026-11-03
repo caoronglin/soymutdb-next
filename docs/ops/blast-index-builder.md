@@ -124,14 +124,22 @@ same identity. Publication is a guarded conditional UPDATE shared with the
 catalog row in one transaction.
 
 Failures clear staging and record a sanitized reason; child stderr, local paths
-and query sequences never reach PostgreSQL. A redelivery while a build is
-``building``/``validating`` never starts a second builder. If the original
-attempt's claim lease has expired, the redelivery closes the row as ``failed``
-with an explicit reason, so an administrator can submit a new immutable build
-instead of a permanently stuck row. Hard process crashes may leave a
-``.blast-build-*`` staging directory in ``/tmp``; remove such directories only
-after checking no builder owns them. Never delete a published identity to
-"repair" a live job.
+and query sequences never reach PostgreSQL. Publication is the commit point:
+the builder materializes the ``<identity>`` directory on the local volume
+before the catalog row is updated, so any failure between materialization and
+a committed publication (rejected catalog UPDATE, failed validation, lost
+``validating`` transition) rolls that directory back together with staging.
+Only a directory this attempt created (``reused=false``) is removed; a reused
+directory may belong to another build and is left alone. Cleanup is strict: if
+removing the materialized index fails, the task raises instead of recording a
+clean failure while a half-built artifact stays on disk. A redelivery while a
+build is ``building``/``validating`` never starts a second builder. If the
+original attempt's claim lease has expired, the redelivery closes the row as
+``failed`` with an explicit reason, so an administrator can submit a new
+immutable build instead of a permanently stuck row. Hard process crashes may
+leave a ``.blast-build-*`` staging directory in ``/tmp``; remove such
+directories only after checking no builder owns them. Never delete a published
+identity to "repair" a live job.
 
 Environment (worker, operator-controlled; never accepted from a client):
 

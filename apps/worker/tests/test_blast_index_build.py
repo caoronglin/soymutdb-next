@@ -11,6 +11,7 @@ import json
 import sys
 import uuid
 from contextlib import contextmanager
+from pathlib import Path
 
 import pytest
 
@@ -330,3 +331,101 @@ def test_failed_reused_index_is_never_deleted(setup, monkeypatch):
     # The second attempt reused the existing directory, so it owns nothing to
     # remove. Deleting it here would break the already-published index.
     assert (directory / "manifest.json").is_file()
+
+
+def test_validation_failure_rolls_back_materialized_index(setup, monkeypatch):
+    """A failure after the index dir is materialized must not leave it behind.
+
+    The catalog guard is only one of several post-materialization failure
+    points; a source-checksum mismatch during validation takes the same
+    cleanup path.
+    """
+    _, root, _ = setup
+    original = build_module.verify_index
+
+    def mismatched(*args, **kwargs):
+        result = original(*args, **kwargs)
+        result["manifest"]["request"]["source_sha256"] = "0" * 64
+        return result
+
+    monkeypatch.setattr(build_module, "verify_index", mismatched)
+    with pytest.raises(build_module.BuildRequestError):
+        _call(str(uuid.uuid4()))
+
+    assert list(root.iterdir()) == []
+    assert not list(root.parent.glob(".blast-build-*"))
+
+
+def test_skipped_validating_transition_rolls_back_materialized_index(setup, monkeypatch):
+    """An early return before publication takes the same cleanup path.
+
+    A guarded transition that loses the race returns ``skipped`` rather than
+    raising; the materialized but unpublished index must still be removed.
+    """
+    _, root, _ = setup
+
+    class StuckBuildingSession(BuildSession):
+        def execute(self, stmt, params=None):
+            table = getattr(stmt, "table", None)
+            if getattr(table, "name", None) == "blast_index_builds" and hasattr(stmt, "_values"):
+                values = {getattr(k, "name", k): _value(v)
+                          for k, v in dict(stmt._values or {}).items()}
+                if values.get("state") == "validating":
+                    return _Result([], rowcount=0)
+            return super().execute(stmt, params)
+
+    session = StuckBuildingSession()
+
+    @contextmanager
+    def reused_db():
+        yield session
+
+    monkeypatch.setattr(build_module, "get_db", reused_db)
+    result = _call(str(uuid.uuid4()))
+
+    assert result["skipped"] is True
+    assert result["state"] == "building"
+    assert list(root.iterdir()) == []
+    assert not list(root.parent.glob(".blast-build-*"))
+
+
+def test_cleanup_failure_is_fatal_not_silently_swallowed(setup, monkeypatch):
+    """A leftover unpublished index is worse than a build failure: cleanup must die.
+
+    Staging cleanup is best-effort (``ignore_errors=True``), but removing a
+    materialized index is strict. If ``rmtree`` fails, the task must raise
+    instead of reporting a clean failure while the artifact stays on disk.
+    """
+    _, root, _ = setup
+    real_rmtree = build_module.shutil.rmtree
+
+    def failing_rmtree(target, *args, **kwargs):
+        # Fail only for the materialized <identity> directory (64 hex chars).
+        # Staging and verification temp dirs must still be cleaned normally.
+        if len(Path(target).name) == 64 and not kwargs.get("ignore_errors"):
+            raise OSError("synthetic cleanup failure")
+        return real_rmtree(target, *args, **kwargs)
+
+    class RejectedCatalogSession(BuildSession):
+        def execute(self, stmt, params=None):
+            table = getattr(stmt, "table", None)
+            if getattr(table, "name", None) == "blast_databases" and hasattr(stmt, "_values"):
+                return _Result([], rowcount=0)
+            return super().execute(stmt, params)
+
+    session = RejectedCatalogSession()
+
+    @contextmanager
+    def reused_db():
+        yield session
+
+    monkeypatch.setattr(build_module, "get_db", reused_db)
+    monkeypatch.setattr(build_module.shutil, "rmtree", failing_rmtree)
+
+    with pytest.raises(OSError, match="synthetic cleanup failure"):
+        _call(str(uuid.uuid4()))
+
+    assert session.state == "failed"
+    # The dir survives because cleanup failed: the task died loudly instead of
+    # pretending the build was cleanly rolled back.
+    assert len(list(root.iterdir())) == 1

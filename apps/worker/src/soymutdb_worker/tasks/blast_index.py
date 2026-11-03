@@ -130,6 +130,21 @@ def _sanitize_error(exc: Exception) -> str:
     return f"{type(exc).__name__}: index build failed"
 
 
+def _remove_unpublished_index(directory: Path) -> None:
+    """Remove an index this attempt materialized but never published.
+
+    Strict on purpose: a half-built index left on the immutable volume is more
+    dangerous than a failed build, so a cleanup failure must surface instead of
+    being silently ignored. A symlink is refused rather than followed.
+    """
+    if directory.is_symlink():
+        raise OSError("refusing to remove a symlinked index directory")
+    try:
+        shutil.rmtree(directory)
+    except FileNotFoundError:
+        pass  # Already gone; nothing left behind.
+
+
 @celery_app.task(bind=True, name=BLAST_BUILD_INDEX_TASK, queue="blast")
 def build_index(self: Task, build_id: str | None = None, **kwargs: object) -> dict:
     """Build, validate and atomically publish one immutable NCBI index.
@@ -263,7 +278,8 @@ def build_index(self: Task, build_id: str | None = None, **kwargs: object) -> di
             # published catalog row, so it is an unreachable orphan. Removing
             # it keeps a failed build from leaving half-published state behind;
             # published/reused identities are deliberately left untouched.
-            shutil.rmtree(owned_index, ignore_errors=True)
+            # A cleanup failure is fatal, not silently swallowed.
+            _remove_unpublished_index(owned_index)
 
 
 __all__ = ["build_index", "BuildRequestError"]
