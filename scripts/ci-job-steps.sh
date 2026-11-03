@@ -490,13 +490,24 @@ dependency_governance_step() {
   ensure_governance_python
   dependency_governance_env
 
+  # The `python-licenses-worker` analyzer resolves the worker runtime through
+  # `uv run --locked --project apps/worker`. On Python 3.15 that builds h5py
+  # 3.16 from its sdist (scanpy -> anndata -> h5py), which needs system HDF5
+  # headers and pkg-config. Without them pip-licenses crashes before writing a
+  # report, and the fail-closed gate records `normalization_unavailable`. This
+  # is the same prerequisite the backend verification job already provisions
+  # before its worker install, so both gates share the one recipe instead of
+  # one gate silently depending on the other container's packages.
+  local rc=0
+  export HDF5_PKGCONFIG_NAME="${HDF5_PKGCONFIG_NAME:-hdf5-serial}"
+  bash "${REPO_ROOT}/scripts/install-worker-science-build-deps.sh" || rc=$?
+
   # e2e/ is intentionally outside the pnpm workspace, but Knip 5 discovers
   # its Playwright config via package.json and imports it to analyze entrypoints.
   # Without the independent npm lock installation, Knip exits 2 before any
   # code-quality findings can be generated (Cannot find '@playwright/test').
   # Install exactly the locked independent dependencies rather than ignoring
   # the whole workspace or disabling the analysis.
-  local rc=0
   npm ci --prefix "${REPO_ROOT}/e2e" --ignore-scripts \
     --registry=https://registry.npmjs.org/ || rc=$?
   # Separate npm package does not belong to root pnpm audit; security-scan it
