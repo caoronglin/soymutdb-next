@@ -140,8 +140,9 @@ def build_index(self: Task, build_id: str | None = None, **kwargs: object) -> di
     repoint the builder at an arbitrary path.
 
     The whole build runs in a private staging directory. Any failure clears
-    staging and records ``failed`` with a sanitized reason; a published index
-    is never deleted or repaired implicitly.
+    staging and the unpublished content-addressed directory this attempt
+    created, then records ``failed`` with a sanitized reason; a published or
+    reused index is never deleted or repaired implicitly.
     """
     if not build_id:
         raise BuildRequestError("build_id is required")
@@ -172,6 +173,13 @@ def build_index(self: Task, build_id: str | None = None, **kwargs: object) -> di
 
     self.update_state(state="STARTED", meta={"progress": 10})
     staging_root = None
+    # The builder publishes the content-addressed directory with an atomic
+    # rename *before* the catalog guard runs. Track the one this attempt
+    # created so a failure before publication can remove it again. A reused
+    # (already published) identity belongs to another attempt and is never
+    # deleted here.
+    owned_index: Path | None = None
+    published = False
     try:
         metadata = _validate_metadata(request["build_metadata"])
         db_type = request["db_type"]
@@ -197,6 +205,8 @@ def build_index(self: Task, build_id: str | None = None, **kwargs: object) -> di
             limits=limits,
         )
         identity = validate_identity(result["index_identity"])
+        if not result["reused"]:
+            owned_index = index_root / identity
         self.update_state(state="STARTED", meta={"progress": 60})
 
         with get_db() as session:
@@ -216,7 +226,7 @@ def build_index(self: Task, build_id: str | None = None, **kwargs: object) -> di
 
         with get_db() as session:
             store = BlastIndexBuildStore(session)
-            published = store.publish(
+            publish_ok = store.publish(
                 identifier,
                 identity=identity,
                 source_sha256=source_sha256,
@@ -224,8 +234,9 @@ def build_index(self: Task, build_id: str | None = None, **kwargs: object) -> di
                 total_length=manifest_request["letter_count"],
                 database_id=request["database_id"],
             )
-        if not published:
+        if not publish_ok:
             raise BuildRequestError("publication rejected by guarded state transition")
+        published = True
         self.update_state(state="STARTED", meta={"progress": 100})
         logger.info("Published immutable BLAST index %s for build %s", identity, identifier)
         return {
@@ -247,6 +258,12 @@ def build_index(self: Task, build_id: str | None = None, **kwargs: object) -> di
     finally:
         if staging_root is not None:
             shutil.rmtree(staging_root, ignore_errors=True)
+        if owned_index is not None and not published:
+            # The directory was created by this attempt but never bound to a
+            # published catalog row, so it is an unreachable orphan. Removing
+            # it keeps a failed build from leaving half-published state behind;
+            # published/reused identities are deliberately left untouched.
+            shutil.rmtree(owned_index, ignore_errors=True)
 
 
 __all__ = ["build_index", "BuildRequestError"]

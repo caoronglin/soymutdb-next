@@ -302,3 +302,31 @@ def test_rejected_catalog_update_fails_the_build_instead_of_half_publishing(setu
     assert session.error is not None
     assert list(root.iterdir()) == []
     assert not list(root.parent.glob(".blast-build-*"))
+
+
+def test_failed_reused_index_is_never_deleted(setup, monkeypatch):
+    """A reused identity belongs to another published build and must survive a failure here."""
+    _, root, _ = setup
+    published = _call(str(uuid.uuid4()))
+    directory = root / published["index_identity"]
+    assert (directory / "manifest.json").is_file()
+
+    class RejectedCatalogSession(BuildSession):
+        def execute(self, stmt, params=None):
+            table = getattr(stmt, "table", None)
+            if getattr(table, "name", None) == "blast_databases" and hasattr(stmt, "_values"):
+                return _Result([], rowcount=0)
+            return super().execute(stmt, params)
+
+    session = RejectedCatalogSession()
+
+    @contextmanager
+    def reused_db():
+        yield session
+
+    monkeypatch.setattr(build_module, "get_db", reused_db)
+    with pytest.raises(ValueError, match="catalog row missing or already published"):
+        _call(str(uuid.uuid4()))
+    # The second attempt reused the existing directory, so it owns nothing to
+    # remove. Deleting it here would break the already-published index.
+    assert (directory / "manifest.json").is_file()
