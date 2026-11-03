@@ -41,6 +41,9 @@
 #   (registry login, signing, publication) is main-push, tag or manual only.
 # =============================================================================
 main:
+  # ---------------------------------------------------------------------------
+  # Pull requests — verification only, no credentials, nothing published
+  # ---------------------------------------------------------------------------
   pull_request:
     - name: verify
       # 16 cores: pnpm install + turbo build + three vitest projects + Python.

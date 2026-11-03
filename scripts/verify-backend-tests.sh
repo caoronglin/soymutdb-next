@@ -18,9 +18,13 @@
 # Requirements: apps/api/.venv with `pip install -e "apps/api[dev]"` and
 #               editable workspace distributions (the shared bootstrap
 #               scripts/install_python_workspace.py owns that install plan).
+#               The worker science stack needs system HDF5 headers on Python
+#               3.15; scripts/install-worker-science-build-deps.sh provisions
+#               them before the worker editable install.
 # Usage: bash scripts/verify-backend-tests.sh
 # Env:   SOYMUTDB_TEST_DATABASE_URL  optional explicit test PostgreSQL
 #        SOYMUTDB_RUN_POSTGRES_INTEGRATION must stay "1"
+#        HDF5_PKGCONFIG_NAME          defaults to hdf5-serial for h5py
 # =============================================================================
 set -euo pipefail
 
@@ -108,6 +112,16 @@ step "Worker analysis dependencies"
 # installs the editable workspace distributions (packages/jobs-py,
 # packages/import-protocol) first, because pip cannot fetch the import protocol
 # from PyPI.
+#
+# Python 3.15 has no h5py wheel: importing the worker's scanpy/anndata stack
+# forces a source build that needs system HDF5 headers. The bare `python:3.15`
+# CI image lacks them (real CNB build cnb-7cn-1k6gvafcf failed with
+# "libhdf5.so: cannot open shared object file"). Provision the same recipe as
+# infra/docker/Dockerfile.worker BEFORE the editable install, and point h5py
+# at Debian/Ubuntu's serial pkg-config flavour. Both CI providers reach this
+# through this one gate, so the system prerequisites cannot drift.
+export HDF5_PKGCONFIG_NAME="${HDF5_PKGCONFIG_NAME:-hdf5-serial}"
+bash "${REPO_ROOT}/scripts/install-worker-science-build-deps.sh"
 VENV_DIR="$(dirname "$(dirname "${VENV_PYTHON}")")"
 "${VENV_PYTHON}" scripts/install_python_workspace.py \
   --venv "${VENV_DIR}" \

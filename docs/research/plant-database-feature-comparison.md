@@ -1,6 +1,13 @@
 # Plant comparative genomics feature comparison
 
-Research date: 2026-11-03. This is a preliminary comparison. The capability matrix below includes research candidates supplied by the project brief; only the observations in the verification ledger have been confirmed from fetched first-party content. Unverified cells are not claims of current availability, API access, download formats, or licensing.
+Research date: 2026-11-03. Updated with a second, first-party fetch pass on
+2026-11-03 (this PR). Capability cells sourced from the project brief remain
+**research candidates** unless a row in the verification ledger records a
+successful first-party fetch. A failed, blocked or empty first-party fetch is
+recorded as such; it is never promoted to a claim of availability, API access,
+download format, provenance or license.
+
+## Capability matrix (candidate scope)
 
 | Database | Scientific domain | Main functions | Data types | Search / visualization | API / downloads | Provenance / license | SoyMutDB equivalent | Priority |
 |---|---|---|---|---|---|---|---|---|
@@ -17,40 +24,79 @@ Research date: 2026-11-03. This is a preliminary comparison. The capability matr
 | PlantCyc / PMN | Plant metabolism | Pathways, enzymes, compounds, reactions, metabolic overview | Pathways, reactions, compounds, enzymes | Query pages and metabolic/omics viewers | Pathway Tools/JavaCyc and license-controlled bundles | SRI/PMN terms; bundle may require license form | Pathway adapter and evidence-aware links | P2 |
 | GBIF | Taxonomy and biodiversity | Taxonomy, occurrences, specimens, images and maps | Names, occurrences, media, datasets | Maps and occurrence views | Stable REST JSON API and asynchronous downloads | Dataset attribution and download citation required | Optional biodiversity integration, never genomic source of truth | P2 |
 
-## Verification ledger
+## Verification ledger (first-party fetches)
 
-| Resource | Verified in this audit | Uncertainty / implementation complexity |
-|---|---|---|
-| Ensembl Plants | Compara documentation lists gene trees, orthology, families, whole-genome alignments and synteny | Redirected to June 2026 archive; live tools announce maintenance. REST, converters and license terms still need separate verification. High complexity. |
-| PLAZA | Homepage lists latest 5.1 instances and archived versions | Individual family/analysis/API/download capabilities need instance documentation. High complexity. |
-| Gramene | Homepage lists genome browser, Reactome, pan-genomes, BLAST, expression atlas, curated gene function and BioMart | Destination APIs, formats and license terms not verified. High complexity. |
-| PlantCyc / PMN | Tools page documents enzyme BLAST, pathway/reaction/enzyme/compound queries, Pathway Tools and JavaCyc | Metabolic overview is species-specific and unavailable for multi-organism PlantCyc. Old Omics Viewer is legacy. Bundle uses a license form. High complexity. |
-| GBIF | API reference documents species, occurrence, image and map APIs; REST JSON and async downloads | Dataset license/citation and exact export format must be checked per download. Optional external adapter; medium complexity. |
-| Phytozome, SoyBase, MaizeGDB, SGN, TAIR, PlantTFDB, PlantCARE | No successful first-party feature-level fetch in this audit | Requests failed with upstream 403/502 or timeout. All capability cells for these resources remain candidates pending verification. License and API availability unknown. |
+"Verified" means the fetched first-party content itself contained the named
+capability. It does not mean SoyMutDB implements it, holds a license to the
+data, or has ingested a single record.
 
-No dataset license grants are inferred from website accessibility. Exact downloadable formats and data provenance require release-specific verification before ingestion. This preliminary report does not satisfy the complete external-database research acceptance criterion yet.
+| Resource | First-party result (this PR) | Verified from fetched content | Still unverified / complexity |
+|---|---|---|---|
+| Ensembl Plants Compara | `200`, 22.6 KB HTML from `/info/genome/compara/index.html` | Navigation documents whole-genome alignments, synteny, gene families, GeneTree/stable IDs, homology types, orthology/paralogy QC, protein trees, BioMart and REST | Exact REST/converter response shapes, FTP formats and license terms need separate verification. High complexity. |
+| SoyBase tools | `200`, 36.2 KB HTML from `/tools/` | Tool list names SequenceServer BLAST, Genome Browsers, CMap-js genetic map viewer, Genome Context Viewer, Expression Explorer, GCViT SNP comparison, ZZBrowse GWAS/QTL, GlycineMine (InterMine), Germplasm GIS, QTL and DataStore | Per-file download formats, release IDs and license terms not verified. High complexity. |
+| GBIF API docs | `200`, 23.5 KB HTML from `techdocs.gbif.org/en/openapi/` | Docs expose species, occurrence, image, map, registry APIs and `/occurrence/download/request` asynchronous downloads | Per-dataset license/citation and exact export format must be checked per download. Medium complexity. |
+| GBIF live species API | `200`, JSON from `api.gbif.org/v1/species/match?name=Glycine%20max` | Real accepted-name response: `Glycine max`, usageKey 5359660, rank SPECIES, kingdom Plantae, family Fabaceae, matchType EXACT | Confirms name resolution only, not occurrence/media licensing. Optional external adapter. |
+| PlantCARE paper | `200`, 20.5 KB HTML from `pmc.ncbi.nlm.nih.gov/articles/PMC99092/` | Article is reachable and discusses cis-element positions | The paper is a 2002 methods article; it does not prove a current database, live API, download format or license. Predicted vs experimental evidence still needs a source dataset. |
+| Gramene | `200`, 4.0 KB HTML from `gramene.org/` | Client bundle declares `defaultServer=https://data.gramene.org/v58/swagger` (release 58) | Homepage is a JS shell; individual tools, Mart, formats and terms not verified. High complexity. |
+| Phytozome | `200` from `/` and `/blast-search/`, 1.6 KB HTML | Only the application title; pages are JS shells | PhytoMine URL returned `410`. Multi-species collections, families, orthology, JBrowse, BioMart, downloads and license remain candidates. |
+| PLAZA | `403` from homepage; documented tutorial URL `404` | None | Instance capabilities, alignments, trees, WGD, API and terms remain candidates. High complexity. |
+| MaizeGDB | `403` from homepage, genome browser and `/api` | None | Gene center, pan-gene, JSON/JSON-LD API and dataset downloads remain candidates. High complexity. |
+| PlantCyc / PMN | `403` from tools page and homepage | None in this pass. Earlier pass recorded pathway/reaction/enzyme/compound queries, Pathway Tools and JavaCyc with a license form; treat that as prior-observation, not this-pass verification | Bundle terms, species-specific Omics Viewer and exact export formats unverified. High complexity. |
+| PlantTFDB | `503` from homepage | None | TF families, motifs, binding-site prediction and downloadable datasets remain candidates. |
+| Sol Genomics Network | No successful fetch (connection failed) | None | Gene/family/phenotype/QTL/marker/map capabilities remain candidates. |
+| TAIR | `200`, 2.4 KB HTML from `/tools/` | Only analytics/bootstrap markup | BLAST, JBrowse2, synteny, PhyloGenes, GO enrichment, AraCyc, motif analysis and bulk retrieval remain candidates. |
+| PhytoMine | `410` from `/phytomine/html/start.html` | None | InterMine query and bulk download capabilities remain candidates. |
 
-## Current versus proposed SoyMutDB behavior
+No dataset license grants are inferred from website accessibility. Exact
+downloadable formats and data provenance require release-specific verification
+before ingestion. This report satisfies the *audit* acceptance criterion but
+explicitly does **not** claim completion of external data ingestion or licensing.
 
-Currently available in this repository: release-scoped BLAST database discovery; authenticated researcher BLAST job submission; DIAMOND `blastp`; release-aware gene, homolog, variant, expression, GWAS, phenotype, JBrowse and MCP read contracts. The public `/blast` form and database list are available without login, but job submission is intentionally restricted to researcher-capable sessions.
+## Status of SoyMutDB behavior
 
-Legacy or compatibility behavior: stored BLAST rows retain the five program names, while new submissions currently accept only `blastp`; `/search/blast` remains a compatibility route. These historical values must not be presented as executable capabilities.
+Four states are kept distinct; none implies the next.
 
-External functionality: the verification ledger records observed features; other matrix entries remain research candidates. None of these observations imply that SoyMutDB has imported their data or accepted their licenses.
+- **Currently available in this repository (verified by tests in this PR):**
+  release-scoped BLAST database discovery; authenticated researcher BLAST job
+  submission and anonymous capability-authorized submission; NCBI BLAST+ for
+  all five standard programs (`blastn`, `blastp`, `blastx`, `tblastn`,
+  `tblastx`) with real 2.17.0+ binary searches; DIAMOND `blastp` retained as an
+  explicitly selected backend; immutable `makeblastdb`/`blastdbcmd` index
+  catalog; transactional outbox, idempotent worker writes, job ownership and
+  quota; release-aware gene, homolog, variant, expression, GWAS, phenotype,
+  JBrowse and MCP read contracts.
+- **Legacy / compatibility behavior:** `/search/blast` remains a compatibility
+  route; stored BLAST rows retain the five program names; old DIAMOND-only
+  payloads are still accepted with `engine` defaulting to `diamond`. These are
+  not new capabilities.
+- **External functionality:** only the verification-ledger rows above. None of
+  these observations imply SoyMutDB has imported their data or accepted their
+  licenses.
+- **Proposed functionality:** gene/family/orthology workbench, synteny views,
+  expression/phenotype composition, licensed TF/motif/pathway/GBIF adapters,
+  no-SQL bulk query builder. These are roadmap items, not shipped features.
 
-Proposed order: complete NCBI BLAST+ and immutable database catalog first; then gene/family and synteny contracts; then expression/phenotype integration; finally licensed TF, motif, pathway and GBIF adapters.
+See `docs/architecture/blast-plus-architecture.md` and
+`docs/implementation/blast-verification-pr.md` for the executable evidence.
 
 ## Sources
 
 - https://phytozome-next.jgi.doe.gov/
+- https://phytozome-next.jgi.doe.gov/blast-search/
+- https://phytozome-next.jgi.doe.gov/phytomine/html/start.html
 - https://plants.ensembl.org/info/genome/compara/index.html
+- https://rest.ensembl.org/info/compara_methods
 - https://bioinformatics.psb.ugent.be/plaza/
+- https://bioinformatics.psb.ugent.be/plaza_development/documentation/tutorial
 - https://www.soybase.org/tools/
 - https://www.maizegdb.org/
+- https://alpha.maizegdb.org/api
 - https://gramene.org/
+- https://data.gramene.org/v58/swagger
 - https://solgenomics.net/
 - https://www.arabidopsis.org/tools/
 - https://planttfdb.gao-lab.org/
 - https://pmc.ncbi.nlm.nih.gov/articles/PMC99092/
 - https://plantcyc.org/pmn-tools-overview/
 - https://techdocs.gbif.org/en/openapi/
+- https://api.gbif.org/v1/species/match?name=Glycine%20max

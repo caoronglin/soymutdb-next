@@ -42,6 +42,7 @@ SHARED_SCRIPTS = (
     "scripts/stage-pages-publication.sh",
     "scripts/verify-frontend-artifacts.sh",
     "scripts/verify-backend-tests.sh",
+    "scripts/install-worker-science-build-deps.sh",
     "scripts/with-postgres-service.sh",
     "scripts/build-static-apps.sh",
     "scripts/build-all-static-apps.sh",
@@ -1364,6 +1365,55 @@ class DeliveryArchitectureTests(unittest.TestCase):
             if pipeline["name"] not in {"release", "publish"}:
                 continue
             self.assertTrue(pipeline.get("stages"), pipeline["name"])
+
+    def test_pull_request_pipelines_are_named_verification_only(self) -> None:
+        """PR builds must stay verifiable and never resolve an undefined NPC role.
+
+        A stray `npc:go` reviewer stage once became `main.pull_request[0]`. It
+        carried no `name`, so the contract helpers that index `[0]` for the
+        `verify` pipeline broke, and its `role: 代码审查员` resolved against a
+        `.cnb/settings.yml` with no `npc.roles` — CI failed in Prepare with
+        "No roles defined in .cnb/settings.yml" before any verification ran.
+        """
+        for branch, event in (("main", "pull_request"), ("$", "pull_request")):
+            pipelines = _cnb_pipelines(branch, event)
+            if branch == "main":
+                self.assertTrue(pipelines, "main/pull_request must run verify")
+            for index, pipeline in enumerate(pipelines):
+                self.assertIn(
+                    "name", pipeline,
+                    f"{branch}/{event}[{index}]: every pipeline needs a name; "
+                    "an unnamed pipeline displaces `verify` from index [0]",
+                )
+                for stage in pipeline.get("stages", []) or []:
+                    self.assertNotEqual(
+                        stage.get("type"), "npc:go",
+                        f"{branch}/{event}/{pipeline['name']}: an `npc:go` "
+                        "stage needs an `npc.roles` definition in "
+                        ".cnb/settings.yml and runs AI before the verification "
+                        "gate; PR builds are verification-only",
+                    )
+
+        # If an NPC stage is ever added deliberately, its `role` must resolve.
+        settings = yaml.safe_load(
+            (ROOT / ".cnb/settings.yml").read_text(encoding="utf-8")
+        ) or {}
+        defined_roles = {
+            role.get("name")
+            for role in (settings.get("npc") or {}).get("roles", []) or []
+            if isinstance(role, dict)
+        }
+        for pipeline in _iter_pipelines(_cnb()):
+            for stage in pipeline.get("stages", []) or []:
+                if stage.get("type") != "npc:go":
+                    continue
+                role = (stage.get("options") or {}).get("role")
+                if role is not None:
+                    self.assertIn(
+                        role, defined_roles,
+                        f"npc:go role {role!r} is not defined in "
+                        ".cnb/settings.yml npc.roles",
+                    )
 
     def test_no_duplicate_verification_logic_between_providers(self) -> None:
         """Shared logic must be scripted once, not copy-pasted per provider.
@@ -3546,6 +3596,55 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # `--ensure` must write a POSIX `KEY=VALUE` file, not shell `export`
         # lines, for the same reason.
         self.assertNotIn("printf 'export SOYMUTDB_TEST_DATABASE_URL", resolver)
+
+    def test_worker_science_build_deps_are_provisioned_before_the_worker_install(self) -> None:
+        """Python 3.15 has no h5py wheel: the backend gate must install HDF5 first.
+
+        Regression for real CNB build cnb-7cn-1k6gvafcf. The `api-tests` stage
+        runs on a bare `python:3.15` image. `verify-backend-tests.sh` editable-
+        installs `apps/worker[dev]`, which pulls scanpy -> anndata -> h5py;
+        h5py 3.16 has no cp315 wheel, so pip builds it from sdist and needs
+        system HDF5 headers. The image has none, so the stage died with:
+
+            error: libhdf5.so: cannot open shared object file: No such file
+            ERROR: Failed building wheel for h5py
+
+        The production image (infra/docker/Dockerfile.worker) already solves
+        this with `libhdf5-dev` + `pkg-config` and HDF5_PKGCONFIG_NAME pointing
+        at Debian/Ubuntu's serial flavour. The CI gate must apply the same
+        recipe BEFORE the worker install, and both providers reach it through
+        this one script so the prerequisite cannot drift.
+        """
+        backend = (ROOT / "scripts/verify-backend-tests.sh").read_text(encoding="utf-8")
+        prereq = (ROOT / "scripts/install-worker-science-build-deps.sh").read_text(
+            encoding="utf-8"
+        )
+        dockerfile = (ROOT / "infra/docker/Dockerfile.worker").read_text(encoding="utf-8")
+
+        # The gate must provision the system deps and set the pkg-config name
+        # before running the worker editable install.
+        self.assertIn("scripts/install-worker-science-build-deps.sh", backend)
+        self.assertIn("export HDF5_PKGCONFIG_NAME=", backend)
+        self.assertIn("hdf5-serial", backend)
+        self.assertLess(
+            backend.index("install-worker-science-build-deps.sh"),
+            backend.index('"apps/worker[dev]"'),
+            "HDF5 prerequisites must be installed BEFORE pip builds h5py",
+        )
+
+        # Same package names and pkg-config flavour as the production image.
+        for package in ("libhdf5-dev", "pkg-config"):
+            self.assertIn(package, prereq, package)
+            self.assertIn(package, dockerfile, package)
+        self.assertIn("HDF5_PKGCONFIG_NAME=hdf5-serial", dockerfile)
+
+        # The prerequisite script is a real, strict, executable shared script.
+        self.assertIn("set -euo pipefail", prereq)
+        self.assertIn(
+            "scripts/install-worker-science-build-deps.sh",
+            SHARED_SCRIPTS,
+            "register the prerequisite script so the shared-script gates cover it",
+        )
 
     def test_acceptance_entry_point_never_reports_a_missing_prerequisite_as_a_pass(self) -> None:
         """The acceptance/smoke difference is deliberate and must stay visible.
