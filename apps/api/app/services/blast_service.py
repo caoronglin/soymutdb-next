@@ -19,6 +19,9 @@ import re
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from soymutdb_jobs.blast_catalog import (
+    is_searchable_build_state,
+)
 from soymutdb_jobs.blast_search import PROGRAM_DATABASE_TYPES, normalize_query
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,12 +35,22 @@ from ..core.exceptions import (
     ValidationError,
 )
 from ..core.security import RoleName, has_role
-from ..core.task_contract import BLAST_RUN_TASK
+from ..core.task_contract import BLAST_BUILD_INDEX_TASK, BLAST_RUN_TASK
 from ..models.auth import User
-from ..models.blast import BlastDatabase, BlastDbType, BlastHit, BlastJob, BlastJobStatus
+from ..models.blast import (
+    BlastDatabase,
+    BlastDbType,
+    BlastHit,
+    BlastIndexBuild,
+    BlastJob,
+    BlastJobStatus,
+)
 from ..models.genomic import Assembly
 from ..schemas.blast import (
     BlastDatabaseResponse,
+    BlastGenomeTargetResponse,
+    BlastIndexBuildRequest,
+    BlastIndexBuildResponse,
     BlastJobListResponse,
     BlastJobResponse,
     BlastParameters,
@@ -54,10 +67,11 @@ from ..schemas.blast import (
 )
 from ..utils.s3 import generate_presigned_url
 from .job_service import build_job_payload
-from .outbox_service import create_outbox_event
+from .outbox_service import create_outbox_event, enqueue_task_event
 from .release_context import ReleaseContext
 
 settings = get_settings()
+
 
 #: Maximum characters of error text exposed to clients.
 _MAX_ERROR_LEN = 2000
@@ -101,7 +115,7 @@ class BlastService:
             .where(
                 BlastDatabase.is_active.is_(True),
                 BlastDatabase.engine.in_(["diamond", "ncbi_blast"]),
-                BlastDatabase.build_status == "ready",
+                BlastDatabase.build_status.in_(["published", "ready"]),
                 Assembly.release_id == release_context.release_id,
             )
         )
@@ -139,13 +153,239 @@ class BlastService:
             )
         return rows
 
+    async def request_index_build(
+        self,
+        db: AsyncSession,
+        request: BlastIndexBuildRequest,
+        *,
+        user_id: uuid.UUID | None,
+        release_context: ReleaseContext,
+    ) -> BlastIndexBuildResponse:
+        """Record an immutable index build request and enqueue worker execution.
+
+        No ``makeblastdb`` call happens in this HTTP request. The catalog row
+        starts ``pending``/inactive and becomes searchable only after the
+        worker validates and publishes a new content-addressed identity.
+        Rebuilds always create a fresh row, never overwrite a published one.
+        """
+        from sqlalchemy import select
+
+
+        # The catalog's assembly/release identity is authoritative and is
+        # never trusted from the request body. get_ncbi_db_path binds the
+        # manifest's assembly_id/release_id to the numeric assemblies.id and
+        # release key of the searched job, so they must be frozen here.
+        assembly = (await db.execute(
+            select(Assembly).where(
+                Assembly.name == request.assembly_name,
+                Assembly.release_id == release_context.release_id,
+            )
+        )).scalar_one_or_none()
+        if assembly is None:
+            raise NotFoundError("assembly not found in the published release")
+
+        existing = (await db.execute(
+            select(BlastDatabase.id).where(BlastDatabase.name == request.name)
+        )).scalar_one_or_none()
+        if existing is not None:
+            raise ValidationError(
+                "BLAST database name already exists; use a new name for a rebuild"
+            )
+
+        catalog = BlastDatabase(
+            name=request.name,
+            db_type=request.db_type,
+            assembly_id=assembly.id,
+            file_path="",  # worker-local index path is never stored or exposed
+            engine="ncbi_blast",
+            sequence_type=request.sequence_type,
+            annotation_version=request.annotation_version,
+            source_url=request.source_url,
+            license=request.license,
+            build_status="pending",
+            is_active=False,
+            is_default=False,
+            provenance={"source_version": request.source_version},
+        )
+        db.add(catalog)
+        await db.flush()
+
+        build = BlastIndexBuild(
+            id=uuid.uuid4(),
+            database_id=catalog.id,
+            state="pending",
+            source_object_key=request.source_object_key,
+            db_type=request.db_type,
+            build_metadata=request.build_metadata(
+                assembly_id=str(assembly.id),
+                assembly_version=assembly.version,
+                release_id=release_context.release_key,
+            ),
+            requested_by=user_id,
+        )
+        db.add(build)
+        await db.flush()
+
+        await enqueue_task_event(
+            db,
+            event_type="blast_index.build",
+            aggregate_type="blast_index_build",
+            aggregate_id=str(build.id),
+            task_name=BLAST_BUILD_INDEX_TASK,
+            kwargs={"build_id": str(build.id)},
+        )
+        await db.commit()
+        await db.refresh(build)
+        return self._build_to_response(build, catalog.name)
+
+    async def get_index_build(
+        self, db: AsyncSession, build_id: uuid.UUID
+    ) -> BlastIndexBuildResponse:
+        from sqlalchemy import select
+
+        build = (await db.execute(
+            select(BlastIndexBuild).where(BlastIndexBuild.id == build_id)
+        )).scalar_one_or_none()
+        if build is None:
+            raise NotFoundError(f"BLAST index build {build_id} not found")
+        name = (await db.execute(
+            select(BlastDatabase.name).where(BlastDatabase.id == build.database_id)
+        )).scalar_one_or_none() or ""
+        return self._build_to_response(build, name)
+
+    @staticmethod
+    def _build_to_response(build: BlastIndexBuild, name: str) -> BlastIndexBuildResponse:
+        return BlastIndexBuildResponse(
+            build_id=str(build.id),
+            database_id=build.database_id or 0,
+            name=name,
+            state=build.state,
+            db_type=build.db_type,
+            index_identity=build.index_identity,
+            sequence_count=build.sequence_count,
+            total_length=build.total_length,
+            error_message=build.error_message,
+            created_at=build.created_at,
+            started_at=build.started_at,
+            completed_at=build.completed_at,
+        )
+
+
+
+    async def resolve_genome_target(
+        self,
+        db: AsyncSession,
+        job_id: uuid.UUID,
+        subject_id: str,
+        *,
+        user_id: uuid.UUID | None = None,
+        user_roles: list[str] | None = None,
+        public_token: str | None = None,
+    ) -> BlastGenomeTargetResponse:
+        """Resolve one BLAST subject to a gene locus in the job's own namespace.
+
+        Amino-acid alignment coordinates from ``blastp``/``blastx``/``tblastn``
+        describe residues, not bases. They are never used to build a genome
+        location. The subject identifier must resolve through an explicit,
+        assembly- and release-scoped gene/alias/transcript relation; anything
+        else is reported as unresolved with a reason.
+        """
+        from sqlalchemy import select
+
+        from ..models.genomic import Gene, GeneAlias, Transcript
+
+        def unresolved(reason: str) -> BlastGenomeTargetResponse:
+            return BlastGenomeTargetResponse(status="unresolved", reason=reason)
+
+        subject = subject_id.strip()
+        if not subject or len(subject) > 256 or any(ord(ch) < 32 for ch in subject):
+            return unresolved("invalid_subject_id")
+        if public_token is not None:
+            verify_blast_capability(public_token, job_id)
+        result = await db.execute(select(BlastJob).where(BlastJob.id == job_id))
+        job = result.scalar_one_or_none()
+        if job is None:
+            raise NotFoundError(f"BLAST job {job_id} not found")
+        self._authorize_read(job, user_id, user_roles, public_token)
+        if job.status != BlastJobStatus.COMPLETED:
+            return unresolved("job_not_completed")
+        # For blastp/blastx/tblastn the hit's subject_start/end are residue
+        # positions. Nothing below reads them: the locus comes only from the
+        # resolved gene record in the job's own assembly/release.
+        database = getattr(job, "database", None)
+        assembly = getattr(database, "assembly", None) if database is not None else None
+        if assembly is None or assembly.release_id is None:
+            return unresolved("assembly_mismatch")
+        release_id = int(assembly.release_id)
+        assembly_id = int(assembly.id)
+
+        gene = (await db.execute(
+            select(Gene).where(
+                Gene.accession == subject,
+                Gene.assembly_id == assembly_id,
+            )
+        )).scalar_one_or_none()
+        resolution = "gene_accession"
+        if gene is None:
+            alias_rows = (await db.execute(
+                select(GeneAlias).join(Gene, GeneAlias.gene_id == Gene.gene_pk).where(
+                    GeneAlias.alias == subject,
+                    Gene.assembly_id == assembly_id,
+                )
+            )).scalars().all()
+            if len(alias_rows) == 1:
+                gene = (await db.execute(
+                    select(Gene).where(Gene.gene_pk == alias_rows[0].gene_id)
+                )).scalar_one_or_none()
+                resolution = "gene_alias"
+            elif len(alias_rows) > 1:
+                return unresolved("ambiguous_subject")
+        if gene is None:
+            transcript_rows = (await db.execute(
+                select(Transcript).join(Gene, Transcript.gene_id == Gene.gene_pk).where(
+                    Transcript.id == subject,
+                    Gene.assembly_id == assembly_id,
+                )
+            )).scalars().all()
+            if len(transcript_rows) == 1:
+                gene = (await db.execute(
+                    select(Gene).where(Gene.gene_pk == transcript_rows[0].gene_id)
+                )).scalar_one_or_none()
+                resolution = "transcript_id"
+            elif len(transcript_rows) > 1:
+                return unresolved("ambiguous_subject")
+        if gene is None:
+            return unresolved("subject_not_found")
+        if gene.assembly_id != assembly_id:
+            return unresolved("assembly_mismatch")
+        chromosome = getattr(gene, "chromosome", None)
+        name = getattr(chromosome, "name", None) if chromosome is not None else None
+        if (
+            not name or gene.start is None or gene.end is None
+            or gene.start < 1 or gene.end < gene.start
+        ):
+            return unresolved("no_genomic_coordinates")
+        return BlastGenomeTargetResponse(
+            status="resolved",
+            gene_id=gene.accession,
+            chromosome=name,
+            start=int(gene.start),
+            end=int(gene.end),
+            strand=gene.strand,
+            release_id=release_id,
+            assembly_id=assembly_id,
+            assembly_name=assembly.name,
+            locus=f"{name}:{int(gene.start)}-{int(gene.end)}",
+            resolution=resolution,
+        )
+
     @staticmethod
     def _is_runnable_database(database: BlastDatabase) -> bool:
         """Catalog preparation must never dispatch an index to the wrong runner."""
         return (
             database.is_active is True
             and database.engine in {"diamond", "ncbi_blast"}
-            and database.build_status == "ready"
+            and is_searchable_build_state(database.build_status)
             and database.db_type in {BlastDbType.PROT, BlastDbType.NUCL}
             and (database.engine != "diamond" or database.db_type == BlastDbType.PROT)
         )
@@ -171,7 +411,7 @@ class BlastService:
             .where(
                 BlastDatabase.is_active.is_(True),
                 BlastDatabase.engine.in_(["diamond", "ncbi_blast"]),
-                BlastDatabase.build_status == "ready",
+                BlastDatabase.build_status.in_(["published", "ready"]),
                 Assembly.release_id == release_context.release_id,
                 BlastDatabase.engine == engine,
                 BlastDatabase.db_type == PROGRAM_DATABASE_TYPES[program],
@@ -425,6 +665,86 @@ class BlastService:
             response.status = BlastSchemaJobStatus.EXPIRED
             response.result_url = None
         return response
+
+
+
+    async def cancel_job(
+        self,
+        db: AsyncSession,
+        job_id: uuid.UUID,
+        user_id: uuid.UUID | None = None,
+        user_roles: list[str] | None = None,
+        *,
+        public_token: str | None = None,
+    ) -> BlastJobResponse:
+        """Cancel a pending/running BLAST job, identically for both engines.
+
+        A worker that already claimed the job finishes its current run, but
+        ``begin_run`` skips terminal rows and ``mark_succeeded`` is guarded on
+        ``status == running``, so a late success cannot overwrite the cancel.
+        """
+        if public_token is not None:
+            verify_blast_capability(public_token, job_id)
+        result = await db.execute(
+            select(BlastJob).where(BlastJob.id == job_id).with_for_update()
+        )
+        job = result.scalar_one_or_none()
+        if job is None:
+            raise NotFoundError(f"BLAST job {job_id} not found")
+        self._authorize_read(job, user_id, user_roles, public_token)
+        if job.status not in (BlastJobStatus.PENDING, BlastJobStatus.RUNNING):
+            raise ValidationError(
+                f"Only pending or running BLAST jobs can be cancelled (status={job.status})"
+            )
+        job.status = BlastJobStatus.CANCELLED
+        job.completed_at = datetime.now(UTC)
+        await db.commit()
+        await db.refresh(job)
+        return self._job_to_response(job)
+
+    async def retry_job(
+        self,
+        db: AsyncSession,
+        job_id: uuid.UUID,
+        user_id: uuid.UUID | None,
+        user_roles: list[str] | None = None,
+        *,
+        release_context: ReleaseContext,
+    ) -> BlastJobResponse:
+        """Retry a failed/expired job as a NEW job, for both engines alike.
+
+        Results and indexes are immutable: retry never mutates the original
+        row, never reuses its job id, and re-resolves the database in the
+        published release so a stale provenance cannot be replayed.
+        """
+        result = await db.execute(select(BlastJob).where(BlastJob.id == job_id))
+        original = result.scalar_one_or_none()
+        if original is None:
+            raise NotFoundError(f"BLAST job {job_id} not found")
+        self._authorize_job(original.user_id, user_id, user_roles)
+        if original.status not in (BlastJobStatus.FAILED, BlastJobStatus.EXPIRED):
+            raise ValidationError(
+                f"Only failed or expired BLAST jobs can be retried (status={original.status})"
+            )
+        if user_id is None:
+            raise AuthorizationError("Anonymous BLAST jobs cannot be retried")
+        provenance = (original.parameters or {}).get("_search_provenance", {})
+        engine = provenance.get("engine", "diamond")
+        request = BlastSubmitRequest(
+            engine=engine,
+            program=BlastProgram(original.program),
+            database_id=original.database_id,
+            query_sequence=original.query_sequence,
+            parameters=BlastParameters(
+                evalue=float((original.parameters or {}).get("evalue", 1e-5)),
+                max_target_seqs=int(
+                    (original.parameters or {}).get("max_target_seqs", 50)
+                ),
+            ),
+        )
+        return await self.submit_job(
+            db, user_id, request, release_context=release_context
+        )
 
     async def list_jobs(
         self,

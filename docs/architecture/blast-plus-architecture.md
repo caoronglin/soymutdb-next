@@ -18,6 +18,21 @@ The API validates FASTA, program-specific parameters, release and database compa
 
 Amino-acid coordinates from `blastp` are never treated as genomic coordinates. Gene/browser links are created only after an exact protein/transcript/gene lookup in the job's release and assembly. Result downloads include checksum, expiry and provenance. Unsupported program/database pairs fail validation before a worker is queued.
 
-## Catalog/index preparation slice
+## Async build and publication slice
 
-The additive catalog migration and operator-only immutable NCBI index builder implement the preparation layer described in [index operations](../ops/blast-index-builder.md). Catalogs distinguish engine/readiness and retain biological provenance; current API discovery/submission admits ready active DIAMOND protein indexes only. NCBI indexes can be built and validated with explicit metadata but are not registered or executed automatically. Five-program dispatch, asynchronous catalog build state and object-store publication remain pending; the existing DIAMOND worker is unchanged.
+Catalog builds are asynchronous and worker-only: the admin endpoint records a
+``blast_index_builds`` row plus an outbox event, and the ``blast``-queue worker
+runs ``makeblastdb``/``blastdbcmd``. The shared state machine is
+``pending -> building -> validating -> published / failed``; only ``published``
+(or legacy ``ready`` DIAMOND) rows are searchable. Each rebuild produces a new
+content-addressed identity and a new catalog row; published directories are
+immutable. Indexes live **only** on the worker's local volume
+(``SOYMUTDB_BLAST_INDEX_ROOT``); the object store carries only the reviewed
+source FASTA. See [index operations](../ops/blast-index-builder.md).
+
+Protein/translated hits never expose amino-acid coordinates as genomic
+coordinates: the genome-target endpoint resolves the subject through an
+explicit gene/alias/transcript relation in the job's own assembly and release,
+and reports ``unresolved`` with a reason when no relation exists. Cancellation,
+retry (as a new job) and download expiry are engine-independent and cover both
+NCBI BLAST+ and DIAMOND.
