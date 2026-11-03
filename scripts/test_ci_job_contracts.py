@@ -638,6 +638,155 @@ class DeliveryArchitectureTests(unittest.TestCase):
         ):
             self.assertIn(event, fallback, event)
 
+    def test_npc_events_resolve_a_role_declared_in_settings(self) -> None:
+        """An NPC event needs a role; `.cnb/settings.yml` is where it lives.
+
+        The `$` -> `issue.comment@npc` pipeline is this repository's NPC entry
+        point, and the platform resolves the mentioned role *by name* against
+        `npc.roles` before the container starts. With no roles declared, the
+        `npc go` stage aborts with "No roles defined in .cnb/settings.yml" and
+        the pipeline body in `.cnb.yml` never runs -- so the failure looks like
+        a broken CI pipeline when in fact no CI job was involved. Two of them
+        (no NPC pipeline at all, or a pipeline with no role list) are cheap to
+        keep apart here.
+        """
+        fallback = _cnb().get("$", {})
+        npc_events = [
+            event
+            for event in fallback
+            if isinstance(event, str) and event.startswith("issue.comment@npc")
+        ]
+        if not npc_events:
+            return
+
+        settings = yaml.safe_load(
+            (ROOT / ".cnb/settings.yml").read_text(encoding="utf-8")
+        ) or {}
+        roles = (settings.get("npc") or {}).get("roles") or []
+        self.assertTrue(
+            roles,
+            ".cnb.yml declares an NPC pipeline but .cnb/settings.yml defines "
+            "no npc.roles, so the platform stops at "
+            "'No roles defined in .cnb/settings.yml'",
+        )
+        names = [role.get("name") for role in roles]
+        for name in names:
+            self.assertTrue(name, "every npc role needs a name")
+        self.assertEqual(
+            len(names),
+            len(set(names)),
+            f"npc role names must be unique, got {names}",
+        )
+        self.assertIn("CodeBuddy", names)
+
+    def test_delivery_pipelines_are_named_and_off_pr_agents(self) -> None:
+        """Every pipeline in the delivery chain carries a `name`, and no agent runs on PRs.
+
+        Twice now a hand edit has dropped an `npc:go` block into `main` ->
+        `pull_request`. The block arrives without a `name` key, so it does not
+        sit *next to* `verify`; it replaces it: `main/pull_request` lost the
+        verification gate and every `pipeline["name"]` consumer raised
+        `KeyError: 'name'`. The same block also named a role the settings file
+        never declared, which the platform rejects before any container starts
+        (`Role "..." not found in .cnb/settings.yml`).
+
+        Two independent invariants, both cheap to check:
+          * pull_request is the verification gate -- no `npc:go` stage there;
+          * a role named in `npc:go` is declared under `npc.roles`, since the
+            platform resolves it by name before the job exists.
+        """
+        settings = yaml.safe_load(
+            (ROOT / ".cnb/settings.yml").read_text(encoding="utf-8")
+        ) or {}
+        declared = {
+            role.get("name") for role in (settings.get("npc") or {}).get("roles") or []
+        }
+
+        for branch, event in (
+            ("main", "pull_request"),
+            ("main", "push"),
+            ("$", "pull_request"),
+            ("$", "push"),
+            ("$", "tag_push"),
+            ("$", "web_trigger_verify"),
+            ("$", "issue.comment@npc"),
+            ("$", "pull_request.comment@npc"),
+        ):
+            for pipeline in _cnb_pipelines(branch, event):
+                self.assertTrue(
+                    pipeline.get("name"),
+                    f"{branch}/{event}: a pipeline needs an explicit `name`; an "
+                    "unnamed block does not sit beside the delivery chain, it "
+                    "replaces it",
+                )
+                for stage in pipeline.get("stages", []):
+                    if stage.get("type") != "npc:go":
+                        continue
+                    self.assertNotEqual(
+                        (branch, event),
+                        ("main", "pull_request"),
+                        "pull_request is the verification gate; an agent session "
+                        "there turns every push into an npc run instead of CI",
+                    )
+                    if str(event).endswith("@npc"):
+                        # An `@` mention supplies the role: the platform injects
+                        # it from the mentioned role and ignores `options`, so
+                        # requiring `options.role` here would demand a value that
+                        # can never take effect.
+                        continue
+                    role = (stage.get("options") or {}).get("role")
+                    self.assertTrue(
+                        role,
+                        f"{branch}/{event}/{pipeline['name']}: npc:go needs a role",
+                    )
+                    self.assertIn(
+                        role,
+                        declared,
+                        f"{branch}/{event}/{pipeline['name']}: role {role!r} is not "
+                        f"declared in .cnb/settings.yml npc.roles (declared: "
+                        f"{sorted(declared)}); the platform resolves the role by "
+                        "name before the container starts",
+                    )
+
+    def test_npc_events_run_the_npc_task_instead_of_a_placeholder(self) -> None:
+        """An `@` mention must reach `npc:go`, and both NPC events must be declared.
+
+        The body used to be `script: echo "Handled by the .cnb.yml npc pipeline"`.
+        That failure is the expensive kind: the pipeline goes green, the mention
+        is acknowledged, and no agent ever reads the thread. Nothing downstream
+        noticed, because a placeholder that exits 0 is indistinguishable from a
+        task that succeeded.
+
+        Declaring only `issue.comment@npc` is the second half: NPC config merges
+        per event, so a missing `pull_request.comment@npc` silently falls back to
+        the platform default and the two entry points drift apart.
+
+        Prompt text is deliberately not asserted. For `@` mentions the platform
+        injects the role prompt and ignores `options`, so a prompt asserted here
+        would pin a value with no effect.
+        """
+        fallback = _cnb().get("$", {})
+        events = ("issue.comment@npc", "pull_request.comment@npc")
+        for event in events:
+            self.assertTrue(
+                fallback.get(event),
+                f"{event} must be declared; NPC config merges per event, so a "
+                "missing one falls back to the platform default",
+            )
+            for pipeline in _cnb_pipelines("$", event):
+                bodies = [
+                    stage.get("script") or stage.get("type") or ""
+                    for stage in pipeline.get("stages", [])
+                ]
+                self.assertTrue(
+                    any(
+                        stage.get("type") == "npc:go"
+                        for stage in pipeline.get("stages", [])
+                    ),
+                    f"$/{event}: stages {bodies} carry no `type: npc:go`, so the "
+                    "mention is acknowledged and then nothing happens",
+                )
+
     def test_contracts_job_provisions_every_import_it_needs(self) -> None:
         """The contracts stage must provision the layer's whole dependency set.
 

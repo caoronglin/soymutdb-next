@@ -11,8 +11,15 @@ def test_all_worker_tasks_register_without_scientific_imports():
     worker = Path(__file__).resolve().parents[1]
     repository = worker.parents[1]
     environment = os.environ.copy()
+    # Every local workspace package the task modules import must be on the
+    # path, including import-protocol: the subprocess inherits no installed
+    # copy, so a missing entry surfaces as a ModuleNotFoundError in the child.
     environment["PYTHONPATH"] = os.pathsep.join(
-        [str(worker / "src"), str(repository / "packages/jobs-py/src")]
+        [
+            str(worker / "src"),
+            str(repository / "packages/jobs-py/src"),
+            str(repository / "packages/import-protocol/src"),
+        ]
     )
     result = subprocess.run(
         [sys.executable, "-c", """
