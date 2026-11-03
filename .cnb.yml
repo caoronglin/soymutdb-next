@@ -42,15 +42,6 @@
 # =============================================================================
 main:
   pull_request:
-    - docker:
-        image: cnbcool/default-npc:latest
-      stages:
-        - name: npc go
-          type: npc:go
-          options:
-            role: 代码审查员
-            systemPrompt: 你是一个专业的代码审查员，请审查代码变更并给出改进建议
-            userPrompt: 审查本次 PR 的代码变更，给出改进建议
     - name: verify
       # 16 cores: pnpm install + turbo build + three vitest projects + Python.
       runner:
@@ -1110,21 +1101,45 @@ $:
             name: pages-verified-tree-$CNB_COMMIT_SHORT
 
   # ---------------------------------------------------------------------------
-  # NPC — Issue-driven tasks handled inside the repository pipeline
+  # NPC — `@` mentions answered by the repository pipeline
   # ---------------------------------------------------------------------------
-  # The `@npc/...` mention is the platform trigger; this entry only exists so
-  # the event has a pipeline to attach to. It carries no `npc:go` stage on
-  # purpose:
+  # The body used to be `script: echo "Handled by the .cnb.yml npc pipeline"`.
+  # Keep that in mind as the failure shape: the build goes green, the mention
+  # looks acknowledged, and no agent ever reads the thread. A green pipeline
+  # that does nothing is worse than a red one, because nobody looks at a green
+  # one twice.
   #
-  #   * an `npc:go` stage needs a role declared under `npc.roles` in
-  #     `.cnb/settings.yml`, and the platform resolves that role BEFORE the
-  #     container starts (a missing one aborts the run at ~1s with
-  #     `Role "..." not found in .cnb/settings.yml`);
-  #   * on `pull_request` the same stage would turn every push into an agent
-  #     session instead of a verification run, so it must not be bolted onto
-  #     `main` -> `pull_request` either.
+  # `npc:go` is the only job body that can reply, write branch code and open a
+  # PR on the mentioner's behalf. Where its prompt comes from depends on HOW the
+  # NPC was summoned:
+  #   * `@` mention       -> the platform injects it from the role declared in
+  #                          .cnb/settings.yml; anything in `options` is ignored;
+  #   * any other trigger -> `userPrompt` is required, `role` alone is rejected.
+  # So no prompts are passed here -- writing them would create a second, silently
+  # ignored source of truth. See docs/ops/soymutdb-next-handoff.md.
+  #
+  # `npc.roles` in .cnb/settings.yml is the other half of this pair and must
+  # stay non-empty: without it the platform aborts in the `npc go` stage with
+  # `No roles defined in .cnb/settings.yml`, before any container starts.
+  #
+  # Declare BOTH NPC events. NPC config merges per event, so declaring only one
+  # leaves the other on the platform default and the two drift apart silently.
+  #
+  # `npc:go` must NOT be added to `main` -> `pull_request`: that event is the
+  # verification gate, and an agent session there turns every push into an NPC
+  # run. The `npc go` stage seen there in earlier revisions was that mistake.
   issue.comment@npc:
     - name: npc
+      docker:
+        image: cnbcool/default-npc:latest
       stages:
-        - name: Handle the NPC request
-          script: echo "Handled by the .cnb.yml npc pipeline"
+        - name: npc go
+          type: npc:go
+
+  pull_request.comment@npc:
+    - name: npc
+      docker:
+        image: cnbcool/default-npc:latest
+      stages:
+        - name: npc go
+          type: npc:go
