@@ -66,7 +66,18 @@ beforeEach(() => {
   runtime.resolveTarget.mockReset().mockImplementation(async (job: { release_id: number; assembly_name: string }) => ({ release: String(job.release_id), assembly: job.assembly_name, locus: "chr01:12000-15000" }));
   runtime.hits.mockReset().mockResolvedValue({ items: [{ subject_id: "Glyma.01G000100", subject_start: 1, subject_end: 100 }] });
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(async () => {
+  // Ant Design Select opens its dropdown through a delayed state update. Let
+  // that pending timer fire while jsdom is still installed: a callback that
+  // runs after the fork tears the environment down reaches react-dom's
+  // resolveUpdatePriority(), which reads `window` and throws an unhandled
+  // "window is not defined" error (4 of them failed the frontend gate).
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 /** Render the page and open the (single) completed job's hits table. */
 async function renderHits(): Promise<QueryClient> {
