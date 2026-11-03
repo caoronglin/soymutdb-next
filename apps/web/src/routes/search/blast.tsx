@@ -100,6 +100,13 @@ function PublicBlastComponent() {
     return () => window.clearInterval(timer);
   }, [expiresAt]);
 
+  // The engine picker's copy lives in one place per page: the pair used to be
+  // duplicated as two inline option arrays, and the two copies drifted.
+  const engineOptions: { value: BlastEngine; label: string; disabled?: boolean }[] = [
+    { value: "ncbi_blast", label: t("blastSearch.engineNcbi") },
+    { value: "diamond", label: t("blastSearch.engineDiamondBlastp"), disabled: program !== "blastp" },
+  ];
+
   const expiredByClock = expiresAt != null && Date.parse(expiresAt) <= clock;
   const statusQuery = useQuery({
     queryKey: ["public-blast-job", job?.id],
@@ -154,7 +161,7 @@ function PublicBlastComponent() {
       <Card title={t("blastPublic.formTitle")}>
         <Form layout="vertical" onFinish={() => void submit()}>
           <div className="grid gap-x-6 md:grid-cols-2">
-            <Form.Item label={t("blastPublic.engine")}><Select aria-label={t("blastPublic.engine")} value={engine} onChange={(value: BlastEngine) => setEngine(value)} options={[{ value: "ncbi_blast", label: t("blastSearch.engineNcbi") }, { value: "diamond", label: t("blastSearch.engineDiamondBlastp"), disabled: program !== "blastp" }]} /></Form.Item>
+            <Form.Item label={t("blastPublic.engine")}><Select aria-label={t("blastPublic.engine")} value={engine} onChange={(value: BlastEngine) => setEngine(value)} options={engineOptions} /></Form.Item>
             <Form.Item label={t("blastPublic.program")}><Select aria-label={t("blastPublic.program")} value={program} onChange={(value: BlastProgram) => setProgram(value)} options={BLAST_PROGRAMS.filter((item) => engine === "ncbi_blast" || item.id === "blastp").map((item) => ({ value: item.id, label: item.label }))} /></Form.Item>
           </div>
           <Form.Item label={t("blast.database")} htmlFor="public-blast-database" required>

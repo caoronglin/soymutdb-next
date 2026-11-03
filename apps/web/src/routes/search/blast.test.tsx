@@ -145,3 +145,11 @@ it("names the raw artifact as tab-separated aligner output", async () => {
   expect(link.getAttribute("href")).toBe("https://objects.example/raw.txt");
   expect(link.getAttribute("download")).toBe("public-j-ncbi_blast-blastp.tsv");
 });
+
+it("offers both search engines from the catalog", async () => {
+  renderPage();
+  await screen.findByText("protein-v4");
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Search engine" }));
+  expect((await screen.findAllByText("NCBI BLAST+")).length).toBeGreaterThan(0);
+  expect((await screen.findAllByText("DIAMOND (blastp)")).length).toBeGreaterThan(0);
+});

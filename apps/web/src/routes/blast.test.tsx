@@ -279,3 +279,15 @@ it("submits several FASTA records and rejects a record without a sequence", asyn
     client.clear();
   }
 });
+
+it("offers both search engines from the catalog", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><Page /></QueryClientProvider>);
+  await screen.findByTestId("blast-submit");
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "blastPublic.engine" }));
+  // Both labels come from blastSearch.* — an inline literal here is exactly what
+  // the visible-copy gate rejects.
+  expect((await screen.findAllByText("blastSearch.engineNcbi")).length).toBeGreaterThan(0);
+  expect((await screen.findAllByText("blastSearch.engineDiamondBlastp")).length).toBeGreaterThan(0);
+  client.clear();
+});

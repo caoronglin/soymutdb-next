@@ -162,6 +162,13 @@ function BlastComponent() {
             ),
           }));
 
+  // The engine picker's copy lives in one place per page: the pair used to be
+  // duplicated as two inline option arrays, and the two copies drifted.
+  const engineOptions: { value: BlastEngine; label: string; disabled?: boolean }[] = [
+    { value: "ncbi_blast", label: t("blastSearch.engineNcbi") },
+    { value: "diamond", label: t("blastSearch.engineDiamondBlastp"), disabled: form.program !== "blastp" },
+  ];
+
   // Default to the database flagged as the assembly default (fallback: first active).
   React.useEffect(() => {
     if (form.database) return;
@@ -558,7 +565,7 @@ function BlastComponent() {
             >
 
               <div className="grid gap-2 md:grid-cols-2">
-                <Select aria-label={t("blastPublic.engine")} value={form.engine} onChange={(value: BlastEngine) => setForm((f) => ({ ...f, engine: value, database: "" }))} options={[{ value: "ncbi_blast", label: t("blastSearch.engineNcbi") }, { value: "diamond", label: t("blastSearch.engineDiamondBlastp"), disabled: form.program !== "blastp" }]} />
+                <Select aria-label={t("blastPublic.engine")} value={form.engine} onChange={(value: BlastEngine) => setForm((f) => ({ ...f, engine: value, database: "" }))} options={engineOptions} />
                 <Select aria-label={t("blastPublic.program")} value={form.program} onChange={(value: BlastProgram) => setForm((f) => ({ ...f, program: value, database: "" }))} options={BLAST_PROGRAMS.filter((item) => form.engine === "ncbi_blast" || item.id === "blastp").map((item) => ({ value: item.id, label: item.label }))} />
               </div>
             </Form.Item>
