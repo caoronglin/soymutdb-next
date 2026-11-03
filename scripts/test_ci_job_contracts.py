@@ -710,6 +710,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
             ("$", "tag_push"),
             ("$", "web_trigger_verify"),
             ("$", "issue.comment@npc"),
+            ("$", "pull_request.comment@npc"),
         ):
             for pipeline in _cnb_pipelines(branch, event):
                 self.assertTrue(
@@ -727,6 +728,12 @@ class DeliveryArchitectureTests(unittest.TestCase):
                         "pull_request is the verification gate; an agent session "
                         "there turns every push into an npc run instead of CI",
                     )
+                    if str(event).endswith("@npc"):
+                        # An `@` mention supplies the role: the platform injects
+                        # it from the mentioned role and ignores `options`, so
+                        # requiring `options.role` here would demand a value that
+                        # can never take effect.
+                        continue
                     role = (stage.get("options") or {}).get("role")
                     self.assertTrue(
                         role,
@@ -740,6 +747,45 @@ class DeliveryArchitectureTests(unittest.TestCase):
                         f"{sorted(declared)}); the platform resolves the role by "
                         "name before the container starts",
                     )
+
+    def test_npc_events_run_the_npc_task_instead_of_a_placeholder(self) -> None:
+        """An `@` mention must reach `npc:go`, and both NPC events must be declared.
+
+        The body used to be `script: echo "Handled by the .cnb.yml npc pipeline"`.
+        That failure is the expensive kind: the pipeline goes green, the mention
+        is acknowledged, and no agent ever reads the thread. Nothing downstream
+        noticed, because a placeholder that exits 0 is indistinguishable from a
+        task that succeeded.
+
+        Declaring only `issue.comment@npc` is the second half: NPC config merges
+        per event, so a missing `pull_request.comment@npc` silently falls back to
+        the platform default and the two entry points drift apart.
+
+        Prompt text is deliberately not asserted. For `@` mentions the platform
+        injects the role prompt and ignores `options`, so a prompt asserted here
+        would pin a value with no effect.
+        """
+        fallback = _cnb().get("$", {})
+        events = ("issue.comment@npc", "pull_request.comment@npc")
+        for event in events:
+            self.assertTrue(
+                fallback.get(event),
+                f"{event} must be declared; NPC config merges per event, so a "
+                "missing one falls back to the platform default",
+            )
+            for pipeline in _cnb_pipelines("$", event):
+                bodies = [
+                    stage.get("script") or stage.get("type") or ""
+                    for stage in pipeline.get("stages", [])
+                ]
+                self.assertTrue(
+                    any(
+                        stage.get("type") == "npc:go"
+                        for stage in pipeline.get("stages", [])
+                    ),
+                    f"$/{event}: stages {bodies} carry no `type: npc:go`, so the "
+                    "mention is acknowledged and then nothing happens",
+                )
 
     def test_contracts_job_provisions_every_import_it_needs(self) -> None:
         """The contracts stage must provision the layer's whole dependency set.
