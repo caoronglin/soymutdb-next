@@ -105,6 +105,26 @@ main:
       services:
         - docker
       stages:
+        # Compiler prerequisites for the worker's CPython 3.15 science stack.
+        #
+        # `scripts/verify-backend-tests.sh` pip-installs `apps/worker[dev]` into
+        # the stage container, and CPython 3.15 publishes no manylinux wheels
+        # for that stack, so pip compiles sdists. The worker *image* installs
+        # build-essential + libhdf5-dev (deploy/docker/Dockerfile.worker), but
+        # the CI stage is a bare `python:3.15` that only carries gcc. Real build
+        # cnb-8sk-1k6gv3vju-002 died there:
+        #
+        #   Loading library to get build settings and version: libhdf5.so
+        #   error: libhdf5.so: cannot open shared object file
+        #   ERROR: Failed building wheel for h5py
+        #
+        # This is a CI-provider precondition, so it lives in the provider
+        # config, not in `scripts/`: the job bodies stay byte-identical between
+        # CNB and GitHub. The step is idempotent and self-skipping when the
+        # headers are already present.
+        - name: Compiler prerequisites
+          image: python:3.15
+          script: bash scripts/ci-job-steps.sh run system-deps
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
         # bootstraps itself via scripts/setup-workspace.sh. Only the pipeline's
