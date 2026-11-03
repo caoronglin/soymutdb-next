@@ -89,6 +89,9 @@ def _make_db() -> BlastDatabase:
         assembly_id=1,
         file_path="/data/dbs/williams82_cds",
         is_active=True,
+        engine="diamond",
+        build_status="ready",
+        is_default=False,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )

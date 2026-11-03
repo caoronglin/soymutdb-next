@@ -7,7 +7,9 @@ from datetime import datetime
 from enum import StrEnum
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     Enum,
     Float,
@@ -17,6 +19,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
@@ -49,6 +52,29 @@ class BlastJobStatus(StrEnum):
 
 class BlastDatabase(Base, TimestampMixin):
     __tablename__ = "blast_databases"
+    __table_args__ = (
+        CheckConstraint("engine IN ('diamond', 'ncbi_blast')", name="ck_blast_catalog_engine"),
+        CheckConstraint(
+            "sequence_type IS NULL OR sequence_type IN "
+            "('genome', 'cds', 'transcript', 'protein', 'repeat_masked', "
+            "'pan_genome', 'family_consensus', 'custom')",
+            name="ck_blast_catalog_sequence_type",
+        ),
+        CheckConstraint(
+            "build_status IN ('pending', 'ready', 'building', 'failed')",
+            name="ck_blast_catalog_build_status",
+        ),
+        CheckConstraint("sequence_count >= 0", name="ck_blast_catalog_sequence_count"),
+        CheckConstraint("total_length >= 0", name="ck_blast_catalog_total_length"),
+        CheckConstraint(
+            "fasta_sha256 IS NULL OR fasta_sha256 ~ '^[a-f0-9]{64}$'",
+            name="ck_blast_catalog_fasta_sha256",
+        ),
+        Index(
+            "uq_blast_catalog_active_default", "assembly_id", "engine", "db_type",
+            unique=True, postgresql_where=text("is_active AND is_default"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(256), unique=True, nullable=False)
@@ -68,6 +94,31 @@ class BlastDatabase(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="true", nullable=False
     )
+
+    # Legacy rows are known DIAMOND indexes. Unknown source/annotation/license
+    # remain NULL rather than fabricated provenance.
+    engine: Mapped[str] = mapped_column(
+        String(16), default="diamond", server_default="diamond", nullable=False
+    )
+    sequence_type: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    annotation_version: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    sequence_count: Mapped[int] = mapped_column(
+        BigInteger, default=0, server_default="0", nullable=False
+    )
+    total_length: Mapped[int] = mapped_column(
+        BigInteger, default=0, server_default="0", nullable=False
+    )
+    fasta_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    index_version: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    build_status: Mapped[str] = mapped_column(
+        String(20), default="pending", server_default="pending", nullable=False
+    )
+    is_default: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false", nullable=False
+    )
+    provenance: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    license: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     assembly = relationship("Assembly", lazy="joined")
     jobs: Mapped[list[BlastJob]] = relationship(

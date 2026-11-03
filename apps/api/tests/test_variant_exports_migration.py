@@ -158,6 +158,36 @@ async def _schema_state(url: str) -> tuple[bool, bool]:
     return bool(tables), bool(types)
 
 
+async def _legacy_blast_state(url: str, *, seed: bool = False) -> tuple:
+    """Observe genuine historical defaults and values through the full chain."""
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    engine = create_async_engine(url)
+    try:
+        async with engine.begin() as connection:
+            if seed:
+                await connection.exec_driver_sql(
+                    "INSERT INTO blast_databases "
+                    "(name,display_name,db_type,program,db_path,file_path,"
+                    "sequence_count,total_length) VALUES "
+                    "('legacy_rt','Legacy index','prot','blastp','/legacy/index',"
+                    "'/legacy/index',42,800)"
+                )
+            row = (await connection.exec_driver_sql(
+                "SELECT name,sequence_count,total_length,build_status,file_path "
+                "FROM blast_databases WHERE name='legacy_rt'"
+            )).one()
+            defaults = (await connection.exec_driver_sql(
+                "SELECT column_name,column_default,is_nullable,data_type "
+                "FROM information_schema.columns WHERE table_schema='public' "
+                "AND table_name='blast_databases' AND column_name IN "
+                "('sequence_count','total_length','build_status') ORDER BY column_name"
+            )).all()
+            return tuple(row), defaults
+    finally:
+        await engine.dispose()
+
+
 def _alembic(command: str, revision: str, url: str) -> None:
     environment = os.environ.copy()
     workspace_root = API_ROOT.parents[1]
@@ -192,13 +222,21 @@ async def test_0049_round_trip_creates_and_removes_the_export_record() -> None:
 
     url = _scratch_url(server_url)
     try:
+        _alembic("upgrade", "0049", url)
+        legacy = await _legacy_blast_state(url, seed=True)
+        assert legacy[0] == ("legacy_rt", 42, 800, "pending", "/legacy/index")
         _alembic("upgrade", "head", url)
+        assert await _legacy_blast_state(url) == legacy
         assert await _schema_state(url) == (True, True), "the upgrade must create the record"
 
         _alembic("downgrade", "0048", url)
         assert await _schema_state(url) == (False, False), "the downgrade must remove it"
+        assert await _legacy_blast_state(url) == legacy
 
-        _alembic("upgrade", "0049", url)
+        # Restore through current head as well: later additive migrations must
+        # remain compatible with the genuine historical chain, not just ORM DDL.
+        _alembic("upgrade", "head", url)
         assert await _schema_state(url) == (True, True), "the record must be restorable"
+        assert await _legacy_blast_state(url) == legacy
     finally:
         await _drop_database(server_url)

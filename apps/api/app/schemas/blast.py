@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
+from soymutdb_jobs.blast_catalog import public_source_url
 from soymutdb_jobs.protein_fasta import PROTEIN_ALPHABET as PROTEIN_ALPHABET
 from soymutdb_jobs.protein_fasta import (
     ProteinFastaError,
@@ -319,3 +320,24 @@ class BlastDatabaseResponse(BaseModel):
     release_id: int | None = None
 
     model_config = {"from_attributes": True}
+
+    engine: Literal["diamond", "ncbi_blast"] = "diamond"
+    sequence_type: Literal[
+        "genome", "cds", "transcript", "protein", "repeat_masked",
+        "pan_genome", "family_consensus", "custom",
+    ] | None = None
+    annotation_version: str | None = None
+    source_url: str | None = None
+    sequence_count: int | None = Field(default=None, ge=0)
+    total_length: int | None = Field(default=None, ge=0)
+    fasta_sha256: str | None = None
+    index_version: str | None = None
+    build_status: Literal["pending", "ready", "building", "failed"] = "pending"
+    is_default: bool = False
+    license: str | None = None
+
+    @field_validator("source_url", mode="before")
+    @classmethod
+    def public_source_url(cls, value: object) -> str | None:
+        """Stored provenance is untrusted; omit paths and private URL authorities."""
+        return public_source_url(value)

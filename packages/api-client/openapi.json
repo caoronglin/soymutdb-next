@@ -18911,6 +18911,131 @@
               }
             ],
             "title": "Release Id"
+          },
+          "engine": {
+            "type": "string",
+            "enum": [
+              "diamond",
+              "ncbi_blast"
+            ],
+            "title": "Engine",
+            "default": "diamond"
+          },
+          "sequence_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "genome",
+                  "cds",
+                  "transcript",
+                  "protein",
+                  "repeat_masked",
+                  "pan_genome",
+                  "family_consensus",
+                  "custom"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence Type"
+          },
+          "annotation_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Annotation Version"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
+          "sequence_count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence Count"
+          },
+          "total_length": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Length"
+          },
+          "fasta_sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fasta Sha256"
+          },
+          "index_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index Version"
+          },
+          "build_status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "ready",
+              "building",
+              "failed"
+            ],
+            "title": "Build Status",
+            "default": "pending"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default",
+            "default": false
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "License"
           }
         },
         "type": "object",

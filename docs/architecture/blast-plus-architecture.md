@@ -17,3 +17,7 @@ The API validates FASTA, program-specific parameters, release and database compa
 ## Biological correctness
 
 Amino-acid coordinates from `blastp` are never treated as genomic coordinates. Gene/browser links are created only after an exact protein/transcript/gene lookup in the job's release and assembly. Result downloads include checksum, expiry and provenance. Unsupported program/database pairs fail validation before a worker is queued.
+
+## Catalog/index preparation slice
+
+The additive catalog migration and operator-only immutable NCBI index builder implement the preparation layer described in [index operations](../ops/blast-index-builder.md). Catalogs distinguish engine/readiness and retain biological provenance; current API discovery/submission admits ready active DIAMOND protein indexes only. NCBI indexes can be built and validated with explicit metadata but are not registered or executed automatically. Five-program dispatch, asynchronous catalog build state and object-store publication remain pending; the existing DIAMOND worker is unchanged.

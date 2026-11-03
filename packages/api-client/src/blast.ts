@@ -12,6 +12,19 @@ export interface BlastDatabase {
   assembly_is_default?: boolean | null;
   release_id?: number | null;
   is_active: boolean;
+  /** Additive catalog metadata; older deployments may omit these fields. */
+  engine?: "diamond" | "ncbi_blast";
+  sequence_type?: "genome" | "cds" | "transcript" | "protein" | "repeat_masked" | "pan_genome" | "family_consensus" | "custom" | null;
+  annotation_version?: string | null;
+  source_url?: string | null;
+  sequence_count?: number | null;
+  total_length?: number | null;
+  fasta_sha256?: string | null;
+  index_version?: string | null;
+  build_status?: "pending" | "ready" | "building" | "failed";
+  /** Database default within assembly, engine and database type. */
+  is_default?: boolean;
+  license?: string | null;
 }
 
 export interface BlastJob {

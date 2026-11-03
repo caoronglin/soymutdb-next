@@ -54,6 +54,9 @@ def _make_db(db_type: str = "prot") -> BlastDatabase:
         assembly_id=1,
         file_path="/data/dbs/williams82_cds",
         is_active=True,
+        engine="diamond",
+        build_status="ready",
+        is_default=False,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -216,7 +219,7 @@ class TestProgramDatabaseCompatibility:
         import asyncio
 
         session = FakeDbSession(blast_db=_make_db(db_type="nucl"))
-        with pytest.raises(AppValidationError, match="cannot search"):
+        with pytest.raises(NotFoundError):
             asyncio.run(self._submit(session, _make_request()))
 
     def test_missing_or_inactive_database_not_found(self) -> None:

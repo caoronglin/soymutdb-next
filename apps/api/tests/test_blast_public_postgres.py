@@ -41,6 +41,7 @@ async def test_public_blast_postgres_release_ownership_and_atomic_outbox(
             db_type="prot",
             file_path="/private/index/protein",
             is_active=True,
+            build_status="ready",
         )
         for release, assembly in zip(releases, assemblies, strict=True)
     ]

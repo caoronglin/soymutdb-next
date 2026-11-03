@@ -63,6 +63,9 @@ class Session:
             assembly_id=1,
             file_path="/private/indices/protein",
             is_active=True,
+            engine="diamond",
+            build_status="ready",
+            is_default=False,
         )
         self.catalog.assembly = Assembly(
             id=1,
