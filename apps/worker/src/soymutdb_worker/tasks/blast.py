@@ -429,6 +429,14 @@ def get_blast_db_path(db_name: str) -> Path:
 # ---------------------------------------------------------------------------
 
 
+# `preexec_fn` runs inside the forked child, so the limits below can only be set
+# on platforms that implement them; a missing RLIMIT is expected and must not
+# abort the search. Both clauses therefore catch and ignore. This function was
+# unimportable for a while (`except ValueError, OSError:` is Python 2 syntax),
+# which is why the worker's per-child limits are only trusted after a real
+# subprocess search, not after an import check.
+
+
 def _set_subprocess_limits() -> None:
     """Set memory and file-size limits for the child process via ``resource``.
 

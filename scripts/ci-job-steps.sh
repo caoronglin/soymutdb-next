@@ -233,6 +233,7 @@ ensure_governance_python() {
 # -----------------------------------------------------------------------------
 JOBS=(
   frontend
+  system-deps
   api-tests
   smoke-contracts
   dependency-governance
@@ -246,6 +247,52 @@ JOBS=(
 
 list_jobs() {
   printf '%s\n' "${JOBS[@]}"
+}
+
+# -----------------------------------------------------------------------------
+# system-deps — the compiler prerequisites a later stage's pip install needs
+# -----------------------------------------------------------------------------
+# CPython 3.15 publishes no manylinux wheels for the worker's science stack
+# (h5py, cyvcf2, pyarrow, leidenalg, ...), so every `pip install apps/worker[dev]`
+# compiles sdists. The worker *image* provides build-essential + libhdf5-dev
+# (deploy/docker/Dockerfile.worker); the `api-tests` stage is a bare
+# `python:3.15` and provides neither, so real build cnb-8sk-1k6gv3vju-002 failed
+# inside the gate that PRs must pass:
+#
+#   Loading library to get build settings and version: libhdf5.so
+#   error: libhdf5.so: cannot open shared object file: No such file or directory
+#   ERROR: Failed building wheel for h5py
+#
+# The step is a no-op where the headers already exist (the GitHub mirror
+# installs them through apt as root in its own job; a developer machine usually
+# has them), and it never installs anything at run time. Package names are the
+# Debian families the Dockerfile pins, so drift shows up as a failing PR rather
+# than a mystery wheel-build error.
+system_deps_run() {
+  if pkg-config --exists hdf5-serial 2>/dev/null; then
+    log "HDF5 development files are already present; nothing to install"
+    return 0
+  fi
+
+  local sudo_prefix=""
+  if [ "$(id -u)" -ne 0 ]; then
+    if command -v sudo >/dev/null 2>&1; then
+      sudo_prefix="sudo"
+    else
+      log "cannot install HDF5 development files: not root and no sudo"
+      return 1
+    fi
+  fi
+
+  if ! command -v apt-get >/dev/null 2>&1; then
+    log "cannot install HDF5 development files: apt-get is unavailable"
+    return 1
+  fi
+
+  log "installing build-essential + libhdf5-dev for the CPython ${PYTHON_VERSION} sdist builds"
+  ${sudo_prefix} apt-get update
+  ${sudo_prefix} env DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    build-essential libhdf5-dev pkg-config
 }
 
 # -----------------------------------------------------------------------------

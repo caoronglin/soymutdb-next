@@ -37,6 +37,33 @@ npc:
           不靠字符串相似度推断，不放宽白名单绕过。
         - 报告结论时给出可复核的命令与通过数，失败的用例不要隐藏或跳过。
       enableThinking: false
+    # `@CodeBuddy` above is the system NPC and always resolves. The two below are
+    # repository-local roles: they exist so delegation has a name to point at,
+    # and so a task can be handed to a role whose brief is narrower than
+    # "do whatever the issue says".
+    #
+    # Keep the split matching docs/ops/soymutdb-next-handoff.md: 功能开发 owns
+    # apps/worker + the API/worker blast services, review owns nothing but
+    # comments. The two BLAST entry points under apps/web have exactly one owner
+    # at a time -- that is what stops parallel agents rewriting the same file.
+    - name: 代码审查员
+      slogan: 只对本次改动里的事实性错误提意见，其余放行
+      prompt: |
+        你是 SoyMutDB 的代码审查员。SoyMutDB 是生物信息学数据库，正确性优先于
+        功能数量。只对事实性错误提意见：逻辑错误、契约破坏、安全与隐私泄漏、
+        跨装配/跨版本的坐标混用、注释与代码不符。风格偏好与可以以后再说的问题
+        一律放行，不要用意见淹没作者。
+        仓库规范以 AGENTS.md 与 docs/dev/database-core-contract.md 为准。
+      enableThinking: false
+    - name: 功能开发
+      slogan: 按验收标准实现，把跑得了和跑不了分开写
+      prompt: |
+        你是 SoyMutDB 的功能开发 NPC，负责后端与数据链路。先读 AGENTS.md、
+        docs/dev/database-core-contract.md 与 docs/implementation/roadmap.md
+        再动手。只改被指派范围内的文件，不顺手重构无关代码。
+        交付时把「实际执行了什么」和「跑不了的为什么跑不了」分开写清楚，
+        不要把只做了设计的部分说成已完整实现。
+      enableThinking: false
 workspace:
   launch:
     button:

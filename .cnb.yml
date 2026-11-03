@@ -108,6 +108,26 @@ main:
       services:
         - docker
       stages:
+        # Compiler prerequisites for the worker's CPython 3.15 science stack.
+        #
+        # `scripts/verify-backend-tests.sh` pip-installs `apps/worker[dev]` into
+        # the stage container, and CPython 3.15 publishes no manylinux wheels
+        # for that stack, so pip compiles sdists. The worker *image* installs
+        # build-essential + libhdf5-dev (deploy/docker/Dockerfile.worker), but
+        # the CI stage is a bare `python:3.15` that only carries gcc. Real build
+        # cnb-8sk-1k6gv3vju-002 died there:
+        #
+        #   Loading library to get build settings and version: libhdf5.so
+        #   error: libhdf5.so: cannot open shared object file
+        #   ERROR: Failed building wheel for h5py
+        #
+        # This is a CI-provider precondition, so it lives in the provider
+        # config, not in `scripts/`: the job bodies stay byte-identical between
+        # CNB and GitHub. The step is idempotent and self-skipping when the
+        # headers are already present.
+        - name: Compiler prerequisites
+          image: python:3.15
+          script: bash scripts/ci-job-steps.sh run system-deps
         # No "setup workspace" stage: every CNB stage gets a fresh container, so
         # a bootstrap stage would not prepare the stages after it. Each job body
         # bootstraps itself via scripts/setup-workspace.sh. Only the pipeline's
@@ -1104,21 +1124,45 @@ $:
             name: pages-verified-tree-$CNB_COMMIT_SHORT
 
   # ---------------------------------------------------------------------------
-  # NPC — Issue-driven tasks handled inside the repository pipeline
+  # NPC — `@` mentions answered by the repository pipeline
   # ---------------------------------------------------------------------------
-  # The `@npc/...` mention is the platform trigger; this entry only exists so
-  # the event has a pipeline to attach to. It carries no `npc:go` stage on
-  # purpose:
+  # The body used to be `script: echo "Handled by the .cnb.yml npc pipeline"`.
+  # Keep that in mind as the failure shape: the build goes green, the mention
+  # looks acknowledged, and no agent ever reads the thread. A green pipeline
+  # that does nothing is worse than a red one, because nobody looks at a green
+  # one twice.
   #
-  #   * an `npc:go` stage needs a role declared under `npc.roles` in
-  #     `.cnb/settings.yml`, and the platform resolves that role BEFORE the
-  #     container starts (a missing one aborts the run at ~1s with
-  #     `Role "..." not found in .cnb/settings.yml`);
-  #   * on `pull_request` the same stage would turn every push into an agent
-  #     session instead of a verification run, so it must not be bolted onto
-  #     `main` -> `pull_request` either.
+  # `npc:go` is the only job body that can reply, write branch code and open a
+  # PR on the mentioner's behalf. Where its prompt comes from depends on HOW the
+  # NPC was summoned:
+  #   * `@` mention       -> the platform injects it from the role declared in
+  #                          .cnb/settings.yml; anything in `options` is ignored;
+  #   * any other trigger -> `userPrompt` is required, `role` alone is rejected.
+  # So no prompts are passed here -- writing them would create a second, silently
+  # ignored source of truth. See docs/ops/soymutdb-next-handoff.md.
+  #
+  # `npc.roles` in .cnb/settings.yml is the other half of this pair and must
+  # stay non-empty: without it the platform aborts in the `npc go` stage with
+  # `No roles defined in .cnb/settings.yml`, before any container starts.
+  #
+  # Declare BOTH NPC events. NPC config merges per event, so declaring only one
+  # leaves the other on the platform default and the two drift apart silently.
+  #
+  # `npc:go` must NOT be added to `main` -> `pull_request`: that event is the
+  # verification gate, and an agent session there turns every push into an NPC
+  # run. The `npc go` stage seen there in earlier revisions was that mistake.
   issue.comment@npc:
     - name: npc
+      docker:
+        image: cnbcool/default-npc:latest
       stages:
-        - name: Handle the NPC request
-          script: echo "Handled by the .cnb.yml npc pipeline"
+        - name: npc go
+          type: npc:go
+
+  pull_request.comment@npc:
+    - name: npc
+      docker:
+        image: cnbcool/default-npc:latest
+      stages:
+        - name: npc go
+          type: npc:go
