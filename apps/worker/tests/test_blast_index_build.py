@@ -266,3 +266,39 @@ def test_stale_claim_is_closed_explicitly_not_rebuilt(setup, monkeypatch, state)
     build_id = str(uuid.uuid4())
     assert _call(build_id) == {"build_id": build_id, "skipped": True, "state": "failed"}
     assert list(root.iterdir()) == []
+
+
+def test_rejected_catalog_update_fails_the_build_instead_of_half_publishing(setup, monkeypatch):
+    """A catalog UPDATE rejected by the guard must not leave a published build."""
+    _, root, _ = setup
+
+    class RejectedCatalogSession(BuildSession):
+        """Simulate a concurrent publisher winning the guarded catalog UPDATE."""
+
+        def execute(self, stmt, params=None):
+            table = getattr(stmt, "table", None)
+            name = getattr(table, "name", None)
+            if name == "blast_databases" and hasattr(stmt, "_values"):
+                return _Result([], rowcount=0)
+            return super().execute(stmt, params)
+
+    session = RejectedCatalogSession()
+
+    @contextmanager
+    def reused_db():
+        yield session
+
+    monkeypatch.setattr(build_module, "get_db", reused_db)
+    build_id = str(uuid.uuid4())
+
+    with pytest.raises(ValueError):
+        _call(build_id)
+
+    # The catalog guard runs before the build row is published, so the task's
+    # exception handler can close it as failed instead of stranding it in
+    # validating/published with an unsearchable index directory.
+    assert session.state == "failed"
+    assert session.catalog_status != "published"
+    assert session.error is not None
+    assert list(root.iterdir()) == []
+    assert not list(root.parent.glob(".blast-build-*"))

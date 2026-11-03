@@ -34,7 +34,7 @@ describe("BLAST client contract", () => {
     expect(hasCompatibleBlastQueryAlphabet(">q\nACGTNNNNACGT", "blastx")).toBe(true);
   });
 
-  it("offers only ready active indexes of the selected engine and biological database type", () => {
+  it("offers only searchable active indexes of the selected engine and biological database type", () => {
     const rows = [
       { id: 1, name: "protein", engine: "ncbi_blast" as const, db_type: "prot" as const, build_status: "ready" as const, is_active: true, assembly_id: 1 },
       { id: 2, name: "genome", engine: "ncbi_blast" as const, db_type: "nucl" as const, build_status: "ready" as const, is_active: true, assembly_id: 1 },
@@ -45,6 +45,10 @@ describe("BLAST client contract", () => {
     expect(compatibleBlastDatabases(rows, "ncbi_blast", "tblastn").map((row) => row.name)).toEqual(["genome"]);
     expect(compatibleBlastDatabases(rows, "diamond", "blastp").map((row) => row.name)).toEqual(["fast"]);
     expect(compatibleBlastDatabases([{ ...rows[0], build_status: "building" }], "ncbi_blast", "blastp")).toEqual([]);
+    // A worker-published NCBI index is searchable; legacy "ready" still is.
+    expect(compatibleBlastDatabases([{ ...rows[0], build_status: "published" }], "ncbi_blast", "blastp").map((row) => row.name)).toEqual(["protein"]);
+    expect(compatibleBlastDatabases([{ ...rows[0], build_status: "validating" }], "ncbi_blast", "blastp")).toEqual([]);
+    expect(compatibleBlastDatabases([{ ...rows[0], build_status: "failed" }], "ncbi_blast", "blastp")).toEqual([]);
   });
 
   it("submits the API schema instead of the legacy flat payload", async () => {

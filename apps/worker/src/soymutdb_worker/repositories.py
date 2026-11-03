@@ -1006,7 +1006,35 @@ class BlastIndexBuildStore:
         current, _ = self.get_state(build_id) or (None, {})
         if current != "validating":
             return False
-        if not self.transition(
+
+        # Bind the catalog row first. If the guarded UPDATE is rejected the
+        # whole transaction rolls back and the build row stays ``validating``,
+        # so the caller's failure handler can close it as ``failed`` rather
+        # than leaving a build marked published with no searchable index.
+        if database_id is not None:
+            updated = self._session.execute(
+                update(blast_databases_catalog)
+                .where(
+                    blast_databases_catalog.c.id == database_id,
+                    blast_databases_catalog.c.build_status.in_(
+                        ["pending", "building", "validating"]
+                    ),
+                    blast_databases_catalog.c.index_version.is_(None),
+                )
+                .values(
+                    build_status="published",
+                    index_version=identity,
+                    fasta_sha256=source_sha256,
+                    sequence_count=sequence_count,
+                    total_length=total_length,
+                    engine="ncbi_blast",
+                    is_active=True,
+                )
+            )
+            if not getattr(updated, "rowcount", 0):
+                raise ValueError("catalog row missing or already published")
+
+        return self.transition(
             build_id, "published", expected="validating",
             fields={
                 "index_identity": identity,
@@ -1014,34 +1042,7 @@ class BlastIndexBuildStore:
                 "sequence_count": sequence_count,
                 "total_length": total_length,
             },
-        ):
-            return False
-        if database_id is None:
-            return True
-        catalog = self._session.execute(
-            select(blast_databases_catalog.c.build_status).where(
-                blast_databases_catalog.c.id == database_id
-            )
-        ).scalar_one_or_none()
-        if catalog is None or catalog == "published":
-            raise ValueError("catalog row missing or already published")
-        updated = self._session.execute(
-            update(blast_databases_catalog)
-            .where(
-                blast_databases_catalog.c.id == database_id,
-                blast_databases_catalog.c.build_status.in_(["pending", "building", "validating"]),
-                blast_databases_catalog.c.index_version.is_(None),
-            )
-            .values(
-                build_status="published",
-                index_version=identity,
-                fasta_sha256=source_sha256,
-                sequence_count=sequence_count,
-                total_length=total_length,
-                engine="ncbi_blast",
-            )
         )
-        return bool(getattr(updated, "rowcount", 0))
 
 
 def _scrub_build_error(reason: str, *, max_len: int = 2000) -> str:

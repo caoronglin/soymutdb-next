@@ -132,10 +132,13 @@ def test_real_build_publishes_and_is_idempotent(monkeypatch, tmp_path, ncbi_bina
                             + len("TGCAACGTTGCAACGT"))
         assert row[2] == 2 and row[3] == expected_letters
         catalog = connection.execute(text(
-            "SELECT build_status,index_version,fasta_sha256,sequence_count FROM blast_databases"
+            "SELECT build_status,index_version,fasta_sha256,sequence_count,is_active "
+            "FROM blast_databases"
         )).one()
         assert catalog[0] == "published" and catalog[1] == identity
         assert len(catalog[2]) == 64 and catalog[3] == 2
+        # Publication must activate the row, otherwise search discovery skips it.
+        assert catalog[4] is True
 
     # A redelivery of the same outbox event must not rebuild or overwrite.
     monkeypatch.setattr(

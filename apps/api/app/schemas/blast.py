@@ -26,6 +26,13 @@ from soymutdb_jobs.protein_fasta import PROTEIN_ALPHABET as PROTEIN_ALPHABET
 
 from ..core.compat import StrEnum
 
+#: Catalog build states are owned by ``soymutdb_jobs.blast_catalog``. Keep the
+#: wire vocabulary in sync with the state machine: a published NCBI index must
+#: survive response validation instead of being rejected as an unknown value.
+BuildState = Literal[
+    "pending", "building", "validating", "published", "failed", "ready",
+]
+
 #: Allowed characters for a BLAST database *name* — matches the worker-side
 #: whitelist (alphanumeric / ``-`` / ``_``) so identifiers can never carry
 #: path separators or traversal sequences.
@@ -279,7 +286,7 @@ class BlastDatabaseResponse(BaseModel):
     total_length: int | None = Field(default=None, ge=0)
     fasta_sha256: str | None = None
     index_version: str | None = None
-    build_status: Literal["pending", "ready", "building", "failed"] = "pending"
+    build_status: BuildState = "pending"
     is_default: bool = False
     license: str | None = None
 
@@ -380,7 +387,7 @@ class BlastIndexBuildResponse(BaseModel):
     build_id: str
     database_id: int
     name: str
-    state: Literal["pending", "building", "validating", "published", "failed", "ready"]
+    state: BuildState
     db_type: Literal["nucl", "prot"]
     index_identity: str | None = None
     sequence_count: int | None = None

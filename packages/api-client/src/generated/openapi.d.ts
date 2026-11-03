@@ -5294,7 +5294,7 @@ export interface components {
              * @default pending
              * @enum {string}
              */
-            build_status: "pending" | "ready" | "building" | "failed";
+            build_status: "pending" | "building" | "validating" | "published" | "failed" | "ready";
             /**
              * Is Default
              * @default false

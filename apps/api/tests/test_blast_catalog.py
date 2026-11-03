@@ -109,3 +109,15 @@ def test_stored_private_source_url_is_omitted(url):
         is_active=True, created_at=datetime.now(UTC), source_url=url,
     )
     assert response.source_url is None
+
+
+async def test_published_ncbi_index_is_discoverable():
+    """A worker-published catalog row must survive response validation.
+
+    Regression: the database query selects ``published``/``ready`` rows, but
+    BlastDatabaseResponse's build_status Literal used to omit ``published``,
+    so GET /blast/databases raised a 500 on every newly built NCBI index.
+    """
+    row = catalog(engine="ncbi_blast", build_status="published")
+    discovered = await BlastService().list_databases(session(row), release_context=CONTEXT)
+    assert [item.build_status for item in discovered] == ["published"]

@@ -40,7 +40,8 @@ export interface BlastDatabase {
   total_length?: number | null;
   fasta_sha256?: string | null;
   index_version?: string | null;
-  build_status?: "pending" | "ready" | "building" | "failed";
+  /** Mirrors the backend catalog state machine (see openapi.d.ts). */
+  build_status?: "pending" | "building" | "validating" | "published" | "failed" | "ready";
   /** Database default within assembly, engine and database type. */
   is_default?: boolean;
   license?: string | null;
@@ -122,7 +123,9 @@ export interface PublicBlastResultResponse extends BlastHitListResponse {
 export function compatibleBlastDatabases(databases: BlastDatabase[], engine: BlastEngine, program: BlastProgram): BlastDatabase[] {
   if (engine === "diamond" && program !== "blastp") return [];
   const allowed = new Set(BLAST_PROGRAM_COMPATIBILITY[program].databases);
-  return databases.filter((database) => database.is_active && database.build_status === "ready" && database.engine === engine && allowed.has(database.db_type));
+  return databases.filter((database) => database.is_active
+    && (database.build_status === "published" || database.build_status === "ready")
+    && database.engine === engine && allowed.has(database.db_type));
 }
 
 export function getBlastDatabases(): Promise<BlastDatabase[]> {

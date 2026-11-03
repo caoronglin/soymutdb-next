@@ -19537,9 +19537,11 @@
             "type": "string",
             "enum": [
               "pending",
-              "ready",
               "building",
-              "failed"
+              "validating",
+              "published",
+              "failed",
+              "ready"
             ],
             "title": "Build Status",
             "default": "pending"
