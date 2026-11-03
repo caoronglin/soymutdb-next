@@ -563,6 +563,7 @@ def _report_is_available(path: Path, report_format: str) -> bool:
 PROBE_SCRIPT = """
 import importlib.metadata as metadata
 import json
+import os
 import sys
 
 # The probe reads the three metadata sources a wheel can publish, in the same
@@ -608,12 +609,26 @@ def declarations(message):
     return legacy
 
 
-# `importlib.metadata.distributions()` defaults to the interpreter's own search
-# path only when it can resolve the package context; passing `sys.path`
-# explicitly is the portable spelling and is what makes the probe describe the
-# same distribution set the analyzer's report does.
+# The marker lets `_probe_declared_licenses` tell "the probe ran but found
+# nothing" (an environment problem, fail loudly) from "this distribution set
+# really declares no license" (a finding, fail closed). It goes to stderr so
+# stdout stays a pure JSON document.
+print("probe:ready", file=sys.stderr)
+
 declared = {}
-for distribution in metadata.distributions(path=sys.path):
+# `path=sys.path` alone misses a distribution reachable only through a `.pth`
+# file: a `uv run` environment reaches this repository's editable first-party
+# packages (soymutdb-jobs, soymutdb-import-protocol) that way, while the report
+# the probe is compared against lists them because the analyzer imports
+# normally. Leaving them out makes the projection disagree with its own report,
+# which is what failed `python-licenses-worker` with
+# `normalization_unavailable:license-expressions`.
+paths = [entry for entry in sys.path if entry] + [
+    entry
+    for entry in (os.environ.get("VIRTUAL_ENV") or "", sys.prefix)
+    if entry
+]
+for distribution in metadata.distributions(path=paths):
     name = distribution.metadata["Name"]
     if not name:
         continue
@@ -622,6 +637,7 @@ for distribution in metadata.distributions(path=sys.path):
         "license_expression": distribution.metadata.get("License-Expression"),
         "declared": declarations(distribution.metadata),
     }
+
 print(json.dumps(declared, sort_keys=True))
 """
 
@@ -652,7 +668,15 @@ def _probe_declared_licenses(command: list[str]) -> dict[str, Any]:
         probed = json.loads(completed.stdout.strip().splitlines()[-1])
     except (json.JSONDecodeError, IndexError):
         return {}
-    return probed if isinstance(probed, dict) else {}
+    if not isinstance(probed, dict):
+        return {}
+    if not probed and "probe:ready" in completed.stderr:
+        # The probe reached the end of its own `sys.path` and found no
+        # distributions at all -- that is a broken environment, not a
+        # license answer. Keep the report authoritative rather than turning
+        # every package in it into an `UNKNOWN` finding.
+        return {}
+    return probed
 
 
 def _rewrite_for_probe(command: list[str]) -> list[str] | None:
@@ -1064,6 +1088,16 @@ def _audit_failure_evidence(row: dict[str, Any], output: Path) -> list[str]:
             "review entrypoints before removal"
         )
         evidence.extend(f"  unused: {file}" for file in unused[:5])
+        # The summary above names how many files have issues but not which
+        # symbols, so a green-green-red round trip is the only way to learn
+        # what failed. Name the first few symbols instead: `knip` reports an
+        # unused *export* per symbol, and the file alone does not say which one.
+        for issue in issues[:3]:
+            symbols = [entry.get("name") for entry in issue.get("exports") or []]
+            if symbols:
+                shown = ", ".join(str(symbol) for symbol in symbols[:5])
+                more = "" if len(symbols) <= 5 else f" (+{len(symbols) - 5} more)"
+                evidence.append(f"  unused exports in {issue.get('file')}: {shown}{more}")
     elif name == "pnpm-duplicate-versions":
         if "Run pnpm dedupe" in detail.get("stdout", ""):
             evidence.append("  pnpm dedupe --check recommends lockfile deduplication")

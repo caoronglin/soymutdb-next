@@ -529,6 +529,51 @@ def test_license_probe_reads_the_three_metadata_sources(tmp_path: Path) -> None:
     assert declared["bare"]["declared"] is None
 
 
+def test_license_probe_reads_distributions_behind_a_pth_file(tmp_path: Path) -> None:
+    """A `.pth`-only distribution must be described, not reported `UNKNOWN`.
+
+    `uv run --project <app>` exposes this repository's editable first-party
+    packages (soymutdb-jobs, soymutdb-import-protocol) through a `.pth` file.
+    `importlib.metadata.distributions(path=sys.path)` does not open those files,
+    so the probe used to describe the *third-party* graph while the analyzer's
+    report listed the first-party packages too -- and every one of them became
+    an `UNKNOWN` finding. That is `python-licenses-worker`'s
+    `normalization_unavailable:license-expressions` (CNB build
+    `cnb-gcb-1k6h13qpn`): a licence gate failing on packages that do declare
+    `MIT`.
+    """
+    governance = _governance_module()
+    site = tmp_path / "site"
+    site.mkdir()
+    metadata = tmp_path / "editable" / "editable-1.0.dist-info"
+    metadata.mkdir(parents=True)
+    (metadata / "METADATA").write_text(
+        "Metadata-Version: 2.5\nName: editable-pkg\nVersion: 1.0\n"
+        "License-Expression: MIT\n",
+        encoding="utf-8",
+    )
+    (site / "editable.pth").write_text(f"{metadata.parent}\n", encoding="utf-8")
+
+    probe_path = tmp_path / "probe.py"
+    probe_path.write_text(governance.PROBE_SCRIPT, encoding="utf-8")
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import site, sys\n"
+            f"site.addsitedir({str(site)!r})\n"
+            "exec(compile(open(sys.argv[1]).read(), sys.argv[1], 'exec'))",
+            str(probe_path),
+        ],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": str(site)},
+        check=True,
+    )
+    declared = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert declared["editable-pkg"]["declared"] == "MIT", declared.get("editable-pkg")
+
+
 def test_undeclared_fixups_are_narrow_and_reviewable(tmp_path: Path) -> None:
     """`@allow-undeclared` admits one package, and only at an allowed license."""
     governance = _governance_module()
