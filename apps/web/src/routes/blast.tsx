@@ -580,7 +580,7 @@ function BlastComponent() {
             >
 
               <div className="grid gap-2 md:grid-cols-2">
-                <Select aria-label={t("blastPublic.engine")} value={form.engine} onChange={(value: BlastEngine) => setForm((f) => ({ ...f, engine: value, database: "" }))} options={[{ value: "ncbi_blast", label: "NCBI BLAST+" }, { value: "diamond", label: "DIAMOND (blastp)", disabled: form.program !== "blastp" }]} />
+                <Select aria-label={t("blastPublic.engine")} value={form.engine} onChange={(value: BlastEngine) => setForm((f) => ({ ...f, engine: value, database: "" }))} options={[{ value: "ncbi_blast", label: t("blastSearch.engineNcbi") }, { value: "diamond", label: t("blastSearch.engineDiamondBlastp"), disabled: form.program !== "blastp" }]} />
                 <Select aria-label={t("blastPublic.program")} value={form.program} onChange={(value: BlastProgram) => setForm((f) => ({ ...f, program: value, database: "" }))} options={BLAST_PROGRAMS.filter((item) => form.engine === "ncbi_blast" || item.id === "blastp").map((item) => ({ value: item.id, label: item.label }))} />
               </div>
             </Form.Item>
@@ -730,7 +730,7 @@ function BlastComponent() {
                   <div className="flex w-full items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-mono text-xs">{job.id.slice(0, 12)}…</p>
-                      <p className="text-xs text-muted-foreground">{job.engine === "ncbi_blast" ? "NCBI BLAST+" : job.engine === "diamond" ? "DIAMOND" : t("blastSearch.engineUnknown")} · {job.program} · {job.database}</p>
+                      <p className="text-xs text-muted-foreground">{job.engine === "ncbi_blast" ? t("blastSearch.engineNcbi") : job.engine === "diamond" ? t("blastSearch.engineDiamond") : t("blastSearch.engineUnknown")} · {job.program} · {job.database}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
                       <Tag

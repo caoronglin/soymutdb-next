@@ -77,6 +77,27 @@ No mock-only claim is made for the above: the child processes are the official
 local PG is 15, while CI/production use newer majors; these results are
 qualified as "PG 15 locally green", not a PG-version certification.
 
+## CI-reported defects fixed in this PR
+
+The PR pipeline surfaced two pre-existing `main` defects that blocked the
+verify lane. Both were fixed inside the BLAST contract surface, not worked
+around by loosening a gate:
+
+- `packages/api-client/src/blast.ts`: `no-useless-escape` on `\-` in the
+  protein alphabet. Moved `-` to the end of the character class (identical
+  literal semantics) and added an alphabet assertion for a gapped query.
+- `apps/web/src/routes/blast.tsx` and `apps/web/src/routes/search/blast.tsx`:
+  visible `"NCBI BLAST+"` / `"DIAMOND"` copy was hardcoded, violating the
+  visible-i18n budget (baseline 0 for both files). Added `blastSearch.engineNcbi`,
+  `engineDiamond` and `engineDiamondBlastp` to the en/zh catalogs and used
+  `t()` in both the status rows and the engine selectors. `node
+  scripts/check_visible_i18n_react.mjs` now reports 0 tracked strings; en/zh
+  key parity holds.
+
+The separate `npc go` pipeline error (`No roles defined in .cnb/settings.yml`)
+is a repository NPC-role configuration issue, not a code defect; it is reported
+but left unchanged because defining review roles is outside this PR's scope.
+
 ## Engine and access-mode contract checks
 
 - `apps/api/app/schemas/blast.py`: `BlastSubmitProgram` lists all five programs;
