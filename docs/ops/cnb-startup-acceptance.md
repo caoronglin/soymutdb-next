@@ -344,6 +344,27 @@ web_artifact_digest=sha256:…   # 有构建产物时
 摘要行本身不参与摘要计算，所以**任何人可以重算并核对**，不需要信任这个文件。
 流水线在 `endStages` 上传该目录，因此即使某一层失败，验收记录仍在。
 
+## 3.4 `@NPC` 任务需要 `.cnb/settings.yml` 里有角色
+
+`$` -> `issue.comment@npc` 是本仓库的 NPC 入口。NPC 事件在**容器启动前**按角色名
+解析 `.cnb/settings.yml` 的 `npc.roles`，没有角色就直接在平台的 `npc go` stage 停下：
+
+```
+▸ 失败 Stage: npc go (status: error)
+  错误信息: No roles defined in .cnb/settings.yml
+  耗时: 1008ms
+```
+
+这条流水线 1 秒就结束了，`.cnb.yml` 里写的 `npc` 分支一行都没跑，日志里也没有任何
+业务命令——它看起来像「CI 挂了」，其实构建本身没开始。角色名必须与 `@` 提及的名字
+一致，否则同样解析不到。
+
+所以 `.cnb.yml` 声明 NPC 事件、`.cnb/settings.yml` 声明 `npc.roles`，两者是一对。
+`scripts/test_ci_job_contracts.py` 的
+`test_npc_events_resolve_a_role_declared_in_settings` 锁定这一对：有 NPC 事件却没有
+角色、角色重名或空名，都在本地测试里就失败，而不是等下一次 `@` 之后由平台报一句
+不带上下文的话。
+
 ## 4. 流水线拓扑（新增部分）
 
 | 触发 | 流水线 | 作用 |
@@ -355,6 +376,7 @@ web_artifact_digest=sha256:…   # 有构建产物时
 | `vscode`（分支页按钮） | `soy-mut-db-development` | 准备环境 + 门户预览 |
 | `web_trigger_workspace-preview` | `workspace-preview` | 同上（手动入口） |
 | `web_trigger_acceptance` | `acceptance-manual` | contracts → backend → static，上传验收清单 |
+| `issue.comment@npc` | `npc` | `@` 提及 NPC 的任务入口（角色见 §3.4） |
 
 按钮声明在 `.cnb/web_trigger.yml`，同时挂到 `^main$`、`^feature/` 与
 兜底 `^(?!main$|feature/).*$` 三类分支：验收的意义就在于**合并前**给出判定，
@@ -389,7 +411,8 @@ scripts/acceptance.sh --profile full
   命令已用桩验证（`docker` 替换为记录环境的脚本）；
 - `web_trigger_acceptance` 的 backend / static 两层（需要平台 Runner 与真实
   PostgreSQL）；
-- `.cnb/settings.yml` 的按钮文案在分支页的实际呈现。
+- `.cnb/settings.yml` 的按钮文案在分支页的实际呈现；
+- `issue.comment@npc` 修掉「No roles defined」之后，一次完整的 NPC 任务（§3.4）。
 
 在这些跑通之前，环境判定仍是 `DEV_READY ✅ / STAGING_READY ❌`，与
 `../dev/pipeline-migration.md` §7 保持一致。

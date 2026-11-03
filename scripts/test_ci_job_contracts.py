@@ -638,6 +638,47 @@ class DeliveryArchitectureTests(unittest.TestCase):
         ):
             self.assertIn(event, fallback, event)
 
+    def test_npc_events_resolve_a_role_declared_in_settings(self) -> None:
+        """An NPC event needs a role; `.cnb/settings.yml` is where it lives.
+
+        The `$` -> `issue.comment@npc` pipeline is this repository's NPC entry
+        point, and the platform resolves the mentioned role *by name* against
+        `npc.roles` before the container starts. With no roles declared, the
+        `npc go` stage aborts with "No roles defined in .cnb/settings.yml" and
+        the pipeline body in `.cnb.yml` never runs -- so the failure looks like
+        a broken CI pipeline when in fact no CI job was involved. Two of them
+        (no NPC pipeline at all, or a pipeline with no role list) are cheap to
+        keep apart here.
+        """
+        fallback = _cnb().get("$", {})
+        npc_events = [
+            event
+            for event in fallback
+            if isinstance(event, str) and event.startswith("issue.comment@npc")
+        ]
+        if not npc_events:
+            return
+
+        settings = yaml.safe_load(
+            (ROOT / ".cnb/settings.yml").read_text(encoding="utf-8")
+        ) or {}
+        roles = (settings.get("npc") or {}).get("roles") or []
+        self.assertTrue(
+            roles,
+            ".cnb.yml declares an NPC pipeline but .cnb/settings.yml defines "
+            "no npc.roles, so the platform stops at "
+            "'No roles defined in .cnb/settings.yml'",
+        )
+        names = [role.get("name") for role in roles]
+        for name in names:
+            self.assertTrue(name, "every npc role needs a name")
+        self.assertEqual(
+            len(names),
+            len(set(names)),
+            f"npc role names must be unique, got {names}",
+        )
+        self.assertIn("CodeBuddy", names)
+
     def test_contracts_job_provisions_every_import_it_needs(self) -> None:
         """The contracts stage must provision the layer's whole dependency set.
 
