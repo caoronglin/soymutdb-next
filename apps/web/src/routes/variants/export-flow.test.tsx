@@ -258,7 +258,10 @@ describe("variant export lifecycle", () => {
     const view = render(<Page />);
     fireEvent.click(screen.getByRole("button", { name: /variants.export$/ }));
     await waitFor(() => expect(runtime.createVariantExport).toHaveBeenCalledTimes(1));
-    expect(screen.getByTestId("variant-export-progress")).toBeTruthy();
+    // The same race the success line above was fixed for: `exportId` is set in
+    // the same post-`await` block, so the progress block appears a microtask
+    // after `waitFor(called)` returns.
+    expect(await screen.findByTestId("variant-export-progress")).toBeTruthy();
 
     // Another account signs in: the previous account's export must not
     // keep being polled.
