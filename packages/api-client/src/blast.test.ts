@@ -1,4 +1,4 @@
-import { hasCompatibleBlastQueryAlphabet, compatibleBlastDatabases, type BlastProgram, getBlastHits, getBlastJob, getBlastJobs, getPublicBlastDatabases, getPublicBlastJob, getPublicBlastResults, resolveBlastHitGenomeTarget, submitBlastJob, submitPublicBlastJob } from "./blast";
+import { blastDownloadLink, hasCompatibleBlastQueryAlphabet, compatibleBlastDatabases, validateBlastFastaStructure, type BlastProgram, getBlastHits, getBlastJob, getBlastJobs, getPublicBlastDatabases, getPublicBlastJob, getPublicBlastResults, resolveBlastHitGenomeTarget, submitBlastJob, submitPublicBlastJob } from "./blast";
 import { setReleaseId } from "./client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -45,6 +45,27 @@ describe("BLAST client contract", () => {
     expect(compatibleBlastDatabases(rows, "ncbi_blast", "tblastn").map((row) => row.name)).toEqual(["genome"]);
     expect(compatibleBlastDatabases(rows, "diamond", "blastp").map((row) => row.name)).toEqual(["fast"]);
     expect(compatibleBlastDatabases([{ ...rows[0], build_status: "building" }], "ncbi_blast", "blastp")).toEqual([]);
+  });
+
+  it("accepts multi-record FASTA and a bare sequence, rejecting only empty records", () => {
+    // One job may carry several records; each header needs residues.
+    expect(validateBlastFastaStructure(">q1\nMKVLAAGIVGL\n>q2\nMKVLAAGIVGL")).toBeNull();
+    expect(validateBlastFastaStructure(">q1\nMKVLAAGIVGL\n>q2")).toBe("emptyRecord");
+    expect(validateBlastFastaStructure(">q1")).toBe("emptyRecord");
+    // A header-less query is a pasted sequence: the API and the worker accept it.
+    expect(validateBlastFastaStructure("MKVLAAGIVGL")).toBeNull();
+  });
+
+  it("names the presigned raw artifact after the aligner output, not the storage key", () => {
+    expect(blastDownloadLink(null, { id: "job-uuid", program: "blastn" })).toBeNull();
+    expect(
+      blastDownloadLink("https://objects.example/blast-results/job-uuid.txt", {
+        id: "job-uuid-1234", program: "blastp", engine: "ncbi_blast",
+      }),
+    ).toEqual({ href: "https://objects.example/blast-results/job-uuid.txt", filename: "job-uuid-ncbi_blast-blastp.tsv" });
+    expect(
+      blastDownloadLink("https://objects.example/x", { id: "abcdefghijkl", program: "blastp", engine: "diamond" }),
+    ).toEqual({ href: "https://objects.example/x", filename: "abcdefgh-diamond-blastp.tsv" });
   });
 
   it("submits the API schema instead of the legacy flat payload", async () => {

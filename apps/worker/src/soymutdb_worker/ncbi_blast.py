@@ -263,7 +263,7 @@ def run_search(
             or output_path.stat().st_size > limits.output_bytes
         ):
             raise NcbiBlastError("BLAST output invalid or oversized")
-    except OSError, UnicodeError:
+    except (OSError, UnicodeError):
         raise NcbiBlastError("cannot execute BLAST") from None
     finally:
         try:

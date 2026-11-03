@@ -48,8 +48,8 @@ def test_only_protein_protein_is_executable(program):
         blast.validate_program(program)
 
 
-def test_blastp_is_the_whole_program_set():
-    assert blast.ALLOWED_PROGRAMS == frozenset({"blastp"})
+def test_diamond_executes_blastp_only():
+    assert blast.DIAMOND_PROGRAMS == frozenset({"blastp"})
     assert blast.validate_program("blastp") == "blastp"
 
 
@@ -100,7 +100,7 @@ def test_no_blast_only_symbols_remain():
         "ALLOWED_PARAMS",
         "BLAST_BIN_DIR",
         "BLAST_ENGINE",
-        "DIAMOND_PROGRAMS",
+        "ALLOWED_PROGRAMS",
     ):
         assert not hasattr(blast, gone), f"{gone} still exists after retirement"
 

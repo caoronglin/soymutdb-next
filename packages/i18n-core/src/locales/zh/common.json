@@ -3110,6 +3110,10 @@
     "invalidParameters": "E 值需大于 0 且不超过 1000，最大命中数需为 1–500。",
     "engineUnknown": "引擎未知",
     "provenance": "数据库上下文",
-    "invalidAlphabet": "查询序列字母与所选程序不匹配。"
+    "invalidAlphabet": "查询序列字母与所选程序不匹配。",
+    "fasta": {
+      "emptyRecord": "有一条 FASTA 记录只有头、没有序列。"
+    },
+    "downloadFilenameHint": "比对原始输出（制表符分隔）"
   }
 }

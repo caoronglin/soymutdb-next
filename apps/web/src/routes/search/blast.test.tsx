@@ -108,3 +108,40 @@ it("renders an expired public job as recoverable state", async () => {
   await waitFor(() => expect(screen.getByText("Public BLAST access expired")).toBeTruthy());
   expect(api.results).not.toHaveBeenCalled();
 });
+
+it("accepts several FASTA records in one anonymous job", async () => {
+  api.submit.mockResolvedValue({ job: completed, access_token: "memory-only-token", expires_at: "2999-01-01T00:00:00Z" });
+  api.results.mockResolvedValue({ job_id: "public-job", status: "completed", items: [], total: 0, download_url: null });
+  renderPage();
+  await screen.findByText("protein-v4");
+  fireEvent.change(screen.getByPlaceholderText("Paste a protein FASTA sequence"), {
+    target: { value: ">q1\nMKKLLLLLLLL\n>q2\nMKVLAAGIVGL" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Run BLAST" }));
+  await waitFor(() => expect(api.submit).toHaveBeenCalledOnce());
+});
+
+it("rejects a FASTA record that has a header but no sequence", async () => {
+  renderPage();
+  await screen.findByText("protein-v4");
+  fireEvent.change(screen.getByPlaceholderText("Paste a protein FASTA sequence"), {
+    target: { value: ">q1\nMKKLLLLLLLL\n>q2" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Run BLAST" }));
+  expect(
+    await screen.findByText("A FASTA record has a header but no sequence."),
+  ).toBeTruthy();
+  expect(api.submit).not.toHaveBeenCalled();
+});
+
+it("names the raw artifact as tab-separated aligner output", async () => {
+  api.submit.mockResolvedValue({ job: completed, access_token: "memory-only-token", expires_at: "2999-01-01T00:00:00Z" });
+  api.results.mockResolvedValue({ job_id: "public-job", status: "completed", items: [], total: 0, download_url: "https://objects.example/raw.txt" });
+  renderPage();
+  await screen.findByText("protein-v4");
+  fireEvent.change(screen.getByPlaceholderText("Paste a protein FASTA sequence"), { target: { value: "MKKLLLLLLLL" } });
+  fireEvent.click(screen.getByRole("button", { name: "Run BLAST" }));
+  const link = await screen.findByRole("link", { name: /Download raw results/ });
+  expect(link.getAttribute("href")).toBe("https://objects.example/raw.txt");
+  expect(link.getAttribute("download")).toBe("public-j-ncbi_blast-blastp.tsv");
+});

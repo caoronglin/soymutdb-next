@@ -237,3 +237,45 @@ it("distinguishes a failed hits query from no hits and recovers on retry", async
     client.clear();
   }
 });
+
+it("offers the raw alignment download only when the job exposes one", async () => {
+  runtime.hits.mockResolvedValue({
+    items: [{ subject_id: "Glyma.01G000100", subject_start: 1, subject_end: 100 }],
+    download_url: "https://objects.example/blast-results/job.txt",
+  });
+  const client = await renderHits();
+  const link = await screen.findByTestId("blast-download");
+  expect(link.getAttribute("href")).toBe("https://objects.example/blast-results/job.txt");
+  // The artifact is the aligner's tabular text, whatever the storage suffix says.
+  expect(link.getAttribute("download")).toBe("job-ncbi_blast-blastp.tsv");
+  client.clear();
+});
+
+it("shows no download control when the job has no stored artifact", async () => {
+  const client = await renderHits();
+  await screen.findByRole("button", { name: "Glyma.01G000100" });
+  expect(screen.queryByTestId("blast-download")).toBeNull();
+  client.clear();
+});
+
+it("submits several FASTA records and rejects a record without a sequence", async () => {
+  {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><Page /></QueryClientProvider>);
+    const sequence = await screen.findByTestId("blast-sequence");
+    fireEvent.change(sequence, { target: { value: ">q1\nMKVLAAGIVGLNLGGK\n>q2" } });
+    fireEvent.click(await screen.findByTestId("blast-submit"));
+    expect(await screen.findByText("blastSearch.fasta.emptyRecord")).toBeTruthy();
+    expect(runtime.submit).not.toHaveBeenCalled();
+
+    fireEvent.change(sequence, { target: { value: ">q1\nMKVLAAGIVGLNLGGK\n>q2\nMKVLAAGIVGL" } });
+    fireEvent.click(screen.getByTestId("blast-submit"));
+    await waitFor(() => expect(runtime.submit).toHaveBeenCalledOnce());
+    expect(runtime.submit.mock.calls[0][0]).toMatchObject({
+      program: "blastp",
+      engine: "ncbi_blast",
+      database: "protein-v4",
+    });
+    client.clear();
+  }
+});

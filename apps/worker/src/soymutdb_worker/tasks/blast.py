@@ -171,10 +171,12 @@ def get_ncbi_db_path(
     return path
 
 
-#: The single executable program. NCBI BLAST and the translated-search
-#: programs (``blastn`` / ``blastx`` / ``tblastn`` / ``tblastx``) have no
-#: engine in this deployment and are rejected before any index is touched.
-ALLOWED_PROGRAMS = frozenset({"blastp"})
+#: The DIAMOND executable program set. DIAMOND implements protein queries
+#: only, so the translated-search programs stay with NCBI BLAST+ and are
+#: rejected here before any DIAMOND index is touched. This is *not* the set of
+#: programs the platform executes: NCBI BLAST+ runs all five (see
+#: :mod:`soymutdb_worker.ncbi_blast`).
+DIAMOND_PROGRAMS = frozenset({"blastp"})
 
 # Resource limits
 MAX_QUERY_LENGTH = int(get_setting("BLAST_MAX_QUERY_LENGTH", "100000"))
@@ -226,11 +228,11 @@ def sanitize_error_message(
 
 
 def validate_program(program: str) -> str:
-    """Validate that *program* is the one program this deployment executes."""
-    if program not in ALLOWED_PROGRAMS:
+    """Validate a program against the DIAMOND backend's capability."""
+    if program not in DIAMOND_PROGRAMS:
         raise ValueError(
-            f"Unsupported program: {program!r}. This deployment searches with "
-            f"DIAMOND blastp only; allowed: {sorted(ALLOWED_PROGRAMS)}"
+            f"Unsupported program: {program!r} for the DIAMOND backend; "
+            f"allowed: {sorted(DIAMOND_PROGRAMS)}"
         )
     return program
 
@@ -418,12 +420,12 @@ def _set_subprocess_limits() -> None:
     mem_bytes = MAX_MEMORY_MB * 1024 * 1024
     try:
         resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
-    except ValueError, OSError:
+    except (ValueError, OSError):
         pass  # May not be supported on all platforms
     # Output file size limit
     try:
         resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_SIZE, MAX_OUTPUT_SIZE))
-    except ValueError, OSError:
+    except (ValueError, OSError):
         pass
 
 
@@ -508,7 +510,7 @@ def run_blast_command(
         )
     if engine not in (None, "diamond", "auto"):
         raise ValueError(
-            f"Unknown aligner {engine!r}; this deployment runs DIAMOND blastp only"
+            f"Unknown aligner {engine!r}; this path runs the DIAMOND backend"
         )
     if outfmt != 15:
         raise ValueError("outfmt is fixed: DIAMOND always writes the 12-column tabular format")

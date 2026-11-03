@@ -18,6 +18,29 @@ The API validates FASTA, program-specific parameters, release and database compa
 
 Amino-acid coordinates from `blastp` are never treated as genomic coordinates. Gene/browser links are created only after an exact protein/transcript/gene lookup in the job's release and assembly. Result downloads include checksum, expiry and provenance. Unsupported program/database pairs fail validation before a worker is queued.
 
+## Access modes: one search, two entry points
+
+Both BLAST entry points run the same service, outbox and worker. They differ only
+in authorization, not in biology or parameters:
+
+- **Anonymous (`/search/blast`, `POST /blast/public/jobs`)** — no session. The
+  response returns an expiring per-job capability (JWT, `X-Blast-Token`) that
+  authorizes status/results for that job only. There is no job listing, the query
+  is capped by `blast_public_max_length`, submission is rate limited per trusted
+  peer IP, failure text is replaced by a fixed message, and download links are
+  bounded by the capability expiry.
+- **Signed-in (`/blast`, `POST /blast/jobs`)** — requires the researcher role;
+  jobs are owned by the caller, listed newest-first, and readable only by the
+  owner or an administrator.
+
+Neither mode may accept a query the other rejects: FASTA structure, program
+alphabet, engine/program/database compatibility and parameter ranges are shared
+rules (`validateBlastFastaStructure`, `hasCompatibleBlastQueryAlphabet`,
+`compatibleBlastDatabases` in `@soymutdb/api-client`; `validate_search_parameters`
+in `soymutdb_jobs.blast_search`). The signed-in page previously kept a private
+FASTA validator that rejected bare sequences and derived its own messages; it now
+uses the shared rule so both entry points accept exactly the same input.
+
 ## Catalog/index preparation slice
 
 The additive catalog migration and operator-only immutable NCBI index builder implement the preparation layer described in [index operations](../ops/blast-index-builder.md). Catalogs distinguish engine/readiness and retain biological provenance; current API discovery/submission admits ready active DIAMOND protein indexes only. NCBI indexes can be built and validated with explicit metadata but are not registered or executed automatically. Five-program dispatch, asynchronous catalog build state and object-store publication remain pending; the existing DIAMOND worker is unchanged.

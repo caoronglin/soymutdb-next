@@ -21,7 +21,11 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { CaretRightOutlined as Play, ExperimentOutlined as FlaskConical } from "@ant-design/icons";
+import {
+  CaretRightOutlined as Play,
+  DownloadOutlined,
+  ExperimentOutlined as FlaskConical,
+} from "@ant-design/icons";
 import {
   Alert,
   Button,
@@ -43,6 +47,9 @@ import {
   getBlastJobs,
   getBlastHits,
   resolveBlastHitGenomeTarget,
+  blastDownloadLink,
+  blastEngineLabel,
+  validateBlastFastaStructure,
   type BlastHit,
   BLAST_PROGRAMS,
   apiBaseUrl,
@@ -89,43 +96,6 @@ const blastSchema = z.object({
   max_hits: z.number().int().min(1).max(500).default(50),
 });
 
-/**
- * Client-side FASTA structure check (defence in depth on top of backend
- * validation). Accepts a plain sequence or one-or-more FASTA records; rejects
- * a `>` header with no following sequence and non-sequence characters.
- *
- * @returns an error message, or null when the input is acceptable.
- */
-function validateFastaStructure(input: string): string | null {
-  const hasHeader = />/.test(input.trim());
-  if (!hasHeader) return null; // plain sequence — backend validates.
-  const lines = input.split(/\r?\n/).map((l) => l.trim());
-  let currentHasHeader = false;
-  let currentHasSeq = false;
-  let sawAny = false;
-  for (const line of lines) {
-    if (!line) continue;
-    if (line.startsWith(">")) {
-      if (currentHasHeader && !currentHasSeq) {
-        return "FASTA header without a sequence";
-      }
-      currentHasHeader = true;
-      currentHasSeq = false;
-      sawAny = true;
-    } else {
-      // Sequence line — allow letters and common gap/stop symbols.
-      if (currentHasHeader && !/[^A-Za-z*.-]/.test(line.replace(/\s+/g, ""))) {
-        currentHasSeq = true;
-      } else if (!currentHasHeader) {
-        return "Sequence data before a FASTA header";
-      }
-    }
-  }
-  if (sawAny && !currentHasSeq) {
-    return "FASTA header without a sequence";
-  }
-  return null;
-}
 
 /** Extract the ID from the first FASTA header of a submitted query, if any. */
 function fastaHeaderId(sequence: string | null | undefined): string | undefined {
@@ -315,9 +285,12 @@ function BlastComponent() {
       return;
     }
     if (!hasCompatibleBlastQueryAlphabet(parsed.data.sequence, form.program)) { setErrors({ sequence: t("blastSearch.invalidAlphabet") }); return; }
-    const fastaError = validateFastaStructure(parsed.data.sequence);
+    // Multi-record FASTA is allowed; each record still needs a header and a
+    // sequence. Shared with the anonymous route so both entry points accept
+    // exactly the same queries.
+    const fastaError = validateBlastFastaStructure(parsed.data.sequence);
     if (fastaError) {
-      setErrors({ sequence: fastaError });
+      setErrors({ sequence: t(`blastSearch.fasta.${fastaError}`) });
       return;
     }
     setErrors({});
@@ -349,7 +322,7 @@ function BlastComponent() {
     queryKey: ["blast-hits", selectedJob?.id],
     queryFn: async () => {
       const res = await getBlastHits(selectedJob!.id, { limit: 100, offset: 0 });
-      return res.items ?? [];
+      return res;
     },
     enabled: selectedJob != null,
     staleTime: 60_000,
@@ -410,7 +383,12 @@ function BlastComponent() {
     }
   };
 
-  const hits = hitsQuery.data ?? [];
+  const hits = hitsQuery.data?.items ?? [];
+  // Raw aligner output for the selected job. `download_url` is the presigned
+  // artifact link; without it there is nothing to download (never a dead link).
+  const hitsDownload = selectedJob
+    ? blastDownloadLink(hitsQuery.data?.download_url, selectedJob)
+    : null;
   const inputSequenceId = selectedJob ? fastaHeaderId(selectedJob.query_sequence) : undefined;
   const hitsColumns: TableColumnsType<BlastHit> = [
     {
@@ -730,7 +708,7 @@ function BlastComponent() {
                   <div className="flex w-full items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-mono text-xs">{job.id.slice(0, 12)}…</p>
-                      <p className="text-xs text-muted-foreground">{job.engine === "ncbi_blast" ? "NCBI BLAST+" : job.engine === "diamond" ? "DIAMOND" : t("blastSearch.engineUnknown")} · {job.program} · {job.database}</p>
+                      <p className="text-xs text-muted-foreground">{blastEngineLabel(job.engine, t("blastSearch.engineUnknown"))} · {job.program} · {job.database}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
                       <Tag
@@ -763,9 +741,25 @@ function BlastComponent() {
             className="mt-6"
             title={<span className="text-base">{t("blast.resultsTitle")}</span>}
             extra={
-              <Typography.Text type="secondary" className="font-mono">
-                {selectedJob.id.slice(0, 12)}…
-              </Typography.Text>
+              <div className="flex items-center gap-3">
+                {hitsDownload ? (
+                  <Button
+                    size="small"
+                    data-testid="blast-download"
+                    icon={<DownloadOutlined aria-hidden />}
+                    href={hitsDownload.href}
+                    download={hitsDownload.filename}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={t("blastSearch.downloadFilenameHint")}
+                  >
+                    {t("blast.download")}
+                  </Button>
+                ) : null}
+                <Typography.Text type="secondary" className="font-mono">
+                  {selectedJob.id.slice(0, 12)}…
+                </Typography.Text>
+              </div>
             }
           >
             {/*

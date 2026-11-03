@@ -15,8 +15,11 @@ import {
   getPublicBlastJob,
   getPublicBlastResults,
   submitPublicBlastJob,
+  blastDownloadLink,
+  blastEngineLabel,
   compatibleBlastDatabases,
   hasCompatibleBlastQueryAlphabet,
+  validateBlastFastaStructure,
   BLAST_PROGRAMS,
   BLAST_PROGRAM_COMPATIBILITY,
   type BlastEngine,
@@ -73,6 +76,9 @@ function PublicBlastComponent() {
     if (engine === "diamond" && program !== "blastp") { setError(t("blastSearch.incompatible")); return; }
     if (!Number.isFinite(Number(evalue)) || Number(evalue) <= 0 || Number(evalue) > 1000 || !Number.isInteger(Number(maxHits)) || Number(maxHits) < 1 || Number(maxHits) > 500) { setError(t("blastSearch.invalidParameters")); return; }
     if (!hasCompatibleBlastQueryAlphabet(sequence, program)) { setError(t("blastSearch.invalidAlphabet")); return; }
+    // Several records are allowed; each still needs a header and a sequence.
+    const fastaError = validateBlastFastaStructure(sequence);
+    if (fastaError) { setError(t(`blastSearch.fasta.${fastaError}`)); return; }
     setIsSubmitting(true);
     setError(null);
     try {
@@ -117,6 +123,9 @@ function PublicBlastComponent() {
   const requestError = statusQuery.error ?? resultsQuery.error;
   const resultExpired = publicResults?.status === "expired";
   const expired = currentJob?.status === "expired" || resultExpired || expiredByClock;
+  // Anonymous downloads expire with the capability; drop the affordance instead
+  // of offering a link that will 403.
+  const download = currentJob && !expired ? blastDownloadLink(publicResults?.download_url, currentJob) : null;
 
   const reset = () => {
     setJob(null);
@@ -168,7 +177,12 @@ function PublicBlastComponent() {
             {job ? <Button onClick={reset}>{t("blastPublic.newSearch")}</Button> : null}
           </div>
         </Form>
-        {error ? <Alert className="mt-4" type="error" showIcon title={error} /> : null}
+        {error ? (
+          // Validation and submission failures go through `title`: AntD 6
+          // dropped the legacy `message` rendering, so this is the only prop
+          // that reaches the DOM.
+          <Alert className="mt-4" type="error" showIcon title={error} />
+        ) : null}
         {databasesQuery.isError ? <Alert className="mt-4" type="error" showIcon title={t("blastPublic.databasesFailed")} /> : null}
       </Card>
 
@@ -177,7 +191,7 @@ function PublicBlastComponent() {
           {statusQuery.error ? <Alert type="error" showIcon title={t("blastPublic.accessFailed")} /> : expired ? <Result status="warning" title={t("blastPublic.expired")} subTitle={t("blastPublic.expiredHint")} /> : (
             <div className="flex items-center gap-3">
               <Tag color={currentJob.status === "completed" ? "success" : currentJob.status === "failed" ? "error" : "processing"}>{currentJob.status}</Tag>
-              <Typography.Text>{currentJob.engine === "ncbi_blast" ? "NCBI BLAST+" : currentJob.engine === "diamond" ? "DIAMOND" : t("blastSearch.engineUnknown")} · {currentJob.program}</Typography.Text>
+              <Typography.Text>{blastEngineLabel(currentJob.engine, t("blastSearch.engineUnknown"))} · {currentJob.program}</Typography.Text>
               {currentJob.status === "pending" || currentJob.status === "running" ? <Typography.Text type="secondary">{t("blastPublic.running")}</Typography.Text> : null}
               {currentJob.assembly_name ? <Typography.Text type="secondary">{currentJob.assembly_name}{currentJob.release_id ? ` · ${t("blastPublic.release")} ${currentJob.release_id}` : ""}</Typography.Text> : null}
               {currentJob.error_message ? <Typography.Text type="danger">{currentJob.error_message}</Typography.Text> : null}
@@ -190,7 +204,7 @@ function PublicBlastComponent() {
       {publicResults && publicResults.status !== "completed" && !resultsQuery.error && !expired ? <Alert className="mt-6" type="info" showIcon title={t("blastPublic.resultsNotReady")} /> : null}
 
       {currentJob?.status === "completed" && publicResults?.status === "completed" && !expired && !requestError ? (
-        <Card className="mt-6" title={t("blastPublic.resultsTitle")} extra={publicResults?.download_url ? <Button type="link" icon={<DownloadOutlined />} href={publicResults.download_url} target="_blank" rel="noreferrer">{t("blastPublic.download")}</Button> : null}>
+        <Card className="mt-6" title={t("blastPublic.resultsTitle")} extra={download ? <Button type="link" icon={<DownloadOutlined />} href={download.href} download={download.filename} target="_blank" rel="noreferrer">{t("blastPublic.download")}</Button> : null}>
           {resultsQuery.isLoading ? <Skeleton active /> : publicResults?.items?.length ? <Table scroll={{ x: "max-content" }} rowKey={(row) => `${row.query_id ?? ""}-${row.subject_id}-${row.hsp_num}`} columns={columns} dataSource={publicResults.items} pagination={{ current: page, pageSize: 25, total: publicResults.total, onChange: (nextPage) => setPage(nextPage) }} /> : <Empty description={t("blast.noHits")} />}
         </Card>
       ) : null}
