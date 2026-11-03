@@ -1030,3 +1030,62 @@ def test_declared_license_probe_failure_is_explained_not_silent(capsys) -> None:
     captured = capsys.readouterr()
     assert "declared-license probe failed" in captured.err
     assert "the worker cannot import on this interpreter" in captured.err
+def test_uv_lock_requires_dist_matches_each_pyproject() -> None:
+    """A hand-edited lock must not leave a stale dependency specifier behind.
+
+    pip-audit-* runs ``uv export --locked`` and python-licenses-* runs
+    ``uv run --locked``; both refuse a lock whose root ``requires-dist`` no
+    longer describes pyproject.toml. Bumping a floor (e.g. fastmcp>=3.4.10)
+    in pyproject without regenerating the lock therefore fails the whole
+    Dependency governance stage, not just the analyzer that reads the bump.
+    """
+    import tomllib
+
+    def normalize(name: str) -> str:
+        return re.sub(r"[-_.]+", "-", name).lower()
+
+    def requirements(entries: list[str]) -> dict[str, str]:
+        parsed: dict[str, str] = {}
+        for entry in entries:
+            match = re.match(r"^([A-Za-z0-9._-]+)\s*(?:\[[^\]]*\])?\s*(.*)$", entry.strip())
+            assert match is not None, f"unparsable requirement: {entry}"
+            name, specifier = match.group(1), match.group(2).strip()
+            parsed[normalize(name)] = specifier
+        return parsed
+
+    for app in ("api", "worker", "mcp-server"):
+        project = tomllib.loads((ROOT / f"apps/{app}/pyproject.toml").read_text(encoding="utf-8"))
+        lock = tomllib.loads((ROOT / f"apps/{app}/uv.lock").read_text(encoding="utf-8"))
+        root = next(
+            package
+            for package in lock["package"]
+            if package.get("source", {}).get("editable") == "."
+        )
+        declared = requirements(project["project"]["dependencies"])
+        # A dependency may appear more than once in requires-dist (once for the
+        # main set, once behind an `extra == ...` marker). Compare against the
+        # non-extra entries only, so a dev/test variant cannot mask a stale
+        # main specifier, while still keeping the check independent of how uv
+        # chooses to order or split markers.
+        locked = {
+            normalize(item["name"]): item.get("specifier", "")
+            for item in root["metadata"]["requires-dist"]
+            if "extra ==" not in item.get("marker", "")
+        }
+        # uv records a local path dependency without a specifier (the version
+        # lives in `source.directory` instead), so an empty lock specifier is
+        # only a mismatch when the package is not a local workspace package.
+        local = {
+            normalize(item["name"])
+            for item in lock["package"]
+            if "directory" in item.get("source", {})
+        }
+        stale = {
+            name: (specifier, locked.get(name))
+            for name, specifier in declared.items()
+            if name not in local and locked.get(name) != specifier
+        }
+        assert not stale, (
+            f"apps/{app}/uv.lock requires-dist is stale; run `uv lock --project apps/{app}`: "
+            f"{stale}"
+        )
