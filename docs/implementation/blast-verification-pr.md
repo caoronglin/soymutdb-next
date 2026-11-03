@@ -94,14 +94,16 @@ around by loosening a gate:
   scripts/check_visible_i18n_react.mjs` now reports 0 tracked strings; en/zh
   key parity holds.
 
-Two CI failures are **environment/configuration issues on `main`, not code
-defects introduced by this PR**, and are reported rather than patched across
-scope:
+The PR pipeline also exposed two `main`-side configuration problems. One was
+fixed by a collaborating NPC on this same branch, the other is an environment
+limit reported here rather than patched across scope:
 
 - `npc go` pipeline: `No roles defined in .cnb/settings.yml`. Commit
   `f6d5001` on `main` added an `npc:go` stage with `role: 代码审查员` but did
-  not define that role in `.cnb/settings.yml`. Defining repository NPC review
-  roles is governance configuration, outside this PR.
+  not define that role. Commit `c3d9955` on this branch removed the stray
+  stage and added a `test_ci_job_contracts.py` guard so PR builds stay
+  verification-only and never resolve an undefined NPC role. This is the
+  "one validation" work item delivered by the parallel agent.
 - `API + Worker verification`: `h5py` has no prebuilt cp315 wheel in the CI
   image, so `scanpy -> h5py` falls back to a source build and fails with
   `libhdf5.so: cannot open shared object file`. This happens during
