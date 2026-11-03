@@ -490,6 +490,22 @@ dependency_governance_step() {
   ensure_governance_python
   dependency_governance_env
 
+  # The `python-licenses-worker` analyzer runs `uv run --locked --no-dev
+  # --project apps/worker --with pip-licenses …`, which resolves the worker's
+  # full runtime graph. On CPython 3.15 there are no wheels for h5py/cyvcf2,
+  # so uv builds those sdists and needs the same system prerequisites as the
+  # production worker image (libhdf5-dev + pkg-config, plus the C toolchain).
+  #
+  # Every CNB stage gets a fresh container, so the `Compiler prerequisites`
+  # and `API + Worker verification` stages' apt installs do NOT reach this
+  # one. Without them the analyzer crashes before writing its JSON report and
+  # the fail-closed gate reports `normalization_unavailable:license-expressions`
+  # -- a toolchain error that looks like a license finding. Provision the
+  # identical recipe here (idempotent, self-skipping on a warm container) and
+  # point h5py at Debian's serial pkg-config flavour.
+  export HDF5_PKGCONFIG_NAME="${HDF5_PKGCONFIG_NAME:-hdf5-serial}"
+  bash "${REPO_ROOT}/scripts/install-worker-science-build-deps.sh"
+
   # e2e/ is intentionally outside the pnpm workspace, but Knip 5 discovers
   # its Playwright config via package.json and imports it to analyze entrypoints.
   # Without the independent npm lock installation, Knip exits 2 before any

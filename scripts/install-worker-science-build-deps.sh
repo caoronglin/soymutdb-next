@@ -3,23 +3,31 @@
 # SoyMutDB — provision the system build prerequisites for the worker science
 # stack in a Python 3.15 CI container.
 # =============================================================================
-# `pip install -e "apps/worker[dev]"` pulls the worker's runtime science stack
-# (scanpy -> anndata -> h5py). On Python 3.15, h5py 3.16 ships no wheel, so pip
-# builds it from the sdist. That build resolves HDF5 through pkg-config and
-# fails on the bare `python:3.15` CI image with:
+# The worker's locked runtime graph has NO cp315 wheels for h5py, cyvcf2,
+# pandas and numcodecs, so both `pip install -e "apps/worker[dev]"` (backend
+# gate) and `uv run --locked --no-dev --project apps/worker` (dependency
+# governance's license/pip-audit analyzers) build those sdists from source.
+# On a bare `python:3.15` CI image the first failure is h5py:
 #
 #   error: libhdf5.so: cannot open shared object file: No such file or directory
 #   ERROR: Failed building wheel for h5py
 #
 # The production worker image already solves this in infra/docker/Dockerfile.worker:
-# install libhdf5-dev + pkg-config and point h5py at Debian/Ubuntu's serial
-# flavour (`hdf5-serial.pc`). This script applies the SAME recipe to the
-# ephemeral CI container, so the CNB `python:3.15` stage and the GitHub
-# ubuntu-latest runner install identical system packages. Keep the package list
-# in sync with that Dockerfile's RUN apt-get block.
+# build-essential, zlib/bzip2/xz headers for cyvcf2's bundled htslib, and
+# libhdf5-dev + pkg-config with HDF5 pointed at Debian/Ubuntu's serial flavour
+# (`hdf5-serial.pc`). This script applies the SAME recipe to the ephemeral CI
+# container, so the CNB `python:3.15` stages and the GitHub ubuntu-latest
+# runner install identical system packages. Keep the package list in sync with
+# that Dockerfile's RUN apt-get block. The autotools are extra: the CI frontend
+# image has no `autoreconf`, which cyvcf2's CMake runs on its bundled htslib,
+# while the production builder's base image provides them.
 #
-# Callers must export HDF5_PKGCONFIG_NAME=hdf5-serial before the worker pip
-# install; see scripts/verify-backend-tests.sh, which owns that env var.
+# Every CNB stage runs in its own fresh container: the `Compiler prerequisites`
+# and `API + Worker verification` stages' apt installs do NOT reach the
+# `Dependency governance` stage, which is why it calls this script too.
+#
+# Callers must export HDF5_PKGCONFIG_NAME=hdf5-serial before the worker build;
+# see scripts/verify-backend-tests.sh and the dependency-governance job.
 #
 # Usage: bash scripts/install-worker-science-build-deps.sh
 # =============================================================================
@@ -49,13 +57,27 @@ if [[ "$(id -u)" -ne 0 ]]; then
   apt_cmd=(sudo -E apt-get)
 fi
 
-# Same packages as infra/docker/Dockerfile.worker. Only the HDF5 ones are
-# needed here: the base python:3.15 image already carries a C toolchain, which
-# is why pandas/cyvcf2/numcodecs built successfully before h5py failed.
+# Same package families as infra/docker/Dockerfile.worker:
+#   build-essential  C/C++ compiler for h5py, pandas, numcodecs, cyvcf2
+#   pkg-config       h5py resolves HDF5 through it (serial flavour)
+#   libhdf5-dev      h5py's HDF5 headers/libraries
+#   zlib1g-dev
+#   libbz2-dev       cyvcf2 builds a bundled htslib; its configure picks up
+#   liblzma-dev      these system compression headers when present
+#   autoconf
+#   automake         cyvcf2's CMake runs `autoreconf -i` on the bundled
+#   libtool          htslib, which needs the autotools at build time
 DEBIAN_FRONTEND=noninteractive "${apt_cmd[@]}" update -qq
 DEBIAN_FRONTEND=noninteractive "${apt_cmd[@]}" install -y --no-install-recommends \
+  build-essential \
+  pkg-config \
   libhdf5-dev \
-  pkg-config
+  zlib1g-dev \
+  libbz2-dev \
+  liblzma-dev \
+  autoconf \
+  automake \
+  libtool
 
 # Fail loudly if the recipe did not actually produce the .pc file h5py needs,
 # instead of letting pip die with an opaque "Unable to load dependency HDF5".
