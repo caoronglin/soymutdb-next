@@ -32,6 +32,9 @@ describe("BLAST client contract", () => {
     expect(hasCompatibleBlastQueryAlphabet(">q\nMKKLLLLLLLL", "tblastn")).toBe(true);
     expect(hasCompatibleBlastQueryAlphabet(">q\nMKKLLLLLLLL", "blastx")).toBe(false);
     expect(hasCompatibleBlastQueryAlphabet(">q\nACGTNNNNACGT", "blastx")).toBe(true);
+    // A gap character is a literal protein-alphabet member, not a regex range.
+    expect(hasCompatibleBlastQueryAlphabet(">q\nMK-KLL", "blastp")).toBe(true);
+    expect(hasCompatibleBlastQueryAlphabet(">q\nMK-KLL", "blastn")).toBe(false);
   });
 
   it("offers only ready active indexes of the selected engine and biological database type", () => {
