@@ -416,6 +416,7 @@ export function blastDownloadLink(
   if (!url) return null;
   const engine = job.engine === "diamond" ? "diamond" : "ncbi_blast";
   return { href: url, filename: `${job.id.slice(0, 8)}-${engine}-${job.program}.tsv` };
+}
 
 /** Cancel a pending/running job. Both engines share the same lifecycle. */
 export function cancelBlastJob(jobId: string): Promise<BlastJob> {
