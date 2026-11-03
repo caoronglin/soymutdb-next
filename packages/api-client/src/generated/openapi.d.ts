@@ -1182,6 +1182,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/blast/databases/build": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Blast Index Build
+         * @description Queue an immutable index build; construction never runs in this request.
+         *
+         *     The catalog row must exist and be buildable (``pending``/``failed`` or a
+         *     ``ready`` row being rebuilt). The outbox event carries only the frozen
+         *     metadata and a validated object reference; the worker resolves binaries,
+         *     staging, validation and publication.
+         */
+        post: operations["request_blast_index_build_api_v1_blast_databases_build_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/blast/jobs/{job_id}": {
         parameters: {
             query?: never;
@@ -1196,6 +1221,49 @@ export interface paths {
         get: operations["get_blast_job_api_v1_blast_jobs__job_id__get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Blast Job
+         * @description Cancel a pending/running BLAST job owned by the caller.
+         *
+         *     The worker re-checks the row before launching the aligner, so a queued
+         *     Celery message that arrives after cancellation cannot start a search.
+         */
+        post: operations["cancel_blast_job_api_v1_blast_jobs__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/jobs/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Blast Job
+         * @description Re-dispatch a failed BLAST job with its original frozen provenance.
+         */
+        post: operations["retry_blast_job_api_v1_blast_jobs__job_id__retry_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5150,7 +5218,7 @@ export interface components {
              * @default pending
              * @enum {string}
              */
-            build_status: "pending" | "ready" | "building" | "failed";
+            build_status: "pending" | "building" | "validating" | "publishing" | "ready" | "failed";
             /**
              * Is Default
              * @default false
@@ -5202,6 +5270,42 @@ export interface components {
              * @default plus
              */
             subject_strand: string;
+            /** Genome Resolution */
+            genome_resolution?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * BlastIndexBuildRequest
+         * @description Admin-only request to build one immutable NCBI index asynchronously.
+         *
+         *     Only identifiers, frozen biological provenance and an object reference are
+         *     accepted. No local filesystem path can pass this boundary.
+         */
+        BlastIndexBuildRequest: {
+            /** Database Id */
+            database_id: number;
+            /**
+             * Db Type
+             * @enum {string}
+             */
+            db_type: "nucl" | "prot";
+            /** Source Object */
+            source_object: string;
+            /** Assembly Id */
+            assembly_id: string;
+            /** Assembly Version */
+            assembly_version: string;
+            /** Release Id */
+            release_id: string;
+            /** Annotation Version */
+            annotation_version: string;
+            /** Source Url */
+            source_url: string;
+            /** Source Version */
+            source_version: string;
+            /** License */
+            license: string;
         };
         /** BlastJobListResponse */
         BlastJobListResponse: {
@@ -12977,10 +13081,138 @@ export interface operations {
             };
         };
     };
+    request_blast_index_build_api_v1_blast_databases_build_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlastIndexBuildRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_blast_job_api_v1_blast_jobs__job_id__get: {
         parameters: {
             query?: never;
             header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_blast_job_api_v1_blast_jobs__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    retry_blast_job_api_v1_blast_jobs__job_id__retry_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path: {
                 job_id: string;
             };
