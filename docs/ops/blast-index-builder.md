@@ -114,9 +114,11 @@ pending -> building -> validating -> published
 ```
 
 Only ``published`` (and the legacy ``ready`` spelling for existing DIAMOND
-rows) is selectable by search. ``failed`` is terminal: retry means a **new**
-build request with a **new** catalog row and a **new** content-addressed
-identity; nothing is rebuilt in place. A redelivered outbox event while a build
+rows) is selectable by search. Successful publication also sets the catalog
+row's ``is_active`` flag, so a newly built index enters discovery without a
+separate operator step. ``failed`` is terminal: retry means a **new** build
+request with a **new** catalog row and a **new** content-addressed identity;
+nothing is rebuilt in place. A redelivered outbox event while a build
 is ``building``/``validating`` is skipped, so two builders can never publish the
 same identity. Publication is a guarded conditional UPDATE shared with the
 catalog row in one transaction.
