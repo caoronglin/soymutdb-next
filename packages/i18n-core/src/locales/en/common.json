@@ -513,6 +513,7 @@
     "noHits": "No hits found for this job",
     "hitsLoadError": "Could not load BLAST hits. Please retry.",
     "resultsTitle": "BLAST Results",
+    "download": "Download raw results",
     "alignments": "Alignments",
     "hitTable": "Hit Table",
     "hitName": "Name",

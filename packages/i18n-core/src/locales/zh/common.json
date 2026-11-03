@@ -513,6 +513,7 @@
     "noHits": "该任务未找到比对命中",
     "hitsLoadError": "无法加载 BLAST 比对命中，请重试。",
     "resultsTitle": "BLAST 结果",
+    "download": "下载原始结果",
     "alignments": "比对",
     "hitTable": "命中表",
     "hitName": "名称",
