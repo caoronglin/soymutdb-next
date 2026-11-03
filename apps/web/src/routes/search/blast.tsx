@@ -145,7 +145,7 @@ function PublicBlastComponent() {
       <Card title={t("blastPublic.formTitle")}>
         <Form layout="vertical" onFinish={() => void submit()}>
           <div className="grid gap-x-6 md:grid-cols-2">
-            <Form.Item label={t("blastPublic.engine")}><Select aria-label={t("blastPublic.engine")} value={engine} onChange={(value: BlastEngine) => setEngine(value)} options={[{ value: "ncbi_blast", label: "NCBI BLAST+" }, { value: "diamond", label: "DIAMOND (blastp)", disabled: program !== "blastp" }]} /></Form.Item>
+            <Form.Item label={t("blastPublic.engine")}><Select aria-label={t("blastPublic.engine")} value={engine} onChange={(value: BlastEngine) => setEngine(value)} options={[{ value: "ncbi_blast", label: t("blastSearch.engineNcbi") }, { value: "diamond", label: t("blastSearch.engineDiamond"), disabled: program !== "blastp" }]} /></Form.Item>
             <Form.Item label={t("blastPublic.program")}><Select aria-label={t("blastPublic.program")} value={program} onChange={(value: BlastProgram) => setProgram(value)} options={BLAST_PROGRAMS.filter((item) => engine === "ncbi_blast" || item.id === "blastp").map((item) => ({ value: item.id, label: item.label }))} /></Form.Item>
           </div>
           <Form.Item label={t("blast.database")} htmlFor="public-blast-database" required>
@@ -177,7 +177,7 @@ function PublicBlastComponent() {
           {statusQuery.error ? <Alert type="error" showIcon title={t("blastPublic.accessFailed")} /> : expired ? <Result status="warning" title={t("blastPublic.expired")} subTitle={t("blastPublic.expiredHint")} /> : (
             <div className="flex items-center gap-3">
               <Tag color={currentJob.status === "completed" ? "success" : currentJob.status === "failed" ? "error" : "processing"}>{currentJob.status}</Tag>
-              <Typography.Text>{currentJob.engine === "ncbi_blast" ? "NCBI BLAST+" : currentJob.engine === "diamond" ? "DIAMOND" : t("blastSearch.engineUnknown")} · {currentJob.program}</Typography.Text>
+              <Typography.Text>{currentJob.engine === "ncbi_blast" ? t("blastSearch.engineNcbi") : currentJob.engine === "diamond" ? t("blastSearch.engineDiamond") : t("blastSearch.engineUnknown")} · {currentJob.program}</Typography.Text>
               {currentJob.status === "pending" || currentJob.status === "running" ? <Typography.Text type="secondary">{t("blastPublic.running")}</Typography.Text> : null}
               {currentJob.assembly_name ? <Typography.Text type="secondary">{currentJob.assembly_name}{currentJob.release_id ? ` · ${t("blastPublic.release")} ${currentJob.release_id}` : ""}</Typography.Text> : null}
               {currentJob.error_message ? <Typography.Text type="danger">{currentJob.error_message}</Typography.Text> : null}

@@ -3109,6 +3109,8 @@
     "incompatible": "不支持此引擎和程序组合。",
     "invalidParameters": "E 值需大于 0 且不超过 1000，最大命中数需为 1–500。",
     "engineUnknown": "引擎未知",
+    "engineNcbi": "NCBI BLAST+",
+    "engineDiamond": "DIAMOND",
     "provenance": "数据库上下文",
     "invalidAlphabet": "查询序列字母与所选程序不匹配。"
   }

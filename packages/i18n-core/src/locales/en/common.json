@@ -3109,6 +3109,8 @@
     "incompatible": "This engine/program combination is not supported.",
     "invalidParameters": "Use a positive E-value up to 1000 and 1–500 maximum hits.",
     "engineUnknown": "Engine unavailable",
+    "engineNcbi": "NCBI BLAST+",
+    "engineDiamond": "DIAMOND",
     "provenance": "Database context",
     "invalidAlphabet": "The query alphabet does not match the selected program."
   }
