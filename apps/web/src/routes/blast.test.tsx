@@ -291,3 +291,26 @@ it("offers both search engines from the catalog", async () => {
   expect((await screen.findAllByText("blastSearch.engineDiamondBlastp")).length).toBeGreaterThan(0);
   client.clear();
 });
+
+it("opens the newest completed job's results without a second click", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><Page /></QueryClientProvider>);
+  // The hits of the most recent job are already on the page: a reader sees
+  // whether the search returned anything without hunting for a button.
+  expect((await screen.findAllByRole("button", { name: "Glyma.01G000100" })).length).toBeGreaterThan(0);
+  expect(runtime.hits).toHaveBeenCalledOnce();
+  client.clear();
+});
+
+it("attaches parameter errors to the parameter fields instead of the sequence", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><Page /></QueryClientProvider>);
+  fireEvent.change(await screen.findByTestId("blast-sequence"), { target: { value: "MKVLAAGIVGLNLGGK" } });
+  fireEvent.change(document.getElementById("e_value") as HTMLInputElement, { target: { value: "5000" } });
+  fireEvent.click(screen.getByTestId("blast-submit"));
+  // The shared range rule is the same one the anonymous route applies, so the
+  // signed-in entry no longer accepts a query the anonymous entry rejects.
+  expect(await screen.findByText("blastSearch.invalidParameters")).toBeTruthy();
+  expect(runtime.submit).not.toHaveBeenCalled();
+  client.clear();
+});

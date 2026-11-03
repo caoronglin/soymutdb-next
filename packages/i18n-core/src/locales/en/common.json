@@ -548,7 +548,10 @@
     },
     "submitRequiresLogin": "Sign in with a researcher-capable account to submit BLAST jobs.",
     "submitRequiresResearcher": "Your account does not have permission to submit BLAST jobs.",
-    "publicWorkflow": "Run BLAST anonymously"
+    "publicWorkflow": "Run BLAST anonymously",
+    "engine": "Engine",
+    "jobStatus": "Status",
+    "parametersHint": "Defaults suit a first look. Change them only if you need a different sensitivity."
   },
   "releases": {
     "title": "Data Releases",
@@ -3099,7 +3102,12 @@
     "loginWorkflow": "Use the signed-in workflow for personal job history.",
     "resultsNotReady": "The public result is not ready yet.",
     "engine": "Search engine",
-    "program": "Search program"
+    "program": "Search program",
+    "fastaDetected": "{{count}} FASTA records",
+    "noArtifact": "This job stored no downloadable artifact.",
+    "resultsFor": "Results for job {{job}}",
+    "artifactHint": "Raw aligner output (tab-separated) for this job.",
+    "sequenceTooShort": "Enter a sequence with at least 10 characters."
   },
   "blastSearch": {
     "proteinInput": "Protein FASTA query",

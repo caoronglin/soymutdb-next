@@ -24,16 +24,19 @@ import * as React from "react";
 import {
   CaretRightOutlined as Play,
   DownloadOutlined,
-  ExperimentOutlined as FlaskConical,
 } from "@ant-design/icons";
 import {
   Alert,
   Button,
   Card,
+  Col,
+  Descriptions,
   Empty,
+  Flex,
   Form,
   Input,
   Result,
+  Row,
   Select,
   Skeleton,
   Table,
@@ -284,9 +287,20 @@ function BlastComponent() {
       max_hits: Number(form.max_hits),
     });
     if (!parsed.success) {
+      // Numeric bounds are checked in the same place as the anonymous route so
+      // both entry points accept exactly the same queries. The zod schema still
+      // runs first: it catches a non-numeric value before the range test.
       const fieldErrors: Record<string, string> = {};
       for (const issue of parsed.error.issues) {
         fieldErrors[issue.path[0] as string] = issue.message;
+      }
+      const inRange =
+        Number.isFinite(Number(form.e_value)) && Number(form.e_value) > 0 && Number(form.e_value) <= 1000 &&
+        Number.isInteger(Number(form.max_hits)) && Number(form.max_hits) >= 1 && Number(form.max_hits) <= 500;
+      if (!inRange) {
+        delete fieldErrors.e_value;
+        delete fieldErrors.max_hits;
+        fieldErrors.parameters = t("blastSearch.invalidParameters");
       }
       setErrors(fieldErrors);
       return;
@@ -325,13 +339,16 @@ function BlastComponent() {
   const navigate = useNavigate();
   const [selectedJob, setSelectedJob] = React.useState<BlastJob | null>(null);
 
+  // The newest completed job is open by default (`activeJob`), so this query
+  // follows the active job rather than only the one the reader clicked.
+  const activeJob = selectedJob ?? jobs[0] ?? null;
   const hitsQuery = useQuery({
-    queryKey: ["blast-hits", selectedJob?.id],
+    queryKey: ["blast-hits", activeJob?.id],
     queryFn: async () => {
-      const res = await getBlastHits(selectedJob!.id, { limit: 100, offset: 0 });
+      const res = await getBlastHits(activeJob!.id, { limit: 100, offset: 0 });
       return res;
     },
-    enabled: selectedJob != null,
+    enabled: activeJob != null && activeJob.status === "completed",
     staleTime: 60_000,
   });
 
@@ -369,7 +386,7 @@ function BlastComponent() {
     setResolvingHit(null);
     setNavigationError(null);
     return () => { navigationAttempt.current += 1; };
-  }, [selectedJob?.id]);
+  }, [activeJob?.id]);
   const openGenomeBrowser = async (job: BlastJob, hit: BlastHit) => {
     const attempt = ++navigationAttempt.current;
     setResolvingHit(hit.subject_id);
@@ -393,10 +410,10 @@ function BlastComponent() {
   const hits = hitsQuery.data?.items ?? [];
   // Raw aligner output for the selected job. `download_url` is the presigned
   // artifact link; without it there is nothing to download (never a dead link).
-  const hitsDownload = selectedJob
-    ? blastDownloadLink(hitsQuery.data?.download_url, selectedJob)
+  const hitsDownload = activeJob
+    ? blastDownloadLink(hitsQuery.data?.download_url, activeJob)
     : null;
-  const inputSequenceId = selectedJob ? fastaHeaderId(selectedJob.query_sequence) : undefined;
+  const inputSequenceId = activeJob ? fastaHeaderId(activeJob.query_sequence) : undefined;
   const hitsColumns: TableColumnsType<BlastHit> = [
     {
       // Wireframe: 基因组版本 (assembly) — shown with the release the job was
@@ -406,7 +423,7 @@ function BlastComponent() {
       key: "assembly",
       width: 160,
       render: () => {
-        const context = selectedJob ? contextForJob(selectedJob) : null;
+        const context = activeJob ? contextForJob(activeJob) : null;
         if (!context) {
           return <span className="font-mono text-xs text-muted-foreground">—</span>;
         }
@@ -475,7 +492,7 @@ function BlastComponent() {
       width: 180,
       render: (_, hit) => {
         const geneId = hit.subject_id;
-        const context = selectedJob ? contextForJob(selectedJob) : null;
+        const context = activeJob ? contextForJob(activeJob) : null;
         const canSearch = context != null && context.release === currentRelease;
         // The identifier is shown whole. It used to go through
         // `compactGeneId(geneId, 18)`, which cut `Glyma.066015200`-length and
@@ -507,14 +524,14 @@ function BlastComponent() {
       key: "gbrowse",
       width: 140,
       render: (_, hit) => {
-        const context = selectedJob ? contextForJob(selectedJob) : null;
+        const context = activeJob ? contextForJob(activeJob) : null;
         return (
           <Button
             size="small"
             data-testid="blast-gbrowse-link"
             disabled={!context || !hit.subject_id?.trim() || resolvingHit != null}
             loading={resolvingHit === hit.subject_id}
-            onClick={() => { if (selectedJob) void openGenomeBrowser(selectedJob, hit); }}
+            onClick={() => { if (activeJob) void openGenomeBrowser(activeJob, hit); }}
             title={context ? undefined : t("browser.contextMissingDescription")}
           >
             {t(resolvingHit === hit.subject_id ? "blast.jbrowse.resolving" : "blast.actions.gbrowse")}
@@ -523,6 +540,21 @@ function BlastComponent() {
       },
     },
   ];
+  // Provenance of the selected reference, as one compact block. Empty values are
+  // dropped so the block states what is known instead of padding five columns.
+  const provenanceItems: React.ComponentProps<typeof Descriptions>["items"] = selectedDatabase
+    ? ([
+        ["blast.assembly", selectedDatabase.assembly_name],
+        ["search.releaseLabel", selectedDatabase.release_id == null ? null : String(selectedDatabase.release_id)],
+        ["blast.annotation", selectedDatabase.annotation_version],
+        ["blast.dbType", selectedDatabase.db_type],
+        ["blast.license", selectedDatabase.license],
+      ] as const)
+        .filter(([, value]) => value != null && value !== "")
+        .map(([label, value]) => ({ key: label, label: t(label), children: String(value) }))
+    : [];
+
+  const activeContext = activeJob ? contextForJob(activeJob) : null;
 
   return (
     <FadeUp>
@@ -533,19 +565,8 @@ function BlastComponent() {
         </h1>
         <div className="mt-3"><Link to="/search/blast">{t("blast.publicWorkflow")}</Link></div>
 
-        <Card className="mt-8">
-          <Card.Meta
-            title={
-              <span className="flex items-center gap-2">
-                <FlaskConical className="size-5 text-primary" aria-hidden />
-                {t("blast.title")}
-              </span>
-            }
-            description={
-              <Typography.Text type="secondary">{t("blast.desc")}</Typography.Text>
-            }
-          />
-          {/* Label-above, two columns. The previous horizontal layout pinned a
+        <Card className="mt-8" title={<span className="text-base">{t("blast.title")}</span>}>
+          {/* Label-above, three columns. The previous horizontal layout pinned a
               6/24 label column inside a 768px card, which left every control
               roughly 570px wide no matter how wide the viewport got — the page
               looked small on a wide screen because it was.
@@ -554,42 +575,70 @@ function BlastComponent() {
               injects `:where(.css-x).ant-form{margin:0}` at runtime, into the
               head *after* Tailwind's stylesheet. Same specificity, later wins,
               so a spacing utility on an antd element root is a silent no-op. */}
-          <div className="mt-6">
           <Form layout="vertical" onFinish={onSubmit}>
-            <div className="grid gap-x-6 md:grid-cols-2">
-            <Form.Item
-              label={get("blast.searchType", t("blast.searchType"))}
-              htmlFor="program"
-              help={errors.program ?? undefined}
-              validateStatus={errors.program ? "error" : undefined}
-            >
+            <Row gutter={[24, 0]}>
+              <Col xs={24} md={8}>
+                <Form.Item
+                  label={get("blast.searchType", t("blast.searchType"))}
+                  help={errors.program ?? undefined}
+                  validateStatus={errors.program ? "error" : undefined}
+                >
+                  <Flex gap={8}>
+                    <Select
+                      className="min-w-0 flex-1"
+                      aria-label={t("blastPublic.engine")}
+                      value={form.engine}
+                      onChange={(value: BlastEngine) => setForm((f) => ({ ...f, engine: value, database: "" }))}
+                      options={engineOptions}
+                    />
+                    <Select
+                      className="min-w-0 flex-1"
+                      aria-label={t("blastPublic.program")}
+                      value={form.program}
+                      onChange={(value: BlastProgram) => setForm((f) => ({ ...f, program: value, database: "" }))}
+                      options={BLAST_PROGRAMS
+                        .filter((item) => form.engine === "ncbi_blast" || item.id === "blastp")
+                        .map((item) => ({ value: item.id, label: item.label }))}
+                    />
+                  </Flex>
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item
+                  label={get("blast.database", t("blast.database"))}
+                  htmlFor="database"
+                  help={errors.database ?? undefined}
+                  validateStatus={errors.database ? "error" : undefined}
+                >
+                  <Select
+                    id="database"
+                    data-testid="blast-database"
+                    value={form.database}
+                    onChange={(v) => setForm((f) => ({ ...f, database: v }))}
+                    placeholder={t("blast.referencePlaceholder")}
+                    status={errors.database ? "error" : undefined}
+                    options={databaseOptions}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label=" " colon={false}>
+                  <Typography.Text type="secondary" className="text-xs">{t("blast.parametersHint")}</Typography.Text>
+                </Form.Item>
+              </Col>
+            </Row>
 
-              <div className="grid gap-2 md:grid-cols-2">
-                <Select aria-label={t("blastPublic.engine")} value={form.engine} onChange={(value: BlastEngine) => setForm((f) => ({ ...f, engine: value, database: "" }))} options={engineOptions} />
-                <Select aria-label={t("blastPublic.program")} value={form.program} onChange={(value: BlastProgram) => setForm((f) => ({ ...f, program: value, database: "" }))} options={BLAST_PROGRAMS.filter((item) => form.engine === "ncbi_blast" || item.id === "blastp").map((item) => ({ value: item.id, label: item.label }))} />
-              </div>
-            </Form.Item>
-
-            <Form.Item
-              label={get("blast.database", t("blast.database"))}
-              htmlFor="database"
-              help={errors.database ?? undefined}
-              validateStatus={errors.database ? "error" : undefined}
-            >
-              <Select
-                id="database"
-                data-testid="blast-database"
-                size="large"
-                value={form.database}
-                onChange={(v) => setForm((f) => ({ ...f, database: v }))}
-                placeholder={t("blast.referencePlaceholder")}
-                options={databaseOptions}
+            {provenanceItems.length > 0 ? (
+              <Descriptions
+                className="mb-6"
+                size="small"
+                bordered
+                column={{ xs: 1, sm: 2, md: 3, lg: 5 }}
+                title={<span className="text-sm font-medium">{t("blastSearch.provenance")}</span>}
+                items={provenanceItems}
               />
-            </Form.Item>
+            ) : null}
 
-            </div>
-
-            {selectedDatabase ? <Typography.Paragraph type="secondary">{t("blastSearch.provenance")}: {selectedDatabase.assembly_name ?? "—"} · {selectedDatabase.release_id ?? "—"} · {selectedDatabase.annotation_version ?? "—"} · {selectedDatabase.db_type} · {selectedDatabase.license ?? "—"}</Typography.Paragraph> : null}
             <Form.Item
               label={t(BLAST_PROGRAM_COMPATIBILITY[form.program].query === "prot" ? "blastSearch.proteinInput" : "blastSearch.nucleotideInput")}
               htmlFor="sequence"
@@ -599,79 +648,87 @@ function BlastComponent() {
               <Input.TextArea
                 id="sequence"
                 data-testid="blast-sequence"
-                size="large"
                 value={form.sequence}
                 onChange={(e) => setForm((f) => ({ ...f, sequence: e.target.value }))}
+                autoSize={{ minRows: 6, maxRows: 14 }}
+                status={errors.sequence ? "error" : undefined}
                 placeholder={get("blast.sequencePlaceholder", t("blast.sequencePlaceholder"))}
-                className="min-h-[160px] font-mono text-sm"
+                className="font-mono text-sm"
               />
             </Form.Item>
 
-            <div className="grid gap-x-6 md:grid-cols-2">
-            <Form.Item label={t("blast.eValue")} htmlFor="e_value" style={{ marginBottom: 0 }}>
-              <Input
-                id="e_value"
-                size="large"
-                value={form.e_value}
-                onChange={(e) => setForm((f) => ({ ...f, e_value: e.target.value }))}
-                className="font-mono"
-                style={{ maxWidth: 320 }}
-              />
-            </Form.Item>
-
-            <Form.Item label={t("blast.maxHits")} htmlFor="max_hits" style={{ marginBottom: 0 }}>
-              <Input
-                id="max_hits"
-                type="number"
-                size="large"
-                value={form.max_hits}
-                onChange={(e) => setForm((f) => ({ ...f, max_hits: e.target.value }))}
-                className="font-mono"
-                style={{ maxWidth: 320 }}
-              />
-            </Form.Item>
-
-            </div>
-
-            <Form.Item style={{ marginTop: 24, marginBottom: 0 }}>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  size="large"
-                  data-testid="blast-submit"
-                  loading={submitMutation.isPending}
-                  disabled={!canSubmit}
-                  title={!isSignedIn ? t("blast.submitRequiresLogin") : !canSubmit ? t("blast.submitRequiresResearcher") : undefined}
-                  icon={<Play className="size-4" aria-hidden />}
+            <Row gutter={[24, 0]}>
+              <Col xs={12} md={6}>
+                <Form.Item
+                  label={t("blast.eValue")}
+                  htmlFor="e_value"
+                  help={errors.parameters}
+                  validateStatus={errors.parameters ? "error" : undefined}
                 >
-                  {get("blast.submit", t("blast.submit"))}
-                </Button>
-                <Button size="large" onClick={clearForm}>{t("blast.clear")}</Button>
-              </div>
-            </Form.Item>
+                  <Input
+                    id="e_value"
+                    className="font-mono"
+                    value={form.e_value}
+                    status={errors.parameters ? "error" : undefined}
+                    onChange={(e) => setForm((f) => ({ ...f, e_value: e.target.value }))}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={12} md={6}>
+                <Form.Item
+                  label={t("blast.maxHits")}
+                  htmlFor="max_hits"
+                  help={errors.parameters ? " " : undefined}
+                  validateStatus={errors.parameters ? "error" : undefined}
+                >
+                  <Input
+                    id="max_hits"
+                    className="font-mono"
+                    type="number"
+                    min={1}
+                    max={500}
+                    value={form.max_hits}
+                    status={errors.parameters ? "error" : undefined}
+                    onChange={(e) => setForm((f) => ({ ...f, max_hits: e.target.value }))}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Flex wrap gap={12} align="center">
+              <Button
+                type="primary"
+                htmlType="submit"
+                size="large"
+                data-testid="blast-submit"
+                loading={submitMutation.isPending}
+                disabled={!canSubmit}
+                title={!isSignedIn ? t("blast.submitRequiresLogin") : !canSubmit ? t("blast.submitRequiresResearcher") : undefined}
+                icon={<Play className="size-4" aria-hidden />}
+              >
+                {get("blast.submit", t("blast.submit"))}
+              </Button>
+              <Button size="large" onClick={clearForm}>{t("blast.clear")}</Button>
+            </Flex>
 
             {!currentUserLoading && !canSubmit ? (
-              <Form.Item className="mb-0 mt-4">
-                <Alert
-                  type="info"
-                  showIcon
-                  message={isSignedIn ? t("blast.submitRequiresResearcher") : t("blast.submitRequiresLogin")}
-                />
-              </Form.Item>
+              <Alert
+                className="mt-4"
+                type="info"
+                showIcon
+                title={isSignedIn ? t("blast.submitRequiresResearcher") : t("blast.submitRequiresLogin")}
+              />
             ) : null}
 
             {submitMutation.isError ? (
-              <Form.Item className="mb-0 mt-4">
-                <Alert
-                  type="error"
-                  showIcon
-                  title={get("ui.errorRetry", t("blast.submitFailed", { message: (submitMutation.error as Error).message }))}
-                />
-              </Form.Item>
+              <Alert
+                className="mt-4"
+                type="error"
+                showIcon
+                title={get("ui.errorRetry", t("blast.submitFailed", { message: (submitMutation.error as Error).message }))}
+              />
             ) : null}
           </Form>
-          </div>
         </Card>
 
         <Card
@@ -709,115 +766,110 @@ function BlastComponent() {
             // Native <ul>/<li> rather than AntD 6's deprecated List. The
             // empty state is the sibling branch above, so this list is only
             // reached with at least one job.
+            //
+            // A job's hits, its download control and its warnings live inside
+            // the job's own row, and the newest completed job is open by
+            // default: the row that states a job's release/assembly context is
+            // the row that shows its hits.
             <ul className="m-0 list-none p-0">
-              {jobs.map((job) => (
-                <li key={job.id} className="py-3">
-                  <div className="flex w-full items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-mono text-xs">{job.id.slice(0, 12)}…</p>
-                      <p className="text-xs text-muted-foreground">{blastEngineLabel(job.engine, t("blastSearch.engineUnknown"))} · {job.program} · {job.database}</p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <Tag
-                        color={job.status === "completed" ? "success" : "default"}
-                        className="m-0 text-[10px] uppercase"
-                      >
-                        {job.status}
-                      </Tag>
-                      {job.status === "completed" ? (
-                        <Button
-                          size="small"
-                          type={selectedJob?.id === job.id ? "primary" : "default"}
-                          onClick={() => setSelectedJob(job)}
+              {jobs.map((job) => {
+                const isActive = activeJob?.id === job.id;
+                return (
+                  <li key={job.id} className="border-b border-border/60 py-3 last:border-b-0">
+                    <Flex wrap gap={12} align="center" justify="space-between">
+                      <div className="min-w-0">
+                        <p className="truncate font-mono text-xs">{job.id.slice(0, 12)}…</p>
+                        <p className="text-xs text-muted-foreground">{blastEngineLabel(job.engine, t("blastSearch.engineUnknown"))} · {job.program} · {job.database}</p>
+                      </div>
+                      <Flex gap={12} align="center" style={{ flexShrink: 0 }}>
+                        <Tag
+                          color={job.status === "completed" ? "success" : job.status === "failed" ? "error" : "processing"}
+                          className="m-0 text-[10px] uppercase"
                         >
-                          {t("blast.viewResults")}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                </li>
-              ))}
+                          {job.status}
+                        </Tag>
+                        {job.status === "completed" ? (
+                          <Button
+                            size="small"
+                            type={isActive ? "primary" : "default"}
+                            onClick={() => setSelectedJob(isActive ? null : job)}
+                          >
+                            {t("blast.viewResults")}
+                          </Button>
+                        ) : null}
+                      </Flex>
+                    </Flex>
+
+                    {isActive && activeJob ? (
+                      <div className="mt-4">
+                        {/*
+                          A job that states no release/assembly context cannot
+                          offer a trustworthy genome-browser link. The state is
+                          announced instead of silently dropping the column, so
+                          the reader knows the link is unavailable rather than
+                          missing.
+                        */}
+                        {!activeContext ? (
+                          <Alert
+                            className="mb-3"
+                            type="warning"
+                            showIcon
+                            title={t("browser.contextMissingTitle")}
+                            description={t("browser.contextMissingDescription")}
+                          />
+                        ) : null}
+                        {navigationError ? <Alert className="mb-3" type="error" showIcon title={navigationError} /> : null}
+                        {hitsDownload ? (
+                          <Flex justify="flex-end" className="mb-3">
+                            <Button
+                              size="small"
+                              data-testid="blast-download"
+                              icon={<DownloadOutlined aria-hidden />}
+                              href={hitsDownload.href}
+                              download={hitsDownload.filename}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={t("blastSearch.downloadFilenameHint")}
+                            >
+                              {t("blast.download")}
+                            </Button>
+                          </Flex>
+                        ) : null}
+                        {hitsQuery.isLoading ? (
+                          <Skeleton active paragraph={{ rows: 4 }} title={false} />
+                        ) : hitsQuery.isError ? (
+                          <div role="alert">
+                            <Result
+                              status="error"
+                              title={t("blast.hitsLoadError")}
+                              extra={
+                                <Button loading={hitsQuery.isFetching} onClick={() => void hitsQuery.refetch()}>
+                                  {t("common.retry")}
+                                </Button>
+                              }
+                            />
+                          </div>
+                        ) : hits.length === 0 ? (
+                          <Empty description={get("ui.noResults", t("blast.noHits"))} />
+                        ) : (
+                          <Table<BlastHit>
+                            rowKey={(hit) => String(hit.hsp_num)}
+                            columns={hitsColumns}
+                            dataSource={hits}
+                            loading={hitsQuery.isFetching}
+                            size="small"
+                            pagination={hits.length > 25 ? { pageSize: 25, showSizeChanger: false } : false}
+                            scroll={{ x: "max-content" }}
+                          />
+                        )}
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>
-
-        {/* Hits table for the selected completed job — with JBrowse 2 /
-            gene-search cross links (PPTX V2). */}
-        {selectedJob ? (
-          <Card
-            className="mt-6"
-            title={<span className="text-base">{t("blast.resultsTitle")}</span>}
-            extra={
-              <div className="flex items-center gap-3">
-                {hitsDownload ? (
-                  <Button
-                    size="small"
-                    data-testid="blast-download"
-                    icon={<DownloadOutlined aria-hidden />}
-                    href={hitsDownload.href}
-                    download={hitsDownload.filename}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={t("blastSearch.downloadFilenameHint")}
-                  >
-                    {t("blast.download")}
-                  </Button>
-                ) : null}
-                <Typography.Text type="secondary" className="font-mono">
-                  {selectedJob.id.slice(0, 12)}…
-                </Typography.Text>
-              </div>
-            }
-          >
-            {/*
-              A job that states no release/assembly context cannot offer a
-              trustworthy genome-browser link. The state is announced instead
-              of silently dropping the column, so the reader knows the link is
-              unavailable rather than missing.
-            */}
-            {selectedJob && !contextForJob(selectedJob) ? (
-              <Alert
-                className="mb-4"
-                type="warning"
-                showIcon
-                title={t("browser.contextMissingTitle")}
-                description={t("browser.contextMissingDescription")}
-              />
-            ) : null}
-            {navigationError ? <Alert className="mb-4" type="error" showIcon title={navigationError} /> : null}
-            {hitsQuery.isLoading ? (
-              <Skeleton active paragraph={{ rows: 4 }} title={false} />
-            ) : hitsQuery.isError ? (
-              <div role="alert">
-                <Result
-                  status="error"
-                  title={t("blast.hitsLoadError")}
-                  extra={
-                    <Button loading={hitsQuery.isFetching} onClick={() => void hitsQuery.refetch()}>
-                      {t("common.retry")}
-                    </Button>
-                  }
-                />
-              </div>
-            ) : hits.length === 0 ? (
-              <Empty description={get("ui.noResults", t("blast.noHits"))} />
-            ) : (
-              <Table<BlastHit>
-                rowKey={(hit) => String(hit.hsp_num)}
-                columns={hitsColumns}
-                dataSource={hits}
-                loading={hitsQuery.isFetching}
-                size="small"
-                pagination={
-                  hits.length > 25
-                    ? { pageSize: 25, showSizeChanger: false }
-                    : false
-                }
-                scroll={{ x: "max-content" }}
-              />
-            )}
-          </Card>
-        ) : null}
       </div>
     </FadeUp>
   );
