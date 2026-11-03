@@ -19,6 +19,10 @@ import re
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from soymutdb_jobs.blast_catalog_state import (
+    SEARCHABLE_STATES,
+    is_searchable_build_state,
+)
 from soymutdb_jobs.blast_search import PROGRAM_DATABASE_TYPES, normalize_query
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -89,7 +93,7 @@ class BlastService:
         *,
         release_context: ReleaseContext,
     ) -> list[BlastDatabaseResponse]:
-        """List ready supported indexes in the published release.
+        """List published, supported indexes in the published release.
 
         Unfinished indexes stay private to the catalog control plane. Program
         compatibility is enforced again at selection; the release join hides
@@ -101,7 +105,7 @@ class BlastService:
             .where(
                 BlastDatabase.is_active.is_(True),
                 BlastDatabase.engine.in_(["diamond", "ncbi_blast"]),
-                BlastDatabase.build_status == "ready",
+                BlastDatabase.build_status.in_(sorted(SEARCHABLE_STATES)),
                 Assembly.release_id == release_context.release_id,
             )
         )
@@ -145,7 +149,7 @@ class BlastService:
         return (
             database.is_active is True
             and database.engine in {"diamond", "ncbi_blast"}
-            and database.build_status == "ready"
+            and is_searchable_build_state(database.build_status)
             and database.db_type in {BlastDbType.PROT, BlastDbType.NUCL}
             and (database.engine != "diamond" or database.db_type == BlastDbType.PROT)
         )
@@ -158,7 +162,7 @@ class BlastService:
         engine: str = "ncbi_blast",
         program: str = "blastp",
     ) -> BlastDatabase | None:
-        """Fetch one ready program/engine-compatible index in the published release.
+        """Fetch one published, program/engine-compatible index in the release.
 
         Only executable ``blast_databases`` rows of the *resolved release* are the
         database whitelist: anything not matching is refused here (defense in
@@ -171,7 +175,7 @@ class BlastService:
             .where(
                 BlastDatabase.is_active.is_(True),
                 BlastDatabase.engine.in_(["diamond", "ncbi_blast"]),
-                BlastDatabase.build_status == "ready",
+                BlastDatabase.build_status.in_(sorted(SEARCHABLE_STATES)),
                 Assembly.release_id == release_context.release_id,
                 BlastDatabase.engine == engine,
                 BlastDatabase.db_type == PROGRAM_DATABASE_TYPES[program],

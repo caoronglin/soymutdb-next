@@ -71,11 +71,39 @@ def database():
             CREATE TABLE blast_jobs (
                 id UUID PRIMARY KEY, user_id UUID, status VARCHAR(32) NOT NULL,
                 started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ,
+                -- The worker re-checks the job's deadline before launching the
+                -- aligner, so the fixture must carry the real column (0042).
+                expires_at TIMESTAMPTZ,
                 error_message TEXT, result_path TEXT, query_len INTEGER, hit_count INTEGER,
                 parameters JSONB
             )
         """)
         )
+        # Protein-subject programs resolve their hits through explicit
+        # assembly-scoped relations, so the fixture carries the four tables
+        # that resolver reads (it must not need a table the worker cannot
+        # assume exists).
+        connection.execute(text("""
+            CREATE TABLE assemblies (id INTEGER PRIMARY KEY, name VARCHAR(128),
+                                     version VARCHAR(64), release_id INTEGER)
+        """))
+        connection.execute(text("""
+            CREATE TABLE chromosomes (id INTEGER PRIMARY KEY, assembly_id INTEGER NOT NULL,
+                                      name VARCHAR(64))
+        """))
+        connection.execute(text("""
+            CREATE TABLE genes (gene_pk BIGSERIAL PRIMARY KEY, accession VARCHAR(64),
+                                assembly_id INTEGER NOT NULL, chromosome_id INTEGER,
+                                start BIGINT, "end" BIGINT, strand VARCHAR(1))
+        """))
+        connection.execute(text("""
+            CREATE TABLE transcripts (id VARCHAR(64) PRIMARY KEY, gene_id BIGINT,
+                                      is_canonical BOOLEAN)
+        """))
+        connection.execute(text("""
+            CREATE TABLE gene_aliases (id SERIAL PRIMARY KEY, gene_id BIGINT,
+                                       alias VARCHAR(256), source VARCHAR(128))
+        """))
         connection.execute(
             text("""
             CREATE TABLE blast_hits (
@@ -85,7 +113,9 @@ def database():
                 percent_identity FLOAT, alignment_length INTEGER, mismatches INTEGER,
                 gap_opens INTEGER, query_start INTEGER, query_end INTEGER,
                 subject_start INTEGER, subject_end INTEGER, evalue FLOAT, bit_score FLOAT,
-                query_strand VARCHAR(8), subject_strand VARCHAR(8)
+                query_strand VARCHAR(8), subject_strand VARCHAR(8),
+                -- Migration 0053: proven genomic resolution, never AA offsets.
+                genome_resolution JSONB
             )
         """)
         )

@@ -79,7 +79,7 @@ def test_guarded_transitions_and_publication(catalog_db):
         assert store.runnable(store.get(7)) is False
         assert store.transition(7, expected=state.PENDING, target=state.BUILDING)
         with pytest.raises(CatalogStateError):
-            store.transition(7, expected=state.BUILDING, target=state.READY)
+            store.transition(7, expected=state.BUILDING, target=state.PUBLISHED)
         assert store.transition(7, expected=state.BUILDING, target=state.VALIDATING)
         assert store.transition(7, expected=state.VALIDATING, target=state.PUBLISHING)
         assert store.publish(
@@ -88,7 +88,7 @@ def test_guarded_transitions_and_publication(catalog_db):
         )
         session.commit()
     status, identity, error, attempt, count, length = _status(engine, table)
-    assert status == state.READY and identity == "a" * 64
+    assert status == state.PUBLISHED and identity == "a" * 64
     assert error is None and attempt == 1 and count == 2 and length == 64
     with Session(engine) as session:
         store = BlastCatalogStore(session)
@@ -98,7 +98,7 @@ def test_guarded_transitions_and_publication(catalog_db):
         assert not store.publish(7, index_identity="c" * 64, fasta_sha256="d" * 64,
                                  sequence_count=9, total_length=99)
         with pytest.raises(CatalogStateError):
-            store.transition(7, expected=state.READY, target=state.READY)
+            store.transition(7, expected=state.PUBLISHED, target=state.PUBLISHED)
 
 
 def test_failed_build_records_a_sanitized_reason(catalog_db):
@@ -162,7 +162,7 @@ def test_build_task_drives_the_whole_state_machine(monkeypatch, catalog_db, tmp_
                "source_version": "v1", "license": "CC0-1.0"}
     result = tasks.build_blast_index.run.__func__(FakeTask(), payload)
     assert result["index_identity"] == "a" * 64
-    assert result["build_status"] == state.READY
+    assert result["build_status"] == state.PUBLISHED
     # The success path deliberately does NOT sweep staging: a concurrent
     # builder may own a .build-* directory. The hourly health task does.
     assert (root / ".build-stale").exists()
@@ -176,7 +176,7 @@ def test_build_task_drives_the_whole_state_machine(monkeypatch, catalog_db, tmp_
     tasks.check_blast_index_health.run.__func__(FakeTask())
     assert not (root / ".build-stale").exists(), "health task swept orphan staging"
     status, identity, error, *_ = _status(engine, table)
-    assert (status, identity, error) == (state.READY, "a" * 64, None)
+    assert (status, identity, error) == (state.PUBLISHED, "a" * 64, None)
 
     # Re-delivery is a no-op; the published identity is immutable.
     again = tasks.build_blast_index.run.__func__(
@@ -209,3 +209,51 @@ def test_failed_build_cleans_staging_and_marks_failed(monkeypatch, catalog_db, t
     assert "binary exploded" in error
     assert not (root / ".build-orphan").exists()
     assert not (root / ".source-7.fasta").exists()
+
+
+def test_a_transition_the_catalog_rejects_marks_failed_and_keeps_identity(
+    monkeypatch, catalog_db, tmp_path
+):
+    """A guarded write that the schema rejects must fail closed.
+
+    If the catalog's build-status vocabulary and the state machine ever drift,
+    the guarded UPDATE raises instead of publishing. The task then has to
+    record ``failed`` and leave the previously published identity untouched —
+    it must never leave a row sitting in ``publishing``.
+    """
+    engine, table = catalog_db
+    root = tmp_path / "indexes"
+    root.mkdir()
+    monkeypatch.setattr(tasks, "BLAST_INDEX_ROOT", root)
+    monkeypatch.setattr(tasks, "get_db", _db(engine))
+    monkeypatch.setattr(tasks, "_download_source",
+                        lambda ref, dest: dest.write_text(">x\nACGT\n"))
+    monkeypatch.setattr(tasks, "build_index", lambda *a, **k: {
+        "index_identity": "a" * 64, "reused": False,
+        "manifest": {"request": {
+            "source_sha256": "b" * 64, "sequence_count": 1, "letter_count": 4,
+            "metadata": {"annotation_version": "v1"},
+        }},
+    })
+    monkeypatch.setattr(tasks, "verify_index", lambda *a, **k: {
+        "manifest": {"request": {
+            "source_sha256": "b" * 64, "sequence_count": 1, "letter_count": 4,
+            "metadata": {"annotation_version": "v1"},
+        }},
+    })
+
+    def rejected_publish(*args, **kwargs):
+        raise RuntimeError("new row for relation \"blast_databases\" violates "
+                           "check constraint \"ck_blast_catalog_build_status\"")
+
+    monkeypatch.setattr(tasks.BlastCatalogStore, "publish", rejected_publish)
+    payload = {"database_id": 7, "db_type": "nucl", "source_object": "blast-sources/x.fa",
+               "assembly_id": "42", "assembly_version": "v4", "release_id": "7",
+               "annotation_version": "v1", "source_url": "https://www.soybase.org/",
+               "source_version": "v1", "license": "CC0-1.0"}
+    with pytest.raises(RuntimeError):
+        tasks.build_blast_index.run.__func__(FakeTask(), payload)
+    status, identity, error, *_ = _status(engine, table)
+    assert status == state.FAILED, "a rejected publication must not stay in flight"
+    assert identity is None, "no identity may be recorded for a failed publication"
+    assert "check constraint" in error

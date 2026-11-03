@@ -4361,9 +4361,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Request Blast Index Build Api V1 Blast Databases Build Post"
+                  "$ref": "#/components/schemas/BlastIndexBuildQueued"
                 }
               }
             }
@@ -19228,8 +19226,9 @@
               "building",
               "validating",
               "publishing",
-              "ready",
-              "failed"
+              "published",
+              "failed",
+              "ready"
             ],
             "title": "Build Status",
             "default": "pending"
@@ -19378,6 +19377,30 @@
           "bit_score"
         ],
         "title": "BlastHit"
+      },
+      "BlastIndexBuildQueued": {
+        "properties": {
+          "database_id": {
+            "type": "integer",
+            "title": "Database Id"
+          },
+          "queued": {
+            "type": "boolean",
+            "title": "Queued"
+          },
+          "task_name": {
+            "type": "string",
+            "title": "Task Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "database_id",
+          "queued",
+          "task_name"
+        ],
+        "title": "BlastIndexBuildQueued",
+        "description": "Acknowledgement for an accepted index build request.\n\nDeliberately narrow: the response says *what was queued*, never where the\nworker will write it. Progress is read back from the catalog's\n``build_status``, not from a filesystem path."
       },
       "BlastIndexBuildRequest": {
         "properties": {

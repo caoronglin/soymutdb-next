@@ -71,9 +71,16 @@ class BlastGenomeResolver:
         return row is not None
 
     def _gene_rows(self, gene_pks: set[int]) -> dict[int, GeneLocus]:
+        """Load loci for *gene_pks*, scoped by assembly on BOTH tables.
+
+        ``genes.assembly_id`` and ``chromosomes.assembly_id`` are joined
+        separately: two assemblies can reuse chromosome names, so the join key
+        alone cannot prove the chromosome belongs to the searched assembly.
+        """
         if not gene_pks or not self._scope:
             return {}
-        rows = self._session.execute(
+        result: dict[int, GeneLocus] = {}
+        statement = (
             select(
                 genes.c.gene_pk,
                 genes.c.accession,
@@ -84,32 +91,39 @@ class BlastGenomeResolver:
                 chromosomes.c.name,
             )
             .select_from(
-                genes.join(chromosomes, genes.c.chromosome_id == chromosomes.c.id)
+                genes.join(
+                    chromosomes,
+                    (genes.c.chromosome_id == chromosomes.c.id)
+                    & (chromosomes.c.assembly_id == genes.c.assembly_id),
+                )
             )
             .where(
                 genes.c.gene_pk.in_(sorted(gene_pks)),
                 genes.c.assembly_id == self.assembly_id,
             )
-        ).all()
-        result: dict[int, GeneLocus] = {}
-        for row in rows:
-            m = row._mapping
+        )
+        for (
+            gene_pk, accession, chromosome_id, start, end, strand, chromosome_name,
+        ) in self._rows(statement):
             if (
-                m["chromosome_id"] is None or m["start"] is None or m["end"] is None
-                or m["start"] < 1 or m["end"] < m["start"]
-                or not m["name"]
+                chromosome_id is None or start is None or end is None
+                or start < 1 or end < start or not chromosome_name
             ):
                 continue
-            result[int(m["gene_pk"])] = GeneLocus(
-                gene_id=str(m["accession"]),
-                chromosome=str(m["name"]),
-                start=int(m["start"]),
-                end=int(m["end"]),
-                strand=str(m["strand"] or "+"),
+            result[int(gene_pk)] = GeneLocus(
+                gene_id=str(accession),
+                chromosome=str(chromosome_name),
+                start=int(start),
+                end=int(end),
+                strand=str(strand or "+"),
                 assembly_id=self.assembly_id,
                 release_id=self.release_id,
             )
         return result
+
+    def _rows(self, statement: Any) -> list[tuple[Any, ...]]:
+        """Execute a two-or-more-column select and return plain tuples."""
+        return [tuple(row) for row in self._session.execute(statement).all()]
 
     def resolve(self, subject_ids: list[str]) -> dict[str, dict[str, Any]]:
         """Return a resolution record per subject ID (never omitted).
@@ -132,33 +146,33 @@ class BlastGenomeResolver:
         owner: dict[str, set[int]] = {key: set() for key in unique}
 
         # (1) exact gene accession in this assembly.
-        for row in self._session.execute(
+        for key, gene_pk in self._rows(
             select(genes.c.accession, genes.c.gene_pk).where(
                 genes.c.accession.in_(unique),
                 genes.c.assembly_id == self.assembly_id,
             )
-        ).all():
-            owner[str(row[0])].add(int(row[1]))
-            gene_pks.add(int(row[1]))
+        ):
+            owner[str(key)].add(int(gene_pk))
+            gene_pks.add(int(gene_pk))
 
         # (2) exact transcript id -> gene_pk.
-        for row in self._session.execute(
+        for key, gene_pk in self._rows(
             select(transcripts.c.id, transcripts.c.gene_id).where(
                 transcripts.c.id.in_(unique)
             )
-        ).all():
-            owner[str(row[0])].add(int(row[1]))
-            gene_pks.add(int(row[1]))
+        ):
+            owner[str(key)].add(int(gene_pk))
+            gene_pks.add(int(gene_pk))
 
         # (3) exact, sourced alias -> gene_pk (explicit relation only).
-        for row in self._session.execute(
+        for key, gene_pk in self._rows(
             select(gene_aliases.c.alias, gene_aliases.c.gene_id).where(
                 gene_aliases.c.alias.in_(unique),
                 gene_aliases.c.source.is_not(None),
             )
-        ).all():
-            owner[str(row[0])].add(int(row[1]))
-            gene_pks.add(int(row[1]))
+        ):
+            owner[str(key)].add(int(gene_pk))
+            gene_pks.add(int(gene_pk))
 
         loci = self._gene_rows(gene_pks)
         for key in unique:

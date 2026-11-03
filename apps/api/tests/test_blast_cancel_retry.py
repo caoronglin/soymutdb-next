@@ -229,8 +229,8 @@ async def test_admin_build_request_writes_a_versioned_outbox_event():
     finally:
         routes.require_admin_roles = original_admin
         routes.get_user_roles = original_roles
-    assert result == {"database_id": 7, "queued": True,
-                      "task_name": BLAST_INDEX_BUILD_TASK}
+    assert result.model_dump() == {"database_id": 7, "queued": True,
+                                   "task_name": BLAST_INDEX_BUILD_TASK}
     assert len(session.added) == 1 and session.commits == 1
     payload = session.added[0].payload
     assert payload["task_name"] == BLAST_INDEX_BUILD_TASK

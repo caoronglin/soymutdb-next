@@ -78,6 +78,13 @@ def _db(session):
     return factory
 
 
+class _NoDeadlineSession(_ExpirySession):
+    """A legacy row whose ``expires_at`` is NULL: nothing may be invented."""
+
+    def __init__(self, status="pending", rowcount=1):
+        super().__init__(status=status, expires_at=None, rowcount=rowcount)
+
+
 def test_expired_job_never_executes(monkeypatch):
     payload = _payload()
     session = _ExpirySession(expires_at=datetime.now(UTC) - timedelta(seconds=1))
@@ -103,6 +110,25 @@ def test_cancelled_job_is_skipped_even_with_future_expiry(monkeypatch):
     )
     result = blast_module.run_blast.run.__func__(FakeTask(), payload=payload)
     assert result["skipped"] is True and result["reason"] == "cancelled_or_expired"
+
+
+def test_a_cancelled_row_is_never_rewritten_as_expired(monkeypatch):
+    """Who ended the job stays readable: cancel is not clobbered by expiry.
+
+    The worker closes *deadline* expiries only. Renaming a user's cancellation
+    to ``expired`` with a system message is a false record of what happened.
+    """
+    payload = _payload()
+    session = _NoDeadlineSession(status="cancelled")
+    monkeypatch.setattr(blast_module, "get_db", _db(session))
+    monkeypatch.setattr(
+        blast_module, "get_blast_db_path",
+        lambda *a, **k: pytest.fail("cancelled job launched a search"),
+    )
+    result = blast_module.run_blast.run.__func__(FakeTask(), payload=payload)
+    assert result["skipped"] is True
+    assert session.status == "cancelled", "the cancellation message was overwritten"
+    assert session.updates == [], "a cancelled row must not be UPDATEd"
 
 
 def test_future_expiry_still_runs_and_caps_download_ttl(monkeypatch, tmp_path):
@@ -145,3 +171,13 @@ def test_download_ttl_is_capped_and_never_negative():
     store = BlastJobStore(_ExpirySession(
         expires_at=datetime.now(UTC) - timedelta(seconds=10)))
     assert store.download_ttl_seconds("job", cap=86400) == 0
+
+
+@pytest.mark.parametrize("value,expected", [
+    (42, 42), ("42", 42), (" 42 ", 42),
+    (None, None), ("", None), ("abc", None), (0, None), ("-1", None),
+    (True, None), (42.5, None),
+])
+def test_frozen_provenance_ids_accept_only_positive_integers(value, expected):
+    """The outbox payload is JSON: "42" and 42 both mean assembly 42, no more."""
+    assert blast_module._frozen_id(value) == expected

@@ -60,9 +60,12 @@ class BlastDatabase(Base, TimestampMixin):
             "'pan_genome', 'family_consensus', 'custom')",
             name="ck_blast_catalog_sequence_type",
         ),
+        #: One vocabulary across the ORM, migration 0052 and
+        #: ``soymutdb_jobs.blast_catalog_state``. ``ready`` is the legacy
+        #: terminal spelling still carried by pre-existing catalogs.
         CheckConstraint(
             "build_status IN ('pending', 'building', 'validating', 'publishing', "
-            "'ready', 'failed')",
+            "'published', 'failed', 'ready')",
             name="ck_blast_catalog_build_status",
         ),
         CheckConstraint("sequence_count >= 0", name="ck_blast_catalog_sequence_count"),

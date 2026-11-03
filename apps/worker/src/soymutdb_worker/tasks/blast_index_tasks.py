@@ -7,14 +7,15 @@ an HTTP request, and PostgreSQL remains authoritative for publication.
 
 State machine (persisted in ``blast_databases.build_status``)::
 
-    pending -> building -> validating -> publishing -> ready
+    pending -> building -> validating -> publishing -> published
                     \\         \\            \\
                      +---------+------------+----> failed
 
-Only ``ready`` rows are selectable by the search service. A rebuild produces a
-new content-addressed identity; the old index directory is never mutated or
-overwritten. Failures clean staging, record a sanitized reason, and leave any
-previously published identity intact.
+Only ``published`` rows are selectable by the search service (the legacy
+``ready`` spelling of pre-existing catalogs reads as published). A rebuild
+produces a new content-addressed identity; the old index directory is never
+mutated or overwritten. Failures clean staging, record a sanitized reason, and
+leave any previously published identity intact.
 
 Object-storage choice: **indexes stay on the worker-local immutable volume**,
 not in MinIO. They are multi-gigabyte, read-only, content-addressed directories
@@ -160,7 +161,7 @@ def build_blast_index(self: Task, payload: dict | None = None) -> dict:
         if row is None:
             raise CatalogStateError("BLAST catalog row not found")
         current = str(row["build_status"])
-        if current == state.READY and row["index_version"] == body.get("index_identity"):
+        if current == state.PUBLISHED and row["index_version"] == body.get("index_identity"):
             return {"database_id": database_id, "skipped": True, "reason": "already_published"}
         if not state.transition_allowed(current, state.BUILDING):
             raise CatalogStateError(
@@ -222,7 +223,7 @@ def build_blast_index(self: Task, payload: dict | None = None) -> dict:
             "database_id": database_id,
             "index_identity": identity,
             "reused": bool(result["reused"]),
-            "build_status": state.READY,
+            "build_status": state.PUBLISHED,
         }
     except Exception as exc:
         reason = _scrub(str(exc))
@@ -270,7 +271,7 @@ def check_blast_index_health(self: Task) -> dict:
     with get_db() as session:
         rows = session.execute(
             select(blast_databases.c.id, blast_databases.c.index_version).where(
-                blast_databases.c.build_status == state.READY
+                blast_databases.c.build_status == state.PUBLISHED
             )
         ).all()
     for database_id, identity in rows:

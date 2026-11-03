@@ -18,6 +18,7 @@ from ...core.security import RoleName, require_admin_roles
 from ...models.auth import User
 from ...schemas.blast import (
     BlastDatabaseResponse,
+    BlastIndexBuildQueued,
     BlastJobListResponse,
     BlastJobResponse,
     BlastResultResponse,
@@ -96,6 +97,7 @@ async def submit_blast_job(
 
 @router.post(
     "/databases/build", status_code=202,
+    response_model=BlastIndexBuildQueued,
     dependencies=[Depends(require_role(RoleName.ADMINISTRATOR))],
 )
 async def request_blast_index_build(
@@ -103,7 +105,7 @@ async def request_blast_index_build(
     response: Response,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> dict:
+) -> BlastIndexBuildQueued:
     """Queue an immutable index build; construction never runs in this request.
 
     The catalog row must exist and be buildable (``pending``/``failed`` or a
@@ -141,8 +143,9 @@ async def request_blast_index_build(
         payload=payload.model_dump(mode="json"),
     )
     await db.commit()
-    return {"database_id": request.database_id, "queued": True,
-            "task_name": BLAST_INDEX_BUILD_TASK}
+    return BlastIndexBuildQueued(
+        database_id=request.database_id, queued=True, task_name=BLAST_INDEX_BUILD_TASK,
+    )
 
 
 @router.get("/jobs", response_model=BlastJobListResponse)

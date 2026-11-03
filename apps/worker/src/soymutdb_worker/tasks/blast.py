@@ -271,6 +271,23 @@ def _require_diamond() -> Path:
     return DIAMOND_BIN
 
 
+def _frozen_id(value: object) -> int | None:
+    """Normalise a frozen provenance identifier to a positive int.
+
+    The outbox payload is JSON, so an id may arrive as ``42`` or ``"42"``. Only
+    a positive integer resolves; anything else (absent, empty, non-numeric,
+    bool, zero) is ``None`` and must never be substituted from another source.
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, str) and value.strip().isdigit():
+        parsed = int(value.strip())
+        return parsed if parsed > 0 else None
+    return None
+
+
 def _positive_threads(value) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, str)):
         raise ValueError("threads must be a positive integer within BLAST_MAX_THREADS")
@@ -763,12 +780,17 @@ def run_blast(
     # ── Idempotent job claim (shared transition validation) ──────────────
     with get_db() as session:
         store = BlastJobStore(session)
-        # A cancelled or expired job must never launch a resource-consuming
-        # NCBI/DIAMOND process. Expiry also invalidates the capability and the
-        # result download, so closing the row is the honest outcome.
-        if store.is_cancelled(job_id) or store.is_expired(job_id):
-            store.mark_expired(job_id)
-            logger.info("BLAST job %s skipped (cancelled/expired)", job_id)
+        # A cancelled/expired row — or a row whose deadline already passed —
+        # must never launch a resource-consuming NCBI/DIAMOND process: expiry
+        # invalidates the capability and the result download too.
+        if store.is_terminal_skip(job_id):
+            # Only a *deadline* expiry may be closed as ``expired``. A row the
+            # user already cancelled keeps its cancelled status and message;
+            # rewriting it would misreport who ended the job.
+            if not store.is_cancelled(job_id) and store.mark_expired(job_id):
+                logger.info("BLAST job %s closed (deadline passed)", job_id)
+            else:
+                logger.info("BLAST job %s skipped (cancelled/expired)", job_id)
             return {"job_id": job_id, "skipped": True, "idempotency_key": idempotency_key,
                     "reason": "cancelled_or_expired"}
         decision = store.begin_run(job_id)
@@ -862,10 +884,12 @@ def run_blast(
             # the API re-signs on each poll with the true remaining TTL, and the
             # worker's returned URL is capped to the same bound.
             with get_db() as session:
-                remaining = BlastJobStore(session).download_ttl_seconds(job_id, cap=86400)
+                download_ttl = BlastJobStore(session).download_ttl_seconds(
+                    job_id, cap=86400
+                )
             presigned_url = (
-                generate_presigned_url(f"{s3_bucket}/{s3_key}", expires_in=remaining)
-                if remaining > 0 else None
+                generate_presigned_url(f"{s3_bucket}/{s3_key}", expires_in=download_ttl)
+                if download_ttl > 0 else None
             )
 
             self.update_state(state="STARTED", meta={"progress": 100})
@@ -878,12 +902,13 @@ def run_blast(
             # unresolved is a first-class, persisted outcome.
             hits_to_store = parsed["hits"]
             if program in PROTEIN_SUBJECT_PROGRAMS and payload is not None:
-                assembly_id = p.get("assembly_id")
-                release_id = p.get("release_id", p.get("release_key"))
+                assembly_id = _frozen_id(p.get("assembly_id"))
+                release_id = _frozen_id(p.get("release_id", p.get("release_key")))
                 # Only a frozen, numeric assembly/release scope can resolve a
                 # genomic locus. Missing provenance is recorded as unresolved
-                # rather than guessed from a string or a default assembly.
-                if isinstance(assembly_id, int) and isinstance(release_id, int):
+                # rather than guessed from a string or a default assembly —
+                # the outbox payload is JSON, where these may be strings.
+                if assembly_id is not None and release_id is not None:
                     with get_db() as session:
                         resolutions = BlastGenomeResolver(
                             session, assembly_id=assembly_id, release_id=release_id,
@@ -922,7 +947,7 @@ def run_blast(
                 "hits_persisted": parsed["total_hits"],
                 "result_s3_path": s3_key,
                 "download_url": presigned_url,
-                "download_ttl_seconds": remaining,
+                "download_ttl_seconds": download_ttl,
                 "query_len": parsed["query_len"],
                 "checksum": checksum,
             }

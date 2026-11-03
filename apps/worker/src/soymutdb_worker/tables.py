@@ -104,6 +104,7 @@ chromosomes = Table(
     "chromosomes",
     metadata,
     Column("id", Integer, primary_key=True),
+    Column("assembly_id", Integer, nullable=False),
     Column("name", String(64)),
 )
 

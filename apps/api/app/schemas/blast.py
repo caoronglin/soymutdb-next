@@ -281,8 +281,13 @@ class BlastDatabaseResponse(BaseModel):
     total_length: int | None = Field(default=None, ge=0)
     fasta_sha256: str | None = None
     index_version: str | None = None
+    #: Must match ``soymutdb_jobs.blast_catalog_state.COLUMN_STATES``: the
+    #: catalog's check constraint, the worker's state machine and this response
+    #: share one vocabulary, including the legacy ``ready`` spelling that
+    #: pre-existing catalogs still carry.
     build_status: Literal[
-        "pending", "building", "validating", "publishing", "ready", "failed"
+        "pending", "building", "validating", "publishing", "published", "failed",
+        "ready",
     ] = "pending"
     is_default: bool = False
     license: str | None = None
@@ -292,3 +297,16 @@ class BlastDatabaseResponse(BaseModel):
     def public_source_url(cls, value: object) -> str | None:
         """Stored provenance is untrusted; omit paths and private URL authorities."""
         return public_source_url(value)
+
+
+class BlastIndexBuildQueued(BaseModel):
+    """Acknowledgement for an accepted index build request.
+
+    Deliberately narrow: the response says *what was queued*, never where the
+    worker will write it. Progress is read back from the catalog's
+    ``build_status``, not from a filesystem path.
+    """
+
+    database_id: int
+    queued: bool
+    task_name: str

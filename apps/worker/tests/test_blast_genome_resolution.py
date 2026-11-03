@@ -30,8 +30,12 @@ def gene_db():
                        Column("id", Integer, primary_key=True),
                        Column("name", String(128)), Column("version", String(64)),
                        Column("release_id", Integer))
+    # ``chromosomes.assembly_id`` is part of the real schema (0001 initial
+    # migration) and the resolver joins on it; a fixture without it would
+    # pass a resolver that silently ignores the chromosome's assembly.
     chromosomes = Table("chromosomes", metadata,
                         Column("id", Integer, primary_key=True),
+                        Column("assembly_id", Integer, nullable=False),
                         Column("name", String(64)))
     genes = Table("genes", metadata,
                   Column("gene_pk", Integer, primary_key=True),
@@ -53,7 +57,10 @@ def gene_db():
             {"id": 44, "name": "Other", "version": "v9", "release_id": 8},
         ])
         connection.execute(insert(chromosomes), [
-            {"id": 1, "name": "chr01"}, {"id": 2, "name": "chr02"},
+            {"id": 1, "assembly_id": 42, "name": "chr01"},
+            {"id": 2, "assembly_id": 43, "name": "chr02"},
+            # Same chromosome name in another assembly: a name is not a scope.
+            {"id": 3, "assembly_id": 44, "name": "chr01"},
         ])
         connection.execute(insert(genes), [
             {"gene_pk": 100, "accession": "Glyma.01G000100", "assembly_id": 42,
@@ -147,6 +154,29 @@ def test_assembly_outside_release_is_refused(gene_db):
     out = resolver.resolve(["Glyma.01G000100"])
     session.close()
     assert out["Glyma.01G000100"]["reason"] == "assembly_outside_release"
+
+
+def test_a_chromosome_of_another_assembly_never_resolves(gene_db):
+    """A gene cannot borrow a locus from a chromosome of another assembly.
+
+    ``genes.chromosome_id`` is a plain FK in the worker's narrow table, so a
+    cross-assembly row is representable: the resolver must refuse it rather
+    than report a locus whose chromosome belongs to a different assembly.
+    """
+    engine = gene_db
+    metadata = MetaData()
+    genes = Table("genes", metadata, autoload_with=engine)
+    with engine.begin() as connection:
+        # Gene 400 claims to be in assembly 42 but points at chromosome 2,
+        # which belongs to assembly 43.
+        connection.execute(insert(genes).values(
+            gene_pk=400, accession="Glyma.09G999999", assembly_id=42,
+            chromosome_id=2, start=5, end=90, strand="+",
+        ))
+    resolver, session = _resolver(engine, assembly_id=42)
+    out = resolver.resolve(["Glyma.09G999999"])
+    session.close()
+    assert out["Glyma.09G999999"] == {"status": "unresolved", "reason": "no_exact_relation"}
 
 
 def test_programs_requiring_resolution_are_explicit():

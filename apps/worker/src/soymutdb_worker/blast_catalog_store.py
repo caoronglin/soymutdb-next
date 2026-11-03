@@ -29,6 +29,12 @@ class BlastCatalogStore:
         self._session = session
 
     def get(self, database_id: int) -> dict | None:
+        """Read only the columns this store writes or gates on.
+
+        Every selected column must exist in ``apps/worker/.../tables.py``;
+        selecting a column the worker table does not declare fails with an
+        ``AttributeError`` at import-adjacent time, not at build time.
+        """
         row = self._session.execute(
             select(
                 blast_databases.c.id,
@@ -38,7 +44,6 @@ class BlastCatalogStore:
                 blast_databases.c.build_status,
                 blast_databases.c.index_version,
                 blast_databases.c.fasta_sha256,
-                blast_databases.c.file_path,
             ).where(blast_databases.c.id == database_id)
         ).first()
         return dict(row._mapping) if row is not None else None
@@ -67,7 +72,7 @@ class BlastCatalogStore:
             values["build_started_at"] = build_started_at or utcnow()
             values["build_finished_at"] = None
             values["build_attempt"] = blast_databases.c.build_attempt + 1
-        elif target == state.READY:
+        elif target == state.PUBLISHED:
             values["build_error"] = None
             values["build_finished_at"] = build_finished_at or utcnow()
         result = self._session.execute(
@@ -92,9 +97,10 @@ class BlastCatalogStore:
     ) -> bool:
         """Atomically swap the catalog to a verified immutable index.
 
-        The row must already be in ``publishing`` (filesystem rename done). The
-        old ``ready`` row stays searchable until this guarded UPDATE wins, so a
-        failed build cannot leave the database without a usable index.
+        The row must already be in ``publishing`` (the filesystem rename is
+        done). The previously published row stays searchable until this guarded
+        UPDATE wins, so a failed build never leaves a database without a usable
+        index.
         """
         now = utcnow()
         result = self._session.execute(
@@ -104,7 +110,7 @@ class BlastCatalogStore:
                 blast_databases.c.build_status == state.PUBLISHING,
             )
             .values(
-                build_status=state.READY,
+                build_status=state.PUBLISHED,
                 build_error=None,
                 build_finished_at=now,
                 index_health_checked_at=now,
@@ -124,7 +130,7 @@ class BlastCatalogStore:
             update(blast_databases)
             .where(
                 blast_databases.c.id == database_id,
-                blast_databases.c.build_status == state.READY,
+                blast_databases.c.build_status == state.PUBLISHED,
             )
             .values(index_health_checked_at=checked_at or utcnow())
         )
@@ -132,7 +138,7 @@ class BlastCatalogStore:
 
     @staticmethod
     def runnable(row: dict | None) -> bool:
-        return row is not None and state.is_runnable(str(row["build_status"]))
+        return row is not None and state.is_searchable_build_state(row["build_status"])
 
 
 __all__ = ["BlastCatalogStore", "CatalogStateError"]

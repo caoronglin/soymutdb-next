@@ -123,26 +123,52 @@ class BlastJobStore:
             return None
         return _BLAST_DB_TO_SHARED.get(row[0])
 
-    def is_expired(self, job_id: str | uuid.UUID) -> bool:
-        """True when the job's download/capability deadline has passed.
+    def _deadline(self, job_id: str | uuid.UUID) -> tuple[datetime | None, bool]:
+        """Return ``(deadline, known)`` for the job's expiry.
 
-        An expired job must not be executed: its public capability and result
-        download are no longer valid. NULL expiry (legacy rows) is not expired.
+        ``known`` is False when the row is missing or the deadline is absent or
+        not a datetime: an unreadable deadline must never be read as "expired",
+        and must never be read as "just expired now" either.
         """
         row = self._session.execute(
             text("SELECT expires_at FROM blast_jobs WHERE id = :jid"),
             {"jid": str(job_id)},
         ).first()
         if row is None or row[0] is None:
-            return False
+            return None, False
         deadline = row[0]
         if not isinstance(deadline, datetime):
-            return False  # unknown deadline shape: never invent an expiry
+            return None, False
         if deadline.tzinfo is None:
             deadline = deadline.replace(tzinfo=UTC)
-        return deadline <= datetime.now(UTC)
+        return deadline, True
+
+    def is_expired(self, job_id: str | uuid.UUID) -> bool:
+        """True when the job's download/capability deadline has passed.
+
+        An expired job must not be executed: its public capability and result
+        download are no longer valid. NULL expiry (legacy rows) is not expired.
+        """
+        deadline, known = self._deadline(job_id)
+        return known and deadline is not None and deadline <= datetime.now(UTC)
+
+    def is_terminal_skip(self, job_id: str | uuid.UUID) -> bool:
+        """True when the job must not be started at all.
+
+        A cancelled/expired *row* is terminal, and so is a row whose deadline
+        has passed — the worker is the last line of defence, so a late Celery
+        delivery cannot start a search whose capability already lapsed.
+        """
+        row = self._session.execute(
+            text("SELECT status FROM blast_jobs WHERE id = :jid"),
+            {"jid": str(job_id)},
+        ).first()
+        if row is not None and row[0] in {"cancelled", "expired"}:
+            return True
+        return self.is_expired(job_id)
 
     def is_cancelled(self, job_id: str | uuid.UUID) -> bool:
+        """True when the job row is already in a cancelled/expired terminal state."""
         row = self._session.execute(
             text("SELECT status FROM blast_jobs WHERE id = :jid"),
             {"jid": str(job_id)},
@@ -157,17 +183,9 @@ class BlastJobStore:
         ``cap`` is the hard maximum even for rows without an expiry (legacy).
         Zero or negative means no download link may be issued.
         """
-        row = self._session.execute(
-            text("SELECT expires_at FROM blast_jobs WHERE id = :jid"),
-            {"jid": str(job_id)},
-        ).first()
-        if row is None or row[0] is None:
-            return max(0, cap)
-        deadline = row[0]
-        if not isinstance(deadline, datetime):
+        deadline, known = self._deadline(job_id)
+        if deadline is None or not known:
             return max(0, cap)  # unknown deadline shape: use the hard cap
-        if deadline.tzinfo is None:
-            deadline = deadline.replace(tzinfo=UTC)
         remaining = int((deadline - datetime.now(UTC)).total_seconds())
         return max(0, min(remaining, cap))
 

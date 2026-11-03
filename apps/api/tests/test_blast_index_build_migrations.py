@@ -55,7 +55,7 @@ async def _schema(db_connection) -> str:
 
 
 async def test_build_state_and_hit_resolution_upgrade_downgrade(db_connection):
-    await _schema(db_connection)
+    schema = await _schema(db_connection)
     await db_connection.run_sync(
         lambda c: _run(BUILD_STATE, "blast_build_state_migration", c, "upgrade")
     )
@@ -63,21 +63,35 @@ async def test_build_state_and_hit_resolution_upgrade_downgrade(db_connection):
         lambda c: _run(HIT_RESOLUTION, "blast_hit_resolution_migration", c, "upgrade")
     )
     columns = (await db_connection.execute(text(
-        "SELECT column_name FROM information_schema.columns WHERE table_name='blast_databases'"
-    ))).scalars().all()
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = :schema AND table_name = 'blast_databases'"
+    ), {"schema": schema})).scalars().all()
     assert {"build_error", "build_attempt", "build_started_at", "build_finished_at",
             "index_health_checked_at"} <= set(columns)
     assert "genome_resolution" in (await db_connection.execute(text(
-        "SELECT column_name FROM information_schema.columns WHERE table_name='blast_hits'"
-    ))).scalars().all()
-    # The widened vocabulary accepts the new in-flight states.
-    for status in ("validating", "publishing"):
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = :schema AND table_name = 'blast_hits'"
+    ), {"schema": schema})).scalars().all()
+    # The widened vocabulary accepts every state the worker writes, and it
+    # still accepts the legacy terminal spelling of pre-existing rows.
+    for status in ("building", "validating", "publishing", "published", "failed",
+                   "ready", "pending"):
         await db_connection.execute(text(
             "UPDATE blast_databases SET build_status=:status WHERE id=2"
         ), {"status": status})
+    with pytest.raises(DBAPIError, match="ck_blast_catalog_build_status"):
+        async with db_connection.begin_nested():
+            await db_connection.execute(text(
+                "UPDATE blast_databases SET build_status='released' WHERE id=2"
+            ))
     assert (await db_connection.execute(text(
         "SELECT genome_resolution FROM blast_hits"
     ))).scalar_one() is None
+    # An in-flight build survives the upgrade but blocks a rollback: an old
+    # binary would read a half-built index as executable.
+    await db_connection.execute(text(
+        "UPDATE blast_databases SET build_status='publishing' WHERE id=2"
+    ))
 
     # Downgrade refuses an unfinished build rather than letting an old binary
     # reinterpret an in-flight index as ready.
@@ -96,11 +110,13 @@ async def test_build_state_and_hit_resolution_upgrade_downgrade(db_connection):
         lambda c: _run(BUILD_STATE, "blast_build_state_migration", c, "downgrade")
     )
     assert "genome_resolution" not in (await db_connection.execute(text(
-        "SELECT column_name FROM information_schema.columns WHERE table_name='blast_hits'"
-    ))).scalars().all()
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = :schema AND table_name = 'blast_hits'"
+    ), {"schema": schema})).scalars().all()
     assert "build_error" not in (await db_connection.execute(text(
-        "SELECT column_name FROM information_schema.columns WHERE table_name='blast_databases'"
-    ))).scalars().all()
+        "SELECT column_name FROM information_schema.columns "
+        "WHERE table_schema = :schema AND table_name = 'blast_databases'"
+    ), {"schema": schema})).scalars().all()
     assert (await db_connection.execute(text(
         "SELECT build_status FROM blast_databases ORDER BY id"
     ))).scalars().all() == ["ready", "ready"]

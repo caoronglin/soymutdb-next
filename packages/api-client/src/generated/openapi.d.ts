@@ -5218,7 +5218,7 @@ export interface components {
              * @default pending
              * @enum {string}
              */
-            build_status: "pending" | "building" | "validating" | "publishing" | "ready" | "failed";
+            build_status: "pending" | "building" | "validating" | "publishing" | "published" | "failed" | "ready";
             /**
              * Is Default
              * @default false
@@ -5274,6 +5274,22 @@ export interface components {
             genome_resolution?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * BlastIndexBuildQueued
+         * @description Acknowledgement for an accepted index build request.
+         *
+         *     Deliberately narrow: the response says *what was queued*, never where the
+         *     worker will write it. Progress is read back from the catalog's
+         *     ``build_status``, not from a filesystem path.
+         */
+        BlastIndexBuildQueued: {
+            /** Database Id */
+            database_id: number;
+            /** Queued */
+            queued: boolean;
+            /** Task Name */
+            task_name: string;
         };
         /**
          * BlastIndexBuildRequest
@@ -13100,9 +13116,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["BlastIndexBuildQueued"];
                 };
             };
             /** @description Validation Error */
