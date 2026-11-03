@@ -1025,6 +1025,20 @@ _DEFINITIONS = (
     # BLAST form + results table headers.
     _definition(
         "content",
+        "blastPublic.subtitle",
+        default=(
+            "Run one protein search without creating an account. "
+            "Keep this tab open while your result is processed."
+        ),
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=512,
+    ),
+    _definition(
+        "content",
         "blast.searchType",
         default="BLAST Type",
         permission=SettingPermission.ADMINISTRATOR,

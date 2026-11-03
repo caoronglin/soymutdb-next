@@ -59,3 +59,17 @@ Independent backend/UI security review found no confirmed Critical/High issue. P
 ## Remote CI baseline
 
 PR #28 was merged as authorized while checks were queued. Subsequent checks confirmed frontend build/contract, Linux PostgreSQL API baseline, Windows API baseline, web/admin baseline build, database A/B and MCP transport passed. Its repository-contract jobs failed on pre-existing Node-version assertions and host PostgreSQL-client assumptions; historical ClickHouse fixture jobs failed because their fixture database lacked `releases`; deployment-bundle CI also failed. These are not treated as passing gates. The new PR's own remote checks must be read independently; the local results above do not close those CI defects.
+
+## PR #29 CI correction (2026-11-03)
+
+Remote CI exposed two regressions introduced by this PR despite the local unit/build checks above: the anonymous page's backend-editable `blastPublic.subtitle` was missing from the settings registry, and its new test used an inline `useTranslation` mock that created a new `t` on every render. The correction registers the existing subtitle with administrator/global metadata and a bounded default, and uses the portal's shared `mockTranslation` so assertions exercise real catalog text with stable translation identity. The contract guards are unchanged.
+
+Verified in an isolated worktree based on PR #29 head `de5dc1b632f574d16a84b5a626e09ab6470630c3`:
+
+- `python scripts/check_content_key_contract.py`: **passed**, 71 portal keys / 122 registered content keys.
+- `python -m unittest scripts.test_ci_job_contracts.DeliveryArchitectureTests.test_i18n_handling_needs_no_per_render_double -v`: **1 passed**.
+- `python -m pytest scripts/test_content_key_contract_guard.py -q`: **5 passed**.
+- API venv, `cd apps/api && python -m pytest tests/test_settings_registry.py -q`: **20 passed**.
+- `cd apps/web && node node_modules/vitest/vitest.mjs run src/routes/blast.test.tsx src/routes/search/blast.test.tsx`: **19 passed**, 2 files; 18.14s.
+
+These targeted corrections do not claim that the remote CI suite is green. A read-only comparison against actual PR #28 job logs confirmed that worker installation failures (`libbzip2` / `libhdf5.so`), the existing Node-pin/host-client contract failures, historical ClickHouse fixture errors, dependency-governance findings and CycloneDX/pnpm `ls --all` failure were already present on the base. The complete PR #29 API pytest run itself passed **2639 tests, 8 skipped** before worker installation failed.
