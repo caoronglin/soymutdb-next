@@ -94,9 +94,8 @@ around by loosening a gate:
   scripts/check_visible_i18n_react.mjs` now reports 0 tracked strings; en/zh
   key parity holds.
 
-The PR pipeline also exposed two `main`-side configuration problems. One was
-fixed by a collaborating NPC on this same branch, the other is an environment
-limit reported here rather than patched across scope:
+The PR pipeline also exposed two `main`-side configuration problems, both
+fixed on this same branch:
 
 - `npc go` pipeline: `No roles defined in .cnb/settings.yml`. Commit
   `f6d5001` on `main` added an `npc:go` stage with `role: 代码审查员` but did
@@ -106,12 +105,18 @@ limit reported here rather than patched across scope:
   "one validation" work item delivered by the parallel agent.
 - `API + Worker verification`: `h5py` has no prebuilt cp315 wheel in the CI
   image, so `scanpy -> h5py` falls back to a source build and fails with
-  `libhdf5.so: cannot open shared object file`. This happens during
-  `apps/worker[dev]` installation, before any test runs, and is independent of
-  the files changed here (no dependency, Dockerfile or install script was
-  touched). The equivalent backend suites were run locally on CPython 3.15.2
-  with a live PostgreSQL and real BLAST+ binaries; all pass counts above are
-  from those local runs.
+  `libhdf5.so: cannot open shared object file` during `apps/worker[dev]`
+  installation, before any test runs. The bare `python:3.15` stage image
+  carries no HDF5 headers. Commit `a0335fd` provisions the same system
+  prerequisites the production worker image uses
+  (`infra/docker/Dockerfile.worker`: `libhdf5-dev` + `pkg-config` +
+  `HDF5_PKGCONFIG_NAME=hdf5-serial`) via
+  `scripts/install-worker-science-build-deps.sh`, called from the shared
+  backend gate before the editable install. A `test_ci_job_contracts.py`
+  regression guard pins the call order and the package list against the
+  production Dockerfile. The equivalent backend suites were also run locally
+  on CPython 3.15.2 with a live PostgreSQL and real BLAST+ binaries; all pass
+  counts above are from those local runs.
 
 On the re-run after the i18n fix, **Frontend verification succeeded**
 (340 s, `check_visible_i18n_react.mjs` included), which confirms the visible
