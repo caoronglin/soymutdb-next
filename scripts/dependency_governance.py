@@ -608,12 +608,17 @@ def declarations(message):
     return legacy
 
 
-# `importlib.metadata.distributions()` defaults to the interpreter's own search
-# path only when it can resolve the package context; passing `sys.path`
-# explicitly is the portable spelling and is what makes the probe describe the
-# same distribution set the analyzer's report does.
+# This probe runs as `python -c <script>`: `sys.path[0]` is then the empty
+# string, which `importlib.metadata` resolves to the current working directory.
+# The CWD is the repository root, so an unpruned path makes the probe describe
+# whatever stray `.dist-info` lives in the checkout (dev tooling in this image
+# has plenty) instead of the selected project environment the analyzer's report
+# describes. Dropping the empty entries leaves exactly the venv's own paths.
+while "" in sys.path:
+    sys.path.remove("")
+
 declared = {}
-for distribution in metadata.distributions(path=sys.path):
+for distribution in metadata.distributions():
     name = distribution.metadata["Name"]
     if not name:
         continue
@@ -623,6 +628,14 @@ for distribution in metadata.distributions(path=sys.path):
         "declared": declarations(distribution.metadata),
     }
 print(json.dumps(declared, sort_keys=True))
+"""
+
+# Appended to the probe when it is re-run for its status: it makes a crash
+# visible. If the probe raised before reaching it, the interpreter is already
+# exiting non-zero; if it printed its answer, this exit is then unused.
+EXIT_MARKER = """
+import sys  # noqa: E402  (the probe already imported it; kept self-contained)
+sys.exit(1)
 """
 
 
@@ -655,6 +668,38 @@ def _probe_declared_licenses(command: list[str]) -> dict[str, Any]:
     return probed if isinstance(probed, dict) else {}
 
 
+def _entry_point_index(arguments: list[str]) -> int | None:
+    """Index of the first non-option word: the analyzer (or `python`) itself."""
+    index = 0
+    while index < len(arguments):
+        if arguments[index].startswith("-"):
+            index += 2 if "=" not in arguments[index] else 1
+            continue
+        return index
+    return None
+
+
+def _probe_for_exit_code(command: list[str]) -> list[str] | None:
+    """Rewrite an already rewritten probe so its exit code is the probe's.
+
+    `_rewrite_for_probe` yields `uv run <selector> python -c <probe>`, and `uv`
+    exits 0 as soon as the interpreter does -- even when the probe itself died.
+    A probe that crashes would therefore be reported exactly like one that
+    answered `{}`, and the caller treats `{}` as "no probe data" instead of
+    failing. Appending `; exit 1` to the script makes a probe exception a
+    non-zero status, so silence can only ever come from a healthy probe.
+    """
+    tail = _entry_point_index(command[2:])
+    if tail is None:
+        return None
+    entry = tail + 2
+    if command[entry : entry + 2] != ["python", "-c"] or len(command) != entry + 3:
+        return None
+    if command[-1] != PROBE_SCRIPT:
+        return None
+    return [*command[:-1], PROBE_SCRIPT + EXIT_MARKER]
+
+
 def _rewrite_for_probe(command: list[str]) -> list[str] | None:
     """Turn `uv run … pip-licenses …` into `uv run … python -c <probe>`.
 
@@ -662,25 +707,21 @@ def _rewrite_for_probe(command: list[str]) -> list[str] | None:
     so an unknown shape degrades to "no probe data" and the report is used
     exactly as before, rather than silently probing the wrong environment.
     """
-    if "uv" not in command or "run" not in command:
+    # The selector is `uv run`, in that order and adjacent: `list.index("run")`
+    # would happily match a later argument that happens to spell `run` and
+    # rewrite the wrong tail, so anchor on the executable plus its subcommand.
+    if len(command) < 2 or Path(command[0]).name != "uv" or command[1] != "run":
         return None
-    try:
-        run_index = command.index("run")
-    except ValueError:  # pragma: no cover - guarded by the membership check
+    if len(command) < 3:
         return None
-    if run_index + 1 >= len(command):
-        return None
+    run_index = 1
     # Everything up to (but excluding) the analyzer entry point is the `uv run`
     # selector: `--locked --no-dev --project <app> --with pip-licenses==5.0.0`.
+    # The entry point is the first non-option word after the selector; a
+    # `--flag value` pair consumes its value, so `apps/mcp-server` and
+    # `pip-licenses==5.0.0` are never mistaken for it.
     tail = command[run_index + 1 :]
-    entry = next(
-        (
-            index
-            for index, argument in enumerate(tail)
-            if argument in ("pip-licenses", "piplicenses")
-        ),
-        None,
-    )
+    entry = _entry_point_index(tail)
     if entry is None:
         return None
     selector: list[str] = []
@@ -762,20 +803,73 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
     report_available = _report_is_available(
         report_path, str(report.get("format", "text"))
     )
+    # Two independent facts, and a pass needs both. An analyzer that exited 0
+    # without a report has passed nothing (the report is the only evidence the
+    # audit keeps), and a nonzero analyzer is re-judged only by a normalization
+    # the policy names explicitly.
+    normalization = check.get("normalize")
+    analyzer_ok = completed.returncode == 0
     result_row.update(
         {
             "exit_code": completed.returncode,
             "reason": "passed"
-            if completed.returncode == 0
-            else "analyzer_exit_nonzero",
+            if analyzer_ok and report_available
+            else (
+                "missing_or_invalid_report"
+                if analyzer_ok
+                else "analyzer_exit_nonzero"
+            ),
             "report_available": report_available,
             "status": "passed"
-            if completed.returncode == 0 and report_available
+            if analyzer_ok and report_available
             else "failed",
         }
     )
-    if completed.returncode == 0 and not report_available:
-        result_row["reason"] = "missing_or_invalid_report"
+    if not report_available:
+        # Nothing to normalize, and nothing the probe can rescue: a missing
+        # report means the analyzer never spoke, whatever its status was.
+        return result_row
+
+    # 1b. When the policy normalizes a license report, the probe has to answer.
+    #    `uv` reports the interpreter's status, so a probe that raised leaves
+    #    stdout empty and exit 0 -- indistinguishable from "the probe was never
+    #    asked", which the projection treats as "no probed data" and therefore
+    #    silently falls back to the analyzer's own column. Re-running it with a
+    #    forced non-zero exit separates a crash from an answer.
+    if normalization == "license-expressions":
+        probe_command = _rewrite_for_probe(command)
+        status_probe = (
+            _probe_for_exit_code(probe_command) if probe_command is not None else None
+        )
+        if status_probe is not None:
+            probe_run = subprocess.run(
+                status_probe,
+                cwd=cwd,
+                check=False,
+                capture_output=True,
+                text=True,
+                env=os.environ.copy(),
+            )
+            (output / f"{name}.probe.stderr.log").write_text(
+                probe_run.stderr, encoding="utf-8"
+            )
+            if not probe_run.stdout.strip():
+                # The status probe always exits non-zero by construction, so the
+                # answer -- not the exit code -- is what says it ran. An empty
+                # answer means the probe never reached its `print`, and the
+                # projection would then silently judge every package on the
+                # analyzer's own `License` column.
+                # `exit_code` stays the analyzer's: the probe is this runner's
+                # instrument, and reporting its status where the analyzer's
+                # belongs would make the evidence unreadable.
+                result_row.update(
+                    {
+                        "reason": "probe_produced_no_declarations",
+                        "status": "failed",
+                        "findings": probe_run.stderr.strip().splitlines()[-1:],
+                    }
+                )
+                return result_row
 
     # 2. Optional normalized re-evaluation of the analyzer's own report. The
     #    analyzer's raw comparison is the process exit code; when the policy
@@ -784,8 +878,7 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
     #    and the gate would be failing on packages whose licence the allow-list
     #    already accepts. The analyzer's crash is never re-interpreted: a
     #    non-zero exit without a usable report stays a failure.
-    normalization = check.get("normalize")
-    if report_available and normalization == "license-expressions":
+    if normalization == "license-expressions":
         declared = _probe_declared_licenses(command)
         if declared:
             _write_json(output / f"{name}.declared-licenses.json", declared)
@@ -802,7 +895,7 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
         result_row["reason"] = (
             "passed" if passed else f"{len(findings)} license findings"
         )
-    elif report_available and normalization == "accepted-advisories":
+    elif normalization == "accepted-advisories":
         try:
             acceptances = load_advisory_acceptances(
                 ROOT / str(check.get("accept_file", ""))

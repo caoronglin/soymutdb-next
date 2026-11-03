@@ -483,6 +483,115 @@ def test_license_projection_distributes_nested_alternatives() -> None:
     ) == [["Apache-2.0"]]
 
 
+def test_license_probe_is_reachable_from_the_configured_command() -> None:
+    """The probe must be derivable from the command the policy actually runs.
+
+    Two defects made `declared` come back empty on every run, which is the same
+    signal as "the probe could not run", so `python-licenses-worker` failed with
+    `normalization_unavailable:license-expressions` on a healthy environment:
+
+    * the probe passed `path=sys.path` to `importlib.metadata.distributions()`,
+      and under `python -c` `sys.path[0]` is `''` -- an empty search path that
+      reads no distribution at all and prints `{}`;
+    * `_rewrite_for_probe` matched the literal `pip-licenses`, which occurs in
+      the `--with pip-licenses==5.0.0` selector *before* the entry point, so the
+      rewrite returned `None` as soon as the probe itself was handed back in.
+
+    Both are asserted from the policy file, so the check cannot silently stop
+    probing after a config edit.
+    """
+    governance = _governance_module()
+    for name in ("python-licenses-api", "python-licenses-worker", "python-licenses-mcp-server"):
+        check = next(
+            entry
+            for entry in json.loads(CONFIG.read_text(encoding="utf-8"))["checks"]
+            if entry["name"] == name
+        )
+        command = [
+            argument.replace("{root}", str(ROOT)).replace("{output_dir}", "/tmp/x")
+            for argument in check["command"]
+        ]
+        probe = governance._rewrite_for_probe(command)
+        assert probe is not None, f"{name}: the probe must be derivable"
+        assert probe[:2] == ["uv", "run"], name
+        assert probe[-3:-1] == ["python", "-c"], name
+        assert probe[-1] == governance.PROBE_SCRIPT, name
+        assert "pip-licenses" not in probe, f"{name}: the analyzer tail must be gone"
+    # The probe pops every `''` entry: `python -c` leaves one at `sys.path[0]`,
+    # and `importlib.metadata` resolves it to the CWD, so an unpopped probe
+    # would describe the checkout's stray `.dist-info` instead of the venv.
+    assert 'while "" in sys.path:' in governance.PROBE_SCRIPT
+    assert "sys.path.remove" in governance.PROBE_SCRIPT
+
+    # Idempotent: feeding the rewritten command back in selects the same
+    # environment again instead of appending a second probe.
+    reused = governance._rewrite_for_probe(probe)
+    assert reused is not None and reused.count(governance.PROBE_SCRIPT) == 1
+    # Not a `uv run` invocation: degrade rather than probe a guess.
+    assert governance._rewrite_for_probe(["python3", "scripts/x.py"]) is None
+    assert governance._rewrite_for_probe(["uv"]) is None
+    assert governance._rewrite_for_probe(["uv", "run"]) is None
+
+
+def test_license_probe_crashes_are_not_read_as_an_empty_probe() -> None:
+    """A dying probe must fail the gate, not look like "no probe data".
+
+    `uv run … python -c <probe>` reports the interpreter's status, and `uv`
+    returns 0 for it, so a probe that raised leaves stdout empty and exit 0 --
+    the exact pair the projection treats as "the probe was not consulted".
+    """
+    governance = _governance_module()
+    check = next(
+        entry
+        for entry in json.loads(CONFIG.read_text(encoding="utf-8"))["checks"]
+        if entry["name"] == "python-licenses-api"
+    )
+    command = [
+        argument.replace("{root}", str(ROOT)).replace("{output_dir}", "/tmp/x")
+        for argument in check["command"]
+    ]
+    probe = governance._rewrite_for_probe(command)
+    status_probe = governance._probe_for_exit_code(probe)
+    assert status_probe is not None
+    assert status_probe[:-1] == probe[:-1]
+    assert status_probe[-1].startswith(governance.PROBE_SCRIPT)
+    assert status_probe[-1].rstrip().endswith("sys.exit(1)")
+
+    # The marker only makes a crash visible: a healthy probe still prints its
+    # answer, and the forced exit only shows up in the process status.
+    broken = "raise RuntimeError('probe is broken')\n"
+    for script in (broken, broken + governance.EXIT_MARKER):
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert completed.returncode != 0, completed
+        assert completed.stdout == ""
+
+    # The check that actually runs: the probe answers, and then `uv` still
+    # reports the forced non-zero status -- so the answer is the signal, and a
+    # healthy probe is not failed for exiting 1.
+    healthy = governance.PROBE_SCRIPT + governance.EXIT_MARKER
+    completed = subprocess.run(
+        [sys.executable, "-c", healthy],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 1
+    assert json.loads(completed.stdout.strip().splitlines()[-1]) != {}
+
+    # A command that is not the rewritten probe is refused rather than mangled.
+    assert (
+        governance._probe_for_exit_code(
+            ["uv", "run", "--project", "apps/api", "pip-licenses"]
+        )
+        is None
+    )
+
+
 def test_license_probe_reads_the_three_metadata_sources(tmp_path: Path) -> None:
     """The probe's precedence, executed as the probe itself runs it.
 
@@ -826,6 +935,25 @@ def test_license_check_runner_probes_and_records_the_declaration(
         )
     )
     assert declared["pep639only"]["license_expression"] == "MIT"
+
+
+def test_knip_treats_admin_vitest_doubles_as_entry_points() -> None:
+    """The doubles are reached through `vi.mock`, which Knip cannot follow.
+
+    `vi.mock("@/lib/antd", async () => (await import("../test/antd-double")))`
+    hides the import inside a factory, so every export of a double reported as
+    unused -- 57 of them for `antd-double.tsx` -- and the dependency gate failed
+    on real test infrastructure. Knip has no per-file "exports are consumed by a
+    mock" rule, so the doubles are entry points: removing one still breaks the
+    analysis instead of silently passing.
+    """
+    knip = json.loads((ROOT / "knip.json").read_text(encoding="utf-8"))
+    entry = knip["workspaces"]["apps/admin"]["entry"]
+    assert "src/test/antd-double.tsx" in entry
+    assert "src/test/mocks.ts" in entry
+    # The doubles really are mocked, not imported as ordinary modules.
+    admin_sources = list((ROOT / "apps/admin/src").rglob("*.test.tsx"))
+    assert any("test/antd-double" in path.read_text(encoding="utf-8") for path in admin_sources)
 
 
 def test_root_scripts_and_knip_configuration_are_executable_contracts() -> None:

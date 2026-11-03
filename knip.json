@@ -76,8 +76,9 @@
         "config/plugins/defer-html-scripts.cjs",
         "src/umi-entry.tsx",
         "src/routes/**/*.tsx",
-        "src/test/vitest-env.d.ts",
-        "src/test/antd-double.tsx"
+        "src/test/antd-double.tsx",
+        "src/test/mocks.ts",
+        "src/test/vitest-env.d.ts"
       ]
     },
     "apps/jbrowse": {
