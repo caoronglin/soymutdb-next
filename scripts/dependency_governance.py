@@ -814,10 +814,17 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
             result_row["reason"] = f"acceptance_policy_invalid:{exc}"
             result_row["findings"] = [str(exc)]
         else:
+            # The acceptance record is shared, so both audit analyzers are
+            # judged by it. A pip-audit finding that nothing accepts stays a
+            # failure: declaring `normalize` here must not soften the gate.
+            evaluate = (
+                evaluate_pip_audit_report
+                if category == "vulnerabilities"
+                and name.startswith("pip-audit-")
+                else evaluate_advisory_report
+            )
             try:
-                passed, findings, accepted = evaluate_advisory_report(
-                    report_path, acceptances
-                )
+                passed, findings, accepted = evaluate(report_path, acceptances)
             except (AcceptancePolicyError, json.JSONDecodeError) as exc:
                 result_row["status"] = "failed"
                 result_row["reason"] = f"acceptance_report_unreadable:{exc}"
@@ -944,15 +951,69 @@ def evaluate_advisory_report(
     folded into the pass so the summary can keep printing the expiry.
     """
     payload = json.loads(report_path.read_text(encoding="utf-8"))
-    advisories = payload.get("advisories")
+    advisories = payload.get("advisories") if isinstance(payload, dict) else None
     if not isinstance(advisories, dict):
-        raise AcceptancePolicyError("pnpm audit report has no `advisories` object")
+        raise AcceptancePolicyError("pnpm audit report has no `advisories` mapping")
+    return _judge_advisories(advisories, acceptances)
+
+
+def evaluate_pip_audit_report(
+    report_path: Path, acceptances: list[dict[str, Any]]
+) -> tuple[bool, list[str], list[dict[str, Any]]]:
+    """The same judgement over a `pip-audit --format json` report.
+
+    pip-audit and pnpm audit disagree on the file layout and on nothing that
+    matters here, so both are flattened into the (package, advisory) pairs the
+    acceptance record names, and both are judged by `_judge_advisories`.
+    """
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    return _judge_advisories(_pip_audit_advisories(payload), acceptances)
+
+
+def _pip_audit_advisories(payload: Any) -> dict[str, dict[str, Any]]:
+    """Project a pip-audit report onto the shape the acceptance judge reads.
+
+    Only fixed versions matter to this projection: a finding with no published
+    fix is what a risk acceptance can lawfully cover, and the reason the
+    acceptances exist at all.
+    """
+    dependencies = payload.get("dependencies") if isinstance(payload, dict) else None
+    if not isinstance(dependencies, list):
+        raise AcceptancePolicyError("pip-audit report has no `dependencies` list")
+    advisories: dict[str, dict[str, Any]] = {}
+    for index, package in enumerate(dependencies):
+        if not isinstance(package, dict):
+            continue
+        for vuln in package.get("vulns") or []:
+            if not isinstance(vuln, dict):
+                continue
+            fix_versions = [str(v) for v in (vuln.get("fix_versions") or []) if v]
+            advisories[str(index)] = {
+                "module_name": package.get("name"),
+                "github_advisory_id": str(vuln.get("id")),
+                "vulnerable_versions": f"=={package.get('version')}",
+                "patched_versions": ", ".join(fix_versions) or None,
+            }
+    return advisories
+
+
+def _judge_advisories(
+    advisories: dict[str, dict[str, Any]], acceptances: list[dict[str, Any]]
+) -> tuple[bool, list[str], list[dict[str, Any]]]:
+    """Judge severity-gated advisories against the acceptance record.
+
+    `advisories` is the common projection both analyzers are flattened into,
+    keyed by anything unique: matching is on package name and advisory id only.
+    """
 
     unaccepted: list[str] = []
     accepted: list[dict[str, Any]] = []
     consumed: set[tuple[str, str]] = set()
     for raw in advisories.values():
-        if raw.get("severity") not in ("high", "critical"):
+        # pip-audit carries no severity of its own; every advisory it reports
+        # is already gated by `--strict` on the analyzer side, so only an
+        # explicitly lower severity is skipped here.
+        if str(raw.get("severity") or "high") not in ("high", "critical"):
             continue
         advisory = str(raw.get("github_advisory_id") or raw.get("url") or raw.get("id"))
         package = str(raw.get("module_name"))

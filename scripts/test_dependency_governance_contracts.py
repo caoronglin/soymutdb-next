@@ -4,8 +4,10 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -903,3 +905,130 @@ def test_governance_failures_show_exact_packages_without_changing_verdict(tmp_pa
 
     row.update(name="missing-tool", report="nonexistent.json")
     assert "report unavailable" in module._audit_failure_evidence(row, tmp_path)[0]
+
+
+def test_pip_audit_checks_are_judged_by_the_acceptance_record() -> None:
+    """The acceptance record is the vulnerability policy, for both analyzers.
+
+    `pip-audit-*` declared no `normalize`, so the gate recorded every one of
+    them as `normalization_unavailable:accepted-advisories` and no signature
+    could ever change a Python finding. Builds cnb-1s0-1k6h45gk9 (main) and
+    cnb-t3b-1k6h4teke (this PR) failed identically on newly published
+    `certifi` / `pillow` advisories against unchanged locks, with the record at
+    `security/advisory-acceptances.json` empty and therefore unused.
+
+    Declaring the gate must not soften it: a finding nothing accepts is still a
+    failure, and the accepted ones stay visible with their expiry.
+    """
+    policy = json.loads(CONFIG.read_text(encoding="utf-8"))
+    audited = [
+        check for check in policy["checks"] if check["name"].startswith("pip-audit-")
+    ]
+    assert audited, "the policy must keep its Python vulnerability gates"
+    for check in audited:
+        assert check.get("normalize") == "accepted-advisories", check["name"]
+        assert (
+            check.get("accept_file") == "security/advisory-acceptances.json"
+        ), check["name"]
+
+    governance = _governance_module()
+    report = Path(tempfile.mkdtemp()) / "soymutdb-pip-audit-probe.json"
+    report.write_text(
+        json.dumps(
+            {
+                "dependencies": [
+                    {
+                        "name": "certifi",
+                        "version": "2026.7.22",
+                        "vulns": [
+                            {"id": "PYSEC-2026-4320", "fix_versions": ["2026.10.18"]}
+                        ],
+                    },
+                    {
+                        "name": "pillow",
+                        "version": "12.3.0",
+                        "vulns": [{"id": "GHSA-22hg-r758-rrw9", "fix_versions": []}],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    # Empty record: both findings fail, exactly as the CI gate reported them.
+    passed, findings, accepted = governance.evaluate_pip_audit_report(report, [])
+    assert not passed
+    assert accepted == []
+    assert any("PYSEC-2026-4320" in finding for finding in findings)
+    assert any("GHSA-22hg-r758-rrw9" in finding for finding in findings)
+
+    # A signed acceptance for one advisory clears only that advisory.
+    from datetime import date, timedelta
+
+    today = date.today()
+    acceptance = {
+        "advisory": "PYSEC-2026-4320",
+        "package": "certifi",
+        "vulnerable_range": "==2026.7.22",
+        "title": "probe",
+        "introduced_by": "certifi",
+        "severity_reached": "high",
+        "reachability": ["probe only"],
+        "rationale": "probe only",
+        "accepted_by": "probe-approver",
+        "accepted_on": today.isoformat(),
+        "expires_on": (today + timedelta(days=14)).isoformat(),
+        "review": "probe only",
+    }
+    record = report.parent / "soymutdb-acceptance-probe.json"
+
+    record.write_text(
+        json.dumps({"schema_version": 1, "acceptances": [acceptance]}),
+        encoding="utf-8",
+    )
+    try:
+        entries = governance.load_advisory_acceptances(record, today=today)
+        passed, findings, accepted = governance.evaluate_pip_audit_report(
+            report, entries
+        )
+        assert not passed, "an unaccepted second advisory must still fail"
+        assert [item["advisory"] for item in accepted] == ["PYSEC-2026-4320"]
+        assert any("GHSA-22hg-r758-rrw9" in finding for finding in findings)
+        # Accepted findings stay in the evidence, with the expiry.
+        row = {
+            "name": "pip-audit-api",
+            "status": "passed",
+            "report": "pip-audit-api.json",
+            "accepted": accepted,
+        }
+        evidence = governance._audit_failure_evidence(row, report.parent)
+        assert any("PYSEC-2026-4320" in line for line in evidence)
+
+        # Expired: back to a failure, never a warning.
+        expired = dict(acceptance, expires_on="2020-01-01")
+        record.write_text(
+            json.dumps({"schema_version": 1, "acceptances": [expired]}),
+            encoding="utf-8",
+        )
+        entries = governance.load_advisory_acceptances(record, today=today)
+        passed, findings, accepted = governance.evaluate_pip_audit_report(
+            report, entries
+        )
+        assert not passed
+        assert accepted and accepted[0]["expired"] is True
+    finally:
+        record.unlink(missing_ok=True)
+        report.unlink(missing_ok=True)
+
+
+def test_pip_audit_projection_refuses_a_payload_it_cannot_read() -> None:
+    """A malformed report is a policy error, never a pass."""
+    governance = _governance_module()
+    for payload in ('{"dependencies": null}', "[]", '{"dependencies": {}}'):
+        with pytest.raises(governance.AcceptancePolicyError):
+            governance._pip_audit_advisories(json.loads(payload))
+
+    # An empty but well-formed report is a clean pass, not an error.
+    empty = Path(tempfile.mkdtemp()) / "soymutdb-pip-clean.json"
+    empty.write_text('{"dependencies": []}', encoding="utf-8")
+    assert governance.evaluate_pip_audit_report(empty, [])[0] is True
