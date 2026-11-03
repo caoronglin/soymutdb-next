@@ -108,21 +108,26 @@ class BlastService:
         *,
         release_context: ReleaseContext,
     ) -> list[BlastDatabaseResponse]:
-        """List active databases whose assembly is in the published release.
+        """List runnable DIAMOND protein indexes in the published release.
 
-        Without the release join this listed every active row, including the
-        databases of draft releases whose data has not been published.
+        Future NCBI and unfinished indexes are catalog records, not executable
+        choices. The release join also hides unpublished assemblies.
         """
         result = await db.execute(
             select(BlastDatabase)
             .join(Assembly, BlastDatabase.assembly_id == Assembly.id)
             .where(
                 BlastDatabase.is_active.is_(True),
+                BlastDatabase.engine == "diamond",
+                BlastDatabase.build_status == "ready",
+                BlastDatabase.db_type == BlastDbType.PROT,
                 Assembly.release_id == release_context.release_id,
             )
         )
         rows: list[BlastDatabaseResponse] = []
         for bd in result.scalars().all():
+            if not self._is_runnable_database(bd):
+                continue
             # ``BlastDatabase.assembly`` is lazy="joined", so it is loaded
             # together with each row (guard with getattr for detached rows).
             assembly = getattr(bd, "assembly", None)
@@ -133,6 +138,17 @@ class BlastService:
                     db_type=bd.db_type,
                     assembly_id=bd.assembly_id,
                     is_active=bd.is_active,
+                    engine=bd.engine,
+                    sequence_type=bd.sequence_type,
+                    annotation_version=bd.annotation_version,
+                    source_url=bd.source_url,
+                    sequence_count=bd.sequence_count,
+                    total_length=bd.total_length,
+                    fasta_sha256=bd.fasta_sha256,
+                    index_version=bd.index_version,
+                    build_status=bd.build_status,
+                    is_default=bd.is_default,
+                    license=bd.license,
                     created_at=bd.created_at,
                     assembly_name=assembly.name if assembly is not None else None,
                     assembly_version=(assembly.version if assembly is not None else None),
@@ -143,14 +159,24 @@ class BlastService:
         return rows
 
     @staticmethod
+    def _is_runnable_database(database: BlastDatabase) -> bool:
+        """Catalog preparation must never dispatch an index to the wrong runner."""
+        return (
+            database.is_active is True
+            and database.engine == "diamond"
+            and database.build_status == "ready"
+            and database.db_type == BlastDbType.PROT
+        )
+
+    @staticmethod
     async def _get_active_database(
         db: AsyncSession,
         release_context: ReleaseContext,
         *conditions: ColumnElement[bool],
     ) -> BlastDatabase | None:
-        """Fetch one active database row in the published release.
+        """Fetch one ready DIAMOND protein index in the published release.
 
-        The active ``blast_databases`` rows of the *resolved release* are the
+        Only executable ``blast_databases`` rows of the *resolved release* are the
         database whitelist: anything not matching is refused here (defense in
         depth on top of the schema-level name format check). The release join
         is what stops a job from targeting another release's database.
@@ -160,11 +186,17 @@ class BlastService:
             .join(Assembly, BlastDatabase.assembly_id == Assembly.id)
             .where(
                 BlastDatabase.is_active.is_(True),
+                BlastDatabase.engine == "diamond",
+                BlastDatabase.build_status == "ready",
+                BlastDatabase.db_type == BlastDbType.PROT,
                 Assembly.release_id == release_context.release_id,
                 *conditions,
             )
+            .order_by(BlastDatabase.is_default.desc(), BlastDatabase.id)
+            .limit(1)
         )
-        return result.scalar_one_or_none()
+        database = result.scalar_one_or_none()
+        return database if database and BlastService._is_runnable_database(database) else None
 
     async def _resolve_database(
         self,

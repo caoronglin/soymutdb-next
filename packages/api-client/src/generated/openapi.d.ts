@@ -5125,6 +5125,39 @@ export interface components {
             assembly_is_default?: boolean | null;
             /** Release Id */
             release_id?: number | null;
+            /**
+             * Engine
+             * @default diamond
+             * @enum {string}
+             */
+            engine: "diamond" | "ncbi_blast";
+            /** Sequence Type */
+            sequence_type?: ("genome" | "cds" | "transcript" | "protein" | "repeat_masked" | "pan_genome" | "family_consensus" | "custom") | null;
+            /** Annotation Version */
+            annotation_version?: string | null;
+            /** Source Url */
+            source_url?: string | null;
+            /** Sequence Count */
+            sequence_count?: number | null;
+            /** Total Length */
+            total_length?: number | null;
+            /** Fasta Sha256 */
+            fasta_sha256?: string | null;
+            /** Index Version */
+            index_version?: string | null;
+            /**
+             * Build Status
+             * @default pending
+             * @enum {string}
+             */
+            build_status: "pending" | "ready" | "building" | "failed";
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /** License */
+            license?: string | null;
         };
         /** BlastHit */
         BlastHit: {

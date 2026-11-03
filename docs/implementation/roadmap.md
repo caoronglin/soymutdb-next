@@ -33,4 +33,4 @@ Extend the existing asynchronous download service with a no-SQL query builder, p
 
 ## Current PR boundary
 
-The follow-up access-mode slice adds anonymous submission/status/results using expiring per-job credentials and the existing outbox/worker, alongside account-owned jobs. See [implementation evidence](blast-anonymous-pr.md). NCBI BLAST+ remains pending; it requires worker/database catalog changes and real nucleotide/protein search verification.
+The follow-up access-mode slice adds anonymous submission/status/results using expiring per-job credentials and the existing outbox/worker, alongside account-owned jobs. See [implementation evidence](blast-anonymous-pr.md). The next preparation slice adds explicit catalog metadata and an operator-only immutable NCBI index builder; see [catalog/index preparation evidence](blast-index-catalog-pr.md). NCBI search execution, asynchronous index lifecycle and object-store publication remain pending. Real nucleotide/protein index construction does not establish five-program search acceptance.
