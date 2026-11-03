@@ -679,20 +679,21 @@ class DeliveryArchitectureTests(unittest.TestCase):
         )
         self.assertIn("CodeBuddy", names)
 
-    def test_npc_go_stages_use_a_role_that_exists_and_stay_off_pull_requests(self) -> None:
-        """A role name typed into `.cnb.yml` is resolved before the container runs.
+    def test_delivery_pipelines_are_named_and_off_pr_agents(self) -> None:
+        """Every pipeline in the delivery chain carries a `name`, and no agent runs on PRs.
 
-        `npc:go` with `options.role: 代码审查员` while `.cnb/settings.yml` only
-        declared `CodeBuddy` aborted build `cnb-2ro-1k6gvif2u-001` after 931ms:
+        Twice now a hand edit has dropped an `npc:go` block into `main` ->
+        `pull_request`. The block arrives without a `name` key, so it does not
+        sit *next to* `verify`; it replaces it: `main/pull_request` lost the
+        verification gate and every `pipeline["name"]` consumer raised
+        `KeyError: 'name'`. The same block also named a role the settings file
+        never declared, which the platform rejects before any container starts
+        (`Role "..." not found in .cnb/settings.yml`).
 
-            Role "代码审查员" not found in .cnb/settings.yml. Available: CodeBuddy
-
-        Nobody wrote that string on purpose -- an NPC session inserted the block
-        while handling a PR, and it landed on `main` -> `pull_request`, where it
-        also silently replaced the `verify` pipeline: no `name` key at all, so
-        every `_cnb_pipelines(...)` consumer raised `KeyError: 'name'`. Both
-        halves are asserted here: the role must exist, and the event it hangs
-        off must be a named pipeline rather than a bare agent session.
+        Two independent invariants, both cheap to check:
+          * pull_request is the verification gate -- no `npc:go` stage there;
+          * a role named in `npc:go` is declared under `npc.roles`, since the
+            platform resolves it by name before the job exists.
         """
         settings = yaml.safe_load(
             (ROOT / ".cnb/settings.yml").read_text(encoding="utf-8")
@@ -713,13 +714,19 @@ class DeliveryArchitectureTests(unittest.TestCase):
             for pipeline in _cnb_pipelines(branch, event):
                 self.assertTrue(
                     pipeline.get("name"),
-                    f"{branch}/{event}: a pipeline with no `name` is not part of "
-                    "the delivery chain; an NPC-triggered block must never "
-                    "replace a named verification pipeline",
+                    f"{branch}/{event}: a pipeline needs an explicit `name`; an "
+                    "unnamed block does not sit beside the delivery chain, it "
+                    "replaces it",
                 )
                 for stage in pipeline.get("stages", []):
                     if stage.get("type") != "npc:go":
                         continue
+                    self.assertNotEqual(
+                        (branch, event),
+                        ("main", "pull_request"),
+                        "pull_request is the verification gate; an agent session "
+                        "there turns every push into an npc run instead of CI",
+                    )
                     role = (stage.get("options") or {}).get("role")
                     self.assertTrue(
                         role,
@@ -732,12 +739,6 @@ class DeliveryArchitectureTests(unittest.TestCase):
                         f"declared in .cnb/settings.yml npc.roles (declared: "
                         f"{sorted(declared)}); the platform resolves the role by "
                         "name before the container starts",
-                    )
-                    self.assertNotEqual(
-                        (branch, event),
-                        ("main", "pull_request"),
-                        "pull_request is the verification gate; an npc:go stage "
-                        "there turns every push into an agent session",
                     )
 
     def test_contracts_job_provisions_every_import_it_needs(self) -> None:

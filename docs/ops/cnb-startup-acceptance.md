@@ -365,6 +365,45 @@ web_artifact_digest=sha256:…   # 有构建产物时
 角色、角色重名或空名，都在本地测试里就失败，而不是等下一次 `@` 之后由平台报一句
 不带上下文的话。
 
+### 3.4.1 `npc:go` 塞进 `pull_request` 会顶掉验证门禁
+
+同一段手写配置还会以另一种方式失败。有人在 `main` -> `pull_request` 里插进了
+一个 `npc:go` 流水线，它**没有 `name` 键**：
+
+```yaml
+main:
+  pull_request:
+    - docker:
+        image: cnbcool/default-npc:latest
+      stages:
+        - name: npc go
+          type: npc:go
+          options:
+            role: 代码审查员
+    - name: verify          # 仍然在，但门禁已经不是它了
+```
+
+两个后果互相独立：
+
+- 提交里的 `role: 代码审查员` 在 `.cnb/settings.yml` 里不存在，平台在 `npc go`
+  stage 就停下（本次构建 `cnb-dh6-1k6gvm7uv-001`，1058ms）：
+  `Role "代码审查员" not found in .cnb/settings.yml. Available: CodeBuddy`；
+- `pull_request` 是**验证门禁**，不是 agent 入口。任何 push 都会先起一个 NPC 会话，
+  而 `verify` 被挤到它后面；`_cnb_pipelines(...)` 的所有消费者（`_pipeline_names`、
+  契约断言）在这类无 `name` 的块上会直接 `KeyError: 'name'`。
+
+所以角色的放置位置只有一处：`.cnb/settings.yml` 的 `npc.roles`；
+`.cnb.yml` 里只有 `$` -> `issue.comment@npc` 承载 NPC，并且它**不带** `npc:go`
+stage——`@` 提及本身就是平台触发器，仓库侧不需要再声明一个 agent 任务。
+
+`test_delivery_pipelines_are_named_and_off_pr_agents` 同时锁定这两条：流水线必须有
+`name`；`npc:go` 不得出现在 `main` -> `pull_request`；其 `role` 必须在
+`npc.roles` 里声明。反向验证过——把上面那段配置放回去，测试报出：
+
+```
+main/pull_request: a pipeline needs an explicit `name`
+```
+
 ## 4. 流水线拓扑（新增部分）
 
 | 触发 | 流水线 | 作用 |
