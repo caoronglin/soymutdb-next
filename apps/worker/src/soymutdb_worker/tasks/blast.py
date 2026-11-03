@@ -171,12 +171,22 @@ def get_ncbi_db_path(
     return path
 
 
-#: The DIAMOND executable program set. DIAMOND implements protein queries
-#: only, so the translated-search programs stay with NCBI BLAST+ and are
-#: rejected here before any DIAMOND index is touched. This is *not* the set of
-#: programs the platform executes: NCBI BLAST+ runs all five (see
-#: :mod:`soymutdb_worker.ncbi_blast`).
-DIAMOND_PROGRAMS = frozenset({"blastp"})
+#: Program set per engine. DIAMOND has no nucleotide search, so the four
+#: remaining NCBI programs belong to ``ncbi_blast`` and are rejected before any
+#: index is touched. One shared set is exactly the bug this replaces: the task
+#: routes blastn/blastx/tblastn/tblastx to the NCBI runner, but a blastp-only
+#: whitelist refused them first. ``ENGINE_PROGRAMS["diamond"]`` is what this
+#: module validates against; it is not the platform program set.
+ENGINE_PROGRAMS = {
+    #: DIAMOND is protein-to-protein only.
+    "diamond": frozenset({"blastp"}),
+    #: NCBI BLAST+ runs all five standard searches.
+    "ncbi_blast": frozenset({"blastn", "blastp", "blastx", "tblastn", "tblastx"}),
+}
+#: Union kept under the historical name for callers that probe the vocabulary.
+ALLOWED_PROGRAMS = frozenset().union(*ENGINE_PROGRAMS.values())
+#: The DIAMOND executable program set, named for the backend it describes.
+DIAMOND_PROGRAMS = ENGINE_PROGRAMS["diamond"]
 
 # Resource limits
 MAX_QUERY_LENGTH = int(get_setting("BLAST_MAX_QUERY_LENGTH", "100000"))
@@ -227,12 +237,20 @@ def sanitize_error_message(
 # ---------------------------------------------------------------------------
 
 
-def validate_program(program: str) -> str:
-    """Validate a program against the DIAMOND backend's capability."""
-    if program not in DIAMOND_PROGRAMS:
+def validate_program(program: str, engine: str = "diamond") -> str:
+    """Validate *program* against the program set of *engine*.
+
+    The engine decides the vocabulary: DIAMOND is protein-only (``blastp``),
+    NCBI BLAST+ runs all five standard searches. Validating against the union
+    would let a DIAMOND job reach the runner with a program it cannot execute,
+    and validating against DIAMOND alone is what made every nucleotide search
+    fail before the index was even opened.
+    """
+    allowed = ENGINE_PROGRAMS.get(engine, ENGINE_PROGRAMS["diamond"])
+    if program not in allowed:
         raise ValueError(
-            f"Unsupported program: {program!r} for the DIAMOND backend; "
-            f"allowed: {sorted(DIAMOND_PROGRAMS)}"
+            f"Unsupported program: {program!r} for engine {engine!r}; "
+            f"allowed: {sorted(allowed)}"
         )
     return program
 
@@ -503,7 +521,8 @@ def run_blast_command(
     queued payload written before the engine was reduced still loads; any
     non-default value is rejected rather than silently ignored.
     """
-    program = validate_program(program)
+    # DIAMOND has no nucleotide search: resolve its own program set.
+    program = validate_program(program, "diamond")
     if word_size is not None:
         raise ValueError(
             "word_size is a retired NCBI BLAST option; DIAMOND blastp has no equivalent"
@@ -722,9 +741,11 @@ def run_blast(
 
     # Validate inputs before doing any work
     if engine == "diamond":
-        validate_program(program)
+        validate_program(program, "diamond")
         validate_sequence(sequence)
     elif engine == "ncbi_blast":
+        # NCBI runs all five programs and validates its own query alphabet.
+        validate_program(program, "ncbi_blast")
         normalize_query(sequence, program, max_length=MAX_QUERY_LENGTH)
     else:
         raise ValueError("Unsupported BLAST engine")

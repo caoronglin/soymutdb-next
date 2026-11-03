@@ -31,29 +31,44 @@ Add PlantTFDB, PlantCARE, PlantCyc and optional GBIF adapters only after source 
 
 Extend the existing asynchronous download service with a no-SQL query builder, provenance manifests, cursor pagination, accessibility and performance gates.
 
-## Phase 1 progress record (branch `feat/blast-access-parity`)
+## Phase 1 status: repaired but incomplete
 
-Verified by inspection and by the gates listed below; nothing here is claimed
-on the strength of a mocked response alone.
+The NCBI execution slice landed unreachable: `ncbi_blast.py` did not parse
+(Python-2 `except A, B:`), and the worker whitelisted `blastp` for every engine,
+so four of the five advertised programs were refused. Both are fixed and the
+five programs now pass real-binary searches — see
+[runtime repair evidence](blast-ncbi-runtime-repair-pr.md).
 
+Entry-point parity (branch `feat/blast-access-parity`, verified by the gates
+listed below; nothing here is claimed on the strength of a mocked response
+alone):
+
+- Program vocabulary: `tasks/blast.py` holds `ENGINE_PROGRAMS`, the per-engine
+  sets (`diamond` = `blastp`, `ncbi_blast` = all five), and keeps the historical
+  `ALLOWED_PROGRAMS` union for vocabulary probes. The DIAMOND-only set stays
+  addressable as `DIAMOND_PROGRAMS`, so it can no longer be misread as the
+  platform's program list.
 - Worker split: `apps/worker/src/soymutdb_worker/ncbi_blast.py` runs all five
   programs with fixed argv, resource limits and provenance; `tasks/blast.py`
-  keeps DIAMOND as an explicit `blastp` backend. Both modules did not parse at
-  all before this slice (`except OSError, UnicodeError:` / `except ValueError,
-  OSError:`), so no worker test could import them; that is fixed and the
-  DIAMOND-only program set is renamed `DIAMOND_PROGRAMS` so it is no longer
-  readable as the platform's program list.
+  keeps DIAMOND as an explicit `blastp` backend.
 - Access parity: the anonymous route surfaced validation failures through
   `Alert title=`, which AntD 6 does not render, so every client-side rejection
   was silent. Fixed; the signed-in route now shares the same FASTA rule.
 - Raw-result download: the anonymous page offered the presigned artifact, the
   signed-in page did not. Both now offer it as tab-separated aligner output
   (`outfmt 6`), and neither renders a link when the job has no stored artifact.
-- Not done: `makeblastdb` lifecycle inside Celery, catalog build states,
-  object-store index publication, real NCBI integration search in CI, and the
-  admin controls for index enable/disable. The DIAMOND SQL/worker assertions and
-  the API suite were not executed in this environment (no PostgreSQL, no NCBI
-  BLAST+ binaries, Python 3.11 only); the TypeScript gates were.
+
+Still open in Phase 1:
+
+- asynchronous `makeblastdb` build/publication workflow in the worker, catalog
+  build states and the admin controls for index enable/disable;
+- protein-hit → transcript/gene resolution before genome-browser links;
+- five-program UI wiring against the existing `/blast` page;
+- cancellation, retry and download-expiry coverage for NCBI jobs.
+
+The DIAMOND SQL/worker assertions and the API suite were not executed in this
+environment (no PostgreSQL, no NCBI BLAST+ binaries, Python 3.11 only); the
+TypeScript gates were.
 
 ## Current PR boundary
 

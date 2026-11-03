@@ -49,8 +49,17 @@ def test_only_protein_protein_is_executable(program):
 
 
 def test_diamond_executes_blastp_only():
+    """DIAMOND stays protein-only; the union includes NCBI's nucleotide programs."""
+    assert blast.ENGINE_PROGRAMS["diamond"] == frozenset({"blastp"})
     assert blast.DIAMOND_PROGRAMS == frozenset({"blastp"})
     assert blast.validate_program("blastp") == "blastp"
+    assert blast.validate_program("blastp", "diamond") == "blastp"
+    for program in ("blastn", "blastx", "tblastn", "tblastx"):
+        assert program in blast.ENGINE_PROGRAMS["ncbi_blast"]
+        assert blast.validate_program(program, "ncbi_blast") == program
+        # The DIAMOND runner must never accept a nucleotide program.
+        with pytest.raises(ValueError, match="Unsupported program"):
+            blast.validate_program(program, "diamond")
 
 
 def test_run_blast_command_rejects_a_non_blastp_program(monkeypatch, tmp_path):
@@ -100,7 +109,6 @@ def test_no_blast_only_symbols_remain():
         "ALLOWED_PARAMS",
         "BLAST_BIN_DIR",
         "BLAST_ENGINE",
-        "ALLOWED_PROGRAMS",
     ):
         assert not hasattr(blast, gone), f"{gone} still exists after retirement"
 
