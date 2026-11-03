@@ -1216,6 +1216,55 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 continue
             self.assertTrue(pipeline.get("stages"), pipeline["name"])
 
+    def test_pull_request_pipelines_are_named_verification_only(self) -> None:
+        """PR builds must stay verifiable and never resolve an undefined NPC role.
+
+        A stray `npc:go` reviewer stage once became `main.pull_request[0]`. It
+        carried no `name`, so the contract helpers that index `[0]` for the
+        `verify` pipeline broke, and its `role: 代码审查员` resolved against a
+        `.cnb/settings.yml` with no `npc.roles` — CI failed in Prepare with
+        "No roles defined in .cnb/settings.yml" before any verification ran.
+        """
+        for branch, event in (("main", "pull_request"), ("$", "pull_request")):
+            pipelines = _cnb_pipelines(branch, event)
+            if branch == "main":
+                self.assertTrue(pipelines, "main/pull_request must run verify")
+            for index, pipeline in enumerate(pipelines):
+                self.assertIn(
+                    "name", pipeline,
+                    f"{branch}/{event}[{index}]: every pipeline needs a name; "
+                    "an unnamed pipeline displaces `verify` from index [0]",
+                )
+                for stage in pipeline.get("stages", []) or []:
+                    self.assertNotEqual(
+                        stage.get("type"), "npc:go",
+                        f"{branch}/{event}/{pipeline['name']}: an `npc:go` "
+                        "stage needs an `npc.roles` definition in "
+                        ".cnb/settings.yml and runs AI before the verification "
+                        "gate; PR builds are verification-only",
+                    )
+
+        # If an NPC stage is ever added deliberately, its `role` must resolve.
+        settings = yaml.safe_load(
+            (ROOT / ".cnb/settings.yml").read_text(encoding="utf-8")
+        ) or {}
+        defined_roles = {
+            role.get("name")
+            for role in (settings.get("npc") or {}).get("roles", []) or []
+            if isinstance(role, dict)
+        }
+        for pipeline in _iter_pipelines(_cnb()):
+            for stage in pipeline.get("stages", []) or []:
+                if stage.get("type") != "npc:go":
+                    continue
+                role = (stage.get("options") or {}).get("role")
+                if role is not None:
+                    self.assertIn(
+                        role, defined_roles,
+                        f"npc:go role {role!r} is not defined in "
+                        ".cnb/settings.yml npc.roles",
+                    )
+
     def test_no_duplicate_verification_logic_between_providers(self) -> None:
         """Shared logic must be scripted once, not copy-pasted per provider.
 
