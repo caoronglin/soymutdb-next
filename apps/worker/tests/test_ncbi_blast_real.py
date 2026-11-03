@@ -19,9 +19,15 @@ BIN = Path(
     os.getenv("SOYMUTDB_TEST_NCBI_BIN_DIR", ".cache/blast-catalog-pr/tools/ncbi-blast-2.17.0+/bin")
 ).absolute()
 
-#: Mirrors ``ncbi_blast._env``: no usage reporting, no user/system rc files.
-TOOL_ENV = {
-    **os.environ,
+# Mirrors ``ncbi_blast._env``: no usage reporting, no user/system rc files.
+# Fixture-only ``makeblastdb`` calls must disable the same telemetry and local
+# config discovery as the runner, otherwise a real binary blocks on telemetry
+# DNS for ~30s and exceeds the test timeout. A minimal environment (rather than
+# ``**os.environ``) also keeps any host NCBI configuration out of the fixture.
+OFFLINE_BLAST_ENV = {
+    "PATH": "/usr/bin:/bin",
+    "LANG": "C",
+    "LC_ALL": "C",
     "BLAST_USAGE_REPORT": "false",
     "NCBI_DONT_USE_NCBIRC": "1",
     "NCBI_DONT_USE_LOCAL_CONFIG": "1",
@@ -77,8 +83,8 @@ def test_real_all_five_known_hit(tmp_path, program, dbtype, query):
         ],
         check=True,
         capture_output=True,
-        timeout=120,
-        env=TOOL_ENV,
+        timeout=20,
+        env=OFFLINE_BLAST_ENV,
     )
     q = tmp_path / "query.fa"
     q.write_text(">query\n" + query + "\n")
@@ -117,8 +123,8 @@ def test_real_reverse_blastn_and_no_hit(tmp_path):
         ],
         check=True,
         capture_output=True,
-        timeout=120,
-        env=TOOL_ENV,
+        timeout=20,
+        env=OFFLINE_BLAST_ENV,
     )
     query = tmp_path / "query.fa"
     query.write_text(">reverse\n" + reverse + "\n")

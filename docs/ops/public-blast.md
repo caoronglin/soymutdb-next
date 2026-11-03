@@ -5,7 +5,7 @@ The two web entry points share the existing BLAST database catalog, transactiona
 - `/search/blast`: anonymous search with a task-specific, expiring credential.
 - `/blast`: account-owned researcher jobs and personal history.
 
-The current worker executes DIAMOND `blastp` against a protein index. Configure and validate that existing worker/index deployment before advertising anonymous searches. This access-mode change does not install NCBI BLAST+ or create indexes.
+Both flows select an engine explicitly. NCBI BLAST+ is the default and executes all five standard programs; DIAMOND `blastp` remains an optional explicitly selected backend. Configure and validate the worker/index deployment (`NCBI_BLAST_BIN_DIR`, `NCBI_BLAST_DATABASE_PATHS`, or the DIAMOND equivalents) before advertising searches. The access-mode change itself does not install binaries or create indexes.
 
 ## API
 
@@ -39,6 +39,6 @@ Searchable databases remain restricted to the resolved published release. Explic
 
 ## Deployment and rollback
 
-No schema migration is required: nullable `user_id`, JSON job parameters and expiry already exist. Deploy the API before the web client. Keep the existing DIAMOND worker/index configuration. A rollback can disable public endpoints first; account-owned endpoints and jobs remain usable. Retention and cleanup continue through the existing BLAST job cleanup workflow.
+No access-mode schema migration is required: nullable `user_id`, JSON job parameters and expiry already exist. The independent BLAST catalog/index migrations `0050` and `0051` must already be applied. Deploy the API before the web client. Keep the configured NCBI and/or DIAMOND worker/index mappings; do not assign a DIAMOND index path to an NCBI catalog row or vice versa. A rollback can disable public endpoints first; account-owned endpoints and jobs remain usable. Retention and cleanup continue through the existing BLAST job cleanup workflow.
 
-Before production enablement, verify Redis connectivity, trusted proxy configuration, a published protein database, an actual worker/index search, result upload and presigned download reachability. Local API/transport tests prove authorization and dispatch contracts; they are not evidence that a production worker or dataset is ready.
+Before production enablement, verify Redis connectivity, trusted proxy configuration, a published database of the intended sequence type, an actual worker/index search for each advertised engine/program, result upload and presigned download reachability. Local API/transport tests prove authorization and dispatch contracts; they are not evidence that a production worker or dataset is ready. Real-binary verification commands and results are recorded in `docs/implementation/blast-verification-pr.md`.
