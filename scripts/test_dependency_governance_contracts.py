@@ -529,6 +529,51 @@ def test_license_probe_reads_the_three_metadata_sources(tmp_path: Path) -> None:
     assert declared["bare"]["declared"] is None
 
 
+def test_license_probe_reads_distributions_behind_a_pth_file(tmp_path: Path) -> None:
+    """A `.pth`-only distribution must be described, not reported `UNKNOWN`.
+
+    `uv run --project <app>` exposes this repository's editable first-party
+    packages (soymutdb-jobs, soymutdb-import-protocol) through a `.pth` file.
+    `importlib.metadata.distributions(path=sys.path)` does not open those files,
+    so the probe used to describe the *third-party* graph while the analyzer's
+    report listed the first-party packages too -- and every one of them became
+    an `UNKNOWN` finding. That is `python-licenses-worker`'s
+    `normalization_unavailable:license-expressions` (CNB build
+    `cnb-gcb-1k6h13qpn`): a licence gate failing on packages that do declare
+    `MIT`.
+    """
+    governance = _governance_module()
+    site = tmp_path / "site"
+    site.mkdir()
+    metadata = tmp_path / "editable" / "editable-1.0.dist-info"
+    metadata.mkdir(parents=True)
+    (metadata / "METADATA").write_text(
+        "Metadata-Version: 2.5\nName: editable-pkg\nVersion: 1.0\n"
+        "License-Expression: MIT\n",
+        encoding="utf-8",
+    )
+    (site / "editable.pth").write_text(f"{metadata.parent}\n", encoding="utf-8")
+
+    probe_path = tmp_path / "probe.py"
+    probe_path.write_text(governance.PROBE_SCRIPT, encoding="utf-8")
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import site, sys\n"
+            f"site.addsitedir({str(site)!r})\n"
+            "exec(compile(open(sys.argv[1]).read(), sys.argv[1], 'exec'))",
+            str(probe_path),
+        ],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": str(site)},
+        check=True,
+    )
+    declared = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert declared["editable-pkg"]["declared"] == "MIT", declared.get("editable-pkg")
+
+
 def test_undeclared_fixups_are_narrow_and_reviewable(tmp_path: Path) -> None:
     """`@allow-undeclared` admits one package, and only at an allowed license."""
     governance = _governance_module()
@@ -839,6 +884,10 @@ def test_root_scripts_and_knip_configuration_are_executable_contracts() -> None:
     )
     assert knip["$schema"].endswith("/knip@5/schema.json")
     assert "**/dist/**" in knip["ignore"]
+    # The antd vi-double is reached only through a mock specifier, which knip
+    # cannot follow. Registering it as an entrypoint keeps its 57 exports out of
+    # the unused-export report; without it the Dependency governance gate fails.
+    assert "src/test/antd-double.tsx" in knip["workspaces"]["apps/admin"]["entry"]
 
 
 def test_evidence_is_generated_and_uploaded_before_image_builds() -> None:
@@ -903,3 +952,140 @@ def test_governance_failures_show_exact_packages_without_changing_verdict(tmp_pa
 
     row.update(name="missing-tool", report="nonexistent.json")
     assert "report unavailable" in module._audit_failure_evidence(row, tmp_path)[0]
+
+
+def test_declared_license_probe_reads_metadata_without_importing_a_distribution(
+    tmp_path: Path,
+) -> None:
+    """The probe must not execute the code of the package it is describing.
+
+    The probe used to enumerate `importlib.metadata.distributions(path=...)`.
+    Resolving a distribution imports it, so running the probe against the
+    worker graph imported `soymutdb_worker`, the probe subprocess exited
+    non-zero, and every one of the 55 worker distributions projected as
+    `UNKNOWN` (build cnb-u4g-1k6h29nbb-001) -- a licensing verdict produced by a
+    probe that never ran.
+
+    Proves both halves: the probe never imports the distribution's module, and
+    it still reads a PEP 639 `License-Expression` out of `*.dist-info/METADATA`.
+    """
+    governance = _governance_module()
+    site = tmp_path / "site"
+    package = site / "probe_package"
+    package.mkdir(parents=True)
+    # Importing this would fail the test loudly, which is the point.
+    (package / "__init__.py").write_text(
+        "raise SystemExit('the license probe must not import distributions')\n",
+        encoding="utf-8",
+    )
+    dist_info = site / "probe_package-1.0.dist-info"
+    dist_info.mkdir()
+    (dist_info / "METADATA").write_text(
+        "Metadata-Version: 2.4\n"
+        "Name: probe-package\n"
+        "Version: 1.0\n"
+        "License-Expression: MIT\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", governance.PROBE_SCRIPT],
+        cwd=str(tmp_path),
+        env={**os.environ, "PYTHONPATH": str(site), "VIRTUAL_ENV": str(site)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    declared = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert declared["probe-package"]["license_expression"] == "MIT"
+    assert declared["probe-package"]["declared"] == "MIT"
+
+
+def test_declared_license_probe_failure_is_explained_not_silent(capsys) -> None:
+    """A probe that cannot run must say so instead of reporting `UNKNOWN`.
+
+    When the probe fails, `_declared_license` keeps the analyzer's `UNKNOWN` for
+    every package, so the gate reports a wall of licensing findings that has
+    nothing to do with licensing. The failure is printed to stderr so the next
+    reader sees the real cause.
+    """
+    governance = _governance_module()
+    original = governance.subprocess.run
+
+    class _Failed:
+        returncode = 1
+        stdout = ""
+        stderr = "RuntimeError: the worker cannot import on this interpreter\n"
+
+    try:
+        governance.subprocess.run = lambda *a, **k: _Failed()  # type: ignore[assignment]
+        probe = governance._probe_declared_licenses(
+            ["uv", "run", "--project", "apps/worker", "pip-licenses"]
+        )
+    finally:
+        governance.subprocess.run = original  # type: ignore[assignment]
+
+    assert probe == {}
+    captured = capsys.readouterr()
+    assert "declared-license probe failed" in captured.err
+    assert "the worker cannot import on this interpreter" in captured.err
+def test_uv_lock_requires_dist_matches_each_pyproject() -> None:
+    """A hand-edited lock must not leave a stale dependency specifier behind.
+
+    pip-audit-* runs ``uv export --locked`` and python-licenses-* runs
+    ``uv run --locked``; both refuse a lock whose root ``requires-dist`` no
+    longer describes pyproject.toml. Bumping a floor (e.g. fastmcp>=3.4.10)
+    in pyproject without regenerating the lock therefore fails the whole
+    Dependency governance stage, not just the analyzer that reads the bump.
+    """
+    import tomllib
+
+    def normalize(name: str) -> str:
+        return re.sub(r"[-_.]+", "-", name).lower()
+
+    def requirements(entries: list[str]) -> dict[str, str]:
+        parsed: dict[str, str] = {}
+        for entry in entries:
+            match = re.match(r"^([A-Za-z0-9._-]+)\s*(?:\[[^\]]*\])?\s*(.*)$", entry.strip())
+            assert match is not None, f"unparsable requirement: {entry}"
+            name, specifier = match.group(1), match.group(2).strip()
+            parsed[normalize(name)] = specifier
+        return parsed
+
+    for app in ("api", "worker", "mcp-server"):
+        project = tomllib.loads((ROOT / f"apps/{app}/pyproject.toml").read_text(encoding="utf-8"))
+        lock = tomllib.loads((ROOT / f"apps/{app}/uv.lock").read_text(encoding="utf-8"))
+        root = next(
+            package
+            for package in lock["package"]
+            if package.get("source", {}).get("editable") == "."
+        )
+        declared = requirements(project["project"]["dependencies"])
+        # A dependency may appear more than once in requires-dist (once for the
+        # main set, once behind an `extra == ...` marker). Compare against the
+        # non-extra entries only, so a dev/test variant cannot mask a stale
+        # main specifier, while still keeping the check independent of how uv
+        # chooses to order or split markers.
+        locked = {
+            normalize(item["name"]): item.get("specifier", "")
+            for item in root["metadata"]["requires-dist"]
+            if "extra ==" not in item.get("marker", "")
+        }
+        # uv records a local path dependency without a specifier (the version
+        # lives in `source.directory` instead), so an empty lock specifier is
+        # only a mismatch when the package is not a local workspace package.
+        local = {
+            normalize(item["name"])
+            for item in lock["package"]
+            if "directory" in item.get("source", {})
+        }
+        stale = {
+            name: (specifier, locked.get(name))
+            for name, specifier in declared.items()
+            if name not in local and locked.get(name) != specifier
+        }
+        assert not stale, (
+            f"apps/{app}/uv.lock requires-dist is stale; run `uv lock --project apps/{app}`: "
+            f"{stale}"
+        )

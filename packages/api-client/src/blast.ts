@@ -18,6 +18,8 @@ export function hasCompatibleBlastQueryAlphabet(sequence: string, program: Blast
   const body = sequence.split(/\r?\n/).filter((line) => !line.trimStart().startsWith(">")).join("").replace(/\s/g, "");
   return BLAST_PROGRAM_COMPATIBILITY[program].query === "nucl"
     ? /^[ACGTNRYSWKMBDHVU]+$/i.test(body)
+    // `-` last in the class: a literal hyphen needs no escape there, and an
+    // escaped one trips no-useless-escape under this ESLint version.
     : /^[ACDEFGHIKLMNPQRSTVWYBZX*-]+$/i.test(body);
 }
 
@@ -344,6 +346,76 @@ export const BLAST_PROGRAMS = [
   { id: "tblastn", label: "TBLASTN", type: "protein", queryType: "prot", description: "Protein vs translated nucleotide" },
   { id: "tblastx", label: "TBLASTX", type: "nucleotide", queryType: "nucl", description: "Translated nucleotide vs translated nucleotide" },
 ] as const;
+
+// ---------------------------------------------------------------------------
+// Shared search-form rules (anonymous and signed-in BLAST are the same search)
+// ---------------------------------------------------------------------------
+
+/** Submission-critical FASTA problems, ordered by where the reader should look. */
+export type FastaStructureError = "emptyRecord";
+
+/**
+ * Structural FASTA check for multi-record queries. One BLAST job may carry
+ * several records; every record that has a header also needs a sequence.
+ * Alphabet is checked separately by
+ * `hasCompatibleBlastQueryAlphabet` (early feedback only — the API is the
+ * authority for the alphabet, record limits and duplicate identifiers).
+ *
+ * A header-less query is a pasted bare sequence, not malformed FASTA: the API
+ * and the worker both accept it, so no client rule may reject it.
+ */
+export function validateBlastFastaStructure(sequence: string): FastaStructureError | null {
+  const lines = sequence.split(/\r?\n/);
+  let sawHeader = false;
+  let currentHasSequence = false;
+  let sawAny = false;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    sawAny = true;
+    if (line.startsWith(">")) {
+      if (sawHeader && !currentHasSequence) return "emptyRecord";
+      sawHeader = true;
+      currentHasSequence = false;
+      continue;
+    }
+    if (!sawHeader) return null; // pasted bare sequence: the API accepts it
+    currentHasSequence = true;
+  }
+  if (!sawAny) return null;
+  return currentHasSequence ? null : "emptyRecord";
+}
+
+/** Display name of a search engine. Product names, not translatable copy. */
+export function blastEngineLabel(
+  engine: BlastEngine | undefined,
+  unknownEngine: string,
+): string {
+  if (engine === "ncbi_blast") return "NCBI BLAST+";
+  if (engine === "diamond") return "DIAMOND";
+  return unknownEngine;
+}
+
+/** One browser download for a job's raw aligner output (presigned URL). */
+export interface BlastDownloadLink {
+  href: string;
+  filename: string;
+}
+
+/**
+ * Build the download link for raw BLAST output.
+ *
+ * The raw artifact is the engine's tabular text (outfmt 6), so the filename
+ * says .tsv instead of inheriting the storage key's .txt suffix. The caller
+ * only passes URLs that survived the scheme check in the page components.
+ */
+export function blastDownloadLink(
+  url: string | null | undefined,
+  job: { id: string; program: BlastProgram; engine?: BlastEngine },
+): BlastDownloadLink | null {
+  if (!url) return null;
+  const engine = job.engine === "diamond" ? "diamond" : "ncbi_blast";
+  return { href: url, filename: `${job.id.slice(0, 8)}-${engine}-${job.program}.tsv` };
 
 /** Cancel a pending/running job. Both engines share the same lifecycle. */
 export function cancelBlastJob(jobId: string): Promise<BlastJob> {

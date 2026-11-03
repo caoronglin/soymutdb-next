@@ -2034,6 +2034,22 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # `ModuleNotFoundError: No module named 'yaml'`.
         self.assertIn("ensure_governance_python", bodies["dependency_governance_step"])
         governance_python = bodies["ensure_governance_python"]
+
+        # python-licenses-worker runs `uv run --locked --project apps/worker`,
+        # which resolves the worker science stack (h5py has no CPython 3.15
+        # wheel) and therefore needs HDF5 headers + pkg-config in THIS stage's
+        # container. "Compiler prerequisites" is a separate container, so its
+        # apt install does not survive here. Without the shared prerequisite
+        # script the analyzer never starts, no report is written, and the gate
+        # fails with `normalization_unavailable:license-expressions`.
+        governance_step = bodies["dependency_governance_step"]
+        self.assertIn("install-worker-science-build-deps.sh", governance_step)
+        self.assertIn("HDF5_PKGCONFIG_NAME", governance_step)
+        self.assertLess(
+            governance_step.index("install-worker-science-build-deps.sh"),
+            governance_step.index("deps:audit"),
+            "HDF5 prerequisites must be installed before uv builds h5py",
+        )
         self.assertIn("import yaml", governance_python)
         self.assertIn("PyYAML==", governance_python)
         # `uv`/`uvx` drive the Deptry/license analyzers; without it every one is

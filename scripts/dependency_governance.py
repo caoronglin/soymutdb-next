@@ -561,8 +561,11 @@ def _report_is_available(path: Path, report_format: str) -> bool:
 # `uv run --project <app>` is the environment the distribution metadata lives in,
 # so the probe replays exactly that selection instead of guessing a path.
 PROBE_SCRIPT = """
+import email.parser
 import importlib.metadata as metadata
 import json
+import os
+import pathlib
 import sys
 
 # The probe reads the three metadata sources a wheel can publish, in the same
@@ -608,20 +611,63 @@ def declarations(message):
     return legacy
 
 
-# `importlib.metadata.distributions()` defaults to the interpreter's own search
-# path only when it can resolve the package context; passing `sys.path`
-# explicitly is the portable spelling and is what makes the probe describe the
-# same distribution set the analyzer's report does.
+# The marker lets `_probe_declared_licenses` tell "the probe ran but found
+# nothing" (an environment problem, fail loudly) from "this distribution set
+# really declares no license" (a finding, fail closed). It goes to stderr so
+# stdout stays a pure JSON document.
+print("probe:ready", file=sys.stderr)
+
+# The probe must describe the license graph WITHOUT importing it.
+# `importlib.metadata.distributions()` resolves each distribution's module before
+# it reads the metadata, so enumerating `sys.path` executes the package under
+# audit: run against `apps/worker`, whose first-party module does not import on
+# an interpreter that is not the pinned CPython, the probe died and every
+# distribution projected as `UNKNOWN` (build cnb-u4g-1k6h29nbb-001 reported 55
+# worker packages as "declares no license", 19 of which do). Read the
+# `*.dist-info/METADATA` files on the search path instead: same distribution
+# set, no code executed, and it cannot be derailed by the project being probed.
+#
+# `sys.path` alone is not enough: a `uv run` environment reaches this
+# repository's editable first-party packages (soymutdb-jobs,
+# soymutdb-import-protocol) through a `.pth` file, and the report the probe is
+# compared against lists them. `VIRTUAL_ENV`/`sys.prefix` are the directories
+# that `.pth` file resolves to.
+paths = [entry for entry in sys.path if entry] + [
+    entry
+    for entry in (os.environ.get("VIRTUAL_ENV") or "", sys.prefix)
+    if entry
+]
+
+
+def metadata_from(paths):
+    seen = {}
+    for entry in paths:
+        try:
+            dist_infos = sorted(pathlib.Path(entry).glob("*.dist-info"))
+        except OSError:
+            continue
+        for dist_info in dist_infos:
+            metafile = dist_info / "METADATA"
+            if not metafile.is_file():
+                continue
+            message = email.parser.Parser().parsestr(
+                metafile.read_text(encoding="utf-8", errors="replace"),
+                headersonly=True,
+            )
+            name = (message.get("Name") or "").strip()
+            if name and name.lower() not in seen:
+                seen[name.lower()] = message
+    return seen
+
+
 declared = {}
-for distribution in metadata.distributions(path=sys.path):
-    name = distribution.metadata["Name"]
-    if not name:
-        continue
-    declared[name.lower()] = {
-        "license": distribution.metadata.get("License"),
-        "license_expression": distribution.metadata.get("License-Expression"),
-        "declared": declarations(distribution.metadata),
+for key, message in metadata_from(paths).items():
+    declared[key] = {
+        "license": message.get("License"),
+        "license_expression": message.get("License-Expression"),
+        "declared": declarations(message),
     }
+
 print(json.dumps(declared, sort_keys=True))
 """
 
@@ -646,13 +692,30 @@ def _probe_declared_licenses(command: list[str]) -> dict[str, Any]:
         text=True,
         env=os.environ.copy(),
     )
+    # A non-zero exit prints why. Without it every distribution projects as
+    # `UNKNOWN` and the failure reads as a licensing problem (build
+    # cnb-u4g-1k6h29nbb-001 reported 55 worker packages that way), which is the
+    # one diagnosis that cannot be true.
     if completed.returncode != 0:
+        sys.stderr.write(
+            "[dependency-governance] declared-license probe failed; every "
+            "distribution will project as UNKNOWN\n"
+        )
+        sys.stderr.write((completed.stderr or "").strip()[:4000] + "\n")
         return {}
     try:
         probed = json.loads(completed.stdout.strip().splitlines()[-1])
     except (json.JSONDecodeError, IndexError):
         return {}
-    return probed if isinstance(probed, dict) else {}
+    if not isinstance(probed, dict):
+        return {}
+    if not probed and "probe:ready" in completed.stderr:
+        # The probe reached the end of its own `sys.path` and found no
+        # distributions at all -- that is a broken environment, not a
+        # license answer. Keep the report authoritative rather than turning
+        # every package in it into an `UNKNOWN` finding.
+        return {}
+    return probed
 
 
 def _rewrite_for_probe(command: list[str]) -> list[str] | None:
@@ -1064,6 +1127,16 @@ def _audit_failure_evidence(row: dict[str, Any], output: Path) -> list[str]:
             "review entrypoints before removal"
         )
         evidence.extend(f"  unused: {file}" for file in unused[:5])
+        # The summary above names how many files have issues but not which
+        # symbols, so a green-green-red round trip is the only way to learn
+        # what failed. Name the first few symbols instead: `knip` reports an
+        # unused *export* per symbol, and the file alone does not say which one.
+        for issue in issues[:3]:
+            symbols = [entry.get("name") for entry in issue.get("exports") or []]
+            if symbols:
+                shown = ", ".join(str(symbol) for symbol in symbols[:5])
+                more = "" if len(symbols) <= 5 else f" (+{len(symbols) - 5} more)"
+                evidence.append(f"  unused exports in {issue.get('file')}: {shown}{more}")
     elif name == "pnpm-duplicate-versions":
         if "Run pnpm dedupe" in detail.get("stdout", ""):
             evidence.append("  pnpm dedupe --check recommends lockfile deduplication")

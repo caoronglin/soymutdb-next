@@ -93,6 +93,29 @@ and reports ``unresolved`` with a reason when no relation exists. Cancellation,
 retry (as a new job) and download expiry are engine-independent and cover both
 NCBI BLAST+ and DIAMOND.
 
+## Access modes: one search, two entry points
+
+Both BLAST entry points run the same service, outbox and worker. They differ only
+in authorization, not in biology or parameters:
+
+- **Anonymous (`/search/blast`, `POST /blast/public/jobs`)** — no session. The
+  response returns an expiring per-job capability (JWT, `X-Blast-Token`) that
+  authorizes status/results for that job only. There is no job listing, the query
+  is capped by `blast_public_max_length`, submission is rate limited per trusted
+  peer IP, failure text is replaced by a fixed message, and download links are
+  bounded by the capability expiry.
+- **Signed-in (`/blast`, `POST /blast/jobs`)** — requires the researcher role;
+  jobs are owned by the caller, listed newest-first, and readable only by the
+  owner or an administrator.
+
+Neither mode may accept a query the other rejects: FASTA structure, program
+alphabet, engine/program/database compatibility and parameter ranges are shared
+rules (`validateBlastFastaStructure`, `hasCompatibleBlastQueryAlphabet`,
+`compatibleBlastDatabases` in `@soymutdb/api-client`; `validate_search_parameters`
+in `soymutdb_jobs.blast_search`). The signed-in page previously kept a private
+FASTA validator that rejected bare sequences and derived its own messages; it now
+uses the shared rule so both entry points accept exactly the same input.
+
 ## Verification evidence
 
 Real NCBI BLAST+ 2.17.0+ binaries were used to build nucleotide and protein
