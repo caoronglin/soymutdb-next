@@ -206,6 +206,10 @@ class BlastHit(BaseModel):
     bit_score: float
     query_strand: str = "plus"
     subject_strand: str = "plus"
+    #: Assembly-scoped genomic location, present only when the hit's subject
+    #: was resolved through an explicit protein/transcript/gene relation.
+    #: ``status`` is "resolved" or "unresolved" with a machine-readable reason.
+    genome_resolution: dict[str, Any] | None = None
 
 
 class BlastHsp(BaseModel):
@@ -277,7 +281,9 @@ class BlastDatabaseResponse(BaseModel):
     total_length: int | None = Field(default=None, ge=0)
     fasta_sha256: str | None = None
     index_version: str | None = None
-    build_status: Literal["pending", "ready", "building", "failed"] = "pending"
+    build_status: Literal[
+        "pending", "building", "validating", "publishing", "ready", "failed"
+    ] = "pending"
     is_default: bool = False
     license: str | None = None
 

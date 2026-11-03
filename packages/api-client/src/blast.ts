@@ -19,7 +19,7 @@ export function hasCompatibleBlastQueryAlphabet(sequence: string, program: Blast
   const body = sequence.split(/\r?\n/).filter((line) => !line.trimStart().startsWith(">")).join("").replace(/\s/g, "");
   return BLAST_PROGRAM_COMPATIBILITY[program].query === "nucl"
     ? /^[ACGTNRYSWKMBDHVU]+$/i.test(body)
-    : /^[ACDEFGHIKLMNPQRSTVWYBZX*\-]+$/i.test(body);
+    : /^[ACDEFGHIKLMNPQRSTVWYBZX*-]+$/i.test(body);
 }
 
 export interface BlastDatabase {
@@ -41,7 +41,7 @@ export interface BlastDatabase {
   total_length?: number | null;
   fasta_sha256?: string | null;
   index_version?: string | null;
-  build_status?: "pending" | "ready" | "building" | "failed";
+  build_status?: "pending" | "building" | "validating" | "publishing" | "ready" | "failed";
   /** Database default within assembly, engine and database type. */
   is_default?: boolean;
   license?: string | null;
@@ -81,6 +81,23 @@ export interface BlastHit {
   evalue: number;
   bit_score: number;
   query_id?: string | null;
+  /** Assembly-scoped genomic locus, only when a protein/transcript subject was
+   * resolved through an explicit relation. Never derived from AA coordinates. */
+  genome_resolution?: BlastGenomeResolution | null;
+}
+
+/** Proven genomic interval or an explicit "unresolved" reason. */
+export interface BlastGenomeResolution {
+  status: "resolved" | "unresolved";
+  reason?: string;
+  gene_id?: string;
+  chromosome?: string;
+  start?: number;
+  end?: number;
+  strand?: string;
+  assembly_id?: number;
+  release_id?: number;
+  relation?: string;
 }
 
 export interface BlastJobParams {
@@ -170,6 +187,7 @@ export function getPublicBlastJob(jobId: string, accessToken: string): Promise<B
   }).then(normalizeJob);
 }
 
+/** Public result reads are always no-store: download URLs are short-lived. */
 export function getPublicBlastResults(
   jobId: string,
   accessToken: string,
@@ -218,6 +236,17 @@ export function getBlastJobs(params: {
 
 export function getBlastJob(jobId: string): Promise<BlastJob> {
   return http.get<BlastJobApi>(`/blast/jobs/${jobId}`).then(normalizeJob);
+}
+/** Cancel a pending/running job. The worker re-checks status before executing. */
+export function cancelBlastJob(jobId: string): Promise<BlastJob> {
+  return http.post<BlastJobApi>(`/blast/jobs/${encodeURIComponent(jobId)}/cancel`)
+    .then(normalizeJob);
+}
+
+/** Re-dispatch a failed job with its original frozen release/assembly provenance. */
+export function retryBlastJob(jobId: string): Promise<BlastJob> {
+  return http.post<BlastJobApi>(`/blast/jobs/${encodeURIComponent(jobId)}/retry`)
+    .then(normalizeJob);
 }
 
 export function getBlastHits(

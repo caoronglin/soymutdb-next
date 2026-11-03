@@ -1,6 +1,14 @@
 # Preparing immutable NCBI BLAST+ indexes
 
-The operator tool prepares and verifies immutable NCBI indexes. It does **not** register databases or enqueue Celery jobs by itself; an operator registers a ready catalog row and configures `NCBI_BLAST_DATABASE_PATHS` on the worker. NCBI BLAST+ is the default search engine for all five programs; DIAMOND `blastp` remains an explicitly selected backend. Building and failed catalog entries are excluded from search discovery and submission. Do not assign an NCBI prefix to a DIAMOND catalog row, or a DIAMOND index to an NCBI row.
+The operator tool prepares and verifies immutable NCBI indexes; the CLI remains
+available for operator verification. NCBI BLAST+ is the default search engine
+for all five programs; DIAMOND `blastp` remains an explicitly selected backend.
+Only `ready` catalog rows are admitted by search discovery and submission;
+building and failed entries are excluded. Runtime construction is driven by the
+Celery task `blast_index_tasks.build_blast_index` (admin-triggered through
+`POST /blast/databases/build`), which publishes on the worker's local immutable
+volume (`BLAST_INDEX_ROOT`). Do not assign an NCBI prefix to a DIAMOND catalog
+row, or a DIAMOND index to an NCBI row.
 
 ## Prerequisites and trust boundary
 
@@ -40,7 +48,17 @@ python -m soymutdb_worker.blast_index verify \
 
 Build occurs in a sibling `.build-*` staging directory. Fixed argument arrays invoke `makeblastdb`; `blastdbcmd -info` and explicit sequence lengths independently check database type, sequence count and total indexed letters. The builder hashes every index artifact, writes a canonical manifest, fsyncs the files/directory, then publishes with a locked atomic rename. The identity includes build options, source hashes, metadata, and both binary hashes/versions. A changed source, metadata or binary creates a new identity. Reuse verifies the exact manifest, complete artifact inventory/checksums and database contents. Corruption is rejected; an existing index is never repaired or overwritten implicitly. Binary provenance must match during verification.
 
-The manifest contains relative artifact names and no source/index filesystem path. Index files and manifest remain operator artifacts; no new API exposes them. A later publication workflow must upload immutable objects to the existing object store and reconcile a verified manifest into PostgreSQL. PostgreSQL remains authoritative for catalog/visibility/workflow state.
+The manifest contains relative artifact names and no source/index filesystem path. No API exposes filesystem paths.
+
+## Runtime lifecycle (Celery)
+
+`build_blast_index` is the only runtime caller of `build_index`. It runs on the `blast` queue, never inside an HTTP request, and drives a persisted catalog state machine:
+
+`pending → building → validating → publishing → ready`, with `failed` reachable from every in-flight state. Only `ready` rows are selectable by `submit_job`. Every transition is a guarded conditional UPDATE keyed on the expected state, so duplicate deliveries cannot double-publish and a stale delivery cannot resurrect a cancelled build. A rebuild produces a new content-addressed identity; the old index directory is never mutated or overwritten, and stays searchable until the final `publishing → ready` swap wins.
+
+**Object-storage decision:** indexes live on an operator-provisioned, immutable, content-addressed local volume (`BLAST_INDEX_ROOT`). They are multi-gigabyte read-only directories consumed in-process by NCBI binaries; copying them into MinIO would create a second, unsynchronized copy of authoritative index state. PostgreSQL (`index_version`, `fasta_sha256`, counts, provenance) is the authoritative catalog. MinIO holds only the uploaded source FASTA (`blast-sources/`) and raw search results (`blast-results/`). Source object references are validated to that prefix; arbitrary local paths are refused.
+
+Failures clean `.build-*` / `.verify-*` staging, record a sanitized reason (`build_error`), and never delete a previously published identity. `check_blast_index_health` runs hourly: it re-verifies each published manifest, artifact checksums and database contents with `blastdbcmd`, records `index_health_checked_at`, and marks a corrupt index `failed` so discovery stops selecting it. Rebuild (new identity) is the only recovery; an index is never repaired in place.
 
 ## Resource limits and recovery
 
@@ -60,7 +78,7 @@ The current source ceiling and in-memory parser are not a validated whole-soybea
 
 ## Migration and rollback
 
-Migration `0050` adds explicit engine/provenance metadata and readiness constraints. It reuses the historical `sequence_count`, `total_length` and `build_status` columns, preserving their values and defaults. Existing rows gain `engine=diamond` and `is_default=false`; legacy `build_status=pending` remains pending and is excluded from search. Before rollout, inspect the actual catalog statuses. An operator must verify an existing DIAMOND index before explicitly promoting its catalog status to ready; migration never fabricates readiness. Newly inserted databases inherit pending until explicitly verified. Only known protein rows are backfilled with `sequence_type=protein`; unknown nucleotide subtype, source, annotation and license remain NULL. Active default entries are unique per assembly/engine/database type. Counts and FASTA checksums have database constraints.
+Migrations `0052`/`0053` add resumable build states, bookkeeping, and per-hit genome resolution. Migration `0050` adds explicit engine/provenance metadata and readiness constraints. It reuses the historical `sequence_count`, `total_length` and `build_status` columns, preserving their values and defaults. Existing rows gain `engine=diamond` and `is_default=false`; legacy `build_status=pending` remains pending and is excluded from search. Before rollout, inspect the actual catalog statuses. An operator must verify an existing DIAMOND index before explicitly promoting its catalog status to ready; migration never fabricates readiness. Newly inserted databases inherit pending until explicitly verified. Only known protein rows are backfilled with `sequence_type=protein`; unknown nucleotide subtype, source, annotation and license remain NULL. Active default entries are unique per assembly/engine/database type. Counts and FASTA checksums have database constraints.
 
 Public discovery emits only explicit safe metadata and runnable published-release rows. Local `file_path` and arbitrary private `provenance` JSON stay private. Existing configured database selection remains first; fallback uses the default assembly and eligible catalog defaults deterministically.
 

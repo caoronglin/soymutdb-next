@@ -41,6 +41,11 @@ from celery import Task
 from soymutdb_jobs.blast_search import normalize_query
 from soymutdb_jobs.protein_fasta import ProteinFastaError, parse_protein_fasta
 
+from soymutdb_worker.blast_genome_resolution import (
+    PROTEIN_SUBJECT_PROGRAMS,
+    BlastGenomeResolver,
+    annotate_hits,
+)
 from soymutdb_worker.blast_index import verify_index
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
@@ -757,7 +762,16 @@ def run_blast(
 
     # ── Idempotent job claim (shared transition validation) ──────────────
     with get_db() as session:
-        decision = BlastJobStore(session).begin_run(job_id)
+        store = BlastJobStore(session)
+        # A cancelled or expired job must never launch a resource-consuming
+        # NCBI/DIAMOND process. Expiry also invalidates the capability and the
+        # result download, so closing the row is the honest outcome.
+        if store.is_cancelled(job_id) or store.is_expired(job_id):
+            store.mark_expired(job_id)
+            logger.info("BLAST job %s skipped (cancelled/expired)", job_id)
+            return {"job_id": job_id, "skipped": True, "idempotency_key": idempotency_key,
+                    "reason": "cancelled_or_expired"}
+        decision = store.begin_run(job_id)
     if decision == "skip":
         logger.info("BLAST job %s skipped (terminal/unknown status)", job_id)
         return {"job_id": job_id, "skipped": True, "idempotency_key": idempotency_key}
@@ -843,18 +857,48 @@ def run_blast(
                 metadata={"checksum": checksum, "size": str(size)},
             )
 
-            # Generate pre-signed URL (24 h)
-            presigned_url = generate_presigned_url(f"{s3_bucket}/{s3_key}", expires_in=86400)
+            # Download link never outlives the job's own deadline. A public
+            # capability may expire much earlier than the historical fixed 24h;
+            # the API re-signs on each poll with the true remaining TTL, and the
+            # worker's returned URL is capped to the same bound.
+            with get_db() as session:
+                remaining = BlastJobStore(session).download_ttl_seconds(job_id, cap=86400)
+            presigned_url = (
+                generate_presigned_url(f"{s3_bucket}/{s3_key}", expires_in=remaining)
+                if remaining > 0 else None
+            )
 
             self.update_state(state="STARTED", meta={"progress": 100})
 
             logger.info("BLAST job %s completed: %d hits", job_id, parsed["total_hits"])
 
+            # Protein/translated hits carry amino-acid subject coordinates.
+            # Resolve them through explicit gene/transcript/alias relations in
+            # the frozen assembly/release before any browser link can exist;
+            # unresolved is a first-class, persisted outcome.
+            hits_to_store = parsed["hits"]
+            if program in PROTEIN_SUBJECT_PROGRAMS and payload is not None:
+                assembly_id = p.get("assembly_id")
+                release_id = p.get("release_id", p.get("release_key"))
+                # Only a frozen, numeric assembly/release scope can resolve a
+                # genomic locus. Missing provenance is recorded as unresolved
+                # rather than guessed from a string or a default assembly.
+                if isinstance(assembly_id, int) and isinstance(release_id, int):
+                    with get_db() as session:
+                        resolutions = BlastGenomeResolver(
+                            session, assembly_id=assembly_id, release_id=release_id,
+                        ).resolve(
+                            [str(hit.get("subject_id", "")) for hit in hits_to_store]
+                        )
+                else:
+                    resolutions = {}
+                hits_to_store = annotate_hits(hits_to_store, resolutions)
+
             # Persist parsed hits (delete-then-insert: idempotent on
             # redelivery) and mark the job succeeded — one transaction, and
             # only a running row wins the status update.
             with get_db() as session:
-                BlastHitStore(session).replace_hits(job_id, parsed["hits"])
+                BlastHitStore(session).replace_hits(job_id, hits_to_store)
                 BlastJobStore(session).mark_succeeded(
                     job_id,
                     result_path=s3_key,
@@ -878,6 +922,7 @@ def run_blast(
                 "hits_persisted": parsed["total_hits"],
                 "result_s3_path": s3_key,
                 "download_url": presigned_url,
+                "download_ttl_seconds": remaining,
                 "query_len": parsed["query_len"],
                 "checksum": checksum,
             }

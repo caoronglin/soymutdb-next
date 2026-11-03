@@ -382,6 +382,7 @@ class BlastService:
                 # Provenance: the worker (and any later reader of the result)
                 # must know which release/assembly namespace was searched.
                 "release_key": release_context.release_key,
+                "release_id": release_context.release_id,
                 "assembly": release_context.assembly,
                 "assembly_id": blast_db.assembly_id,
             },
@@ -565,6 +566,7 @@ class BlastService:
                     bit_score=h.bit_score,
                     query_strand=h.query_strand,
                     subject_strand=h.subject_strand,
+                    genome_resolution=getattr(h, "genome_resolution", None),
                 )
                 for h in page
             ],
@@ -579,6 +581,117 @@ class BlastService:
             completed_at=job.completed_at,
             download_url=download_url,
         )
+
+    async def cancel_job(
+        self,
+        db: AsyncSession,
+        job_id: uuid.UUID,
+        user_id: uuid.UUID,
+        user_roles: list[str] | None = None,
+    ) -> BlastJobResponse:
+        """Cancel a pending/running BLAST job owned by the caller.
+
+        Cancellation is a guarded status transition, not a best-effort broker
+        revoke: the worker re-checks the row before launching the aligner and on
+        redelivery, so a late Celery message cannot resurrect the job. A
+        completed/failed/expired job is terminal and is refused explicitly.
+        """
+        result = await db.execute(select(BlastJob).where(BlastJob.id == job_id))
+        job = result.scalar_one_or_none()
+        if job is None:
+            raise NotFoundError(f"BLAST job {job_id} not found")
+        self._authorize_job(job.user_id, user_id, user_roles)
+        if job.status not in (BlastJobStatus.PENDING, BlastJobStatus.RUNNING):
+            raise ValidationError(
+                f"BLAST job {job_id} is {job.status}; only pending/running jobs can be cancelled"
+            )
+        job.status = BlastJobStatus.CANCELLED
+        job.completed_at = datetime.now(UTC)
+        job.error_message = "Cancelled by user"
+        await db.commit()
+        return self._job_to_response(job)
+
+    async def retry_job(
+        self,
+        db: AsyncSession,
+        job_id: uuid.UUID,
+        user_id: uuid.UUID,
+        user_roles: list[str] | None = None,
+        *,
+        release_context: ReleaseContext,
+    ) -> BlastJobResponse:
+        """Re-dispatch a FAILED BLAST job with its frozen original provenance.
+
+        Only the owner (or an administrator) may retry, and only a ``failed``
+        row is retryable. The frozen ``_search_provenance`` and query are
+        reused verbatim: retry never silently re-resolves the database against
+        a different release or assembly. A fresh outbox event (new event id /
+        task id) is written in the same transaction as the status reset.
+        """
+        result = await db.execute(select(BlastJob).where(BlastJob.id == job_id))
+        job = result.scalar_one_or_none()
+        if job is None:
+            raise NotFoundError(f"BLAST job {job_id} not found")
+        self._authorize_job(job.user_id, user_id, user_roles)
+        if job.status != BlastJobStatus.FAILED:
+            raise ValidationError(
+                f"BLAST job {job_id} is {job.status}; only failed jobs can be retried"
+            )
+        provenance = (job.parameters or {}).get("_search_provenance") or {}
+        if not isinstance(provenance, dict) or not provenance.get("index_identity"):
+            raise ValidationError("BLAST job lacks frozen index provenance; submit a new job")
+        await self._enforce_user_limit(db, user_id)
+        job.status = BlastJobStatus.PENDING
+        job.error_message = None
+        job.started_at = None
+        job.completed_at = None
+        job.result_path = None
+        job.hit_count = 0
+        job.query_len = None
+        job.expires_at = datetime.now(UTC) + timedelta(days=7)
+        await db.flush()
+
+        worker_params = {
+            key: value for key, value in (job.parameters or {}).items()
+            if key not in {"_search_provenance", PUBLIC_JOB_MARKER}
+        }
+        job_payload = build_job_payload(
+            job_id=job.id,
+            task_name=BLAST_RUN_TASK,
+            payload={
+                "job_id": str(job.id),
+                "program": job.program,
+                "engine": str(provenance.get("engine", "ncbi_blast")),
+                "database_type": str(provenance.get("database_type", "")),
+                "index_identity": str(provenance["index_identity"]),
+                "fasta_sha256": str(provenance.get("fasta_sha256", "")),
+                "index_version": str(provenance.get("index_version", "")),
+                "annotation_version": provenance.get("annotation_version"),
+                "database": job.database.name if job.database is not None else "",
+                "sequence": job.query_sequence,
+                "evalue": (job.parameters or {}).get("evalue", 0.001),
+                "max_target_seqs": (job.parameters or {}).get("max_target_seqs", 50),
+                "parameters": worker_params,
+                "release_key": str(release_context.release_id),
+                "release_id": release_context.release_id,
+                "assembly": release_context.assembly,
+                "assembly_id": (
+                    job.database.assembly_id if job.database is not None else None
+                ),
+            },
+            idempotency_key=f"blast:{job.id}:retry:{uuid.uuid4().hex}",
+            max_attempts=settings.blast_max_attempts,
+        )
+        await create_outbox_event(
+            db,
+            aggregate_type="blast_job",
+            aggregate_id=str(job.id),
+            event_type="blast_job.retry",
+            payload=job_payload.model_dump(mode="json"),
+        )
+        await db.commit()
+        await db.refresh(job)
+        return self._job_to_response(job)
 
     @staticmethod
     def _expired(job: BlastJob) -> bool:

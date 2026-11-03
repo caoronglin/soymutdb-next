@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     Column,
     DateTime,
     Float,
@@ -106,6 +107,23 @@ chromosomes = Table(
     Column("name", String(64)),
 )
 
+transcripts = Table(
+    "transcripts",
+    metadata,
+    Column("id", String(64), primary_key=True),
+    Column("gene_id", BigInteger),
+    Column("is_canonical", Boolean),
+)
+
+gene_aliases = Table(
+    "gene_aliases",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("gene_id", BigInteger),
+    Column("alias", String(256)),
+    Column("source", String(128)),
+)
+
 expression_data = Table(
     "expression_data",
     metadata,
@@ -197,6 +215,35 @@ module_data_rows = Table(
     ),
 )
 
+blast_databases = Table(
+    "blast_databases",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("name", String(256)),
+    Column("engine", String(16)),
+    Column("db_type", String(4)),
+    Column("build_status", String(20)),
+    Column("build_error", Text),
+    Column("build_attempt", Integer),
+    Column("build_started_at", DateTime(timezone=True)),
+    Column("build_finished_at", DateTime(timezone=True)),
+    Column("index_health_checked_at", DateTime(timezone=True)),
+    Column("file_path", String(2048)),
+    Column("index_version", String(256)),
+    Column("fasta_sha256", String(64)),
+    Column("sequence_count", BigInteger),
+    Column("total_length", BigInteger),
+    Column("is_active", Boolean),
+    Column("is_default", Boolean),
+    Column("annotation_version", String(256)),
+    Column("source_url", String(2048)),
+    Column("source_version", String(256)),
+    Column("license", Text),
+    Column("assembly_id", Integer),
+    Column("release_id", Integer),
+    Column("assembly_version", String(64)),
+)
+
 blast_jobs = Table(
     "blast_jobs",
     metadata,
@@ -272,6 +319,9 @@ blast_hits = Table(
     Column("bit_score", Float),
     Column("query_strand", String(8)),
     Column("subject_strand", String(8)),
+    # Protein/transcript -> gene genomic coordinates, resolved through
+    # explicit assembly-scoped relations. NULL means "no proven link".
+    Column("genome_resolution", JSONB),
 )
 
 #: GWAS association jobs (EMMAX / GEMMA).  The API side (B5) owns the

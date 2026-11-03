@@ -14,6 +14,11 @@ from typing import Final
 # ---------------------------------------------------------------------------
 
 BLAST_RUN_TASK: Final[str] = "soymutdb_worker.tasks.blast.run_blast"
+#: Asynchronous, immutable index build -> validation -> atomic publication.
+#: Runs on the same ``blast`` queue as searches, never inside an HTTP request.
+BLAST_INDEX_BUILD_TASK: Final[str] = (
+    "soymutdb_worker.tasks.blast_index_tasks.build_blast_index"
+)
 BUILD_STATIC_PAGES_TASK: Final[str] = "soymutdb_worker.tasks.static_pages.build_static_pages"
 EXPORT_VARIANTS_TASK: Final[str] = "soymutdb_worker.tasks.export.export_variants"
 IMPORT_ADAPTER_TASK: Final[str] = "soymutdb_worker.tasks.ingest.run_import_adapter"
@@ -56,6 +61,7 @@ QUEUE_DEFAULT: Final[str] = "default"
 #: Queue used for a given task name (fallback: ``default``).
 TASK_QUEUE_MAP: Final[dict[str, str]] = {
     BLAST_RUN_TASK: QUEUE_BLAST,
+    BLAST_INDEX_BUILD_TASK: QUEUE_BLAST,
     BUILD_STATIC_PAGES_TASK: QUEUE_STATS,
     STATIC_PUBLISH_TASK: QUEUE_STATS,
     PAGE_BUILDER_PUBLISH_TASK: QUEUE_DEFAULT,
@@ -81,6 +87,7 @@ __all__ = [
     "ANALYSIS_FASTP_TASK",
     "ANALYSIS_SCANPY_TASK",
     "BLAST_RUN_TASK",
+    "BLAST_INDEX_BUILD_TASK",
     "GWAS_RUN_TASK",
     "BUILD_STATIC_PAGES_TASK",
     "EXPORT_VARIANTS_TASK",
