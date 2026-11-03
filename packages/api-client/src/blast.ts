@@ -2,10 +2,30 @@ import { http } from "./auth";
 import { ApiError, request } from "./client";
 import type { AssemblyInfo, GeneDetail } from "./genes";
 
+export type BlastEngine = "ncbi_blast" | "diamond";
+export type BlastProgram = "blastn" | "blastp" | "blastx" | "tblastn" | "tblastx";
+export type BlastDatabaseType = "nucl" | "prot";
+
+export const BLAST_PROGRAM_COMPATIBILITY: Record<BlastProgram, { query: "nucl" | "prot"; databases: BlastDatabaseType[] }> = {
+  blastn: { query: "nucl", databases: ["nucl"] },
+  blastp: { query: "prot", databases: ["prot"] },
+  blastx: { query: "nucl", databases: ["prot"] },
+  tblastn: { query: "prot", databases: ["nucl"] },
+  tblastx: { query: "nucl", databases: ["nucl"] },
+};
+
+/** Early alphabet feedback only; record structure and biological limits are API-owned. */
+export function hasCompatibleBlastQueryAlphabet(sequence: string, program: BlastProgram): boolean {
+  const body = sequence.split(/\r?\n/).filter((line) => !line.trimStart().startsWith(">")).join("").replace(/\s/g, "");
+  return BLAST_PROGRAM_COMPATIBILITY[program].query === "nucl"
+    ? /^[ACGTNRYSWKMBDHVU]+$/i.test(body)
+    : /^[ACDEFGHIKLMNPQRSTVWYBZX*\-]+$/i.test(body);
+}
+
 export interface BlastDatabase {
   id: string | number;
   name: string;
-  db_type: "nucl" | "prot";
+  db_type: BlastDatabaseType;
   assembly_id: string | number;
   assembly_name?: string | null;
   assembly_version?: string | null;
@@ -13,7 +33,7 @@ export interface BlastDatabase {
   release_id?: number | null;
   is_active: boolean;
   /** Additive catalog metadata; older deployments may omit these fields. */
-  engine?: "diamond" | "ncbi_blast";
+  engine?: BlastEngine;
   sequence_type?: "genome" | "cds" | "transcript" | "protein" | "repeat_masked" | "pan_genome" | "family_consensus" | "custom" | null;
   annotation_version?: string | null;
   source_url?: string | null;
@@ -30,7 +50,8 @@ export interface BlastDatabase {
 export interface BlastJob {
   id: string;
   name?: string;
-  program: string;
+  program: BlastProgram;
+  engine?: BlastEngine;
   database: string;
   release_id?: number | null;
   assembly_name?: string | null;
@@ -59,10 +80,12 @@ export interface BlastHit {
   subject_end: number;
   evalue: number;
   bit_score: number;
+  query_id?: string | null;
 }
 
 export interface BlastJobParams {
-  program: string;
+  program: BlastProgram;
+  engine?: BlastEngine;
   database: string;
   sequence: string;
   name?: string;
@@ -97,6 +120,12 @@ export interface PublicBlastResultResponse extends BlastHitListResponse {
   error_message?: string | null;
 }
 
+export function compatibleBlastDatabases(databases: BlastDatabase[], engine: BlastEngine, program: BlastProgram): BlastDatabase[] {
+  if (engine === "diamond" && program !== "blastp") return [];
+  const allowed = new Set(BLAST_PROGRAM_COMPATIBILITY[program].databases);
+  return databases.filter((database) => database.is_active && database.build_status === "ready" && database.engine === engine && allowed.has(database.db_type));
+}
+
 export function getBlastDatabases(): Promise<BlastDatabase[]> {
   return http.get<BlastDatabase[]>("/blast/databases");
 }
@@ -110,10 +139,10 @@ function publicHeaders(accessToken: string): HeadersInit {
   return { "X-Blast-Token": accessToken };
 }
 
-export type PublicBlastJobParams = Omit<BlastJobParams, "program"> & { program: "blastp" };
+export type PublicBlastJobParams = Omit<BlastJobParams, "program"> & { program: BlastProgram; engine?: BlastEngine };
 
 export function submitPublicBlastJob(params: PublicBlastJobParams): Promise<PublicBlastSubmitResponse> {
-  if (params.program !== "blastp") throw new Error("Public BLAST supports blastp only");
+  if (params.engine === "diamond" && params.program !== "blastp") throw new Error("DIAMOND supports blastp only");
   return request<{ job: BlastJobApi; access_token: string; expires_at: string }>("/blast/public/jobs", {
     method: "POST",
     auth: false,
@@ -121,6 +150,7 @@ export function submitPublicBlastJob(params: PublicBlastJobParams): Promise<Publ
     credentials: "omit",
     json: {
       program: params.program,
+      engine: params.engine ?? "ncbi_blast",
       database: params.database,
       query_sequence: params.sequence,
       parameters: {
@@ -163,6 +193,7 @@ export function submitBlastJob(params: BlastJobParams): Promise<BlastJob> {
   return http.post<BlastJobApi>("/blast/jobs", {
     json: {
       program: params.program,
+      engine: params.engine ?? "ncbi_blast",
       database: params.database,
       query_sequence: params.sequence,
       parameters: {
@@ -278,9 +309,11 @@ function normalizeJob(job: BlastJobApi | BlastJob): BlastJob {
   };
 }
 
-/** The only submittable program. Stored jobs may still report the wider
- *  {@link BlastProgram} vocabulary, which is why this is a one-entry list
- *  rather than a type alias. */
+/** Program choices; the engine and database catalog further constrain compatibility. */
 export const BLAST_PROGRAMS = [
-  { id: "blastp", label: "BLASTP", type: "protein", description: "Protein vs protein" },
+  { id: "blastn", label: "BLASTN", type: "nucleotide", queryType: "nucl", description: "Nucleotide vs nucleotide" },
+  { id: "blastp", label: "BLASTP", type: "protein", queryType: "prot", description: "Protein vs protein" },
+  { id: "blastx", label: "BLASTX", type: "nucleotide", queryType: "nucl", description: "Translated nucleotide vs protein" },
+  { id: "tblastn", label: "TBLASTN", type: "protein", queryType: "prot", description: "Protein vs translated nucleotide" },
+  { id: "tblastx", label: "TBLASTX", type: "nucleotide", queryType: "nucl", description: "Translated nucleotide vs translated nucleotide" },
 ] as const;

@@ -15,17 +15,25 @@ URL for the raw output.
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from soymutdb_jobs.blast_search import PROGRAM_DATABASE_TYPES, normalize_query
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.blast_capability import PUBLIC_JOB_MARKER, verify_blast_capability
 from ..core.config import get_settings
-from ..core.exceptions import AuthorizationError, NotFoundError, ValidationError
+from ..core.exceptions import (
+    AuthorizationError,
+    NotFoundError,
+    RateLimitExceededError,
+    ValidationError,
+)
 from ..core.security import RoleName, has_role
 from ..core.task_contract import BLAST_RUN_TASK
+from ..models.auth import User
 from ..models.blast import BlastDatabase, BlastDbType, BlastHit, BlastJob, BlastJobStatus
 from ..models.genomic import Assembly
 from ..schemas.blast import (
@@ -51,22 +59,6 @@ from .release_context import ReleaseContext
 
 settings = get_settings()
 
-#: Which database types each program may search against (db_type whitelist).
-#: DIAMOND ``blastp`` is protein-query against a protein index; the other
-#: stored programs have no executable engine in this deployment.
-_PROGRAM_DB_TYPES: dict[BlastProgram, frozenset[str]] = {
-    BlastProgram.BLASTP: frozenset({BlastDbType.PROT.value}),
-}
-
-#: Client-facing parameter names → worker whitelisted CLI names.  ``evalue``,
-#: ``word_size`` and ``max_target_seqs`` travel as top-level payload keys (the
-#: worker reads them directly), so they are intentionally absent here.
-_PARAMETER_NAME_MAP: dict[str, str] = {
-    "gap_open": "gapopen",
-    "gap_extend": "gapextend",
-    "matrix": "matrix",
-}
-
 #: Maximum characters of error text exposed to clients.
 _MAX_ERROR_LEN = 2000
 
@@ -80,23 +72,12 @@ def _sanitize_error(message: str | None) -> str | None:
 
 
 def _worker_parameters(
-    params: BlastParameters, program: BlastProgram = BlastProgram.BLASTP
+    params: BlastParameters, program: BlastProgram = BlastProgram.BLASTP,
+    engine: str = "diamond",
 ) -> dict:
-    """Map validated request parameters to worker-whitelisted CLI parameters.
-
-    ``percent_identity`` is a client-side filter only and is intentionally
-    dropped (the worker rejects unknown parameter keys).  ``dust`` and
-    ``soft_masking`` are NCBI-BLAST flags with no DIAMOND equivalent, so they
-    are no longer part of the submission surface at all.
-    """
-    out: dict = {}
-    if params.gap_open is not None:
-        out["gapopen"] = params.gap_open
-    if params.gap_extend is not None:
-        out["gapextend"] = params.gap_extend
-    if params.matrix:
-        out["matrix"] = params.matrix
-    return out
+    validated = params.canonical_parameters(program.value, engine)
+    return {key: value for key, value in validated.items()
+            if key not in {"evalue", "max_target_seqs"}}
 
 
 class BlastService:
@@ -108,19 +89,19 @@ class BlastService:
         *,
         release_context: ReleaseContext,
     ) -> list[BlastDatabaseResponse]:
-        """List runnable DIAMOND protein indexes in the published release.
+        """List ready supported indexes in the published release.
 
-        Future NCBI and unfinished indexes are catalog records, not executable
-        choices. The release join also hides unpublished assemblies.
+        Unfinished indexes stay private to the catalog control plane. Program
+        compatibility is enforced again at selection; the release join hides
+        unpublished assemblies.
         """
         result = await db.execute(
             select(BlastDatabase)
             .join(Assembly, BlastDatabase.assembly_id == Assembly.id)
             .where(
                 BlastDatabase.is_active.is_(True),
-                BlastDatabase.engine == "diamond",
+                BlastDatabase.engine.in_(["diamond", "ncbi_blast"]),
                 BlastDatabase.build_status == "ready",
-                BlastDatabase.db_type == BlastDbType.PROT,
                 Assembly.release_id == release_context.release_id,
             )
         )
@@ -163,9 +144,10 @@ class BlastService:
         """Catalog preparation must never dispatch an index to the wrong runner."""
         return (
             database.is_active is True
-            and database.engine == "diamond"
+            and database.engine in {"diamond", "ncbi_blast"}
             and database.build_status == "ready"
-            and database.db_type == BlastDbType.PROT
+            and database.db_type in {BlastDbType.PROT, BlastDbType.NUCL}
+            and (database.engine != "diamond" or database.db_type == BlastDbType.PROT)
         )
 
     @staticmethod
@@ -173,8 +155,10 @@ class BlastService:
         db: AsyncSession,
         release_context: ReleaseContext,
         *conditions: ColumnElement[bool],
+        engine: str = "ncbi_blast",
+        program: str = "blastp",
     ) -> BlastDatabase | None:
-        """Fetch one ready DIAMOND protein index in the published release.
+        """Fetch one ready program/engine-compatible index in the published release.
 
         Only executable ``blast_databases`` rows of the *resolved release* are the
         database whitelist: anything not matching is refused here (defense in
@@ -186,17 +170,22 @@ class BlastService:
             .join(Assembly, BlastDatabase.assembly_id == Assembly.id)
             .where(
                 BlastDatabase.is_active.is_(True),
-                BlastDatabase.engine == "diamond",
+                BlastDatabase.engine.in_(["diamond", "ncbi_blast"]),
                 BlastDatabase.build_status == "ready",
-                BlastDatabase.db_type == BlastDbType.PROT,
                 Assembly.release_id == release_context.release_id,
+                BlastDatabase.engine == engine,
+                BlastDatabase.db_type == PROGRAM_DATABASE_TYPES[program],
                 *conditions,
             )
             .order_by(BlastDatabase.is_default.desc(), BlastDatabase.id)
             .limit(1)
         )
         database = result.scalar_one_or_none()
-        return database if database and BlastService._is_runnable_database(database) else None
+        return database if (
+            database and BlastService._is_runnable_database(database)
+            and database.engine == engine
+            and database.db_type == PROGRAM_DATABASE_TYPES[program]
+        ) else None
 
     async def _resolve_database(
         self,
@@ -218,7 +207,8 @@ class BlastService:
         """
         if request.database_id is not None:
             blast_db = await self._get_active_database(
-                db, release_context, BlastDatabase.id == request.database_id
+                db, release_context, BlastDatabase.id == request.database_id,
+                engine=request.engine, program=request.program.value
             )
             if blast_db is None:
                 raise NotFoundError(
@@ -233,7 +223,8 @@ class BlastService:
 
         if request.database is not None:
             blast_db = await self._get_active_database(
-                db, release_context, BlastDatabase.name == request.database
+                db, release_context, BlastDatabase.name == request.database,
+                engine=request.engine, program=request.program.value
             )
             if blast_db is None:
                 raise NotFoundError(f"BLAST database {request.database!r} not found or inactive")
@@ -243,7 +234,8 @@ class BlastService:
         # database, then to the release's default assembly.
         if settings.blast_default_db:
             blast_db = await self._get_active_database(
-                db, release_context, BlastDatabase.name == settings.blast_default_db
+                db, release_context, BlastDatabase.name == settings.blast_default_db,
+                engine=request.engine, program=request.program.value
             )
             if blast_db is not None:
                 return blast_db
@@ -257,7 +249,8 @@ class BlastService:
         assembly = assembly_result.scalars().first()
         if assembly is not None:
             blast_db = await self._get_active_database(
-                db, release_context, BlastDatabase.assembly_id == assembly.id
+                db, release_context, BlastDatabase.assembly_id == assembly.id,
+                engine=request.engine, program=request.program.value
             )
             if blast_db is not None:
                 return blast_db
@@ -266,6 +259,31 @@ class BlastService:
             "No BLAST database selected and no default database configured; "
             "pass database/database_id or configure blast_default_db"
         )
+
+    async def _enforce_user_limit(self, db: AsyncSession, user_id: uuid.UUID | None) -> None:
+        """Serialize reservations on the authoritative user row in this transaction.
+
+        The lock remains held through job/outbox insertion and commit. Counting
+        without this lock lets concurrent requests all observe the last slot.
+        NULL legacy expiry is conservatively active; public jobs use peer quotas.
+        """
+        if user_id is None:
+            return
+        user = await db.execute(select(User.id).where(User.id == user_id).with_for_update())
+        if user.scalar_one_or_none() is None:
+            raise NotFoundError("BLAST submitting account not found")
+        active_count = await db.scalar(
+            select(func.count()).select_from(BlastJob).where(
+                BlastJob.user_id == user_id,
+                BlastJob.status.in_([BlastJobStatus.PENDING, BlastJobStatus.RUNNING]),
+                (BlastJob.expires_at.is_(None)) | (BlastJob.expires_at > datetime.now(UTC)),
+            )
+        )
+        if active_count >= settings.blast_max_active_jobs_per_user:
+            raise RateLimitExceededError(
+                "Too many active BLAST jobs; wait for an existing job to finish",
+                retry_after=60,
+            )
 
     async def submit_job(
         self,
@@ -286,9 +304,9 @@ class BlastService:
         blast_db = await self._resolve_database(db, request, release_context=release_context)
 
         # Program ↔ database-type compatibility.
-        allowed_types = _PROGRAM_DB_TYPES.get(request.program)
+        expected_type = PROGRAM_DATABASE_TYPES[request.program.value]
         db_type = getattr(blast_db.db_type, "value", blast_db.db_type)
-        if allowed_types is not None and db_type not in allowed_types:
+        if db_type != expected_type:
             raise ValidationError(
                 f"Program {request.program.value} cannot search a '{db_type}' database"
             )
@@ -303,15 +321,39 @@ class BlastService:
             raise ValidationError(
                 f"Public query exceeds max length {settings.blast_public_max_length}"
             )
-        worker_params = _worker_parameters(request.parameters, request.program)
+        normalized = normalize_query(request.query_sequence, request.program.value)
+        if request.engine == "ncbi_blast" and (
+            not isinstance(blast_db.index_version, str)
+            or not re.fullmatch(r"[a-f0-9]{64}", blast_db.index_version)
+            or not isinstance(blast_db.fasta_sha256, str)
+            or not re.fullmatch(r"[a-f0-9]{64}", blast_db.fasta_sha256)
+        ):
+            raise ValidationError("NCBI index requires verified identity and FASTA checksum")
+        worker_params = _worker_parameters(request.parameters, request.program, request.engine)
+        await self._enforce_user_limit(db, user_id)
+        index_metadata = {
+            "engine": request.engine,
+            "database_type": str(blast_db.db_type),
+            "index_identity": blast_db.index_version,
+            "fasta_sha256": blast_db.fasta_sha256,
+            "index_version": blast_db.index_version,
+            "annotation_version": blast_db.annotation_version,
+        }
+        search_provenance = {
+            **index_metadata,
+            "release_id": release_context.release_id,
+            "assembly_id": blast_db.assembly_id,
+            "assembly_name": getattr(blast_db.assembly, "name", release_context.assembly),
+        }
         job = BlastJob(
             id=uuid.uuid4(),
             user_id=user_id,
             program=request.program.value,
             database_id=blast_db.id,
-            query_sequence=request.query_sequence,
+            query_sequence=normalized.normalized_fasta,
             parameters=(
-                {**worker_params, PUBLIC_JOB_MARKER: True} if user_id is None else worker_params
+                {**worker_params, "_search_provenance": search_provenance, PUBLIC_JOB_MARKER: True}
+                if user_id is None else {**worker_params, "_search_provenance": search_provenance}
             ),
             status=BlastJobStatus.PENDING,
             submitted_at=datetime.now(UTC),
@@ -331,6 +373,7 @@ class BlastService:
             payload={
                 "job_id": str(job.id),
                 "program": job.program,
+                **index_metadata,
                 "database": blast_db.name,
                 "sequence": job.query_sequence,
                 "evalue": request.parameters.evalue,
@@ -506,6 +549,7 @@ class BlastService:
             query_len=job.query_len,
             hits=[
                 BlastHitSchema(
+                    query_id=getattr(h, "query_id", None),
                     hsp_num=h.hsp_num,
                     subject_id=h.subject_id,
                     subject_title=h.subject_title or "",
@@ -574,6 +618,7 @@ class BlastService:
             job_id=str(job.id),
             status=BlastSchemaJobStatus(job.status),
             program=BlastProgram(job.program),
+            engine=(job.parameters or {}).get("_search_provenance", {}).get("engine", "diamond"),
             database_id=job.database_id,
             database=database.name if database is not None else None,
             query_sequence=job.query_sequence,
@@ -587,6 +632,10 @@ class BlastService:
             completed_at=job.completed_at,
             error_message=job.error_message,
             result_url=job.result_path,
-            release_id=(assembly.release_id if assembly is not None else None),
-            assembly_name=(assembly.name if assembly is not None else None),
+            release_id=(job.parameters or {}).get("_search_provenance", {}).get(
+                "release_id", assembly.release_id if assembly is not None else None
+            ),
+            assembly_name=(job.parameters or {}).get("_search_provenance", {}).get(
+                "assembly_name", assembly.name if assembly is not None else None
+            ),
         )

@@ -364,3 +364,12 @@ def test_runner_tolerates_ncbi_atomic_temp_file_renames(files, binaries, monkeyp
     monkeypatch.setattr(Path, "iterdir", with_disappeared_temp)
     assert "2.17.0+" in index._run(binaries["makeblastdb_bin"], ["-version"], files[1],
                                   index.BuildLimits())
+
+
+@pytest.mark.parametrize("db_type,sequence", [("nucl", "ACGTACGT"), ("prot", "MKVLAAGIVGLNLGGK")])
+def test_index_identifier_must_fit_persisted_subject_identity(
+    files, metadata, binaries, db_type, sequence
+):
+    files[0].write_text(">" + "a" * 256 + "\n" + sequence + "\n")
+    with pytest.raises(index.IndexBuildError, match="identifier exceeds"):
+        build(files, metadata, binaries, db_type=db_type)

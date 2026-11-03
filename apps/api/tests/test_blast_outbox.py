@@ -11,6 +11,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+import pytest
+
 from app.core.task_contract import BLAST_RUN_TASK
 from app.models.blast import BlastDatabase, BlastJob, BlastJobStatus
 from app.models.outbox import OutboxEvent, OutboxEventStatus
@@ -74,6 +76,7 @@ def _context(release_id: int = 7) -> ReleaseContext:
 
 def _make_request() -> BlastSubmitRequest:
     return BlastSubmitRequest(
+        engine="diamond",
         program=BlastSubmitProgram.BLASTP,
         database_id=1,
         query_sequence="ATGCAAGCTTAGCTAGGCTAGGCTAGGC",
@@ -146,3 +149,12 @@ async def test_submit_job_rejects_missing_or_inactive_database() -> None:
 
     assert session.added == []
     assert session.commits == 0
+
+
+@pytest.fixture(autouse=True)
+def isolated_database_quota_boundary(monkeypatch):
+    """These fake-session tests cover mapping; PostgreSQL quota tests cover locks."""
+    async def enforce(_self, _db, _user_id):
+        return None
+
+    monkeypatch.setattr(BlastService, "_enforce_user_limit", enforce)

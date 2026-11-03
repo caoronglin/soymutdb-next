@@ -1,4 +1,4 @@
-import { getBlastHits, getBlastJob, getBlastJobs, getPublicBlastDatabases, getPublicBlastJob, getPublicBlastResults, resolveBlastHitGenomeTarget, submitBlastJob, submitPublicBlastJob } from "./blast";
+import { hasCompatibleBlastQueryAlphabet, compatibleBlastDatabases, type BlastProgram, getBlastHits, getBlastJob, getBlastJobs, getPublicBlastDatabases, getPublicBlastJob, getPublicBlastResults, resolveBlastHitGenomeTarget, submitBlastJob, submitPublicBlastJob } from "./blast";
 import { setReleaseId } from "./client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -18,6 +18,35 @@ describe("BLAST client contract", () => {
 
   afterEach(() => { setReleaseId(null); vi.restoreAllMocks(); });
 
+  it.each(["blastn", "blastp", "blastx", "tblastn", "tblastx"] as BlastProgram[])("preserves NCBI %s and per-HSP query IDs", async (program) => {
+    vi.mocked(fetch).mockResolvedValueOnce(json({ job: { job_id: "search", database_id: 1, engine: "ncbi_blast", program }, access_token: "secret", expires_at: "2030-01-01T00:00:00Z" }, 201));
+    await submitPublicBlastJob({ program, engine: "ncbi_blast", database: "db", sequence: ">q1\nACGTACGTACGT" });
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(body).toMatchObject({ program, engine: "ncbi_blast" });
+    vi.mocked(fetch).mockResolvedValueOnce(json({ status: "completed", hits: [{ query_id: "q2", subject_id: "subject", hsp_num: 1 }], total_hits: 1 }));
+    const result = await getPublicBlastResults("search", "secret");
+    expect(result.items[0].query_id).toBe("q2");
+  });
+
+  it("validates query alphabet by program rather than target database", () => {
+    expect(hasCompatibleBlastQueryAlphabet(">q\nMKKLLLLLLLL", "tblastn")).toBe(true);
+    expect(hasCompatibleBlastQueryAlphabet(">q\nMKKLLLLLLLL", "blastx")).toBe(false);
+    expect(hasCompatibleBlastQueryAlphabet(">q\nACGTNNNNACGT", "blastx")).toBe(true);
+  });
+
+  it("offers only ready active indexes of the selected engine and biological database type", () => {
+    const rows = [
+      { id: 1, name: "protein", engine: "ncbi_blast" as const, db_type: "prot" as const, build_status: "ready" as const, is_active: true, assembly_id: 1 },
+      { id: 2, name: "genome", engine: "ncbi_blast" as const, db_type: "nucl" as const, build_status: "ready" as const, is_active: true, assembly_id: 1 },
+      { id: 3, name: "fast", engine: "diamond" as const, db_type: "prot" as const, build_status: "ready" as const, is_active: true, assembly_id: 1 },
+    ];
+    expect(compatibleBlastDatabases(rows, "ncbi_blast", "blastn").map((row) => row.name)).toEqual(["genome"]);
+    expect(compatibleBlastDatabases(rows, "ncbi_blast", "blastx").map((row) => row.name)).toEqual(["protein"]);
+    expect(compatibleBlastDatabases(rows, "ncbi_blast", "tblastn").map((row) => row.name)).toEqual(["genome"]);
+    expect(compatibleBlastDatabases(rows, "diamond", "blastp").map((row) => row.name)).toEqual(["fast"]);
+    expect(compatibleBlastDatabases([{ ...rows[0], build_status: "building" }], "ncbi_blast", "blastp")).toEqual([]);
+  });
+
   it("submits the API schema instead of the legacy flat payload", async () => {
     await submitBlastJob({
       program: "blastn",
@@ -30,6 +59,7 @@ describe("BLAST client contract", () => {
     const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toEqual({
       program: "blastn",
+      engine: "ncbi_blast",
       database: "williams82_cds",
       query_sequence: ">q\nACGTACGTACGT",
       parameters: { evalue: 1e-5, max_target_seqs: 50 },
@@ -38,7 +68,7 @@ describe("BLAST client contract", () => {
 
 
   it("rejects unsupported public programs before making a request", async () => {
-    expect(() => submitPublicBlastJob({ program: "blastn" as "blastp", database: "protein-v4", sequence: "MKKLLLLLLLL" })).toThrow("blastp only");
+    expect(() => submitPublicBlastJob({ program: "blastn", engine: "diamond", database: "protein-v4", sequence: "MKKLLLLLLLL" })).toThrow("blastp only");
     expect(fetch).not.toHaveBeenCalled();
   });
 

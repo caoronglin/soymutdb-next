@@ -520,7 +520,8 @@ async def seqfetch(
 @mcp.tool(
     name="blast_submit",
     description=(
-        "Submit a BLAST job (write). Asynchronous: returns a job handle "
+        "Submit a BLAST job (write). NCBI BLAST+ is the default engine; "
+        "pass engine='diamond' explicitly for DIAMOND. Asynchronous: returns a job handle "
         "plus a submitter_token that proves ownership for later polls "
         "(blast_job_status / analyses_query). Requires the write bearer "
         "token; quota 10 submissions/hour/client."
@@ -529,6 +530,7 @@ async def seqfetch(
 async def blast_submit(
     query_sequence: str,
     program: str = "blastp",
+    engine: str = "ncbi_blast",
     database: str | None = None,
     database_id: int | None = None,
     params: dict[str, Any] | None = None,
@@ -539,6 +541,7 @@ async def blast_submit(
     if rate_err is not None:
         return rate_err
     payload: dict[str, Any] = {
+        "engine": engine,
         "program": program,
         "query_sequence": query_sequence,
     }
@@ -561,6 +564,7 @@ async def blast_submit(
     return {
         "job_id": job_id,
         "status": data.get("status"),
+        "engine": data.get("engine", engine),
         "program": data.get("program"),
         "database_id": data.get("database_id"),
         "submitted_at": data.get("submitted_at"),

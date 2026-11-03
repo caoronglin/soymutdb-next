@@ -207,6 +207,7 @@ blast_jobs = Table(
     Column("completed_at", DateTime(timezone=True)),
     Column("error_message", Text),
     Column("result_path", String(2048)),
+    Column("parameters", JSONB),
     Column("query_len", Integer),
     Column("hit_count", Integer),
 )
@@ -256,6 +257,7 @@ blast_hits = Table(
     Column("id", Integer, primary_key=True),
     Column("job_id", UUID(as_uuid=True)),
     Column("hsp_num", Integer),
+    Column("query_id", String(256)),
     Column("subject_id", String(256)),
     Column("subject_title", String(1024)),
     Column("percent_identity", Float),

@@ -133,7 +133,9 @@ ENV PYTHONUNBUFFERED=1 \
 # queue needs it to survive a restart.
 ENV NUMBA_CACHE_DIR=/tmp/soymutdb-numba-cache
 
-# Bioinformatics tools: htslib, bcftools, diamond
+# Bioinformatics tools: htslib, bcftools, NCBI BLAST+, diamond
+# The version/help probes below intentionally fail the image build when a
+# required NCBI program or index utility is absent.
 #
 # Libraries the source-built science stack links but does not vendor. The
 # builder's -dev packages have been purged by this point, so each of these is
@@ -157,12 +159,25 @@ RUN apt-get update \
     libhdf5-310 \
     bcftools \
     tabix \
+    ncbi-blast+ \
     diamond-aligner \
     samtools \
     bedtools \
     pigz \
     zstd \
     && rm -rf /var/lib/apt/lists/* \
+    && blastn -version \
+    && blastp -version \
+    && blastx -version \
+    && tblastn -version \
+    && tblastx -version \
+    && makeblastdb -version \
+    && blastdbcmd -version \
+    && blastn -help >/dev/null \
+    && blastp -help >/dev/null \
+    && blastx -help >/dev/null \
+    && tblastn -help >/dev/null \
+    && tblastx -help >/dev/null \
     && groupadd --gid 1000 soymutdb \
     && useradd --uid 1000 --gid soymutdb --shell /bin/bash --create-home soymutdb
 

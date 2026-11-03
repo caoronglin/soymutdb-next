@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.blast import BlastParameters, BlastSubmitProgram
+from app.schemas.blast import BlastParameters, BlastSubmitProgram, BlastSubmitRequest
 from app.services.blast_service import _worker_parameters
 
 
@@ -21,8 +21,9 @@ def test_defaults_map_to_nothing():
     [("word_size", 11), ("dust", True), ("dust", False), ("soft_masking", True)],
 )
 def test_retired_blast_parameters_are_rejected_at_the_schema(field, value):
-    with pytest.raises(ValidationError, match="retired NCBI BLAST option"):
-        BlastParameters(**{field: value})
+    with pytest.raises(ValidationError):
+        BlastSubmitRequest(engine="diamond", query_sequence="MKVLAAGIVGLNLGGK",
+                           parameters=BlastParameters(**{field: value}))
 
 
 def test_retired_parameters_default_to_absent():

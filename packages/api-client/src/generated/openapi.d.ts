@@ -5161,6 +5161,8 @@ export interface components {
         };
         /** BlastHit */
         BlastHit: {
+            /** Query Id */
+            query_id?: string | null;
             /** Hsp Num */
             hsp_num: number;
             /** Subject Id */
@@ -5214,6 +5216,12 @@ export interface components {
         };
         /** BlastJobResponse */
         BlastJobResponse: {
+            /**
+             * Engine
+             * @default diamond
+             * @enum {string}
+             */
+            engine: "ncbi_blast" | "diamond";
             /** Job Id */
             job_id: string;
             status: components["schemas"]["BlastJobStatus"];
@@ -5274,23 +5282,18 @@ export interface components {
             gap_extend?: number | null;
             /** Matrix */
             matrix?: string | null;
-            /** Percent Identity */
-            percent_identity?: number | null;
             /** Word Size */
             word_size?: number | null;
             /** Dust */
             dust?: boolean | null;
             /** Soft Masking */
             soft_masking?: boolean | null;
+            /** Percent Identity */
+            percent_identity?: number | null;
         };
         /**
          * BlastProgram
-         * @description Every program value that can appear in a *stored* job row.
-         *
-         *     This is a storage/response vocabulary, not a submission contract. The
-         *     search engine is DIAMOND ``blastp`` only; the other values remain here so
-         *     that jobs persisted before the engine was reduced can still be read and
-         *     rendered. :class:`BlastSubmitProgram` is what new requests must use.
+         * @description Program vocabulary shared by stored jobs and current responses.
          * @enum {string}
          */
         BlastProgram: "blastn" | "blastp" | "blastx" | "tblastn" | "tblastx";
@@ -5330,12 +5333,18 @@ export interface components {
         };
         /**
          * BlastSubmitProgram
-         * @description The only program this deployment can execute: DIAMOND ``blastp``.
+         * @description Programs supported by the explicit NCBI BLAST+ engine.
          * @enum {string}
          */
-        BlastSubmitProgram: "blastp";
+        BlastSubmitProgram: "blastn" | "blastp" | "blastx" | "tblastn" | "tblastx";
         /** BlastSubmitRequest */
         BlastSubmitRequest: {
+            /**
+             * Engine
+             * @default ncbi_blast
+             * @enum {string}
+             */
+            engine: "ncbi_blast" | "diamond";
             /** @default blastp */
             program: components["schemas"]["BlastSubmitProgram"];
             /** Database Id */

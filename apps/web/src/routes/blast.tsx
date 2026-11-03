@@ -47,6 +47,11 @@ import {
   BLAST_PROGRAMS,
   apiBaseUrl,
   getAccessToken,
+  compatibleBlastDatabases,
+  hasCompatibleBlastQueryAlphabet,
+  BLAST_PROGRAM_COMPATIBILITY,
+  type BlastEngine,
+  type BlastProgram,
   type BlastJob,
 } from "@soymutdb/api-client";
 import { FadeUp } from "../components/route-motion";
@@ -75,17 +80,13 @@ type JobContext = {
   assembly: string;
 };
 
-// The only executable program is DIAMOND blastp (protein vs protein). The
-// API still reports the wider BlastProgram vocabulary for jobs stored before
-// the engine was reduced, so history rendering must keep using those labels.
-const BLAST_PROGRAM = BLAST_PROGRAMS[0];
 
 const blastSchema = z.object({
   program: z.string().min(1),
   database: z.string().min(1),
   sequence: z.string().min(10, "Sequence must be at least 10 characters"),
-  e_value: z.number().min(0).default(1e-5),
-  max_hits: z.number().int().min(1).max(1000).default(50),
+  e_value: z.number().gt(0).max(1000).default(1e-5),
+  max_hits: z.number().int().min(1).max(500).default(50),
 });
 
 /**
@@ -150,10 +151,10 @@ function BlastComponent() {
   // current session can never authorize. Anonymous visitors retain the
   // public database/form experience; researcher-capable users retain submit.
   const canSubmit = user != null && grantsResearcher(user);
-  // Defaults to blastp: protein/protein is the only program this deployment
-  // executes, and DIAMOND is the only aligner behind it.
-  const [form, setForm] = React.useState({
+  // NCBI BLAST+ is explicit by default; DIAMOND is a separate blastp choice.
+  const [form, setForm] = React.useState<{ program: BlastProgram; engine: BlastEngine; database: string; sequence: string; e_value: string; max_hits: string }>({
     program: "blastp",
+    engine: "ncbi_blast",
     database: "",
     sequence: "",
     e_value: "1e-5",
@@ -168,7 +169,8 @@ function BlastComponent() {
   });
 
   const databases = (databasesQuery.data ?? []);
-  const activeDatabases = databases.filter((d) => d.is_active);
+  const activeDatabases = compatibleBlastDatabases(databases, form.engine, form.program);
+  const selectedDatabase = activeDatabases.find((item) => String(item.id) === form.database);
 
   const databaseOptions: { value: string; label: React.ReactNode; disabled?: boolean }[] =
     databasesQuery.isLoading
@@ -193,12 +195,12 @@ function BlastComponent() {
   // Default to the database flagged as the assembly default (fallback: first active).
   React.useEffect(() => {
     if (form.database) return;
-    const active = (databasesQuery.data ?? []).filter((d) => d.is_active);
+    const active = compatibleBlastDatabases(databasesQuery.data ?? [], form.engine, form.program);
     if (active.length === 0) return;
-    const def = active.find((d) => d.assembly_is_default) ?? active[0];
+    const def = active.find((d) => d.is_default) ?? active.find((d) => d.assembly_is_default) ?? active[0];
     if (def) setForm((f) => ({ ...f, database: String(def.id) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [databasesQuery.data]);
+  }, [databasesQuery.data, form.engine, form.program]);
 
   const [sseAvailable, setSseAvailable] = React.useState(false);
 
@@ -293,6 +295,7 @@ function BlastComponent() {
   });
 
   const onSubmit = () => {
+    if (form.engine === "diamond" && form.program !== "blastp") { setErrors({ program: t("blastSearch.incompatible") }); return; }
     // Request Notification permission inside this user gesture (browser
     // requirement) — fire-and-forget; denied is handled by the hook.
     void ensurePermission();
@@ -311,6 +314,7 @@ function BlastComponent() {
       setErrors(fieldErrors);
       return;
     }
+    if (!hasCompatibleBlastQueryAlphabet(parsed.data.sequence, form.program)) { setErrors({ sequence: t("blastSearch.invalidAlphabet") }); return; }
     const fastaError = validateFastaStructure(parsed.data.sequence);
     if (fastaError) {
       setErrors({ sequence: fastaError });
@@ -321,14 +325,17 @@ function BlastComponent() {
     // *name* (or numeric database_id) — map back so the job carries a
     // plain identifier that resolves to an active whitelist entry.
     const selected = activeDatabases.find((d) => String(d.id) === parsed.data.database);
+    if (!selected) { setErrors({ database: t("blast.noDatabases") }); return; }
     submitMutation.mutate({
       ...parsed.data,
+      program: parsed.data.program as BlastProgram,
+      engine: form.engine,
       database: selected?.name ?? parsed.data.database,
     });
   };
 
   const clearForm = () =>
-    setForm({ program: "blastp", database: "", sequence: "", e_value: "1e-5", max_hits: "50" });
+    setForm({ program: "blastp", engine: "ncbi_blast", database: "", sequence: "", e_value: "1e-5", max_hits: "50" });
 
   const jobs = jobsQuery.data?.items ?? [];
 
@@ -433,8 +440,8 @@ function BlastComponent() {
       title: get("blast.hitSequenceId", t("blast.hitSequenceId")),
       key: "subject",
       width: 160,
-      render: () => (
-        <span className="font-mono text-xs font-medium">{inputSequenceId ?? "—"}</span>
+      render: (_, hit) => (
+        <span className="font-mono text-xs font-medium">{hit.query_id ?? inputSequenceId ?? "—"}</span>
       ),
     },
     {
@@ -453,11 +460,8 @@ function BlastComponent() {
       },
     },
     {
-      // The alignment coordinates are amino-acid positions of the subject
-      // protein. They are deliberately labelled as protein coordinates: they
-      // are not genome positions, and the genome browser link below resolves
-      // the gene itself rather than these offsets.
-      title: get("blast.hitProteinCoords", t("blast.hitProteinCoords")),
+      // Alignment offsets are never used directly as genomic browser targets.
+      title: t("blastSearch.subjectCoordinates"),
       key: "proteinCoords",
       width: 150,
       render: (_, hit) => (
@@ -574,18 +578,10 @@ function BlastComponent() {
               help={errors.program ?? undefined}
               validateStatus={errors.program ? "error" : undefined}
             >
-              {/* One executable program, so a dropdown would be a control that
-                  cannot change anything. A read-only value states the contract
-                  without inviting a click. */}
-              <div
-                id="program"
-                data-testid="blast-program"
-                className="flex h-8 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-sm"
-              >
-                <span className="font-medium">{BLAST_PROGRAM.label}</span>
-                <span className="text-xs text-muted-foreground">
-                  {t("blast.proteinOnlyHint")}
-                </span>
+
+              <div className="grid gap-2 md:grid-cols-2">
+                <Select aria-label={t("blastPublic.engine")} value={form.engine} onChange={(value: BlastEngine) => setForm((f) => ({ ...f, engine: value, database: "" }))} options={[{ value: "ncbi_blast", label: "NCBI BLAST+" }, { value: "diamond", label: "DIAMOND (blastp)", disabled: form.program !== "blastp" }]} />
+                <Select aria-label={t("blastPublic.program")} value={form.program} onChange={(value: BlastProgram) => setForm((f) => ({ ...f, program: value, database: "" }))} options={BLAST_PROGRAMS.filter((item) => form.engine === "ncbi_blast" || item.id === "blastp").map((item) => ({ value: item.id, label: item.label }))} />
               </div>
             </Form.Item>
 
@@ -608,8 +604,9 @@ function BlastComponent() {
 
             </div>
 
+            {selectedDatabase ? <Typography.Paragraph type="secondary">{t("blastSearch.provenance")}: {selectedDatabase.assembly_name ?? "—"} · {selectedDatabase.release_id ?? "—"} · {selectedDatabase.annotation_version ?? "—"} · {selectedDatabase.db_type} · {selectedDatabase.license ?? "—"}</Typography.Paragraph> : null}
             <Form.Item
-              label={get("blast.input", t("blast.inputSequence"))}
+              label={t(BLAST_PROGRAM_COMPATIBILITY[form.program].query === "prot" ? "blastSearch.proteinInput" : "blastSearch.nucleotideInput")}
               htmlFor="sequence"
               help={errors.sequence ?? undefined}
               validateStatus={errors.sequence ? "error" : undefined}
@@ -733,7 +730,7 @@ function BlastComponent() {
                   <div className="flex w-full items-center justify-between gap-3">
                     <div className="min-w-0">
                       <p className="truncate font-mono text-xs">{job.id.slice(0, 12)}…</p>
-                      <p className="text-xs text-muted-foreground">{job.program} · {job.database}</p>
+                      <p className="text-xs text-muted-foreground">{job.engine === "ncbi_blast" ? "NCBI BLAST+" : job.engine === "diamond" ? "DIAMOND" : t("blastSearch.engineUnknown")} · {job.program} · {job.database}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
                       <Tag

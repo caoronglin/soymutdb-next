@@ -13,7 +13,8 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from soymutdb_jobs.export_errors import EXPORT_FAILED_MESSAGE
-from sqlalchemy import delete, insert, select, text, update
+from sqlalchemy import delete, func, insert, literal, select, text, update
+from sqlalchemy.dialects.postgresql import JSONB
 
 from soymutdb_worker.shared import JobStatus, JobStatusUpdate, transition_allowed
 from soymutdb_worker.tables import (
@@ -186,6 +187,7 @@ class BlastJobStore:
         result_path: str,
         query_len: int | None = None,
         hit_count: int | None = None,
+        execution_metadata: dict | None = None,
     ) -> bool:
         """Mark the job completed and record the S3 result path.
 
@@ -206,6 +208,10 @@ class BlastJobStore:
             values["query_len"] = int(query_len)
         if hit_count is not None:
             values["hit_count"] = int(hit_count)
+        if execution_metadata is not None:
+            values["parameters"] = func.coalesce(
+                blast_jobs.c.parameters, literal({}, type_=JSONB)
+            ).op("||")(literal({"_execution": execution_metadata}, type_=JSONB))
         result = self._session.execute(
             update(blast_jobs)
             .where(
@@ -258,7 +264,10 @@ class BlastHitStore:
             delete(blast_hits).where(blast_hits.c.job_id == jid)
         )
         if hits:
-            rows = [{**hit, "job_id": jid} for hit in hits]
+            rows = [
+                {**hit, "hsp_num": number, "job_id": jid}
+                for number, hit in enumerate(hits, 1)
+            ]
             self._session.execute(insert(blast_hits), rows)
         return len(hits)
 

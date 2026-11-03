@@ -61,11 +61,17 @@ async def test_unexecutable_catalog_never_creates_job_or_outbox(
     db.execute = AsyncMock(side_effect=execute)
     selectors = {"id": {"database_id": 1}, "name": {"database": "protein"},
                  "both": {"database_id": 1, "database": "protein"}, "default": {}}
-    request = BlastSubmitRequest(query_sequence="MKVLAAGIVGLNLGGK", **selectors[selector])
+    request = BlastSubmitRequest(
+        engine="diamond", query_sequence="MKVLAAGIVGLNLGGK", **selectors[selector]
+    )
     with pytest.raises(NotFoundError):
         await BlastService().submit_job(db, None, request, release_context=CONTEXT)
     db.add.assert_not_called()
-    assert await BlastService().list_databases(db, release_context=CONTEXT) == []
+    discovered = await BlastService().list_databases(db, release_context=CONTEXT)
+    if field == "engine":
+        assert len(discovered) == 1  # Both ready engines/types are discoverable.
+    else:
+        assert discovered == []
 
 
 async def test_public_catalog_is_an_explicit_metadata_allowlist():

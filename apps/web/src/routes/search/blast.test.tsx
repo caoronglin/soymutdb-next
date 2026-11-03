@@ -10,7 +10,8 @@ vi.mock("@tanstack/react-router", () => ({ createFileRoute: () => (options: unkn
 vi.mock("react-i18next", async () => (await import("../../test/mocks")).mockTranslation);
 vi.mock("../../lib/site-content-react", () => ({ useSiteContent: () => ({ get: (_key: string, fallback: string) => fallback }) }));
 vi.mock("../../lib/release-scope", () => ({ useReleaseId: () => "9" }));
-vi.mock("@soymutdb/api-client", () => ({
+vi.mock("@soymutdb/api-client", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@soymutdb/api-client")>(),
   getPublicBlastDatabases: api.databases,
   submitPublicBlastJob: api.submit,
   getPublicBlastJob: api.job,
@@ -19,7 +20,7 @@ vi.mock("@soymutdb/api-client", () => ({
 import { Route } from "./blast";
 const Page = (Route.options as { component: React.ComponentType }).component;
 
-const database = { id: 1, name: "protein-v4", db_type: "prot", assembly_id: 7, is_active: true };
+const database = { id: 1, name: "protein-v4", db_type: "prot", engine: "ncbi_blast", build_status: "ready", assembly_id: 7, is_active: true };
 const completed = { id: "public-job", program: "blastp", database: "protein-v4", status: "completed", query_sequence: null, parameters: {}, hit_count: 1, submitted_at: "2030-01-01T00:00:00Z" };
 
 function renderPage() {
@@ -35,6 +36,20 @@ beforeEach(() => {
   api.results.mockReset();
 });
 afterEach(() => cleanup());
+
+it("switches to a nucleotide program and compatible NCBI database without rewriting the request", async () => {
+  api.databases.mockResolvedValue([database, { ...database, id: 2, name: "genome-v4", db_type: "nucl", assembly_name: "Wm82.a4.v1", release_id: 4 }]);
+  api.submit.mockResolvedValue({ job: { ...completed, program: "blastn", engine: "ncbi_blast" }, access_token: "memory-only-token", expires_at: "2999-01-01T00:00:00Z" });
+  api.results.mockResolvedValue({ status: "completed", items: [], total: 0 });
+  renderPage();
+  await screen.findByText("protein-v4");
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Search program" }));
+  fireEvent.click(await screen.findByText("BLASTN"));
+  await screen.findByText("genome-v4 · Wm82.a4.v1");
+  fireEvent.change(screen.getByPlaceholderText("Paste nucleotide FASTA records"), { target: { value: ">q1\nACGTACGTACGT" } });
+  fireEvent.click(screen.getByRole("button", { name: "Run BLAST" }));
+  await waitFor(() => expect(api.submit).toHaveBeenCalledWith(expect.objectContaining({ program: "blastn", engine: "ncbi_blast", database: "genome-v4" })));
+});
 
 it("executes through public endpoints and renders the raw download", async () => {
   api.submit.mockResolvedValue({ job: completed, access_token: "memory-only-token", expires_at: "2999-01-01T00:00:00Z" });

@@ -26,6 +26,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from soymutdb_jobs.blast_catalog import public_source_url
+from soymutdb_jobs.blast_search import FASTA_ID_MAX_BYTES
 from soymutdb_jobs.protein_fasta import ProteinFastaError, parse_protein_fasta
 
 BUILD_VERSION = "soymutdb-ncbi-index-v1"
@@ -222,6 +223,11 @@ def _fasta(data: bytes, db_type: str) -> tuple[bytes, int, int, int]:
             parsed = parse_protein_fasta(text)
             if parsed.synthesized_header:
                 raise IndexBuildError("index FASTA requires explicit record identifiers")
+            if any(
+                len(record.record_id.encode("ascii")) > FASTA_ID_MAX_BYTES
+                for record in parsed.records
+            ):
+                raise IndexBuildError("FASTA identifier exceeds 255 bytes")
             return (parsed.to_fasta.encode(), len(parsed.records),
                     sum(len(record.sequence) for record in parsed.records), parsed.query_length)
         if db_type != "nucl":
@@ -247,6 +253,8 @@ def _fasta(data: bytes, db_type: str) -> tuple[bytes, int, int, int]:
                 current = line[1:].split()[0] if line[1:].split() else None
                 if not current:
                     raise IndexBuildError("FASTA identifier missing")
+                if len(current.encode("ascii")) > FASTA_ID_MAX_BYTES:
+                    raise IndexBuildError("FASTA identifier exceeds 255 bytes")
                 chunks = []
             elif line:
                 sequence = line.replace(" ", "").replace("\t", "").upper()

@@ -170,8 +170,10 @@ TOOLS: list[dict[str, object]] = [
         "inputs": {
             "query_sequence": "str, required (>= 10 chars; FASTA header "
             "optional; amino-acid alphabet checked by the API)",
-            "program": "str, default 'blastp' — the only supported value; "
-            "searches run with DIAMOND blastp",
+            "engine": "str, default 'ncbi_blast' — explicit engine selector; "
+            "use 'diamond' only when selecting the DIAMOND backend",
+            "program": "str, default 'blastp' — one of blastn, blastp, "
+            "blastx, tblastn, tblastx; forwarded unchanged to the selected engine",
             "database": "str, optional — database name alias",
             "database_id": "int, optional — numeric database id",
             "params": "dict, optional — search parameters (evalue, "
@@ -180,6 +182,7 @@ TOOLS: list[dict[str, object]] = [
         "outputs": {
             "job_id": "str",
             "status": "str ('pending' | ...)",
+            "engine": "str ('ncbi_blast' | 'diamond')",
             "program": "str",
             "database_id": "int",
             "submitted_at": "datetime (ISO string)",

@@ -3096,6 +3096,20 @@
     "download": "下载原始结果",
     "release": "数据版本",
     "loginWorkflow": "登录后可使用个人任务历史。",
-    "resultsNotReady": "公开结果尚未准备好。"
+    "resultsNotReady": "公开结果尚未准备好。",
+    "engine": "搜索引擎",
+    "program": "搜索程序"
+  },
+  "blastSearch": {
+    "proteinInput": "蛋白质 FASTA 查询",
+    "nucleotideInput": "核酸 FASTA 查询",
+    "nucleotidePlaceholder": "粘贴核酸 FASTA 序列",
+    "queryId": "查询 ID",
+    "subjectCoordinates": "目标序列比对位置",
+    "incompatible": "不支持此引擎和程序组合。",
+    "invalidParameters": "E 值需大于 0 且不超过 1000，最大命中数需为 1–500。",
+    "engineUnknown": "引擎未知",
+    "provenance": "数据库上下文",
+    "invalidAlphabet": "查询序列字母与所选程序不匹配。"
   }
 }

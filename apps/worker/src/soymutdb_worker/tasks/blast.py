@@ -38,8 +38,10 @@ import tempfile
 from pathlib import Path
 
 from celery import Task
+from soymutdb_jobs.blast_search import normalize_query
 from soymutdb_jobs.protein_fasta import ProteinFastaError, parse_protein_fasta
 
+from soymutdb_worker.blast_index import verify_index
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
 from soymutdb_worker.repositories import BlastHitStore, BlastJobStore
@@ -135,6 +137,39 @@ def load_database_paths(raw: str) -> dict[str, str]:
 
 
 BLAST_DATABASE_PATHS = load_database_paths(get_setting("BLAST_DATABASE_PATHS", "{}"))
+
+#: Explicit NCBI catalog mapping, separate from DIAMOND's existing mapping.
+#: Values are immutable local prefixes: <root>/<64-character identity>/db.
+NCBI_BLAST_DATABASE_PATHS = load_database_paths(get_setting("NCBI_BLAST_DATABASE_PATHS", "{}"))
+NCBI_BLAST_BIN_DIR = Path(get_setting("NCBI_BLAST_BIN_DIR", "/usr/bin"))
+
+
+def get_ncbi_db_path(
+    database: str, *, index_identity: str, fasta_sha256: str, database_type: str,
+    release_key: str, assembly_id: str,
+) -> Path:
+    """Resolve only a configured immutable index and verify frozen provenance."""
+    configured = NCBI_BLAST_DATABASE_PATHS.get(database)
+    if configured is None:
+        raise ValueError("NCBI database is not configured on this worker")
+    path = Path(configured)
+    if not path.is_absolute() or path.name != "db" or path.parent.name != index_identity:
+        raise ValueError("NCBI database index identity mismatch")
+    verified = verify_index(
+        path.parent.parent, index_identity,
+        blastdbcmd_bin=NCBI_BLAST_BIN_DIR / "blastdbcmd",
+    )
+    request = verified["manifest"]["request"]
+    metadata = request["metadata"]
+    if (
+        request["source_sha256"] != fasta_sha256
+        or request["db_type"] != database_type
+        or str(metadata["release_id"]) != str(release_key)
+        or str(metadata["assembly_id"]) != str(assembly_id)
+    ):
+        raise ValueError("NCBI database provenance mismatch")
+    return path
+
 
 #: The single executable program. NCBI BLAST and the translated-search
 #: programs (``blastn`` / ``blastx`` / ``tblastn`` / ``tblastx``) have no
@@ -630,6 +665,7 @@ def run_blast(
     max_target_seqs: int = 100,
     parameters: dict | None = None,
     num_threads: int = 1,
+    engine: str = "diamond",
 ) -> dict:
     """Execute a BLAST search asynchronously.
 
@@ -665,6 +701,8 @@ def run_blast(
         max_target_seqs = int(p.get("max_target_seqs", 100))
         parameters = p.get("parameters")
         num_threads = int(p.get("num_threads", 1))
+        # Missing engine means a legacy DIAMOND job, never an implicit reroute.
+        engine = str(p.get("engine", "diamond"))
     else:
         if job_id is None:
             raise TypeError("run_blast requires a JobPayload or a legacy job_id kwarg")
@@ -681,8 +719,13 @@ def run_blast(
     )
 
     # Validate inputs before doing any work
-    validate_program(program)
-    validate_sequence(sequence)
+    if engine == "diamond":
+        validate_program(program)
+        validate_sequence(sequence)
+    elif engine == "ncbi_blast":
+        normalize_query(sequence, program, max_length=MAX_QUERY_LENGTH)
+    else:
+        raise ValueError("Unsupported BLAST engine")
 
     # ── Idempotent job claim (shared transition validation) ──────────────
     with get_db() as session:
@@ -695,8 +738,22 @@ def run_blast(
 
     try:
         # Validate parameters and freeze the index before touching the filesystem.
-        cleaned = validate_diamond_parameters(parameters)
-        db_path = get_blast_db_path(database)
+        if engine == "diamond":
+            cleaned = validate_diamond_parameters(parameters)
+            db_path = get_blast_db_path(database)
+        else:
+            if payload is None:
+                raise ValueError("NCBI execution requires a versioned provenance payload")
+            from soymutdb_worker.ncbi_blast import validate_program_database
+
+            validate_program_database(program, p.get("database_type"))
+            db_path = get_ncbi_db_path(
+                database, index_identity=p.get("index_identity", ""),
+                fasta_sha256=p.get("fasta_sha256", ""),
+                database_type=p.get("database_type", ""),
+                release_key=p.get("release_key", ""), assembly_id=p.get("assembly_id", ""),
+            )
+            cleaned = dict(parameters or {})
         self.update_state(state="STARTED", meta={"progress": 10})
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -711,32 +768,40 @@ def run_blast(
             # "Missing fields in input line" only after the job is running.
             # The shared parser is the same owner the API validated with, so
             # acceptance cannot differ between the two.
-            try:
-                query = parse_protein_fasta(sequence)
-            except ProteinFastaError as exc:
-                raise ValueError(f"query_sequence: {exc}") from exc
-            query_path.write_text(query.to_fasta)
-            self.update_state(state="STARTED", meta={"progress": 15})
+            if engine == "diamond":
+                try:
+                    query = parse_protein_fasta(sequence)
+                except ProteinFastaError as exc:
+                    raise ValueError(f"query_sequence: {exc}") from exc
+                query_path.write_text(query.to_fasta)
+                self.update_state(state="STARTED", meta={"progress": 15})
+                run_blast_command(
+                    program=program, db_path=db_path, query_path=query_path,
+                    output_path=output_path, evalue=evalue, word_size=word_size,
+                    max_target_seqs=max_target_seqs, extra_args=cleaned,
+                    num_threads=num_threads,
+                )
+                parsed = parse_diamond_tabular(output_path)
+                parsed["query_len"] = query.query_length
+            else:
+                from soymutdb_worker.ncbi_blast import run_search
 
-            run_blast_command(
-                program=program,
-                db_path=db_path,
-                query_path=query_path,
-                output_path=output_path,
-                evalue=evalue,
-                word_size=word_size,
-                max_target_seqs=max_target_seqs,
-                extra_args=cleaned,
-                num_threads=num_threads,
-            )
+                query = normalize_query(sequence, program, max_length=MAX_QUERY_LENGTH)
+                query_path.write_text(query.normalized_fasta)
+                self.update_state(state="STARTED", meta={"progress": 15})
+                search_parameters = {
+                    **cleaned, "evalue": evalue, "max_target_seqs": max_target_seqs,
+                    "num_threads": num_threads,
+                }
+                if word_size is not None:
+                    search_parameters["word_size"] = word_size
+                parsed = run_search(
+                    program=program, db_type=p["database_type"], db_path=db_path,
+                    query_path=query_path, output_path=output_path,
+                    parameters=search_parameters, bin_dir=NCBI_BLAST_BIN_DIR,
+                )
+                parsed["query_len"] = query.query_length
             self.update_state(state="STARTED", meta={"progress": 80})
-
-            parsed = parse_diamond_tabular(output_path)
-            # Residues actually searched. Reusing the validated parse instead of
-            # re-reading the file keeps the reported provenance identical to
-            # what the search consumed, and excludes a terminal stop symbol
-            # that ``len(record.seq)`` used to count as a residue.
-            parsed["query_len"] = query.query_length
             self.update_state(state="STARTED", meta={"progress": 90})
 
             # Upload raw results to MinIO (key contains job_id; metadata
@@ -767,6 +832,11 @@ def run_blast(
                     result_path=s3_key,
                     query_len=parsed["query_len"],
                     hit_count=parsed["total_hits"],
+                    execution_metadata=(
+                        {"engine": engine, "binary": parsed["binary"],
+                         "raw_sha256": checksum, "raw_bytes": size}
+                        if engine == "ncbi_blast" and "binary" in parsed else None
+                    ),
                 )
 
             # In-app + optional desktop notification (D2): resolves the job

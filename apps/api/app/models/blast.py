@@ -216,6 +216,7 @@ class BlastHit(Base):
         nullable=False,
         index=True,
     )
+    query_id: Mapped[str | None] = mapped_column(String(256), nullable=True)
     hsp_num: Mapped[int] = mapped_column(Integer, nullable=False)
     subject_id: Mapped[str] = mapped_column(String(256), nullable=False, index=True)
     subject_title: Mapped[str | None] = mapped_column(String(1024), nullable=True)

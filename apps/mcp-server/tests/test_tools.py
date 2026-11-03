@@ -16,12 +16,12 @@ Mock ``httpx.AsyncClient`` (``unittest.mock``) and verify, per tool:
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any, Self
+from unittest import mock
 
 import httpx
 import pytest
-from unittest import mock
-
 from mcp_server import server
 from mcp_server.ratelimit import GLOBAL_LIMITER, SUBMIT_LIMITER, FixedWindowLimiter
 
@@ -52,10 +52,10 @@ class FakeAsyncClient:
         self._handler = handler
         self.calls: list[dict[str, Any]] = []
 
-    async def __aenter__(self) -> "FakeAsyncClient":
+    async def __aenter__(self) -> Self:
         return self
 
-    async def __aexit__(self, *args: Any) -> bool:
+    async def __aexit__(self, *args: object) -> bool:
         return False
 
     async def request(
@@ -68,9 +68,17 @@ class FakeAsyncClient:
         headers: dict[str, str] | None = None,
     ) -> FakeResponse:
         self.calls.append(
-            {"method": method, "url": url, "params": params, "json": json, "headers": headers}
+            {
+                "method": method,
+                "url": url,
+                "params": params,
+                "json": json,
+                "headers": headers,
+            }
         )
-        return await self._handler(method, url, params=params, json=json, headers=headers)
+        return await self._handler(
+            method, url, params=params, json=json, headers=headers
+        )
 
 
 class ClientPatch:
@@ -78,13 +86,15 @@ class ClientPatch:
 
     def __init__(self, handler: Callable[..., Awaitable[FakeResponse]]) -> None:
         self.fake = FakeAsyncClient(handler)
-        self._patcher = mock.patch.object(server.httpx, "AsyncClient", return_value=self.fake)
+        self._patcher = mock.patch.object(
+            server.httpx, "AsyncClient", return_value=self.fake
+        )
 
     def __enter__(self) -> FakeAsyncClient:
         self._patcher.start()
         return self.fake
 
-    def __exit__(self, *args: Any) -> None:
+    def __exit__(self, *args: object) -> None:
         self._patcher.stop()
 
 
@@ -92,7 +102,9 @@ def _patch_client(handler: Callable[..., Awaitable[FakeResponse]]) -> ClientPatc
     return ClientPatch(handler)
 
 
-def _ok(json_data: Any, status_code: int = 200, headers: dict[str, str] | None = None) -> FakeResponse:
+def _ok(
+    json_data: Any, status_code: int = 200, headers: dict[str, str] | None = None
+) -> FakeResponse:
     return FakeResponse(status_code=status_code, json_data=json_data, headers=headers)
 
 
@@ -194,7 +206,15 @@ class TestGeneById:
 
             async def handler(method, url, *, params, json, headers):
                 captured.update(params=params, headers=headers)
-                return _ok({"gene_id": "G1", "chromosome": "chr1", "start": 1, "end": 2, "strand": "+"})
+                return _ok(
+                    {
+                        "gene_id": "G1",
+                        "chromosome": "chr1",
+                        "start": 1,
+                        "end": 2,
+                        "strand": "+",
+                    }
+                )
 
             with _patch_client(handler):
                 asyncio.run(server.gene_by_id("G1", assembly_id=7))
@@ -209,7 +229,11 @@ class TestGeneById:
             return _ok(
                 status_code=404,
                 json_data={
-                    "error": {"code": "not_found", "message": "Gene G1 not found", "details": {}},
+                    "error": {
+                        "code": "not_found",
+                        "message": "Gene G1 not found",
+                        "details": {},
+                    },
                     "request_id": "r1",
                     "status_code": 404,
                 },
@@ -226,8 +250,18 @@ class TestGeneById:
             return _ok(
                 status_code=422,
                 json_data={
-                    "error": {"code": "validation_error", "message": "Request validation failed", "details": {}},
-                    "errors": [{"field": "query.gene_id", "message": "too long", "type": "string_too_long"}],
+                    "error": {
+                        "code": "validation_error",
+                        "message": "Request validation failed",
+                        "details": {},
+                    },
+                    "errors": [
+                        {
+                            "field": "query.gene_id",
+                            "message": "too long",
+                            "type": "string_too_long",
+                        }
+                    ],
                     "status_code": 422,
                 },
             )
@@ -262,7 +296,9 @@ class TestVariantByRegion:
             )
 
         with _patch_client(handler):
-            result = asyncio.run(server.variant_by_region("GmWm82.a2.v1", "chr1", 1000, 2000))
+            result = asyncio.run(
+                server.variant_by_region("GmWm82.a2.v1", "chr1", 1000, 2000)
+            )
 
         assert captured["method"] == "GET"
         assert captured["url"] == "http://localhost:8010/api/v1/variants/region"
@@ -395,12 +431,19 @@ class TestSeqFetch:
 
         async def handler(method, url, *, params, json, headers):
             captured["json"] = json
-            return _ok({"format": "fasta", "count": 0, "truncated": False, "missing": []})
+            return _ok(
+                {"format": "fasta", "count": 0, "truncated": False, "missing": []}
+            )
 
         with _patch_client(handler):
-            asyncio.run(server.seqfetch(assembly="GmWm82.a2.v1", region="chr1:1000-2000"))
+            asyncio.run(
+                server.seqfetch(assembly="GmWm82.a2.v1", region="chr1:1000-2000")
+            )
 
-        assert captured["json"] == {"assembly": "GmWm82.a2.v1", "region": "chr1:1000-2000"}
+        assert captured["json"] == {
+            "assembly": "GmWm82.a2.v1",
+            "region": "chr1:1000-2000",
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -428,14 +471,18 @@ class TestBlastSubmit:
         with _patch_client(handler):
             result = asyncio.run(
                 server.blast_submit(
-                    "MEEPQSDPSV", program="blastp", database="glyma_cds",
-                    database_id=3, params={"evalue": 1e-5},
+                    "MEEPQSDPSV",
+                    program="blastp",
+                    database="glyma_cds",
+                    database_id=3,
+                    params={"evalue": 1e-5},
                 )
             )
 
         assert captured["method"] == "POST"
         assert captured["url"] == "http://localhost:8010/api/v1/blast/jobs"
         assert captured["json"] == {
+            "engine": "ncbi_blast",
             "program": "blastp",
             "query_sequence": "MEEPQSDPSV",
             "database": "glyma_cds",
@@ -449,13 +496,49 @@ class TestBlastSubmit:
         assert len(result["submitter_token"]) == 32
         assert server._JOB_OWNERSHIP["job-1"] == result["submitter_token"]
 
+    def test_all_ncbi_programs_and_explicit_diamond_engine_are_forwarded(self):
+        captured: list[dict[str, Any]] = []
+
+        async def handler(method, url, *, params, json, headers):
+            captured.append(json)
+            return _ok(
+                status_code=201,
+                json_data={
+                    "job_id": f"job-{len(captured)}",
+                    "status": "pending",
+                    "program": json["program"],
+                },
+            )
+
+        with _patch_client(handler):
+            for program in ("blastn", "blastp", "blastx", "tblastn", "tblastx"):
+                asyncio.run(server.blast_submit("ACGTACGTACGT", program=program))
+            asyncio.run(
+                server.blast_submit("MEEPQSDPSV", program="blastp", engine="diamond")
+            )
+
+        assert [(item["engine"], item["program"]) for item in captured] == [
+            ("ncbi_blast", program)
+            for program in ("blastn", "blastp", "blastx", "tblastn", "tblastx")
+        ] + [("diamond", "blastp")]
+
     def test_api_422_maps_to_validation(self):
         async def handler(method, url, *, params, json, headers):
             return _ok(
                 status_code=422,
                 json_data={
-                    "error": {"code": "validation_error", "message": "Request validation failed", "details": {}},
-                    "errors": [{"field": "body.query_sequence", "message": "String should have at least 10 characters", "type": "string_too_short"}],
+                    "error": {
+                        "code": "validation_error",
+                        "message": "Request validation failed",
+                        "details": {},
+                    },
+                    "errors": [
+                        {
+                            "field": "body.query_sequence",
+                            "message": "String should have at least 10 characters",
+                            "type": "string_too_short",
+                        }
+                    ],
                     "status_code": 422,
                 },
             )
@@ -473,7 +556,9 @@ class TestBlastJobStatus:
 
         async def handler(method, url, *, params, json, headers):
             if url.endswith("/api/v1/blast/jobs"):
-                return _ok(status_code=201, json_data={"job_id": "job-1", "status": "pending"})
+                return _ok(
+                    status_code=201, json_data={"job_id": "job-1", "status": "pending"}
+                )
             if url.endswith("/api/v1/blast/jobs/job-1"):
                 return _ok(
                     {
@@ -514,7 +599,7 @@ class TestBlastJobStatus:
 
     def test_cross_token_read_is_refused(self):
         with _patch_client(self._flow()):
-            submit = asyncio.run(server.blast_submit("ACGTACGTACGTACGTACGT"))
+            _ = asyncio.run(server.blast_submit("ACGTACGTACGTACGTACGT"))
             result = asyncio.run(server.blast_job_status("job-1", "a" * 32))
 
         assert result["error"] == "forbidden"
@@ -542,15 +627,25 @@ class TestBlastJobStatus:
     def test_api_404_maps_to_not_found_for_owner(self):
         async def handler(method, url, *, params, json, headers):
             if url.endswith("/api/v1/blast/jobs"):
-                return _ok(status_code=201, json_data={"job_id": "job-1", "status": "pending"})
+                return _ok(
+                    status_code=201, json_data={"job_id": "job-1", "status": "pending"}
+                )
             return _ok(
                 status_code=404,
-                json_data={"error": {"code": "not_found", "message": "BLAST job job-1 not found", "details": {}}},
+                json_data={
+                    "error": {
+                        "code": "not_found",
+                        "message": "BLAST job job-1 not found",
+                        "details": {},
+                    }
+                },
             )
 
         with _patch_client(handler):
             submit = asyncio.run(server.blast_submit("ACGTACGTACGTACGTACGT"))
-            result = asyncio.run(server.blast_job_status("job-1", submit["submitter_token"]))
+            result = asyncio.run(
+                server.blast_job_status("job-1", submit["submitter_token"])
+            )
 
         assert result["error"] == "not_found"
 
@@ -567,7 +662,11 @@ class TestErrorMapping:
                 status_code=429,
                 headers={"Retry-After": "30"},
                 json_data={
-                    "error": {"code": "rate_limited", "message": "Too many requests", "details": {}},
+                    "error": {
+                        "code": "rate_limited",
+                        "message": "Too many requests",
+                        "details": {},
+                    },
                     "status_code": 429,
                 },
             )

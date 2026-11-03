@@ -33,7 +33,7 @@ from app.models.genomic import Assembly
 from app.services.blast_service import BlastService
 from app.services.release_context import ReleaseContext, get_release_context
 
-PAYLOAD = {"database_id": 1, "query_sequence": ">query\nMKVLAAGIVGLNLGGK"}
+PAYLOAD = {"database_id": 1, "engine": "diamond", "query_sequence": ">query\nMKVLAAGIVGLNLGGK"}
 BASE = "/api/v1/blast/public/jobs"
 
 
@@ -303,7 +303,9 @@ async def test_download_ttl_does_not_outlive_capability(api, monkeypatch):
 async def test_public_shorter_query_limit_and_disabled_mode(api, monkeypatch):
     client, session, quota = api
     monkeypatch.setattr(get_settings(), "blast_public_max_length", 20)
-    response = await client.post(BASE, json={**PAYLOAD, "query_sequence": "M" * 21})
+    response = await client.post(
+        BASE, json={**PAYLOAD, "engine": "diamond", "query_sequence": "M" * 21}
+    )
     assert response.status_code == 422
     assert_private(response)
     assert not session.added

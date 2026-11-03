@@ -257,6 +257,7 @@ class Settings(BaseSettings):
     # --------------------------------------------------------------- BLAST
     blast_max_length: int = 100000
     blast_default_db: str = "williams82_cds"
+    blast_max_active_jobs_per_user: int = Field(default=3, ge=1, le=20)
     # Public capability jobs share the existing worker, with a separate peer budget.
     blast_public_enabled: bool = True
     blast_public_max_length: int = Field(default=10000, ge=10, le=100000)

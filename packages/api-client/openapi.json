@@ -19051,6 +19051,17 @@
       },
       "BlastHit": {
         "properties": {
+          "query_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query Id"
+          },
           "hsp_num": {
             "type": "integer",
             "minimum": 1.0,
@@ -19175,6 +19186,15 @@
       },
       "BlastJobResponse": {
         "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "ncbi_blast",
+              "diamond"
+            ],
+            "title": "Engine",
+            "default": "diamond"
+          },
           "job_id": {
             "type": "string",
             "title": "Job Id"
@@ -19321,6 +19341,7 @@
         "properties": {
           "evalue": {
             "type": "number",
+            "maximum": 1000.0,
             "exclusiveMinimum": 0.0,
             "title": "Evalue",
             "default": 1e-05
@@ -19336,6 +19357,7 @@
             "anyOf": [
               {
                 "type": "integer",
+                "maximum": 100.0,
                 "minimum": 0.0
               },
               {
@@ -19348,6 +19370,7 @@
             "anyOf": [
               {
                 "type": "integer",
+                "maximum": 100.0,
                 "minimum": 0.0
               },
               {
@@ -19367,25 +19390,12 @@
             ],
             "title": "Matrix"
           },
-          "percent_identity": {
-            "anyOf": [
-              {
-                "type": "number",
-                "maximum": 100.0,
-                "minimum": 0.0
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Percent Identity"
-          },
           "word_size": {
             "anyOf": [
               {
                 "type": "integer",
                 "maximum": 64.0,
-                "minimum": 4.0
+                "minimum": 2.0
               },
               {
                 "type": "null"
@@ -19414,8 +19424,22 @@
               }
             ],
             "title": "Soft Masking"
+          },
+          "percent_identity": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 100.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Percent Identity"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "title": "BlastParameters"
       },
@@ -19429,7 +19453,7 @@
           "tblastx"
         ],
         "title": "BlastProgram",
-        "description": "Every program value that can appear in a *stored* job row.\n\nThis is a storage/response vocabulary, not a submission contract. The\nsearch engine is DIAMOND ``blastp`` only; the other values remain here so\nthat jobs persisted before the engine was reduced can still be read and\nrendered. :class:`BlastSubmitProgram` is what new requests must use."
+        "description": "Program vocabulary shared by stored jobs and current responses."
       },
       "BlastResultResponse": {
         "properties": {
@@ -19554,13 +19578,26 @@
       "BlastSubmitProgram": {
         "type": "string",
         "enum": [
-          "blastp"
+          "blastn",
+          "blastp",
+          "blastx",
+          "tblastn",
+          "tblastx"
         ],
         "title": "BlastSubmitProgram",
-        "description": "The only program this deployment can execute: DIAMOND ``blastp``."
+        "description": "Programs supported by the explicit NCBI BLAST+ engine."
       },
       "BlastSubmitRequest": {
         "properties": {
+          "engine": {
+            "type": "string",
+            "enum": [
+              "ncbi_blast",
+              "diamond"
+            ],
+            "title": "Engine",
+            "default": "ncbi_blast"
+          },
           "program": {
             "$ref": "#/components/schemas/BlastSubmitProgram",
             "default": "blastp"

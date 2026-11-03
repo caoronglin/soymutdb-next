@@ -3096,6 +3096,20 @@
     "download": "Download raw results",
     "release": "Release",
     "loginWorkflow": "Use the signed-in workflow for personal job history.",
-    "resultsNotReady": "The public result is not ready yet."
+    "resultsNotReady": "The public result is not ready yet.",
+    "engine": "Search engine",
+    "program": "Search program"
+  },
+  "blastSearch": {
+    "proteinInput": "Protein FASTA query",
+    "nucleotideInput": "Nucleotide FASTA query",
+    "nucleotidePlaceholder": "Paste nucleotide FASTA records",
+    "queryId": "Query ID",
+    "subjectCoordinates": "Subject alignment positions",
+    "incompatible": "This engine/program combination is not supported.",
+    "invalidParameters": "Use a positive E-value up to 1000 and 1–500 maximum hits.",
+    "engineUnknown": "Engine unavailable",
+    "provenance": "Database context",
+    "invalidAlphabet": "The query alphabet does not match the selected program."
   }
 }

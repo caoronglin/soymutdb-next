@@ -56,7 +56,7 @@ async def test_public_blast_postgres_release_ownership_and_atomic_outbox(
         headers=release_headers,
         json={
             "database_id": databases[0].id,
-            "query_sequence": query,
+            "engine": "diamond", "query_sequence": query,
         },
     )
     assert submitted.status_code == 201, submitted.text
@@ -103,7 +103,7 @@ async def test_public_blast_postgres_release_ownership_and_atomic_outbox(
             headers={"X-SoyMutDB-Release": str(release_id)},
             json={
                 "database_id": databases[1].id,
-                "query_sequence": query,
+                "engine": "diamond", "query_sequence": query,
             },
         )
         assert refused.status_code == 404, refused.text

@@ -16,13 +16,13 @@ import re
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from soymutdb_jobs.blast_catalog import public_source_url
-from soymutdb_jobs.protein_fasta import PROTEIN_ALPHABET as PROTEIN_ALPHABET
-from soymutdb_jobs.protein_fasta import (
-    ProteinFastaError,
-    parse_protein_fasta,
+from soymutdb_jobs.blast_search import (
+    normalize_query,
+    validate_search_parameters,
 )
+from soymutdb_jobs.protein_fasta import PROTEIN_ALPHABET as PROTEIN_ALPHABET
 
 from ..core.compat import StrEnum
 
@@ -33,13 +33,7 @@ _DATABASE_NAME_RE = re.compile(r"[A-Za-z0-9_-]+")
 
 
 class BlastProgram(StrEnum):
-    """Every program value that can appear in a *stored* job row.
-
-    This is a storage/response vocabulary, not a submission contract. The
-    search engine is DIAMOND ``blastp`` only; the other values remain here so
-    that jobs persisted before the engine was reduced can still be read and
-    rendered. :class:`BlastSubmitProgram` is what new requests must use.
-    """
+    """Program vocabulary shared by stored jobs and current responses."""
 
     BLASTN = "blastn"
     BLASTP = "blastp"
@@ -49,9 +43,13 @@ class BlastProgram(StrEnum):
 
 
 class BlastSubmitProgram(StrEnum):
-    """The only program this deployment can execute: DIAMOND ``blastp``."""
+    """Programs supported by the explicit NCBI BLAST+ engine."""
 
+    BLASTN = "blastn"
     BLASTP = "blastp"
+    BLASTX = "blastx"
+    TBLASTN = "tblastn"
+    TBLASTX = "tblastx"
 
 
 class BlastJobStatus(StrEnum):
@@ -67,89 +65,46 @@ class BlastJobStatus(StrEnum):
 # Sequence alphabet validation
 # ---------------------------------------------------------------------------
 
-#: IUPAC nucleotide codes (uppercase; ``-`` for gaps). Historic vocabulary:
-#: only ``blastp`` is submittable, but stored job rows may still name the
-#: nucleotide programs, so this alphabet stays readable.
-NUCLEOTIDE_ALPHABET = frozenset("ACGTUNRYSWKMBDHVX-")
-#: ``PROTEIN_ALPHABET`` is imported above from the shared contract, so the API
-#: and the worker cannot drift apart on what counts as a protein residue.
-#: Programs whose *query* is a protein sequence. The only executable program
-#: is ``blastp``, so every submitted query is protein.
-_PROTEIN_QUERY_PROGRAMS = frozenset({"blastp"})
-
-#: BLAST matrix whitelist (case-insensitive on input).
-ALLOWED_MATRICES = frozenset(
-    {"BLOSUM62", "BLOSUM45", "BLOSUM80", "PAM30", "PAM70", "PAM250"}
-)
-
 
 def validate_sequence_charset(sequence: str, program: str) -> str:
-    """Reject characters outside the alphabet for *program*.
-
-    FASTA header lines (``>``) and whitespace are ignored; raises
-    :class:`ValueError` listing the first offending characters.
-    """
-    if program in _PROTEIN_QUERY_PROGRAMS:
-        parse_protein_fasta(sequence)
-        return sequence
-    body = "".join(
-        part for part in sequence.splitlines() if not part.startswith(">")
-    )
-    alphabet = NUCLEOTIDE_ALPHABET
-    invalid = sorted(
-        {ch.upper() for ch in body.replace(" ", "") if ch.upper() not in alphabet}
-    )
-    if invalid:
-        raise ValueError(
-            f"Invalid characters in query sequence: {invalid[:10]}"
-            f"{'…' if len(invalid) > 10 else ''}"
-        )
+    """Use the same query owner as the executing worker."""
+    normalize_query(sequence, program)
     return sequence
 
 
 class BlastParameters(BaseModel):
-    evalue: float = Field(default=1e-5, gt=0)
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    evalue: float = Field(default=1e-5, gt=0, le=1000)
     max_target_seqs: int = Field(default=50, ge=1, le=500)
-    gap_open: int | None = Field(default=None, ge=0)
-    gap_extend: int | None = Field(default=None, ge=0)
+    gap_open: int | None = Field(default=None, ge=0, le=100)
+    gap_extend: int | None = Field(default=None, ge=0, le=100)
     matrix: str | None = None
-    #: Client-side filter only; not forwarded to the search binary.
-    percent_identity: float | None = Field(default=None, ge=0.0, le=100.0)
-    #: Retired NCBI-BLAST inputs. ``BlastParameters`` is a submission-only
-    #: schema (stored job payloads are read as raw dicts), so these are
-    #: rejected outright rather than silently ignored — DIAMOND has no
-    #: equivalent and quietly ignoring them would misreport the search.
-    word_size: int | None = Field(default=None, ge=4, le=64)
+    word_size: int | None = Field(default=None, ge=2, le=64)
     dust: bool | None = None
     soft_masking: bool | None = None
-
-    @field_validator("word_size", "dust", "soft_masking")
-    @classmethod
-    def _reject_retired_blast_params(cls, v, info):
-        if v is None:
-            return v
-        raise ValueError(
-            f"parameters.{info.field_name} is a retired NCBI BLAST option; "
-            "this deployment searches with DIAMOND blastp, which has no equivalent"
-        )
+    percent_identity: float | None = Field(default=None, ge=0, le=100)
 
     @field_validator("matrix")
     @classmethod
-    def _validate_matrix(cls, v: str | None) -> str | None:
-        if v is None:
-            return None
-        normalized = v.upper()
-        if normalized not in ALLOWED_MATRICES:
-            raise ValueError(
-                f"Unsupported substitution matrix {v!r}; "
-                f"allowed: {sorted(ALLOWED_MATRICES)}"
-            )
-        return normalized
+    def _validate_matrix(cls, value: str | None) -> str | None:
+        return value.upper() if value is not None else None
+
+    def canonical_parameters(self, program: str, engine: str) -> dict:
+        params = self.model_dump(exclude_none=True)
+        if "percent_identity" in params:
+            if engine != "ncbi_blast" or program != "blastn":
+                raise ValueError("percent_identity is supported only by NCBI blastn")
+            params["perc_identity"] = params.pop("percent_identity")
+        for old, new in (("gap_open", "gapopen"), ("gap_extend", "gapextend")):
+            if old in params:
+                params[new] = params.pop(old)
+        return validate_search_parameters(program, engine, params)
 
 
 class BlastSubmitRequest(BaseModel):
-    #: Only DIAMOND ``blastp`` is executable; the wider :class:`BlastProgram`
-    #: vocabulary exists solely to read historical rows.
+    #: New submissions choose NCBI BLAST+ unless DIAMOND is explicit.
+    engine: Literal["ncbi_blast", "diamond"] = "ncbi_blast"
     program: BlastSubmitProgram = BlastSubmitProgram.BLASTP
     #: Numeric id of an active database from ``GET /blast/databases``.
     database_id: int | None = Field(default=None, gt=0)
@@ -180,32 +135,21 @@ class BlastSubmitRequest(BaseModel):
 
     @field_validator("query_sequence", mode="before")
     @classmethod
-    def _validate_fasta(cls, v: object) -> str:
-        """Refuse a query the worker could not search.
+    def _validate_query_shape(cls, value, info):
+        if isinstance(value, str) and len(value) <= 100000:
+            normalize_query(value, info.data.get("program", BlastSubmitProgram.BLASTP).value)
+        return value
 
-        ``mode="before"`` so an empty or header-only submission reports the
-        real reason instead of the length cap, which would otherwise fire first
-        and tell the submitter their empty query "should have at least 10
-        characters".
-
-        The previous check only inspected the first header, so a later empty
-        record was accepted here and then failed inside DIAMOND with an opaque
-        ``Missing fields in input line``. Empty records and duplicate record
-        ids are now rejected at submission time with a 422.
-        """
-        if not isinstance(v, str):
-            return v  # type: ignore[return-value]
-        if len(v) > 100_000:
-            # Let the field's size constraint reject before allocating a parse.
-            return v
-        try:
-            parse_protein_fasta(v)
-        except ProteinFastaError as exc:
-            raise ValueError(f"query_sequence: {exc}") from exc
-        return v.strip(" \t\r\n")
+    @model_validator(mode="after")
+    def _validate_search(self) -> BlastSubmitRequest:
+        self.parameters.canonical_parameters(self.program.value, self.engine)
+        normalize_query(self.query_sequence, self.program.value)
+        self.query_sequence = self.query_sequence.strip(" \t\r\n")
+        return self
 
 
 class BlastJobResponse(BaseModel):
+    engine: Literal["ncbi_blast", "diamond"] = "diamond"
     job_id: str
     status: BlastJobStatus
     program: BlastProgram
@@ -246,6 +190,7 @@ class BlastJobListResponse(BaseModel):
 
 #: Flat, per-HSP hit row persisted to ``blast_hits`` and returned to clients.
 class BlastHit(BaseModel):
+    query_id: str | None = None
     hsp_num: int = Field(..., ge=1)
     subject_id: str
     subject_title: str = ""

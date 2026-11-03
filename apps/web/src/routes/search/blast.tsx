@@ -15,6 +15,12 @@ import {
   getPublicBlastJob,
   getPublicBlastResults,
   submitPublicBlastJob,
+  compatibleBlastDatabases,
+  hasCompatibleBlastQueryAlphabet,
+  BLAST_PROGRAMS,
+  BLAST_PROGRAM_COMPATIBILITY,
+  type BlastEngine,
+  type BlastProgram,
   type BlastDatabase,
   type BlastHit,
   type BlastJob,
@@ -31,8 +37,12 @@ function PublicBlastComponent() {
   const { t } = useTranslation();
   const releaseId = useReleaseId();
   const { get } = useSiteContent();
+  const [engine, setEngine] = React.useState<BlastEngine>("ncbi_blast");
+  const [program, setProgram] = React.useState<BlastProgram>("blastp");
   const [database, setDatabase] = React.useState("");
   const [sequence, setSequence] = React.useState("");
+  const [evalue, setEvalue] = React.useState("1e-5");
+  const [maxHits, setMaxHits] = React.useState("50");
   const [error, setError] = React.useState<string | null>(null);
   const [job, setJob] = React.useState<BlastJob | null>(null);
   const [accessToken, setAccessToken] = React.useState<string | null>(null);
@@ -43,14 +53,15 @@ function PublicBlastComponent() {
     queryFn: getPublicBlastDatabases,
     staleTime: 30 * 60 * 1000,
   });
-  const databases = (databasesQuery.data ?? []).filter((item) => item.is_active && item.db_type === "prot");
+  const databases = compatibleBlastDatabases(databasesQuery.data ?? [], engine, program);
   React.useEffect(() => {
     setDatabase("");
-  }, [releaseId]);
+  }, [releaseId, engine, program]);
   React.useEffect(() => {
     if (!database && databases.length) setDatabase(String(databases[0].id));
   }, [database, databases]);
 
+  const selectedDatabase = databases.find((item) => String(item.id) === database);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [page, setPage] = React.useState(1);
   const [clock, setClock] = React.useState(() => Date.now());
@@ -59,10 +70,13 @@ function PublicBlastComponent() {
     const selected = databases.find((item) => String(item.id) === database);
     if (!selected) { setError(t("blastPublic.databaseRequired")); return; }
     if (!sequence.trim() || sequence.trim().length < 10) { setError(t("blastPublic.sequenceRequired")); return; }
+    if (engine === "diamond" && program !== "blastp") { setError(t("blastSearch.incompatible")); return; }
+    if (!Number.isFinite(Number(evalue)) || Number(evalue) <= 0 || Number(evalue) > 1000 || !Number.isInteger(Number(maxHits)) || Number(maxHits) < 1 || Number(maxHits) > 500) { setError(t("blastSearch.invalidParameters")); return; }
+    if (!hasCompatibleBlastQueryAlphabet(sequence, program)) { setError(t("blastSearch.invalidAlphabet")); return; }
     setIsSubmitting(true);
     setError(null);
     try {
-      const response = await submitPublicBlastJob({ program: "blastp", database: selected.name, sequence, e_value: 1e-5, max_hits: 50 });
+      const response = await submitPublicBlastJob({ program, engine, database: selected.name, sequence, e_value: Number(evalue), max_hits: Number(maxHits) });
       setJob(response.job);
       setAccessToken(response.access_token);
       setExpiresAt(response.expires_at);
@@ -112,6 +126,7 @@ function PublicBlastComponent() {
   };
 
   const columns: TableColumnsType<BlastHit> = [
+    { title: t("blastSearch.queryId"), dataIndex: "query_id", key: "query_id", render: (value: string | null) => value ?? "—" },
     { title: t("blast.hitSubject"), dataIndex: "subject_id", key: "subject_id" },
     { title: t("blast.hitIdentity"), dataIndex: "percent_identity", key: "identity", render: (value: number) => `${value.toFixed(2)}%` },
     { title: t("blast.hitLength"), dataIndex: "alignment_length", key: "length" },
@@ -129,14 +144,23 @@ function PublicBlastComponent() {
       </div>
       <Card title={t("blastPublic.formTitle")}>
         <Form layout="vertical" onFinish={() => void submit()}>
+          <div className="grid gap-x-6 md:grid-cols-2">
+            <Form.Item label={t("blastPublic.engine")}><Select aria-label={t("blastPublic.engine")} value={engine} onChange={(value: BlastEngine) => setEngine(value)} options={[{ value: "ncbi_blast", label: "NCBI BLAST+" }, { value: "diamond", label: "DIAMOND (blastp)", disabled: program !== "blastp" }]} /></Form.Item>
+            <Form.Item label={t("blastPublic.program")}><Select aria-label={t("blastPublic.program")} value={program} onChange={(value: BlastProgram) => setProgram(value)} options={BLAST_PROGRAMS.filter((item) => engine === "ncbi_blast" || item.id === "blastp").map((item) => ({ value: item.id, label: item.label }))} /></Form.Item>
+          </div>
           <Form.Item label={t("blast.database")} htmlFor="public-blast-database" required>
             {databasesQuery.isLoading ? <Skeleton.Input active /> : (
               <Select id="public-blast-database" className="w-full" value={database || undefined} onChange={setDatabase} options={databases.map((item: BlastDatabase) => ({ value: String(item.id), label: `${item.name}${item.assembly_name ? ` · ${item.assembly_name}` : ""}` }))} />
             )}
           </Form.Item>
-          <Form.Item label={t("blast.inputSequence")} htmlFor="public-blast-sequence" required>
-            <Input.TextArea id="public-blast-sequence" value={sequence} onChange={(event) => setSequence(event.target.value)} rows={8} placeholder={t("blastPublic.sequencePlaceholder")} />
+          {selectedDatabase ? <Typography.Paragraph type="secondary">{t("blastSearch.provenance")}: {selectedDatabase.assembly_name ?? "—"} · {selectedDatabase.release_id ?? "—"} · {selectedDatabase.annotation_version ?? "—"} · {selectedDatabase.db_type} · {selectedDatabase.license ?? "—"}</Typography.Paragraph> : null}
+          <Form.Item label={t(BLAST_PROGRAM_COMPATIBILITY[program].query === "prot" ? "blastSearch.proteinInput" : "blastSearch.nucleotideInput")} htmlFor="public-blast-sequence" required>
+            <Input.TextArea id="public-blast-sequence" value={sequence} onChange={(event) => setSequence(event.target.value)} rows={8} placeholder={t(BLAST_PROGRAM_COMPATIBILITY[program].query === "prot" ? "blastPublic.sequencePlaceholder" : "blastSearch.nucleotidePlaceholder")} />
           </Form.Item>
+          <div className="grid gap-x-6 md:grid-cols-2">
+            <Form.Item label={t("blast.eValue")} htmlFor="public-blast-evalue"><Input id="public-blast-evalue" value={evalue} onChange={(event) => setEvalue(event.target.value)} /></Form.Item>
+            <Form.Item label={t("blast.maxHits")} htmlFor="public-blast-maxhits"><Input id="public-blast-maxhits" type="number" min={1} max={500} value={maxHits} onChange={(event) => setMaxHits(event.target.value)} /></Form.Item>
+          </div>
           <div className="flex flex-wrap items-center gap-3">
             <Button type="primary" htmlType="submit" loading={isSubmitting} disabled={Boolean(job && !expired)} icon={<Play aria-hidden />}>
               {t("blastPublic.submit")}
@@ -153,6 +177,7 @@ function PublicBlastComponent() {
           {statusQuery.error ? <Alert type="error" showIcon title={t("blastPublic.accessFailed")} /> : expired ? <Result status="warning" title={t("blastPublic.expired")} subTitle={t("blastPublic.expiredHint")} /> : (
             <div className="flex items-center gap-3">
               <Tag color={currentJob.status === "completed" ? "success" : currentJob.status === "failed" ? "error" : "processing"}>{currentJob.status}</Tag>
+              <Typography.Text>{currentJob.engine === "ncbi_blast" ? "NCBI BLAST+" : currentJob.engine === "diamond" ? "DIAMOND" : t("blastSearch.engineUnknown")} · {currentJob.program}</Typography.Text>
               {currentJob.status === "pending" || currentJob.status === "running" ? <Typography.Text type="secondary">{t("blastPublic.running")}</Typography.Text> : null}
               {currentJob.assembly_name ? <Typography.Text type="secondary">{currentJob.assembly_name}{currentJob.release_id ? ` · ${t("blastPublic.release")} ${currentJob.release_id}` : ""}</Typography.Text> : null}
               {currentJob.error_message ? <Typography.Text type="danger">{currentJob.error_message}</Typography.Text> : null}
@@ -166,7 +191,7 @@ function PublicBlastComponent() {
 
       {currentJob?.status === "completed" && publicResults?.status === "completed" && !expired && !requestError ? (
         <Card className="mt-6" title={t("blastPublic.resultsTitle")} extra={publicResults?.download_url ? <Button type="link" icon={<DownloadOutlined />} href={publicResults.download_url} target="_blank" rel="noreferrer">{t("blastPublic.download")}</Button> : null}>
-          {resultsQuery.isLoading ? <Skeleton active /> : publicResults?.items?.length ? <Table scroll={{ x: "max-content" }} rowKey={(row) => `${row.subject_id}-${row.hsp_num}`} columns={columns} dataSource={publicResults.items} pagination={{ current: page, pageSize: 25, total: publicResults.total, onChange: (nextPage) => setPage(nextPage) }} /> : <Empty description={t("blast.noHits")} />}
+          {resultsQuery.isLoading ? <Skeleton active /> : publicResults?.items?.length ? <Table scroll={{ x: "max-content" }} rowKey={(row) => `${row.query_id ?? ""}-${row.subject_id}-${row.hsp_num}`} columns={columns} dataSource={publicResults.items} pagination={{ current: page, pageSize: 25, total: publicResults.total, onChange: (nextPage) => setPage(nextPage) }} /> : <Empty description={t("blast.noHits")} />}
         </Card>
       ) : null}
     </div>

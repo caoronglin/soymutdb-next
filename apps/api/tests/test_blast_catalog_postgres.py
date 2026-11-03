@@ -60,12 +60,12 @@ async def test_postgres_catalog_restricts_all_selectors_before_job_and_outbox(
     service = BlastService()
     context = ReleaseContext(release_id=release.id, assembly_id=assembly.id, assembly=assembly.name)
     discovered = await service.list_databases(db_session, release_context=context)
-    assert [entry.id for entry in discovered] == [ready.id]
+    assert [entry.id for entry in discovered] == [ready.id, unavailable[0].id]
     public = await client.get("/api/v1/blast/databases", headers={
         "X-SoyMutDB-Release": str(release.id),
     })
     assert public.status_code == 200, public.text
-    assert [entry["id"] for entry in public.json()] == [ready.id]
+    assert [entry["id"] for entry in public.json()] == [ready.id, unavailable[0].id]
     assert "/private/" not in public.text
     assert "provenance" not in public.text
     assert "catalog_draft" not in public.text
@@ -76,14 +76,16 @@ async def test_postgres_catalog_restricts_all_selectors_before_job_and_outbox(
             {"database_id": unavailable_row.id}, {"database": unavailable_row.name},
             {"database_id": unavailable_row.id, "database": unavailable_row.name},
         ):
-            request = BlastSubmitRequest(query_sequence="MKVLAAGIVGLNLGGK", **selector)
+            request = BlastSubmitRequest(
+                engine="diamond", query_sequence="MKVLAAGIVGLNLGGK", **selector
+            )
             with pytest.raises(NotFoundError):
                 await service.submit_job(db_session, None, request, release_context=context)
         # An incompatible configured default may fall back to the release's
         # runnable default but must never select the incompatible row itself.
         monkeypatch.setattr(blast_service.settings, "blast_default_db", unavailable_row.name)
         resolved = await service._resolve_database(
-            db_session, BlastSubmitRequest(query_sequence="MKVLAAGIVGLNLGGK"),
+            db_session, BlastSubmitRequest(engine="diamond", query_sequence="MKVLAAGIVGLNLGGK"),
             release_context=context,
         )
         assert resolved.id == ready.id
@@ -97,7 +99,9 @@ async def test_postgres_catalog_restricts_all_selectors_before_job_and_outbox(
     assert draft_request.status_code == 404
     response = await service.submit_job(
         db_session, None,
-        BlastSubmitRequest(database_id=ready.id, query_sequence="MKVLAAGIVGLNLGGK"),
+        BlastSubmitRequest(
+            engine="diamond", database_id=ready.id, query_sequence="MKVLAAGIVGLNLGGK"
+        ),
         release_context=context,
     )
     assert response.database_id == ready.id

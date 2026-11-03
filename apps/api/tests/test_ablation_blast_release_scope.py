@@ -120,6 +120,7 @@ def _make_assembly(release_id: int = _RELEASE_ID) -> Assembly:
 
 def _make_request(**overrides: Any) -> BlastSubmitRequest:
     defaults: dict[str, Any] = dict(
+        engine="diamond",
         program=BlastSubmitProgram.BLASTP,
         query_sequence="ATGCAAGCTTAGCTAGGCTAGGCTAGGC",
         parameters=BlastParameters(),
@@ -268,3 +269,12 @@ def test_job_response_exposes_the_searched_release_and_assembly():
 
     assert response.release_id == _RELEASE_ID
     assert response.assembly_name == "Wm82.a4.v1"
+
+
+@pytest.fixture(autouse=True)
+def isolated_database_quota_boundary(monkeypatch):
+    """These fake-session tests cover mapping; PostgreSQL quota tests cover locks."""
+    async def enforce(_self, _db, _user_id):
+        return None
+
+    monkeypatch.setattr(BlastService, "_enforce_user_limit", enforce)

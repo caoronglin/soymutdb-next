@@ -29,12 +29,13 @@ vi.mock("../lib/use-current-user", () => ({
   useCurrentUser: () => ({ user: runtime.currentUser, isLoading: false }),
   grantsResearcher: (user: { is_superuser?: boolean; effective_roles?: string[] }) => user.is_superuser === true || user.effective_roles?.includes("researcher") === true,
 }));
-vi.mock("@soymutdb/api-client", () => ({
-  BLAST_PROGRAMS: [{ value: "blastp", label: "BLASTP" }], apiBaseUrl: "/api/v1", getAccessToken: () => null,
+vi.mock("@soymutdb/api-client", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@soymutdb/api-client")>(),
+  apiBaseUrl: "/api/v1", getAccessToken: () => null,
   // The database list belongs to the ACTIVE release (release 9) — it must
   // never be used to re-label a job that was computed against another one.
   getBlastDatabases: async () => [
-    { id: 1, name: "protein-v4", is_active: true, assembly_name: runtime.activeAssembly, release_id: 9 },
+    { id: 1, name: "protein-v4", db_type: "prot", engine: "ncbi_blast", build_status: "ready", is_active: true, assembly_name: runtime.activeAssembly, release_id: 9 },
   ],
   getBlastJobs: async () => ({
     items: [{
