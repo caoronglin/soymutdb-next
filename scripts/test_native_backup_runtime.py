@@ -1134,6 +1134,45 @@ def test_no_repo_env_option_keeps_the_repository_env_out_of_the_run(
     assert "repo-env-host" not in "\n".join(_psql_calls(tmp_path))
 
 
+def test_back_to_back_runs_do_not_collide_on_a_second_stamped_backup_id(
+    tmp_path: Path,
+) -> None:
+    """Two backups in the same wall second must not refuse to run.
+
+    The backup id is `<timestamp>-<component hash>`, the timestamp has second
+    resolution, and identical source data yields an identical component hash.
+    A second run started inside the same second therefore built the very id the
+    first run had just published and aborted with
+
+        refusing to overwrite existing backup artifact: <id>.tar.gz
+
+    against a file it had not created. This was flaky rather than deterministic
+    because it depended on how long the harness took, which is why it surfaced
+    as an intermittent contracts-suite failure. Runs are now serialised onto
+    distinct seconds.
+    """
+    fake_bin = _tool_bin(tmp_path)
+    env = _env(tmp_path, fake_bin)
+    env.pop("SOYMUTDB_BACKUP_REPO_ENV")
+    _seed_source_bucket(tmp_path / "mc-store")
+    project = _fake_project(tmp_path)
+
+    # Three runs in a row is the smallest count that exposes the collision: the
+    # second run usually still lands in the next second, the third does not.
+    for attempt in range(3):
+        result = _run(
+            ["bash", str(project / "deploy/scripts/backup.sh"), "--no-repo-env"],
+            env=env,
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0, f"run {attempt}: {result.stdout}{result.stderr}"
+
+    archives = sorted((tmp_path / "backups").glob("*.tar.gz"))
+    assert len(archives) == 3, [archive.name for archive in archives]
+    ids = {archive.name.removesuffix(".tar.gz").rsplit("-", 1)[0] for archive in archives}
+    assert len(ids) == 3, f"backup ids collided: {sorted(ids)}"
+
+
 def test_repo_env_policy_rejects_an_ambiguous_value(tmp_path: Path) -> None:
     fake_bin = _tool_bin(tmp_path)
     env = _env(tmp_path, fake_bin, SOYMUTDB_BACKUP_REPO_ENV="maybe")
