@@ -13,7 +13,7 @@ from .auth import (
     User,
 )
 from .base import AuditMixin, Base, SoftDeleteMixin, TimestampMixin
-from .blast import BlastDatabase, BlastHit, BlastJob
+from .blast import BlastDatabase, BlastHit, BlastIndexBuild, BlastJob
 from .content import (
     DownloadFile,
     NewsArticle,
@@ -89,6 +89,7 @@ __all__ = [
     "Base",
     "BlastDatabase",
     "BlastHit",
+    "BlastIndexBuild",
     "BlastJob",
     "Chromosome",
     "DataPatch",

@@ -74,7 +74,26 @@ expiry and provenance. Unsupported program/database pairs fail validation
 before a worker is queued. A BLAST hit is a similarity candidate, never an
 orthology assertion.
 
-## Verification evidence (this PR)
+## Async build and publication slice
+
+Catalog builds are asynchronous and worker-only: the admin endpoint records a
+``blast_index_builds`` row plus an outbox event, and the ``blast``-queue worker
+runs ``makeblastdb``/``blastdbcmd``. The shared state machine is
+``pending -> building -> validating -> published / failed``; only ``published``
+(or legacy ``ready`` DIAMOND) rows are searchable. Each rebuild produces a new
+content-addressed identity and a new catalog row; published directories are
+immutable. Indexes live **only** on the worker's local volume
+(``SOYMUTDB_BLAST_INDEX_ROOT``); the object store carries only the reviewed
+source FASTA. See [index operations](../ops/blast-index-builder.md).
+
+Protein/translated hits never expose amino-acid coordinates as genomic
+coordinates: the genome-target endpoint resolves the subject through an
+explicit gene/alias/transcript relation in the job's own assembly and release,
+and reports ``unresolved`` with a reason when no relation exists. Cancellation,
+retry (as a new job) and download expiry are engine-independent and cover both
+NCBI BLAST+ and DIAMOND.
+
+## Verification evidence
 
 Real NCBI BLAST+ 2.17.0+ binaries were used to build nucleotide and protein
 indexes and to execute all five programs against synthetic CC0 fixtures.
@@ -85,8 +104,10 @@ for commands, pass counts and environment limits.
 
 ## Remaining limitations
 
-- Index construction is operator-driven; there is no admin-triggered async
-  rebuild endpoint or automatic object-store publication in this slice.
+- Index construction is worker-triggered asynchronously, but there is no admin
+  UI for it and no cross-worker distribution of the index volume: a deployment
+  either mounts the volume on its `blast`-queue worker or cannot serve NCBI
+  search.
 - No production multi-species/pan-genome FASTA is bundled; release-scoped
   catalog rows must be provisioned by operators.
 - DIAMOND `blastp` remains the only DIAMOND program. Custom researcher-uploaded

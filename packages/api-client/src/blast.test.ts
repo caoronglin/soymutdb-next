@@ -103,51 +103,66 @@ describe("BLAST client contract", () => {
   function json(body: unknown, status = 200) {
     return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
   }
-  const job = { release_id: 4, assembly_name: "Wm82.a4.v1" };
-  const gene = { gene_id: "Glyma.01G000100", assembly_id: "7", chromosome: "chr01", start_pos: 12000, end_pos: 15000 };
+  const job = { id: "job-1", release_id: 4, assembly_name: "Wm82.a4.v1" };
+  const resolved = {
+    status: "resolved", gene_id: "Glyma.01G000100", chromosome: "chr01",
+    start: 12000, end: 15000, strand: "+", release_id: 4, assembly_id: 7,
+    assembly_name: "Wm82.a4.v1", locus: "chr01:12000-15000",
+    resolution: "gene_accession",
+  };
 
   it("preserves API job provenance through normalization", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(json({ job_id: "job", database_id: 1, ...job }));
-    expect(await getBlastJob("job")).toMatchObject({ id: "job", database: "1", ...job });
+    const provenance = { release_id: 4, assembly_name: job.assembly_name };
+    vi.mocked(fetch).mockResolvedValueOnce(json({ job_id: "job", database_id: 1, ...provenance }));
+    expect(await getBlastJob("job")).toMatchObject({ id: "job", database: "1", ...provenance });
   });
-  it("uses exact assembly/gene records and overrides active release headers", async () => {
-    setReleaseId("9");
-    vi.mocked(fetch).mockResolvedValueOnce(json([{ id: 7, name: job.assembly_name }]))
-      .mockResolvedValueOnce(json(gene));
-    expect(await resolveBlastHitGenomeTarget(job, gene.gene_id)).toEqual({ release: "4", assembly: job.assembly_name, locus: "chr01:12000-15000" });
-    expect(fetch).toHaveBeenCalledTimes(2);
-    for (const [input, init] of vi.mocked(fetch).mock.calls) {
-      expect(new Headers(init?.headers).get("X-SoyMutDB-Release")).toBe("4");
-      expect(new URL(String(input), "http://localhost").searchParams.has("release_id")).toBe(false);
-    }
-    const geneUrl = new URL(String(vi.mocked(fetch).mock.calls[1][0]), "http://localhost");
-    expect(geneUrl.searchParams.get("assembly_id")).toBe("7");
+  it("resolves a subject through the API's explicit gene relation, never AA coordinates", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(json(resolved));
+    expect(await resolveBlastHitGenomeTarget(job, "Glyma.01G000100")).toMatchObject({
+      release: "4", assembly: job.assembly_name, locus: "chr01:12000-15000",
+      resolution: "gene_accession",
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const [input, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    expect(String(input)).toContain("/blast/jobs/job-1/hits/Glyma.01G000100/genome-target");
+    // No alignment coordinates are ever sent to build a genome location.
+    expect(String(input)).not.toMatch(/subject_start|subject_end|qstart|sstart/);
+    expect(init.body).toBeUndefined();
+  });
+  it("uses the anonymous capability endpoint for public jobs", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(json(resolved));
+    await resolveBlastHitGenomeTarget(job, "Glyma.01G000100", { publicToken: "secret" });
+    const [input, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    expect(String(input)).toContain("/blast/public/jobs/job-1/hits/");
+    expect(new Headers(init.headers).get("X-Blast-Token")).toBe("secret");
+    expect(init.credentials).toBe("omit");
   });
   it("does not request data for an unproven job context", async () => {
-    expect(await resolveBlastHitGenomeTarget({ release_id: null }, "gene")).toBeNull();
+    expect(await resolveBlastHitGenomeTarget({ ...job, release_id: null }, "gene")).toBeNull();
     expect(fetch).not.toHaveBeenCalled();
   });
-  it("rejects ambiguous assembly names instead of choosing one", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(json([{ id: 7, name: job.assembly_name }, { id: 8, name: job.assembly_name }]));
-    expect(await resolveBlastHitGenomeTarget(job, gene.gene_id)).toBeNull();
+  it("does not fabricate a locus when the API says the subject is unresolved", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(json({ status: "unresolved", reason: "subject_not_found" }));
+    expect(await resolveBlastHitGenomeTarget(job, "protein.1")).toBeNull();
     expect(fetch).toHaveBeenCalledTimes(1);
   });
-  it("does not issue an unscoped lookup if an assembly response lacks its identity", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(json([{ name: job.assembly_name }]));
-    expect(await resolveBlastHitGenomeTarget(job, gene.gene_id)).toBeNull();
-    expect(fetch).toHaveBeenCalledTimes(1);
+  it("rejects a transcript/alias resolution that came from another release or assembly", async () => {
+    for (const wrong of [
+      { ...resolved, release_id: 5 },
+      { ...resolved, assembly_name: "Wm82.a2.v1" },
+      { ...resolved, start: 0 },
+      { ...resolved, end: 1 },
+      { ...resolved, locus: null },
+    ]) {
+      vi.mocked(fetch).mockResolvedValueOnce(json(wrong));
+      expect(await resolveBlastHitGenomeTarget(job, "subject")).toBeNull();
+    }
   });
   it("does not strip protein isoform suffixes or fuzzy-match unknown IDs", async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(json([{ id: 7, name: job.assembly_name }]))
-      .mockResolvedValueOnce(json({ error: { code: "not_found", message: "missing" } }, 404));
+    vi.mocked(fetch).mockResolvedValueOnce(json({ error: { code: "not_found", message: "missing" } }, 404));
     expect(await resolveBlastHitGenomeTarget(job, "protein/a.1")).toBeNull();
-    expect(String(vi.mocked(fetch).mock.calls[1][0])).toContain("/genes/protein%2Fa.1?");
-    expect(fetch).toHaveBeenCalledTimes(2);
-  });
-  it.each([{ assembly_id: "8" }, { start_pos: 0 }, { end_pos: 1 }, { chromosome: " " }, { gene_id: "another" }])("rejects an untrusted gene interval %j", async (invalid) => {
-    vi.mocked(fetch).mockResolvedValueOnce(json([{ id: 7, name: job.assembly_name }]))
-      .mockResolvedValueOnce(json({ ...gene, ...invalid }));
-    expect(await resolveBlastHitGenomeTarget(job, gene.gene_id)).toBeNull();
+    expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain("/hits/protein%2Fa.1/genome-target");
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
   it("uses the implemented jobs list and result routes", async () => {
