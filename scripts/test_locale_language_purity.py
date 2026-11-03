@@ -43,8 +43,9 @@ EXEMPT = {
     "home.databaseEyebrow",
     # Vendor product name, identical in both bundles by design.
     "admin.analyticsSettings.badgeCloudflare",
-    # Upstream tool name, identical in both bundles by design: "NCBI BLAST+"
-    # is not translated in a Chinese UI either.
+    # Upstream tool name (the NCBI search engine). A BLAST user searches for
+    # "NCBI BLAST+", not for a translation of it, and the platform never renders
+    # a localised alias anywhere else.
     "blastSearch.engineNcbi",
 }
 
