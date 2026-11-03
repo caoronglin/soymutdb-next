@@ -409,6 +409,14 @@ def get_blast_db_path(db_name: str) -> Path:
 # ---------------------------------------------------------------------------
 
 
+# `preexec_fn` runs inside the forked child, so the limits below can only be set
+# on platforms that implement them; a missing RLIMIT is expected and must not
+# abort the search. Both clauses therefore catch and ignore. This function was
+# unimportable for a while (`except ValueError, OSError:` is Python 2 syntax),
+# which is why the worker's per-child limits are only trusted after a real
+# subprocess search, not after an import check.
+
+
 def _set_subprocess_limits() -> None:
     """Set memory and file-size limits for the child process via ``resource``.
 
@@ -418,12 +426,12 @@ def _set_subprocess_limits() -> None:
     mem_bytes = MAX_MEMORY_MB * 1024 * 1024
     try:
         resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
-    except ValueError, OSError:
+    except (ValueError, OSError):
         pass  # May not be supported on all platforms
     # Output file size limit
     try:
         resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_SIZE, MAX_OUTPUT_SIZE))
-    except ValueError, OSError:
+    except (ValueError, OSError):
         pass
 
 

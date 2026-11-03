@@ -120,7 +120,15 @@ def test_node_and_pnpm_toolchain_is_exact_in_jobs_that_build_assets() -> None:
     assert (ROOT / ".nvmrc").read_text(encoding="utf-8").strip() == NODE_VERSION
     assert (ROOT / ".node-version").read_text(encoding="utf-8").strip() == NODE_VERSION
     assert package["packageManager"] == f"pnpm@{PNPM_VERSION}"
-    assert package["engines"] == {"node": ">=26.0.0 <27", "pnpm": PNPM_VERSION}
+    # The floor tracks the runtime patch, not the major: a solution that
+    # resolves `26.0.0` satisfies a `>=26 <27` range while the repository's
+    # `.nvmrc`/Dockerfile pins (and therefore its tested toolchain) require
+    # 26.13.0. `check-toolchain-pins.py` validates the *shape*; this pins the
+    # exact string so a floor downgrade cannot pass silently.
+    assert package["engines"] == {
+        "node": f">={NODE_VERSION} <{int(NODE_VERSION.split('.')[0]) + 1}",
+        "pnpm": PNPM_VERSION,
+    }
 
     # CNB is the primary delivery pipeline. Every pipeline that builds or tests
     # the workspace must pin the exact Node release; the smoke pipeline runs the
