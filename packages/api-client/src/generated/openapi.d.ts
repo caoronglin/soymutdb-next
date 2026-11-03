@@ -1225,6 +1225,150 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/blast/index-builds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Blast Index Build
+         * @description Request an immutable NCBI index build (admin only).
+         *
+         *     Records the catalog/build rows and one transactional-outbox event in a
+         *     single transaction. ``makeblastdb`` never runs inside this HTTP request;
+         *     the worker on the ``blast`` queue owns construction and publication.
+         */
+        post: operations["create_blast_index_build_api_v1_blast_index_builds_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/index-builds/{build_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Blast Index Build
+         * @description Poll one build's state; no filesystem path or binary name is exposed.
+         */
+        get: operations["get_blast_index_build_api_v1_blast_index_builds__build_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/jobs/{job_id}/hits/{subject_id}/genome-target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Blast Hit Genome Target
+         * @description Resolve a subject to a gene locus in the job's release/assembly.
+         *
+         *     Never derives genomic coordinates from amino-acid alignment positions.
+         *     An unresolved subject returns an explicit reason and no locus.
+         */
+        get: operations["get_blast_hit_genome_target_api_v1_blast_jobs__job_id__hits__subject_id__genome_target_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Blast Job
+         * @description Cancel a pending/running job (engine-independent).
+         */
+        post: operations["cancel_blast_job_api_v1_blast_jobs__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/jobs/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Blast Job
+         * @description Retry a failed/expired job as a new job with the same search contract.
+         */
+        post: operations["retry_blast_job_api_v1_blast_jobs__job_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/public/jobs/{job_id}/hits/{subject_id}/genome-target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Public Blast Hit Genome Target */
+        get: operations["get_public_blast_hit_genome_target_api_v1_blast_public_jobs__job_id__hits__subject_id__genome_target_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/public/jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Public Blast Job
+         * @description Anonymous capability holder may cancel only its own pending job.
+         */
+        post: operations["cancel_public_blast_job_api_v1_blast_public_jobs__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/blast/public/jobs": {
         parameters: {
             query?: never;
@@ -5150,7 +5294,7 @@ export interface components {
              * @default pending
              * @enum {string}
              */
-            build_status: "pending" | "ready" | "building" | "failed";
+            build_status: "pending" | "building" | "validating" | "published" | "failed" | "ready";
             /**
              * Is Default
              * @default false
@@ -5158,6 +5302,43 @@ export interface components {
             is_default: boolean;
             /** License */
             license?: string | null;
+        };
+        /**
+         * BlastGenomeTargetResponse
+         * @description JBrowse target for one BLAST subject, resolved through an explicit relation.
+         *
+         *     ``status == "unresolved"`` carries ``reason`` and no locus: the caller must
+         *     say the mapping is unavailable instead of guessing a genomic coordinate.
+         *     Amino-acid alignment coordinates from blastp/blastx are never used here.
+         */
+        BlastGenomeTargetResponse: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "resolved" | "unresolved";
+            /** Reason */
+            reason?: ("job_not_completed" | "authorization_failed" | "unsupported_program" | "subject_not_found" | "ambiguous_subject" | "assembly_mismatch" | "no_genomic_coordinates" | "invalid_subject_id") | null;
+            /** Gene Id */
+            gene_id?: string | null;
+            /** Chromosome */
+            chromosome?: string | null;
+            /** Start */
+            start?: number | null;
+            /** End */
+            end?: number | null;
+            /** Strand */
+            strand?: string | null;
+            /** Release Id */
+            release_id?: number | null;
+            /** Assembly Id */
+            assembly_id?: number | null;
+            /** Assembly Name */
+            assembly_name?: string | null;
+            /** Locus */
+            locus?: string | null;
+            /** Resolution */
+            resolution?: ("gene_accession" | "gene_alias" | "transcript_id") | null;
         };
         /** BlastHit */
         BlastHit: {
@@ -5202,6 +5383,81 @@ export interface components {
              * @default plus
              */
             subject_strand: string;
+        };
+        /**
+         * BlastIndexBuildRequest
+         * @description Admin request to build one immutable NCBI index in a worker.
+         *
+         *     The source FASTA is an object-store key under ``blast-sources/`` that was
+         *     uploaded and reviewed beforehand. No local path, binary name or output
+         *     directory is accepted from a client. Rebuilds create a new catalog row and
+         *     a new content-addressed identity; they never overwrite a published index.
+         */
+        BlastIndexBuildRequest: {
+            /** Source Object Key */
+            source_object_key: string;
+            /**
+             * Db Type
+             * @enum {string}
+             */
+            db_type: "nucl" | "prot";
+            /** Assembly Name */
+            assembly_name: string;
+            /** Annotation Version */
+            annotation_version: string;
+            /** Source Version */
+            source_version: string;
+            /** Source Url */
+            source_url: string;
+            /** License */
+            license: string;
+            /** Name */
+            name: string;
+            /**
+             * Sequence Type
+             * @default genome
+             * @enum {string}
+             */
+            sequence_type: "genome" | "cds" | "transcript" | "protein" | "repeat_masked" | "pan_genome" | "family_consensus" | "custom";
+        };
+        /**
+         * BlastIndexBuildResponse
+         * @description Status of one build; no filesystem path or binary name is exposed.
+         */
+        BlastIndexBuildResponse: {
+            /** Build Id */
+            build_id: string;
+            /** Database Id */
+            database_id: number;
+            /** Name */
+            name: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "building" | "validating" | "published" | "failed" | "ready";
+            /**
+             * Db Type
+             * @enum {string}
+             */
+            db_type: "nucl" | "prot";
+            /** Index Identity */
+            index_identity?: string | null;
+            /** Sequence Count */
+            sequence_count?: number | null;
+            /** Total Length */
+            total_length?: number | null;
+            /** Error Message */
+            error_message?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Started At */
+            started_at?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
         };
         /** BlastJobListResponse */
         BlastJobListResponse: {
@@ -13038,6 +13294,302 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BlastResultResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_blast_index_build_api_v1_blast_index_builds_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlastIndexBuildRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastIndexBuildResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_blast_index_build_api_v1_blast_index_builds__build_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                build_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastIndexBuildResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_blast_hit_genome_target_api_v1_blast_jobs__job_id__hits__subject_id__genome_target_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                subject_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastGenomeTargetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_blast_job_api_v1_blast_jobs__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    retry_blast_job_api_v1_blast_jobs__job_id__retry_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_public_blast_hit_genome_target_api_v1_blast_public_jobs__job_id__hits__subject_id__genome_target_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Blast-Token"?: string | null;
+            };
+            path: {
+                job_id: string;
+                subject_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastGenomeTargetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_public_blast_job_api_v1_blast_public_jobs__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Blast-Token"?: string | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobResponse"];
                 };
             };
             /** @description Validation Error */

@@ -20,6 +20,11 @@
 #
 # Callers must export HDF5_PKGCONFIG_NAME=hdf5-serial before building h5py on
 # Debian trixie, which only ships the serial .pc file.
+# Callers must export HDF5_PKGCONFIG_NAME=hdf5-serial before the worker
+# resolution. Two gates reach the worker runtime on Python 3.15 and both own
+# that export: scripts/verify-backend-tests.sh (worker editable install) and
+# scripts/ci-job-steps.sh (dependency-governance license analyzer, whose
+# `uv run --locked --project apps/worker` also builds h5py from sdist).
 #
 # Usage: bash scripts/install-worker-science-build-deps.sh
 # =============================================================================

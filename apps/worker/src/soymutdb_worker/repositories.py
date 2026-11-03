@@ -19,7 +19,9 @@ from sqlalchemy.dialects.postgresql import JSONB
 from soymutdb_worker.shared import JobStatus, JobStatusUpdate, transition_allowed
 from soymutdb_worker.tables import (
     analysis_jobs,
+    blast_databases_catalog,
     blast_hits,
+    blast_index_builds,
     blast_jobs,
     gwas_jobs,
     import_tasks,
@@ -867,8 +869,184 @@ class NotifyStore:
 __all__ = [
     "AnalysisJobStore",
     "BlastHitStore",
+    "BlastIndexBuildStore",
     "BlastJobStore",
     "GwasJobStore",
     "ImportTaskStore",
     "NotifyStore",
 ]
+
+
+class BlastIndexBuildStore:
+    """Narrow repository over ``blast_index_builds``.
+
+    Every state write is a guarded conditional UPDATE validated by the shared
+    BLAST catalog state machine, so duplicate outbox deliveries cannot advance
+    a build twice or publish a stale identity. Failure reasons are sanitized
+    (no paths, no child stderr, no sequences).
+    """
+
+    def __init__(self, session) -> None:
+        self._session = session
+
+    def get_state(self, build_id: str | uuid.UUID) -> tuple[str, dict] | None:
+        row = self._session.execute(
+            select(
+                blast_index_builds.c.state,
+                blast_index_builds.c.build_metadata,
+                blast_index_builds.c.source_object_key,
+                blast_index_builds.c.db_type,
+                blast_index_builds.c.index_identity,
+                blast_index_builds.c.database_id,
+            ).where(blast_index_builds.c.id == str(build_id))
+        ).first()
+        if row is None:
+            return None
+        state, metadata, key, db_type, identity, database_id = row
+        return state, {
+            "build_metadata": metadata or {}, "source_object_key": key, "db_type": db_type,
+            "index_identity": identity, "database_id": database_id,
+        }
+
+    def expire_stale_claim(self, build_id: str | uuid.UUID, lease_seconds: int) -> bool:
+        """Close a claim whose worker died, without starting another build."""
+        row = self._session.execute(
+            select(blast_index_builds.c.state, blast_index_builds.c.started_at).where(
+                blast_index_builds.c.id == str(build_id)
+            )
+        ).first()
+        if row is None or row[0] not in {"building", "validating"}:
+            return False
+        started_at = row[1]
+        if started_at is None:
+            return False
+        if started_at.tzinfo is None:
+            from datetime import UTC
+
+            started_at = started_at.replace(tzinfo=UTC)
+        if (utcnow() - started_at).total_seconds() < lease_seconds:
+            return False
+        result = self._session.execute(
+            update(blast_index_builds)
+            .where(
+                blast_index_builds.c.id == str(build_id),
+                blast_index_builds.c.state == row[0],
+                blast_index_builds.c.started_at == started_at,
+            )
+            .values(
+                state="failed",
+                error_message="build attempt lost (claim lease expired)",
+                completed_at=utcnow(),
+                updated_at=utcnow(),
+            )
+        )
+        return bool(getattr(result, "rowcount", 0))
+
+    def transition(
+        self,
+        build_id: str | uuid.UUID,
+        target: str,
+        *,
+        expected: str,
+        fields: dict[str, Any] | None = None,
+    ) -> bool:
+        """Apply one legal state step only if the row is still at *expected*."""
+        from soymutdb_jobs.blast_catalog import build_transition_allowed, validate_build_state
+
+        validate_build_state(target)
+        if not build_transition_allowed(expected, target):
+            return False
+        now = utcnow()
+        values: dict[str, Any] = {"state": target, "updated_at": now}
+        if target == "building":
+            values["started_at"] = now
+        if target in {"published", "failed"}:
+            values["completed_at"] = now
+        if fields:
+            values.update(fields)
+        result = self._session.execute(
+            update(blast_index_builds)
+            .where(
+                blast_index_builds.c.id == str(build_id),
+                blast_index_builds.c.state == expected,
+            )
+            .values(**values)
+        )
+        return bool(getattr(result, "rowcount", 0))
+
+    def fail(self, build_id: str | uuid.UUID, *, reason: str) -> bool:
+        """Terminal failure from any non-terminal state, with a scrubbed reason."""
+        current, _ = self.get_state(build_id) or (None, {})
+        if current is None or current in {"published", "failed", "ready"}:
+            return False
+        return self.transition(
+            build_id, "failed", expected=current,
+            fields={"error_message": _scrub_build_error(reason)},
+        )
+
+    def publish(
+        self,
+        build_id: str | uuid.UUID,
+        *,
+        identity: str,
+        source_sha256: str,
+        sequence_count: int,
+        total_length: int,
+        database_id: int | None,
+    ) -> bool:
+        """Atomically publish the verified identity and bind the catalog row.
+
+        The catalog row is updated in the same transaction: an index becomes
+        searchable only when both the build record and the catalog agree.
+        A published directory is never overwritten.
+        """
+        from soymutdb_jobs.blast_catalog import index_identity as validate_identity
+
+        validate_identity(identity)
+        current, _ = self.get_state(build_id) or (None, {})
+        if current != "validating":
+            return False
+
+        # Bind the catalog row first. If the guarded UPDATE is rejected the
+        # whole transaction rolls back and the build row stays ``validating``,
+        # so the caller's failure handler can close it as ``failed`` rather
+        # than leaving a build marked published with no searchable index.
+        if database_id is not None:
+            updated = self._session.execute(
+                update(blast_databases_catalog)
+                .where(
+                    blast_databases_catalog.c.id == database_id,
+                    blast_databases_catalog.c.build_status.in_(
+                        ["pending", "building", "validating"]
+                    ),
+                    blast_databases_catalog.c.index_version.is_(None),
+                )
+                .values(
+                    build_status="published",
+                    index_version=identity,
+                    fasta_sha256=source_sha256,
+                    sequence_count=sequence_count,
+                    total_length=total_length,
+                    engine="ncbi_blast",
+                    is_active=True,
+                )
+            )
+            if not getattr(updated, "rowcount", 0):
+                raise ValueError("catalog row missing or already published")
+
+        return self.transition(
+            build_id, "published", expected="validating",
+            fields={
+                "index_identity": identity,
+                "source_sha256": source_sha256,
+                "sequence_count": sequence_count,
+                "total_length": total_length,
+            },
+        )
+
+
+def _scrub_build_error(reason: str, *, max_len: int = 2000) -> str:
+    """Operator diagnostics never echo paths, sequences or raw child stderr."""
+    clean = "".join(ch for ch in reason if ch.isprintable() or ch in "\n\t")
+    clean = " ".join(clean.split())
+    return (clean[:max_len] or "index build failed")
