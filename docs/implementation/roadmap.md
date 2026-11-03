@@ -7,7 +7,7 @@
 - Recorded the test baseline on Python 3.15 (see [`blast-verification-pr.md`](blast-verification-pr.md)).
 - Completed a first-party external-database research pass; see [`../research/plant-database-feature-comparison.md`](../research/plant-database-feature-comparison.md). Unverifiable sources remain labelled candidates.
 
-## Phase 1: BLAST+ (implemented, verified in this PR)
+## Phase 1: BLAST+ (execution repaired; see status below)
 
 - NCBI BLAST+ executes all five standard programs against real 2.17.0+ binaries.
 - DIAMOND `blastp` is retained as an explicitly selected backend; both engines remain available in the API, client, frontend and MCP contracts.
@@ -37,6 +37,21 @@ Add PlantTFDB, PlantCARE, PlantCyc and optional GBIF adapters only after source 
 
 Extend the existing asynchronous download service with a no-SQL query builder, provenance manifests, cursor pagination, accessibility and performance gates.
 
+### Phase 1 status: repaired but incomplete
+
+The NCBI execution slice landed unreachable: `ncbi_blast.py` did not parse
+(Python-2 `except A, B:`), and the worker whitelisted `blastp` for every engine,
+so four of the five advertised programs were refused. Both are fixed and the
+five programs now pass real-binary searches — see
+[runtime repair evidence](blast-ncbi-runtime-repair-pr.md).
+
+Still open in Phase 1:
+
+- asynchronous `makeblastdb` build/publication workflow in the worker;
+- protein-hit → transcript/gene resolution before genome-browser links;
+- five-program UI wiring against the existing `/blast` page;
+- cancellation, retry and download-expiry coverage for NCBI jobs.
+
 ## Delivery notes
 
 Earlier slices were delivered as separate commits on `main`: anonymous
@@ -44,5 +59,5 @@ capability authorization, catalog/index preparation, and NCBI execution. This
 PR closes the verification gap: it makes the opt-in real-binary tests reliable
 offline, aligns the architecture/roadmap documents with the implemented state,
 records a first-party research ledger, and reports actual pass counts. It does
-not replace the existing delivery pipeline or add a second job queue/storage
-backend.
+not complete the four Phase 1 items listed above, and does not replace the
+existing delivery pipeline or add a second job queue/storage backend.

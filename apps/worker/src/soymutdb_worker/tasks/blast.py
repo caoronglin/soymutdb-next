@@ -171,10 +171,19 @@ def get_ncbi_db_path(
     return path
 
 
-#: The single executable program. NCBI BLAST and the translated-search
-#: programs (``blastn`` / ``blastx`` / ``tblastn`` / ``tblastx``) have no
-#: engine in this deployment and are rejected before any index is touched.
-ALLOWED_PROGRAMS = frozenset({"blastp"})
+#: Program set per engine. DIAMOND has no nucleotide search, so the four
+#: remaining NCBI programs belong to ``ncbi_blast`` and are rejected before any
+#: index is touched. One shared set is exactly the bug this replaces: the task
+#: routes blastn/blastx/tblastn/tblastx to the NCBI runner, but a blastp-only
+#: whitelist refused them first.
+ENGINE_PROGRAMS = {
+    #: DIAMOND is protein-to-protein only.
+    "diamond": frozenset({"blastp"}),
+    #: NCBI BLAST+ runs all five standard searches.
+    "ncbi_blast": frozenset({"blastn", "blastp", "blastx", "tblastn", "tblastx"}),
+}
+#: Union kept under the historical name for callers that probe the vocabulary.
+ALLOWED_PROGRAMS = frozenset().union(*ENGINE_PROGRAMS.values())
 
 # Resource limits
 MAX_QUERY_LENGTH = int(get_setting("BLAST_MAX_QUERY_LENGTH", "100000"))
@@ -225,12 +234,20 @@ def sanitize_error_message(
 # ---------------------------------------------------------------------------
 
 
-def validate_program(program: str) -> str:
-    """Validate that *program* is the one program this deployment executes."""
-    if program not in ALLOWED_PROGRAMS:
+def validate_program(program: str, engine: str = "diamond") -> str:
+    """Validate *program* against the program set of *engine*.
+
+    The engine decides the vocabulary: DIAMOND is protein-only (``blastp``),
+    NCBI BLAST+ runs all five standard searches. Validating against the union
+    would let a DIAMOND job reach the runner with a program it cannot execute,
+    and validating against DIAMOND alone is what made every nucleotide search
+    fail before the index was even opened.
+    """
+    allowed = ENGINE_PROGRAMS.get(engine, ENGINE_PROGRAMS["diamond"])
+    if program not in allowed:
         raise ValueError(
-            f"Unsupported program: {program!r}. This deployment searches with "
-            f"DIAMOND blastp only; allowed: {sorted(ALLOWED_PROGRAMS)}"
+            f"Unsupported program: {program!r} for engine {engine!r}; "
+            f"allowed: {sorted(allowed)}"
         )
     return program
 
@@ -409,6 +426,14 @@ def get_blast_db_path(db_name: str) -> Path:
 # ---------------------------------------------------------------------------
 
 
+# `preexec_fn` runs inside the forked child, so the limits below can only be set
+# on platforms that implement them; a missing RLIMIT is expected and must not
+# abort the search. Both clauses therefore catch and ignore. This function was
+# unimportable for a while (`except ValueError, OSError:` is Python 2 syntax),
+# which is why the worker's per-child limits are only trusted after a real
+# subprocess search, not after an import check.
+
+
 def _set_subprocess_limits() -> None:
     """Set memory and file-size limits for the child process via ``resource``.
 
@@ -418,12 +443,12 @@ def _set_subprocess_limits() -> None:
     mem_bytes = MAX_MEMORY_MB * 1024 * 1024
     try:
         resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
-    except ValueError, OSError:
+    except (ValueError, OSError):
         pass  # May not be supported on all platforms
     # Output file size limit
     try:
         resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_SIZE, MAX_OUTPUT_SIZE))
-    except ValueError, OSError:
+    except (ValueError, OSError):
         pass
 
 
@@ -501,7 +526,8 @@ def run_blast_command(
     queued payload written before the engine was reduced still loads; any
     non-default value is rejected rather than silently ignored.
     """
-    program = validate_program(program)
+    # DIAMOND has no nucleotide search: resolve its own program set.
+    program = validate_program(program, "diamond")
     if word_size is not None:
         raise ValueError(
             "word_size is a retired NCBI BLAST option; DIAMOND blastp has no equivalent"
@@ -720,9 +746,11 @@ def run_blast(
 
     # Validate inputs before doing any work
     if engine == "diamond":
-        validate_program(program)
+        validate_program(program, "diamond")
         validate_sequence(sequence)
     elif engine == "ncbi_blast":
+        # NCBI runs all five programs and validates its own query alphabet.
+        validate_program(program, "ncbi_blast")
         normalize_query(sequence, program, max_length=MAX_QUERY_LENGTH)
     else:
         raise ValueError("Unsupported BLAST engine")

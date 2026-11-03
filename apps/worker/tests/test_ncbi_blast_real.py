@@ -1,4 +1,11 @@
-"""Actual NCBI2.17 searches using synthetic CC0 ORF fixtures, not biological claims."""
+"""Actual NCBI2.17 searches using synthetic CC0 ORF fixtures, not biological claims.
+
+``BLAST_USAGE_REPORT=false`` is not optional here. Without it, every NCBI
+executable tries to phone home on startup and burns ~31 s per invocation in a
+network-isolated environment, which turns a fast unit suite into a hang. The
+worker's own runner (:func:`soymutdb_worker.ncbi_blast._env`) already sets it;
+this fixture pins the same contract for the binaries the test spawns itself.
+"""
 
 import os
 import subprocess
@@ -12,9 +19,11 @@ BIN = Path(
     os.getenv("SOYMUTDB_TEST_NCBI_BIN_DIR", ".cache/blast-catalog-pr/tools/ncbi-blast-2.17.0+/bin")
 ).absolute()
 
-# The runner already disables NCBI's network usage report and local config
-# discovery. Fixture-only ``makeblastdb`` calls must do the same, otherwise a
-# real binary blocks on telemetry DNS for ~30s and exceeds the test timeout.
+# Mirrors ``ncbi_blast._env``: no usage reporting, no user/system rc files.
+# Fixture-only ``makeblastdb`` calls must disable the same telemetry and local
+# config discovery as the runner, otherwise a real binary blocks on telemetry
+# DNS for ~30s and exceeds the test timeout. A minimal environment (rather than
+# ``**os.environ``) also keeps any host NCBI configuration out of the fixture.
 OFFLINE_BLAST_ENV = {
     "PATH": "/usr/bin:/bin",
     "LANG": "C",

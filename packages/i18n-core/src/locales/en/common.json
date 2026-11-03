@@ -3110,9 +3110,6 @@
     "invalidParameters": "Use a positive E-value up to 1000 and 1–500 maximum hits.",
     "engineUnknown": "Engine unavailable",
     "provenance": "Database context",
-    "invalidAlphabet": "The query alphabet does not match the selected program.",
-    "engineNcbi": "NCBI BLAST+",
-    "engineDiamond": "DIAMOND",
-    "engineDiamondBlastp": "DIAMOND (blastp)"
+    "invalidAlphabet": "The query alphabet does not match the selected program."
   }
 }
