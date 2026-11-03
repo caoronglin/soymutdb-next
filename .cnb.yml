@@ -1112,6 +1112,17 @@ $:
   # ---------------------------------------------------------------------------
   # NPC — Issue-driven tasks handled inside the repository pipeline
   # ---------------------------------------------------------------------------
+  # The `@npc/...` mention is the platform trigger; this entry only exists so
+  # the event has a pipeline to attach to. It carries no `npc:go` stage on
+  # purpose:
+  #
+  #   * an `npc:go` stage needs a role declared under `npc.roles` in
+  #     `.cnb/settings.yml`, and the platform resolves that role BEFORE the
+  #     container starts (a missing one aborts the run at ~1s with
+  #     `Role "..." not found in .cnb/settings.yml`);
+  #   * on `pull_request` the same stage would turn every push into an agent
+  #     session instead of a verification run, so it must not be bolted onto
+  #     `main` -> `pull_request` either.
   issue.comment@npc:
     - name: npc
       stages:

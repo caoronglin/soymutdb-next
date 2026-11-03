@@ -120,7 +120,9 @@ def test_node_and_pnpm_toolchain_is_exact_in_jobs_that_build_assets() -> None:
     assert (ROOT / ".nvmrc").read_text(encoding="utf-8").strip() == NODE_VERSION
     assert (ROOT / ".node-version").read_text(encoding="utf-8").strip() == NODE_VERSION
     assert package["packageManager"] == f"pnpm@{PNPM_VERSION}"
-    assert package["engines"] == {"node": ">=26.0.0 <27", "pnpm": PNPM_VERSION}
+    # Exact-pin upper bound mirrors the lower bound: a floating floor here is the
+    # same defect as a floating floor in the pipelines, one install away.
+    assert package["engines"] == {"node": f">={NODE_VERSION} <27", "pnpm": PNPM_VERSION}
 
     # CNB is the primary delivery pipeline. Every pipeline that builds or tests
     # the workspace must pin the exact Node release; the smoke pipeline runs the

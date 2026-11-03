@@ -1,8 +1,8 @@
 # =============================================================================
 # SoyMutDB — CNB repository UI configuration
 # =============================================================================
-# Currently only the cloud-development entry point is customised; everything
-# else keeps the platform default.
+# Two things are customised: the cloud-development entry point and the NPC role
+# that `@`-mention tasks run as. Everything else keeps the platform default.
 #
 # The development button is the human-facing half of "CNB 启动": pressing it
 # runs the `$` -> `vscode` pipeline in .cnb.yml, which delegates to
@@ -11,6 +11,32 @@
 # Keep this file free of anything secret: it is committed and readable by
 # anyone who can read the repository.
 # =============================================================================
+
+# -----------------------------------------------------------------------------
+# NPC roles
+# -----------------------------------------------------------------------------
+# The `$` -> `issue.comment@npc` pipeline in .cnb.yml is this repository's NPC
+# entry point, and an NPC event resolves its role *by name* against this list.
+# With no `npc.roles` the platform aborts the run in its `npc go` stage with
+# "No roles defined in .cnb/settings.yml" -- before the container starts, so the
+# pipeline body in .cnb.yml never gets a chance to report anything useful.
+#
+# `name` must match the role the operator mentions; `prompt` is the standing
+# brief. Keep it about *how* to work in this repository rather than repeating
+# AGENTS.md, which the runtime already reads.
+npc:
+  roles:
+    - name: CodeBuddy
+      slogan: 交付流水线、数据库契约与测试的常驻值守
+      prompt: |
+        你在 SoyMutDB 仓库里工作。先读 AGENTS.md 与 docs/dev/database-core-contract.md，
+        再动手。
+        - 交付链条以 .cnb.yml 为准，具体逻辑写在 scripts/ 里；不要往流水线里内联
+          build/test 逻辑，scripts/test_ci_job_contracts.py 会拦。
+        - 生物实体的公开标识、装配版本（v4/v5）与 internal/external 站点边界是契约，
+          不靠字符串相似度推断，不放宽白名单绕过。
+        - 报告结论时给出可复核的命令与通过数，失败的用例不要隐藏或跳过。
+      enableThinking: false
 workspace:
   launch:
     button:

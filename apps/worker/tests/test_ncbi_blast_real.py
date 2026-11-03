@@ -1,4 +1,11 @@
-"""Actual NCBI2.17 searches using synthetic CC0 ORF fixtures, not biological claims."""
+"""Actual NCBI2.17 searches using synthetic CC0 ORF fixtures, not biological claims.
+
+``BLAST_USAGE_REPORT=false`` is not optional here. Without it, every NCBI
+executable tries to phone home on startup and burns ~31 s per invocation in a
+network-isolated environment, which turns a fast unit suite into a hang. The
+worker's own runner (:func:`soymutdb_worker.ncbi_blast._env`) already sets it;
+this fixture pins the same contract for the binaries the test spawns itself.
+"""
 
 import os
 import subprocess
@@ -11,6 +18,14 @@ from soymutdb_worker.ncbi_blast import run_search
 BIN = Path(
     os.getenv("SOYMUTDB_TEST_NCBI_BIN_DIR", ".cache/blast-catalog-pr/tools/ncbi-blast-2.17.0+/bin")
 ).absolute()
+
+#: Mirrors ``ncbi_blast._env``: no usage reporting, no user/system rc files.
+TOOL_ENV = {
+    **os.environ,
+    "BLAST_USAGE_REPORT": "false",
+    "NCBI_DONT_USE_NCBIRC": "1",
+    "NCBI_DONT_USE_LOCAL_CONFIG": "1",
+}
 DNA = (
     "ATG" + "GCTGAAAAGGTTCTGGATGGTGACTTTGCTAAGAAGATTGGTGAAAAGGTTGATGCTGGTGTTGATGTTGCT"
     "GAAAAGGTTGATGGTGCTAAGGCTGTTGAAAAGGCTGATGTTGGTGCTGATGAAAAGGTTGCTGATGTTGAAAAG"
@@ -62,7 +77,8 @@ def test_real_all_five_known_hit(tmp_path, program, dbtype, query):
         ],
         check=True,
         capture_output=True,
-        timeout=20,
+        timeout=120,
+        env=TOOL_ENV,
     )
     q = tmp_path / "query.fa"
     q.write_text(">query\n" + query + "\n")
@@ -101,7 +117,8 @@ def test_real_reverse_blastn_and_no_hit(tmp_path):
         ],
         check=True,
         capture_output=True,
-        timeout=20,
+        timeout=120,
+        env=TOOL_ENV,
     )
     query = tmp_path / "query.fa"
     query.write_text(">reverse\n" + reverse + "\n")
