@@ -77,50 +77,46 @@ No mock-only claim is made for the above: the child processes are the official
 local PG is 15, while CI/production use newer majors; these results are
 qualified as "PG 15 locally green", not a PG-version certification.
 
-## CI-reported defects fixed in this PR
+## CI defects and gate recovery
 
-The PR pipeline surfaced two pre-existing `main` defects that blocked the
-verify lane. Both were fixed inside the BLAST contract surface, not worked
-around by loosening a gate:
+Three gate defects were blocking every PR build. They were fixed across
+several PRs; this section records which fix landed where, so the evidence
+here is not read as belonging to this branch alone.
 
-- `packages/api-client/src/blast.ts`: `no-useless-escape` on `\-` in the
-  protein alphabet. Moved `-` to the end of the character class (identical
-  literal semantics) and added an alphabet assertion for a gapped query.
-- `apps/web/src/routes/blast.tsx` and `apps/web/src/routes/search/blast.tsx`:
-  visible `"NCBI BLAST+"` / `"DIAMOND"` copy was hardcoded, violating the
-  visible-i18n budget (baseline 0 for both files). Added `blastSearch.engineNcbi`,
-  `engineDiamond` and `engineDiamondBlastp` to the en/zh catalogs and used
-  `t()` in both the status rows and the engine selectors. `node
-  scripts/check_visible_i18n_react.mjs` now reports 0 tracked strings; en/zh
-  key parity holds.
+- **`npc:go` pre-empting `verify`** — `f6d5001` put an unnamed `npc:go`
+  stage at `main.pull_request[0]` with `role: 代码审查员`, a role absent from
+  `.cnb/settings.yml`. The platform resolves roles before the container
+  starts, so every build died in ~1 s with
+  `Role "代码审查员" not found ... Available: CodeBuddy`; the unnamed block
+  also displaced `verify`, breaking four contract tests. Fixed and merged in
+  PR #5 (`.cnb.yml` + `.cnb/settings.yml`, plus a guard). PR #5 also replaced
+  the `issue.comment@npc` `echo` placeholder with a real `npc:go` job and
+  declared `pull_request.comment@npc`, so `@`-mentions actually start an NPC.
+- **h5py source build failing** — CPython 3.15 has no manylinux wheel for the
+  worker science stack (`scanpy -> anndata -> h5py`); the bare `python:3.15`
+  CI image lacks HDF5 headers, so the editable install died with
+  `libhdf5.so: cannot open shared object file` before any test ran. PR #6
+  added a `Compiler prerequisites` stage and a `system-deps` job body in
+  `scripts/ci-job-steps.sh`. This branch keeps an idempotent
+  `scripts/install-worker-science-build-deps.sh` called from the shared
+  `verify-backend-tests.sh` (which also covers the GitHub mirror), with a
+  `test_ci_job_contracts.py` guard pinning the call order and package list
+  against `infra/docker/Dockerfile.worker`. Both are idempotent and install
+  the same `libhdf5-dev` + `pkg-config` recipe.
+- **Visible-i18n and lint defects on the BLAST surface** — the earlier
+  revision of this branch fixed the `no-useless-escape` on `\-` in
+  `packages/api-client/src/blast.ts` and the hardcoded engine labels in
+  `apps/web/src/routes/blast.tsx` / `search/blast.tsx`. Those files have a
+  single owner in PR #4, which carries the same fixes. To avoid two PRs
+  rewriting the same file, this branch deliberately dropped them; the i18n
+  patch was forwarded to PR #4 (`48a2674`). This PR therefore contains no
+  frontend or api-client changes.
 
-The PR pipeline also exposed two `main`-side configuration problems, both
-fixed on this same branch:
-
-- `npc go` pipeline: `No roles defined in .cnb/settings.yml`. Commit
-  `f6d5001` on `main` added an `npc:go` stage with `role: 代码审查员` but did
-  not define that role. Commit `c3d9955` on this branch removed the stray
-  stage and added a `test_ci_job_contracts.py` guard so PR builds stay
-  verification-only and never resolve an undefined NPC role. This is the
-  "one validation" work item delivered by the parallel agent.
-- `API + Worker verification`: `h5py` has no prebuilt cp315 wheel in the CI
-  image, so `scanpy -> h5py` falls back to a source build and fails with
-  `libhdf5.so: cannot open shared object file` during `apps/worker[dev]`
-  installation, before any test runs. The bare `python:3.15` stage image
-  carries no HDF5 headers. Commit `a0335fd` provisions the same system
-  prerequisites the production worker image uses
-  (`infra/docker/Dockerfile.worker`: `libhdf5-dev` + `pkg-config` +
-  `HDF5_PKGCONFIG_NAME=hdf5-serial`) via
-  `scripts/install-worker-science-build-deps.sh`, called from the shared
-  backend gate before the editable install. A `test_ci_job_contracts.py`
-  regression guard pins the call order and the package list against the
-  production Dockerfile. The equivalent backend suites were also run locally
-  on CPython 3.15.2 with a live PostgreSQL and real BLAST+ binaries; all pass
-  counts above are from those local runs.
-
-On the re-run after the i18n fix, **Frontend verification succeeded**
-(340 s, `check_visible_i18n_react.mjs` included), which confirms the visible
-i18n gate is green on this branch.
+Both #5 and #6 were merged to `main` before this branch was rebased, so the
+`verify` pipeline is the single named PR pipeline again and the
+`Compiler prerequisites` stage succeeds (~8 s) before the verification
+stages. The backend pass counts above are from the local CPython 3.15.2 /
+PostgreSQL 15 / real BLAST+ 2.17.0+ runs, not from CI.
 
 ## Engine and access-mode contract checks
 
