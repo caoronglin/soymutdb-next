@@ -183,8 +183,12 @@ describe("variant export lifecycle", () => {
     fireEvent.click(screen.getByRole("button", { name: /variants.export$/ }));
     await waitFor(() => expect(runtime.createVariantExport).toHaveBeenCalledTimes(1));
 
+    // The success line is rendered from the resolved response, and the click
+    // is what starts that promise: query it asynchronously. Reading it with
+    // `getByTestId` immediately after `waitFor(called)` raced the microtask
+    // and failed on whichever runner was slow enough to lose.
     expect(runtime.exportStatus).toBeUndefined();
-    expect(screen.getByTestId("variant-export-status").textContent).toContain(
+    expect((await screen.findByTestId("variant-export-status")).textContent).toContain(
       "Export job submitted",
     );
     view.unmount();
