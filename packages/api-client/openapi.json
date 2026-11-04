@@ -30819,10 +30819,18 @@
             "title": "Covered Bp"
           },
           "hits": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/OverlapHit"
-            },
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OverlapHit"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
             "title": "Hits"
           },
           "limited": {
@@ -30835,7 +30843,6 @@
           "query",
           "overlap_count",
           "covered_bp",
-          "hits",
           "limited"
         ],
         "title": "OverlapQueryResult"

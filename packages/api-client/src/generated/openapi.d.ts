@@ -10411,8 +10411,11 @@ export interface components {
             overlap_count: number;
             /** Covered Bp */
             covered_bp: number;
-            /** Hits */
-            hits: components["schemas"]["OverlapHit"][];
+            /**
+             * Hits
+             * @default null
+             */
+            hits: components["schemas"]["OverlapHit"][] | null;
             /** Limited */
             limited: boolean;
         };

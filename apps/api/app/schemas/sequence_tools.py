@@ -238,7 +238,9 @@ class OverlapQueryResult(BaseModel):
     query: IntervalRegion
     overlap_count: int
     covered_bp: int
-    hits: list[OverlapHit]
+    # None means the caller did not request per-record hits (mode='count');
+    # [] means hits were requested and the region had none. spec §7.3.
+    hits: list[OverlapHit] | None = None
     limited: bool
 
 

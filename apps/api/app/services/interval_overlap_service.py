@@ -131,7 +131,7 @@ async def overlap(
             )
             for h in q["hits"]
             if int(h[3]) < len(genes)
-        ] if include_hits else []
+        ] if include_hits else None
         queries.append(
             s.OverlapQueryResult(
                 query=region,

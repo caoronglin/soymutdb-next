@@ -189,7 +189,8 @@ async def test_interval_count_mode_omits_hits() -> None:
         assert hit.start == 10, f"start0+1 must be 10, got {hit.start}"
         assert hit.end == 20, f"end0 is the 1-based inclusive end, got {hit.end}"
         assert hit.overlap_bp == 11, "overlap of [10,20] with itself is 11 bp"
-    assert count.queries[0].hits == [], "count mode must omit the hit list"
+    assert count.queries[0].hits is None, "count mode must omit the hit list"
+    assert count.queries[0].hits != [], "an omitted list is not an empty list"
     # The count/coverage aggregates are still present and identical.
     assert count.queries[0].overlap_count == hits.queries[0].overlap_count
     assert count.queries[0].covered_bp == hits.queries[0].covered_bp
