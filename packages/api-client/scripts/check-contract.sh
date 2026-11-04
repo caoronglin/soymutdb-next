@@ -16,8 +16,8 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 echo ">> exporting OpenAPI from backend..."
 export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
-"$API_PYTHON" "$API_DIR/scripts/export_openapi.py" \
-  --output "$TMP_DIR/openapi.json"
+"$API_PYTHON" "$PKG_DIR/scripts/export_contract.py" \
+  --openapi "$TMP_DIR/openapi.json"
 
 echo ">> regenerating client types in temp dir..."
 (cd "$PKG_DIR" && pnpm exec openapi-typescript "$TMP_DIR/openapi.json" \
