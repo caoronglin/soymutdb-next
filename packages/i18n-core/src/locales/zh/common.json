@@ -45,7 +45,8 @@
     "internalBadge": "内网",
     "primaryLabel": "主导航",
     "quickSearchLabel": "快速搜索（Cmd+K）",
-    "searchPlaceholder": "搜索…"
+    "searchPlaceholder": "搜索…",
+    "comparative": "比较基因组"
   },
   "home": {
     "subtitle": "大豆突变体数据库",
@@ -3213,5 +3214,103 @@
     },
     "downloadFilenameHint": "比对原始输出（制表符分隔）",
     "engineDiamondBlastp": "DIAMOND（blastp）"
+  },
+  "comparative": {
+    "title": "比较基因组",
+    "subtitle": "来自具名来源的基因家族与同源分组，每条记录都标明方法与版本。",
+    "filters": {
+      "assembly": "装配版本",
+      "allAssemblies": "全部装配",
+      "level": "层级",
+      "allLevels": "全部层级",
+      "clear": "清除筛选",
+      "searchParamsNote": "筛选条件保存在 URL 中，因此本视图可深链、可分享。"
+    },
+    "level": {
+      "gene_family": "基因家族",
+      "gene_subfamily": "亚家族"
+    },
+    "list": {
+      "family": "家族",
+      "name": "名称",
+      "members": "成员数",
+      "method": "方法",
+      "source": "来源",
+      "release": "版本",
+      "empty": "当前版本与该筛选条件下没有导入任何基因家族。",
+      "emptyHint": "家族表缺失不等于家族数为零：所选范围内没有导入数据。",
+      "total": "共 {{total}} 个家族",
+      "pageInfo": "第 {{page}} / {{pages}} 页",
+      "loadError": "家族列表加载失败。"
+    },
+    "detail": {
+      "backToList": "全部家族",
+      "externalId": "来源编号",
+      "method": "方法",
+      "methodVersion": "方法版本",
+      "sourceName": "来源",
+      "sourceVersion": "来源版本",
+      "sourceUrl": "来源链接",
+      "release": "版本",
+      "assembly": "装配版本",
+      "memberCount": "成员数",
+      "relationshipTypes": "关系类型",
+      "membersTitle": "成员",
+      "memberGene": "基因",
+      "memberSpecies": "物种",
+      "memberRelationship": "关系",
+      "memberMethod": "方法",
+      "memberConfidence": "置信度",
+      "membersEmpty": "该家族没有导入任何成员记录。",
+      "provenanceTitle": "数据溯源",
+      "provenanceNote": "家族是计算得到的分组，产出它的方法是记录的一部分，不是可选注释。",
+      "loadError": "家族信息加载失败。",
+      "notFound": "当前版本中没有该家族。",
+      "artifactsTitle": "比对与系统树",
+      "artifactsNote": "比对与系统树异步计算，只对下方哈希所对应的成员集合有效。",
+      "requestMsa": "计算多序列比对",
+      "requestTree": "构建系统树",
+      "polling": "正在等待 worker 执行…",
+      "inputSha": "输入 sha256",
+      "inputMembers": "冻结成员数",
+      "download": "下载结果",
+      "downloadUnavailable": "worker 已结束，但没有发布可下载的对象。",
+      "requestFailed": "请求被拒绝。",
+      "pollTimedOut": "已停止轮询（{{seconds}} 秒）。任务可能仍在运行，刷新页面可再次检查。"
+    },
+    "coverage": {
+      "title": "物种覆盖",
+      "species": "物种",
+      "state": "状态",
+      "members": "成员数",
+      "available": "已导入",
+      "no_data": "该物种在来源中无记录",
+      "no_dataHint": "来源中没有该物种的行，这不是量到的零。",
+      "not_imported": "本 release 未导入该家族的快照",
+      "not_importedHint": "本版本从未导入该家族的快照，因此这里的缺失不说明该物种的情况。"
+    },
+    "relationship": {
+      "one_to_one": "one_to_one",
+      "one_to_many": "one_to_many",
+      "many_to_many": "many_to_many"
+    },
+    "orthologs": {
+      "title": "直系同源与旁系同源",
+      "hint": "关系类型来自导入的记录行，不来自序列相似度。",
+      "gene": "基因",
+      "species": "物种",
+      "type": "关系",
+      "method": "方法",
+      "source": "来源",
+      "no_data": "来源中该基因在本版本没有同源记录。",
+      "not_imported": "本版本从未为该装配导入同源快照。",
+      "empty": "该基因没有记录。",
+      "loadError": "同源记录加载失败。"
+    },
+    "geneLink": {
+      "title": "比较基因组",
+      "body": "该基因所属的基因家族与同源分组，关系分类沿用来源自己的判定。",
+      "open": "查看直系同源与旁系同源"
+    }
   }
 }

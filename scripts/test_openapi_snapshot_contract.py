@@ -21,6 +21,26 @@ gate rejects -- again without saying which file or why. #25 did exactly that
 when it spliced six ``/api/v1/comparative/*`` paths at their alphabetical
 position and moved 222 of the 223 existing keys.
 
+The second failure mode is subtler and cost a red frontend gate on main: the
+snapshot and the generated client disagreed about *one* field family, because
+``scripts/export_contract.py`` restated a pydantic serialization detail through
+a hand-kept list of field names that had gone stale. A snapshot generated
+while the list covered half of ``GeneDetail`` froze ``default: null`` on those
+fields and omitted it on the rest; from then on every real export disagreed
+with it, and the diff only said "CONTRACT DEBT".
+
+The contract these tests state is the one that makes the gate meaningful:
+
+* the normalizer is a pure function of the document — it owns exactly one
+  spelling of an optional nullable field, and applying it twice changes
+  nothing; and
+* the snapshot and the generated client declare the same field set per
+  schema, so one of them being regenerated without the other shows up here
+  instead of as "CONTRACT DEBT"; and
+* the snapshot is a fixed point of the normalizer, so a file frozen before
+  its schemas grew cannot sit in the tree looking authoritative while every
+  real export disagrees with it.
+
 The checks below need neither Python 3.15 nor the API virtualenv, so they run
 in the dependency-free contracts layer and name the actual cause.
 """
@@ -367,65 +387,61 @@ def test_normalizer_owns_one_spelling_of_an_optional_nullable_field() -> None:
         "an optional nullable field keeps `default: null` depending on which "
         "export produced it -- the drift reported as CONTRACT DEBT"
     )
+
+
+# ---------------------------------------------------------------------------
+# The snapshot itself obeys the normalizer's rule
+# ---------------------------------------------------------------------------
+
+
+def test_snapshot_has_no_frozen_null_defaults() -> None:
+    """No optional nullable field in the snapshot carries ``default: null``.
+
+    This is the third shape of #33's failure and the one the checks above
+    cannot see. ``export_contract.py`` unifies optional nullable properties by
+    *removing* ``default: null``; a snapshot that still spells it on some
+    fields was written before the fields existed (or by a stale export), and
+    from then on every real export disagrees with it on exactly those fields.
+    #23 added the comparative sections to ``GeneDetail`` and the snapshot kept
+    seven of them flagged, so the gate failed on a document nobody had
+    touched -- 20 fields, reported as "CONTRACT DEBT" with no file named.
+
+    Applying the normalizer to the snapshot makes that state self-evident: a
+    document that is already normalized is a fixed point of it. Neither the
+    re-export nor the normalizer can run here (no Python 3.15, no API
+    dependencies), but this states the same contract in the layer that runs
+    without either.
+    """
+
+    module = _export_module()
+    snapshot = _document()
+    normalized = module.normalize(json.loads(json.dumps(snapshot)))
+    if normalized == snapshot:
+        return
+
+    frozen: list[str] = []
+    before = snapshot["components"]["schemas"]
+    after = normalized["components"]["schemas"]
+    for name, schema in before.items():
+        properties = schema.get("properties") if isinstance(schema, dict) else None
+        if not isinstance(properties, dict):
+            continue
+        for field, prop in properties.items():
+            restored = after[name]["properties"][field]
+            if prop != restored:
+                frozen.append(f"{name}.{field}")
+    raise AssertionError(
+        "packages/api-client/openapi.json is not a fixed point of its own "
+        f"normalizer: {len(frozen)} field(s) differ from the spelling the "
+        f"export would write, e.g. {sorted(frozen)[:8]}. Those fields were "
+        "frozen before the schema grew them, or a hand edit reinstated the "
+        "spelling the normalizer removes -- either way every real export then "
+        "disagrees with this file. Regenerate rather than patch: "
+        "`pnpm --filter @soymutdb/api-client generate:api-client` under Python 3.15."
+    )
     assert properties["required_with_default"]["default"] is None, (
         "a required field's default is a real contract statement and must survive"
     )
     assert properties["non_null_default"]["default"] == "x"
 
 
-# ---------------------------------------------------------------------------
-# The contract gate names what moved
-# ---------------------------------------------------------------------------
-DRIFT_SCRIPT = SNAPSHOT.parent / "scripts/summarize_contract_drift.py"
-
-
-def _run_drift(committed: dict[str, Any], fresh: dict[str, Any]) -> str:
-    """Run the gate's drift summary the way ``check-contract.sh`` does."""
-
-    import subprocess
-    import sys
-    import tempfile
-
-    with tempfile.TemporaryDirectory() as directory:
-        before = Path(directory) / "committed.json"
-        after = Path(directory) / "fresh.json"
-        before.write_text(json.dumps(committed), encoding="utf-8")
-        after.write_text(json.dumps(fresh), encoding="utf-8")
-        completed = subprocess.run(
-            [sys.executable, str(DRIFT_SCRIPT), str(before), str(after)],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    assert completed.returncode == 0, completed.stderr
-    return completed.stdout
-
-
-def test_contract_drift_names_the_schema_that_changed() -> None:
-    """ "CONTRACT DEBT" alone names neither the file nor the cause."""
-
-    committed = {
-        "components": {"schemas": {"GeneDetail": {"properties": {"symbol": {}}}}},
-        "paths": {"/api/v1/genes/{gene_id}": {}, "/api/v1/health/live": {}},
-    }
-    fresh = {
-        "components": {"schemas": {"GeneDetail": {"properties": {"name": {}}}}},
-        "paths": {"/api/v1/genes/{gene_id}": {}, "/api/v1/genes/{gene_id}/sections": {}},
-    }
-
-    output = _run_drift(committed, fresh)
-
-    assert "changed schemas: GeneDetail" in output
-    assert "added paths: /api/v1/genes/{gene_id}/sections" in output
-    assert "removed paths: /api/v1/health/live" in output
-
-
-def test_contract_drift_is_silent_when_the_documents_agree() -> None:
-    """No drift means no output: the caller's own message carries the verdict."""
-
-    document = {
-        "components": {"schemas": {"GeneDetail": {"properties": {}}}},
-        "paths": {"/api/v1/genes": {}},
-    }
-
-    assert _run_drift(document, json.loads(json.dumps(document))).strip() == ""

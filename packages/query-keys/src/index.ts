@@ -227,6 +227,53 @@ export const queryKeys = {
     export: (exportId: string | null, sessionId?: number | null) =>
       [...queryKeys.variants.all(), "export", exportId ?? null, sessionId ?? null] as const,
   },
+  comparative: {
+    all: () => [...queryKeys.all, "comparative"] as const,
+    // Family listing and detail are release-, assembly- and site-scoped reads:
+    // the same family id answers with different member sets per assembly, so
+    // none of that context may be dropped from the key (DB-CORE-6).
+    families: (context: {
+      assemblyId: string | number | null;
+      level: string | null;
+      page: number;
+      pageSize: number;
+      releaseId: string | null;
+      siteVariant: "external" | "internal";
+    }) =>
+      [
+        ...queryKeys.comparative.all(),
+        "families",
+        context.assemblyId ?? null,
+        context.level ?? null,
+        context.page,
+        context.pageSize,
+        context.releaseId,
+        context.siteVariant,
+      ] as const,
+    family: (context: {
+      familyId: number;
+      assemblyId: string | number | null;
+      releaseId: string | null;
+      siteVariant: "external" | "internal";
+    }) =>
+      [
+        ...queryKeys.comparative.all(),
+        "family",
+        context.familyId,
+        context.assemblyId ?? null,
+        context.releaseId,
+        context.siteVariant,
+      ] as const,
+    // An artifact is a job: its key is the job id, and it must never be shared
+    // with a family read (a finished alignment belongs to a frozen input set,
+    // not to the family's current membership).
+    artifact: (
+      jobId: string | null,
+      releaseId: string | null,
+      siteVariant: "external" | "internal",
+    ) =>
+      [...queryKeys.comparative.all(), "artifact", jobId ?? null, releaseId, siteVariant] as const,
+  },
 } as const;
 
 export type QueryKeys = typeof queryKeys;

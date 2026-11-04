@@ -28,6 +28,8 @@ import { Route as ToolsIndexRouteImport } from './routes/tools/index'
 import { Route as ToolsSeqfetchRouteImport } from './routes/tools/seqfetch'
 import { Route as ToolsEnrichmentRouteImport } from './routes/tools/enrichment'
 import { Route as ToolsExppatternRouteImport } from './routes/tools/exppattern'
+import { Route as ComparativeIndexRouteImport } from './routes/comparative/index'
+import { Route as ComparativeFamilyIdRouteImport } from './routes/comparative/$familyId'
 import { Route as GenesIndexRouteImport } from './routes/genes/index'
 import { Route as GenesGeneIdRouteImport } from './routes/genes/$geneId'
 import { Route as MutantsIndexRouteImport } from './routes/mutants/index'
@@ -139,6 +141,16 @@ const ToolsEnrichmentRoute = ToolsEnrichmentRouteImport.update({
 const ToolsExppatternRoute = ToolsExppatternRouteImport.update({
   id: '/tools/exppattern',
   path: '/tools/exppattern',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComparativeIndexRoute = ComparativeIndexRouteImport.update({
+  id: '/comparative/',
+  path: '/comparative/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComparativeFamilyIdRoute = ComparativeFamilyIdRouteImport.update({
+  id: '/comparative/$familyId',
+  path: '/comparative/$familyId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GenesIndexRoute = GenesIndexRouteImport.update({
@@ -253,6 +265,8 @@ export interface FileRoutesByFullPath {
   '/analytics': typeof AnalyticsRoute
   '/blast': typeof BlastRoute
   '/browser': typeof BrowserRoute
+  '/comparative/': typeof ComparativeIndexRoute
+  '/comparative/$familyId': typeof ComparativeFamilyIdRoute
   '/compare': typeof CompareRoute
   '/downloads': typeof DownloadsRoute
   '/genome-view': typeof GenomeViewRoute
@@ -291,6 +305,8 @@ export interface FileRoutesByTo {
   '/analytics': typeof AnalyticsRoute
   '/blast': typeof BlastRoute
   '/browser': typeof BrowserRoute
+  '/comparative/': typeof ComparativeIndexRoute
+  '/comparative/$familyId': typeof ComparativeFamilyIdRoute
   '/compare': typeof CompareRoute
   '/downloads': typeof DownloadsRoute
   '/genome-view': typeof GenomeViewRoute
@@ -308,6 +324,7 @@ export interface FileRoutesByTo {
   '/seed-request': typeof SeedRequestRoute
   '/sra': typeof SraRoute
   '/tools': typeof ToolsIndexRoute
+  '/comparative': typeof ComparativeIndexRoute
   '/tools/seqfetch': typeof ToolsSeqfetchRoute
   '/tools/enrichment': typeof ToolsEnrichmentRoute
   '/tools/exppattern': typeof ToolsExppatternRoute
@@ -330,6 +347,8 @@ export interface FileRoutesById {
   '/analytics': typeof AnalyticsRoute
   '/blast': typeof BlastRoute
   '/browser': typeof BrowserRoute
+  '/comparative/': typeof ComparativeIndexRoute
+  '/comparative/$familyId': typeof ComparativeFamilyIdRoute
   '/compare': typeof CompareRoute
   '/downloads': typeof DownloadsRoute
   '/genome-view': typeof GenomeViewRoute
@@ -370,6 +389,8 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/blast'
     | '/browser'
+    | '/comparative/'
+    | '/comparative/$familyId'
     | '/compare'
     | '/downloads'
     | '/genome-view'
@@ -408,6 +429,8 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/blast'
     | '/browser'
+    | '/comparative'
+    | '/comparative/$familyId'
     | '/compare'
     | '/downloads'
     | '/genome-view'
@@ -446,6 +469,8 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/blast'
     | '/browser'
+    | '/comparative/'
+    | '/comparative/$familyId'
     | '/compare'
     | '/downloads'
     | '/genome-view'
@@ -661,6 +686,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SraRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/comparative/': {
+      id: '/comparative/'
+      path: '/comparative'
+      fullPath: '/comparative/'
+      preLoaderRoute: typeof ComparativeIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/comparative/$familyId': {
+      id: '/comparative/$familyId'
+      path: '/comparative/$familyId'
+      fullPath: '/comparative/$familyId'
+      preLoaderRoute: typeof ComparativeFamilyIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/genes/': {
       id: '/genes/'
       path: '/genes'
@@ -789,6 +828,8 @@ const rootRouteChildren: RootRouteChildren = {
   ToolsSeqfetchRoute: ToolsSeqfetchRoute,
   ToolsEnrichmentRoute: ToolsEnrichmentRoute,
   ToolsExppatternRoute: ToolsExppatternRoute,
+  ComparativeIndexRoute: ComparativeIndexRoute,
+  ComparativeFamilyIdRoute: ComparativeFamilyIdRoute,
   GenesGeneIdRoute: GenesGeneIdRoute,
   MutantsIndexRoute: MutantsIndexRoute,
   MutantsIdRoute: MutantsIdRoute,

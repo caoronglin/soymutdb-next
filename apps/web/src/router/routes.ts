@@ -61,6 +61,8 @@ export interface PortalRouteDefinition {
     | "publications"
     | "login"
     | "analytics"
+    | "comparative"
+    | "family"
     | "compare";
   meta: PortalRouteMeta;
 }
@@ -313,6 +315,26 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
       prerender: true,
       sitemap: true,
     },
+  },
+  {
+    // Gene-family browser. `/compare` below is *variant* comparison and is a
+    // different feature entirely — do not merge the two entries.
+    path: "/comparative",
+    name: "comparative",
+    componentKey: "comparative",
+    meta: {
+      title: "Comparative genomics — SoyMutDB",
+      description:
+        "Browse gene families and orthologous groups with their source method, version and per-species coverage.",
+      prerender: true,
+      sitemap: true,
+    },
+  },
+  {
+    path: "/comparative/:familyId",
+    name: "family",
+    componentKey: "family",
+    meta: { title: "Gene family — SoyMutDB" },
   },
   {
     path: "/compare",
