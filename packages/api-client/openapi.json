@@ -20540,6 +20540,38 @@
         "title": "AssemblyDetailResponse",
         "description": "One assembly, its counts, and its chromosomes.\n\nThe chromosome list is what makes \"the assembly does not exist\" and \"the\nassembly exists but has no chromosomes\" distinguishable answers rather\nthan two identical empty payloads."
       },
+      "AssemblyMetric": {
+        "properties": {
+          "value": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Value"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "title": "AssemblyMetric",
+        "description": "One assembly-level statistic, with the reason it is unknown.\n\n``value`` is ``None`` whenever the number could not be derived from the\nauthoritative tables, and a machine-readable ``reason`` then says why. It is\nnever defaulted to ``0``: an assembly whose annotation was never imported and\nan assembly that genuinely has no genes are different facts, and once both\nare printed as zero nobody can tell them apart. The two fields are mutually\nexclusive on purpose -- a number with a reason (\"we did not count it, but\nhere it is\") would be a contradiction."
+      },
       "AssemblyResponse": {
         "properties": {
           "id": {
@@ -20621,57 +20653,24 @@
       "AssemblyStatistics": {
         "properties": {
           "gene_count": {
-            "type": "integer",
-            "minimum": 0.0,
-            "default": 0,
-            "title": "Gene Count"
+            "$ref": "#/components/schemas/AssemblyMetric"
           },
           "transcript_count": {
-            "type": "integer",
-            "minimum": 0.0,
-            "default": 0,
-            "title": "Transcript Count"
+            "$ref": "#/components/schemas/AssemblyMetric"
           },
           "chromosome_count": {
-            "type": "integer",
-            "minimum": 0.0,
-            "default": 0,
-            "title": "Chromosome Count"
+            "$ref": "#/components/schemas/AssemblyMetric"
           },
           "total_length": {
-            "type": "integer",
-            "minimum": 0.0,
-            "default": 0,
-            "title": "Total Length"
+            "$ref": "#/components/schemas/AssemblyMetric"
           },
           "download_count": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Download Count"
-          },
-          "download_count_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null,
-            "title": "Download Count Reason"
+            "$ref": "#/components/schemas/AssemblyMetric"
           }
         },
         "type": "object",
         "title": "AssemblyStatistics",
-        "description": "Counts derived from real rows, scoped to one assembly.\n\nEvery number here is a ``COUNT``/``SUM`` over rows that carry an\n``assembly_id`` of their own. Nothing is read from ``Release.gene_count`` or\nany other denormalised counter: a release owns several assemblies, so a\nrelease-level total copied onto each assembly would report the whole\nrelease's genes once per assembly.\n\n``download_count`` is ``None`` on purpose. ``download_files`` has no\nassembly column -- it is linked to a release and its ``category`` is free\ntext -- so there is no relation to aggregate over. Guessing an assembly\nfrom a category string would invent a number, and borrowing the release's\ndownload total would be the same mistake as borrowing its gene count. The\nfield stays in the payload, with a ``reason``, so that \"we do not know\" is\nvisible instead of looking like a zero."
+        "description": "Counts derived from real rows, scoped to one assembly.\n\nEvery number here is a ``COUNT``/``SUM`` over rows that carry an\n``assembly_id`` of their own. Nothing is read from ``Release.gene_count`` or\nany other denormalised counter: a release owns several assemblies, so a\nrelease-level total copied onto each assembly would report the whole\nrelease's genes once per assembly.\n\nEach count is an :class:`AssemblyMetric` rather than a bare ``int`` so that\n\"we could not count this\" survives the trip to the client. A histogram over\nan empty assembly and an assembly whose statistics were never computed both\nused to arrive as ``0``; with the metric shape the second arrives as\n``{\"value\": null, \"reason\": \"...\"}`` and the page can say so.\n\n``download_count`` is always unknown. ``download_files`` has no assembly\ncolumn -- it is linked to a release and its ``category`` is free text -- so\nthere is no relation to aggregate over. Guessing an assembly from a category\nstring would invent a number, and borrowing the release's download total\nwould be the same mistake as borrowing its gene count."
       },
       "AssemblySummaryResponse": {
         "properties": {

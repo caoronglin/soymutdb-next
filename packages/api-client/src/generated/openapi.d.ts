@@ -5665,6 +5665,30 @@ export interface components {
             /** Chromosomes */
             chromosomes?: components["schemas"]["ChromosomeResponse"][];
         };
+        /**
+         * AssemblyMetric
+         * @description One assembly-level statistic, with the reason it is unknown.
+         *
+         *     ``value`` is ``None`` whenever the number could not be derived from the
+         *     authoritative tables, and a machine-readable ``reason`` then says why. It is
+         *     never defaulted to ``0``: an assembly whose annotation was never imported and
+         *     an assembly that genuinely has no genes are different facts, and once both
+         *     are printed as zero nobody can tell them apart. The two fields are mutually
+         *     exclusive on purpose -- a number with a reason ("we did not count it, but
+         *     here it is") would be a contradiction.
+         */
+        AssemblyMetric: {
+            /**
+             * Value
+             * @default null
+             */
+            value: number | null;
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
+        };
         /** AssemblyResponse */
         AssemblyResponse: {
             /** Id */
@@ -5706,45 +5730,24 @@ export interface components {
          *     release-level total copied onto each assembly would report the whole
          *     release's genes once per assembly.
          *
-         *     ``download_count`` is ``None`` on purpose. ``download_files`` has no
-         *     assembly column -- it is linked to a release and its ``category`` is free
-         *     text -- so there is no relation to aggregate over. Guessing an assembly
-         *     from a category string would invent a number, and borrowing the release's
-         *     download total would be the same mistake as borrowing its gene count. The
-         *     field stays in the payload, with a ``reason``, so that "we do not know" is
-         *     visible instead of looking like a zero.
+         *     Each count is an :class:`AssemblyMetric` rather than a bare ``int`` so that
+         *     "we could not count this" survives the trip to the client. A histogram over
+         *     an empty assembly and an assembly whose statistics were never computed both
+         *     used to arrive as ``0``; with the metric shape the second arrives as
+         *     ``{"value": null, "reason": "..."}`` and the page can say so.
+         *
+         *     ``download_count`` is always unknown. ``download_files`` has no assembly
+         *     column -- it is linked to a release and its ``category`` is free text -- so
+         *     there is no relation to aggregate over. Guessing an assembly from a category
+         *     string would invent a number, and borrowing the release's download total
+         *     would be the same mistake as borrowing its gene count.
          */
         AssemblyStatistics: {
-            /**
-             * Gene Count
-             * @default 0
-             */
-            gene_count: number;
-            /**
-             * Transcript Count
-             * @default 0
-             */
-            transcript_count: number;
-            /**
-             * Chromosome Count
-             * @default 0
-             */
-            chromosome_count: number;
-            /**
-             * Total Length
-             * @default 0
-             */
-            total_length: number;
-            /**
-             * Download Count
-             * @default null
-             */
-            download_count: number | null;
-            /**
-             * Download Count Reason
-             * @default null
-             */
-            download_count_reason: string | null;
+            gene_count?: components["schemas"]["AssemblyMetric"];
+            transcript_count?: components["schemas"]["AssemblyMetric"];
+            chromosome_count?: components["schemas"]["AssemblyMetric"];
+            total_length?: components["schemas"]["AssemblyMetric"];
+            download_count?: components["schemas"]["AssemblyMetric"];
         };
         /**
          * AssemblySummaryResponse

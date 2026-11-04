@@ -654,11 +654,29 @@ class GeneService:
     async def list_chromosomes(
         self, db: AsyncSession, assembly_id: int, *, release_id: int
     ) -> list[ChromosomeResponse]:
+        """Chromosomes of one assembly, only when it belongs to this release.
+
+        The existence check is separate from the row query on purpose. Filtering
+        a join by ``Assembly.release_id`` and returning whatever came back makes
+        an assembly outside the release answer ``200 + []``, which tells the
+        caller "that assembly exists and has no chromosomes" -- a claim the data
+        never made, and one that discloses the existence of unpublished rows.
+        Unpublished and non-existent therefore share one 404, with no row data in
+        the error, and no fallback to the default assembly (that would silently
+        answer for a different coordinate namespace).
+        """
+        in_release = (
+            await db.execute(
+                select(Assembly.id)
+                .where(Assembly.id == assembly_id)
+                .where(Assembly.release_id == release_id)
+            )
+        ).scalar_one_or_none()
+        if in_release is None:
+            raise NotFoundError(f"Assembly {assembly_id} is not available")
         result = await db.execute(
             select(Chromosome)
-            .join(Assembly, Chromosome.assembly_id == Assembly.id)
             .where(Chromosome.assembly_id == assembly_id)
-            .where(Assembly.release_id == release_id)
             .order_by(Chromosome.order)
         )
         return [

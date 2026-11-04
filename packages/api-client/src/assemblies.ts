@@ -1,22 +1,34 @@
 /**
  * Genome assemblies of the current release, with counts aggregated per assembly.
  *
- * `statistics.download_count` is `null` on purpose and carries a
- * `download_count_reason`: `download_files` has no assembly dimension, so there
- * is no number to report. Do not substitute the release's download total, and
- * do not derive one from `category` — both would be invented data.
+ * Every statistic is an `AssemblyMetric`, not a bare number. A count that could
+ * not be derived from the authoritative tables arrives as `value: null` plus a
+ * machine-readable `reason`; a count that ran and found nothing arrives as a
+ * genuine `0` with no reason. A caller that collapses the two loses the whole
+ * distinction, so render `null` as "not counted (because …)", never as `0`.
+ *
+ * `statistics.download_count` is always the first kind: `download_files` has no
+ * assembly dimension. Do not substitute the release's download total, and do not
+ * derive one from `category` — both would be invented data.
  */
 import { http } from "./auth";
 
+/** One statistic: a count, or an explained absence. Never both. */
+export interface AssemblyMetric {
+  /** `null` when the count could not be derived. */
+  value: number | null;
+  /** Reason code for a `null` value; always `null` when `value` is present. */
+  reason: string | null;
+}
+
 /** Counts aggregated from rows that carry the assembly id themselves. */
 export interface AssemblyStatistics {
-  gene_count: number;
-  transcript_count: number;
-  chromosome_count: number;
-  total_length: number;
-  /** Always `null`: no assembly dimension exists to aggregate over. */
-  download_count: number | null;
-  download_count_reason: string | null;
+  gene_count: AssemblyMetric;
+  transcript_count: AssemblyMetric;
+  chromosome_count: AssemblyMetric;
+  total_length: AssemblyMetric;
+  /** Always unknown: no assembly dimension exists to aggregate over. */
+  download_count: AssemblyMetric;
 }
 
 export interface AssemblySummary {

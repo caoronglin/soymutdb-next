@@ -453,7 +453,10 @@ class TestListAssemblies:
 
 class TestListChromosomes:
     async def test_maps_rows_to_responses(self):
-        session = FakeDbSession(chromosomes=[make_chromosome(1), make_chromosome(2, name="Gm02")])
+        session = FakeDbSession(
+            assemblies=[make_assembly(1)],
+            chromosomes=[make_chromosome(1), make_chromosome(2, name="Gm02")],
+        )
         responses = await GeneService().list_chromosomes(
             session, assembly_id=1, release_id=7
         )
@@ -461,12 +464,23 @@ class TestListChromosomes:
         assert responses[0].assembly_id == "1"
         assert responses[0].length == 50_000_000
 
-    async def test_filters_by_assembly_and_orders(self):
-        session = FakeDbSession(chromosomes=[make_chromosome()])
+    async def test_scopes_to_the_assembly_and_orders(self):
+        session = FakeDbSession(assemblies=[make_assembly(1)], chromosomes=[make_chromosome()])
         await GeneService().list_chromosomes(
             session, assembly_id=1, release_id=7
         )
         sql = str(session.last_stmt)
         assert "chromosomes.assembly_id" in sql
-        assert "assemblies.release_id" in sql
         assert 'ORDER BY chromosomes."order"' in sql
+
+    async def test_assembly_outside_the_release_is_not_found(self):
+        """An empty list would claim "exists, has no chromosomes".
+
+        Guarding the *assembly* (not only the rows) is what keeps an unpublished
+        assembly indistinguishable from an id that was never issued: the same
+        404, no row data, no fallback to another assembly. The PostgreSQL
+        integration test asserts the same contract end to end.
+        """
+        session = FakeDbSession(assemblies=[], chromosomes=[make_chromosome()])
+        with pytest.raises(NotFoundError):
+            await GeneService().list_chromosomes(session, assembly_id=1, release_id=7)

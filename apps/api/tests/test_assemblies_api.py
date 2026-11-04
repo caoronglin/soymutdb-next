@@ -134,18 +134,25 @@ async def test_list_reports_each_assembly_own_counts(assembly_fixture, client):
     v4_row = rows[str(v4.id)]
     v5_row = rows[str(v5.id)]
 
-    assert v4_row["statistics"]["gene_count"] == V4_GENES
-    assert v5_row["statistics"]["gene_count"] == V5_GENES
-    assert v4_row["statistics"]["gene_count"] != v5_row["statistics"]["gene_count"]
+    assert v4_row["statistics"]["gene_count"] == {"value": V4_GENES, "reason": None}
+    assert v5_row["statistics"]["gene_count"] == {"value": V5_GENES, "reason": None}
+    assert (
+        v4_row["statistics"]["gene_count"]["value"]
+        != v5_row["statistics"]["gene_count"]["value"]
+    )
 
-    assert v4_row["statistics"]["transcript_count"] == V4_TRANSCRIPTS
-    assert v5_row["statistics"]["transcript_count"] == V5_TRANSCRIPTS
+    assert v4_row["statistics"]["transcript_count"]["value"] == V4_TRANSCRIPTS
+    assert v5_row["statistics"]["transcript_count"]["value"] == V5_TRANSCRIPTS
 
-    assert v4_row["statistics"]["chromosome_count"] == len(V4_CHROMOSOMES)
-    assert v5_row["statistics"]["chromosome_count"] == len(V5_CHROMOSOMES)
+    assert v4_row["statistics"]["chromosome_count"]["value"] == len(V4_CHROMOSOMES)
+    assert v5_row["statistics"]["chromosome_count"]["value"] == len(V5_CHROMOSOMES)
 
-    assert v4_row["statistics"]["total_length"] == sum(length for _, length in V4_CHROMOSOMES)
-    assert v5_row["statistics"]["total_length"] == sum(length for _, length in V5_CHROMOSOMES)
+    assert v4_row["statistics"]["total_length"]["value"] == sum(
+        length for _, length in V4_CHROMOSOMES
+    )
+    assert v5_row["statistics"]["total_length"]["value"] == sum(
+        length for _, length in V5_CHROMOSOMES
+    )
 
     assert v4_row["release_id"] == release.id
     assert v4_row["release_version"] == release.version
@@ -167,7 +174,7 @@ async def test_release_counters_are_never_read(assembly_fixture, client):
     for slug in {row["id"] for row in listing.json()}:
         detail = await client.get(f"{ASSEMBLIES}/{slug}", params={"release_id": release.id})
         assert detail.status_code == 200
-        assert detail.json()["statistics"]["gene_count"] != release.gene_count
+        assert detail.json()["statistics"]["gene_count"]["value"] != release.gene_count
 
 
 async def test_download_count_is_always_null_with_a_reason(assembly_fixture, client):
@@ -180,14 +187,18 @@ async def test_download_count_is_always_null_with_a_reason(assembly_fixture, cli
     listing = await client.get(ASSEMBLIES, params={"release_id": release.id})
     assert listing.status_code == 200
     for row in listing.json():
-        assert row["statistics"]["download_count"] is None
-        assert row["statistics"]["download_count_reason"] == DOWNLOAD_COUNT_UNAVAILABLE
+        assert row["statistics"]["download_count"] == {
+            "value": None,
+            "reason": DOWNLOAD_COUNT_UNAVAILABLE,
+        }
 
     detail = await client.get(f"{ASSEMBLIES}/{v4.id}", params={"release_id": release.id})
     assert detail.status_code == 200
     statistics = detail.json()["statistics"]
-    assert statistics["download_count"] is None
-    assert statistics["download_count_reason"] == DOWNLOAD_COUNT_UNAVAILABLE
+    assert statistics["download_count"] == {
+        "value": None,
+        "reason": DOWNLOAD_COUNT_UNAVAILABLE,
+    }
     assert "12345" not in detail.text
 
 
@@ -260,3 +271,161 @@ async def test_list_is_empty_for_a_release_without_assemblies(db_session, client
     response = await client.get(ASSEMBLIES, params={"release_id": empty.id})
     assert response.status_code == 200
     assert response.json() == []
+
+
+async def test_assembly_without_annotation_reports_zeros_but_downloads_do_not(
+    assembly_fixture, db_session, client
+):
+    """An assembly with no rows is genuinely empty, and one dimension never counts.
+
+    Two different "nothing here" cases, deliberately asserted side by side:
+
+    * genes / transcripts / chromosomes: the aggregates ran over this assembly
+      and found no rows, so the honest answer is ``0`` with no reason;
+    * downloads: nothing could be aggregated at all, so it stays ``null`` with
+      ``no_linked_downloads`` and is never turned into a zero.
+    """
+    release, v4, _v5 = assembly_fixture
+    bare = Assembly(
+        name=f"{uuid.uuid4().hex[:8]}-bare",
+        species="Glycine max",
+        version="v9",
+        release_id=release.id,
+    )
+    db_session.add(bare)
+    await db_session.flush()
+
+    response = await client.get(f"{ASSEMBLIES}/{bare.id}", params={"release_id": release.id})
+    assert response.status_code == 200
+    statistics = response.json()["statistics"]
+
+    for field in ("gene_count", "transcript_count", "chromosome_count", "total_length"):
+        assert statistics[field] == {"value": 0, "reason": None}, field
+
+    assert statistics["download_count"] == {
+        "value": None,
+        "reason": DOWNLOAD_COUNT_UNAVAILABLE,
+    }
+
+    # The real assembly is unaffected: one assembly's emptiness is not another's.
+    healthy = await client.get(f"{ASSEMBLIES}/{v4.id}", params={"release_id": release.id})
+    assert healthy.json()["statistics"]["gene_count"] == {"value": V4_GENES, "reason": None}
+
+
+async def test_gene_without_transcripts_is_a_real_zero_not_a_reason(
+    assembly_fixture, db_session, client
+):
+    """The counterpoint: a count that ran and found nothing is ``0``, not ``null``.
+
+    An assembly that has annotation but no transcripts must not borrow the
+    "could not count it" wording -- that would be as wrong as printing 0 for a
+    dimension nobody ever counted.
+    """
+    release, _v4, _v5 = assembly_fixture
+    token = uuid.uuid4().hex[:8]
+    solo = Assembly(
+        name=f"{token}-solo",
+        species="Glycine max",
+        version="v3",
+        release_id=release.id,
+    )
+    db_session.add(solo)
+    await db_session.flush()
+
+    chromosome = Chromosome(
+        assembly_id=solo.id, name=f"{token}-c1", length=500, order=0
+    )
+    db_session.add(chromosome)
+    await db_session.flush()
+    db_session.add(
+        Gene(
+            accession=f"{token}-G0",
+            assembly_id=solo.id,
+            chromosome_id=chromosome.id,
+            biotype="protein_coding",
+            start=10,
+            end=20,
+            strand="+",
+        )
+    )
+    await db_session.flush()
+
+    response = await client.get(f"{ASSEMBLIES}/{solo.id}", params={"release_id": release.id})
+    assert response.status_code == 200
+    statistics = response.json()["statistics"]
+
+    assert statistics["gene_count"] == {"value": 1, "reason": None}
+    assert statistics["chromosome_count"] == {"value": 1, "reason": None}
+    assert statistics["total_length"] == {"value": 500, "reason": None}
+    # The aggregate ran over an empty set: a genuine zero.
+    assert statistics["transcript_count"] == {"value": 0, "reason": None}
+
+
+async def test_chromosomes_of_an_unpublished_assembly_are_404_without_rows(
+    assembly_fixture, db_session, client, app
+):
+    """``GET /genes/assemblies/{id}/chromosomes`` must not answer ``200 + []``.
+
+    The route used to filter a join by ``Assembly.release_id`` and return
+    whatever came back, so an assembly outside the resolved release answered
+    ``200 + []`` -- "this assembly exists and has no chromosomes". This asserts
+    the guard end to end: the same 404 an unknown id gets, no chromosome row in
+    the body, and no fallback to the release's default assembly.
+
+    ``release_context`` is overridden per test because the app-wide fixture pins
+    release 7, which this fixture's rows do not live in.
+    """
+    from app.services.release_context import ReleaseContext, get_release_context
+
+    release, v4, _v5 = assembly_fixture
+
+    async def override() -> ReleaseContext:
+        return ReleaseContext(release_id=release.id, assembly_id=v4.id, assembly=v4.name)
+
+    app.dependency_overrides[get_release_context] = override
+    try:
+        other = Release(
+            version=f"{uuid.uuid4().hex[:8]}-unpublished",
+            name="unpublished release",
+            status=ReleaseStatus.DRAFT,
+        )
+        db_session.add(other)
+        await db_session.flush()
+        hidden = Assembly(
+            name=f"{uuid.uuid4().hex[:8]}-hidden",
+            species="Glycine max",
+            version="v1",
+            release_id=other.id,
+        )
+        db_session.add(hidden)
+        await db_session.flush()
+        db_session.add(
+            Chromosome(
+                assembly_id=hidden.id,
+                name=f"{uuid.uuid4().hex[:6]}-secret",
+                length=12_345,
+                order=0,
+            )
+        )
+        await db_session.flush()
+
+        unpublished = await client.get(f"/api/v1/genes/assemblies/{hidden.id}/chromosomes")
+        assert unpublished.status_code == 404
+        # No row data, no hidden name or length in the error body.
+        assert "secret" not in unpublished.text
+        assert "12345" not in unpublished.text
+
+        # Indistinguishable from an id that never existed.
+        never = await client.get(
+            f"/api/v1/genes/assemblies/{hidden.id + 100_000}/chromosomes"
+        )
+        assert never.status_code == unpublished.status_code
+
+        # And the published assembly still answers, so the guard is not a blanket 404.
+        visible = await client.get(f"/api/v1/genes/assemblies/{v4.id}/chromosomes")
+        assert visible.status_code == 200
+        assert [row["name"] for row in visible.json()] == [
+            name for name, _ in V4_CHROMOSOMES
+        ]
+    finally:
+        app.dependency_overrides.pop(get_release_context, None)

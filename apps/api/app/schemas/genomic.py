@@ -256,6 +256,30 @@ class GeneListResponse(BaseModel):
 GeneDetail.model_rebuild()
 
 
+class AssemblyMetric(BaseModel):
+    """One assembly-level statistic, with the reason it is unknown.
+
+    ``value`` is ``None`` whenever the number could not be derived from the
+    authoritative tables, and a machine-readable ``reason`` then says why. It is
+    never defaulted to ``0``: an assembly whose annotation was never imported and
+    an assembly that genuinely has no genes are different facts, and once both
+    are printed as zero nobody can tell them apart. The two fields are mutually
+    exclusive on purpose -- a number with a reason ("we did not count it, but
+    here it is") would be a contradiction.
+    """
+
+    value: int | None = Field(default=None, ge=0)
+    reason: str | None = None
+
+    @model_validator(mode="after")
+    def _reason_matches_value(self):  # noqa: ANN201
+        if self.value is None and not self.reason:
+            raise ValueError("an unknown statistic must carry a reason")
+        if self.value is not None and self.reason is not None:
+            raise ValueError("a known statistic must not carry a reason")
+        return self
+
+
 class AssemblyStatistics(BaseModel):
     """Counts derived from real rows, scoped to one assembly.
 
@@ -265,21 +289,24 @@ class AssemblyStatistics(BaseModel):
     release-level total copied onto each assembly would report the whole
     release's genes once per assembly.
 
-    ``download_count`` is ``None`` on purpose. ``download_files`` has no
-    assembly column -- it is linked to a release and its ``category`` is free
-    text -- so there is no relation to aggregate over. Guessing an assembly
-    from a category string would invent a number, and borrowing the release's
-    download total would be the same mistake as borrowing its gene count. The
-    field stays in the payload, with a ``reason``, so that "we do not know" is
-    visible instead of looking like a zero.
+    Each count is an :class:`AssemblyMetric` rather than a bare ``int`` so that
+    "we could not count this" survives the trip to the client. A histogram over
+    an empty assembly and an assembly whose statistics were never computed both
+    used to arrive as ``0``; with the metric shape the second arrives as
+    ``{"value": null, "reason": "..."}`` and the page can say so.
+
+    ``download_count`` is always unknown. ``download_files`` has no assembly
+    column -- it is linked to a release and its ``category`` is free text -- so
+    there is no relation to aggregate over. Guessing an assembly from a category
+    string would invent a number, and borrowing the release's download total
+    would be the same mistake as borrowing its gene count.
     """
 
-    gene_count: int = Field(default=0, ge=0)
-    transcript_count: int = Field(default=0, ge=0)
-    chromosome_count: int = Field(default=0, ge=0)
-    total_length: int = Field(default=0, ge=0)
-    download_count: int | None = None
-    download_count_reason: str | None = None
+    gene_count: AssemblyMetric = Field(default_factory=AssemblyMetric)
+    transcript_count: AssemblyMetric = Field(default_factory=AssemblyMetric)
+    chromosome_count: AssemblyMetric = Field(default_factory=AssemblyMetric)
+    total_length: AssemblyMetric = Field(default_factory=AssemblyMetric)
+    download_count: AssemblyMetric = Field(default_factory=AssemblyMetric)
 
 
 class AssemblySummaryResponse(AssemblyResponse):

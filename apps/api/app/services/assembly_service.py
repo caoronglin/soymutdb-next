@@ -22,14 +22,19 @@ from ..core.exceptions import NotFoundError
 from ..models.genomic import Assembly, Chromosome, Gene, Transcript
 from ..schemas.genomic import (
     AssemblyDetailResponse,
+    AssemblyMetric,
     AssemblyStatistics,
     AssemblySummaryResponse,
     ChromosomeResponse,
 )
 
-#: Stated once, returned to the client, so the missing number is explained
-#: rather than read as a zero.
-DOWNLOAD_COUNT_UNAVAILABLE = "download_files does not record an assembly dimension"
+#: Stated once, returned to the client, so a missing number is explained rather
+#: than read as a zero. These are machine-readable codes: the portal maps them to
+#: sentences, and an unrecognised code is still passed through rather than hidden.
+DOWNLOAD_COUNT_UNAVAILABLE = "no_linked_downloads"
+NO_GENES = "no_genes"
+NO_TRANSCRIPTS = "no_transcripts"
+NO_CHROMOSOMES = "no_chromosomes"
 
 
 class AssemblyService:
@@ -116,13 +121,15 @@ class AssemblyService:
 
         return {
             assembly_id: AssemblyStatistics(
-                gene_count=gene_counts.get(assembly_id, 0),
-                transcript_count=transcript_counts.get(assembly_id, 0),
-                chromosome_count=chromosome_counts.get(assembly_id, 0),
-                total_length=total_lengths.get(assembly_id, 0),
+                # A count that ran and found nothing is a real ``0``: the
+                # aggregate answered, and the answer was zero. Only a count
+                # nobody could run is ``None``, and it says why.
+                gene_count=AssemblyMetric(value=gene_counts.get(assembly_id, 0)),
+                transcript_count=AssemblyMetric(value=transcript_counts.get(assembly_id, 0)),
+                chromosome_count=AssemblyMetric(value=chromosome_counts.get(assembly_id, 0)),
+                total_length=AssemblyMetric(value=total_lengths.get(assembly_id, 0)),
                 # Never a number: there is nothing to aggregate it over.
-                download_count=None,
-                download_count_reason=DOWNLOAD_COUNT_UNAVAILABLE,
+                download_count=AssemblyMetric(reason=DOWNLOAD_COUNT_UNAVAILABLE),
             )
             for assembly_id in assembly_ids
         }
@@ -190,6 +197,17 @@ class AssemblyService:
 
 
 def _empty_statistics() -> AssemblyStatistics:
+    """Statistics for an assembly that was never handed to the aggregates.
+
+    Only reached when ``_statistics_for`` returned nothing for an assembly that
+    *is* in this release, which means the caller skipped it rather than that the
+    data is empty. Reporting ``0``s here would state a measurement that never
+    happened, so each count is an explained absence instead.
+    """
     return AssemblyStatistics(
-        download_count=None, download_count_reason=DOWNLOAD_COUNT_UNAVAILABLE
+        gene_count=AssemblyMetric(reason=NO_GENES),
+        transcript_count=AssemblyMetric(reason=NO_TRANSCRIPTS),
+        chromosome_count=AssemblyMetric(reason=NO_CHROMOSOMES),
+        total_length=AssemblyMetric(reason=NO_CHROMOSOMES),
+        download_count=AssemblyMetric(reason=DOWNLOAD_COUNT_UNAVAILABLE),
     )
