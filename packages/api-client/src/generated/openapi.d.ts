@@ -6761,20 +6761,38 @@ export interface components {
         };
         /** GeneDetail */
         GeneDetail: {
-            /** Id */
-            id?: string | null;
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Assembly Id */
-            assembly_id?: string | null;
-            /** Assembly Name */
-            assembly_name?: string | null;
+            /**
+             * Id
+             * @default null
+             */
+            id: string | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: string | null;
+            /**
+             * Assembly Name
+             * @default null
+             */
+            assembly_name: string | null;
             /** Chromosome */
             chromosome: string;
-            /** Name */
-            name?: string | null;
-            /** Symbol */
-            symbol?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * Symbol
+             * @default null
+             */
+            symbol: string | null;
             /**
              * Biotype
              * @default protein_coding
@@ -6789,8 +6807,11 @@ export interface components {
             /** End Pos */
             end_pos: number;
             strand: components["schemas"]["Strand"];
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /**
              * Variant Count
              * @default 0
@@ -6800,16 +6821,20 @@ export interface components {
             transcripts?: components["schemas"]["TranscriptResponse"][];
             /** Aliases */
             aliases?: string[];
-            /** Created At */
-            created_at?: string | null;
-            /** Updated At */
-            updated_at?: string | null;
             /**
-             * Sequences
-             * @default []
+             * Created At
+             * @default null
              */
-            sequences: components["schemas"]["SequenceAvailability"][];
-            model_evidence?: components["schemas"]["EvidenceTag"] | null;
+            created_at: string | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: string | null;
+            /** Sequences */
+            sequences?: components["schemas"]["SequenceAvailability"][];
+            /** @default null */
+            model_evidence: components["schemas"]["EvidenceTag"] | null;
         };
         /** GeneListResponse */
         GeneListResponse: {
@@ -9488,14 +9513,26 @@ export interface components {
              * @enum {string}
              */
             availability: "available" | "unavailable";
-            /** Reason */
-            reason?: string | null;
-            /** Length */
-            length?: number | null;
-            /** Checksum */
-            checksum?: string | null;
-            /** Sequence */
-            sequence?: string | null;
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
+            /**
+             * Length
+             * @default null
+             */
+            length: number | null;
+            /**
+             * Checksum
+             * @default null
+             */
+            checksum: string | null;
+            /**
+             * Sequence
+             * @default null
+             */
+            sequence: string | null;
         };
         /** SettingFieldSchema */
         SettingFieldSchema: {

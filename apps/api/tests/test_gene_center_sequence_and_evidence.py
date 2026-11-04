@@ -19,8 +19,7 @@ import pytest
 
 from app.schemas.gene_evidence import (
     AVAILABILITY_LITERALS,
-    Availability,
-    EvidenceKind,
+    EVIDENCE_KINDS,
     EvidenceTag,
     SequenceAvailability,
 )
@@ -40,7 +39,7 @@ def test_every_molecule_reports_unavailable_without_a_residue_store():
         "protein",
     ]
     for entry in availability:
-        assert entry.availability is Availability.UNAVAILABLE
+        assert entry.availability == AVAILABILITY_LITERALS[1]
         # Ablation: a fabricated residue string is the exact failure this
         # guards. An empty string would be just as dishonest as a real one.
         assert entry.sequence is None
@@ -57,19 +56,19 @@ def test_availability_reason_names_the_molecule():
 @pytest.mark.parametrize(
     ("attributes", "expected"),
     [
-        ({"evidence": "experimental"}, EvidenceKind.EXPERIMENTAL),
-        ({"evidence": "Curated"}, EvidenceKind.CURATED),
-        ({"evidence": "transferred"}, EvidenceKind.TRANSFERRED),
-        ({"source": "AUGUSTUS"}, EvidenceKind.PREDICTED),
-        ({"source": "GeneSnap"}, EvidenceKind.PREDICTED),
-        ({"source": "curated by SoyBase"}, EvidenceKind.CURATED),
-        ({"source": "Glyma_275_Wm82.a4.v1.gene.gff3"}, EvidenceKind.IMPORTED),
+        ({"evidence": "experimental"}, "experimental"),
+        ({"evidence": "Curated"}, "curated"),
+        ({"evidence": "transferred"}, "transferred"),
+        ({"source": "AUGUSTUS"}, "predicted"),
+        ({"source": "GeneSnap"}, "predicted"),
+        ({"source": "curated by SoyBase"}, "curated"),
+        ({"source": "Glyma_275_Wm82.a4.v1.gene.gff3"}, "imported"),
     ],
 )
 def test_declared_source_maps_to_one_evidence_kind(attributes, expected):
     tag = gene_model_evidence(SimpleNamespace(attributes=attributes))
     assert tag is not None
-    assert tag.kind is expected
+    assert tag.kind == expected
 
 
 @pytest.mark.parametrize(
@@ -107,10 +106,10 @@ def test_wire_schema_states_the_enum_labels_inline():
     """
     for model, field, expected in (
         (SequenceAvailability, "availability", AVAILABILITY_LITERALS),
-        (EvidenceTag, "kind", tuple(EvidenceKind)),
+        (EvidenceTag, "kind", EVIDENCE_KINDS),
     ):
         schema = model.model_json_schema()
         assert "$defs" not in schema
         property_schema = schema["properties"][field]
         assert "$ref" not in property_schema
-        assert property_schema["enum"] == [str(value) for value in expected]
+        assert property_schema["enum"] == list(expected)

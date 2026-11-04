@@ -9,7 +9,7 @@ from sqlalchemy.orm import joinedload, lazyload
 from ..core.exceptions import NotFoundError, ValidationError
 from ..models.genomic import Assembly, Chromosome, Gene, Transcript
 from ..models.variant import VariantSummary
-from ..schemas.gene_evidence import EvidenceKind, EvidenceTag
+from ..schemas.gene_evidence import EVIDENCE_KINDS, EvidenceTag
 from ..schemas.genomic import (
     AssemblyResponse,
     ChromosomeResponse,
@@ -111,21 +111,21 @@ def gene_model_evidence(gene: Gene) -> EvidenceTag | None:
     attributes = gene.attributes if isinstance(gene.attributes, dict) else {}
     declared = attributes.get("evidence")
     if isinstance(declared, str) and declared.strip():
-        known = {kind.value for kind in EvidenceKind}
+        known = set(EVIDENCE_KINDS)
         candidate = declared.strip().lower()
         if candidate in known:
             return EvidenceTag(
-                kind=EvidenceKind(candidate),
+                kind=candidate,
                 source=str(attributes.get("source") or "annotation"),
             )
     source = attributes.get("source")
     if isinstance(source, str) and source.strip():
         lowered = source.strip().lower()
         if any(marker in lowered for marker in _CURATED_SOURCE_MARKERS):
-            return EvidenceTag(kind=EvidenceKind.CURATED, source=source.strip())
+            return EvidenceTag(kind="curated", source=source.strip())
         if any(marker in lowered for marker in _PREDICTED_SOURCE_MARKERS):
-            return EvidenceTag(kind=EvidenceKind.PREDICTED, source=source.strip())
-        return EvidenceTag(kind=EvidenceKind.IMPORTED, source=source.strip())
+            return EvidenceTag(kind="predicted", source=source.strip())
+        return EvidenceTag(kind="imported", source=source.strip())
     return None
 
 

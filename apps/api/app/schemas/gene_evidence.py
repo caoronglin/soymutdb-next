@@ -22,11 +22,10 @@ resource it came from.
 
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field
-
-from ..core.compat import StrEnum
 
 #: The vocabulary, strongest first. Every member list below is built from one
 #: of these tuples so the enum, the JSON schema and the TypeScript client cannot
@@ -35,6 +34,15 @@ from ..core.compat import StrEnum
 #: ``$ref`` in the vehicle schema, which hides the allowed labels from anyone
 #: reading ``openapi.json`` and from ``openapi-typescript``. A ``Literal``
 #: inline the values, so the wire contract states what it accepts.
+#:
+#: The two ``StrEnum`` classes below are private for the same reason, one step
+#: further out: a model field typed by an enum that is *importable* is
+#: referenced by its qualname (``app.schemas.gene_evidence.Availability``), so
+#: pydantic emits a component named after the module path instead of the values
+#: and ``SequenceAvailability.model_json_schema()`` grows a ``$defs`` entry.
+#: A module-private class cannot be referenced, so the enum collapses into the
+#: inline ``enum`` list the contract promises. Neither class is part of the
+#: public surface; the tuples and ``AVAILABILITY_STATES`` are.
 EVIDENCE_KINDS = (
     "experimental",
     "curated",
@@ -45,7 +53,7 @@ EVIDENCE_KINDS = (
 )
 
 
-class EvidenceKind(StrEnum):
+class _EvidenceKind(StrEnum):
     EXPERIMENTAL = "experimental"
     CURATED = "curated"
     PREDICTED = "predicted"
@@ -55,10 +63,10 @@ class EvidenceKind(StrEnum):
 
 
 #: Ordered from strongest to weakest; the UI sorts by this.
-EVIDENCE_STRENGTH: tuple[EvidenceKind, ...] = tuple(EvidenceKind(kind) for kind in EVIDENCE_KINDS)
+EVIDENCE_STRENGTH: tuple[_EvidenceKind, ...] = tuple(_EvidenceKind(kind) for kind in EVIDENCE_KINDS)
 
 
-class Availability(StrEnum):
+class _Availability(StrEnum):
     """Why a section has nothing to show.
 
     ``unavailable`` is the only honest answer when the platform holds no
@@ -71,8 +79,10 @@ class Availability(StrEnum):
     UNAVAILABLE = "unavailable"
 
 
-AVAILABILITY_STATES = (Availability.AVAILABLE, Availability.UNAVAILABLE)
-AVAILABILITY_LITERALS = tuple(state.value for state in AVAILABILITY_STATES)
+#: The literal (``str``) spellings clients actually receive, in declaration
+#: order: ``available`` then ``unavailable``.
+AVAILABILITY_LITERALS = tuple(state.value for state in _Availability)
+AVAILABILITY_STATES = AVAILABILITY_LITERALS
 
 
 class EvidenceTag(BaseModel):
@@ -95,7 +105,7 @@ class SequenceAvailability(BaseModel):
 
     molecule: Literal["genomic", "cds", "transcript", "protein"]
     availability: Literal[AVAILABILITY_LITERALS] = (  # type: ignore[valid-type]
-        Availability.UNAVAILABLE
+        _Availability.UNAVAILABLE
     )
     reason: str | None = None
     length: int | None = Field(default=None, ge=0)
@@ -107,10 +117,8 @@ class SequenceAvailability(BaseModel):
 __all__ = [
     "AVAILABILITY_LITERALS",
     "AVAILABILITY_STATES",
-    "Availability",
     "EVIDENCE_KINDS",
     "EVIDENCE_STRENGTH",
-    "EvidenceKind",
     "EvidenceTag",
     "SequenceAvailability",
 ]

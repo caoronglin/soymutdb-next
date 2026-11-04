@@ -11,7 +11,7 @@ store without updating this module must fail the gene detail contract.
 
 from __future__ import annotations
 
-from ..schemas.gene_evidence import Availability, SequenceAvailability
+from ..schemas.gene_evidence import AVAILABILITY_LITERALS, SequenceAvailability
 
 #: Machine-readable reason, stable across releases so clients can key on it.
 NO_SEQUENCE_STORE = "no_sequence_store"
@@ -38,7 +38,7 @@ def gene_sequence_availability() -> list[SequenceAvailability]:
     return [
         SequenceAvailability(
             molecule=molecule,  # type: ignore[arg-type]
-            availability=Availability.UNAVAILABLE,
+            availability=AVAILABILITY_LITERALS[1],
             reason=_reason(molecule),
         )
         for molecule in ("genomic", "cds", "transcript", "protein")

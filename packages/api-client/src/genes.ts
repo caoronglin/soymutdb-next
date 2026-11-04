@@ -85,7 +85,11 @@ export interface GeneDetail extends GeneSummary {
   extra: Record<string, unknown>;
   transcripts: GeneTranscript[];
   annotations: unknown[];
-  /** Always present; one entry per molecule. */
+  /**
+   * One entry per molecule. Optional (not `undefined`-by-default on the wire
+   * since the schema carries `default_factory`, not `default`), so a client must
+   * treat "absent" as "nothing reported", never as "no sequences".
+   */
   sequences?: GeneSequenceAvailability[];
   /** How the gene model came to exist; ``null`` when the source is silent. */
   model_evidence?: EvidenceTag | null;
