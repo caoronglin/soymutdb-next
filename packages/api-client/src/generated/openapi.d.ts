@@ -1203,6 +1203,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/blast/databases/{database_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Blast Database State
+         * @description Enable/disable a published BLAST index (administrator only).
+         *
+         *     Disabling an index only removes it from *new* searches. Submitted jobs keep
+         *     the provenance frozen at submission time and are never rewritten. There is
+         *     no delete route: a published index is an immutable, auditable record.
+         */
+        patch: operations["update_blast_database_state_api_v1_blast_databases__database_id__patch"];
+        trace?: never;
+    };
     "/api/v1/blast/jobs": {
         parameters: {
             query?: never;
@@ -5894,6 +5918,37 @@ export interface components {
              * @default null
              */
             license: string | null;
+        };
+        /**
+         * BlastDatabaseStateResponse
+         * @description Narrow acknowledgement of a state toggle.
+         *
+         *     ``BlastDatabaseResponse`` is the public discovery shape: it is scoped to a
+         *     published release and carries catalog metadata. This control-plane reply
+         *     must work for *any* catalog row (including one already disabled, or one in
+         *     another release) and must never expose the worker-local ``file_path``.
+         */
+        BlastDatabaseStateResponse: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Is Active */
+            is_active: boolean;
+        };
+        /**
+         * BlastDatabaseStateUpdate
+         * @description Admin toggle for one published catalog row.
+         *
+         *     The only mutable field is ``is_active``. A published index is immutable:
+         *     disabling it stops *new* searches from selecting it, but never deletes the
+         *     row, rewrites a submitted job, or changes the frozen index identity. The
+         *     request is deliberately narrow (``extra="forbid"``) so a caller cannot
+         *     smuggle in a path, a build state or a name through the same route.
+         */
+        BlastDatabaseStateUpdate: {
+            /** Is Active */
+            is_active: boolean;
         };
         /**
          * BlastGenomeTargetResponse
@@ -15733,6 +15788,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BlastDatabaseResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_blast_database_state_api_v1_blast_databases__database_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                database_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlastDatabaseStateUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastDatabaseStateResponse"];
                 };
             };
             /** @description Validation Error */

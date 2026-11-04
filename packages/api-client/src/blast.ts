@@ -502,3 +502,27 @@ export function requestBlastIndexBuild(payload: BlastIndexBuildRequest): Promise
 export function getBlastIndexBuild(buildId: string): Promise<BlastIndexBuild> {
   return http.get<BlastIndexBuild>(`/blast/index-builds/${encodeURIComponent(buildId)}`);
 }
+
+/** Narrow control-plane acknowledgement: never a filesystem path or catalog dump. */
+export interface BlastDatabaseState {
+  id: number;
+  name: string;
+  is_active: boolean;
+}
+
+/**
+ * Admin-only enable/disable of a published index.
+ *
+ * Disabling stops *new* searches from selecting the index; it never deletes
+ * the record or rewrites an in-flight job's frozen provenance. There is no
+ * delete function: a published index is immutable.
+ */
+export function setBlastDatabaseActive(
+  databaseId: number | string,
+  isActive: boolean,
+): Promise<BlastDatabaseState> {
+  return http.patch<BlastDatabaseState>(
+    `/blast/databases/${encodeURIComponent(String(databaseId))}`,
+    { json: { is_active: isActive } },
+  );
+}

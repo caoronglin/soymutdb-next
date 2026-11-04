@@ -308,6 +308,42 @@ class BlastDatabaseResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Admin enable/disable control for a published index (control plane)
+# ---------------------------------------------------------------------------
+
+
+class BlastDatabaseStateUpdate(BaseModel):
+    """Admin toggle for one published catalog row.
+
+    The only mutable field is ``is_active``. A published index is immutable:
+    disabling it stops *new* searches from selecting it, but never deletes the
+    row, rewrites a submitted job, or changes the frozen index identity. The
+    request is deliberately narrow (``extra="forbid"``) so a caller cannot
+    smuggle in a path, a build state or a name through the same route.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    is_active: bool
+
+
+class BlastDatabaseStateResponse(BaseModel):
+    """Narrow acknowledgement of a state toggle.
+
+    ``BlastDatabaseResponse`` is the public discovery shape: it is scoped to a
+    published release and carries catalog metadata. This control-plane reply
+    must work for *any* catalog row (including one already disabled, or one in
+    another release) and must never expose the worker-local ``file_path``.
+    """
+
+    model_config = {"from_attributes": True}
+
+    id: int
+    name: str
+    is_active: bool
+
+
+# ---------------------------------------------------------------------------
 # Asynchronous immutable index builds (admin control plane)
 # ---------------------------------------------------------------------------
 

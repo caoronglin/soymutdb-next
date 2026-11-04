@@ -4328,6 +4328,74 @@
         "x-idempotent": true
       }
     },
+    "/api/v1/blast/databases/{database_id}": {
+      "patch": {
+        "tags": [
+          "blast"
+        ],
+        "summary": "Update Blast Database State",
+        "description": "Enable/disable a published BLAST index (administrator only).\n\nDisabling an index only removes it from *new* searches. Submitted jobs keep\nthe provenance frozen at submission time and are never rewritten. There is\nno delete route: a published index is an immutable, auditable record.",
+        "operationId": "update_blast_database_state_api_v1_blast_databases__database_id__patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "database_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Database Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlastDatabaseStateUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlastDatabaseStateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/blast/jobs": {
       "post": {
         "tags": [
@@ -21009,6 +21077,45 @@
           "created_at"
         ],
         "title": "BlastDatabaseResponse"
+      },
+      "BlastDatabaseStateResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "is_active"
+        ],
+        "title": "BlastDatabaseStateResponse",
+        "description": "Narrow acknowledgement of a state toggle.\n\n``BlastDatabaseResponse`` is the public discovery shape: it is scoped to a\npublished release and carries catalog metadata. This control-plane reply\nmust work for *any* catalog row (including one already disabled, or one in\nanother release) and must never expose the worker-local ``file_path``."
+      },
+      "BlastDatabaseStateUpdate": {
+        "properties": {
+          "is_active": {
+            "type": "boolean",
+            "title": "Is Active"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "is_active"
+        ],
+        "title": "BlastDatabaseStateUpdate",
+        "description": "Admin toggle for one published catalog row.\n\nThe only mutable field is ``is_active``. A published index is immutable:\ndisabling it stops *new* searches from selecting it, but never deletes the\nrow, rewrites a submitted job, or changes the frozen index identity. The\nrequest is deliberately narrow (``extra=\"forbid\"``) so a caller cannot\nsmuggle in a path, a build state or a name through the same route."
       },
       "BlastGenomeTargetResponse": {
         "properties": {
