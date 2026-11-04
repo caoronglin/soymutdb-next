@@ -9,6 +9,11 @@ export interface DownloadFile {
   category: string | null;
   download_count: number;
   created_at: string;
+  /** NULL when the artifact predates checksum recording; never a fake digest. */
+  sha256: string | null;
+  license: string | null;
+  generated_at: string | null;
+  source_ref: string | null;
 }
 
 export interface DownloadUrlResponse {

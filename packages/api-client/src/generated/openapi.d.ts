@@ -818,6 +818,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/variants/export/{export_id}/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Variant Export Manifest
+         * @description Return citable provenance for one export (submitter or administrator).
+         *
+         *     A legacy artifact with no checksum is reported with ``sha256: null`` and
+         *     ``sha256_state='not_recorded'``; the response never invents a digest.
+         */
+        get: operations["get_variant_export_manifest_api_v1_variants_export__export_id__manifest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/variants/export/{export_id}/download": {
         parameters: {
             query?: never;
@@ -2269,6 +2292,30 @@ export interface paths {
         get: operations["get_download_url_api_v1_content_downloads__file_id__url_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/exports/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit Export Query
+         * @description Submit a whitelisted filter set as one asynchronous variant export.
+         *
+         *     Unknown or unbacked filters are refused by ``ExportQueryRequest`` before
+         *     any record or outbox event is written, so a downloader never receives an
+         *     artifact that silently ignored a constraint they set.
+         */
+        post: operations["submit_export_query_api_v1_exports_query_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5325,6 +5372,7 @@ export interface components {
             /** Variant Id */
             variant_id: string;
             /**
+             * Assembly
              * @description Assembly namespace the variant was read from.
              *
              *     `variant_id` is only unique per (release, assembly); a row that travels
@@ -6940,6 +6988,26 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Sha256
+             * @default null
+             */
+            sha256: string | null;
+            /**
+             * License
+             * @default null
+             */
+            license: string | null;
+            /**
+             * Generated At
+             * @default null
+             */
+            generated_at: string | null;
+            /**
+             * Source Ref
+             * @default null
+             */
+            source_ref: string | null;
         };
         /**
          * EnrichmentGseaResponse
@@ -7392,6 +7460,121 @@ export interface components {
             expires_at: string;
             /** Expires In Seconds */
             expires_in_seconds: number;
+        };
+        /**
+         * ExportManifestResponse
+         * @description Citable provenance for a produced variant-export artifact.
+         *
+         *     The manifest mirrors the owner-visible status record but adds the byte
+         *     identity and licence. ``sha256`` is ``None`` when the artifact predates
+         *     checksum recording; a client must not display that as a valid digest.
+         *     ``filters`` carries only the public, non-secret filter keys the submitter
+         *     set — never the worker-only resolved mutant-line name or any internal id.
+         */
+        ExportManifestResponse: {
+            /** Export Id */
+            export_id: string;
+            /** Status */
+            status: string;
+            /** Format */
+            format: string;
+            /** Release Key */
+            release_key: string;
+            /**
+             * Assembly Key
+             * @default null
+             */
+            assembly_key: string | null;
+            /**
+             * Record Count
+             * @default null
+             */
+            record_count: number | null;
+            /**
+             * File Size
+             * @default null
+             */
+            file_size: number | null;
+            /**
+             * Sha256
+             * @default null
+             */
+            sha256: string | null;
+            /**
+             * Sha256 State
+             * @description 'recorded' when sha256 is a real digest; 'not_recorded' when the artifact was produced before checksum recording shipped.
+             * @default recorded
+             */
+            sha256_state: string;
+            /**
+             * License
+             * @default null
+             */
+            license: string | null;
+            /**
+             * Generated At
+             * @default null
+             */
+            generated_at: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
+            /**
+             * Expires At
+             * @default null
+             */
+            expires_at: string | null;
+            /** Filters */
+            filters?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * ExportQueryRequest
+         * @description A whitelisted filter set for one variant-export artifact.
+         *
+         *     ``extra='forbid'`` is the core of the contract: an unknown key is a 422,
+         *     not a parameter that quietly vanishes. Release/assembly are resolved by
+         *     the server from the published release context, never trusted from the
+         *     body as a provenance claim.
+         */
+        ExportQueryRequest: {
+            /**
+             * Format
+             * @default tsv
+             */
+            format: string;
+            /**
+             * Compress
+             * @default true
+             */
+            compress: boolean;
+            /** Filters */
+            filters?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * ExportQueryResponse
+         * @description The durable export record the query builder submitted.
+         */
+        ExportQueryResponse: {
+            /** Export Id */
+            export_id: string;
+            /** Status */
+            status: string;
+            /** Message */
+            message: string;
+            /** Format */
+            format: string;
+            /** Applied Filters */
+            applied_filters?: {
+                [key: string]: unknown;
+            };
+            /** Unsupported Filters */
+            unsupported_filters?: string[];
         };
         /**
          * ExportRequest
@@ -8904,7 +9087,10 @@ export interface components {
         LdVariant: {
             /** Variant Id */
             variant_id: string;
-            /** @description Assembly namespace the variant was read from (see AlleleFreqVariant). */
+            /**
+             * Assembly
+             * @description Assembly namespace the variant was read from (see AlleleFreqVariant).
+             */
             assembly: string;
             /** Chromosome */
             chromosome: string;
@@ -15130,6 +15316,46 @@ export interface operations {
             };
         };
     };
+    get_variant_export_manifest_api_v1_variants_export__export_id__manifest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportManifestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     get_variant_export_download_api_v1_variants_export__export_id__download_get: {
         parameters: {
             query?: never;
@@ -17908,6 +18134,52 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SignedUrlResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    submit_export_query_api_v1_exports_query_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportQueryResponse"];
                 };
             };
             /** @description Validation Error */

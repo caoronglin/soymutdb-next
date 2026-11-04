@@ -400,4 +400,8 @@ def _dl_to_response(d: DownloadFile) -> DownloadFileResponse:
         category=d.category,
         download_count=d.download_count,
         created_at=d.created_at,
+        sha256=d.sha256,
+        license=d.license,
+        generated_at=d.generated_at,
+        source_ref=d.source_ref,
     )

@@ -3,8 +3,10 @@ import { http } from "./auth";
 import {
   createVariantExport,
   getVariantExportDownload,
+  getVariantExportManifest,
   getVariantExportStatus,
   searchVariants,
+  submitExportQuery,
 } from "./variants";
 
 vi.mock("./auth", () => ({ http: { get: vi.fn(), post: vi.fn() } }));
@@ -76,5 +78,26 @@ describe("variant client contract", () => {
     await createVariantExport(body);
 
     expect(http.post).toHaveBeenCalledWith("/variants/export", { json: body });
+  });
+});
+
+describe("export provenance and query builder", () => {
+  it("fetches the manifest from the owner-scoped export path", async () => {
+    vi.mocked(http.get).mockResolvedValue({});
+    await getVariantExportManifest("export-1");
+    expect(vi.mocked(http.get)).toHaveBeenCalledWith(
+      "/variants/export/export-1/manifest",
+    );
+  });
+
+  it("submits a whitelisted query through the /exports/query endpoint", async () => {
+    vi.mocked(http.post).mockResolvedValue({});
+    await submitExportQuery({ format: "vcf", filters: { assembly: "Wm82.a4.v1" } });
+    expect(vi.mocked(http.post)).toHaveBeenCalledWith(
+      "/exports/query",
+      expect.objectContaining({
+        json: { format: "vcf", filters: { assembly: "Wm82.a4.v1" } },
+      }),
+    );
   });
 });

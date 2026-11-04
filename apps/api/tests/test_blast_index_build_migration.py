@@ -139,7 +139,7 @@ def test_build_revision_chains_after_the_lifecycle_revision() -> None:
     assert revision_of["0052"] == "0052_blast_index_build_state.py"
     assert parent_of["0052"] == "0051"
     # The revision chain must not fork: exactly one node has no children.
-    # ``0055`` (comparative genomics) chains after ``0054`` and is therefore the
+    # ``0056`` (download provenance) chains after ``0055`` and is therefore the
     # current head; the assertion is about *one* head, not about ``0054`` being
     # the last revision ever written.
     children = set(parent_of.values())
@@ -147,11 +147,12 @@ def test_build_revision_chains_after_the_lifecycle_revision() -> None:
     # str | None = "0014"``) look parentless to a plain ``ast.Assign`` scan, so
     # ``0014``/``0035`` appear as heads here. The property worth asserting is
     # that this slice did not *create* a fork: the tail from ``0050`` on has
-    # exactly one head, and it is ``0055``.
+    # exactly one head, and it is ``0056``.
     heads = [revision for revision in revision_of if revision not in children]
-    assert "0055" in heads
-    assert [head for head in heads if head >= "0050"] == ["0055"], heads
+    assert "0056" in heads
+    assert [head for head in heads if head >= "0050"] == ["0056"], heads
     assert parent_of["0055"] == "0054"
+    assert parent_of["0056"] == "0055"
     # The blast lifecycle keeps its own order regardless of what chains after.
     blast_lineage = [r for r in revision_of if "0050" <= r <= "0054"]
     assert all(parent_of[r] or "" < r for r in blast_lineage if r != "0050")

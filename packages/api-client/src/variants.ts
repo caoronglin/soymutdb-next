@@ -172,3 +172,43 @@ export function getVariantExportDownload(
 ): Promise<VariantExportDownload> {
   return http.get<VariantExportDownload>(`/variants/export/${exportId}/download`);
 }
+
+/** Citable provenance of a produced export artifact. */
+export type VariantExportManifest = components["schemas"]["ExportManifestResponse"];
+
+export function getVariantExportManifest(
+  exportId: string,
+): Promise<VariantExportManifest> {
+  return http.get<VariantExportManifest>(`/variants/export/${exportId}/manifest`);
+}
+
+/** Whitelisted no-SQL query over the existing export pipeline. */
+export interface ExportQueryFilters {
+  assembly?: string;
+  chromosome?: string;
+  start?: number;
+  end?: number;
+  min_af?: number;
+  max_af?: number;
+  variant_type?: string;
+  consequence?: string;
+  impact?: string;
+  gene_id?: string;
+  mutant_line_public_id?: string;
+}
+
+export interface ExportQueryResult {
+  export_id: string;
+  status: string;
+  message: string;
+  format: string;
+  applied_filters: Record<string, unknown>;
+}
+
+export function submitExportQuery(data: {
+  format?: string;
+  compress?: boolean;
+  filters?: ExportQueryFilters;
+}): Promise<ExportQueryResult> {
+  return http.post<ExportQueryResult>("/exports/query", { json: data });
+}

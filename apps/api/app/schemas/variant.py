@@ -283,3 +283,35 @@ class ExportDownloadResponse(BaseModel):
     filename: str
     expires_at: datetime
     expires_in_seconds: int
+
+
+class ExportManifestResponse(BaseModel):
+    """Citable provenance for a produced variant-export artifact.
+
+    The manifest mirrors the owner-visible status record but adds the byte
+    identity and licence. ``sha256`` is ``None`` when the artifact predates
+    checksum recording; a client must not display that as a valid digest.
+    ``filters`` carries only the public, non-secret filter keys the submitter
+    set — never the worker-only resolved mutant-line name or any internal id.
+    """
+
+    export_id: str
+    status: str
+    format: str
+    release_key: str
+    assembly_key: str | None = None
+    record_count: int | None = None
+    file_size: int | None = None
+    sha256: str | None = None
+    sha256_state: str = Field(
+        default="recorded",
+        description=(
+            "'recorded' when sha256 is a real digest; 'not_recorded' when the "
+            "artifact was produced before checksum recording shipped."
+        ),
+    )
+    license: str | None = None
+    generated_at: datetime | None = None
+    completed_at: datetime | None = None
+    expires_at: datetime | None = None
+    filters: dict[str, object] = Field(default_factory=dict)

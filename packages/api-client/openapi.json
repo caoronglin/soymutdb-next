@@ -2962,6 +2962,66 @@
         "x-idempotent": true
       }
     },
+    "/api/v1/variants/export/{export_id}/manifest": {
+      "get": {
+        "tags": [
+          "variants"
+        ],
+        "summary": "Get Variant Export Manifest",
+        "description": "Return citable provenance for one export (submitter or administrator).\n\nA legacy artifact with no checksum is reported with ``sha256: null`` and\n``sha256_state='not_recorded'``; the response never invents a digest.",
+        "operationId": "get_variant_export_manifest_api_v1_variants_export__export_id__manifest_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "export_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Export Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportManifestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
     "/api/v1/variants/export/{export_id}/download": {
       "get": {
         "tags": [
@@ -8080,6 +8140,99 @@
           }
         },
         "x-idempotent": true
+      }
+    },
+    "/api/v1/exports/query": {
+      "post": {
+        "tags": [
+          "exports"
+        ],
+        "summary": "Submit Export Query",
+        "description": "Submit a whitelisted filter set as one asynchronous variant export.\n\nUnknown or unbacked filters are refused by ``ExportQueryRequest`` before\nany record or outbox event is written, so a downloader never receives an\nartifact that silently ignored a constraint they set.",
+        "operationId": "submit_export_query_api_v1_exports_query_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportQueryRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportQueryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/news": {
@@ -19820,7 +19973,8 @@
           },
           "assembly": {
             "type": "string",
-            "description": "Assembly namespace the variant was read from.\n\n`variant_id` is only unique per (release, assembly); a row that travels\nwithout its namespace cannot be identified once two scopes meet."
+            "description": "Assembly namespace the variant was read from.\n\n`variant_id` is only unique per (release, assembly); a row that travels\nwithout its namespace cannot be identified once two scopes meet.",
+            "title": "Assembly"
           },
           "chromosome": {
             "type": "string",
@@ -23314,6 +23468,55 @@
             "type": "string",
             "format": "date-time",
             "title": "Created At"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sha256"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "License"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Generated At"
+          },
+          "source_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Ref"
           }
         },
         "type": "object",
@@ -24108,6 +24311,210 @@
         ],
         "title": "ExportDownloadResponse",
         "description": "A short-lived download link for a finished export artifact."
+      },
+      "ExportManifestResponse": {
+        "properties": {
+          "export_id": {
+            "type": "string",
+            "title": "Export Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "format": {
+            "type": "string",
+            "title": "Format"
+          },
+          "release_key": {
+            "type": "string",
+            "title": "Release Key"
+          },
+          "assembly_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Assembly Key"
+          },
+          "record_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Record Count"
+          },
+          "file_size": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "File Size"
+          },
+          "sha256": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sha256"
+          },
+          "sha256_state": {
+            "type": "string",
+            "description": "'recorded' when sha256 is a real digest; 'not_recorded' when the artifact was produced before checksum recording shipped.",
+            "default": "recorded",
+            "title": "Sha256 State"
+          },
+          "license": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "License"
+          },
+          "generated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Generated At"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Completed At"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Expires At"
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": true,
+            "title": "Filters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "export_id",
+          "status",
+          "format",
+          "release_key"
+        ],
+        "title": "ExportManifestResponse",
+        "description": "Citable provenance for a produced variant-export artifact.\n\nThe manifest mirrors the owner-visible status record but adds the byte\nidentity and licence. ``sha256`` is ``None`` when the artifact predates\nchecksum recording; a client must not display that as a valid digest.\n``filters`` carries only the public, non-secret filter keys the submitter\nset \u2014 never the worker-only resolved mutant-line name or any internal id."
+      },
+      "ExportQueryRequest": {
+        "properties": {
+          "format": {
+            "type": "string",
+            "pattern": "^(vcf|tsv|csv|json|bed)$",
+            "default": "tsv",
+            "title": "Format"
+          },
+          "compress": {
+            "type": "boolean",
+            "default": true,
+            "title": "Compress"
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": true,
+            "title": "Filters"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ExportQueryRequest",
+        "description": "A whitelisted filter set for one variant-export artifact.\n\n``extra='forbid'`` is the core of the contract: an unknown key is a 422,\nnot a parameter that quietly vanishes. Release/assembly are resolved by\nthe server from the published release context, never trusted from the\nbody as a provenance claim."
+      },
+      "ExportQueryResponse": {
+        "properties": {
+          "export_id": {
+            "type": "string",
+            "title": "Export Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "format": {
+            "type": "string",
+            "title": "Format"
+          },
+          "applied_filters": {
+            "type": "object",
+            "additionalProperties": true,
+            "title": "Applied Filters"
+          },
+          "unsupported_filters": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "Unsupported Filters"
+          }
+        },
+        "type": "object",
+        "required": [
+          "export_id",
+          "status",
+          "message",
+          "format"
+        ],
+        "title": "ExportQueryResponse",
+        "description": "The durable export record the query builder submitted."
       },
       "ExportRequest": {
         "properties": {
@@ -27428,7 +27835,8 @@
           },
           "assembly": {
             "type": "string",
-            "description": "Assembly namespace the variant was read from (see AlleleFreqVariant)."
+            "description": "Assembly namespace the variant was read from (see AlleleFreqVariant).",
+            "title": "Assembly"
           },
           "chromosome": {
             "type": "string",

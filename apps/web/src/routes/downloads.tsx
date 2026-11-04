@@ -28,6 +28,7 @@ import { Button, Card, Select, Skeleton, Table, Tag, Typography, type TableColum
 import { FadeUp, Stagger } from "../components/route-motion";
 import { getDownloadFiles, getDownloadUrl } from "@soymutdb/api-client";
 import type { DownloadFile } from "@soymutdb/api-client";
+import { ExportQueryCard } from "../components/export-query-card";
 import { FilePreviewDialog } from "../components/file-viewer/file-preview-dialog";
 import { VariantExportControls } from "../components/variant-export-controls";
 import { safeExternalUrl } from "../lib/url-safety";
@@ -70,6 +71,13 @@ function formatDate(dateStr: string): string {
   } catch {
     return dateStr;
   }
+}
+
+function shortChecksum(sha256: string | null): string {
+  // A legacy file has no digest. Rendering "not recorded" instead of a
+  // truncated string is what keeps it from being mistaken for a verified
+  // checksum; an empty string would be the same lie in a quieter form.
+  return sha256 ? sha256.slice(0, 12) : "—";
 }
 
 function getFileFormat(name: string): string {
@@ -176,6 +184,40 @@ function DownloadsComponent() {
       key: "created_at",
       width: 150,
       render: (_, file) => <span className="font-mono text-xs">{formatDate(file.created_at)}</span>,
+    },
+    {
+      title: get("downloads.checksum", t("downloads.checksum")),
+      key: "sha256",
+      width: 150,
+      render: (_, file) => (
+        <span
+          className="font-mono text-xs"
+          data-testid={`download-checksum-${file.id}`}
+          title={file.sha256 ?? ""}
+        >
+          {shortChecksum(file.sha256)}
+        </span>
+      ),
+    },
+    {
+      title: get("downloads.license", t("downloads.license")),
+      key: "license",
+      width: 120,
+      render: (_, file) => (
+        <span className="text-xs" data-testid={`download-license-${file.id}`}>
+          {file.license ?? "—"}
+        </span>
+      ),
+    },
+    {
+      title: get("downloads.generatedAt", t("downloads.generatedAt")),
+      key: "generated_at",
+      width: 150,
+      render: (_, file) => (
+        <span className="font-mono text-xs">
+          {file.generated_at ? formatDate(file.generated_at) : "—"}
+        </span>
+      ),
     },
     {
       title: t("common.actions"),
@@ -309,6 +351,11 @@ function DownloadsComponent() {
           />
         </div>
       </Card>
+
+      <ExportQueryCard
+        assemblies={assemblies}
+        defaultAssemblyId={exportAssembly ? String(exportAssembly.id) : undefined}
+      />
 
       {preview && (
         <FilePreviewDialog

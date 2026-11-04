@@ -303,6 +303,12 @@ class DownloadFileResponse(BaseModel):
     category: str | None = None
     download_count: int = 0
     created_at: datetime
+    #: Provenance of the stored bytes. NULL means the file predates checksum
+    #: recording; the portal renders "not recorded", never a fake digest.
+    sha256: str | None = None
+    license: str | None = None
+    generated_at: datetime | None = None
+    source_ref: str | None = None
 
     model_config = {"from_attributes": True}
 
