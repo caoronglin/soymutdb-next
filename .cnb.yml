@@ -303,6 +303,14 @@ main:
         - name: Database A/B harness (reproducibility gate)
           image: python:3.15
           script: bash scripts/ci-job-steps.sh run db-ab
+        # TEMPORARY DIAGNOSTIC (to be reverted): check:contract compares the
+        # committed generated client against the schema the API emits on THIS
+        # interpreter. The committed snapshot now matches a local export
+        # byte-for-byte, yet the gate still reports debt, so the two exports
+        # disagree somewhere. Capture the CI-side document so the delta can be
+        # read instead of guessed.
+        - name: Dump the CI-side OpenAPI document
+          script: bash scripts/ci-job-steps.sh run dump-openapi
         - name: Build the checksummed Pages artifact
           image: node:26.13.0
           # Both scripts carry a bash shebang and bootstrap their own container
