@@ -19,13 +19,29 @@ export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 "$API_PYTHON" "$PKG_DIR/scripts/export_contract.py" \
   --openapi "$TMP_DIR/openapi.json"
 
+# Which committed file moved. "CONTRACT DEBT" alone compares a file nobody can
+# read in a log (the temp regeneration) against one nobody edited, so it names
+# neither the cause nor the fix. Diffing the *documents* first separates the two
+# states: a snapshot that disagrees, which is what a backend change looks like,
+# versus a snapshot that matches while only the generated client went stale.
+if ! diff -q "$TMP_DIR/openapi.json" "$PKG_DIR/openapi.json" >/dev/null; then
+  echo "CONTRACT DEBT: packages/api-client/openapi.json is out of sync with app.main:app."
+  # Names, not text: both files are single-line JSON exports, so a plain diff
+  # would print the whole API description as line 1 and bury the actual change.
+  python3 "${PKG_DIR}/scripts/summarize_contract_drift.py" \
+    "$PKG_DIR/openapi.json" "$TMP_DIR/openapi.json" || true
+  echo "Run: pnpm --filter @soymutdb/api-client generate:api-client"
+  exit 1
+fi
+
 echo ">> regenerating client types in temp dir..."
 (cd "$PKG_DIR" && pnpm exec openapi-typescript "$TMP_DIR/openapi.json" \
   -o "$TMP_DIR/openapi.d.ts"
 )
 
 if ! diff -q "$TMP_DIR/openapi.d.ts" "$PKG_DIR/src/generated/openapi.d.ts" >/dev/null; then
-  echo "CONTRACT DEBT: generated client is out of sync with the backend OpenAPI."
+  echo "CONTRACT DEBT: packages/api-client/openapi.json matches the backend, but"
+  echo "packages/api-client/src/generated/openapi.d.ts does not match the snapshot."
   echo "Run: pnpm --filter @soymutdb/api-client generate:api-client"
   exit 1
 else

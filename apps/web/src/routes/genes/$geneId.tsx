@@ -1,7 +1,13 @@
 import { assembliesQueryOptions } from "../../lib/query-options";
 /**
- * Gene detail route — full gene information with tabbed sections for
- * overview, expression data, and homologs.
+ * Gene detail route — full gene information, one tab per data block.
+ *
+ * The optional blocks (annotation / homolog / expression / variants / phenotype
+ * / literature) come from the detail response itself: each carries its own
+ * `SectionStatus`, so the page can say "this gene has none" and "this release
+ * never imported it" differently. Because the block is *in* the response, the
+ * page no longer issues its own `/genes/{id}/expression` or
+ * `/genes/{id}/homologs` request — one dataset has one source, or the two drift.
  *
  * AntD 5 migration (A1): Card/Descriptions/Tabs/Table/Skeleton/Tag/Empty
  * replace the frozen shared UI components. TanStack Query data flow
@@ -16,8 +22,6 @@ import * as React from "react";
 import {
   AimOutlined as Microscope,
   ArrowLeftOutlined as ArrowLeft,
-  BarChartOutlined as BarChart3,
-  DeploymentUnitOutlined as Dna,
 } from "@ant-design/icons";
 import {
   Button,
@@ -33,14 +37,19 @@ import {
 } from "@/lib/antd";
 import {
   getGene,
-  getGeneExpression,
-  getGeneHomologs,
   getReleaseId,
   listTestDataPreviewMutationSitesForGene,
-  type ExpressionRecord,
-  type HomologRecord,
+  type GeneExpressionRecord,
   type TestDataPreviewMutationSite,
 } from "@soymutdb/api-client";
+import {
+  GeneAnnotationSectionCard,
+  GeneExpressionSectionCard,
+  GeneHomologSectionCard,
+  GeneLiteratureSectionCard,
+  GenePhenotypeSectionCard,
+  GeneVariantSectionCard,
+} from "../../components/gene-sections";
 import { GeneGenomeView } from "../../components/gene-genome-view";
 import { GeneSeedRequestEntry } from "../../components/gene-seed-request-entry";
 import { FadeUp, ScaleIn } from "../../components/route-motion";
@@ -86,18 +95,6 @@ function GeneDetailComponent() {
     queryFn: () => getGene(geneId, { assembly_id: assembly }),
   });
 
-  const expressionQuery = useQuery({
-    queryKey: queryKeys.genes.expression({ geneId, assemblyId: assembly, releaseId, siteVariant: SITE_VARIANT }),
-    queryFn: () => getGeneExpression(geneId, { assembly_id: assembly }),
-    enabled: !!geneId,
-  });
-
-  const homologQuery = useQuery({
-    queryKey: queryKeys.genes.homologs({ geneId, assemblyId: assembly, releaseId, siteVariant: SITE_VARIANT }),
-    queryFn: () => getGeneHomologs(geneId, { assembly_id: assembly }),
-    enabled: !!geneId,
-  });
-
   // A 200 response of the wrong shape (e.g. the search-list envelope) must render
   // the empty state, not crash the genome view on undefined coordinates.
   const gene = isGeneDetailRecord(geneQuery.data) ? geneQuery.data : undefined;
@@ -125,11 +122,19 @@ function GeneDetailComponent() {
     [mutationSites],
   );
 
-  const expressions = React.useMemo(
-    () => expressionQuery.data?.expressions ?? [],
-    [expressionQuery.data],
+  // Every optional block, straight off the detail response: no second request
+  // for the same rows, and an older API build omits a block rather than sending
+  // an empty list, which each component reports as "nothing reported".
+  const annotationSection = gene?.annotation_section ?? null;
+  const homologSection = gene?.homolog_section ?? null;
+  const expressionSection = gene?.expression_section ?? null;
+  const variantsSection = gene?.variants_section ?? null;
+  const phenotypeSection = gene?.phenotype_section ?? null;
+  const literatureSection = gene?.literature_section ?? null;
+  const expressions = React.useMemo<GeneExpressionRecord[]>(
+    () => expressionSection?.records ?? [],
+    [expressionSection],
   );
-  const homologs = homologQuery.data?.homologs ?? [];
   const jbrowseAssembly = gene?.assembly_name ?? selectedAssembly?.name;
   const jbrowseHref = gene && jbrowseAssembly
     ? buildJbrowseLocusUrl(import.meta.env.BASE_URL, {
@@ -144,56 +149,24 @@ function GeneDetailComponent() {
     const grouped = new Map<string, { sum: number; count: number; treatment: string }>();
     for (const expr of expressions) {
       if (expr.fpkm == null) continue;
-      const key = `${expr.tissue}|${expr.treatment}`;
+      const key = `${expr.tissue ?? ""}|${expr.treatment ?? ""}`;
       const existing = grouped.get(key);
       if (existing) {
         existing.sum += expr.fpkm;
         existing.count += 1;
       } else {
-        grouped.set(key, { sum: expr.fpkm, count: 1, treatment: expr.treatment });
+        grouped.set(key, { sum: expr.fpkm, count: 1, treatment: expr.treatment ?? "" });
       }
     }
     return Array.from(grouped.entries()).map(([key, val]) => {
       const [tissue] = key.split("|");
-      return { tissue, mean_fpkm: val.sum / val.count, treatment: val.treatment };
+      return {
+        tissue: tissue || val.treatment || "—",
+        mean_fpkm: val.sum / val.count,
+        treatment: val.treatment,
+      };
     });
   }, [expressions]);
-
-  const expressionColumns: TableColumnsType<ExpressionRecord> = [
-    {
-      title: t("genes.expression.library"),
-      dataIndex: "library_name",
-      key: "library_name",
-    },
-    { title: t("genes.expression.tissue"), dataIndex: "tissue", key: "tissue" },
-    { title: t("genes.expression.treatment"), dataIndex: "treatment", key: "treatment" },
-    {
-      title: t("genes.expression.fpkm"),
-      dataIndex: "fpkm",
-      key: "fpkm",
-      align: "right",
-      render: (_, row) => row.fpkm == null ? "—" : row.fpkm.toFixed(2),
-    },
-    {
-      title: t("genes.expression.tpm"),
-      dataIndex: "tpm",
-      key: "tpm",
-      align: "right",
-      render: (_, row) => row.tpm == null ? "—" : row.tpm.toFixed(2),
-    },
-  ];
-
-  const homologColumns: TableColumnsType<HomologRecord> = [
-    { title: t("genes.homologs.species"), dataIndex: "species", key: "species" },
-    {
-      title: t("genes.homologs.gene_id"),
-      dataIndex: "gene_id",
-      key: "gene_id",
-      render: (_, row) => <span className="font-mono text-xs">{row.gene_id}</span>,
-    },
-    { title: t("genes.homologs.type"), dataIndex: "type", key: "type" },
-    { title: t("genes.homologs.source"), dataIndex: "source", key: "source" },
-  ];
 
   // Columns exactly as the operator specified, in order: mutation system
   // (line parent + position), chromosome, position, confidence, gene, feature,
@@ -465,58 +438,43 @@ function GeneDetailComponent() {
                 key: "expression",
                 label: t("genes.tabs.expression"),
                 children: (
-                  <ScaleIn>
-                    {expressionQuery.isLoading ? (
-                      <Skeleton active paragraph={{ rows: 8 }} title={false} />
-                    ) : expressions.length === 0 ? (
-                      <Empty
-                        image={<BarChart3 className="size-10 text-muted-foreground" aria-hidden />}
-                        description={t("genes.expression.no_data")}
-                        className="py-10"
-                      />
-                    ) : (
-                      <div className="space-y-6">
+                  <GeneExpressionSectionCard
+                    section={expressionSection}
+                    loading={geneQuery.isLoading}
+                    chart={
+                      expressions.length > 0 ? (
                         <React.Suspense fallback={<Skeleton active paragraph={{ rows: 8 }} title={false} />}>
                           <ExpressionBarChart data={barChartData} />
                         </React.Suspense>
-                        <Table<ExpressionRecord>
-                          rowKey="library_public_id"
-                          size="small"
-                          columns={expressionColumns}
-                          dataSource={expressions}
-                          pagination={false}
-                          locale={{ emptyText: t("genes.expression.no_data") }}
-                        />
-                      </div>
-                    )}
-                  </ScaleIn>
+                      ) : null
+                    }
+                  />
                 ),
               },
               {
                 key: "homologs",
                 label: t("genes.tabs.homologs"),
-                children: (
-                  <ScaleIn>
-                    {homologQuery.isLoading ? (
-                      <Skeleton active paragraph={{ rows: 6 }} title={false} />
-                    ) : homologs.length === 0 ? (
-                      <Empty
-                        image={<Dna className="size-10 text-muted-foreground" aria-hidden />}
-                        description={t("genes.homologs.no_data")}
-                        className="py-10"
-                      />
-                    ) : (
-                      <Table<HomologRecord>
-                        rowKey={(row) => `${row.species}-${row.gene_id}`}
-                        size="small"
-                        columns={homologColumns}
-                        dataSource={homologs}
-                        pagination={false}
-                        locale={{ emptyText: t("genes.homologs.no_data") }}
-                      />
-                    )}
-                  </ScaleIn>
-                ),
+                children: <GeneHomologSectionCard section={homologSection} />,
+              },
+              {
+                key: "annotation",
+                label: t("genes.tabs.annotation"),
+                children: <GeneAnnotationSectionCard section={annotationSection} />,
+              },
+              {
+                key: "variants",
+                label: t("genes.tabs.variants"),
+                children: <GeneVariantSectionCard section={variantsSection} />,
+              },
+              {
+                key: "phenotype",
+                label: t("genes.tabs.phenotype"),
+                children: <GenePhenotypeSectionCard section={phenotypeSection} />,
+              },
+              {
+                key: "literature",
+                label: t("genes.tabs.literature"),
+                children: <GeneLiteratureSectionCard section={literatureSection} />,
               },
               {
                 key: "sequences",
