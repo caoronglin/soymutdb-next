@@ -845,6 +845,13 @@ class DeliveryArchitectureTests(unittest.TestCase):
             )
             good = '# see docs/ops/bio-core-wheel.md, "CI：构建一次，消费一次"'
             self.assertEqual(checker.doc_ref_errors(good, root), [], good)
+            # A wrap inside the quoted label must fold the same way in both
+            # gates: CJK carries no inter-word space, so the join must vanish.
+            wrapped = (
+                '# see docs/ops/bio-core-wheel.md, "CI：构建一次，\n'
+                '# 消费一次"'
+            )
+            self.assertEqual(checker.doc_ref_errors(wrapped, root), [], wrapped)
             # A bare dangling path, with no label at all.
             dangling = "# see docs/build/script-vs-plugin.md#file-sharing"
             self.assertTrue(

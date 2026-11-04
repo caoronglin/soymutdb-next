@@ -25,6 +25,7 @@ import importlib.util
 import re
 import sys
 import tomllib
+import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,8 +44,14 @@ def doc_ref_errors(text: str, root: Path = ROOT) -> list[str]:
     it. A dangling path or a renamed heading now fails instead of lingering.
     """
     errors: list[str] = []
-    # A citation can wrap across consecutive '#'-prefixed comment lines.
-    flat = re.sub(r"\n[ \t]*#[ \t]*", " ", text)
+
+    # Fold wrapped comment lines the same way as test_ci_job_contracts.py:
+    # CJK headings have no inter-word spaces, so a wrap there must vanish.
+    def fold_wrap(match: re.Match[str]) -> str:
+        prev = match.string[match.start() - 1]
+        return "" if unicodedata.east_asian_width(prev) in ("W", "F") else " "
+
+    flat = re.sub(r"\n[ \t]*#[ \t]*", fold_wrap, text)
     for line in flat.splitlines():
         for match in DOC_REF.finditer(line):
             ref = match.group(0)
