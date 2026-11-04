@@ -72,6 +72,15 @@ step "Rust toolchain"
   cargo --version
 )
 
+step "Rust kernel ↔ advertised capability parity"
+# GET /tools/sequence/capabilities advertises input limits that the Rust
+# kernel enforces. Both sides are committed sources; a one-sided edit would
+# advertise a bound the kernel rejects (or vice versa) with no OpenAPI drift
+# and no failing unit test. Read the bytes before the expensive build so the
+# failure is named early, and prove the guard is load-bearing via --self-test.
+"${PY}" scripts/check_bio_core_capability_parity.py --self-test
+"${PY}" scripts/check_bio_core_capability_parity.py
+
 step "Lock file consistency"
 # --locked makes an uncommitted dependency resolution a hard failure.
 (cd "${CRATE_DIR}" && cargo metadata --locked --format-version 1 >/dev/null)
@@ -153,5 +162,10 @@ PY
 
 step "wheel contract tests (pytest against the installed artifact)"
 "${SMOKE_PY}" -m pytest "${CRATE_DIR}/python_tests" -q
+
+step "capability-parity guard regression (the guard itself must be load-bearing)"
+# The isolated venv above has pytest; the guard's own suite proves a weakened
+# comparison is caught, rather than leaving an unexercised file in the repo.
+"${SMOKE_PY}" -m pytest scripts/test_bio_core_capability_parity.py -q
 
 echo "==> bio-core verification: PASS"
