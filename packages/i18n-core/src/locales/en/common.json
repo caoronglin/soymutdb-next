@@ -2733,7 +2733,9 @@
         "position": "Position",
         "alleles": "Alleles",
         "type": "Type",
-        "alleleFrequency": "Allele frequency"
+        "alleleFrequency": "Allele frequency",
+        "variantScope": "Release-scoped",
+        "variantScopeHelp": "This number identifies a variant only inside one release. It is not a permanent public identifier — a later release may reuse it for a different record."
       },
       "errors": {
         "geneRequired": "Enter a gene accession.",

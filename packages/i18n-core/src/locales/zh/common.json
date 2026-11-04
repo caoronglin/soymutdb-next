@@ -2733,7 +2733,9 @@
         "position": "位置",
         "alleles": "等位基因",
         "type": "类型",
-        "alleleFrequency": "等位基因频率"
+        "alleleFrequency": "等位基因频率",
+        "variantScope": "发布版本内标识",
+        "variantScopeHelp": "该编号只在同一发布版本内唯一，不是永久公开标识；后续版本可能把它分配给另一条记录。"
       },
       "errors": {
         "geneRequired": "请输入基因编号。",

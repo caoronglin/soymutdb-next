@@ -279,6 +279,42 @@ describe("allele-frequency page", () => {
     expect(screen.getByText("Not recorded")).toBeTruthy();
     expect(screen.queryByText("0.000")).toBeNull();
   });
+
+  it("labels variant_id as release-scoped, not as a permanent public id", async () => {
+    // `variant_id` is unique only within (release_id, variant_id), so a later
+    // release may hand the same number to a different record. Rendering it as
+    // a plain "Variant" column invites readers to quote it as a permanent
+    // identifier, so the header has to carry the scope.
+    api.computeAlleleFreq.mockResolvedValue({
+      source: "gene",
+      gene_id: "Glyma.01G000100",
+      assembly: "Wm82.a4.v1",
+      chromosome: "chr01",
+      start: 1,
+      end: 1000,
+      n_variants: 1,
+      variants: [
+        {
+          variant_id: "v1",
+          chromosome: "chr01",
+          position: 100,
+          ref_allele: "A",
+          alt_allele: "G",
+          allele_frequency: 0.25,
+          variant_type: "SNP",
+          gene_id: "Glyma.01G000100",
+        },
+      ],
+    });
+
+    renderWith(<AlleleFreq />);
+    submitGeneQuery("af");
+
+    await waitFor(() => expect(screen.getByText("v1")).toBeTruthy());
+    // Header must say "Variant (Release-scoped)". A bare "Variant" column is
+    // what invites readers to quote a release-local number as permanent.
+    expect(document.body.textContent).toContain("Variant (Release-scoped)");
+  });
 });
 
 // The component test above swaps in a mock `t()` that echoes the key, so a key

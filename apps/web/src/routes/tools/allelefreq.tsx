@@ -10,7 +10,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation } from "@tanstack/react-query";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Breadcrumb, Button, Card, Empty, Result, Tag, Typography } from "@/lib/antd";
+import { Breadcrumb, Button, Card, Empty, Result, Tag, Tooltip, Typography } from "@/lib/antd";
 import { CaretRightOutlined, LoadingOutlined, RedoOutlined, PieChartOutlined } from "@ant-design/icons";
 import { computeAlleleFreq, type AlleleFreqVariant } from "@soymutdb/api-client";
 import { DataTable } from "../../components/data-table";
@@ -196,7 +196,16 @@ function AlleleFreqComponent() {
                 columns={[
                   {
                     key: "variant_id",
-                    header: t("tools.popgen.columns.variant"),
+                    header: (
+                      <Tooltip title={t("tools.popgen.columns.variantScopeHelp")}>
+                        <span>
+                          {t("tools.popgen.columns.variant")}{" "}
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            ({t("tools.popgen.columns.variantScope")})
+                          </Typography.Text>
+                        </span>
+                      </Tooltip>
+                    ),
                     cell: (row) => <span className="font-mono text-xs">{row.variant_id}</span>,
                   },
                   {

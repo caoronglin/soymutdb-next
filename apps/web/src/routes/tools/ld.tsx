@@ -25,6 +25,7 @@ import {
   Input,
   Result,
   Tag,
+  Tooltip,
   Typography,
 } from "@/lib/antd";
 import { CaretRightOutlined, LoadingOutlined, PartitionOutlined, RedoOutlined } from "@ant-design/icons";
@@ -350,7 +351,16 @@ function LdComponent() {
                 columns={[
                   {
                     key: "variant_id",
-                    header: t("tools.popgen.columns.variant"),
+                    header: (
+                      <Tooltip title={t("tools.popgen.columns.variantScopeHelp")}>
+                        <span>
+                          {t("tools.popgen.columns.variant")}{" "}
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            ({t("tools.popgen.columns.variantScope")})
+                          </Typography.Text>
+                        </span>
+                      </Tooltip>
+                    ),
                     cell: (row) => <span className="font-mono text-xs">{row.variant_id}</span>,
                   },
                   {
