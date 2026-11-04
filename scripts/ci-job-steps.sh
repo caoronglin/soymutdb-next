@@ -453,9 +453,11 @@ dependency_governance_env() {
 # scripts/verify-bio-core.sh so CNB and the GitHub mirror execute identical
 # bytes; no Rust logic is inlined into either provider's YAML.
 #
-# The cited heading is pinned by check_bio_core_wheel.py --static and
-# test_ci_job_contracts.py; renaming it in the doc is a gate change, not an
-# editorial fix. Update both sites in one commit.
+# The wheel-boundary citation below names a real heading in the bio-core wheel
+# doc. check_bio_core_wheel.py --static and test_ci_job_contracts.py resolve that
+# quoted label against the doc's headings, so renaming the heading is a gate
+# change, not an editorial fix: update the citation and both gates together.
+# On main (before this PR) neither gate reads the doc.
 # This job is the ONLY producer of artifacts/wheels/soymutdb_bio_core-*-cp315-*.whl.
 # scripts/verify-backend-tests.sh (the api-tests stage, a bare python:3.15 with
 # no Rust toolchain or C linker) only CONSUMES that file. The boundary is closed
