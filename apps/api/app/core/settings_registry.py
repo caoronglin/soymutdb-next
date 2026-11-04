@@ -49,7 +49,15 @@ class SettingRedaction(StrEnum):
     OMIT = "omit"
 
 
-type SettingDefault = str | int | bool | None
+#: Spelled without ``type`` on purpose. The value is serialised straight into
+#: ``SettingFieldSchema.default`` (see ``/admin/settings/schema``), so it must
+#: stay byte-identical to that field's inline union
+#: (``str | int | bool | None``). A PEP 695 ``type`` alias is a referenceable
+#: object: pydantic hoists it into ``components/schemas`` and emits ``$ref``, and
+#: the OpenAPI normaliser then deletes the component -- which is how 8 dangling
+#: ``$ref``s reached the generated client. Two spellings of one union in the same
+#: response is the drift this exists to prevent.
+SettingDefault = str | int | bool | None
 
 
 @dataclass(frozen=True)
