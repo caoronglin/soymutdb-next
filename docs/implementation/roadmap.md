@@ -107,3 +107,48 @@ offline, aligns the architecture/roadmap documents with the implemented state,
 records a first-party research ledger, and reports actual pass counts. It does
 not complete the four Phase 1 items listed above, and does not replace the
 existing delivery pipeline or add a second job queue/storage backend.
+
+---
+
+## Rust bio-core 0.1.2 — re-phased slice (2026-11-05)
+
+The 2026-11-05 Rust-core spec is a design proposal, not a delivered state.  The
+phases below were re-cut by *file ownership* rather than by feature noun, so each
+PR is independently buildable and no two parallel agents write the same file.
+Every phase is one PR; the chain is `#83 → #96 → #101 → #105`.
+
+| Phase | PR | Content | Verification |
+| --- | --- | --- | --- |
+| R1 | #83 | `packages/bio-core` crate (Rust-Bio / noodles / rust-lapper / bio-seq / PyO3), `Cargo.lock` + pinned toolchain, golden + adversarial Rust tests, `scripts/verify-bio-core.sh`, `bio-core` CI job in the shared dispatcher + both providers | 41 Rust tests, cp315 wheel + import smoke, 9 wheel pytest, 36/36 turbo, 87 contracts |
+| R2 | #96 | `/tools/sequence/*` 7 compute endpoints + `capabilities`, Pydantic limits, fail-closed bridge, OpenAPI/`openapi.d.ts` regeneration | 10 API tests, `check-contract.sh` EXIT 0, 36/36 turbo |
+| R3 | #101 | `/tools/intervals/overlap` over published genes, `/tools/sequence/inspect`, `SOYMUTDB_BIO_ENGINE` fail-closed toggle | 16 API tests, 0 removed / 0 changed / 10 added OpenAPI paths |
+| R4 | #104 | wheel installation into the backend test venv, `smoke.sh` static+runtime wheel gates, full regression, architecture doc | below |
+
+### R4 verification (this PR)
+
+Run on the merged chain with CPython 3.15.2 / Rust 1.99.1 / pydantic 2.14.1:
+
+- `bash scripts/verify-bio-core.sh` — PASS (fmt, clippy, 41 Rust tests, wheel, import, 9 pytest)
+- `pytest apps/api/tests/test_sequence_tools.py apps/api/tests/test_interval_overlap.py -q` — 16 passed
+- `pnpm turbo run lint typecheck test --force` — 36/36
+- `python3 -m unittest scripts.test_ci_job_contracts scripts.test_site_artifact_isolation` — 87 passed
+- `bash scripts/smoke.sh --profile contracts` — PASS (includes `check_bio_core_wheel.py --static`)
+- `SOYMUTDB_API_PYTHON=… bash packages/api-client/scripts/check-contract.sh` — OK, visibility PASS
+- `ruff check` on every changed Python file — clean
+
+Not run here (prerequisite missing, reported honestly): `--profile runtime`
+needs a disposable PostgreSQL + API venv; `--profile images` needs a Docker
+daemon; Playwright E2E needs browsers.  A missing prerequisite is `SKIPPED`,
+never a pass.
+
+### Still not implemented
+
+- Wheel shipped inside `infra/docker/Dockerfile.api` / `.worker` runtime images
+  (needs a Rust builder stage + SHA-256 verified install + multi-arch wheels).
+- `/tools/sequence/batch` async jobs, CDS phase/negative-strand assembly,
+  GFF3 Parent association, VCF/BCF/BAM/CRAM adapters, non-standard NCBI
+  translation tables, interval index cache with release/assembly invalidation.
+- Frontend `/tools/sequence` page (owned by @npc/CodeBuddy(deepseek-v4.1-flash)).
+- Fuzz / property / benchmark gates; `cargo audit` / `cargo deny` in the release lane.
+
+Do not describe any of the above as complete until a PR links a passing test.

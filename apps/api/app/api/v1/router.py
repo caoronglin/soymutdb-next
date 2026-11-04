@@ -56,7 +56,9 @@ from . import (
     table_views,
     tools_enrichment,
     tools_exppattern,
+    tools_intervals,
     tools_seqfetch,
+    tools_sequence,
     tracks,
     variants,
 )
@@ -80,6 +82,8 @@ api_router.include_router(popgen.router)
 api_router.include_router(preview_test_data.router)
 api_router.include_router(variants.router)
 api_router.include_router(tools_seqfetch.router)
+api_router.include_router(tools_sequence.router)
+api_router.include_router(tools_intervals.router)
 api_router.include_router(search.router)
 api_router.include_router(stats.router)
 api_router.include_router(blast.router)

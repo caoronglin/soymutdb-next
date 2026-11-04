@@ -42,6 +42,7 @@ SHARED_SCRIPTS = (
     "scripts/stage-pages-publication.sh",
     "scripts/verify-frontend-artifacts.sh",
     "scripts/verify-backend-tests.sh",
+    "scripts/verify-bio-core.sh",
     "scripts/install-worker-science-build-deps.sh",
     "scripts/with-postgres-service.sh",
     "scripts/build-static-apps.sh",
@@ -477,6 +478,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertLessEqual(
             {
                 "frontend",
+                "bio-core",
                 "api-tests",
                 "dependency-governance",
                 "compose-acceptance",
@@ -488,11 +490,100 @@ class DeliveryArchitectureTests(unittest.TestCase):
             jobs,
         )
 
+    def test_bio_core_gate_is_delegated_by_both_providers(self) -> None:
+        """The Rust kernel gate must be one shared job body, not two YAML copies."""
+        steps = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        self.assertIn("bio_core_run()", steps)
+        self.assertIn("scripts/verify-bio-core.sh", steps)
+        self.assertIn("run bio-core", _workflow_text("ci.yml"))
+        self.assertIn("run bio-core", _flatten(_cnb()))
+        # The wheel gate is real: it must build AND import, not just build.
+        verify = (ROOT / "scripts/verify-bio-core.sh").read_text(encoding="utf-8")
+        self.assertIn("maturin build", verify)
+        self.assertIn("import soymutdb_bio_core", verify)
+        self.assertIn("-m pytest", verify)
+        # Regression for cnb-6e3-1k6jsptrg: the CNB system Python 3.15 has
+        # no pytest, so the wheel gate must build its own throwaway venv.
+        self.assertIn("-m venv", verify)
+        self.assertIn("--locked", verify)
+        # The crate pins its own compiler; no second Rust version in the YAML.
+        pin = (ROOT / "packages/bio-core/rust-toolchain.toml").read_text(encoding="utf-8")
+        self.assertIn("channel", pin)
+
+    # The Rust bio-core job the spec (docs/dev/rust-core-development-spec-
+    # 2026-11-05.md §13.1) requires. The two tests above are SUBSET assertions
+    # (`assertLessEqual`), so they stay green no matter what a new job does --
+    # including a job that is registered in `.cnb.yml` but never dispatched
+    # through the shared entrypoint, or one that only one provider knows about.
+    # This one is deliberately ordered the other way: the job must exist and
+    # must be reachable from both providers through the same script.
+    BIO_CORE_JOB = "bio-core"
+
+    def test_bio_core_job_is_dispatched_through_the_shared_entrypoint(self) -> None:
+        invocation = f"scripts/ci-job-steps.sh run {self.BIO_CORE_JOB}"
+
+        # CNB is authoritative, and the GitHub workflows are its mirror: both
+        # must dispatch the job by name through ci-job-steps.sh, or the two
+        # providers stop executing the same bytes.
+        for provider, text in (
+            (".cnb.yml", _cnb_text()),
+            (".github/workflows/ci.yml", _workflow_text("ci.yml")),
+        ):
+            self.assertIn(invocation, text, f"{provider} does not dispatch {self.BIO_CORE_JOB}")
+
+        # Dispatch is not registration. `run <job>` forwards to `<job>_run`, so a
+        # pipeline calling an unregistered name fails at runtime with a shell
+        # error instead of a review-time failure here.
+        catalog = subprocess.run(
+            ["bash", "scripts/ci-job-steps.sh", "list"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn(
+            self.BIO_CORE_JOB,
+            catalog.stdout.split(),
+            f"{self.BIO_CORE_JOB} is not in the `ci-job-steps.sh list` catalog",
+        )
+
+    def test_bio_core_job_body_does_not_hide_in_a_provider_config(self) -> None:
+        """§13.1: no standalone rust.yml, and no cargo/maturin in a wrapper.
+
+        The shared job body owns the toolchain commands; the provider configs
+        only sequence jobs. If `cargo`/`maturin` appears in `.cnb.yml` or in the
+        GitHub mirror, the same gate runs from two places and drifts.
+        """
+        for provider, text in (
+            (".cnb.yml", _cnb_text()),
+            (".github/workflows/ci.yml", _workflow_text("ci.yml")),
+        ):
+            for command in ("cargo ", "maturin "):
+                self.assertNotIn(
+                    command,
+                    text,
+                    f"{provider} inlines `{command}`; it belongs in the shared job body",
+                )
+
+        # The spec explicitly forbids a second, provider-specific Rust pipeline.
+        rust_pipelines = sorted(
+            path.name
+            for path in (ROOT / ".cnb" / "pipelines").glob("*rust*.yml")
+        )
+        self.assertEqual(
+            rust_pipelines,
+            [],
+            "the Rust gate extends .cnb.yml + ci-job-steps.sh; a separate "
+            "pipeline is what §13.1 forbids",
+        )
+
+
     def test_github_workflows_delegate_instead_of_inlining_gates(self) -> None:
         ci = _workflow_text("ci.yml")
         for delegation in (
             "scripts/verify-frontend-artifacts.sh",
             "scripts/verify-backend-tests.sh",
+            "scripts/ci-job-steps.sh run bio-core",
             "scripts/ci-job-steps.sh run dependency-governance",
             "scripts/ci-job-steps.sh run clickhouse-migration",
             "scripts/ci-job-steps.sh run mcp-e2e",
@@ -1829,6 +1920,22 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # And it must still be exported for the gates that legitimately need it.
         gate = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
         self.assertIn("SOYMUTDB_CI_DEMO_API_URL", gate)
+
+    def test_variant_row_key_guard_is_wired_into_both_gates(self) -> None:
+        """A source+test co-reversion must fail, not stay green.
+
+        A stale-base branch carried an older ``rowKey`` together with the two
+        test cases that match it: vitest reported 2/2 and the OpenAPI gate has
+        no opinion about frontend source. The guard reads the committed sources
+        independently of the test runner, so deleting tests cannot make it
+        greener. Both the frontend gate and the contracts layer must invoke it.
+        """
+        frontend = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
+        self.assertIn("scripts/check_variant_row_key_contract.py", frontend)
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        self.assertIn("scripts/test_variant_row_key_contract.py", smoke)
+        self.assertTrue((ROOT / "scripts/check_variant_row_key_contract.py").is_file())
+        self.assertTrue((ROOT / "scripts/test_variant_row_key_contract.py").is_file())
 
     def test_package_script_invocations_do_not_double_up_the_separator(self) -> None:
         """`pnpm run <script> -- --flag` forwards a literal "--" to the script.

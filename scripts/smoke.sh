@@ -123,6 +123,10 @@ smoke_contracts() {
     scripts/test_backup_restore_contracts.py
     scripts/test_native_backup_runtime.py
     scripts/test_ci_job_contracts.py
+    # A stale-base branch carried an older variants row key AND the shorter
+    # test file that matches it: vitest stayed green (2/2) and no contract gate
+    # reads frontend source. This suite proves the guard fails on that pair.
+    scripts/test_variant_row_key_contract.py
     # The committed OpenAPI snapshot is an export, not a source file. A hand
     # edit to it (4975dbd inlined a hoisted type alias and deleted its
     # component) surfaces in CI only as "CONTRACT DEBT" from the frontend gate,
@@ -165,6 +169,9 @@ smoke_contracts() {
   # mismatch produces a build that differs between two machines on the same
   # commit, which is exactly what a contract layer exists to catch.
   "${PYTHON_BIN}" scripts/check-toolchain-pins.py || rc=$?
+  # Rust kernel: the crate pins + CI job + wheel-install gate must exist even
+  # when this layer has no compiled extension available.
+  "${PYTHON_BIN}" scripts/check_bio_core_wheel.py --static || rc=$?
   # Workspace exports are checked the same way, and for the same reason: a
   # gitignore pattern that swallows an imported source directory (the `build/`
   # rule did exactly that to packages/shared/src/build/) leaves every local
@@ -261,6 +268,10 @@ smoke_runtime() {
     return 1
   fi
   bash scripts/deploy/smoke.sh --environment development
+  # The compiled kernel must be installed in the API venv AND produce real
+  # scientific results, not merely import.  This is a hard gate: a sequence
+  # tool without its engine would otherwise fail closed with 503 in production.
+  apps/api/.venv/bin/python scripts/check_bio_core_wheel.py --runtime || return 1
 }
 
 # -----------------------------------------------------------------------------

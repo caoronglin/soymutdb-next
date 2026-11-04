@@ -234,6 +234,7 @@ ensure_governance_python() {
 JOBS=(
   frontend
   system-deps
+  bio-core
   api-tests
   smoke-contracts
   dependency-governance
@@ -445,6 +446,16 @@ dependency_governance_env() {
 # -----------------------------------------------------------------------------
 # smoke-contracts — repo contract suites (the gate that had no CI coverage)
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# bio-core — Rust kernel gates (fmt / clippy / tests / wheel / import smoke)
+# -----------------------------------------------------------------------------
+# Added with packages/bio-core (0.1.2).  The job body is a single delegation to
+# scripts/verify-bio-core.sh so CNB and the GitHub mirror execute identical
+# bytes; no Rust logic is inlined into either provider's YAML.
+bio_core_run() {
+  bash "${REPO_ROOT}/scripts/verify-bio-core.sh"
+}
+
 smoke_contracts_run() {
   # scripts/test_ci_job_contracts.py asserts, among other things, that every
   # shared script is executable and strict. It runs only under

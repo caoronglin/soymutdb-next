@@ -37,6 +37,9 @@ services:
 stages:
 - name: Frontend verification
   script: bash scripts/ci-job-steps.sh run frontend
+# Rust bio-core gates, delegated to the shared job body (see .cnb.yml).
+- name: Rust bio-core
+  script: bash scripts/ci-job-steps.sh run bio-core
 - name: API + Worker verification
   image: python:3.15
   script: bash scripts/ci-job-steps.sh run api-tests

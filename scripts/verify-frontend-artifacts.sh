@@ -144,6 +144,9 @@ python3 scripts/check_page_registry.py
 step "Web query-key architecture"
 python3 scripts/check_web_query_keys.py
 
+step "Variants row-key source and regression-suite contract"
+python3 scripts/check_variant_row_key_contract.py
+
 step "Backend-editable content key contract"
 python3 scripts/check_content_key_contract.py
 

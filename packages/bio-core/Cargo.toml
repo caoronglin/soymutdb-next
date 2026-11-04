@@ -1,0 +1,30 @@
+[package]
+name = "soymutdb-bio-core"
+version = "0.1.2"
+edition = "2024"
+rust-version = "1.99.1"
+publish = false
+license = "Apache-2.0"
+
+[lib]
+name = "soymutdb_bio_core"
+crate-type = ["rlib", "cdylib"]
+
+[features]
+default = ["basic-formats"]
+python = ["dep:pyo3", "pyo3/extension-module"]
+basic-formats = ["noodles/fasta", "noodles/fastq", "noodles/gff", "noodles/gtf", "noodles/bed", "noodles/bgzf"]
+variant-formats = ["noodles/vcf", "noodles/bcf", "noodles/tabix", "noodles/csi"]
+
+[dependencies]
+bio = "=4.2.2"
+noodles = { version = "=0.118.0", default-features = false }
+rust-lapper = "=1.3.0"
+bio-seq = { version = "=0.15.2", features = ["translation"] }
+pyo3 = { version = "=0.30.1", optional = true }
+serde = { version = "=1.0.229", features = ["derive"] }
+thiserror = "=2.0.17"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"

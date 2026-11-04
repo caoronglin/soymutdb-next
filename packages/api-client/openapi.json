@@ -3110,6 +3110,546 @@
         }
       }
     },
+    "/api/v1/tools/sequence/capabilities": {
+      "get": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Sequence Capabilities",
+        "description": "Supported algorithms, formats, limits and engine availability.",
+        "operationId": "sequence_capabilities_api_v1_tools_sequence_capabilities_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SequenceCapabilitiesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/tools/sequence/reverse-complement": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Reverse Complement",
+        "operationId": "reverse_complement_api_v1_tools_sequence_reverse_complement_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReverseComplementRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReverseComplementResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/sequence/match": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Sequence Match",
+        "operationId": "sequence_match_api_v1_tools_sequence_match_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SequenceMatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SequenceMatchResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/sequence/align": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Sequence Align",
+        "operationId": "sequence_align_api_v1_tools_sequence_align_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SequenceAlignRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SequenceAlignResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/sequence/stats": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Sequence Stats",
+        "operationId": "sequence_stats_api_v1_tools_sequence_stats_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SequenceStatsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SequenceStatsResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/sequence/orfs": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Sequence Orfs",
+        "operationId": "sequence_orfs_api_v1_tools_sequence_orfs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrfRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OrfResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/sequence/translate": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Sequence Translate",
+        "operationId": "sequence_translate_api_v1_tools_sequence_translate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranslateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslateResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/sequence/kmers": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Sequence Kmers",
+        "operationId": "sequence_kmers_api_v1_tools_sequence_kmers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KmerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KmerResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/sequence/inspect": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Inspect Format",
+        "description": "Validate a bounded FASTA/FASTQ/BED payload; never accepts a path or URL.",
+        "operationId": "inspect_format_api_v1_tools_sequence_inspect_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FormatInspectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormatInspectResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/intervals/overlap": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Interval Overlap",
+        "description": "Overlap user regions with published gene annotations of one assembly.",
+        "operationId": "interval_overlap_api_v1_tools_intervals_overlap_post",
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OverlapRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverlapResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/search": {
       "get": {
         "tags": [
@@ -23334,6 +23874,37 @@
         ],
         "title": "DownloadFileResponse"
       },
+      "EngineMetadata": {
+        "properties": {
+          "engine": {
+            "type": "string",
+            "title": "Engine"
+          },
+          "engine_version": {
+            "type": "string",
+            "title": "Engine Version"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Request Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "engine",
+          "engine_version"
+        ],
+        "title": "EngineMetadata",
+        "description": "Implementation identity; distinct from a biological data release."
+      },
       "EnrichmentGseaResponse": {
         "properties": {
           "mode": {
@@ -25163,6 +25734,76 @@
         ],
         "title": "FooterNavigationLink",
         "description": "One editable, bilingual footer destination."
+      },
+      "FormatInspectRequest": {
+        "properties": {
+          "fmt": {
+            "type": "string",
+            "enum": [
+              "fasta",
+              "fastq",
+              "bed"
+            ],
+            "title": "Fmt"
+          },
+          "data": {
+            "type": "string",
+            "description": "Base64-encoded file content, \u22641 MiB",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fmt",
+          "data"
+        ],
+        "title": "FormatInspectRequest",
+        "description": "Bounded raw bytes as a list of integers (no file paths / URLs)."
+      },
+      "FormatInspectResponse": {
+        "properties": {
+          "fmt": {
+            "type": "string",
+            "enum": [
+              "fasta",
+              "fastq",
+              "bed"
+            ],
+            "title": "Fmt"
+          },
+          "valid": {
+            "type": "boolean",
+            "title": "Valid"
+          },
+          "record_count": {
+            "type": "integer",
+            "title": "Record Count"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated"
+          },
+          "records": {
+            "type": "array",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Records"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "fmt",
+          "valid",
+          "record_count",
+          "truncated",
+          "engine"
+        ],
+        "title": "FormatInspectResponse"
       },
       "GeneDetail": {
         "properties": {
@@ -26998,6 +27639,27 @@
         ],
         "title": "ImportValidationRequest"
       },
+      "InlineTarget": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "const": "inline",
+            "default": "inline",
+            "title": "Kind"
+          },
+          "sequence": {
+            "type": "string",
+            "maxLength": 1048576,
+            "minLength": 1,
+            "title": "Sequence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence"
+        ],
+        "title": "InlineTarget"
+      },
       "InternalGeneSearchItem": {
         "properties": {
           "entity_type": {
@@ -27175,6 +27837,144 @@
           "query"
         ],
         "title": "InternalSearchResponse"
+      },
+      "IntervalRegion": {
+        "properties": {
+          "start": {
+            "type": "integer",
+            "minimum": 1.0,
+            "description": "1-based inclusive start",
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "minimum": 1.0,
+            "description": "1-based inclusive end",
+            "title": "End"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "IntervalRegion"
+      },
+      "KmerItem": {
+        "properties": {
+          "kmer": {
+            "type": "string",
+            "title": "Kmer"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kmer",
+          "count"
+        ],
+        "title": "KmerItem"
+      },
+      "KmerRequest": {
+        "properties": {
+          "sequence": {
+            "type": "string",
+            "maxLength": 1048576,
+            "minLength": 1,
+            "title": "Sequence"
+          },
+          "k": {
+            "type": "integer",
+            "maximum": 32.0,
+            "minimum": 1.0,
+            "default": 4,
+            "title": "K"
+          },
+          "canonical": {
+            "type": "boolean",
+            "default": true,
+            "title": "Canonical"
+          },
+          "ambiguity_policy": {
+            "type": "string",
+            "enum": [
+              "skip",
+              "reject"
+            ],
+            "default": "skip",
+            "title": "Ambiguity Policy"
+          },
+          "max_items": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "default": 1000,
+            "title": "Max Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence"
+        ],
+        "title": "KmerRequest"
+      },
+      "KmerResponse": {
+        "properties": {
+          "k": {
+            "type": "integer",
+            "title": "K"
+          },
+          "canonical": {
+            "type": "boolean",
+            "title": "Canonical"
+          },
+          "total_windows": {
+            "type": "integer",
+            "title": "Total Windows"
+          },
+          "valid_windows": {
+            "type": "integer",
+            "title": "Valid Windows"
+          },
+          "skipped_windows": {
+            "type": "integer",
+            "title": "Skipped Windows"
+          },
+          "distinct_kmers": {
+            "type": "integer",
+            "title": "Distinct Kmers"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KmerItem"
+            },
+            "title": "Items"
+          },
+          "limited": {
+            "type": "boolean",
+            "title": "Limited"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "k",
+          "canonical",
+          "total_windows",
+          "valid_windows",
+          "skipped_windows",
+          "distinct_kmers",
+          "items",
+          "limited",
+          "engine"
+        ],
+        "title": "KmerResponse"
       },
       "LayoutResponse": {
         "properties": {
@@ -27699,6 +28499,40 @@
         ],
         "title": "MarkReadResponse",
         "description": "Number of rows flipped to read."
+      },
+      "MatchHit": {
+        "properties": {
+          "start": {
+            "type": "integer",
+            "description": "1-based inclusive start",
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "description": "1-based inclusive end",
+            "title": "End"
+          },
+          "strand": {
+            "type": "string",
+            "enum": [
+              "+",
+              "-"
+            ],
+            "title": "Strand"
+          },
+          "edit_distance": {
+            "type": "integer",
+            "default": 0,
+            "title": "Edit Distance"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "strand"
+        ],
+        "title": "MatchHit"
       },
       "MatchType": {
         "type": "string",
@@ -29708,6 +30542,92 @@
         ],
         "title": "OntologyTermResponse"
       },
+      "OrfCandidate": {
+        "properties": {
+          "start": {
+            "type": "integer",
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "title": "End"
+          },
+          "strand": {
+            "type": "string",
+            "enum": [
+              "+",
+              "-"
+            ],
+            "title": "Strand"
+          },
+          "frame": {
+            "type": "integer",
+            "title": "Frame"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "strand",
+          "frame"
+        ],
+        "title": "OrfCandidate"
+      },
+      "OrfRequest": {
+        "properties": {
+          "sequence": {
+            "type": "string",
+            "maxLength": 1048576,
+            "minLength": 1,
+            "title": "Sequence"
+          },
+          "min_len": {
+            "type": "integer",
+            "maximum": 1048576.0,
+            "minimum": 3.0,
+            "default": 90,
+            "title": "Min Len"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "default": 1000,
+            "title": "Limit"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence"
+        ],
+        "title": "OrfRequest"
+      },
+      "OrfResponse": {
+        "properties": {
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OrfCandidate"
+            },
+            "title": "Candidates"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "candidates",
+          "count",
+          "engine"
+        ],
+        "title": "OrfResponse"
+      },
       "OrthologRecord": {
         "properties": {
           "gene_accession": {
@@ -29851,6 +30771,177 @@
           "state"
         ],
         "title": "OrthologResponse"
+      },
+      "OverlapHit": {
+        "properties": {
+          "public_id": {
+            "type": "string",
+            "title": "Public Id"
+          },
+          "start": {
+            "type": "integer",
+            "title": "Start"
+          },
+          "end": {
+            "type": "integer",
+            "title": "End"
+          },
+          "overlap_bp": {
+            "type": "integer",
+            "title": "Overlap Bp"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "public_id",
+          "start",
+          "end",
+          "overlap_bp",
+          "source"
+        ],
+        "title": "OverlapHit"
+      },
+      "OverlapQueryResult": {
+        "properties": {
+          "query": {
+            "$ref": "#/components/schemas/IntervalRegion"
+          },
+          "overlap_count": {
+            "type": "integer",
+            "title": "Overlap Count"
+          },
+          "covered_bp": {
+            "type": "integer",
+            "title": "Covered Bp"
+          },
+          "hits": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OverlapHit"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Hits"
+          },
+          "limited": {
+            "type": "boolean",
+            "title": "Limited"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "overlap_count",
+          "covered_bp",
+          "limited"
+        ],
+        "title": "OverlapQueryResult"
+      },
+      "OverlapRequest": {
+        "properties": {
+          "assembly": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Assembly"
+          },
+          "reference_name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Reference Name"
+          },
+          "regions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IntervalRegion"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Regions"
+          },
+          "coordinate_system": {
+            "type": "string",
+            "const": "1-based-inclusive",
+            "default": "1-based-inclusive",
+            "title": "Coordinate System"
+          },
+          "annotation_type": {
+            "type": "string",
+            "const": "gene",
+            "default": "gene",
+            "title": "Annotation Type"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "hits",
+              "count"
+            ],
+            "default": "hits",
+            "title": "Mode"
+          },
+          "max_hits": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "default": 100,
+            "title": "Max Hits"
+          }
+        },
+        "type": "object",
+        "required": [
+          "assembly",
+          "reference_name",
+          "regions"
+        ],
+        "title": "OverlapRequest"
+      },
+      "OverlapResponse": {
+        "properties": {
+          "assembly": {
+            "type": "string",
+            "title": "Assembly"
+          },
+          "release": {
+            "type": "string",
+            "title": "Release"
+          },
+          "coordinate_system": {
+            "type": "string",
+            "const": "1-based-inclusive",
+            "default": "1-based-inclusive",
+            "title": "Coordinate System"
+          },
+          "queries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OverlapQueryResult"
+            },
+            "title": "Queries"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "assembly",
+          "release",
+          "queries",
+          "engine"
+        ],
+        "title": "OverlapResponse"
       },
       "PageDefinitionCreate": {
         "properties": {
@@ -32476,6 +33567,102 @@
         "title": "ResolvedTableView",
         "description": "The layout the portal should render for this request."
       },
+      "ReverseComplementRequest": {
+        "properties": {
+          "sequence": {
+            "type": "string",
+            "maxLength": 1048576,
+            "minLength": 1,
+            "title": "Sequence"
+          },
+          "alphabet": {
+            "type": "string",
+            "enum": [
+              "dna",
+              "rna",
+              "protein"
+            ],
+            "default": "dna",
+            "title": "Alphabet"
+          },
+          "preserve_case": {
+            "type": "boolean",
+            "default": false,
+            "title": "Preserve Case"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence"
+        ],
+        "title": "ReverseComplementRequest"
+      },
+      "ReverseComplementResponse": {
+        "properties": {
+          "sequence": {
+            "type": "string",
+            "title": "Sequence"
+          },
+          "length": {
+            "type": "integer",
+            "title": "Length"
+          },
+          "alphabet": {
+            "type": "string",
+            "enum": [
+              "dna",
+              "rna",
+              "protein"
+            ],
+            "title": "Alphabet"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence",
+          "length",
+          "alphabet",
+          "engine"
+        ],
+        "title": "ReverseComplementResponse"
+      },
+      "ScoringConfig": {
+        "properties": {
+          "match": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": -100.0,
+            "default": 2,
+            "title": "Match"
+          },
+          "mismatch": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": -100.0,
+            "default": -3,
+            "title": "Mismatch"
+          },
+          "gap_open": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": -100.0,
+            "default": -5,
+            "title": "Gap Open"
+          },
+          "gap_extend": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": -100.0,
+            "default": -1,
+            "title": "Gap Extend"
+          }
+        },
+        "type": "object",
+        "title": "ScoringConfig"
+      },
       "SearchResultItem": {
         "properties": {
           "type": {
@@ -32949,6 +34136,124 @@
         "title": "SeqFetchResponse",
         "description": "Extraction result.\n\nSmall results return inline FASTA (``sequence``); results larger than\n10 MiB are stored in S3 and returned as a pre-signed ``download_url``\ninstead (``sequence`` is ``None`` and ``truncated`` is ``False`` \u2013 the\npayload is complete, just delivered out-of-band)."
       },
+      "SequenceAlignRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 1048576,
+            "minLength": 1,
+            "title": "Query"
+          },
+          "target": {
+            "type": "string",
+            "maxLength": 1048576,
+            "minLength": 1,
+            "title": "Target"
+          },
+          "alphabet": {
+            "type": "string",
+            "enum": [
+              "dna",
+              "rna",
+              "protein"
+            ],
+            "default": "dna",
+            "title": "Alphabet"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "local",
+              "global",
+              "semiglobal"
+            ],
+            "default": "local",
+            "title": "Mode"
+          },
+          "scoring": {
+            "$ref": "#/components/schemas/ScoringConfig"
+          }
+        },
+        "type": "object",
+        "required": [
+          "query",
+          "target"
+        ],
+        "title": "SequenceAlignRequest"
+      },
+      "SequenceAlignResponse": {
+        "properties": {
+          "score": {
+            "type": "integer",
+            "title": "Score"
+          },
+          "query_range": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Query Range"
+          },
+          "target_range": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2,
+            "title": "Target Range"
+          },
+          "cigar": {
+            "type": "string",
+            "title": "Cigar"
+          },
+          "identity": {
+            "type": "number",
+            "title": "Identity"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "local",
+              "global",
+              "semiglobal"
+            ],
+            "title": "Mode"
+          },
+          "coordinate_system": {
+            "type": "string",
+            "const": "1-based-inclusive",
+            "default": "1-based-inclusive",
+            "title": "Coordinate System"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "score",
+          "query_range",
+          "target_range",
+          "cigar",
+          "identity",
+          "mode",
+          "engine"
+        ],
+        "title": "SequenceAlignResponse"
+      },
       "SequenceAvailability": {
         "properties": {
           "molecule": {
@@ -33026,6 +34331,335 @@
         ],
         "title": "SequenceAvailability",
         "description": "Per-molecule availability for a gene's sequences.\n\nThe platform currently has no FASTA store: ``genes``/``transcripts`` carry\ncoordinates, not residues. Rather than fabricate a ``sequence`` string (a\ngene page that silently shows a made-up nucleotide string is worse than one\nthat says \"not imported\"), the contract reports availability plus the\nreason. When a sequence store is added, only ``availability`` flips and\nthe residue fields populate \u2014 consumers do not change shape."
+      },
+      "SequenceCapabilitiesResponse": {
+        "properties": {
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "engine": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Engine"
+          },
+          "engine_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Engine Version"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "max_inline_sequence": {
+            "type": "integer",
+            "default": 1048576,
+            "title": "Max Inline Sequence"
+          },
+          "max_pattern": {
+            "type": "integer",
+            "default": 256,
+            "title": "Max Pattern"
+          },
+          "max_hits": {
+            "type": "integer",
+            "default": 1000,
+            "title": "Max Hits"
+          },
+          "k_range": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "maxItems": 2,
+            "minItems": 2,
+            "default": [
+              1,
+              32
+            ],
+            "title": "K Range"
+          },
+          "genetic_codes": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Genetic Codes"
+          },
+          "coordinate_system_internal": {
+            "type": "string",
+            "default": "0-based-half-open",
+            "title": "Coordinate System Internal"
+          },
+          "coordinate_system_public": {
+            "type": "string",
+            "default": "1-based-inclusive",
+            "title": "Coordinate System Public"
+          },
+          "programs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "Programs"
+          },
+          "formats": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "Formats"
+          }
+        },
+        "type": "object",
+        "required": [
+          "available"
+        ],
+        "title": "SequenceCapabilitiesResponse",
+        "description": "Supported algorithms, formats and limits; never internal paths."
+      },
+      "SequenceMatchRequest": {
+        "properties": {
+          "pattern": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Pattern"
+          },
+          "target": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InlineTarget"
+              }
+            ],
+            "discriminator": {
+              "propertyName": "kind",
+              "mapping": {
+                "inline": "#/components/schemas/InlineTarget"
+              }
+            },
+            "title": "Target"
+          },
+          "alphabet": {
+            "type": "string",
+            "enum": [
+              "dna",
+              "rna",
+              "protein"
+            ],
+            "default": "dna",
+            "title": "Alphabet"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "approximate"
+            ],
+            "default": "exact",
+            "title": "Mode"
+          },
+          "both_strands": {
+            "type": "boolean",
+            "default": true,
+            "title": "Both Strands"
+          },
+          "max_edits": {
+            "type": "integer",
+            "maximum": 3.0,
+            "minimum": 0.0,
+            "default": 0,
+            "title": "Max Edits"
+          },
+          "iupac_mode": {
+            "type": "string",
+            "const": "literal",
+            "default": "literal",
+            "title": "Iupac Mode"
+          },
+          "max_hits": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "default": 100,
+            "title": "Max Hits"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pattern",
+          "target"
+        ],
+        "title": "SequenceMatchRequest"
+      },
+      "SequenceMatchResponse": {
+        "properties": {
+          "matches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MatchHit"
+            },
+            "title": "Matches"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "limited": {
+            "type": "boolean",
+            "title": "Limited"
+          },
+          "coordinate_system": {
+            "type": "string",
+            "const": "1-based-inclusive",
+            "default": "1-based-inclusive",
+            "title": "Coordinate System"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "exact",
+              "approximate"
+            ],
+            "title": "Method"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "matches",
+          "count",
+          "limited",
+          "method",
+          "engine"
+        ],
+        "title": "SequenceMatchResponse"
+      },
+      "SequenceStatsRequest": {
+        "properties": {
+          "sequence": {
+            "type": "string",
+            "maxLength": 1048576,
+            "minLength": 1,
+            "title": "Sequence"
+          },
+          "alphabet": {
+            "type": "string",
+            "enum": [
+              "dna",
+              "rna",
+              "protein"
+            ],
+            "default": "dna",
+            "title": "Alphabet"
+          },
+          "ambiguous_gc_policy": {
+            "type": "string",
+            "enum": [
+              "exclude",
+              "include"
+            ],
+            "default": "exclude",
+            "title": "Ambiguous Gc Policy"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence"
+        ],
+        "title": "SequenceStatsRequest"
+      },
+      "SequenceStatsResponse": {
+        "properties": {
+          "length": {
+            "type": "integer",
+            "title": "Length"
+          },
+          "gc_count": {
+            "type": "integer",
+            "title": "Gc Count"
+          },
+          "at_count": {
+            "type": "integer",
+            "title": "At Count"
+          },
+          "ambiguous_count": {
+            "type": "integer",
+            "title": "Ambiguous Count"
+          },
+          "a": {
+            "type": "integer",
+            "title": "A"
+          },
+          "c": {
+            "type": "integer",
+            "title": "C"
+          },
+          "g": {
+            "type": "integer",
+            "title": "G"
+          },
+          "t": {
+            "type": "integer",
+            "title": "T"
+          },
+          "denominator": {
+            "type": "integer",
+            "title": "Denominator"
+          },
+          "gc_fraction": {
+            "type": "number",
+            "title": "Gc Fraction"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "length",
+          "gc_count",
+          "at_count",
+          "ambiguous_count",
+          "a",
+          "c",
+          "g",
+          "t",
+          "denominator",
+          "gc_fraction",
+          "engine"
+        ],
+        "title": "SequenceStatsResponse"
       },
       "SettingFieldSchema": {
         "properties": {
@@ -35230,6 +36864,80 @@
           "strand"
         ],
         "title": "TranscriptResponse"
+      },
+      "TranslateRequest": {
+        "properties": {
+          "sequence": {
+            "type": "string",
+            "maxLength": 1048576,
+            "minLength": 1,
+            "title": "Sequence"
+          },
+          "genetic_code_id": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "default": 1,
+            "title": "Genetic Code Id"
+          },
+          "frame": {
+            "type": "integer",
+            "maximum": 2.0,
+            "minimum": 0.0,
+            "default": 0,
+            "title": "Frame"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence"
+        ],
+        "title": "TranslateRequest"
+      },
+      "TranslateResponse": {
+        "properties": {
+          "protein": {
+            "type": "string",
+            "title": "Protein"
+          },
+          "genetic_code_id": {
+            "type": "integer",
+            "title": "Genetic Code Id"
+          },
+          "frame": {
+            "type": "integer",
+            "title": "Frame"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings"
+          },
+          "codons": {
+            "type": "integer",
+            "title": "Codons"
+          },
+          "trailing_bases": {
+            "type": "integer",
+            "title": "Trailing Bases"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "protein",
+          "genetic_code_id",
+          "frame",
+          "warnings",
+          "codons",
+          "trailing_bases",
+          "engine"
+        ],
+        "title": "TranslateResponse"
       },
       "UnreadCountResponse": {
         "properties": {

@@ -48,3 +48,34 @@ CONTRACT DEBT: packages/api-client/openapi.json is out of sync with app.main:app
   同一个 commit，门禁就没有在合并时替你记账的机会。
 - 合并之后跑一次 `main` 的 verify pipeline（push 触发）是这条契约唯一的事后判据；
   绿色 PR + 红色 `main` 正是本文件描述的那种失败。
+
+## 比较基准：两点 diff 与三点 diff 不是一回事
+
+`main` 被 force-rewrite 过之后，`git diff main...HEAD`（三点）会以 **merge-base**
+为基线，而 merge-base 可能是旧形状的链头；`git diff main HEAD`（两点）才比两棵树的
+真实端点。曾有一处 `title: "Assembly"` 的差异用三点 diff 看着是真回退，换成两点后是
+逐字节相同——「逐字节一致」的结论没错，错的是把 merge-base 当成了 `main` 的当前形状。
+
+判据：
+
+- 判定「这条分支相对当前 `main` 改了什么」，一律用两点 `git diff origin/main HEAD`；
+- 三点 `git diff origin/main...HEAD` 只回答「本分支自己提交了什么」，适合看净新增，
+  不适合判定是否回退了 `main` 上已有的东西；
+- 报结论时带上 `git rev-parse origin/main` 与 `git merge-base origin/main HEAD`，
+  否则「main」和「基线」容易被混成同一棵树。
+
+## 源码与测试一起退化时，契约门禁不会喊
+
+`check-contract.sh` 比的是「后端实时导出 vs 提交快照」，`test_openapi_snapshot_contract.py`
+比的是快照自身的形状。两者都不读 `apps/web/src/**`。一次 stale-base 分支同时带了旧的
+`variants` 行键（`?? ""` 拼接）和只剩 2 条的 `row-key.test.tsx`：vitest **绿 2/2**，
+没有任何门禁报错——测试跟着代码一起退，绿灯反而更亮。
+
+`scripts/check_variant_row_key_contract.py` 独立读提交的源码与测试文件，要求行键使用
+`JSON.stringify([...])`、且回归用例保留「null 与空串分开」「同键同桶」两组；任一缺失即失败。
+它挂在 `verify-frontend-artifacts.sh` 与 `smoke.sh --profile contracts` 两层，
+`scripts/test_variant_row_key_contract.py` 用合成树证明每个负例真的会红。
+`scripts/test_ci_job_contracts.py` 再断言这两处接线不会被悄悄摘掉。
+
+教训：凡是「契约由源码 + 配套测试共同表达」的地方，必须有一层读源码字节的守卫，
+不能只依赖会随代码一起被改短的测试运行器。
