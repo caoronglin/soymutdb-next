@@ -14,6 +14,13 @@ locally, and the lowering silently changed what pydantic emits for them. A
 ``$ref``s and deleted the component, so the document ended up defining nothing
 while claiming otherwise.
 
+The fourth check covers the other hand edit that survives all of the above:
+reordering ``paths``. ``openapi-typescript`` prints keys in document order, so
+a snapshot whose path order was rewritten still generates a file the contract
+gate rejects -- again without saying which file or why. #25 did exactly that
+when it spliced six ``/api/v1/comparative/*`` paths at their alphabetical
+position and moved 222 of the 223 existing keys.
+
 The checks below need neither Python 3.15 nor the API virtualenv, so they run
 in the dependency-free contracts layer and name the actual cause.
 """
@@ -98,4 +105,39 @@ def test_hoisted_type_aliases_are_actually_referenced() -> None:
     assert orphans == [], (
         f"alias component(s) {orphans} are defined but never referenced: the "
         "snapshot was hand-edited to inline them. Regenerate it."
+    )
+
+
+def test_generated_client_keeps_snapshot_path_order() -> None:
+    """``openapi.d.ts`` must list ``paths`` in the snapshot's own order.
+
+    ``openapi-typescript`` prints ``paths`` in document order unless
+    ``--alphabetize`` is passed, so a snapshot whose path order was rewritten
+    still generates a file that ``check:contract`` rejects while every key is
+    present and every reference resolves. Reordering is the only hand edit that
+    survives the three checks above, so it gets its own.
+    """
+    snapshot_paths = list(_document().get("paths", {}))
+    generated_paths = re.findall(
+        r'^    "(/[^"]*)": \{$', GENERATED.read_text(encoding="utf-8"), re.M
+    )
+    if generated_paths == snapshot_paths:
+        return
+    index, snapshot, generated = next(
+        (
+            (index, snapshot, generated)
+            for index, (snapshot, generated) in enumerate(
+                zip(snapshot_paths, generated_paths)
+            )
+            if snapshot != generated
+        ),
+        (None, "<end>", "<end>"),
+    )
+    raise AssertionError(
+        f"src/generated/openapi.d.ts lists {generated!r} at position {index} "
+        f"where the snapshot lists {snapshot!r}: the snapshot's path order was "
+        "rewritten by hand. `openapi-typescript` prints paths in document "
+        "order, so the snapshot must keep FastAPI's router-registration order "
+        "-- run `pnpm --filter @soymutdb/api-client generate:api-client` under "
+        "Python 3.15 instead of reordering the JSON."
     )
