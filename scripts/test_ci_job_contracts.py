@@ -873,6 +873,37 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 "a section hint naming no heading must fail --static",
             )
 
+    def test_doc_citation_gates_agree_on_wrapped_citations(self) -> None:
+        """The contract guard and --static must never give opposite signals.
+
+        Both parse wrapped comments with their own copy of the fold. A correct
+        rewrap must stay green in both, and a dangling label must stay red in
+        both; otherwise a future edit to one parser silently reintroduces the
+        inverted signal this guard was added to prevent.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_consistency",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        original = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        good = "CI：构建一次，消费一次"
+        doc = "docs/ops/bio-core-wheel.md"
+        wrapped = original.replace(f'"{good}"', '"CI：构建一次，\n# 消费一次"')
+        dangling = original.replace(f'"{good}"', '"CI: build once,\n# consume once"')
+
+        self.assertEqual(_doc_section_citations(wrapped), [(doc, good)])
+        self.assertEqual(checker.doc_ref_errors(wrapped), [], "false positive in --static")
+        self.assertEqual(
+            _doc_section_citations(dangling),
+            [(doc, "CI: build once, consume once")],
+        )
+        self.assertTrue(checker.doc_ref_errors(dangling), "dangling label must stay red")
+
     def test_github_workflows_delegate_instead_of_inlining_gates(self) -> None:
         ci = _workflow_text("ci.yml")
         for delegation in (
