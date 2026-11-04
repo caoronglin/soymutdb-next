@@ -701,14 +701,20 @@ def _probe_declared_licenses(command: list[str]) -> dict[str, Any]:
     probe_command = _rewrite_for_probe(command)
     if probe_command is None:
         return {}
-    completed = subprocess.run(
-        probe_command,
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-        env=os.environ.copy(),
-    )
+    try:
+        completed = subprocess.run(
+            probe_command,
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+            timeout=PROBE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as expired:
+        completed = _kill_on_timeout(
+            expired, PROBE_TIMEOUT_SECONDS, "declared-license probe"
+        )
     # A non-zero exit prints why. Without it every distribution projects as
     # `UNKNOWN` and the failure reads as a licensing problem (build
     # cnb-u4g-1k6h29nbb-001 reported 55 worker packages that way), which is the
@@ -805,6 +811,46 @@ def _rewrite_for_probe(command: list[str]) -> list[str] | None:
             selector.append(argument)
         index += 1
     return ["uv", "run", *selector, "python", "-c", PROBE_SCRIPT]
+
+
+#: Wall-clock ceiling for this runner's own instruments: the declared-license
+#: probe and its status re-run. They are `uv run` too, so they can compile the
+#: worker's science stack exactly like the analyzer that already has a ceiling.
+#: Without one they were the last unbounded `subprocess.run` left in this file,
+#: and a hung probe reproduced the original silent-stage death from INSIDE the
+#: runner that exists to name it: build cnb-ha3-1k6ish0rh-001 spent its whole
+#: 17-minute allowance making zero noise and reported nothing but
+#: "task exceeded 10m with no output".
+PROBE_TIMEOUT_SECONDS = DEFAULT_CHECK_TIMEOUT_SECONDS
+
+
+def _kill_on_timeout(
+    expired: subprocess.TimeoutExpired, ceiling: int, what: str
+) -> subprocess.CompletedProcess[str]:
+    """Re-raise a probe timeout as a described, non-zero result.
+
+    Callers already handle "the instrument did not answer": a failed status
+    probe already means `probe_produced_no_declarations`, and an empty
+    declaration map already means "judge by the analyzer's own column". The
+    ceiling only has to turn a hang into that state instead of a stage kill, so
+    the stderr explains what happened and the caller keeps its own diagnosis.
+    """
+    sys.stderr.write(
+        f"[dependency-governance] {what} exceeded its {ceiling}s ceiling and "
+        "was killed; continuing without its evidence\n"
+    )
+    return subprocess.CompletedProcess(
+        args=expired.cmd,
+        returncode=-9,
+        stdout=_text_of(expired.stdout),
+        stderr=_text_of(expired.stderr),
+    )
+
+
+def _text_of(value: str | bytes | None) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", "replace")
+    return value or ""
 
 
 def _check_timeout_seconds(check: dict[str, Any]) -> int:
@@ -968,14 +1014,20 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
             _probe_for_exit_code(probe_command) if probe_command is not None else None
         )
         if status_probe is not None:
-            probe_run = subprocess.run(
-                status_probe,
-                cwd=cwd,
-                check=False,
-                capture_output=True,
-                text=True,
-                env=os.environ.copy(),
-            )
+            try:
+                probe_run = subprocess.run(
+                    status_probe,
+                    cwd=cwd,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    env=os.environ.copy(),
+                    timeout=PROBE_TIMEOUT_SECONDS,
+                )
+            except subprocess.TimeoutExpired as expired:
+                probe_run = _kill_on_timeout(
+                    expired, PROBE_TIMEOUT_SECONDS, f"{name} status probe"
+                )
             (output / f"{name}.probe.stderr.log").write_text(
                 probe_run.stderr, encoding="utf-8"
             )
@@ -1400,7 +1452,16 @@ def run_audits(config_path: Path, output: Path) -> int:
                         )
 
     rows: list[dict[str, Any]] = []
-    for check in checks:
+    for index, check in enumerate(checks, start=1):
+        # Say who is running BEFORE the silence. Every analyzer after this one
+        # is bounded by its own ceiling, but a run that prints only at the end
+        # is indistinguishable from a dead one to a reader -- and to CNB, whose
+        # ten-minute no-output rule is what makes a missing ceiling fatal. The
+        # line is cheap and it is the first thing anyone reads in a failed log.
+        print(
+            f"[{index}/{len(checks)}] {check.get('name')}: running",
+            flush=True,
+        )
         try:
             row = _run_check(check, output)
         except Exception as exc:  # noqa: BLE001 - record runner errors per check
@@ -1414,6 +1475,9 @@ def run_audits(config_path: Path, output: Path) -> int:
                 "status": "failed",
             }
         rows.append(row)
+        # Adjacent to the work: the reason, not just the verdict, is what a
+        # reader needs before scrolling into the evidence files.
+        print(f"  {row['name']}: {row['status']} ({row['reason']})", flush=True)
 
     status = "passed" if all(row["status"] == "passed" for row in rows) else "failed"
     summary = {
