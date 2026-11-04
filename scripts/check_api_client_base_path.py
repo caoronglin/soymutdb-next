@@ -45,7 +45,13 @@ PREFIX = "/api/v1"
 
 
 def strip_comments(text: str) -> str:
-    text = re.sub(r"/\*[\s\S]*?\*/", "", text)
+    # Keep the newlines inside block comments: reported line numbers are counted
+    # on the stripped text, so deleting them shifts every diagnostic upwards.
+    text = re.sub(
+        r"/\*[\s\S]*?\*/",
+        lambda m: "\n" * m.group(0).count("\n"),
+        text,
+    )
     return re.sub(r"(?m)//[^\n]*", "", text)
 
 

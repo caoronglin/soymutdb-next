@@ -84,3 +84,29 @@ def test_comments_and_test_files_are_ignored(tmp_path: Path) -> None:
 
 def test_self_test_stays_green() -> None:
     assert guard.self_test() == 0
+
+
+def test_block_comments_do_not_shift_reported_line_numbers(tmp_path: Path) -> None:
+    """A guard that tells you where to fix must point at the real line.
+
+    ``strip_comments`` used to delete block comments *with their newlines*;
+    diagnostics are numbered on the stripped text, so every line after a
+    multi-line comment was reported too high. This pins the exact coordinates.
+    """
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "tools.ts").write_text(
+        "/**\n"
+        " * Block comment\n"
+        " * spanning lines\n"
+        " */\n"
+        'const BASE = "/api/v1/tools/sequence";\n'
+        "                                           // inline\n"
+        "function post(path: string) {\n"
+        "  return request(`${BASE}${path}`, {});\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    failures = guard.inspect(guard.collect(src))
+    assert any("tools.ts:5:" in f and "BASE" in f for f in failures), failures
+    assert any("tools.ts:8:" in f and "request path" in f for f in failures), failures
