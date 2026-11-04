@@ -23123,6 +23123,16 @@
         "description": "One editable, bilingual footer destination."
       },
       "GeneDetail": {
+        "type": "object",
+        "required": [
+          "chromosome",
+          "start",
+          "end",
+          "start_pos",
+          "end_pos",
+          "strand"
+        ],
+        "title": "GeneDetail",
         "properties": {
           "id": {
             "title": "Id",
@@ -23293,18 +23303,68 @@
                 "type": "null"
               }
             ]
+          },
+          "annotation_section": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AnnotationSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "homolog_section": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HomologSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expression_section": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ExpressionSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "variants_section": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VariantSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "phenotype_section": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PhenotypeSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "literature_section": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LiteratureSection"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
-        },
-        "type": "object",
-        "required": [
-          "chromosome",
-          "start",
-          "end",
-          "start_pos",
-          "end_pos",
-          "strand"
-        ],
-        "title": "GeneDetail"
+        }
       },
       "GeneListResponse": {
         "properties": {
@@ -34474,6 +34534,598 @@
         ],
         "title": "SeedRequestUpdate",
         "description": "Admin status update payload."
+      },
+      "PhenotypeRecord": {
+        "properties": {
+          "mutant_public_id": {
+            "type": "string",
+            "title": "Mutant Public Id"
+          },
+          "mutant_name": {
+            "type": "string",
+            "title": "Mutant Name"
+          },
+          "trait_category": {
+            "type": "string",
+            "title": "Trait Category"
+          },
+          "trait_name": {
+            "type": "string",
+            "title": "Trait Name"
+          },
+          "trait_value": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trait Value"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          },
+          "measurement_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Measurement Method"
+          }
+        },
+        "type": "object",
+        "required": [
+          "mutant_public_id",
+          "mutant_name",
+          "trait_category",
+          "trait_name"
+        ],
+        "title": "PhenotypeRecord",
+        "description": "One phenotype observation linked to the gene through a mutant line."
+      },
+      "HomologRecord": {
+        "properties": {
+          "homolog_species": {
+            "type": "string",
+            "title": "Homolog Species"
+          },
+          "homolog_gene_id": {
+            "type": "string",
+            "title": "Homolog Gene Id"
+          },
+          "homolog_type": {
+            "type": "string",
+            "enum": [
+              "ortholog",
+              "paralog"
+            ],
+            "title": "Homolog Type"
+          },
+          "method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Method"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "experimental",
+              "curated",
+              "predicted",
+              "transferred",
+              "imported",
+              "unknown"
+            ],
+            "title": "Kind",
+            "default": "transferred"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "homolog_species",
+          "homolog_gene_id",
+          "homolog_type"
+        ],
+        "title": "HomologRecord",
+        "description": "One ortholog/paralog assertion, with cross-assembly context."
+      },
+      "ExpressionSection": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/SectionStatus"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/ExpressionRecord"
+            },
+            "type": "array",
+            "title": "Records"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "ExpressionSection"
+      },
+      "PhenotypeSection": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/SectionStatus"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/PhenotypeRecord"
+            },
+            "type": "array",
+            "title": "Records"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "PhenotypeSection"
+      },
+      "VariantSection": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/SectionStatus"
+          },
+          "total": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total"
+          },
+          "by_impact": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "By Impact"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "VariantSection",
+        "description": "Release- and assembly-scoped variant totals for the gene."
+      },
+      "LiteratureRecord": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "authors": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authors"
+          },
+          "journal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal"
+          },
+          "year": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Year"
+          },
+          "doi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doi"
+          },
+          "pmid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pmid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "title": "LiteratureRecord",
+        "description": "One publication, identified by DOI/PMID rather than its row key."
+      },
+      "AnnotationTerm": {
+        "properties": {
+          "ontology": {
+            "type": "string",
+            "enum": [
+              "go",
+              "kegg"
+            ],
+            "title": "Ontology"
+          },
+          "term_id": {
+            "type": "string",
+            "title": "Term Id"
+          },
+          "term_name": {
+            "type": "string",
+            "title": "Term Name"
+          },
+          "evidence_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Evidence Code"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "experimental",
+              "curated",
+              "predicted",
+              "transferred",
+              "imported",
+              "unknown"
+            ],
+            "title": "Kind",
+            "default": "unknown"
+          },
+          "reference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference"
+          },
+          "qualifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Qualifier"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ontology",
+          "term_id",
+          "term_name"
+        ],
+        "title": "AnnotationTerm",
+        "description": "One GO/KEGG assertion with the evidence code its source carried."
+      },
+      "SectionStatus": {
+        "properties": {
+          "section": {
+            "type": "string",
+            "enum": [
+              "annotation",
+              "homolog",
+              "expression",
+              "variants",
+              "phenotype",
+              "literature"
+            ],
+            "title": "Section"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "available",
+              "empty",
+              "not_imported"
+            ],
+            "title": "State",
+            "default": "not_imported"
+          },
+          "count": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Count"
+          },
+          "evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceTag"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "section"
+        ],
+        "title": "SectionStatus",
+        "description": "Presence, provenance and evidence strength of one gene-detail section."
+      },
+      "AnnotationSection": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/SectionStatus"
+          },
+          "terms": {
+            "items": {
+              "$ref": "#/components/schemas/AnnotationTerm"
+            },
+            "type": "array",
+            "title": "Terms"
+          },
+          "source_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Name"
+          },
+          "source_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
+          },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "AnnotationSection",
+        "description": "The gene's GO/KEGG section, or the reason it is absent."
+      },
+      "ExpressionRecord": {
+        "properties": {
+          "library_id": {
+            "type": "string",
+            "title": "Library Id"
+          },
+          "library_name": {
+            "type": "string",
+            "title": "Library Name"
+          },
+          "tissue": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tissue"
+          },
+          "treatment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Treatment"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "tpm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tpm"
+          },
+          "fpkm": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fpkm"
+          },
+          "raw_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "library_id",
+          "library_name"
+        ],
+        "title": "ExpressionRecord",
+        "description": "One expression measurement. Absent values stay absent, never 0."
+      },
+      "HomologSection": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/SectionStatus"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/HomologRecord"
+            },
+            "type": "array",
+            "title": "Records"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "HomologSection"
+      },
+      "LiteratureSection": {
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/SectionStatus"
+          },
+          "records": {
+            "items": {
+              "$ref": "#/components/schemas/LiteratureRecord"
+            },
+            "type": "array",
+            "title": "Records"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "LiteratureSection"
       }
     },
     "securitySchemes": {

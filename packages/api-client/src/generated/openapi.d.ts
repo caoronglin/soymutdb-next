@@ -6814,6 +6814,12 @@ export interface components {
             /** Sequences */
             sequences?: components["schemas"]["SequenceAvailability"][];
             model_evidence?: components["schemas"]["EvidenceTag"] | null;
+            annotation_section?: components["schemas"]["AnnotationSection"] | null;
+            homolog_section?: components["schemas"]["HomologSection"] | null;
+            expression_section?: components["schemas"]["ExpressionSection"] | null;
+            variants_section?: components["schemas"]["VariantSection"] | null;
+            phenotype_section?: components["schemas"]["PhenotypeSection"] | null;
+            literature_section?: components["schemas"]["LiteratureSection"] | null;
         };
         /** GeneListResponse */
         GeneListResponse: {
@@ -11119,6 +11125,194 @@ export interface components {
          */
         app__schemas__seed_request__SeedRequestUpdate: {
             status: components["schemas"]["app__models__seed_request__SeedRequestStatus"];
+        };
+        /**
+         * PhenotypeRecord
+         * @description One phenotype observation linked to the gene through a mutant line.
+         */
+        PhenotypeRecord: {
+            /** Mutant Public Id */
+            mutant_public_id: string;
+            /** Mutant Name */
+            mutant_name: string;
+            /** Trait Category */
+            trait_category: string;
+            /** Trait Name */
+            trait_name: string;
+            /** Trait Value */
+            trait_value?: string | null;
+            /** Unit */
+            unit?: string | null;
+            /** Measurement Method */
+            measurement_method?: string | null;
+        };
+        /**
+         * HomologRecord
+         * @description One ortholog/paralog assertion, with cross-assembly context.
+         */
+        HomologRecord: {
+            /** Homolog Species */
+            homolog_species: string;
+            /** Homolog Gene Id */
+            homolog_gene_id: string;
+            /**
+             * Homolog Type
+             * @enum {string}
+             */
+            homolog_type: "ortholog" | "paralog";
+            /** Method */
+            method?: string | null;
+            /** Source */
+            source?: string | null;
+            /**
+             * Kind
+             * @default transferred
+             * @enum {string}
+             */
+            kind: "experimental" | "curated" | "predicted" | "transferred" | "imported" | "unknown";
+            /** Confidence */
+            confidence?: number | null;
+        };
+        /** ExpressionSection */
+        ExpressionSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Records */
+            records?: components["schemas"]["ExpressionRecord"][];
+        };
+        /** PhenotypeSection */
+        PhenotypeSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Records */
+            records?: components["schemas"]["PhenotypeRecord"][];
+        };
+        /**
+         * VariantSection
+         * @description Release- and assembly-scoped variant totals for the gene.
+         */
+        VariantSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Total */
+            total?: number | null;
+            /** By Impact */
+            by_impact?: {
+                [key: string]: number;
+            };
+        };
+        /**
+         * LiteratureRecord
+         * @description One publication, identified by DOI/PMID rather than its row key.
+         */
+        LiteratureRecord: {
+            /** Title */
+            title: string;
+            /** Authors */
+            authors?: string | null;
+            /** Journal */
+            journal?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Doi */
+            doi?: string | null;
+            /** Pmid */
+            pmid?: string | null;
+        };
+        /**
+         * AnnotationTerm
+         * @description One GO/KEGG assertion with the evidence code its source carried.
+         */
+        AnnotationTerm: {
+            /**
+             * Ontology
+             * @enum {string}
+             */
+            ontology: "go" | "kegg";
+            /** Term Id */
+            term_id: string;
+            /** Term Name */
+            term_name: string;
+            /** Evidence Code */
+            evidence_code?: string | null;
+            /**
+             * Kind
+             * @default unknown
+             * @enum {string}
+             */
+            kind: "experimental" | "curated" | "predicted" | "transferred" | "imported" | "unknown";
+            /** Reference */
+            reference?: string | null;
+            /** Qualifier */
+            qualifier?: string | null;
+        };
+        /**
+         * SectionStatus
+         * @description Presence, provenance and evidence strength of one gene-detail section.
+         */
+        SectionStatus: {
+            /**
+             * Section
+             * @enum {string}
+             */
+            section: "annotation" | "homolog" | "expression" | "variants" | "phenotype" | "literature";
+            /**
+             * State
+             * @default not_imported
+             * @enum {string}
+             */
+            state: "available" | "empty" | "not_imported";
+            /** Count */
+            count?: number | null;
+            evidence?: components["schemas"]["EvidenceTag"] | null;
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
+         * AnnotationSection
+         * @description The gene's GO/KEGG section, or the reason it is absent.
+         */
+        AnnotationSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Terms */
+            terms?: components["schemas"]["AnnotationTerm"][];
+            /** Source Name */
+            source_name?: string | null;
+            /** Source Version */
+            source_version?: string | null;
+            /** Source Url */
+            source_url?: string | null;
+        };
+        /**
+         * ExpressionRecord
+         * @description One expression measurement. Absent values stay absent, never 0.
+         */
+        ExpressionRecord: {
+            /** Library Id */
+            library_id: string;
+            /** Library Name */
+            library_name: string;
+            /** Tissue */
+            tissue?: string | null;
+            /** Treatment */
+            treatment?: string | null;
+            /** Stage */
+            stage?: string | null;
+            /** Tpm */
+            tpm?: number | null;
+            /** Fpkm */
+            fpkm?: number | null;
+            /** Raw Count */
+            raw_count?: number | null;
+        };
+        /** HomologSection */
+        HomologSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Records */
+            records?: components["schemas"]["HomologRecord"][];
+        };
+        /** LiteratureSection */
+        LiteratureSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Records */
+            records?: components["schemas"]["LiteratureRecord"][];
         };
     };
     responses: never;

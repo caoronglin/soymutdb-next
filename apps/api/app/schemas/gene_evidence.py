@@ -18,6 +18,11 @@ The vocabulary is deliberately small:
 
 Anything not known is ``unknown``, and the accompanying ``source`` says which
 resource it came from.
+
+The same rule applies to whole sections. Every optional block of the gene
+detail response carries a :class:`SectionStatus`, so "this gene has no GO
+terms" and "this release has no GO snapshot" are different answers and the
+portal never prints a zero where it should print "not imported".
 """
 
 from __future__ import annotations
@@ -114,11 +119,188 @@ class SequenceAvailability(BaseModel):
     sequence: str | None = None
 
 
+#: The optional blocks of a gene detail response. One name per block, used as
+#: the ``section`` value clients switch on -- never localised, never reordered.
+GENE_SECTIONS = (
+    "annotation",
+    "homolog",
+    "expression",
+    "variants",
+    "phenotype",
+    "literature",
+)
+
+
+class _SectionState(StrEnum):
+    """Why a gene-detail section has nothing to show.
+
+    ``available`` — the section carries rows.
+    ``empty`` — the data source is present and this gene legitimately has none.
+    ``not_imported`` — the source snapshot is absent for this release. This is
+    *not* an empty result: "we never imported the GO snapshot for v4" and "this
+    gene has no GO terms" are different statements.
+    """
+
+    AVAILABLE = "available"
+    EMPTY = "empty"
+    NOT_IMPORTED = "not_imported"
+
+
+SECTION_STATE_LITERALS = tuple(state.value for state in _SectionState)
+
+
+class SectionStatus(BaseModel):
+    """Presence, provenance and evidence strength of one gene-detail section."""
+
+    section: Literal[GENE_SECTIONS]  # type: ignore[valid-type]
+    state: Literal[SECTION_STATE_LITERALS] = (  # type: ignore[valid-type]
+        _SectionState.NOT_IMPORTED
+    )
+    #: How many rows the section carries. ``None`` when the section could not
+    #: be counted because its source is absent. Never 0 as a stand-in for
+    #: "unknown" -- that is what ``state`` says.
+    count: int | None = Field(default=None, ge=0)
+    #: Provenance of the rows, when the source states it.
+    evidence: EvidenceTag | None = None
+    #: Machine-readable reason the section has no rows, e.g.
+    #: ``annotation_set_missing:go``. Stable across releases so clients can
+    #: key on it instead of matching prose.
+    reason: str | None = None
+
+
+class AnnotationTerm(BaseModel):
+    """One GO/KEGG assertion with the evidence code its source carried."""
+
+    ontology: Literal["go", "kegg"]
+    term_id: str
+    term_name: str
+    #: The source's evidence code verbatim (``IDA``, ``IEA``, ``ISS``...).
+    #: ``None`` -- not ``""`` -- when the snapshot carried no code.
+    evidence_code: str | None = None
+    #: The evidence *class* derived from that code, kept separate so a client
+    #: never has to reimplement the mapping.
+    kind: Literal[EVIDENCE_KINDS] = "unknown"  # type: ignore[valid-type]
+    reference: str | None = None
+    qualifier: str | None = None
+
+
+class AnnotationSection(BaseModel):
+    """The gene's GO/KEGG section, or the reason it is absent."""
+
+    status: SectionStatus
+    terms: list[AnnotationTerm] = Field(default_factory=list)
+    #: The snapshot these terms came from. ``None`` when nothing was imported.
+    source_name: str | None = None
+    source_version: str | None = None
+    source_url: str | None = None
+
+
+class HomologRecord(BaseModel):
+    """One ortholog/paralog assertion, with cross-assembly context."""
+
+    homolog_species: str
+    homolog_gene_id: str
+    homolog_type: Literal["ortholog", "paralog"]
+    #: How the relationship was established. ``None`` when the import source
+    #: did not say -- never filled with "computed".
+    method: str | None = None
+    #: Origin of the row (``soybase``, ``inparanoid``...). ``None`` if silent.
+    source: str | None = None
+    #: ``transferred``: the row is about another locus, not this one. Always
+    #: set for this section by :func:`homolog_evidence_kind`.
+    kind: Literal[EVIDENCE_KINDS] = "transferred"  # type: ignore[valid-type]
+    #: Confidence as the source recorded it. ``None`` when unstated.
+    confidence: float | None = Field(default=None, ge=0, le=1)
+
+
+class HomologSection(BaseModel):
+    status: SectionStatus
+    records: list[HomologRecord] = Field(default_factory=list)
+
+
+class ExpressionRecord(BaseModel):
+    """One expression measurement. Absent values stay absent, never 0."""
+
+    library_id: str
+    library_name: str
+    tissue: str | None = None
+    treatment: str | None = None
+    stage: str | None = None
+    #: All three units are optional: a snapshot may carry TPM only.
+    tpm: float | None = None
+    fpkm: float | None = None
+    raw_count: int | None = None
+
+
+class ExpressionSection(BaseModel):
+    status: SectionStatus
+    records: list[ExpressionRecord] = Field(default_factory=list)
+
+
+class VariantSection(BaseModel):
+    """Release- and assembly-scoped variant totals for the gene."""
+
+    status: SectionStatus
+    total: int | None = Field(default=None, ge=0)
+    #: Counts by consequence class, only for classes that were counted from
+    #: rows. A class absent from the map was not measured, which is different
+    #: from a class measured as 0 and therefore always present.
+    by_impact: dict[str, int] = Field(default_factory=dict)
+
+
+class PhenotypeRecord(BaseModel):
+    """One phenotype observation linked to the gene through a mutant line."""
+
+    mutant_public_id: str
+    mutant_name: str
+    trait_category: str
+    trait_name: str
+    #: ``None`` when the source recorded the trait without a value or unit.
+    trait_value: str | None = None
+    unit: str | None = None
+    measurement_method: str | None = None
+
+
+class PhenotypeSection(BaseModel):
+    status: SectionStatus
+    records: list[PhenotypeRecord] = Field(default_factory=list)
+
+
+class LiteratureRecord(BaseModel):
+    """One publication, identified by DOI/PMID rather than its row key."""
+
+    title: str
+    authors: str | None = None
+    journal: str | None = None
+    year: int | None = None
+    doi: str | None = None
+    pmid: str | None = None
+
+
+class LiteratureSection(BaseModel):
+    status: SectionStatus
+    records: list[LiteratureRecord] = Field(default_factory=list)
+
+
 __all__ = [
     "AVAILABILITY_LITERALS",
     "AVAILABILITY_STATES",
     "EVIDENCE_KINDS",
     "EVIDENCE_STRENGTH",
+    "GENE_SECTIONS",
+    "SECTION_STATE_LITERALS",
+    "AnnotationSection",
+    "AnnotationTerm",
     "EvidenceTag",
+    "ExpressionRecord",
+    "ExpressionSection",
+    "HomologRecord",
+    "HomologSection",
+    "LiteratureRecord",
+    "LiteratureSection",
+    "PhenotypeRecord",
+    "PhenotypeSection",
+    "SectionStatus",
     "SequenceAvailability",
+    "VariantSection",
 ]
