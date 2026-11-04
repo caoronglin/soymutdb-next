@@ -600,9 +600,20 @@ def test_every_schema_object_carries_the_snapshot_key_order() -> None:
         The normalizer runs over the whole document, so a reordering that
         silently discarded ``required`` or an unknown keyword would edit the
         contract on the way to making it print nicely.
+
+        Compares the key *set* and the values, never the order: order is
+        ``_wrong_order``'s question. Comparing key sequences here would flag
+        every lossless reordering -- 320 of the snapshot's schemas -- and, since
+        the check below is an ``or``, that false positive would mask whatever
+        the order half found. Comparing with ``!=`` alone is the opposite
+        mistake: ``dict`` equality ignores order, so a reordering can never
+        make it true and this half stops meaning anything.
         """
 
-        return module._object_last(dict(node)) != node
+        reordered = module._object_last(dict(node))
+        return sorted(reordered) != sorted(node) or any(
+            reordered[key] != node[key] for key in reordered
+        )
 
     misplaced = [
         name
