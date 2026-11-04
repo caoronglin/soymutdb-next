@@ -14,6 +14,15 @@ from .auth import (
 )
 from .base import AuditMixin, Base, SoftDeleteMixin, TimestampMixin
 from .blast import BlastDatabase, BlastHit, BlastIndexBuild, BlastJob
+from .comparative import (
+    ArtifactType,
+    ComparativeArtifact,
+    ComparativeArtifactState,
+    FamilyLevel,
+    GeneFamily,
+    GeneFamilyMember,
+    RelationshipType,
+)
 from .content import (
     DownloadFile,
     NewsArticle,
@@ -75,6 +84,13 @@ from .variant_export import VariantExport, VariantExportStatus
 from .variant_facts import analytics_events, variant_facts, variant_facts_staging, web_vitals
 
 __all__ = [
+    "ArtifactType",
+    "ComparativeArtifact",
+    "ComparativeArtifactState",
+    "FamilyLevel",
+    "GeneFamily",
+    "GeneFamilyMember",
+    "RelationshipType",
     "analytics_events",
     "variant_facts",
     "variant_facts_staging",

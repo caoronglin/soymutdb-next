@@ -43,6 +43,7 @@ export {
 
 export { attachCsrf } from "./csrf";
 
+export * from "./comparative";
 export * from "./genes";
 export * from "./variants";
 export * from "./blast";

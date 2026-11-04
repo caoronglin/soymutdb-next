@@ -29,6 +29,7 @@ from . import (
     auth,
     blast,
     capabilities,
+    comparative,
     content,
     expression,
     genes,
@@ -111,6 +112,7 @@ api_router.include_router(admin_table_views.species_router)
 api_router.include_router(admin_uploads.router)
 api_router.include_router(expression.router)
 api_router.include_router(homolog.router)
+api_router.include_router(comparative.router)
 api_router.include_router(analytics.router)
 api_router.include_router(site.router)
 api_router.include_router(capabilities.router)
