@@ -22287,6 +22287,35 @@
         "title": "ErrorResponse",
         "type": "object"
       },
+      "EvidenceTag": {
+        "description": "Provenance of one displayed assertion.",
+        "properties": {
+          "kind": {
+            "enum": [
+              "experimental",
+              "curated",
+              "predicted",
+              "transferred",
+              "imported",
+              "unknown"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "source": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "source"
+        ],
+        "title": "EvidenceTag",
+        "type": "object"
+      },
       "ExonResponse": {
         "properties": {
           "id": {
@@ -23182,6 +23211,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Id"
           },
           "gene_id": {
@@ -23193,6 +23223,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Gene Id"
           },
           "assembly_id": {
@@ -23204,6 +23235,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Assembly Id"
           },
           "assembly_name": {
@@ -23215,11 +23247,12 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Assembly Name"
           },
           "chromosome": {
-            "type": "string",
-            "title": "Chromosome"
+            "title": "Chromosome",
+            "type": "string"
           },
           "name": {
             "anyOf": [
@@ -23230,6 +23263,7 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Name"
           },
           "symbol": {
@@ -23241,32 +23275,33 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Symbol"
           },
           "biotype": {
-            "type": "string",
+            "default": "protein_coding",
             "title": "Biotype",
-            "default": "protein_coding"
+            "type": "string"
           },
           "start": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Start"
+            "minimum": 0,
+            "title": "Start",
+            "type": "integer"
           },
           "end": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "End"
+            "minimum": 0,
+            "title": "End",
+            "type": "integer"
           },
           "start_pos": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "Start Pos"
+            "minimum": 0,
+            "title": "Start Pos",
+            "type": "integer"
           },
           "end_pos": {
-            "type": "integer",
-            "minimum": 0.0,
-            "title": "End Pos"
+            "minimum": 0,
+            "title": "End Pos",
+            "type": "integer"
           },
           "strand": {
             "$ref": "#/components/schemas/Strand"
@@ -23280,54 +23315,74 @@
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Description"
           },
           "variant_count": {
-            "type": "integer",
-            "minimum": 0.0,
+            "default": 0,
+            "minimum": 0,
             "title": "Variant Count",
-            "default": 0
+            "type": "integer"
           },
           "transcripts": {
             "items": {
               "$ref": "#/components/schemas/TranscriptResponse"
             },
-            "type": "array",
-            "title": "Transcripts"
+            "title": "Transcripts",
+            "type": "array"
           },
           "aliases": {
             "items": {
               "type": "string"
             },
-            "type": "array",
-            "title": "Aliases"
+            "title": "Aliases",
+            "type": "array"
           },
           "created_at": {
             "anyOf": [
               {
-                "type": "string",
-                "format": "date-time"
+                "format": "date-time",
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Created At"
           },
           "updated_at": {
             "anyOf": [
               {
-                "type": "string",
-                "format": "date-time"
+                "format": "date-time",
+                "type": "string"
               },
               {
                 "type": "null"
               }
             ],
+            "default": null,
             "title": "Updated At"
+          },
+          "sequences": {
+            "items": {
+              "$ref": "#/components/schemas/SequenceAvailability"
+            },
+            "title": "Sequences",
+            "type": "array"
+          },
+          "model_evidence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvidenceTag"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
           }
         },
-        "type": "object",
         "required": [
           "chromosome",
           "start",
@@ -23336,7 +23391,8 @@
           "end_pos",
           "strand"
         ],
-        "title": "GeneDetail"
+        "title": "GeneDetail",
+        "type": "object"
       },
       "GeneListResponse": {
         "properties": {
@@ -30105,6 +30161,84 @@
         "title": "SeqFetchResponse",
         "description": "Extraction result.\n\nSmall results return inline FASTA (``sequence``); results larger than\n10 MiB are stored in S3 and returned as a pre-signed ``download_url``\ninstead (``sequence`` is ``None`` and ``truncated`` is ``False`` \u2013 the\npayload is complete, just delivered out-of-band)."
       },
+      "SequenceAvailability": {
+        "description": "Per-molecule availability for a gene's sequences.\n\nThe platform currently has no FASTA store: ``genes``/``transcripts`` carry\ncoordinates, not residues. Rather than fabricate a ``sequence`` string (a\ngene page that silently shows a made-up nucleotide string is worse than one\nthat says \"not imported\"), the contract reports availability plus the\nreason. When a sequence store is added, only ``availability`` flips and\nthe residue fields populate \u2014 consumers do not change shape.",
+        "properties": {
+          "molecule": {
+            "enum": [
+              "genomic",
+              "cds",
+              "transcript",
+              "protein"
+            ],
+            "title": "Molecule",
+            "type": "string"
+          },
+          "availability": {
+            "default": "unavailable",
+            "enum": [
+              "available",
+              "unavailable"
+            ],
+            "title": "Availability",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          },
+          "length": {
+            "anyOf": [
+              {
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Length"
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Checksum"
+          },
+          "sequence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sequence"
+          }
+        },
+        "required": [
+          "molecule"
+        ],
+        "title": "SequenceAvailability",
+        "type": "object"
+      },
       "SettingFieldSchema": {
         "properties": {
           "kind": {
@@ -30124,12 +30258,19 @@
           "default": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/SettingValue"
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Default"
           },
           "permission": {
             "type": "string",
@@ -30212,19 +30353,6 @@
         ],
         "title": "SettingFieldSchema"
       },
-      "SettingValue": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "integer"
-          },
-          {
-            "type": "boolean"
-          }
-        ]
-      },
       "SettingsDocumentResponse": {
         "properties": {
           "section": {
@@ -30238,7 +30366,17 @@
           },
           "values": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/SettingValue"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
             },
             "type": "object",
             "title": "Values"
@@ -30271,7 +30409,17 @@
           },
           "values": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/SettingValue"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
             },
             "type": "object",
             "title": "Values"
@@ -30280,7 +30428,13 @@
             "additionalProperties": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/SettingValue"
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
                 },
                 {
                   "type": "null"
@@ -30379,7 +30533,17 @@
           },
           "values": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/SettingValue"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
             },
             "type": "object",
             "minProperties": 1,
@@ -30473,7 +30637,17 @@
           },
           "values": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/SettingValue"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
             },
             "type": "object",
             "minProperties": 1,
@@ -30502,7 +30676,17 @@
           },
           "values": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/SettingValue"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
             },
             "type": "object",
             "title": "Values"

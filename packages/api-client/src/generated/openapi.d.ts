@@ -6449,6 +6449,19 @@ export interface components {
                 };
             };
         };
+        /**
+         * EvidenceTag
+         * @description Provenance of one displayed assertion.
+         */
+        EvidenceTag: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "experimental" | "curated" | "predicted" | "transferred" | "imported" | "unknown";
+            /** Source */
+            source: string;
+        };
         /** ExonResponse */
         ExonResponse: {
             /** Id */
@@ -6792,20 +6805,38 @@ export interface components {
         };
         /** GeneDetail */
         GeneDetail: {
-            /** Id */
-            id?: string | null;
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Assembly Id */
-            assembly_id?: string | null;
-            /** Assembly Name */
-            assembly_name?: string | null;
+            /**
+             * Id
+             * @default null
+             */
+            id: string | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: string | null;
+            /**
+             * Assembly Name
+             * @default null
+             */
+            assembly_name: string | null;
             /** Chromosome */
             chromosome: string;
-            /** Name */
-            name?: string | null;
-            /** Symbol */
-            symbol?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * Symbol
+             * @default null
+             */
+            symbol: string | null;
             /**
              * Biotype
              * @default protein_coding
@@ -6820,8 +6851,11 @@ export interface components {
             /** End Pos */
             end_pos: number;
             strand: components["schemas"]["Strand"];
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /**
              * Variant Count
              * @default 0
@@ -6831,10 +6865,20 @@ export interface components {
             transcripts?: components["schemas"]["TranscriptResponse"][];
             /** Aliases */
             aliases?: string[];
-            /** Created At */
-            created_at?: string | null;
-            /** Updated At */
-            updated_at?: string | null;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: string | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: string | null;
+            /** Sequences */
+            sequences?: components["schemas"]["SequenceAvailability"][];
+            /** @default null */
+            model_evidence: components["schemas"]["EvidenceTag"] | null;
         };
         /** GeneListResponse */
         GeneListResponse: {
@@ -9490,6 +9534,50 @@ export interface components {
              */
             expires_in?: number | null;
         };
+        /**
+         * SequenceAvailability
+         * @description Per-molecule availability for a gene's sequences.
+         *
+         *     The platform currently has no FASTA store: ``genes``/``transcripts`` carry
+         *     coordinates, not residues. Rather than fabricate a ``sequence`` string (a
+         *     gene page that silently shows a made-up nucleotide string is worse than one
+         *     that says "not imported"), the contract reports availability plus the
+         *     reason. When a sequence store is added, only ``availability`` flips and
+         *     the residue fields populate — consumers do not change shape.
+         */
+        SequenceAvailability: {
+            /**
+             * Molecule
+             * @enum {string}
+             */
+            molecule: "genomic" | "cds" | "transcript" | "protein";
+            /**
+             * Availability
+             * @default unavailable
+             * @enum {string}
+             */
+            availability: "available" | "unavailable";
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
+            /**
+             * Length
+             * @default null
+             */
+            length: number | null;
+            /**
+             * Checksum
+             * @default null
+             */
+            checksum: string | null;
+            /**
+             * Sequence
+             * @default null
+             */
+            sequence: string | null;
+        };
         /** SettingFieldSchema */
         SettingFieldSchema: {
             /**
@@ -9497,7 +9585,8 @@ export interface components {
              * @enum {string}
              */
             kind: "string" | "color" | "integer" | "boolean" | "enum" | "email" | "url" | "uuid";
-            default: components["schemas"]["SettingValue"] | null;
+            /** Default */
+            default: string | number | boolean | null;
             /**
              * Permission
              * @constant
@@ -9528,7 +9617,6 @@ export interface components {
             /** Max Length */
             max_length: number;
         };
-        SettingValue: string | number | boolean;
         /** SettingsDocumentResponse */
         SettingsDocumentResponse: {
             /** Section */
@@ -9537,7 +9625,7 @@ export interface components {
             version: number;
             /** Values */
             values: {
-                [key: string]: components["schemas"]["SettingValue"];
+                [key: string]: string | number | boolean;
             };
         };
         /** SettingsHistoryItem */
@@ -9551,11 +9639,11 @@ export interface components {
             action: "patch" | "put_compat" | "rollback";
             /** Values */
             values: {
-                [key: string]: components["schemas"]["SettingValue"];
+                [key: string]: string | number | boolean;
             };
             /** Changes */
             changes: {
-                [key: string]: components["schemas"]["SettingValue"] | null;
+                [key: string]: string | number | boolean | null;
             };
             /** Actor Id */
             actor_id?: string | null;
@@ -9584,7 +9672,7 @@ export interface components {
             expected_version: number;
             /** Values */
             values: {
-                [key: string]: components["schemas"]["SettingValue"];
+                [key: string]: string | number | boolean;
             };
         };
         /** SettingsRollbackRequest */
@@ -9622,7 +9710,7 @@ export interface components {
             section: string;
             /** Values */
             values: {
-                [key: string]: components["schemas"]["SettingValue"];
+                [key: string]: string | number | boolean;
             };
         };
         /** SettingsValidateResponse */
@@ -9637,7 +9725,7 @@ export interface components {
             valid: true;
             /** Values */
             values: {
-                [key: string]: components["schemas"]["SettingValue"];
+                [key: string]: string | number | boolean;
             };
         };
         /**

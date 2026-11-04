@@ -10,6 +10,8 @@ import { assembliesQueryOptions } from "../../lib/query-options";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { EvidenceLine } from "@/components/evidence-tag";
+import { GeneSequencePanel } from "@/components/gene-sequence-panel";
 import * as React from "react";
 import {
   AimOutlined as Microscope,
@@ -315,6 +317,11 @@ function GeneDetailComponent() {
                     {gene.description}
                   </p>
                 ) : null}
+                {/* The gene model's provenance, stated once at the top so a
+                    predicted model is never read as a curated one. */}
+                <div className="mt-2" data-testid="gene-model-evidence">
+                  <EvidenceLine evidence={gene.model_evidence ?? null} />
+                </div>
               </div>
               <Button
                 data-testid="gene-jbrowse"
@@ -508,6 +515,15 @@ function GeneDetailComponent() {
                         locale={{ emptyText: t("genes.homologs.no_data") }}
                       />
                     )}
+                  </ScaleIn>
+                ),
+              },
+              {
+                key: "sequences",
+                label: t("genes.sequences.title"),
+                children: (
+                  <ScaleIn>
+                    <GeneSequencePanel sequences={gene.sequences} />
                   </ScaleIn>
                 ),
               },

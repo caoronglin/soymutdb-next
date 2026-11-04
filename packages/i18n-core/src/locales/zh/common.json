@@ -263,7 +263,41 @@
       "siteKey": "突变体系（株系母+位置）"
     },
     "mutationSitesTitle": "突变位点",
-    "unpublishedPreview": "未发布预览"
+    "unpublishedPreview": "未发布预览",
+    "sequences": {
+      "title": "序列",
+      "molecule": {
+        "genomic": "基因组 DNA",
+        "cds": "编码序列 (CDS)",
+        "transcript": "转录本",
+        "protein": "蛋白"
+      },
+      "available": "已收录",
+      "unavailable": "未导入",
+      "unavailableHint": "本发布版本收录了该基因的坐标与注释，不包含残基序列。不显示序列是因为确实没有存储，而不是取值为空。",
+      "length": "长度"
+    },
+    "evidence": {
+      "label": "证据等级",
+      "source": "来源",
+      "kind": {
+        "experimental": "实验验证",
+        "curated": "人工审编",
+        "predicted": "计算预测",
+        "transferred": "同源转移",
+        "imported": "外部导入",
+        "unknown": "未知"
+      },
+      "kindHint": {
+        "experimental": "由来源研究实测或实验验证。",
+        "curated": "来源记录中经人工审阅的注释。",
+        "predicted": "计算预测结果，未经实验确认。",
+        "transferred": "由其他物种或同源基因推断而来。",
+        "imported": "导入来源未说明生成方式。",
+        "unknown": "来源记录未描述其证据来源。"
+      },
+      "unknownSource": "来源记录未说明其证据来源。"
+    }
   },
   "variants": {
     "title": "变异搜索",

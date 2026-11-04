@@ -8,6 +8,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ..core.compat import StrEnum
+from .gene_evidence import EvidenceTag, SequenceAvailability
 
 
 class Strand(StrEnum):
@@ -94,6 +95,13 @@ class GeneDetail(GeneResponse):
     aliases: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    #: Per-molecule availability (genomic/CDS/transcript/protein). Always
+    #: present; a disabled entry carries a machine-readable ``reason`` instead
+    #: of a fabricated sequence.
+    sequences: list[SequenceAvailability] = Field(default_factory=list)
+    #: How the gene model itself came to exist (predicted/curated/imported).
+    #: ``None`` when the source record does not say — never guessed.
+    model_evidence: EvidenceTag | None = None
 
 
 class ExonResponse(BaseModel):
