@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import unicodedata
 import unittest
 from pathlib import Path
 
@@ -404,6 +405,37 @@ def _is_executable(script: str) -> bool:
     return len(fields) >= 2 and fields[0] == "100755"
 
 
+_DOC_SECTION_CITATION = re.compile(r'\((docs/[\w./-]+\.md),\s*"([^"]+)"\)', re.DOTALL)
+_COMMENT_WRAP = re.compile(r"\n[ \t]*#[ \t]*")
+
+
+def _fold_comment_wrap(match: re.Match[str]) -> str:
+    """Replacement for one wrapped comment continuation (``\n# ``).
+
+    ASCII prose needs a space when a line break stands in for one
+    (``"build once,\n# consume"`` -> ``"build once, consume"``). CJK headings
+    carry no inter-word spaces, so a wrap there must vanish instead
+    (``"构建一次，\n# 消费一次"`` -> ``"构建一次，消费一次"``). Wide/fullwidth
+    characters mark the latter case; everything else keeps the space.
+    """
+    prev = match.string[match.start() - 1]
+    return "" if unicodedata.east_asian_width(prev) in ("W", "F") else " "
+
+
+def _doc_section_citations(text: str) -> list[tuple[str, str]]:
+    """Return every ``(docs/*.md, "label")`` citation, wrapped lines included.
+
+    Shared scripts wrap long shell comments mid-citation. Fold the continuation
+    prefixes first, then whitespace-normalize the label. Kept as a helper so
+    the gate and its regression tests exercise the same parsing, not a copy.
+    """
+    folded = _COMMENT_WRAP.sub(_fold_comment_wrap, text)
+    return [
+        (doc, " ".join(label.split()))
+        for doc, label in _DOC_SECTION_CITATION.findall(folded)
+    ]
+
+
 class DeliveryArchitectureTests(unittest.TestCase):
     """The CNB pipeline is authoritative and the GitHub workflows mirror it."""
 
@@ -623,7 +655,6 @@ class DeliveryArchitectureTests(unittest.TestCase):
         for skip in ("pytest.skip", "SKIPPED", "exit 0 #"):
             self.assertNotIn(skip, backend, skip)
 
-
     def test_doc_section_citations_resolve_to_real_headings(self) -> None:
         """A quoted doc section must name a heading that actually exists.
 
@@ -634,16 +665,16 @@ class DeliveryArchitectureTests(unittest.TestCase):
         HTML anchor could resolve. Neither was caught because no gate validates
         prose citations. This guard covers the general form: any (path, "label")
         citation in a shared script must match a real file and a real heading.
-        The regex spans newlines so a citation wrapped across two comment lines
-        still matches; `label` is whitespace-normalized for the same reason.
+        Wrapped comment lines are folded first, so reformatting the citation
+        across lines cannot silently remove it from the checked set.
         """
-        citations = []
-        for script in SHARED_SCRIPTS:
-            text = (ROOT / script).read_text(encoding="utf-8")
-            for path, label in re.findall(
-                r'\((docs/[\w./-]+\.md),\s*"([^"]+)"\)', text, re.DOTALL
-            ):
-                citations.append((script, path, " ".join(label.split())))
+        citations = [
+            (script, doc, label)
+            for script in SHARED_SCRIPTS
+            for doc, label in _doc_section_citations(
+                (ROOT / script).read_text(encoding="utf-8")
+            )
+        ]
 
         self.assertTrue(citations, "no doc-section citations found to validate")
         for script, path, label in citations:
@@ -660,6 +691,37 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 f"{script}: cites {path} section {label!r}, which is not a heading "
                 f"(headings: {headings})",
             )
+
+    def test_doc_section_citation_wrap_tolerance(self) -> None:
+        """Wrapping a real citation across comment lines must not dissolve the gate.
+
+        The heading is Chinese and has now been re-quoted twice; a plain rewrap
+        of that comment line is the most likely next edit. Folding must keep a
+        correct citation green and keep a dangling label red, so the signal
+        never inverts. CJK text has no inter-word spaces, hence the no-space
+        join in _fold_comment_wrap.
+        """
+        script = "scripts/ci-job-steps.sh"
+        original = (ROOT / script).read_text(encoding="utf-8")
+        doc = "docs/ops/bio-core-wheel.md"
+        good = "CI：构建一次，消费一次"
+        headings = [
+            line.lstrip("#").strip()
+            for line in (ROOT / doc).read_text(encoding="utf-8").splitlines()
+            if line.startswith("#")
+        ]
+        self.assertIn(good, headings)
+
+        wrapped = original.replace(f'"{good}"', '"CI：构建一次，\n# 消费一次"')
+        self.assertNotEqual(wrapped, original)
+        self.assertEqual(_doc_section_citations(wrapped), [(doc, good)])
+
+        dangling = original.replace(f'"{good}"', '"CI: build once,\n# consume once"')
+        self.assertEqual(
+            _doc_section_citations(dangling),
+            [(doc, "CI: build once, consume once")],
+        )
+        self.assertNotIn("CI: build once, consume once", headings)
 
     def test_github_mirror_hands_the_wheel_from_bio_core_to_api_tests(self) -> None:
         """GitHub jobs do not share a filesystem: the wheel crosses as an artifact.
