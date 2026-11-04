@@ -623,6 +623,44 @@ class DeliveryArchitectureTests(unittest.TestCase):
         for skip in ("pytest.skip", "SKIPPED", "exit 0 #"):
             self.assertNotIn(skip, backend, skip)
 
+
+    def test_doc_section_citations_resolve_to_real_headings(self) -> None:
+        """A quoted doc section must name a heading that actually exists.
+
+        Regression for two consecutive review findings on PR #116: a comment in
+        scripts/ci-job-steps.sh cited docs/build/script-vs-plugin.md#file-sharing
+        (a file that never existed), then cited an English translation of a
+        Chinese heading ("CI: build once, consume once") that no text search or
+        HTML anchor could resolve. Neither was caught because no gate validates
+        prose citations. This guard covers the general form: any (path, "label")
+        citation in a shared script must match a real file and a real heading.
+        The regex spans newlines so a citation wrapped across two comment lines
+        still matches; `label` is whitespace-normalized for the same reason.
+        """
+        citations = []
+        for script in SHARED_SCRIPTS:
+            text = (ROOT / script).read_text(encoding="utf-8")
+            for path, label in re.findall(
+                r'\((docs/[\w./-]+\.md),\s*"([^"]+)"\)', text, re.DOTALL
+            ):
+                citations.append((script, path, " ".join(label.split())))
+
+        self.assertTrue(citations, "no doc-section citations found to validate")
+        for script, path, label in citations:
+            doc = ROOT / path
+            self.assertTrue(doc.is_file(), f"{script}: cited missing doc {path}")
+            headings = [
+                line.lstrip("#").strip()
+                for line in doc.read_text(encoding="utf-8").splitlines()
+                if line.startswith("#")
+            ]
+            self.assertIn(
+                label,
+                headings,
+                f"{script}: cites {path} section {label!r}, which is not a heading "
+                f"(headings: {headings})",
+            )
+
     def test_github_mirror_hands_the_wheel_from_bio_core_to_api_tests(self) -> None:
         """GitHub jobs do not share a filesystem: the wheel crosses as an artifact.
 

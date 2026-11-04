@@ -457,9 +457,8 @@ dependency_governance_env() {
 # scripts/verify-backend-tests.sh (the api-tests stage, a bare python:3.15 with
 # no Rust toolchain or C linker) only CONSUMES that file. The boundary is closed
 # per provider: on CNB the two stages are in one pipeline, so /workspace carries
-# artifacts/wheels/ across (docs/ops/bio-core-wheel.md, "CI: build once,
-# consume once"); on GitHub the bio-core job uploads an artifact that api-tests
-# downloads.
+# artifacts/wheels/ across (docs/ops/bio-core-wheel.md, "CI：构建一次，消费一次");
+# on GitHub the bio-core job uploads an artifact that api-tests downloads.
 bio_core_run() {
   bash "${REPO_ROOT}/scripts/verify-bio-core.sh"
 }
