@@ -8,7 +8,16 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ..core.compat import StrEnum
-from .gene_evidence import EvidenceTag, SequenceAvailability
+from .gene_evidence import (
+    AnnotationSection,
+    EvidenceTag,
+    ExpressionSection,
+    HomologSection,
+    LiteratureSection,
+    PhenotypeSection,
+    SequenceAvailability,
+    VariantSection,
+)
 
 
 class Strand(StrEnum):
@@ -102,6 +111,15 @@ class GeneDetail(GeneResponse):
     #: How the gene model itself came to exist (predicted/curated/imported).
     #: ``None`` when the source record does not say — never guessed.
     model_evidence: EvidenceTag | None = None
+    #: Optional blocks. Each carries its own status, so "this gene has none"
+    #: and "this release never imported them" stay distinguishable. Optional on
+    #: the wire: an older API build omits them rather than sending empty lists.
+    annotation_section: AnnotationSection | None = None
+    homolog_section: HomologSection | None = None
+    expression_section: ExpressionSection | None = None
+    variants_section: VariantSection | None = None
+    phenotype_section: PhenotypeSection | None = None
+    literature_section: LiteratureSection | None = None
 
 
 class ExonResponse(BaseModel):
