@@ -1362,3 +1362,128 @@ def test_uv_lock_requires_dist_matches_each_pyproject() -> None:
             f"apps/{app}/uv.lock requires-dist is stale; run `uv lock --project apps/{app}`: "
             f"{stale}"
         )
+
+
+def test_hanging_analyzer_is_named_instead_of_killing_the_stage(
+    tmp_path: Path,
+) -> None:
+    """A stuck analyzer must fail by name, not take the stage down silently.
+
+    CNB kills a stage that prints nothing for ten minutes. Before the ceiling
+    existed, `subprocess.run` waited forever, so a hung `uv run` compiling the
+    worker's science stack produced
+
+        error: task exceeded 10m with no output and was forcibly closed
+
+    with no record of *which* analyzer was running -- and the checks after it
+    never produced their evidence either. This pins both halves: the slow check
+    is reported as `analyzer_timeout`, and the healthy check behind it still
+    passes.
+    """
+    config = tmp_path / "hangs.json"
+    config.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "checks": [
+                    {
+                        "name": "slow-tool",
+                        "category": "knip",
+                        "command": [sys.executable, "-c", "import time; time.sleep(60)"],
+                        "timeout_seconds": 1,
+                        "report": {
+                            "mode": "stdout",
+                            "path": "slow-tool.json",
+                            "format": "json",
+                        },
+                    },
+                    {
+                        "name": "healthy-tool",
+                        "category": "knip",
+                        "command": [sys.executable, "-c", "print('{}')"],
+                        "report": {
+                            "mode": "stdout",
+                            "path": "healthy-tool.json",
+                            "format": "json",
+                        },
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "audit",
+            "--config",
+            str(config),
+            "--output",
+            str(reports),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    summary = json.loads((reports / "summary.json").read_text(encoding="utf-8"))
+    by_name = {check["name"]: check for check in summary["checks"]}
+
+    assert by_name["slow-tool"]["status"] == "failed"
+    assert by_name["slow-tool"]["reason"] == "analyzer_timeout:1s"
+    assert by_name["healthy-tool"]["status"] == "passed"
+
+    stderr = (reports / "slow-tool.stderr.log").read_text(encoding="utf-8")
+    assert "exceeded its 1s ceiling" in stderr
+    assert "python" in stderr
+
+
+def test_malformed_analyzer_timeout_is_a_policy_error(tmp_path: Path) -> None:
+    """A bad ceiling must fail before any analyzer starts, not mid-build."""
+    config = tmp_path / "bad-timeout.json"
+    config.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "checks": [
+                    {
+                        "name": "odd-tool",
+                        "category": "knip",
+                        "command": [sys.executable, "-c", "print('{}')"],
+                        "timeout_seconds": 0,
+                        "report": {
+                            "mode": "stdout",
+                            "path": "odd-tool.json",
+                            "format": "json",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "audit",
+            "--config",
+            str(config),
+            "--output",
+            str(tmp_path / "reports"),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "timeout_seconds must be a positive integer" in result.stderr

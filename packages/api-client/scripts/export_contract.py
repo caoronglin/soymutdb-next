@@ -1,31 +1,30 @@
 #!/usr/bin/env python3
 """Regenerate the committed API contract snapshot without environment noise.
 
-``openapi-typescript`` renders one pydantic serialization choice that is not a
-contract change, so diffing a fresh export against the committed
-``src/generated/openapi.d.ts`` would report debt on every run:
+Two kinds of difference between a fresh export and the committed
+``src/generated/openapi.d.ts`` are not contract changes, so they are restated
+here instead of being reported as debt:
 
-* An optional field with a ``None`` default (``x: str | None = None``) gains a
-  ``default: null`` in the JSON Schema, which pydantic version and model
-  configuration decide — not the API. The generated client flips
-  ``string | null`` into an optional ``string | null``, and the diff is a
-  *client* regression even though the API response is unchanged.
+* A PEP 695 union alias (``type SettingValue = str | int | bool``) used as an
+  annotated ``dict`` value is hoisted into ``$defs`` and referenced by ``$ref``,
+  one level deeper than the inline union the committed snapshot carries — and
+  ``$defs`` entries are not part of ``components.schemas``, so a client reading
+  the components table cannot resolve them.
+* pydantic decides where in a property's JSON object ``title`` goes, and the
+  committed snapshot was printed by one pydantic version. Mixing dialects
+  inside one schema is not a contract change either, but it *is* the reason the
+  snapshot's spelling has to be restated rather than inherited — see
+  ``_title_last``.
 
-The committed snapshot chose one spelling — *no* ``default: null`` — so the
-export moves every optional nullable field to that spelling. The rule is read
-off the document (``anyOf`` with a ``null`` branch, not in ``required``), never
-off a list of field names: the list version is what broke the frontend gate.
-It named the ten ``GeneDetail`` and four ``SequenceAvailability`` fields, so a
-snapshot generated while the list covered five of them carried
-``default: null`` for those five and omitted it for the other five, and every
-later export disagreed no matter what pydantic did.
+Restating ``default: null`` is deliberately *not* on that list. Its absence is
+a client-visible change: ``openapi-typescript`` renders an optional field as
+``field?: string | null``, so a consumer that read it without a guard starts
+reading ``undefined``. The normalizer restores it for every optional nullable
+field, derived from the document (``anyOf`` with a ``null`` branch, not in
+``required``) rather than from a list of names — the hand-kept list drifted
+once already and left one schema with both spellings.
 
-A second, historical normalization — inlining the hoisted PEP 695 alias
-``type SettingValue = str | int | bool`` — is kept because the committed
-snapshot carries the inline shape. The current pydantic emits the union inline
-already, so it only keeps older outputs reproducible.
-
-``normalize`` deliberately leaves key order alone. ``openapi-typescript``
+``normalize`` deliberately leaves ``path`` order alone. ``openapi-typescript``
 prints ``paths`` in document order unless ``--alphabetize`` is passed, and the
 committed ``openapi.d.ts`` was always generated without it, so the snapshot
 has to keep FastAPI's router-registration order. Inserting a route by hand in
@@ -51,9 +50,7 @@ for path in (str(API_DIR), str(REPO_ROOT)):
 
 #: Inline union of the setting-value scalar kinds, as the committed snapshot
 #: spells it (``additionalProperties`` of every settings document).
-SETTING_VALUE = {
-    "anyOf": [{"type": "string"}, {"type": "integer"}, {"type": "boolean"}]
-}
+SETTING_VALUE = {"anyOf": [{"type": "string"}, {"type": "integer"}, {"type": "boolean"}]}
 SETTING_VALUE_OR_NULL = {
     "anyOf": [
         {"type": "string"},
@@ -72,67 +69,71 @@ SETTINGS_DOCUMENTS = (
     "SettingsValidateResponse",
 )
 
-#: Distinguishes "no ``default`` key" from "``default`` is ``null``".
-_MISSING = object()
-
 
 def _clone(value: dict[str, Any]) -> dict[str, Any]:
     return json.loads(json.dumps(value))
 
 
-def _drop_null_default(prop: dict[str, Any]) -> dict[str, Any]:
-    """Strip ``default: null`` from an optional nullable property.
+#: Property keys that keep their printed order. Everything else -- ``title``
+#: above all -- is re-emitted in the snapshot's spelling by ``_title_last``.
+_ORDERED_KEYS = ("anyOf", "oneOf", "allOf", "$ref", "type", "items", "enum")
 
-    Only the default goes: ``anyOf`` keeps its ``null`` branch, because that
-    is the field's *type*. Key order follows the committed shape (``title``,
-    ``anyOf``, then the extras) so a regenerated document stays byte-stable.
+
+def _title_last(prop: dict[str, Any]) -> dict[str, Any]:
+    """Re-emit one property in the committed snapshot's key order.
+
+    The snapshot was printed by a pydantic that writes the value keywords
+    first and ``title`` last, and that omits ``title`` beside a lone ``$ref``.
+    ``openapi-typescript`` only reads the keywords, so this is a re-ordering,
+    not a contract change -- but a *different* pydantic prints ``title`` first,
+    and a document holding both spellings inside one schema can never match a
+    fresh export again. That is what kept the frontend contract gate red with
+    "CONTRACT DEBT" for a schema nobody edited.
     """
 
-    restored: dict[str, Any] = {}
-    if "title" in prop:
-        restored["title"] = prop["title"]
-    restored["anyOf"] = _clone(prop["anyOf"])
-    for extra in ("description", "examples"):
-        if extra in prop:
-            restored[extra] = _clone(prop[extra])
-    return restored
+    ordered: dict[str, Any] = {key: prop[key] for key in _ORDERED_KEYS if key in prop}
+    for key, value in prop.items():
+        if key not in ordered and key != "title":
+            ordered[key] = value
+    # A ``$ref`` already names the definition; a sibling ``title`` is what
+    # pydantic prints for an inline value, not for a reference.
+    if "title" in prop and "$ref" not in prop:
+        ordered["title"] = prop["title"]
+    return ordered
 
 
-def _optional_nullable(prop: dict[str, Any]) -> bool:
-    """Does this property describe ``X | None`` while not being required?
+def _is_nullable(prop: dict[str, Any]) -> bool:
+    return any(branch.get("type") == "null" for branch in prop.get("anyOf", ()))
 
-    A required nullable field is not this case: it has to stay a plain
-    ``anyOf: [X, null]``. Neither is a field carrying a non-null default,
-    which is a real contract statement about the value the server sends.
+
+def _normalize_properties(document: dict[str, Any]) -> None:
+    """One spelling for every property in the document.
+
+    Two rules, both derived from the document itself so a new schema needs no
+    edit here:
+
+    * an optional nullable field keeps ``default: null``; and
+    * key order matches the snapshot (see ``_title_last``).
     """
 
-    if "anyOf" not in prop:
-        return False
-    default = prop.get("default", _MISSING)
-    if default is not _MISSING and default is not None:
-        return False
-    return any(branch.get("type") == "null" for branch in prop["anyOf"])
+    def visit(node: Any) -> None:
+        if isinstance(node, dict):
+            properties = node.get("properties")
+            if isinstance(properties, dict):
+                required = set(node.get("required", ()))
+                for name, prop in properties.items():
+                    if not isinstance(prop, dict):
+                        continue
+                    if name not in required and _is_nullable(prop):
+                        prop.setdefault("default", None)
+                    properties[name] = _title_last(prop)
+            for value in node.values():
+                visit(value)
+        elif isinstance(node, list):
+            for value in node:
+                visit(value)
 
-
-def _strip_null_defaults(schemas: dict[str, Any]) -> None:
-    """Restate every optional nullable field in the committed spelling.
-
-    Derived from the document rather than from a list of names: a hand-kept
-    list goes stale the moment a schema gains an optional field, and the only
-    symptom is the frontend contract gate failing with "CONTRACT DEBT" on a
-    document nobody touched.
-    """
-
-    for schema in schemas.values():
-        properties = schema.get("properties")
-        if not isinstance(properties, dict):
-            continue
-        required = set(schema.get("required", ()))
-        for name, prop in properties.items():
-            if name in required or not isinstance(prop, dict):
-                continue
-            if _optional_nullable(prop):
-                properties[name] = _drop_null_default(prop)
+    visit(document)
 
 
 def normalize(document: dict[str, Any]) -> dict[str, Any]:
@@ -142,18 +143,14 @@ def normalize(document: dict[str, Any]) -> dict[str, Any]:
         properties = schemas[name]["properties"]
         properties["values"]["additionalProperties"] = _clone(SETTING_VALUE)
         if "changes" in properties:
-            properties["changes"]["additionalProperties"] = _clone(
-                SETTING_VALUE_OR_NULL
-            )
-    # Keyed by name, not by the "default" *property*: a schema that happens to
-    # describe a field called ``default`` must not shadow the normalizer.
+            properties["changes"]["additionalProperties"] = _clone(SETTING_VALUE_OR_NULL)
     setting_default = schemas["SettingFieldSchema"]["properties"]["default"]
     setting_default.clear()
     setting_default.update(title="Default", **_clone(SETTING_VALUE_OR_NULL))
     # The union is inline now; the hoisted definition has no consumer.
     schemas.pop("SettingValue", None)
 
-    _strip_null_defaults(schemas)
+    _normalize_properties(document)
 
     return document
 

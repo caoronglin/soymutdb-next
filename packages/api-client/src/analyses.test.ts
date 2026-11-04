@@ -64,6 +64,7 @@ describe("analyses (auth)", () => {
         filename: "s.fastq",
         size: 1024,
         checksum_sha256: checksum,
+        content_type: null,
       });
       expect(new Headers(init.headers).get("Authorization")).toBe(
         "Bearer test-token",

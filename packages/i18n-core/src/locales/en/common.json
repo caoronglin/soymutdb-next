@@ -179,7 +179,11 @@
     "tabs": {
       "overview": "Overview",
       "expression": "Expression",
-      "homologs": "Homologs"
+      "homologs": "Homologs",
+      "annotation": "GO / KEGG",
+      "variants": "Variants",
+      "phenotype": "Phenotypes",
+      "literature": "Literature"
     },
     "expression": {
       "no_data": "No expression data available for this gene",
@@ -298,6 +302,54 @@
         "unknown": "The source record does not describe its provenance."
       },
       "unknownSource": "The source record does not state its provenance."
+    },
+    "sections": {
+      "state": {
+        "empty": "This gene has no {{section}}.",
+        "emptyHint": "The source snapshot is loaded for this release; this gene simply carries no records in it.",
+        "notImported": "{{section}} was not imported for this release.",
+        "notImportedHint": "The release holds no snapshot for this data at all. That is not the same as this gene having none.",
+        "unreported": "{{section}}: nothing reported by this API build.",
+        "reason": "Reason: {{reason}}"
+      },
+      "annotation": {
+        "title": "GO / KEGG annotation",
+        "empty": "This gene has no GO or KEGG terms in this release.",
+        "ontology": "Ontology",
+        "term": "Term",
+        "termName": "Name",
+        "evidenceCode": "Evidence code",
+        "qualifier": "Qualifier",
+        "reference": "Reference",
+        "snapshot": "Snapshot",
+        "snapshotVersion": "Snapshot version"
+      },
+      "variants": {
+        "title": "Variants",
+        "empty": "This gene has no variants in this release.",
+        "total": "Total",
+        "impact": "Consequence",
+        "count": "Count",
+        "unannotated": "No consequence predicted"
+      },
+      "phenotype": {
+        "title": "Phenotypes",
+        "empty": "No phenotype has been recorded for mutants of this gene.",
+        "mutant": "Mutant line",
+        "category": "Category",
+        "trait": "Trait",
+        "value": "Value",
+        "method": "Method"
+      },
+      "literature": {
+        "title": "Literature",
+        "empty": "No publication is linked to this gene.",
+        "titleColumn": "Title",
+        "authors": "Authors",
+        "journal": "Journal",
+        "year": "Year",
+        "identifier": "Identifier"
+      }
     }
   },
   "variants": {

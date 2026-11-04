@@ -150,6 +150,7 @@ function EnrichmentComponent() {
       return runEnrichment({
         assembly_id: Number(assemblyId),
         genes: parseGenes(genesRaw),
+        values: null,
         mode: "ora",
         ontology,
         p_threshold: p,
