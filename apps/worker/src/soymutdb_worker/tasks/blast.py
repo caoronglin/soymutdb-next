@@ -67,9 +67,11 @@ logger = logging.getLogger(__name__)
 
 BLAST_CACHE_DIR = Path(get_setting("BLAST_CACHE_DIR", "/tmp/blast_cache"))
 
-#: The one aligner this deployment runs. DIAMOND replaces NCBI BLAST entirely:
-#: there is no second engine, no auto-routing and no fallback, so a job cannot
-#: end up parsed by a tool it was not built for.
+#: The DIAMOND executable. DIAMOND is the *selected* backend for ``blastp``
+#: here; it is not the only engine this module serves. ``run_blast`` routes
+#: ``engine == "ncbi_blast"`` to :mod:`soymutdb_worker.ncbi_blast` and keeps
+#: DIAMOND only for an explicitly selected ``blastp`` job, so an NCBI payload is
+#: never parsed by the DIAMOND parser (see ``ENGINE_PROGRAMS`` below).
 DIAMOND_BIN = Path(get_setting("DIAMOND_BIN", shutil.which("diamond") or "/usr/bin/diamond"))
 #: Also the documented default columns; explicit names pin our parser contract.
 DIAMOND_OUTFMT6_COLUMNS = (

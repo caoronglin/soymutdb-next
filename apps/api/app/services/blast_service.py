@@ -6,11 +6,12 @@ Celery broker being reachable.  A background dispatcher forwards the event
 to the worker afterwards.
 
 Results are stored by the worker in two places: the parsed hits land in the
-``blast_hits`` table (via migration 0008) and the raw output file goes to
-MinIO under ``blast-results/{job_id}.json``.  :meth:`get_result` returns a
-status-aware envelope: pending/running/failed jobs carry no hit list (never a
-placeholder), completed jobs carry the real hits plus a pre-signed download
-URL for the raw output.
+``blast_hits`` table (via migration 0008) and the raw aligner output — the
+tabular ``outfmt 6`` text, not JSON — goes to MinIO under
+``blast-results/{job_id}.txt`` (``tasks/blast.py``). :meth:`get_result` returns
+a status-aware envelope: pending/running/failed jobs carry no hit list (never a
+placeholder), completed jobs carry the real hits plus a pre-signed download URL
+for the raw output.
 """
 
 from __future__ import annotations

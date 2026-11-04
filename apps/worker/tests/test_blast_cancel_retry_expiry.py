@@ -131,6 +131,70 @@ def test_a_cancelled_row_is_never_rewritten_as_expired(monkeypatch):
     assert session.updates == [], "a cancelled row must not be UPDATEd"
 
 
+def _ncbi_payload(job_id: str | None = None) -> dict:
+    """A payload for the NCBI engine, with the frozen index identity it needs.
+
+    Cancellation and deadline expiry are decided on the job row, before any
+    engine-specific argument handling, so the same guard has to hold for both
+    backends. This payload is what makes that claim testable on the NCBI side
+    instead of only on DIAMOND.
+    """
+    import uuid as _uuid
+    from datetime import UTC, datetime
+
+    from soymutdb_jobs.schemas import JobPayload
+
+    from soymutdb_worker.tasks.blast import BLAST_RUN_TASK
+
+    job_id = job_id or str(_uuid.uuid4())
+    now = datetime.now(UTC)
+    return JobPayload(
+        job_id=job_id,
+        task_name=BLAST_RUN_TASK,
+        payload={
+            "job_id": job_id,
+            "program": "blastn",
+            "database": "williams82_genome",
+            "sequence": ">q\nACGTACGTACGTACGTACGT",
+            "evalue": 1e-5,
+            "max_target_seqs": 10,
+            "engine": "ncbi_blast",
+            "parameters": {
+                "index_identity": "b" * 64,
+                "fasta_sha256": "a" * 64,
+                "database_type": "nucl",
+                "release_id": 7,
+                "assembly_id": 42,
+            },
+        },
+        idempotency_key=f"blast:{job_id}",
+        created_at=now,
+        updated_at=now,
+    ).model_dump(mode="json")
+
+
+@pytest.mark.parametrize("status,expires_in", [
+    ("cancelled", timedelta(days=1)),
+    ("pending", -timedelta(seconds=1)),
+])
+def test_ncbi_jobs_are_guarded_before_the_engine_runs(monkeypatch, status, expires_in):
+    """A cancelled or past-deadline NCBI job never reaches the aligner."""
+    payload = _ncbi_payload()
+    session = _ExpirySession(status=status, expires_at=datetime.now(UTC) + expires_in)
+    monkeypatch.setattr(blast_module, "get_db", _db(session))
+    monkeypatch.setattr(
+        blast_module, "get_ncbi_db_path",
+        lambda *a, **k: pytest.fail("a cancelled/expired NCBI job resolved an index"),
+    )
+    monkeypatch.setattr(
+        blast_module, "run_blast_command",
+        lambda *a, **k: pytest.fail("a cancelled/expired NCBI job launched a search"),
+    )
+    result = blast_module.run_blast.run.__func__(FakeTask(), payload=payload)
+    assert result["skipped"] is True
+    assert result["reason"] == "cancelled_or_expired"
+
+
 def test_future_expiry_still_runs_and_caps_download_ttl(monkeypatch, tmp_path):
     payload = _payload()
     session = _ExpirySession(expires_at=datetime.now(UTC) + timedelta(seconds=10))

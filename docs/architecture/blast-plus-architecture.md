@@ -14,9 +14,12 @@ sequence type (`genome`, `cds`, `transcript`, `protein`, `repeat_masked`,
 length, checksum, build status, index version (a 64-hex immutable identity),
 active/default state, provenance and license. Indexes are immutable objects
 published atomically after validation by `blastdbcmd`; see
-[`docs/ops/blast-index-builder.md`](../ops/blast-index-builder.md). Raw FASTA
-and indexes remain in configured object storage; clients receive no filesystem
-paths. Migrations `0050` (catalog) and `0051` (per-query HSP ids) are additive.
+[`docs/ops/blast-index-builder.md`](../ops/blast-index-builder.md). The reviewed
+source FASTA is read from object storage (`blast-sources/`); the built index
+itself lives on the worker's local POSIX volume and is **not** round-tripped
+through MinIO — see the storage decision in `blast-index-builder.md`. No
+filesystem path is stored in PostgreSQL for a published NCBI row or sent to any
+client. Migrations `0050` (catalog) and `0051` (per-query HSP ids) are additive.
 
 ## Programs and engines
 
@@ -59,7 +62,10 @@ Resource caps cover CPU, memory, wall time, output size and per-user
 concurrency. Database construction uses `makeblastdb`, validation uses
 `blastdbcmd`, and publication is atomic with failed-build cleanup, driven by a
 persisted catalog state machine (`pending → building → validating → publishing →
-ready / failed`). Only `ready` indexes are searchable.
+published / failed`). Only `published` indexes are searchable; `ready` is the
+legacy terminal spelling carried by catalogs built before asynchronous indexing
+and is readable as `published`, but the state machine never writes it back
+(`packages/jobs-py/src/soymutdb_jobs/blast_catalog_state.py`).
 
 The outbox payload freezes `engine`, `database_type`, `index_identity`,
 `fasta_sha256`, `release_key`, `assembly` and `assembly_id` at submission. The
@@ -96,14 +102,25 @@ source FASTA. See [index operations](../ops/blast-index-builder.md).
 Protein/translated hits never expose amino-acid coordinates as genomic
 coordinates: the genome-target endpoint resolves the subject through an
 explicit gene/alias/transcript relation in the job's own assembly and release,
-and reports ``unresolved`` with a reason when no relation exists. Cancellation,
-retry (as a new job) and download expiry are engine-independent and cover both
-NCBI BLAST+ and DIAMOND.
+and reports ``unresolved`` with a reason when no relation exists. That
+resolution is scoped inside each relation query — accession, transcript id and
+sourced alias each join `genes` and filter `genes.assembly_id` — rather than
+resolved across both namespaces and filtered afterwards, because a transcript id
+and an alias are strings that v4 and v5 can both carry.
+
+Cancellation and deadline expiry are decided on the job row before any
+engine-specific work, so both engines are guarded by the same check;
+`test_blast_cancel_retry_expiry.py` exercises it with an `engine: ncbi_blast`
+payload and fails if either the index lookup or the aligner is reached. Retry
+re-arms the same row against its frozen provenance and is covered on the API
+path for both engines (`test_blast_cancel_retry.py`). Download expiry is a
+property of `BlastJob.expires_at` and is shared, not per-engine.
 
 ## Access modes: one search, two entry points
 
-Both BLAST entry points run the same service, outbox and worker. They differ only
-in authorization, not in biology or parameters:
+Both BLAST entry points run the same service, outbox and worker. They accept the
+same queries and run the same biology; what differs is authorization, and — as
+of this revision, still — how much of the result the page exposes:
 
 - **Anonymous (`/search/blast`, `POST /blast/public/jobs`)** — no session. The
   response returns an expiring per-job capability (JWT, `X-Blast-Token`) that
@@ -122,6 +139,16 @@ rules (`validateBlastFastaStructure`, `hasCompatibleBlastQueryAlphabet`,
 in `soymutdb_jobs.blast_search`). The signed-in page previously kept a private
 FASTA validator that rejected bare sequences and derived its own messages; it now
 uses the shared rule so both entry points accept exactly the same input.
+
+Accepted input is parity. **Result presentation is not, yet.** The signed-in
+page (`routes/blast.tsx`) shows the job's assembly/release and offers a
+gene/JBrowse jump through `resolveBlastHitGenomeTarget`; the anonymous page
+(`routes/search/blast.tsx`) renders six hit columns and neither. The public
+endpoint `/blast/public/jobs/{job_id}/hits/{subject}/genome-target` exists, so
+this is wiring, not a capability boundary — but it is a real difference and
+should not be described as "authorization only" until the anonymous page renders
+the same resolution or a decision is recorded that anonymous visitors must not
+receive loci.
 
 ## Verification evidence
 
