@@ -23249,13 +23249,13 @@
                   "type": "string"
                 },
                 "availability": {
-                  "description": "Why a section has nothing to show.\n\n    ``unavailable`` is the only honest answer when the platform holds no\n    sequence store. It is *not* ``empty``: \"we never imported this\" and \"this\n    gene has no isoforms\" are different scientific statements, and the portal\n    renders them differently.\n    ",
+                  "default": "unavailable",
                   "enum": [
                     "available",
                     "unavailable"
                   ],
-                  "type": "string",
-                  "default": "unavailable"
+                  "title": "Availability",
+                  "type": "string"
                 },
                 "reason": {
                   "anyOf": [
@@ -23330,7 +23330,7 @@
                       "imported",
                       "unknown"
                     ],
-                    "title": "EvidenceKind",
+                    "title": "Kind",
                     "type": "string"
                   },
                   "source": {

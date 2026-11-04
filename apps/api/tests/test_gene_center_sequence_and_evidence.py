@@ -17,7 +17,13 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.schemas.gene_evidence import Availability, EvidenceKind
+from app.schemas.gene_evidence import (
+    AVAILABILITY_LITERALS,
+    Availability,
+    EvidenceKind,
+    EvidenceTag,
+    SequenceAvailability,
+)
 from app.services.gene_service import gene_model_evidence
 from app.services.sequence_availability import (
     NO_SEQUENCE_STORE,
@@ -89,3 +95,22 @@ def test_declared_source_is_preserved_verbatim():
     tag = gene_model_evidence(SimpleNamespace(attributes={"source": "AUGUSTUS 3.5"}))
     assert tag is not None
     assert tag.source == "AUGUSTUS 3.5"
+
+
+def test_wire_schema_states_the_enum_labels_inline():
+    """The contract must print its allowed values, not a ``$ref`` to ``$defs``.
+
+    Ablation: nested ``StrEnum`` members make pydantic hoist the enum and leave
+    an opaque reference in the vehicle schema. ``openapi.json`` then does not
+    say what the API accepts and ``openapi-typescript`` still renders a union,
+    so the drift stays invisible until someone diffs the two by hand.
+    """
+    for model, field, expected in (
+        (SequenceAvailability, "availability", AVAILABILITY_LITERALS),
+        (EvidenceTag, "kind", tuple(EvidenceKind)),
+    ):
+        schema = model.model_json_schema()
+        assert "$defs" not in schema
+        property_schema = schema["properties"][field]
+        assert "$ref" not in property_schema
+        assert property_schema["enum"] == [str(value) for value in expected]

@@ -6802,12 +6802,7 @@ export interface components {
                  */
                 molecule: "genomic" | "cds" | "transcript" | "protein";
                 /**
-                 * @description Why a section has nothing to show.
-                 *
-                 *         ``unavailable`` is the only honest answer when the platform holds no
-                 *         sequence store. It is *not* ``empty``: "we never imported this" and "this
-                 *         gene has no isoforms" are different scientific statements, and the portal
-                 *         renders them differently.
+                 * Availability
                  * @default unavailable
                  * @enum {string}
                  */
@@ -6839,7 +6834,7 @@ export interface components {
              */
             model_evidence?: {
                 /**
-                 * EvidenceKind
+                 * Kind
                  * @enum {string}
                  */
                 kind: "experimental" | "curated" | "predicted" | "transferred" | "imported" | "unknown";

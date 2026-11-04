@@ -28,6 +28,22 @@ from pydantic import BaseModel, Field
 
 from ..core.compat import StrEnum
 
+#: The vocabulary, strongest first. Every member list below is built from one
+#: of these tuples so the enum, the JSON schema and the TypeScript client cannot
+#: drift apart. They are tuples of literals rather than ``StrEnum`` members on
+#: purpose: pydantic hoists a nested enum into ``$defs`` and leaves an opaque
+#: ``$ref`` in the vehicle schema, which hides the allowed labels from anyone
+#: reading ``openapi.json`` and from ``openapi-typescript``. A ``Literal``
+#: inline the values, so the wire contract states what it accepts.
+EVIDENCE_KINDS = (
+    "experimental",
+    "curated",
+    "predicted",
+    "transferred",
+    "imported",
+    "unknown",
+)
+
 
 class EvidenceKind(StrEnum):
     EXPERIMENTAL = "experimental"
@@ -39,14 +55,7 @@ class EvidenceKind(StrEnum):
 
 
 #: Ordered from strongest to weakest; the UI sorts by this.
-EVIDENCE_STRENGTH: tuple[EvidenceKind, ...] = (
-    EvidenceKind.EXPERIMENTAL,
-    EvidenceKind.CURATED,
-    EvidenceKind.PREDICTED,
-    EvidenceKind.TRANSFERRED,
-    EvidenceKind.IMPORTED,
-    EvidenceKind.UNKNOWN,
-)
+EVIDENCE_STRENGTH: tuple[EvidenceKind, ...] = tuple(EvidenceKind(kind) for kind in EVIDENCE_KINDS)
 
 
 class Availability(StrEnum):
@@ -62,10 +71,14 @@ class Availability(StrEnum):
     UNAVAILABLE = "unavailable"
 
 
+AVAILABILITY_STATES = (Availability.AVAILABLE, Availability.UNAVAILABLE)
+AVAILABILITY_LITERALS = tuple(state.value for state in AVAILABILITY_STATES)
+
+
 class EvidenceTag(BaseModel):
     """Provenance of one displayed assertion."""
 
-    kind: EvidenceKind
+    kind: Literal[EVIDENCE_KINDS]  # type: ignore[valid-type]
     source: str = Field(..., min_length=1, max_length=256)
 
 
@@ -81,7 +94,9 @@ class SequenceAvailability(BaseModel):
     """
 
     molecule: Literal["genomic", "cds", "transcript", "protein"]
-    availability: Availability = Availability.UNAVAILABLE
+    availability: Literal[AVAILABILITY_LITERALS] = (  # type: ignore[valid-type]
+        Availability.UNAVAILABLE
+    )
     reason: str | None = None
     length: int | None = Field(default=None, ge=0)
     checksum: str | None = None
@@ -90,7 +105,10 @@ class SequenceAvailability(BaseModel):
 
 
 __all__ = [
+    "AVAILABILITY_LITERALS",
+    "AVAILABILITY_STATES",
     "Availability",
+    "EVIDENCE_KINDS",
     "EVIDENCE_STRENGTH",
     "EvidenceKind",
     "EvidenceTag",
