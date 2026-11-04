@@ -30,20 +30,35 @@ bash scripts/verify-bio-core.sh        # 完整门禁，一条命令
 
 产物：`soymutdb_bio_core-0.1.2-cp315-cp315-manylinux_2_34_x86_64.whl`。
 `artifacts/` 在 `.gitignore` 内，wheel 不进仓库；`Cargo.lock` 必须提交。
+构建前会清掉 `artifacts/wheels/` 里的旧 wheel，避免消费者装到别的修订。
 
-## CI 里的两处安装
+## CI：构建一次，消费一次
 
-- **Rust 门禁**：`scripts/ci-job-steps.sh run bio-core` → `verify-bio-core.sh`。
-  CNB 与 GitHub 都只写这一行委托。
-- **后端门禁**：`scripts/verify-backend-tests.sh` 在 API pytest 之前把同一个
-  wheel 装进 `apps/api/.venv`，再跑 `packages/bio-core/python_tests`。这样
-  `test_sequence_tools.py` / `test_interval_overlap.py` 跑的是发布制品，不是
-  `PYTHONPATH` 里的源码替身。
+wheel 只有**一个生产者**：`bio-core` job。它也是唯一持有 Rust 工具链 /
+C linker 的阶段；`api-tests` 阶段是裸 `python:3.15`（无 cargo / curl / cc），
+在那里编译必然首轮就红，且每次 PR push 都要重编一次未缓存的原生 crate。
+
+- **生产者**：`scripts/ci-job-steps.sh run bio-core` → `verify-bio-core.sh`。
+  CNB 与 GitHub 都只写这一行委托，wheel 落到 `artifacts/wheels/`。
+- **消费者**：`scripts/verify-backend-tests.sh` 在 API pytest 之前把**那个
+  wheel** 装进 `apps/api/.venv`（`--force-reinstall --no-deps`）、做 import
+  断言、再跑 `packages/bio-core/python_tests`。这里只装不建；缺 wheel 或
+  wheel 不唯一一律 **EXIT 1**，与 sequence tools 失败关闭为 503 一致。
+
+跨 job 边界：
+
+- **CNB**：同一条 pipeline 的 stages 共享 `/workspace`，`bio-core` stage 排在
+  `api-tests` 之前，`artifacts/wheels/` 直接被下一个 stage 读到，无需插件。
+- **GitHub Actions**：job 之间不共享文件系统，`bio-core` 用
+  `actions/upload-artifact` 上传、`api-tests` 用 `needs: bio-core` +
+  `actions/download-artifact` 下载到同一目录。生产者失败则消费者不启动。
+
+两处都满足规格 §13.5「不能只构建 wheel 而不安装测试」。
 
 ## 冒烟
 
 ```bash
-python3 scripts/check_bio_core_wheel.py --static    # 任何 Python 3，查 pin/锁/CI/门禁
+python3 scripts/check_bio_core_wheel.py --static    # Python 3.11+，查 pin/锁/CI/门禁
 python3 scripts/check_bio_core_wheel.py --runtime   # 需已装 wheel，跑真实算法
 bash scripts/smoke.sh --profile contracts           # 含 --static
 bash scripts/smoke.sh --profile runtime             # 含 --runtime（需 PG + API venv）

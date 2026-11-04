@@ -18,6 +18,10 @@
 # Requirements: apps/api/.venv with `pip install -e "apps/api[dev]"` and
 #               editable workspace distributions (the shared bootstrap
 #               scripts/install_python_workspace.py owns that install plan).
+#               artifacts/wheels/soymutdb_bio_core-*-cp315-*.whl MUST already
+#               exist: it is built once by the `bio-core` job
+#               (scripts/verify-bio-core.sh). This gate only INSTALLS it; a
+#               missing wheel is a hard failure, never a skip.
 #               The worker science stack needs system HDF5 headers on Python
 #               3.15; scripts/install-worker-science-build-deps.sh provisions
 #               them before the worker editable install.
@@ -89,29 +93,34 @@ step "Deprecated-API ratchet"
 
 step "Install the Rust bio-core wheel into the API test venv"
 # The /tools/sequence/* and /tools/intervals/overlap endpoints are backed by a
-# private compiled extension.  Their API tests (and the wheel contract tests)
+# private compiled extension. Their API tests (and the wheel contract tests)
 # must run against the SAME artifact the release images ship, not against a
-# source-tree import or a Python look-alike.  A missing wheel is a hard failure
-# here: the sequence tools are specified to fail closed with 503, so the gate
-# cannot quietly pass without the engine present.
+# source-tree import or a Python look-alike.
+#
+# The wheel is built ONCE by the `bio-core` job (scripts/verify-bio-core.sh),
+# which is the only stage with a Rust toolchain and a C linker. This `api-tests`
+# stage is a bare python:3.15: it has no cargo, no curl to bootstrap rustup, no
+# cc. Building here would fail on the first CI run for a reason unrelated to
+# this change, and an uncached native build (bio/noodles/rust-lapper/bio-seq,
+# thin LTO, codegen-units=1) would add minutes to every PR push.
+#
+# So this gate CONSUMES the wheel the producer left under /workspace, and is
+# fail-closed: spec §13.5 requires "install, don't just build", and the sequence
+# tools are specified to fail closed with 503, so the gate cannot quietly pass
+# without the engine present. A missing or ambiguous wheel fails here — it can
+# never skip.
 BIO_CORE_WHEEL_DIR="${SOYMUTDB_BIO_CORE_WHEEL_DIR:-${REPO_ROOT}/artifacts/wheels}"
-export CARGO_HOME="${CARGO_HOME:-${TMPDIR:-/tmp}/soymutdb-cargo}"
-export RUSTUP_HOME="${RUSTUP_HOME:-${TMPDIR:-/tmp}/soymutdb-rustup}"
-export PATH="${CARGO_HOME}/bin:${PATH}"
-command -v cargo >/dev/null 2>&1 || {
-  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-    | sh -s -- -y --profile minimal --default-toolchain none --no-modify-path
-}
-command -v cc >/dev/null 2>&1 || { echo "missing C linker (cc) for the Rust wheel" >&2; exit 1; }
-"${VENV_PYTHON}" -m pip install --quiet "maturin==1.16.0"
-mkdir -p "${BIO_CORE_WHEEL_DIR}"
-(
-  cd "${REPO_ROOT}/packages/bio-core"
-  "${VENV_PYTHON}" -m maturin build --release --locked \
-    --interpreter "${VENV_PYTHON}" --out "${BIO_CORE_WHEEL_DIR}"
-)
-BIO_CORE_WHEEL="$(ls -1 "${BIO_CORE_WHEEL_DIR}"/soymutdb_bio_core-*-cp315-*.whl | head -1)"
-[[ -n "${BIO_CORE_WHEEL}" ]] || { echo "no cp315 bio-core wheel produced" >&2; exit 1; }
+shopt -s nullglob
+BIO_CORE_WHEELS=( "${BIO_CORE_WHEEL_DIR}"/soymutdb_bio_core-*-cp315-*.whl )
+shopt -u nullglob
+if [[ ${#BIO_CORE_WHEELS[@]} -ne 1 || ! -f "${BIO_CORE_WHEELS[0]:-}" ]]; then
+  echo "expected exactly one cp315 bio-core wheel in ${BIO_CORE_WHEEL_DIR}, found ${#BIO_CORE_WHEELS[@]}" >&2
+  echo "the bio-core job (scripts/verify-bio-core.sh) must build it before this gate runs" >&2
+  echo "a sequence tool without its engine fails closed with 503, so this cannot be a skip" >&2
+  exit 1
+fi
+BIO_CORE_WHEEL="${BIO_CORE_WHEELS[0]}"
+echo "bio-core wheel: ${BIO_CORE_WHEEL}"
 "${VENV_PYTHON}" -m pip install --quiet --force-reinstall --no-deps "${BIO_CORE_WHEEL}"
 "${VENV_PYTHON}" -c "import soymutdb_bio_core as c; print('bio-core wheel:', c.capabilities()['engine_version'])"
 

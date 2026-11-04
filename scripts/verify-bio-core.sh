@@ -10,9 +10,18 @@
 # the last two steps exercise the exact artifact the API/Worker images consume.
 # Missing prerequisites fail the script; they never report SKIPPED-as-PASS.
 #
+# This job is the SINGLE producer of the cp315 wheel. It writes the artifact to
+# artifacts/wheels/ and leaves it there so the backend gate can install that
+# exact file (spec §13.5) without owning a second Rust toolchain. The api-tests
+# stage is a bare python:3.15 with no cargo/curl/C linker; building the crate
+# there would both fail on the first CI run and add minutes of uncached native
+# compile to every PR. Stale wheels are removed first so a consumer can never
+# install a wheel from a different revision.
+#
 # Usage: bash scripts/verify-bio-core.sh
-# Env:   SOYMUTDB_BIO_CORE_PYTHON  CPython 3.15 interpreter (wheel target)
-#        CARGO_HOME / RUSTUP_HOME  optional rustup storage
+# Env:   SOYMUTDB_BIO_CORE_PYTHON       CPython 3.15 interpreter (wheel target)
+#        SOYMUTDB_BIO_CORE_WHEEL_DIR    wheel output dir (default artifacts/wheels)
+#        CARGO_HOME / RUSTUP_HOME       optional rustup storage
 #        SOYMUTDB_BIO_CORE_SKIP_WHEEL=1 is NOT supported: no silent skips.
 # =============================================================================
 set -euo pipefail
@@ -96,6 +105,10 @@ fi
   exit 1
 }
 mkdir -p "${WHEEL_DIR}"
+# /workspace is shared across CNB stages and cached between builds. Remove any
+# wheel left by an earlier revision so the backend gate cannot install a stale
+# artifact; maturin then writes exactly one wheel for THIS commit.
+rm -f "${WHEEL_DIR}"/soymutdb_bio_core-*.whl
 (cd "${CRATE_DIR}" && "${PY}" -m maturin build --release --locked \
   --interpreter "${PY}" --out "${WHEEL_DIR}")
 

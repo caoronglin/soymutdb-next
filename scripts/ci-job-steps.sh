@@ -452,6 +452,14 @@ dependency_governance_env() {
 # Added with packages/bio-core (0.1.2).  The job body is a single delegation to
 # scripts/verify-bio-core.sh so CNB and the GitHub mirror execute identical
 # bytes; no Rust logic is inlined into either provider's YAML.
+#
+# This job is the ONLY producer of artifacts/wheels/soymutdb_bio_core-*-cp315-*.whl.
+# scripts/verify-backend-tests.sh (the api-tests stage, a bare python:3.15 with
+# no Rust toolchain or C linker) only CONSUMES that file. The boundary is closed
+# per provider: on CNB the two stages are in one pipeline, so /workspace carries
+# artifacts/wheels/ across (docs/ops/bio-core-wheel.md, "CI: build once,
+# consume once"); on GitHub the bio-core job uploads an artifact that api-tests
+# downloads.
 bio_core_run() {
   bash "${REPO_ROOT}/scripts/verify-bio-core.sh"
 }

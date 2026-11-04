@@ -4,6 +4,11 @@
 # Source of truth: the `API + Worker verification` stage of `.cnb.yml`.
 # SOYMUTDB_RUN_POSTGRES_INTEGRATION is mandatory: privacy, identity and
 # assembly-isolation cases must fail closed instead of skipping green.
+#
+# This stage CONSUMES the wheel built by the `Rust bio-core` stage of the same
+# pipeline (see .cnb.yml / verify.yml): /workspace is shared between CNB
+# stages, and verify-backend-tests.sh fails closed when the wheel is absent.
+# The bare python:3.15 image has no Rust toolchain, so it must never build it.
 # =============================================================================
 name: SoyMutDB API and worker tests
 env:

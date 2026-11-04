@@ -122,7 +122,7 @@ Every phase is one PR; the chain is `#83 → #96 → #101 → #105`.
 | R1 | #83 | `packages/bio-core` crate (Rust-Bio / noodles / rust-lapper / bio-seq / PyO3), `Cargo.lock` + pinned toolchain, golden + adversarial Rust tests, `scripts/verify-bio-core.sh`, `bio-core` CI job in the shared dispatcher + both providers | 41 Rust tests, cp315 wheel + import smoke, 9 wheel pytest, 36/36 turbo, 87 contracts |
 | R2 | #96 | `/tools/sequence/*` 7 compute endpoints + `capabilities`, Pydantic limits, fail-closed bridge, OpenAPI/`openapi.d.ts` regeneration | 10 API tests, `check-contract.sh` EXIT 0, 36/36 turbo |
 | R3 | #101 | `/tools/intervals/overlap` over published genes, `/tools/sequence/inspect`, `SOYMUTDB_BIO_ENGINE` fail-closed toggle | 16 API tests, 0 removed / 0 changed / 10 added OpenAPI paths |
-| R4 | #104 | wheel installation into the backend test venv, `smoke.sh` static+runtime wheel gates, full regression, architecture doc | below |
+| R4 | #105 | wheel installation into the backend test venv, `smoke.sh` static+runtime wheel gates, full regression, architecture doc; wheel built once in the `bio-core` job, consumed (not rebuilt) by `api-tests` | below |
 
 ### R4 verification (this PR)
 
