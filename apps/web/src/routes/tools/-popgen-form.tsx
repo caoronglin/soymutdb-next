@@ -220,3 +220,35 @@ export function formatRegion(result: {
 }): string {
   return `${result.assembly} ${result.chromosome}:${result.start}-${result.end}`;
 }
+
+/**
+ * React row key for a popgen variant row.
+ *
+ * `variant_id` alone is not an identity: the fact table is keyed by
+ * `(release_id, assembly_id, variant_id)`, so the same number can name a
+ * different record in another namespace. The key therefore spells out every
+ * scoping field the row actually carries — the assembly it was read in, the
+ * resolved region, and its alleles — so two rows can only collide when they
+ * are the same variant in the same scope.
+ *
+ * `assembly` is required on the wire (it is not derived from the page's
+ * form state): a row that arrives without its namespace is a server bug, and
+ * this key renders it as such rather than papering over it.
+ */
+export function variantRowKey(row: {
+  variant_id: string;
+  assembly: string;
+  chromosome: string;
+  position: number;
+  ref_allele: string;
+  alt_allele: string;
+}): string {
+  return [
+    row.assembly,
+    row.variant_id,
+    row.chromosome,
+    String(row.position),
+    row.ref_allele,
+    row.alt_allele,
+  ].join("|");
+}

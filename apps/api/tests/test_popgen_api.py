@@ -49,6 +49,7 @@ RELEASE_CONTEXT = ReleaseContext(
 FIXTURE_ROWS = [
     {
         "variant_id": "var1",
+        "assembly_key": "GmWm82.a2.v1",
         "chromosome": "Gm01",
         "position": 100,
         "ref_allele": "A",
@@ -59,6 +60,7 @@ FIXTURE_ROWS = [
     },
     {
         "variant_id": "var2",
+        "assembly_key": "GmWm82.a2.v1",
         "chromosome": "Gm01",
         "position": 200,
         "ref_allele": "C",
@@ -69,6 +71,7 @@ FIXTURE_ROWS = [
     },
     {
         "variant_id": "var3",
+        "assembly_key": "GmWm82.a2.v1",
         "chromosome": "Gm01",
         "position": 300,
         "ref_allele": "G",
@@ -79,6 +82,7 @@ FIXTURE_ROWS = [
     },
     {
         "variant_id": "var4",
+        "assembly_key": "GmWm82.a2.v1",
         "chromosome": "Gm01",
         "position": 400,
         "ref_allele": "T",
@@ -339,6 +343,112 @@ async def test_ld_without_genotypes_returns_note_and_coordinates() -> None:
     assert response.note is not None and "genotype" in response.note
     assert len(response.variants) == 4
     assert response.variants[0].position == 100
+
+
+def _identical_across_namespaces(variant_id: str) -> list[dict]:
+    """Two rows that share every field except the assembly namespace.
+
+    Only ``assembly_key`` differs: same coordinates, same alleles, same
+    ``variant_id``. That is exactly the pair a key built from the number alone
+    would merge.
+    """
+    row = {
+        "variant_id": variant_id,
+        "chromosome": "Gm01",
+        "position": 100,
+        "ref_allele": "A",
+        "alt_allele": "G",
+        "variant_type": "SNP",
+        "allele_frequency": 0.5,
+        "gene_id": "Glyma.01G000100",
+    }
+    return [{**row, "assembly_key": "GmWm82.a2.v1"}, {**row, "assembly_key": "GmWm82.a4.v1"}]
+
+
+async def test_two_namespaces_keep_the_same_variant_id_apart() -> None:
+    """The response has to make the two rows distinguishable.
+
+    ``variant_facts`` is keyed by ``(release_id, assembly_id, variant_id)``, so
+    the row identity has three parts and the namespace is one of them. A
+    response row that carries only the number loses a part of the identity: two
+    assemblies' rows would then compare equal on every field the contract
+    exposes, and a client keying on the number alone would merge them. This
+    endpoint currently answers per assembly, which bounds the blast radius — it
+    does not make the extra field unnecessary.
+    """
+    service = _service(FakeVariantStore(_identical_across_namespaces("77")))
+    region = {"chromosome": "Gm01", "start": 1, "end": 1000}
+
+    response = await service.allele_frequencies(
+        NullDb(),
+        AlleleFreqRequest(assembly="GmWm82.a2.v1", **region),
+        release_context=RELEASE_CONTEXT,
+    )
+
+    assert [row.variant_id for row in response.variants] == ["77", "77"]
+    assert [row.assembly for row in response.variants] == ["GmWm82.a2.v1", "GmWm82.a4.v1"]
+    # Everything else in the row is identical, so the namespace is the only
+    # field that tells them apart.
+    first, second = response.variants
+    assert first.model_dump(exclude={"assembly"}) == second.model_dump(exclude={"assembly"})
+
+
+async def test_every_variant_row_states_its_assembly_namespace() -> None:
+    """A row without its namespace cannot be keyed.
+
+    ``variant_facts`` is keyed by ``(release_id, assembly_id, variant_id)``, so
+    two assemblies may carry the same ``variant_id``. The popgen responses
+    therefore have to echo the namespace per row: a client that only receives
+    the number cannot tell the two apart, and a list keyed on the number alone
+    would merge them.
+    """
+    service = _service()
+    region = {"assembly": "GmWm82.a2.v1", "chromosome": "Gm01", "start": 1, "end": 1000}
+
+    allele_freq = await service.allele_frequencies(
+        NullDb(),
+        AlleleFreqRequest(**region),
+        release_context=RELEASE_CONTEXT,
+    )
+    assert [row.assembly for row in allele_freq.variants] == ["GmWm82.a2.v1"] * 4
+
+    ld_response = await service.ld(
+        NullDb(),
+        LdRequest(**region),
+        release_context=RELEASE_CONTEXT,
+    )
+    assert [row.assembly for row in ld_response.variants] == ["GmWm82.a2.v1"] * 4
+
+    # Coordinates are caller-supplied here, so the namespace is the one the
+    # request resolved — still stated per row, never read off the page.
+    with_genotypes = await service.ld(
+        NullDb(),
+        LdRequest(
+            **region,
+            genotypes=GenotypeMatrix(
+                sample_ids=[f"s{i}" for i in range(4)],
+                variant_ids=["var1", "var2"],
+                values=[[0, 2], [1, 1], [2, 0], [1, 1]],
+            ),
+        ),
+        release_context=RELEASE_CONTEXT,
+    )
+    assert [row.assembly for row in with_genotypes.variants] == ["GmWm82.a2.v1"] * 2
+
+
+def test_variant_row_schemas_require_the_namespace() -> None:
+    """``assembly`` is required on the wire, not defaulted to an empty string.
+
+    An omitted namespace and "the empty namespace" would render identically in
+    a row key, which is the collision this field exists to prevent.
+    """
+    from app.schemas.popgen import AlleleFreqVariant, LdVariant
+
+    for schema in (AlleleFreqVariant, LdVariant):
+        # `assembly` is required (present in `required`, no default) and typed
+        # `str`: an omitted namespace must be a validation error, not "".
+        assert "assembly" in schema.model_json_schema()["required"], schema.__name__
+        assert schema.model_fields["assembly"].annotation is str, schema.__name__
 
 
 async def test_ld_with_inline_genotypes_computes_r2() -> None:

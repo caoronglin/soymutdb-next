@@ -172,6 +172,10 @@ class PopGenService:
             cleaned.append(
                 {
                     "variant_id": str(row.get("variant_id", "")),
+                    # Carried per row: (release, assembly, variant_id) is the
+                    # identity, so a row without its namespace cannot be told
+                    # apart from another namespace's row downstream.
+                    "assembly": str(row.get("assembly_key") or ""),
                     "chromosome": str(row.get("chromosome", "")),
                     "position": int(row.get("position", 0)),
                     "ref_allele": str(row.get("ref_allele", "")),
@@ -203,6 +207,7 @@ class PopGenService:
         variants = [
             AlleleFreqVariant(
                 variant_id=r["variant_id"],
+                assembly=r["assembly"],
                 chromosome=r["chromosome"],
                 position=r["position"],
                 ref_allele=r["ref_allele"],
@@ -306,6 +311,7 @@ class PopGenService:
         variant_rows = [
             LdVariant(
                 variant_id=r["variant_id"],
+                assembly=r["assembly"],
                 chromosome=r["chromosome"],
                 position=r["position"],
                 ref_allele=r["ref_allele"],
@@ -346,6 +352,9 @@ class PopGenService:
             variants=[
                 LdVariant(
                     variant_id=vid,
+                    # Genotypes are caller-supplied, so the coordinates are
+                    # unknown; the namespace is the one the request resolved.
+                    assembly=region["assembly"],
                     chromosome=region["chromosome"],
                     position=0,
                     ref_allele="",

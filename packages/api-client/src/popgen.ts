@@ -42,6 +42,8 @@ export interface LdRequest extends PopgenRegionQuery {
 
 export interface LdVariant {
   variant_id: string;
+  /** Assembly namespace the variant was read from. */
+  assembly: string;
   chromosome: string;
   position: number;
   ref_allele: string;
@@ -105,6 +107,8 @@ export interface AlleleFreqRequest extends PopgenRegionQuery {
 
 export interface AlleleFreqVariant {
   variant_id: string;
+  /** Assembly namespace the variant was read from. */
+  assembly: string;
   chromosome: string;
   position: number;
   ref_allele: string;
