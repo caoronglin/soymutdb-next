@@ -46,6 +46,7 @@ celery_app = Celery(
     backend=RESULT_BACKEND,
     include=[
         "soymutdb_worker.tasks.blast",
+        "soymutdb_worker.tasks.blast_index",
         "soymutdb_worker.tasks.blast_index_tasks",
         "soymutdb_worker.tasks.export",
         "soymutdb_worker.tasks.ingest",
@@ -144,6 +145,7 @@ celery_app.autodiscover_tasks(
     [
         "soymutdb_worker.tasks.ingest",
         "soymutdb_worker.tasks.blast",
+        "soymutdb_worker.tasks.blast_index",
         "soymutdb_worker.tasks.blast_index_tasks",
         "soymutdb_worker.tasks.export",
         "soymutdb_worker.tasks.stats",

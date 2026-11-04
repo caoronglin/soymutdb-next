@@ -16,6 +16,7 @@ __all__ = [
     "ANALYSIS_SCANPY_TASK",
     "BLAST_RUN_TASK",
     "BLAST_INDEX_BUILD_TASK",
+    "BLAST_BUILD_INDEX_TASK",
     "BUILD_STATIC_PAGES_TASK",
     "EXPORT_VARIANTS_TASK",
     "GWAS_RUN_TASK",
@@ -65,6 +66,7 @@ _ensure_jobs_package()
 from soymutdb_jobs.contract import (  # noqa: E402
     ANALYSIS_FASTP_TASK,
     ANALYSIS_SCANPY_TASK,
+    BLAST_BUILD_INDEX_TASK,
     BLAST_INDEX_BUILD_TASK,
     BLAST_RUN_TASK,
     BUILD_STATIC_PAGES_TASK,

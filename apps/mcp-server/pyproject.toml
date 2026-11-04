@@ -10,7 +10,8 @@ readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.15"
 dependencies = [
-    "fastmcp>=3.2.0,<4",
+    # 3.4.8 is refused by the dependency-governance gate (GHSA-7xgj-8392-5q4r, fixed 3.4.10).
+    "fastmcp>=3.4.10,<4",
     "httpx>=0.27",
     # No upper bound: the <0.36.0 ceiling is what pinned this server to an ASGI
     # server release older than the one the rest of the repository installs.

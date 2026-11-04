@@ -180,7 +180,8 @@ def get_ncbi_db_path(
 #: remaining NCBI programs belong to ``ncbi_blast`` and are rejected before any
 #: index is touched. One shared set is exactly the bug this replaces: the task
 #: routes blastn/blastx/tblastn/tblastx to the NCBI runner, but a blastp-only
-#: whitelist refused them first.
+#: whitelist refused them first. ``ENGINE_PROGRAMS["diamond"]`` is what this
+#: module validates against; it is not the platform program set.
 ENGINE_PROGRAMS = {
     #: DIAMOND is protein-to-protein only.
     "diamond": frozenset({"blastp"}),
@@ -189,6 +190,8 @@ ENGINE_PROGRAMS = {
 }
 #: Union kept under the historical name for callers that probe the vocabulary.
 ALLOWED_PROGRAMS = frozenset().union(*ENGINE_PROGRAMS.values())
+#: The DIAMOND executable program set, named for the backend it describes.
+DIAMOND_PROGRAMS = ENGINE_PROGRAMS["diamond"]
 
 # Resource limits
 MAX_QUERY_LENGTH = int(get_setting("BLAST_MAX_QUERY_LENGTH", "100000"))
@@ -556,7 +559,7 @@ def run_blast_command(
         )
     if engine not in (None, "diamond", "auto"):
         raise ValueError(
-            f"Unknown aligner {engine!r}; this deployment runs DIAMOND blastp only"
+            f"Unknown aligner {engine!r}; this path runs the DIAMOND backend"
         )
     if outfmt != 15:
         raise ValueError("outfmt is fixed: DIAMOND always writes the 12-column tabular format")

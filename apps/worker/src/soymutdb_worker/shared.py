@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 __all__ = [
+    "BLAST_BUILD_INDEX_TASK",
     "BLAST_RUN_TASK",
     "BLAST_INDEX_BUILD_TASK",
     "BUILD_STATIC_PAGES_TASK",
@@ -53,6 +54,7 @@ def _ensure_jobs_package() -> None:
 _ensure_jobs_package()
 
 from soymutdb_jobs.contract import (  # noqa: E402
+    BLAST_BUILD_INDEX_TASK,
     BLAST_INDEX_BUILD_TASK,
     BLAST_RUN_TASK,
     BUILD_STATIC_PAGES_TASK,

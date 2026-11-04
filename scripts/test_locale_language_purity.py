@@ -43,12 +43,12 @@ EXEMPT = {
     "home.databaseEyebrow",
     # Vendor product name, identical in both bundles by design.
     "admin.analyticsSettings.badgeCloudflare",
-    # Programme names: "NCBI BLAST+" and "DIAMOND" are how the engines are
-    # called in Chinese documentation too, so both bundles spell them the same.
+    # Upstream tool names (the NCBI search engine and DIAMOND). A BLAST user
+    # searches for "NCBI BLAST+" and "DIAMOND", not for a translation, and
+    # neither key exists under `blastPublic`: that namespace carries
+    # `blastPublic.engine`, not per-engine labels.
     "blastSearch.engineNcbi",
     "blastSearch.engineDiamond",
-    "blastPublic.engineNcbi",
-    "blastPublic.engineDiamond",
 }
 
 

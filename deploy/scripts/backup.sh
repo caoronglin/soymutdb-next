@@ -124,7 +124,31 @@ S3_ENDPOINT="${S3_ENDPOINT:-http://localhost:9001}"
 S3_ACCESS_KEY="${S3_ACCESS_KEY:-${MINIO_ROOT_USER:-minioadmin}}"
 S3_SECRET_KEY="${S3_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}"
 
-TIMESTAMP="$(date +%Y%m%d_%H%M%S)"
+# Second resolution cannot order two runs that start inside the same second, and
+# with identical source data they also produce the identical component hash, so
+# the second run builds the same backup id and its own "refusing to overwrite"
+# guard fires against archives the first run just published. Wait for the next
+# whole second instead of inventing a suffix: the id stays parseable by
+# prune_local's ^[0-9]{8}_[0-9]{6}$ retention regex and by operator scripts that
+# read the timestamp, and the collision becomes impossible rather than merely
+# unlikely.
+unique_backup_timestamp() {
+    local stamp
+    stamp="$(date +%Y%m%d_%H%M%S)"
+    # A run that is still in flight owns `.staging/<stamp>-<pid>`; a completed
+    # run owns `<stamp>-<component hash>.tar.gz`. Either means this second is
+    # already taken, so the next whole second is used instead.
+    while compgen -G "${BAK_BASE_DIR}/.staging/${stamp}-*" >/dev/null 2>&1 \
+        || compgen -G "${BAK_BASE_DIR}/${stamp}-*.tar.gz" >/dev/null 2>&1; do
+        while [[ "$(date +%H%M%S)" == "${stamp#*_}" ]]; do
+            sleep 0.05 2>/dev/null || sleep 1
+        done
+        stamp="$(date +%Y%m%d_%H%M%S)"
+    done
+    printf '%s\n' "${stamp}"
+}
+
+TIMESTAMP="$(unique_backup_timestamp)"
 HOSTNAME_SHORT="$(hostname -s 2>/dev/null || printf unknown)"
 STAGING_DIR=""
 PARTIAL_ARCHIVE=""

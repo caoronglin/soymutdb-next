@@ -17,7 +17,7 @@ from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from soymutdb_jobs.blast_catalog import public_source_url
+from soymutdb_jobs.blast_catalog import public_source_url, validate_build_state
 from soymutdb_jobs.blast_search import (
     normalize_query,
     validate_search_parameters,
@@ -25,6 +25,15 @@ from soymutdb_jobs.blast_search import (
 from soymutdb_jobs.protein_fasta import PROTEIN_ALPHABET as PROTEIN_ALPHABET
 
 from ..core.compat import StrEnum
+
+#: Catalog build states are owned by ``soymutdb_jobs.blast_catalog_state``; this
+#: alias is the wire spelling of its ``COLUMN_STATES``. A published NCBI index --
+#: and every in-flight ``publishing`` row a client polls -- must survive response
+#: validation instead of being rejected as an unknown value.
+BuildState = Literal[
+    "pending", "building", "validating", "publishing", "published", "failed",
+    "ready",
+]
 
 #: Allowed characters for a BLAST database *name* — matches the worker-side
 #: whitelist (alphanumeric / ``-`` / ``_``) so identifiers can never carry
@@ -161,6 +170,7 @@ class BlastJobResponse(BaseModel):
     submitted_at: datetime
     started_at: datetime | None = None
     completed_at: datetime | None = None
+
     error_message: str | None = None
     result_url: str | None = None
     #: Release/assembly provenance of the searched database, resolved through
@@ -247,6 +257,7 @@ class BlastResultResponse(BaseModel):
     search_stats: dict[str, Any] | None = None
     error_message: str | None = None
     completed_at: datetime | None = None
+
     download_url: str | None = None
 
     model_config = {"from_attributes": True}
@@ -281,14 +292,11 @@ class BlastDatabaseResponse(BaseModel):
     total_length: int | None = Field(default=None, ge=0)
     fasta_sha256: str | None = None
     index_version: str | None = None
-    #: Must match ``soymutdb_jobs.blast_catalog_state.COLUMN_STATES``: the
-    #: catalog's check constraint, the worker's state machine and this response
-    #: share one vocabulary, including the legacy ``ready`` spelling that
-    #: pre-existing catalogs still carry.
-    build_status: Literal[
-        "pending", "building", "validating", "publishing", "published", "failed",
-        "ready",
-    ] = "pending"
+    #: Must match ``soymutdb_jobs.blast_catalog_state.COLUMN_STATES``: the catalog's
+    #: check constraint, the worker's state machine and this response share one
+    #: vocabulary, including the in-flight ``publishing`` state and the legacy
+    #: ``ready`` spelling pre-existing catalogs still carry.
+    build_status: BuildState = "pending"
     is_default: bool = False
     license: str | None = None
 
@@ -297,6 +305,159 @@ class BlastDatabaseResponse(BaseModel):
     def public_source_url(cls, value: object) -> str | None:
         """Stored provenance is untrusted; omit paths and private URL authorities."""
         return public_source_url(value)
+
+
+# ---------------------------------------------------------------------------
+# Asynchronous immutable index builds (admin control plane)
+# ---------------------------------------------------------------------------
+
+
+class BlastIndexBuildRequest(BaseModel):
+    """Admin request to build one immutable NCBI index in a worker.
+
+    The source FASTA is an object-store key under ``blast-sources/`` that was
+    uploaded and reviewed beforehand. No local path, binary name or output
+    directory is accepted from a client. Rebuilds create a new catalog row and
+    a new content-addressed identity; they never overwrite a published index.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_object_key: str = Field(..., min_length=1, max_length=2048)
+    db_type: Literal["nucl", "prot"]
+    assembly_name: str = Field(..., min_length=1, max_length=1024)
+    annotation_version: str = Field(..., min_length=1, max_length=1024)
+    source_version: str = Field(..., min_length=1, max_length=1024)
+    source_url: str = Field(..., min_length=1, max_length=1024)
+    license: str = Field(..., min_length=1, max_length=1024)
+    name: str = Field(..., min_length=1, max_length=256)
+    sequence_type: Literal[
+        "genome", "cds", "transcript", "protein", "repeat_masked",
+        "pan_genome", "family_consensus", "custom",
+    ] = "genome"
+
+    @field_validator("source_object_key")
+    @classmethod
+    def _validate_source_key(cls, value: str) -> str:
+        if (
+            not value.startswith("blast-sources/")
+            or ".." in value.split("/")
+            or "\\" in value
+            or any(ord(ch) < 32 for ch in value)
+        ):
+            raise ValueError("source_object_key must be a reviewed blast-sources/ object key")
+        return value
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        if not _DATABASE_NAME_RE.fullmatch(value):
+            raise ValueError("name must be a plain identifier")
+        return value
+
+    @field_validator("source_url")
+    @classmethod
+    def _validate_public_url(cls, value: str) -> str:
+        if public_source_url(value) is None:
+            raise ValueError("source_url must be public attribution without credentials")
+        return value
+
+    @field_validator("assembly_name", "annotation_version", "source_version", "license")
+    @classmethod
+    def _validate_metadata(cls, value: str) -> str:
+        if "/" in value or "\\" in value or value in {".", ".."}:
+            raise ValueError("metadata must not contain paths")
+        return value
+
+    def build_metadata(
+        self, *, assembly_id: str, assembly_version: str, release_id: str
+    ) -> dict[str, str]:
+        """Freeze identity from the authoritative assembly/release context.
+
+        The three identity fields are never accepted from the request body:
+        ``get_ncbi_db_path`` binds them to the searched job's numeric
+        assemblies.id and release key.
+        """
+        return {
+            "assembly_id": assembly_id,
+            "assembly_version": assembly_version,
+            "release_id": release_id,
+            "annotation_version": self.annotation_version,
+            "source_version": self.source_version,
+            "source_url": self.source_url,
+            "license": self.license,
+        }
+
+
+class BlastIndexBuildResponse(BaseModel):
+    """Status of one build; no filesystem path or binary name is exposed."""
+
+    model_config = {"from_attributes": True}
+
+    build_id: str
+    database_id: int
+    name: str
+    state: BuildState
+    db_type: Literal["nucl", "prot"]
+    index_identity: str | None = None
+    sequence_count: int | None = None
+    total_length: int | None = None
+    error_message: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+    @field_validator("state")
+    @classmethod
+    def _validate_state(cls, value: str) -> str:
+        return validate_build_state(value)
+
+
+# ---------------------------------------------------------------------------
+# Protein/transcript hit → genome target (biological correctness boundary)
+# ---------------------------------------------------------------------------
+
+
+class BlastGenomeTargetResponse(BaseModel):
+    """JBrowse target for one BLAST subject, resolved through an explicit relation.
+
+    ``status == "unresolved"`` carries ``reason`` and no locus: the caller must
+    say the mapping is unavailable instead of guessing a genomic coordinate.
+    Amino-acid alignment coordinates from blastp/blastx are never used here.
+    """
+
+    status: Literal["resolved", "unresolved"]
+    reason: Literal[
+        "job_not_completed", "authorization_failed", "unsupported_program",
+        "subject_not_found", "ambiguous_subject", "assembly_mismatch",
+        "no_genomic_coordinates", "invalid_subject_id",
+    ] | None = None
+    gene_id: str | None = None
+    chromosome: str | None = None
+    start: int | None = Field(default=None, ge=1)
+    end: int | None = Field(default=None, ge=1)
+    strand: str | None = None
+    release_id: int | None = None
+    assembly_id: int | None = None
+    assembly_name: str | None = None
+    locus: str | None = None
+    #: Explicit provenance for how the subject was resolved to a gene.
+    resolution: Literal["gene_accession", "gene_alias", "transcript_id"] | None = None
+
+    @model_validator(mode="after")
+    def _validate_shape(self) -> BlastGenomeTargetResponse:
+        if self.status == "resolved":
+            if (
+                self.reason is not None or not self.gene_id or not self.chromosome
+                or self.start is None or self.end is None or self.locus is None
+                or self.resolution is None or self.end < self.start
+                or self.release_id is None or self.assembly_id is None
+                or not self.assembly_name
+            ):
+                raise ValueError("resolved target requires a complete, proven gene locus")
+        elif self.locus is not None or self.resolution is not None or self.start is not None:
+            raise ValueError("unresolved target must not carry coordinates")
+        return self
 
 
 class BlastIndexBuildQueued(BaseModel):

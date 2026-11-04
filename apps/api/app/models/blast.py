@@ -68,6 +68,12 @@ class BlastDatabase(Base, TimestampMixin):
             "'published', 'failed', 'ready')",
             name="ck_blast_catalog_build_status",
         ),
+        # Only a published (or legacy-ready) index carries an immutable
+        # identity. Nothing may silently overwrite a live index directory.
+        CheckConstraint(
+            "index_version IS NULL OR index_version ~ '^[a-f0-9]{64}$'",
+            name="ck_blast_catalog_index_identity",
+        ),
         CheckConstraint("sequence_count >= 0", name="ck_blast_catalog_sequence_count"),
         CheckConstraint("total_length >= 0", name="ck_blast_catalog_total_length"),
         CheckConstraint(
@@ -274,10 +280,79 @@ class BlastHit(Base):
         )
 
 
+class BlastIndexBuild(Base, TimestampMixin):
+    """One immutable NCBI index construction request (worker-only execution).
+
+    The API records the request and writes an outbox event in the same
+    transaction; only the Celery worker runs ``makeblastdb``. Every rebuild
+    creates a new row and a new content-addressed ``index_identity`` — an
+    existing published index is never mutated or overwritten.
+    """
+
+    __tablename__ = "blast_index_builds"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('pending', 'building', 'validating', 'published', 'failed', 'ready')",
+            name="ck_blast_index_build_state",
+        ),
+        CheckConstraint(
+            "db_type IN ('nucl', 'prot')", name="ck_blast_index_build_db_type"
+        ),
+        CheckConstraint(
+            "index_identity IS NULL OR index_identity ~ '^[a-f0-9]{64}$'",
+            name="ck_blast_index_build_identity",
+        ),
+        CheckConstraint(
+            "sequence_count >= 0", name="ck_blast_index_build_sequence_count"
+        ),
+        Index("ix_blast_index_build_state", "state"),
+        Index("ix_blast_index_build_catalog", "database_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
+    )
+    #: Catalog row the published index will be bound to. NULL for a rebuild
+    #: that has not yet been assigned a catalog entry.
+    database_id: Mapped[int | None] = mapped_column(
+        ForeignKey("blast_databases.id", ondelete="SET NULL"), nullable=True
+    )
+    state: Mapped[str] = mapped_column(
+        String(20), default="pending", server_default="pending", nullable=False
+    )
+    #: MinIO object key of the reviewed source FASTA (not a local path).
+    source_object_key: Mapped[str] = mapped_column(String(2048), nullable=False)
+    source_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Plain string: migration 0052 owns the check constraint. Reusing the
+    # PostgreSQL enum type here would make create_all depend on enum lifecycle.
+    db_type: Mapped[str] = mapped_column(String(4), nullable=False)
+    #: Frozen assembly/release/annotation/source provenance for this build.
+    build_metadata: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    index_identity: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    sequence_count: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    total_length: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    #: Sanitized failure reason; child stderr, paths and sequences never land here.
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    requested_by: Mapped[uuid.UUID | None] = mapped_column(
+        PG_UUID(as_uuid=True), nullable=True
+    )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<BlastIndexBuild id={self.id} state={self.state!r}>"
+
+
+
+
 __all__ = [
     "BlastDatabase",
     "BlastDbType",
     "BlastHit",
+    "BlastIndexBuild",
     "BlastJob",
     "BlastJobStatus",
     "BlastProgram",

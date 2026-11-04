@@ -1,6 +1,5 @@
 import { http } from "./auth";
 import { ApiError, request } from "./client";
-import type { AssemblyInfo, GeneDetail } from "./genes";
 
 export type BlastEngine = "ncbi_blast" | "diamond";
 export type BlastProgram = "blastn" | "blastp" | "blastx" | "tblastn" | "tblastx";
@@ -19,6 +18,8 @@ export function hasCompatibleBlastQueryAlphabet(sequence: string, program: Blast
   const body = sequence.split(/\r?\n/).filter((line) => !line.trimStart().startsWith(">")).join("").replace(/\s/g, "");
   return BLAST_PROGRAM_COMPATIBILITY[program].query === "nucl"
     ? /^[ACGTNRYSWKMBDHVU]+$/i.test(body)
+    // `-` last in the class: a literal hyphen needs no escape there, and an
+    // escaped one trips no-useless-escape under this ESLint version.
     : /^[ACDEFGHIKLMNPQRSTVWYBZX*-]+$/i.test(body);
 }
 
@@ -41,7 +42,8 @@ export interface BlastDatabase {
   total_length?: number | null;
   fasta_sha256?: string | null;
   index_version?: string | null;
-  build_status?: "pending" | "building" | "validating" | "publishing" | "ready" | "failed";
+  /** Mirrors the backend catalog state machine (see openapi.d.ts). */
+  build_status?: "pending" | "building" | "validating" | "publishing" | "published" | "failed" | "ready";
   /** Database default within assembly, engine and database type. */
   is_default?: boolean;
   license?: string | null;
@@ -140,7 +142,9 @@ export interface PublicBlastResultResponse extends BlastHitListResponse {
 export function compatibleBlastDatabases(databases: BlastDatabase[], engine: BlastEngine, program: BlastProgram): BlastDatabase[] {
   if (engine === "diamond" && program !== "blastp") return [];
   const allowed = new Set(BLAST_PROGRAM_COMPATIBILITY[program].databases);
-  return databases.filter((database) => database.is_active && database.build_status === "ready" && database.engine === engine && allowed.has(database.db_type));
+  return databases.filter((database) => database.is_active
+    && (database.build_status === "published" || database.build_status === "ready")
+    && database.engine === engine && allowed.has(database.db_type));
 }
 
 export function getBlastDatabases(): Promise<BlastDatabase[]> {
@@ -237,18 +241,6 @@ export function getBlastJobs(params: {
 export function getBlastJob(jobId: string): Promise<BlastJob> {
   return http.get<BlastJobApi>(`/blast/jobs/${jobId}`).then(normalizeJob);
 }
-/** Cancel a pending/running job. The worker re-checks status before executing. */
-export function cancelBlastJob(jobId: string): Promise<BlastJob> {
-  return http.post<BlastJobApi>(`/blast/jobs/${encodeURIComponent(jobId)}/cancel`)
-    .then(normalizeJob);
-}
-
-/** Re-dispatch a failed job with its original frozen release/assembly provenance. */
-export function retryBlastJob(jobId: string): Promise<BlastJob> {
-  return http.post<BlastJobApi>(`/blast/jobs/${encodeURIComponent(jobId)}/retry`)
-    .then(normalizeJob);
-}
-
 export function getBlastHits(
   jobId: string,
   params: {
@@ -270,44 +262,69 @@ export interface BlastGenomeTarget {
   release: string;
   assembly: string;
   locus: string;
+  /** Explicit relation used to resolve the subject; never an inferred coordinate. */
+  resolution?: "gene_accession" | "gene_alias" | "transcript_id";
+}
+
+interface GenomeTargetApi {
+  status: "resolved" | "unresolved";
+  reason?: string | null;
+  gene_id?: string | null;
+  chromosome?: string | null;
+  start?: number | null;
+  end?: number | null;
+  strand?: string | null;
+  release_id?: number | null;
+  assembly_id?: number | null;
+  assembly_name?: string | null;
+  locus?: string | null;
+  resolution?: BlastGenomeTarget["resolution"];
 }
 
 /**
- * Resolve lazily on user action, never from DIAMOND subject_start/end (AA).
- * Protein FASTA IDs need not be gene accessions: exact lookup only, no suffix
- * stripping or fuzzy mapping. A missing/ambiguous mapping has no browser target.
+ * Resolve a BLAST subject through the API's explicit gene/alias/transcript
+ * relation in the job's own release and assembly. Amino-acid alignment
+ * coordinates (blastp/blastx/tblastn subject_start/end) are never sent and
+ * never interpreted as genomic positions. An unresolved subject returns
+ * `null`; callers must surface that explicitly rather than guessing a locus.
  */
 export async function resolveBlastHitGenomeTarget(
-  job: Pick<BlastJob, "release_id" | "assembly_name">,
+  job: Pick<BlastJob, "id" | "release_id" | "assembly_name">,
   subjectId: string,
+  options: { publicToken?: string } = {},
 ): Promise<BlastGenomeTarget | null> {
-  const releaseId = job.release_id;
-  const assemblyName = job.assembly_name?.trim();
-  if (!Number.isSafeInteger(releaseId) || releaseId == null || releaseId < 1
-      || !assemblyName || !subjectId.trim()) return null;
-  // Explicit request headers override the portal's current global release pin.
-  const headers = { "X-SoyMutDB-Release": String(releaseId) };
-  const assemblies = await http.get<AssemblyInfo[]>("/genes/assemblies", { headers });
-  const matches = assemblies.filter((item) => item.name === assemblyName);
-  if (matches.length !== 1) return null;
-  const assemblyId = Number(matches[0].id);
-  if (!Number.isSafeInteger(assemblyId) || assemblyId < 1) return null;
-  let gene: GeneDetail;
+  const jobId = job.id?.trim();
+  const subject = subjectId?.trim();
+  if (!jobId || !subject || !Number.isSafeInteger(job.release_id) || job.release_id == null
+      || job.release_id < 1 || !job.assembly_name?.trim()) return null;
+  const path = options.publicToken
+    ? `/blast/public/jobs/${encodeURIComponent(jobId)}/hits/${encodeURIComponent(subject)}/genome-target`
+    : `/blast/jobs/${encodeURIComponent(jobId)}/hits/${encodeURIComponent(subject)}/genome-target`;
+  const headers: Record<string, string> = options.publicToken
+    ? { "X-Blast-Token": options.publicToken } : {};
+  let response: GenomeTargetApi;
   try {
-    gene = await http.get<GeneDetail>(`/genes/${encodeURIComponent(subjectId)}`, {
-      params: { assembly_id: assemblyId }, headers,
-    });
+    response = options.publicToken
+      ? await request<GenomeTargetApi>(path, {
+          auth: false, cache: "no-store", credentials: "omit", headers,
+        })
+      : await http.get<GenomeTargetApi>(path);
   } catch (error) {
-    if (error instanceof ApiError && (error.status === 404 || error.code === "ambiguous_assembly")) return null;
+    if (error instanceof ApiError && (error.status === 404 || error.code === "not_found")) return null;
     throw error;
   }
-  if (String(gene.assembly_id) !== String(assemblyId)
-      || gene.gene_id !== subjectId || !gene.chromosome?.trim()
-      || !Number.isSafeInteger(gene.start_pos) || !Number.isSafeInteger(gene.end_pos)
-      || gene.start_pos < 1 || gene.end_pos < gene.start_pos) return null;
+  if (response.status !== "resolved" || !response.locus || !response.assembly_name
+      || !Number.isSafeInteger(response.release_id) || response.release_id == null
+      || String(response.release_id) !== String(job.release_id)
+      || response.assembly_name !== job.assembly_name
+      || !Number.isSafeInteger(response.start) || !Number.isSafeInteger(response.end)
+      || response.start == null || response.end == null || response.start < 1
+      || response.end < response.start) return null;
   return {
-    release: String(releaseId), assembly: assemblyName,
-    locus: `${gene.chromosome}:${gene.start_pos}-${gene.end_pos}`,
+    release: String(response.release_id),
+    assembly: response.assembly_name,
+    locus: response.locus,
+    resolution: response.resolution,
   };
 }
 
@@ -346,3 +363,147 @@ export const BLAST_PROGRAMS = [
   { id: "tblastn", label: "TBLASTN", type: "protein", queryType: "prot", description: "Protein vs translated nucleotide" },
   { id: "tblastx", label: "TBLASTX", type: "nucleotide", queryType: "nucl", description: "Translated nucleotide vs translated nucleotide" },
 ] as const;
+
+// ---------------------------------------------------------------------------
+// Shared search-form rules (anonymous and signed-in BLAST are the same search)
+// ---------------------------------------------------------------------------
+
+/** Submission-critical FASTA problems, ordered by where the reader should look. */
+export type FastaStructureError = "emptyRecord";
+
+/**
+ * Structural FASTA check for multi-record queries. One BLAST job may carry
+ * several records; every record that has a header also needs a sequence.
+ * Alphabet is checked separately by
+ * `hasCompatibleBlastQueryAlphabet` (early feedback only — the API is the
+ * authority for the alphabet, record limits and duplicate identifiers).
+ *
+ * A header-less query is a pasted bare sequence, not malformed FASTA: the API
+ * and the worker both accept it, so no client rule may reject it.
+ */
+export function validateBlastFastaStructure(sequence: string): FastaStructureError | null {
+  const lines = sequence.split(/\r?\n/);
+  let sawHeader = false;
+  let currentHasSequence = false;
+  let sawAny = false;
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+    sawAny = true;
+    if (line.startsWith(">")) {
+      if (sawHeader && !currentHasSequence) return "emptyRecord";
+      sawHeader = true;
+      currentHasSequence = false;
+      continue;
+    }
+    if (!sawHeader) return null; // pasted bare sequence: the API accepts it
+    currentHasSequence = true;
+  }
+  if (!sawAny) return null;
+  return currentHasSequence ? null : "emptyRecord";
+}
+
+/** Display name of a search engine. Product names, not translatable copy. */
+export function blastEngineLabel(
+  engine: BlastEngine | undefined,
+  unknownEngine: string,
+): string {
+  if (engine === "ncbi_blast") return "NCBI BLAST+";
+  if (engine === "diamond") return "DIAMOND";
+  return unknownEngine;
+}
+
+/** One browser download for a job's raw aligner output (presigned URL). */
+export interface BlastDownloadLink {
+  href: string;
+  filename: string;
+}
+
+/**
+ * Build the download link for raw BLAST output.
+ *
+ * The raw artifact is the engine's tabular text (outfmt 6), so the filename
+ * says .tsv instead of inheriting the storage key's .txt suffix. The caller
+ * only passes URLs that survived the scheme check in the page components.
+ */
+export function blastDownloadLink(
+  url: string | null | undefined,
+  job: { id: string; program: BlastProgram; engine?: BlastEngine },
+): BlastDownloadLink | null {
+  if (!url) return null;
+  const engine = job.engine === "diamond" ? "diamond" : "ncbi_blast";
+  return { href: url, filename: `${job.id.slice(0, 8)}-${engine}-${job.program}.tsv` };
+}
+
+/** Cancel a pending/running job. Both engines share the same lifecycle. */
+export function cancelBlastJob(jobId: string): Promise<BlastJob> {
+  return http.post<BlastJobApi>(`/blast/jobs/${encodeURIComponent(jobId)}/cancel`).then(normalizeJob);
+}
+
+export function cancelPublicBlastJob(jobId: string, accessToken: string): Promise<BlastJob> {
+  return request<BlastJobApi>(`/blast/public/jobs/${encodeURIComponent(jobId)}/cancel`, {
+    method: "POST", auth: false, cache: "no-store", credentials: "omit",
+    headers: publicHeaders(accessToken),
+  }).then(normalizeJob);
+}
+
+/** Retry a failed/expired job as a new job; results are never overwritten. */
+export function retryBlastJob(jobId: string): Promise<BlastJob> {
+  return http.post<BlastJobApi>(`/blast/jobs/${encodeURIComponent(jobId)}/retry`).then(normalizeJob);
+}
+
+export type BlastIndexBuildState =
+  | "pending" | "building" | "validating" | "publishing" | "published" | "failed" | "ready";
+
+export interface BlastIndexBuild {
+  build_id: string;
+  database_id: number;
+  name: string;
+  state: BlastIndexBuildState;
+  db_type: BlastDatabaseType;
+  index_identity?: string | null;
+  sequence_count?: number | null;
+  total_length?: number | null;
+  error_message?: string | null;
+  created_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
+export interface BlastIndexBuildRequest {
+  source_object_key: string;
+  db_type: BlastDatabaseType;
+  assembly_name: string;
+  annotation_version: string;
+  source_version: string;
+  source_url: string;
+  license: string;
+  name: string;
+  sequence_type?: BlastDatabase["sequence_type"];
+}
+
+/**
+ * Acknowledgement for an accepted build request.
+ *
+ * Deliberately narrow: it says what was queued, never where the worker will
+ * write it. Progress is read back from the catalog's `build_status`.
+ */
+export interface BlastIndexBuildQueued {
+  database_id: number;
+  queued: boolean;
+  task_name: string;
+}
+
+/** Admin-only: enqueue a worker build. No makeblastdb runs in the request. */
+export function requestBlastIndexBuild(payload: BlastIndexBuildRequest): Promise<BlastIndexBuild> {
+  return http.post<BlastIndexBuild>("/blast/index-builds", { json: payload });
+}
+
+/** Admin-only: the lifecycle entry point (`POST /blast/databases/build`). */
+export function queueBlastIndexBuild(databaseId: number): Promise<BlastIndexBuildQueued> {
+  return http.post<BlastIndexBuildQueued>("/blast/databases/build", { json: { database_id: databaseId } });
+}
+
+export function getBlastIndexBuild(buildId: string): Promise<BlastIndexBuild> {
+  return http.get<BlastIndexBuild>(`/blast/index-builds/${encodeURIComponent(buildId)}`);
+}

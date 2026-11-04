@@ -456,7 +456,9 @@ def utcnow() -> datetime:
 __all__ = [
     "analysis_jobs",
     "assemblies",
+    "blast_databases_catalog",
     "blast_hits",
+    "blast_index_builds",
     "blast_jobs",
     "chromosomes",
     "expression_data",
@@ -477,3 +479,44 @@ __all__ = [
     "utcnow",
     "variant_exports",
 ]
+
+
+#: Asynchronous immutable BLAST index builds. API owns the migration; the
+#: worker advances the state machine and records the published identity.
+blast_index_builds = Table(
+    "blast_index_builds",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("database_id", Integer),
+    Column("state", String(20)),
+    Column("source_object_key", String(2048)),
+    Column("source_sha256", String(64)),
+    Column("db_type", String(4)),
+    Column("build_metadata", JSONB),
+    Column("index_identity", String(64)),
+    Column("sequence_count", BigInteger),
+    Column("total_length", BigInteger),
+    Column("error_message", Text),
+    Column("requested_by", UUID(as_uuid=True)),
+    Column("started_at", DateTime(timezone=True)),
+    Column("completed_at", DateTime(timezone=True)),
+    Column("updated_at", DateTime(timezone=True)),
+)
+
+#: Worker narrow view of catalog publication (identity is immutable).
+blast_databases_catalog = Table(
+    "blast_databases",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("name", String(256)),
+    Column("db_type", String(4)),
+    Column("engine", String(16)),
+    Column("build_status", String(20)),
+    Column("is_active", Boolean),
+    Column("is_default", Boolean),
+    Column("index_version", String(256)),
+    Column("fasta_sha256", String(64)),
+    Column("sequence_count", BigInteger),
+    Column("total_length", BigInteger),
+    Column("provenance", JSONB),
+)

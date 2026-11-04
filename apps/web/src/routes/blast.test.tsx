@@ -66,7 +66,18 @@ beforeEach(() => {
   runtime.resolveTarget.mockReset().mockImplementation(async (job: { release_id: number; assembly_name: string }) => ({ release: String(job.release_id), assembly: job.assembly_name, locus: "chr01:12000-15000" }));
   runtime.hits.mockReset().mockResolvedValue({ items: [{ subject_id: "Glyma.01G000100", subject_start: 1, subject_end: 100 }] });
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(async () => {
+  // Ant Design Select opens its dropdown through a delayed state update. Let
+  // that pending timer fire while jsdom is still installed: a callback that
+  // runs after the fork tears the environment down reaches react-dom's
+  // resolveUpdatePriority(), which reads `window` and throws an unhandled
+  // "window is not defined" error (4 of them failed the frontend gate).
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 /** Render the page and open the (single) completed job's hits table. */
 async function renderHits(): Promise<QueryClient> {
@@ -236,4 +247,81 @@ it("distinguishes a failed hits query from no hits and recovers on retry", async
     cleanup();
     client.clear();
   }
+});
+
+it("offers the raw alignment download only when the job exposes one", async () => {
+  runtime.hits.mockResolvedValue({
+    items: [{ subject_id: "Glyma.01G000100", subject_start: 1, subject_end: 100 }],
+    download_url: "https://objects.example/blast-results/job.txt",
+  });
+  const client = await renderHits();
+  const link = await screen.findByTestId("blast-download");
+  expect(link.getAttribute("href")).toBe("https://objects.example/blast-results/job.txt");
+  // The artifact is the aligner's tabular text, whatever the storage suffix says.
+  expect(link.getAttribute("download")).toBe("job-ncbi_blast-blastp.tsv");
+  client.clear();
+});
+
+it("shows no download control when the job has no stored artifact", async () => {
+  const client = await renderHits();
+  await screen.findByRole("button", { name: "Glyma.01G000100" });
+  expect(screen.queryByTestId("blast-download")).toBeNull();
+  client.clear();
+});
+
+it("submits several FASTA records and rejects a record without a sequence", async () => {
+  {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><Page /></QueryClientProvider>);
+    const sequence = await screen.findByTestId("blast-sequence");
+    fireEvent.change(sequence, { target: { value: ">q1\nMKVLAAGIVGLNLGGK\n>q2" } });
+    fireEvent.click(await screen.findByTestId("blast-submit"));
+    expect(await screen.findByText("blastSearch.fasta.emptyRecord")).toBeTruthy();
+    expect(runtime.submit).not.toHaveBeenCalled();
+
+    fireEvent.change(sequence, { target: { value: ">q1\nMKVLAAGIVGLNLGGK\n>q2\nMKVLAAGIVGL" } });
+    fireEvent.click(screen.getByTestId("blast-submit"));
+    await waitFor(() => expect(runtime.submit).toHaveBeenCalledOnce());
+    expect(runtime.submit.mock.calls[0][0]).toMatchObject({
+      program: "blastp",
+      engine: "ncbi_blast",
+      database: "protein-v4",
+    });
+    client.clear();
+  }
+});
+
+it("offers both search engines from the catalog", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><Page /></QueryClientProvider>);
+  await screen.findByTestId("blast-submit");
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "blastPublic.engine" }));
+  // Both labels come from blastSearch.* — an inline literal here is exactly what
+  // the visible-copy gate rejects.
+  expect((await screen.findAllByText("blastSearch.engineNcbi")).length).toBeGreaterThan(0);
+  expect((await screen.findAllByText("blastSearch.engineDiamondBlastp")).length).toBeGreaterThan(0);
+  client.clear();
+});
+
+it("opens the newest completed job's results without a second click", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><Page /></QueryClientProvider>);
+  // The hits of the most recent job are already on the page: a reader sees
+  // whether the search returned anything without hunting for a button.
+  expect((await screen.findAllByRole("button", { name: "Glyma.01G000100" })).length).toBeGreaterThan(0);
+  expect(runtime.hits).toHaveBeenCalledOnce();
+  client.clear();
+});
+
+it("attaches parameter errors to the parameter fields instead of the sequence", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><Page /></QueryClientProvider>);
+  fireEvent.change(await screen.findByTestId("blast-sequence"), { target: { value: "MKVLAAGIVGLNLGGK" } });
+  fireEvent.change(document.getElementById("e_value") as HTMLInputElement, { target: { value: "5000" } });
+  fireEvent.click(screen.getByTestId("blast-submit"));
+  // The shared range rule is the same one the anonymous route applies, so the
+  // signed-in entry no longer accepts a query the anonymous entry rejects.
+  expect(await screen.findByText("blastSearch.invalidParameters")).toBeTruthy();
+  expect(runtime.submit).not.toHaveBeenCalled();
+  client.clear();
 });

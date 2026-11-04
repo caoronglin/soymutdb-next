@@ -2034,6 +2034,22 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # `ModuleNotFoundError: No module named 'yaml'`.
         self.assertIn("ensure_governance_python", bodies["dependency_governance_step"])
         governance_python = bodies["ensure_governance_python"]
+
+        # python-licenses-worker runs `uv run --locked --project apps/worker`,
+        # which resolves the worker science stack (h5py has no CPython 3.15
+        # wheel) and therefore needs HDF5 headers + pkg-config in THIS stage's
+        # container. "Compiler prerequisites" is a separate container, so its
+        # apt install does not survive here. Without the shared prerequisite
+        # script the analyzer never starts, no report is written, and the gate
+        # fails with `normalization_unavailable:license-expressions`.
+        governance_step = bodies["dependency_governance_step"]
+        self.assertIn("install-worker-science-build-deps.sh", governance_step)
+        self.assertIn("HDF5_PKGCONFIG_NAME", governance_step)
+        self.assertLess(
+            governance_step.index("install-worker-science-build-deps.sh"),
+            governance_step.index("deps:audit"),
+            "HDF5 prerequisites must be installed before uv builds h5py",
+        )
         self.assertIn("import yaml", governance_python)
         self.assertIn("PyYAML==", governance_python)
         # `uv`/`uvx` drive the Deptry/license analyzers; without it every one is
@@ -3672,6 +3688,33 @@ class DeliveryArchitectureTests(unittest.TestCase):
             "scripts/install-worker-science-build-deps.sh",
             SHARED_SCRIPTS,
             "register the prerequisite script so the shared-script gates cover it",
+        )
+
+    def test_dependency_governance_provisions_hdf5_before_the_worker_license_probe(self) -> None:
+        """The governance license analyzer resolves the worker runtime too.
+
+        Real CNB build cnb-9gi-1k6h3mikv failed Dependency governance with
+        `python-licenses-worker: failed (normalization_unavailable:license-expressions)`.
+        `uv run --locked --project apps/worker --with pip-licenses` builds h5py
+        3.16 from its sdist on Python 3.15 (scanpy -> anndata -> h5py), so it
+        needs the same system HDF5 headers + pkg-config the backend gate already
+        installs. Without them pip-licenses crashes before writing a report and
+        the fail-closed gate has nothing to normalize. The governance stage must
+        provision them through the shared script BEFORE `pnpm deps:audit` runs,
+        and both providers reach it through this one job body.
+        """
+        shared = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        step = shared[shared.index("dependency_governance_step() {") :]
+        step = step[: step.index("\ndependency_governance_run()")]
+
+        self.assertIn("export HDF5_PKGCONFIG_NAME=", step)
+        self.assertIn("hdf5-serial", step)
+        self.assertIn("scripts/install-worker-science-build-deps.sh", step)
+        self.assertIn("pnpm deps:audit", step)
+        self.assertLess(
+            step.index("install-worker-science-build-deps.sh"),
+            step.index("pnpm deps:audit"),
+            "HDF5 prerequisites must be installed BEFORE the worker license probe",
         )
 
     def test_acceptance_entry_point_never_reports_a_missing_prerequisite_as_a_pass(self) -> None:

@@ -14,8 +14,15 @@ from typing import Final
 # ---------------------------------------------------------------------------
 
 BLAST_RUN_TASK: Final[str] = "soymutdb_worker.tasks.blast.run_blast"
-#: Asynchronous, immutable index build -> validation -> atomic publication.
-#: Runs on the same ``blast`` queue as searches, never inside an HTTP request.
+#: Asynchronous, worker-only construction of an immutable NCBI BLAST index
+#: (staging -> makeblastdb -> validation -> atomic publication). HTTP handlers
+#: enqueue this through the transactional outbox and never invoke makeblastdb
+#: themselves; it runs on the `blast` queue, never inside a request.
+BLAST_BUILD_INDEX_TASK: Final[str] = "soymutdb_worker.tasks.blast_index.build_index"
+#: The lifecycle-owning build task (staging -> makeblastdb -> validation ->
+#: catalog publication). `BLAST_BUILD_INDEX_TASK` above is the legacy single-shot
+#: builder that predates the catalog state machine; new work is queued through
+#: this one, and both are registered so redelivered legacy messages still run.
 BLAST_INDEX_BUILD_TASK: Final[str] = (
     "soymutdb_worker.tasks.blast_index_tasks.build_blast_index"
 )
@@ -62,6 +69,7 @@ QUEUE_DEFAULT: Final[str] = "default"
 TASK_QUEUE_MAP: Final[dict[str, str]] = {
     BLAST_RUN_TASK: QUEUE_BLAST,
     BLAST_INDEX_BUILD_TASK: QUEUE_BLAST,
+    BLAST_BUILD_INDEX_TASK: QUEUE_BLAST,
     BUILD_STATIC_PAGES_TASK: QUEUE_STATS,
     STATIC_PUBLISH_TASK: QUEUE_STATS,
     PAGE_BUILDER_PUBLISH_TASK: QUEUE_DEFAULT,
@@ -88,6 +96,7 @@ __all__ = [
     "ANALYSIS_SCANPY_TASK",
     "BLAST_RUN_TASK",
     "BLAST_INDEX_BUILD_TASK",
+    "BLAST_BUILD_INDEX_TASK",
     "GWAS_RUN_TASK",
     "BUILD_STATIC_PAGES_TASK",
     "EXPORT_VARIANTS_TASK",

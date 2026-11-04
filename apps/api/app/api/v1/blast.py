@@ -18,7 +18,9 @@ from ...core.security import RoleName, require_admin_roles
 from ...models.auth import User
 from ...schemas.blast import (
     BlastDatabaseResponse,
+    BlastGenomeTargetResponse,
     BlastIndexBuildQueued,
+    BlastIndexBuildResponse,
     BlastJobListResponse,
     BlastJobResponse,
     BlastResultResponse,
@@ -244,6 +246,104 @@ def _require_public_blast() -> None:
     if not get_settings().blast_public_enabled:
         raise NotFoundError("Public BLAST is disabled")
 
+
+@router.post(
+    "/index-builds",
+    response_model=BlastIndexBuildResponse,
+    status_code=202,
+    dependencies=[Depends(require_role(RoleName.ADMINISTRATOR))],
+)
+async def create_blast_index_build(
+    payload: BlastIndexBuildRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
+    current_user: User = Depends(get_current_user),
+) -> BlastIndexBuildResponse:
+    """Request an immutable NCBI index build (admin only).
+
+    Records the catalog/build rows and one transactional-outbox event in a
+    single transaction. ``makeblastdb`` never runs inside this HTTP request;
+    the worker on the ``blast`` queue owns construction and publication.
+    """
+    _private(response)
+    return await service.request_index_build(
+        db, payload, user_id=current_user.id, release_context=release_context
+    )
+
+
+@router.get(
+    "/index-builds/{build_id}",
+    response_model=BlastIndexBuildResponse,
+    dependencies=[Depends(require_role(RoleName.ADMINISTRATOR))],
+)
+async def get_blast_index_build(
+    build_id: uuid.UUID,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> BlastIndexBuildResponse:
+    """Poll one build's state; no filesystem path or binary name is exposed."""
+    _private(response)
+    return await service.get_index_build(db, build_id)
+
+
+@router.get(
+    "/jobs/{job_id}/hits/{subject_id}/genome-target",
+    response_model=BlastGenomeTargetResponse,
+)
+async def get_blast_hit_genome_target(
+    job_id: uuid.UUID,
+    subject_id: str,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BlastGenomeTargetResponse:
+    """Resolve a subject to a gene locus in the job's release/assembly.
+
+    Never derives genomic coordinates from amino-acid alignment positions.
+    An unresolved subject returns an explicit reason and no locus.
+    """
+    _private(response)
+    return await service.resolve_genome_target(
+        db, job_id, subject_id, current_user.id, get_user_roles(current_user)
+    )
+
+
+@public_router.get(
+    "/public/jobs/{job_id}/hits/{subject_id}/genome-target",
+    response_model=BlastGenomeTargetResponse,
+    dependencies=[Depends(_require_public_blast)],
+)
+async def get_public_blast_hit_genome_target(
+    job_id: uuid.UUID,
+    subject_id: str,
+    response: Response,
+    access_token: str | None = Header(default=None, alias="X-Blast-Token"),
+    db: AsyncSession = Depends(get_db),
+) -> BlastGenomeTargetResponse:
+    _public_private(response)
+    verify_blast_capability(access_token, job_id)
+    return await service.resolve_genome_target(
+        db, job_id, subject_id, public_token=access_token
+    )
+
+
+
+@public_router.post(
+    "/public/jobs/{job_id}/cancel",
+    response_model=BlastJobResponse,
+    dependencies=[Depends(_require_public_blast)],
+)
+async def cancel_public_blast_job(
+    job_id: uuid.UUID,
+    response: Response,
+    access_token: str | None = Header(default=None, alias="X-Blast-Token"),
+    db: AsyncSession = Depends(get_db),
+) -> BlastJobResponse:
+    """Anonymous capability holder may cancel only its own pending job."""
+    _public_private(response)
+    verify_blast_capability(access_token, job_id)
+    return await service.cancel_job(db, job_id, public_token=access_token)
 
 @public_router.post(
     "/public/jobs",
