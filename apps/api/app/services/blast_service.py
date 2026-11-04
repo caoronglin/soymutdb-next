@@ -86,6 +86,17 @@ def _sanitize_error(message: str | None) -> str | None:
     return clean.strip()[:_MAX_ERROR_LEN] or None
 
 
+def _has_frozen_index_provenance(provenance: dict) -> bool:
+    """A retryable NCBI job carries the identity of the index it searched."""
+    if provenance.get("engine", "diamond") != "ncbi_blast":
+        return provenance.get("engine") == "diamond"
+    return all(
+        isinstance(provenance.get(key), str)
+        and re.fullmatch(r"[a-f0-9]{64}", provenance[key])
+        for key in ("index_identity", "fasta_sha256")
+    )
+
+
 def _worker_parameters(
     params: BlastParameters, program: BlastProgram = BlastProgram.BLASTP,
     engine: str = "diamond",
@@ -313,8 +324,7 @@ class BlastService:
         # For blastp/blastx/tblastn the hit's subject_start/end are residue
         # positions. Nothing below reads them: the locus comes only from the
         # resolved gene record in the job's own assembly/release.
-        database = getattr(job, "database", None)
-        assembly = getattr(database, "assembly", None) if database is not None else None
+        _, assembly = await self._load_database_context(db, job.database_id)
         if assembly is None or assembly.release_id is None:
             return unresolved("assembly_mismatch")
         release_id = int(assembly.release_id)
@@ -379,6 +389,28 @@ class BlastService:
             locus=f"{name}:{int(gene.start)}-{int(gene.end)}",
             resolution=resolution,
         )
+
+    @staticmethod
+    async def _load_database_context(
+        db: AsyncSession, database_id: int
+    ) -> tuple[BlastDatabase | None, Assembly | None]:
+        """Fetch the catalog row and its assembly explicitly.
+
+        ``BlastJob.database`` is a lazy relationship, and the ORM flushes or can
+        lazy-load: both read it as the target index instead of the *job*. A
+        control-plane read (``/blast/jobs``) must not be able to fail because a
+        catalog row is missing its assembly, so the two lookups stay here and
+        are ``None``-safe.
+        """
+        database = (await db.execute(
+            select(BlastDatabase).where(BlastDatabase.id == database_id)
+        )).scalar_one_or_none()
+        assembly = None
+        if database is not None:
+            assembly = (await db.execute(
+                select(Assembly).where(Assembly.id == database.assembly_id)
+            )).scalar_one_or_none()
+        return database, assembly
 
     @staticmethod
     def _is_runnable_database(database: BlastDatabase) -> bool:
@@ -641,7 +673,10 @@ class BlastService:
         await db.commit()
         await db.refresh(job)
 
-        return self._job_to_response(job)
+        assembly = (await db.execute(
+            select(Assembly).where(Assembly.id == blast_db.assembly_id)
+        )).scalar_one_or_none()
+        return self._job_to_response(job, blast_db, assembly)
 
     async def get_job(
         self,
@@ -659,7 +694,8 @@ class BlastService:
         if job is None:
             raise NotFoundError(f"BLAST job {job_id} not found")
         self._authorize_read(job, user_id, user_roles, public_token)
-        response = self._job_to_response(job)
+        database, assembly = await self._load_database_context(db, job.database_id)
+        response = self._job_to_response(job, database, assembly)
         if public_token is not None:
             response.result_url = None
             response.error_message = self._public_error(job.error_message)
@@ -698,11 +734,16 @@ class BlastService:
             raise ValidationError(
                 f"Only pending or running BLAST jobs can be cancelled (status={job.status})"
             )
+        # The terminal reason is part of the record: a cancelled job must not
+        # read like one that failed on its own, and ``expired`` is reserved for
+        # an actual deadline. ``_job_to_response`` reads this column back.
         job.status = BlastJobStatus.CANCELLED
+        job.error_message = "Cancelled by user"
         job.completed_at = datetime.now(UTC)
         await db.commit()
         await db.refresh(job)
-        return self._job_to_response(job)
+        database, assembly = await self._load_database_context(db, job.database_id)
+        return self._job_to_response(job, database, assembly)
 
     async def retry_job(
         self,
@@ -713,40 +754,91 @@ class BlastService:
         *,
         release_context: ReleaseContext,
     ) -> BlastJobResponse:
-        """Retry a failed/expired job as a NEW job, for both engines alike.
+        """Re-run a failed/expired job as the SAME job with frozen provenance.
 
-        Results and indexes are immutable: retry never mutates the original
-        row, never reuses its job id, and re-resolves the database in the
-        published release so a stale provenance cannot be replayed.
+        Retry never copies a job: it re-arms the existing row and re-dispatches
+        it with the ``_search_provenance`` frozen at submission time, so a
+        later index publication cannot silently change what is searched and the
+        job id, hits and result path stay one record. Only ``failed`` and
+        ``expired`` rows are retryable, and only when they carry a complete
+        frozen identity — a job that never froze one is refused instead of
+        re-resolved against today's catalog.
         """
         result = await db.execute(select(BlastJob).where(BlastJob.id == job_id))
-        original = result.scalar_one_or_none()
-        if original is None:
+        job = result.scalar_one_or_none()
+        if job is None:
             raise NotFoundError(f"BLAST job {job_id} not found")
-        self._authorize_job(original.user_id, user_id, user_roles)
-        if original.status not in (BlastJobStatus.FAILED, BlastJobStatus.EXPIRED):
+        self._authorize_job(job.user_id, user_id, user_roles)
+        if job.status not in (BlastJobStatus.FAILED, BlastJobStatus.EXPIRED):
             raise ValidationError(
-                f"Only failed or expired BLAST jobs can be retried (status={original.status})"
+                f"Only failed or expired BLAST jobs can be retried (status={job.status})"
             )
         if user_id is None:
             raise AuthorizationError("Anonymous BLAST jobs cannot be retried")
-        provenance = (original.parameters or {}).get("_search_provenance", {})
-        engine = provenance.get("engine", "diamond")
-        request = BlastSubmitRequest(
-            engine=engine,
-            program=BlastProgram(original.program),
-            database_id=original.database_id,
-            query_sequence=original.query_sequence,
-            parameters=BlastParameters(
-                evalue=float((original.parameters or {}).get("evalue", 1e-5)),
-                max_target_seqs=int(
-                    (original.parameters or {}).get("max_target_seqs", 50)
-                ),
-            ),
+        provenance = (job.parameters or {}).get("_search_provenance") or {}
+        if not isinstance(provenance, dict) or not _has_frozen_index_provenance(provenance):
+            raise ValidationError(
+                "Cannot retry a BLAST job without frozen index provenance; submit a new job"
+            )
+        database, assembly = await self._load_database_context(db, job.database_id)
+        if database is None or assembly is None:
+            raise ValidationError(
+                "Cannot retry a BLAST job whose catalog row is gone; submit a new job"
+            )
+
+        await self._enforce_user_limit(db, user_id)
+        job.status = BlastJobStatus.PENDING
+        job.error_message = None
+        job.started_at = None
+        job.completed_at = None
+        job.result_path = None
+        job.hit_count = 0
+        job.query_len = None
+        job.expires_at = datetime.now(UTC) + timedelta(days=7)
+        await db.flush()
+
+        worker_params = {
+            key: value for key, value in (job.parameters or {}).items()
+            if key not in {"_search_provenance", PUBLIC_JOB_MARKER}
+        }
+        index_metadata = {
+            "engine": provenance["engine"],
+            "database_type": provenance.get("database_type", str(database.db_type)),
+            "index_identity": provenance["index_identity"],
+            "fasta_sha256": provenance["fasta_sha256"],
+            "index_version": provenance.get("index_version", provenance["index_identity"]),
+            "annotation_version": provenance.get("annotation_version"),
+        }
+        job_payload = build_job_payload(
+            job_id=job.id,
+            task_name=BLAST_RUN_TASK,
+            payload={
+                "job_id": str(job.id),
+                "program": job.program,
+                **index_metadata,
+                "database": database.name,
+                "sequence": job.query_sequence,
+                "evalue": float((job.parameters or {}).get("evalue", 1e-5)),
+                "max_target_seqs": int((job.parameters or {}).get("max_target_seqs", 50)),
+                "parameters": worker_params,
+                "release_key": release_context.release_key,
+                "release_id": provenance.get("release_id", release_context.release_id),
+                "assembly": provenance.get("assembly_name", assembly.name),
+                "assembly_id": provenance.get("assembly_id", database.assembly_id),
+            },
+            idempotency_key=f"blast:{job.id}:retry:{uuid.uuid4().hex}",
+            max_attempts=settings.blast_max_attempts,
         )
-        return await self.submit_job(
-            db, user_id, request, release_context=release_context
+        await create_outbox_event(
+            db,
+            aggregate_type="blast_job",
+            aggregate_id=str(job.id),
+            event_type="blast_job.retry",
+            payload=job_payload.model_dump(mode="json"),
         )
+        await db.commit()
+        await db.refresh(job)
+        return self._job_to_response(job, database, assembly)
 
     async def list_jobs(
         self,
@@ -775,8 +867,29 @@ class BlastService:
             .limit(page_size)
         )
         jobs = list((await db.execute(stmt)).scalars().all())
+        database_ids = {job.database_id for job in jobs if job.database_id is not None}
+        catalog: dict[int, BlastDatabase] = {}
+        assemblies: dict[int, Assembly] = {}
+        if database_ids:
+            rows = (await db.execute(
+                select(BlastDatabase).where(BlastDatabase.id.in_(database_ids))
+            )).scalars().all()
+            catalog = {row.id: row for row in rows}
+            assembly_ids = {row.assembly_id for row in rows}
+            assembly_rows = (await db.execute(
+                select(Assembly).where(Assembly.id.in_(assembly_ids))
+            )).scalars().all()
+            assemblies = {row.id: row for row in assembly_rows}
         return BlastJobListResponse(
-            items=[self._job_to_response(job) for job in jobs],
+            items=[
+                self._job_to_response(
+                    job,
+                    catalog.get(job.database_id),
+                    assemblies.get(catalog[job.database_id].assembly_id)
+                    if job.database_id in catalog else None,
+                )
+                for job in jobs
+            ],
             total=total,
             page=page,
             page_size=page_size,
@@ -931,12 +1044,16 @@ class BlastService:
             raise AuthorizationError("You do not have permission to access this BLAST job")
 
     @staticmethod
-    def _job_to_response(job: BlastJob) -> BlastJobResponse:
-        database = getattr(job, "database", None)
-        # Provenance is read through the database row (the job stores only the
+    def _job_to_response(
+        job: BlastJob,
+        database: BlastDatabase | None = None,
+        assembly: Assembly | None = None,
+    ) -> BlastJobResponse:
+        # Provenance is read through the catalog row (the job stores only the
         # database id): a stored result must state which release and assembly it
-        # was computed against.
-        assembly = getattr(database, "assembly", None) if database is not None else None
+        # was computed against. Both rows are passed in explicitly so rendering
+        # a job never triggers a lazy load, and a missing/legacy catalog row
+        # degrades to ``None`` instead of a 500.
         return BlastJobResponse(
             job_id=str(job.id),
             status=BlastSchemaJobStatus(job.status),

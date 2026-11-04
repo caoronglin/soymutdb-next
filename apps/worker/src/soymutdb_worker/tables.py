@@ -243,6 +243,7 @@ blast_databases = Table(
     Column("assembly_id", Integer),
     Column("release_id", Integer),
     Column("assembly_version", String(64)),
+    Column("provenance", JSONB),
 )
 
 blast_jobs = Table(
@@ -456,7 +457,7 @@ def utcnow() -> datetime:
 __all__ = [
     "analysis_jobs",
     "assemblies",
-    "blast_databases_catalog",
+    "blast_databases",
     "blast_hits",
     "blast_index_builds",
     "blast_jobs",
@@ -503,20 +504,3 @@ blast_index_builds = Table(
     Column("updated_at", DateTime(timezone=True)),
 )
 
-#: Worker narrow view of catalog publication (identity is immutable).
-blast_databases_catalog = Table(
-    "blast_databases",
-    metadata,
-    Column("id", Integer, primary_key=True),
-    Column("name", String(256)),
-    Column("db_type", String(4)),
-    Column("engine", String(16)),
-    Column("build_status", String(20)),
-    Column("is_active", Boolean),
-    Column("is_default", Boolean),
-    Column("index_version", String(256)),
-    Column("fasta_sha256", String(64)),
-    Column("sequence_count", BigInteger),
-    Column("total_length", BigInteger),
-    Column("provenance", JSONB),
-)

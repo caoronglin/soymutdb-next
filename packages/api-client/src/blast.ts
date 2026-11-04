@@ -499,11 +499,6 @@ export function requestBlastIndexBuild(payload: BlastIndexBuildRequest): Promise
   return http.post<BlastIndexBuild>("/blast/index-builds", { json: payload });
 }
 
-/** Admin-only: the lifecycle entry point (`POST /blast/databases/build`). */
-export function queueBlastIndexBuild(databaseId: number): Promise<BlastIndexBuildQueued> {
-  return http.post<BlastIndexBuildQueued>("/blast/databases/build", { json: { database_id: databaseId } });
-}
-
 export function getBlastIndexBuild(buildId: string): Promise<BlastIndexBuild> {
   return http.get<BlastIndexBuild>(`/blast/index-builds/${encodeURIComponent(buildId)}`);
 }

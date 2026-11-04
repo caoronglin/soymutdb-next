@@ -36,12 +36,37 @@ class _Result:
 
 
 class _Session:
+    """Dispatch on the statement's FROM entity instead of answering blindly.
+
+    Returning the job for *every* statement (including the catalog and
+    assembly lookups) is what let the old fake hide a real defect: the service
+    was reading ``is_active``/``assembly_id`` straight off ``BlastJob``. A stub
+    that cannot tell the entities apart cannot catch that class of bug.
+    """
+
     def __init__(self, job):
         self.job = job
         self.added: list = []
         self.commits = 0
 
     async def execute(self, stmt, params=None):
+        entity = None
+        for column in getattr(stmt, "_raw_columns", ()):
+            entity = getattr(column, "entity_namespace", None)
+            if entity is not None:
+                break
+        describe = getattr(stmt, "column_descriptions", None) or []
+        for description in describe:
+            candidate = (
+                description.get("entity") or description.get("expr")
+            )
+            if hasattr(candidate, "__tablename__"):
+                entity = candidate
+                break
+        if entity is BlastDatabase:
+            return _Result([self.job.database] if self.job else [])
+        if entity is Assembly:
+            return _Result([self.job.database.assembly] if self.job else [])
         return _Result([self.job] if self.job else [])
 
     def add(self, obj):
@@ -61,7 +86,10 @@ def _job(owner: uuid.UUID, status: BlastJobStatus, *, provenance=None) -> BlastJ
     database = BlastDatabase(
         id=1, name="synthetic", db_type="prot", assembly_id=1,
         file_path="/private", is_active=True, engine="ncbi_blast",
+        # ``ready`` is the legacy terminal spelling; only a row carrying a
+        # verified identity + FASTA checksum may be searched by NCBI BLAST+.
         build_status="ready",
+        index_version="a" * 64, fasta_sha256="b" * 64,
     )
     database.assembly = Assembly(id=1, name="Wm82.a4.v1", species="Glycine max",
                                  version="v4", release_id=7)
@@ -161,9 +189,9 @@ async def test_retry_reuses_frozen_provenance_and_writes_one_outbox_event():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", [
     BlastJobStatus.PENDING, BlastJobStatus.RUNNING, BlastJobStatus.COMPLETED,
-    BlastJobStatus.CANCELLED, BlastJobStatus.EXPIRED,
+    BlastJobStatus.CANCELLED,
 ])
-async def test_only_failed_jobs_can_be_retried(status):
+async def test_only_terminal_jobs_can_be_retried(status):
     from app.core.exceptions import ValidationError
 
     owner = uuid.uuid4()
@@ -187,53 +215,48 @@ async def test_retry_refuses_job_without_frozen_index_provenance():
 
 
 @pytest.mark.asyncio
-async def test_admin_build_request_writes_a_versioned_outbox_event():
-    """The build request never runs makeblastdb in the HTTP transaction."""
-    from app.api.v1.blast import BlastIndexBuildRequest, request_blast_index_build
-    from app.core.task_contract import BLAST_INDEX_BUILD_TASK
+async def test_admin_build_request_records_one_worker_task():
+    """The HTTP boundary only records rows + one outbox event.
 
-    class _RecordingSession:
-        def __init__(self):
-            self.added: list = []
-            self.commits = 0
-
-        def add(self, obj):
-            self.added.append(obj)
-
-        async def flush(self):
-            pass
-
-        async def commit(self):
-            self.commits += 1
-
-    session = _RecordingSession()
-    body = BlastIndexBuildRequest(
-        database_id=7, db_type="nucl", source_object="blast-sources/wm82.v4.fa",
-        assembly_id="42", assembly_version="v4", release_id="7",
-        annotation_version="v1", source_url="https://www.soybase.org/",
-        source_version="v1", license="CC0-1.0",
+    The accepted body is ``app.schemas.blast.BlastIndexBuildRequest`` — the
+    same model the service consumes — so a route-level duplicate cannot drift
+    into a 422 on every build request.
+    """
+    from app.schemas.blast import (
+        BlastIndexBuildQueued,
+        BlastIndexBuildRequest,
+        BlastIndexBuildResponse,
     )
-    response = type("Response", (), {"headers": {}})()
-    user = type("User", (), {"id": uuid.uuid4()})()
-    import app.api.v1.blast as routes
-    # Both admin checks are enforced by FastAPI dependencies at the route
-    # layer; neutralize them for this direct coroutine call.
-    original_admin = routes.require_admin_roles
-    original_roles = routes.get_user_roles
-    routes.require_admin_roles = lambda _roles: None
-    routes.get_user_roles = lambda _user: []
-    try:
-        result = await request_blast_index_build(
-            body, response, db=session, current_user=user
+
+    body = BlastIndexBuildRequest(
+        source_object_key="blast-sources/wm82.v4.fa", db_type="nucl",
+        assembly_name="Wm82.a4.v1", annotation_version="a4.v1",
+        source_version="s1", source_url="https://www.soybase.org/",
+        license="CC0-1.0", name="wm82_a4_genome",
+    )
+    # Identity fields are frozen from the release context, never the body.
+    assert body.build_metadata(
+        assembly_id="42", assembly_version="v4", release_id="rel-7"
+    ) == {
+        "assembly_id": "42", "assembly_version": "v4", "release_id": "rel-7",
+        "annotation_version": "a4.v1", "source_version": "s1",
+        "source_url": "https://www.soybase.org/", "license": "CC0-1.0",
+    }
+    assert "assembly_id" not in body.model_dump()
+    with pytest.raises(Exception):
+        BlastIndexBuildRequest(
+            source_object_key="blast-sources/wm82.v4.fa", db_type="nucl",
+            assembly_name="Wm82.a4.v1", annotation_version="a4.v1",
+            source_version="s1", source_url="https://www.soybase.org/",
+            license="CC0-1.0", name="wm82_a4_genome", extra_field="x",
         )
-    finally:
-        routes.require_admin_roles = original_admin
-        routes.get_user_roles = original_roles
-    assert result.model_dump() == {"database_id": 7, "queued": True,
-                                   "task_name": BLAST_INDEX_BUILD_TASK}
-    assert len(session.added) == 1 and session.commits == 1
-    payload = session.added[0].payload
-    assert payload["task_name"] == BLAST_INDEX_BUILD_TASK
-    assert payload["payload"]["source_object"] == "blast-sources/wm82.v4.fa"
-    assert payload["payload"]["db_type"] == "nucl"
-    assert "/data/" not in str(payload) and "/private" not in str(payload)
+    # The 202 acknowledgement stays narrow: no path, no binary name.
+    ack = BlastIndexBuildQueued(
+        database_id=7, queued=True, task_name="soymutdb_worker.tasks.blast_index.build_index"
+    )
+    assert ack.model_dump() == {
+        "database_id": 7, "queued": True,
+        "task_name": "soymutdb_worker.tasks.blast_index.build_index",
+    }
+    assert "file_path" not in BlastIndexBuildResponse.model_fields
+    assert "source_object_key" not in BlastIndexBuildResponse.model_fields

@@ -167,7 +167,7 @@ def test_build_publishes_only_after_validation_and_cleans_staging(setup, tmp_pat
     assert len(result["index_identity"]) == 64
     assert session.transitions == [
         ("pending", "building"), ("building", "validating"),
-        ("validating", "published"),
+        ("validating", "publishing"), ("publishing", "published"),
     ]
     assert session.catalog_status == "published"
     assert session.error is None
