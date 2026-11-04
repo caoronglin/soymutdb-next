@@ -812,6 +812,60 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertIn('cargo.get("dependencies", {})', checker)
         self.assertNotIn('"bio ="', checker)
 
+    def test_bio_core_static_gate_rejects_dangling_doc_citations(self) -> None:
+        """--static must check that every cited docs/ path exists.
+
+        The section-heading guard above only matches `(path, "label")` pairs:
+        a bare dangling path (the shape the squash regression actually had)
+        yields zero citations, and a dangling path next to a valid labeled one
+        is not checked at all. This is the narrower, stronger assertion: every
+        docs/*.md path in ci-job-steps.sh must resolve, so a squash cannot
+        silently drop a path fix again.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_under_test",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        steps = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        self.assertEqual(
+            checker.doc_ref_errors(steps), [],
+            "--static must pass on the committed tree",
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs/ops").mkdir(parents=True)
+            (root / "docs/ops/bio-core-wheel.md").write_text(
+                "# Wheel\n\n## CI：构建一次，消费一次\n", encoding="utf-8"
+            )
+            good = '# see docs/ops/bio-core-wheel.md, "CI：构建一次，消费一次"'
+            self.assertEqual(checker.doc_ref_errors(good, root), [], good)
+            # A bare dangling path, with no label at all.
+            dangling = "# see docs/build/script-vs-plugin.md#file-sharing"
+            self.assertTrue(
+                checker.doc_ref_errors(dangling, root),
+                "a docs/ path that is not committed must fail --static",
+            )
+            # ...and one hiding next to a perfectly valid labeled citation.
+            alongside = (
+                '# see docs/ops/bio-core-wheel.md, "CI：构建一次，消费一次" and '
+                'docs/build/script-vs-plugin.md#file-sharing'
+            )
+            self.assertTrue(
+                checker.doc_ref_errors(alongside, root),
+                "a dangling path beside a valid citation must fail --static",
+            )
+            stale = '# see docs/ops/bio-core-wheel.md, section "renamed heading"'
+            self.assertTrue(
+                checker.doc_ref_errors(stale, root),
+                "a section hint naming no heading must fail --static",
+            )
+
     def test_github_workflows_delegate_instead_of_inlining_gates(self) -> None:
         ci = _workflow_text("ci.yml")
         for delegation in (

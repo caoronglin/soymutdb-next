@@ -6,8 +6,9 @@ never as a skipped pass:
 
 1. Static (Python 3.11+ for stdlib tomllib; the pinned CI floor is 3.15): the
    crate declares a pinned toolchain, its lock file is committed, the CI job is
-   registered in the shared dispatcher, and the verification script actually
-   installs + imports the wheel. The manifest is parsed, not grep-ed.
+   registered in the shared dispatcher, the verification script actually
+   installs + imports the wheel, and every docs/ citation in the dispatcher
+   resolves. The manifest is parsed, not grep-ed.
 2. Runtime (CPython 3.15 with the wheel installed): import the compiled
    extension and execute real scientific assertions.
 
@@ -21,12 +22,49 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import re
 import sys
 import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CRATE = ROOT / "packages" / "bio-core"
+
+DOC_REF = re.compile(r"docs/[\w./-]+\.md(?![.\w/-])")
+SECTION_HINT = re.compile(r'(?:,\s*|section\s+)"([^"]+)"')
+
+
+def doc_ref_errors(text: str, root: Path = ROOT) -> list[str]:
+    """Fail when a docs/ citation points at a missing file or section.
+
+    A squash dropped a citation fix and reintroduced a path into a directory
+    that never existed; neither review nor any gate noticed. Called on the
+    shared dispatcher only: every cited path plus a quoted section hint beside
+    it. A dangling path or a renamed heading now fails instead of lingering.
+    """
+    errors: list[str] = []
+    # A citation can wrap across consecutive '#'-prefixed comment lines.
+    flat = re.sub(r"\n[ \t]*#[ \t]*", " ", text)
+    for line in flat.splitlines():
+        for match in DOC_REF.finditer(line):
+            ref = match.group(0)
+            doc = root / ref
+            if not doc.is_file():
+                errors.append(f"ci-job-steps.sh cites missing doc {ref!r}")
+                continue
+            hint = SECTION_HINT.search(line[match.end():match.end() + 120])
+            if not hint:
+                continue
+            headings = {
+                heading.lstrip("#").strip()
+                for heading in doc.read_text(encoding="utf-8").splitlines()
+                if re.match(r"#{1,6}\s", heading)
+            }
+            if hint.group(1) not in headings:
+                errors.append(
+                    f"ci-job-steps.sh cites missing section {hint.group(1)!r} in {ref}"
+                )
+    return errors
 
 
 def check_static() -> int:
@@ -68,6 +106,7 @@ def check_static() -> int:
                     errors.append(f"Cargo.toml dependency {dep!r} has no version/workspace pin")
 
     steps = (ROOT / "scripts" / "ci-job-steps.sh").read_text(encoding="utf-8")
+    errors.extend(doc_ref_errors(steps))
     if "bio-core" not in steps or "bio_core_run()" not in steps:
         errors.append("bio-core job is not registered in scripts/ci-job-steps.sh")
     verify = (ROOT / "scripts" / "verify-bio-core.sh").read_text(encoding="utf-8")
