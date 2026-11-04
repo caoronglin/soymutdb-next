@@ -43,6 +43,7 @@ SHARED_SCRIPTS = (
     "scripts/verify-frontend-artifacts.sh",
     "scripts/verify-backend-tests.sh",
     "scripts/verify-bio-core.sh",
+    "scripts/check_bio_core_wheel.py",
     "scripts/install-worker-science-build-deps.sh",
     "scripts/with-postgres-service.sh",
     "scripts/build-static-apps.sh",
@@ -506,6 +507,11 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # no pytest, so the wheel gate must build its own throwaway venv.
         self.assertIn("-m venv", verify)
         self.assertIn("--locked", verify)
+        # Both smoke layers must keep invoking the wheel checker. Without these
+        # two assertions, deleting either call from smoke.sh stays green.
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        self.assertIn("check_bio_core_wheel.py --static", smoke)
+        self.assertIn("check_bio_core_wheel.py --runtime", smoke)
         # The crate pins its own compiler; no second Rust version in the YAML.
         pin = (ROOT / "packages/bio-core/rust-toolchain.toml").read_text(encoding="utf-8")
         self.assertIn("channel", pin)
