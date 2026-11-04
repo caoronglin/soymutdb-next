@@ -40,6 +40,7 @@ import {
   EMPTY_REGION,
   formatRegion,
   RegionForm,
+  variantRowKey,
   type RegionErrors,
   type RegionFormState,
 } from "./-popgen-form";
@@ -346,7 +347,7 @@ function LdComponent() {
               </div>
               <DataTable
                 ariaLabel={t("tools.popgen.ld.variantsTitle")}
-                rowKey={(row) => row.variant_id}
+                rowKey={variantRowKey}
                 data={result.variants}
                 columns={[
                   {

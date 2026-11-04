@@ -20,6 +20,7 @@ import {
   EMPTY_REGION,
   formatRegion,
   RegionForm,
+  variantRowKey,
   type RegionErrors,
   type RegionFormState,
 } from "./-popgen-form";
@@ -191,7 +192,7 @@ function AlleleFreqComponent() {
               </div>
               <DataTable<AlleleFreqVariant>
                 ariaLabel={t("tools.popgen.allelefreq.resultsTitle")}
-                rowKey={(row) => row.variant_id}
+                rowKey={variantRowKey}
                 data={result.variants}
                 columns={[
                   {

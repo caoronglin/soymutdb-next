@@ -19818,6 +19818,10 @@
             "type": "string",
             "title": "Variant Id"
           },
+          "assembly": {
+            "type": "string",
+            "description": "Assembly namespace the variant was read from.\n\n`variant_id` is only unique per (release, assembly); a row that travels\nwithout its namespace cannot be identified once two scopes meet."
+          },
           "chromosome": {
             "type": "string",
             "title": "Chromosome"
@@ -19866,6 +19870,7 @@
         "type": "object",
         "required": [
           "variant_id",
+          "assembly",
           "chromosome",
           "position",
           "ref_allele",
@@ -27421,6 +27426,10 @@
             "type": "string",
             "title": "Variant Id"
           },
+          "assembly": {
+            "type": "string",
+            "description": "Assembly namespace the variant was read from (see AlleleFreqVariant)."
+          },
           "chromosome": {
             "type": "string",
             "title": "Chromosome"
@@ -27441,6 +27450,7 @@
         "type": "object",
         "required": [
           "variant_id",
+          "assembly",
           "chromosome",
           "position",
           "ref_allele",

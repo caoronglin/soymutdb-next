@@ -31,6 +31,7 @@ import { Route as LdRoute, parseGenotypes } from "./ld";
 import { Route as DiversityRoute, formatPi } from "./diversity";
 import { Route as AlleleFreqRoute, formatFrequency } from "./allelefreq";
 import { ldChartState, toLdCells } from "./-popgen-charts";
+import { variantRowKey } from "./-popgen-form";
 
 type RouteOptions = { component: React.ComponentType };
 function componentOf(route: unknown): React.ComponentType {
@@ -65,8 +66,8 @@ const ldResponse = (overrides: Partial<LdResponse> = {}): LdResponse => ({
   end: 2000,
   n_variants: 2,
   variants: [
-    { variant_id: "v1", chromosome: "chr01", position: 1000, ref_allele: "A", alt_allele: "G" },
-    { variant_id: "v2", chromosome: "chr01", position: 1200, ref_allele: "C", alt_allele: "T" },
+    { variant_id: "v1", assembly: "Wm82.a4.v1", chromosome: "chr01", position: 1000, ref_allele: "A", alt_allele: "G" },
+    { variant_id: "v2", assembly: "Wm82.a4.v1", chromosome: "chr01", position: 1200, ref_allele: "C", alt_allele: "T" },
   ],
   r_squared: null,
   note: "per-sample genotypes are required to compute LD",
@@ -151,6 +152,28 @@ describe("parseGenotypes", () => {
 
   it("returns nothing for an empty box", () => {
     expect(parseGenotypes("   \n ")).toEqual({ matrix: null, error: null });
+  });
+});
+
+describe("variantRowKey", () => {
+  const row = {
+    variant_id: "v1",
+    assembly: "Wm82.a4.v1",
+    chromosome: "chr01",
+    position: 1000,
+    ref_allele: "A",
+    alt_allele: "G",
+  };
+
+  it("separates two rows that share a variant_id but not an assembly", () => {
+    // `variant_id` is unique per (release, assembly) only, so a key built from
+    // it alone would make two namespaces' rows collide and React would reuse
+    // the wrong row.
+    expect(variantRowKey(row)).not.toBe(variantRowKey({ ...row, assembly: "Wm82.a2.v1" }));
+  });
+
+  it("carries the namespace on the row rather than reading it from the page", () => {
+    expect(variantRowKey(row).startsWith("Wm82.a4.v1|")).toBe(true);
   });
 });
 
@@ -261,6 +284,7 @@ describe("allele-frequency page", () => {
       variants: [
         {
           variant_id: "v1",
+          assembly: "Wm82.a4.v1",
           chromosome: "chr01",
           position: 100,
           ref_allele: "A",
@@ -296,6 +320,7 @@ describe("allele-frequency page", () => {
       variants: [
         {
           variant_id: "v1",
+          assembly: "Wm82.a4.v1",
           chromosome: "chr01",
           position: 100,
           ref_allele: "A",
