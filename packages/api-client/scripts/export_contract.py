@@ -18,6 +18,15 @@ not contract changes, so diffing a fresh export against the committed
 The normalizations below restate the committed shape explicitly, so
 regeneration is reproducible and a *real* contract change still shows up as a
 diff.
+
+``normalize`` deliberately leaves key order alone. ``openapi-typescript``
+prints ``paths`` in document order unless ``--alphabetize`` is passed, and the
+committed ``openapi.d.ts`` was always generated without it, so the snapshot
+has to keep FastAPI's router-registration order. Inserting a route by hand in
+the wrong place -- #25 added six ``/api/v1/comparative/*`` paths at their
+alphabetical position -- leaves every other path in the right place while
+still reshuffling the generated file, and the contract gate then reports a
+diff it cannot explain. Append new paths where the router registers them.
 """
 
 from __future__ import annotations
@@ -69,6 +78,13 @@ DEFAULT_NONE_FIELDS = {
         "created_at",
         "updated_at",
         "model_evidence",
+        # Phase 2 aggregation sections: every block is ``X | None = None``.
+        "annotation_section",
+        "homolog_section",
+        "expression_section",
+        "variants_section",
+        "phenotype_section",
+        "literature_section",
     ),
     "SequenceAvailability": ("reason", "length", "checksum", "sequence"),
 }

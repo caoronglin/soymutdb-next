@@ -18,7 +18,7 @@
       "paths": ["apps/api/app/models"],
       "pattern": "lazy\\s*=\\s*[\"']noload[\"']",
       "max_occurrences": 24,
-      "why": "SQLAlchemy 2.1 deprecates the `noload` loader strategy (returns None for related items). The replacement is `lazy=\"raise_on_sql\"` or `lazy=\"selectin\"`; both change runtime relationship access, so this is a behaviour review, not a mechanical swap."
+      "why": "SQLAlchemy 2.1 deprecates the `noload` loader strategy (returns None for related items). The replacement is `lazy=\"raise_on_sql\"` or `lazy=\"selectin\"`; both change runtime relationship access, so this is a behaviour review, not a mechanical swap. The 25th the comparative models added was `GeneFamilyMember.family`, a back-reference nothing reads; it was removed rather than grandfathered (the member already exposes `family_id`, and `GeneFamily.members` keeps its eager load), so this budget stays where it was."
     },
     "testcontainers-legacy-postgres-import": {
       "paths": ["apps/api/tests", "apps/worker/tests"],
