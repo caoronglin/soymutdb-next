@@ -6791,6 +6791,61 @@ export interface components {
             created_at?: string | null;
             /** Updated At */
             updated_at?: string | null;
+            /**
+             * Sequences
+             * @description null
+             */
+            sequences?: {
+                /**
+                 * Molecule
+                 * @enum {string}
+                 */
+                molecule: "genomic" | "cds" | "transcript" | "protein";
+                /**
+                 * Availability
+                 * @description Why a section has nothing to show.
+                 *
+                 *     ``unavailable`` is the only honest answer when the platform holds no
+                 *     sequence store. It is *not* ``empty``: "we never imported this" and "this
+                 *     gene has no isoforms" are different scientific statements, and the portal
+                 *     renders them differently.
+                 * @enum {string}
+                 */
+                availability?: "available" | "unavailable";
+                /**
+                 * Reason
+                 * @default null
+                 */
+                reason: string | null;
+                /**
+                 * Length
+                 * @default null
+                 */
+                length: number | null;
+                /**
+                 * Checksum
+                 * @default null
+                 */
+                checksum: string | null;
+                /**
+                 * Sequence
+                 * @default null
+                 */
+                sequence: string | null;
+            }[];
+            /**
+             * Model Evidence
+             * @description null
+             */
+            model_evidence?: {
+                /**
+                 * EvidenceKind
+                 * @enum {string}
+                 */
+                kind: "experimental" | "curated" | "predicted" | "transferred" | "imported" | "unknown";
+                /** Source */
+                source: string;
+            } | null;
         };
         /** GeneListResponse */
         GeneListResponse: {

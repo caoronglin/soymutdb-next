@@ -9,6 +9,7 @@ from sqlalchemy.orm import joinedload, lazyload
 from ..core.exceptions import NotFoundError, ValidationError
 from ..models.genomic import Assembly, Chromosome, Gene, Transcript
 from ..models.variant import VariantSummary
+from ..schemas.gene_evidence import EvidenceKind, EvidenceTag
 from ..schemas.genomic import (
     AssemblyResponse,
     ChromosomeResponse,
@@ -28,6 +29,7 @@ from .release_context import (
     decode_bound_cursor,
     encode_bound_cursor,
 )
+from .sequence_availability import gene_sequence_availability
 from .sql_like import LIKE_ESCAPE_CHARACTER, contains_pattern
 
 
@@ -78,6 +80,53 @@ def _variant_count_subquery(release_id: int):
         .correlate(Gene)
         .scalar_subquery()
     )
+
+
+#: Source strings that mean "a model called this gene, nobody checked it".
+#: Kept as a branch of literal matches rather than a fuzzy match: a wrong guess
+#: here would relabel a curated annotation as predicted.
+_PREDICTED_SOURCE_MARKERS = (
+    "augustus",
+    "genesnap",
+    "fgenesh",
+    "maker",
+    "predicted",
+    "ab initio",
+    "abinitio",
+)
+
+#: Source strings that mean a human reviewed this record.
+_CURATED_SOURCE_MARKERS = ("curated", "reviewed", "swiss-prot", "uniprot")
+
+
+def gene_model_evidence(gene: Gene) -> EvidenceTag | None:
+    """Report how the gene model came to exist, or ``None`` when unknown.
+
+    Reads only what the imported annotation actually carries (the GFF3
+    ``attributes["source"]`` / ``attributes["evidence"]``), never the accession
+    pattern. Returning ``None`` for a silent source is the point: guessing
+    "predicted" from a gene id would put a claim on the page the data never
+    made.
+    """
+    attributes = gene.attributes if isinstance(gene.attributes, dict) else {}
+    declared = attributes.get("evidence")
+    if isinstance(declared, str) and declared.strip():
+        known = {kind.value for kind in EvidenceKind}
+        candidate = declared.strip().lower()
+        if candidate in known:
+            return EvidenceTag(
+                kind=EvidenceKind(candidate),
+                source=str(attributes.get("source") or "annotation"),
+            )
+    source = attributes.get("source")
+    if isinstance(source, str) and source.strip():
+        lowered = source.strip().lower()
+        if any(marker in lowered for marker in _CURATED_SOURCE_MARKERS):
+            return EvidenceTag(kind=EvidenceKind.CURATED, source=source.strip())
+        if any(marker in lowered for marker in _PREDICTED_SOURCE_MARKERS):
+            return EvidenceTag(kind=EvidenceKind.PREDICTED, source=source.strip())
+        return EvidenceTag(kind=EvidenceKind.IMPORTED, source=source.strip())
+    return None
 
 
 def _order_by(params: GeneListParams, release_id: int):
@@ -437,6 +486,8 @@ class GeneService:
             transcripts=transcripts,
             aliases=aliases,
             variant_count=variant_count,
+            sequences=gene_sequence_availability(),
+            model_evidence=gene_model_evidence(gene),
             created_at=gene.created_at,
             updated_at=gene.updated_at,
         )

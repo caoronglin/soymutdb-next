@@ -41,11 +41,54 @@ export interface GeneTranscript {
   exons: GeneExon[];
 }
 
+/**
+ * Why a section has nothing to show. ``unavailable`` means the platform holds
+ * no such data — it is not an empty result, and the UI must not render it as a
+ * zero.
+ */
+export type SequenceAvailabilityState = "available" | "unavailable";
+
+/**
+ * Per-molecule availability for a gene's sequences.
+ *
+ * The API answers this for genomic/CDS/transcript/protein even when no residue
+ * store exists, so the page can say "not imported" instead of rendering a
+ * fabricated string. ``sequence`` is only ever populated when
+ * ``availability`` is ``"available"``.
+ */
+export interface GeneSequenceAvailability {
+  molecule: "genomic" | "cds" | "transcript" | "protein";
+  availability: SequenceAvailabilityState;
+  reason: string | null;
+  length: number | null;
+  checksum: string | null;
+  sequence: string | null;
+}
+
+/** Evidence strength, strongest first. Never raise one to another. */
+export type EvidenceKind =
+  | "experimental"
+  | "curated"
+  | "predicted"
+  | "transferred"
+  | "imported"
+  | "unknown";
+
+/** Provenance of one displayed assertion. */
+export interface EvidenceTag {
+  kind: EvidenceKind;
+  source: string;
+}
+
 export interface GeneDetail extends GeneSummary {
   source: string;
   extra: Record<string, unknown>;
   transcripts: GeneTranscript[];
   annotations: unknown[];
+  /** Always present; one entry per molecule. */
+  sequences?: GeneSequenceAvailability[];
+  /** How the gene model came to exist; ``null`` when the source is silent. */
+  model_evidence?: EvidenceTag | null;
   snp_count?: number;
   indel_count?: number;
   sv_count?: number;

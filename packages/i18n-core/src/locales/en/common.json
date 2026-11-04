@@ -263,7 +263,41 @@
       "siteKey": "Mutant system (parent + position)"
     },
     "mutationSitesTitle": "Mutation sites",
-    "unpublishedPreview": "Unpublished preview"
+    "unpublishedPreview": "Unpublished preview",
+    "sequences": {
+      "title": "Sequences",
+      "molecule": {
+        "genomic": "Genomic DNA",
+        "cds": "CDS",
+        "transcript": "Transcript",
+        "protein": "Protein"
+      },
+      "available": "Available",
+      "unavailable": "Not imported",
+      "unavailableHint": "This platform release holds coordinates and annotations for this gene, not residues. A sequence is not shown because none is stored.",
+      "length": "Length"
+    },
+    "evidence": {
+      "label": "Evidence",
+      "source": "Source",
+      "kind": {
+        "experimental": "Experimental",
+        "curated": "Curated",
+        "predicted": "Predicted",
+        "transferred": "Transferred by orthology",
+        "imported": "Imported",
+        "unknown": "Unknown"
+      },
+      "kindHint": {
+        "experimental": "Measured or experimentally validated by the source study.",
+        "curated": "Manually reviewed annotation from the source record.",
+        "predicted": "Computational prediction, not experimentally confirmed.",
+        "transferred": "Inferred from another species or gene by homology.",
+        "imported": "Import source states nothing about how it was produced.",
+        "unknown": "The source record does not describe its provenance."
+      },
+      "unknownSource": "The source record does not state its provenance."
+    }
   },
   "variants": {
     "title": "Variant Search",

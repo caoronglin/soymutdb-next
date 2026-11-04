@@ -1,4 +1,4 @@
-import { searchGenes } from "./genes";
+import { getGene, searchGenes } from "./genes";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 describe("gene client contract", () => {
@@ -28,5 +28,40 @@ describe("gene client contract", () => {
     expect(parsed.searchParams.get("cursor")).toBe("c1");
     expect(parsed.searchParams.get("limit")).toBe("20");
     expect(parsed.searchParams.has("q")).toBe(false);
+  });
+});
+
+describe("gene detail sequence/evidence contract", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("keeps an unavailable molecule unavailable instead of defaulting it to a sequence", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          gene_id: "Glyma.01G000100",
+          chromosome: "Chr01",
+          start_pos: 1,
+          end_pos: 100,
+          strand: "+",
+          sequences: [
+            {
+              molecule: "protein",
+              availability: "unavailable",
+              reason: "no_sequence_store:protein",
+              length: null,
+              checksum: null,
+              sequence: null,
+            },
+          ],
+          model_evidence: { kind: "predicted", source: "AUGUSTUS" },
+        }),
+        { status: 200, headers: { "content-type": "application/json" } },
+      ),
+    );
+
+    const detail = await getGene("Glyma.01G000100");
+    expect(detail.sequences?.[0].availability).toBe("unavailable");
+    expect(detail.sequences?.[0].sequence).toBeNull();
+    expect(detail.model_evidence?.kind).toBe("predicted");
   });
 });
