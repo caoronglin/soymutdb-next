@@ -475,7 +475,6 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
       title: "Linkage disequilibrium — SoyMutDB",
       description:
         "Variant coordinates and pairwise r² for a gene or interval. r² is reported as not computable when no genotype data exists.",
-      prerender: true,
       sitemap: false,
     },
   },
@@ -486,7 +485,6 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
     meta: {
       title: "Nucleotide diversity — SoyMutDB",
       description: "Nucleotide diversity (π) and Watterson's θ for a gene or an interval.",
-      prerender: true,
       sitemap: false,
     },
   },
@@ -497,7 +495,6 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
     meta: {
       title: "Allele frequency — SoyMutDB",
       description: "Per-variant allele frequencies for a gene or an interval.",
-      prerender: true,
       sitemap: false,
     },
   },

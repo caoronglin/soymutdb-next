@@ -188,7 +188,8 @@ describe("queryKeys", () => {
     expect(queryKeys.variants.list({ ...base, cursor: "c1" })).not.toEqual(key);
   });
 
-  it("scopes news caches by category, page and page size", () => {    const base = { category: "update", page: 1, pageSize: 10 };
+  it("scopes news caches by category, page and page size", () => {
+    const base = { category: "update", page: 1, pageSize: 10 };
     const listKey = queryKeys.news.list(base);
     expect(queryKeys.news.list({ ...base, category: "news" })).not.toEqual(listKey);
     expect(queryKeys.news.list({ ...base, page: 2 })).not.toEqual(listKey);

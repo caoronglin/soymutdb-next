@@ -43,14 +43,20 @@ describe("deriveStaticRouteEntries", () => {
       "/seed-request",
       "/sra",
       "/tools",
-      "/tools/allelefreq",
-      "/tools/diversity",
       "/tools/enrichment",
       "/tools/exppattern",
-      "/tools/ld",
       "/tools/seqfetch",
       "/variants",
     ]);
+    // A POST-form tool renders nothing without JS, so it gets no document of
+    // its own: a titled shell with an empty body reads as "this page has no
+    // content". The data-rendering tools keep theirs.
+    expect(paths).not.toContain("/tools/ld");
+    expect(paths).not.toContain("/tools/diversity");
+    expect(paths).not.toContain("/tools/allelefreq");
+    expect(paths).toContain("/tools/enrichment");
+    expect(paths).toContain("/tools/seqfetch");
+    expect(paths).toContain("/tools/exppattern");
     // Dynamic detail routes render from parameters; they never get a document.
     expect(paths).not.toContain("/genes/:geneId");
     expect(paths).not.toContain("/mutants/:publicId");
@@ -124,6 +130,77 @@ describe("injectPageHead", () => {
     });
     expect(output).toContain("<title>Home</title>");
     expect(output).not.toContain("canonical");
+  });
+});
+
+describe("injectPageHead shell fallback", () => {
+  const shelf = '<html><head><title>Old</title></head>' +
+    '<body><div id="root"></div><script src="/app.js"></script></body></html>';
+
+  it("gives a prerendered shell a readable body beside its title", () => {
+    const html = injectPageHead(shelf, {
+      path: "/expression",
+      title: "Expression — SoyMutDB",
+      description: "Browse released expression libraries.",
+      includeInSitemap: false,
+    });
+
+    // A crawler must not see a correct title over an empty document.
+    expect(html).toContain("<title>Expression — SoyMutDB</title>");
+    expect(html).toContain('class="soymutdb-shell-fallback"');
+    expect(html).toContain("<h1>Expression — SoyMutDB</h1>");
+    expect(html).toContain("<p>Browse released expression libraries.</p>");
+    expect(html).toContain("<noscript>");
+  });
+
+  it("keeps the mount container empty so react can own it", () => {
+    const html = injectPageHead(shelf, {
+      path: "/expression",
+      title: "Expression — SoyMutDB",
+      includeInSitemap: false,
+    });
+
+    // The content-snapshot build only recognises an empty #root, and
+    // createRoot clears it — anything written inside is markup nobody sees.
+    expect(html).toContain('<div id="root"></div>');
+    // The fallback is a sibling, and the boot script still comes last.
+    expect(html).toContain('</div><div class="soymutdb-shell-fallback">');
+    expect(html.indexOf("soymutdb-shell-fallback")).toBeLessThan(html.indexOf("<script"));
+  });
+
+  it("skips the fallback when the caller supplies a real body", () => {
+    // The content-snapshot build calls this with a document that gets a real
+    // <main>, so "enable JavaScript" must not appear in it.
+    const html = injectPageHead(
+      shelf,
+      { path: "/about", title: "About", description: "About body.", includeInSitemap: true },
+      undefined,
+      "external",
+      { shellFallback: false },
+    );
+    expect(html).toContain("<title>About</title>");
+    expect(html).not.toContain("soymutdb-shell-fallback");
+  });
+
+  it("leaves a document with no mount container untouched", () => {
+    const html = injectPageHead("<html><head><title>Old</title></head><body></body></html>", {
+      path: "/about",
+      title: "About",
+      includeInSitemap: true,
+    });
+    expect(html).toContain("<title>About</title>");
+    expect(html).not.toContain("soymutdb-shell-fallback");
+  });
+
+  it("escapes the title and description it writes into the body", () => {
+    const html = injectPageHead(shelf, {
+      path: "/about",
+      title: 'A & "B"',
+      description: "<script>x</script>",
+      includeInSitemap: false,
+    });
+    expect(html).toContain("<h1>A &amp; &quot;B&quot;</h1>");
+    expect(html).not.toContain("<p><script>");
   });
 });
 

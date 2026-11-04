@@ -280,3 +280,30 @@ describe("allele-frequency page", () => {
     expect(screen.queryByText("0.000")).toBeNull();
   });
 });
+
+// The component test above swaps in a mock `t()` that echoes the key, so a key
+// that only exists in the JSON *as a string* — or exists in neither catalog —
+// still passes there. These assertions resolve the same keys through the real
+// i18next instance built from the shipped catalogs: `aria-label` and heading
+// text must render prose, not `tools.popgen.ld.resultsTitle`.
+describe("popgen tool catalog entries resolve", () => {
+  const KEYS = [
+    "tools.popgen.ld.resultsTitle",
+    "tools.popgen.diversity.resultsTitle",
+    "tools.popgen.allelefreq.resultsTitle",
+  ] as const;
+
+  it.each(["en", "zh"] as const)("resolves every results heading in %s", async (language) => {
+    const { createInstance } = await import("i18next");
+    const { buildBaseI18nOptions } = await import("@soymutdb/i18n-core");
+    const i18n = createInstance();
+    i18n.init({ ...buildBaseI18nOptions(language), lng: language, initImmediate: false });
+
+    for (const key of KEYS) {
+      const rendered = i18n.t(key);
+      expect(rendered).not.toBe(key);
+      expect(rendered).not.toContain("tools.popgen");
+      expect(rendered.trim().length).toBeGreaterThan(0);
+    }
+  });
+});
