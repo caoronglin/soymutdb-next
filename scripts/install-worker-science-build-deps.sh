@@ -18,8 +18,6 @@
 # governance gate (ci-job-steps.sh dependency_governance_step) call this one
 # script, so CNB and GitHub execute identical bytes.
 #
-# Callers must export HDF5_PKGCONFIG_NAME=hdf5-serial before building h5py on
-# Debian trixie, which only ships the serial .pc file.
 # Callers must export HDF5_PKGCONFIG_NAME=hdf5-serial before the worker
 # resolution. Two gates reach the worker runtime on Python 3.15 and both own
 # that export: scripts/verify-backend-tests.sh (worker editable install) and
