@@ -10,12 +10,15 @@ Run with: python3 -m unittest scripts.test_ci_job_contracts -v
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
 import tempfile
+import unicodedata
 import unittest
 from pathlib import Path
 
@@ -405,6 +408,37 @@ def _is_executable(script: str) -> bool:
     return len(fields) >= 2 and fields[0] == "100755"
 
 
+_DOC_SECTION_CITATION = re.compile(r'\((docs/[\w./-]+\.md),\s*"([^"]+)"\)', re.DOTALL)
+_COMMENT_WRAP = re.compile(r"\n[ \t]*#[ \t]*")
+
+
+def _fold_comment_wrap(match: re.Match[str]) -> str:
+    """Replacement for one wrapped comment continuation (``\n# ``).
+
+    ASCII prose needs a space when a line break stands in for one
+    (``"build once,\n# consume"`` -> ``"build once, consume"``). CJK headings
+    carry no inter-word spaces, so a wrap there must vanish instead
+    (``"构建一次，\n# 消费一次"`` -> ``"构建一次，消费一次"``). Wide/fullwidth
+    characters mark the latter case; everything else keeps the space.
+    """
+    prev = match.string[match.start() - 1]
+    return "" if unicodedata.east_asian_width(prev) in ("W", "F") else " "
+
+
+def _doc_section_citations(text: str) -> list[tuple[str, str]]:
+    """Return every ``(docs/*.md, "label")`` citation, wrapped lines included.
+
+    Shared scripts wrap long shell comments mid-citation. Fold the continuation
+    prefixes first, then whitespace-normalize the label. Kept as a helper so
+    the gate and its regression tests exercise the same parsing, not a copy.
+    """
+    folded = _COMMENT_WRAP.sub(_fold_comment_wrap, text)
+    return [
+        (doc, " ".join(label.split()))
+        for doc, label in _DOC_SECTION_CITATION.findall(folded)
+    ]
+
+
 class DeliveryArchitectureTests(unittest.TestCase):
     """The CNB pipeline is authoritative and the GitHub workflows mirror it."""
 
@@ -629,6 +663,88 @@ class DeliveryArchitectureTests(unittest.TestCase):
         for skip in ("pytest.skip", "SKIPPED", "exit 0 #"):
             self.assertNotIn(skip, backend, skip)
 
+    def test_doc_section_citations_resolve_to_real_headings(self) -> None:
+        """A quoted doc section must name a heading that actually exists.
+
+        Regression for two consecutive review findings on PR #116: a comment in
+        scripts/ci-job-steps.sh cited docs/build/script-vs-plugin.md#file-sharing
+        (a file that never existed), then cited an English translation of a
+        Chinese heading ("CI: build once, consume once") that no text search or
+        HTML anchor could resolve. Neither was caught because no gate validates
+        prose citations. This guard covers the general form: any (path, "label")
+        citation in a shared script must match a real file and a real heading.
+        Wrapped comment lines are folded first, so reformatting the citation
+        across lines cannot silently remove it from the checked set.
+        """
+        citations = [
+            (script, doc, label)
+            for script in SHARED_SCRIPTS
+            for doc, label in _doc_section_citations(
+                (ROOT / script).read_text(encoding="utf-8")
+            )
+        ]
+
+        self.assertTrue(citations, "no doc-section citations found to validate")
+        for script, path, label in citations:
+            doc = ROOT / path
+            self.assertTrue(doc.is_file(), f"{script}: cited missing doc {path}")
+            headings = [
+                line.lstrip("#").strip()
+                for line in doc.read_text(encoding="utf-8").splitlines()
+                if line.startswith("#")
+            ]
+            self.assertIn(
+                label,
+                headings,
+                f"{script}: cites {path} section {label!r}, which is not a heading "
+                f"(headings: {headings})",
+            )
+
+    def test_doc_section_citation_wrap_tolerance(self) -> None:
+        """Wrapping a real citation across comment lines must not dissolve the gate.
+
+        The heading is Chinese and has now been re-quoted twice; a plain rewrap
+        of that comment line is the most likely next edit. Folding must keep a
+        correct citation green and keep a dangling label red, so the signal
+        never inverts. CJK text has no inter-word spaces, hence the no-space
+        join in _fold_comment_wrap.
+        """
+        script = "scripts/ci-job-steps.sh"
+        original = (ROOT / script).read_text(encoding="utf-8")
+        doc = "docs/ops/bio-core-wheel.md"
+        good = "CI：构建一次，消费一次"
+        headings = [
+            line.lstrip("#").strip()
+            for line in (ROOT / doc).read_text(encoding="utf-8").splitlines()
+            if line.startswith("#")
+        ]
+        self.assertIn(good, headings)
+
+        # The committed tree itself must parse. Without this assertion the
+        # regression is only self-contained in the neighbouring guard: a
+        # mutation that drops the citation entirely would leave this test's
+        # wrapped/dangling derivations silently empty.
+        self.assertEqual(_doc_section_citations(original), [(doc, good)])
+
+        wrapped = original.replace(f'"{good}"', '"CI：构建一次，\n# 消费一次"')
+        self.assertNotEqual(wrapped, original)
+        self.assertEqual(_doc_section_citations(wrapped), [(doc, good)])
+
+        # A wrap right after the ASCII "CI" takes the space-keeping branch and
+        # yields a spurious space in BOTH gates. Pin the shape so a future
+        # "fix" to one fold cannot silently diverge from the other.
+        after_ci = original.replace(f'"{good}"', '"CI\n# ：构建一次，消费一次"')
+        self.assertEqual(
+            _doc_section_citations(after_ci), [(doc, "CI ：构建一次，消费一次")]
+        )
+
+        dangling = original.replace(f'"{good}"', '"CI: build once,\n# consume once"')
+        self.assertEqual(
+            _doc_section_citations(dangling),
+            [(doc, "CI: build once, consume once")],
+        )
+        self.assertNotIn("CI: build once, consume once", headings)
+
     def test_github_mirror_hands_the_wheel_from_bio_core_to_api_tests(self) -> None:
         """GitHub jobs do not share a filesystem: the wheel crosses as an artifact.
 
@@ -717,6 +833,191 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertIn("tomllib.loads", checker)
         self.assertIn('cargo.get("dependencies", {})', checker)
         self.assertNotIn('"bio ="', checker)
+
+    def test_bio_core_static_gate_rejects_dangling_doc_citations(self) -> None:
+        """--static must check that every cited docs/ path exists.
+
+        The section-heading guard above only matches `(path, "label")` pairs:
+        a bare dangling path (the shape the squash regression actually had)
+        yields zero citations, and a dangling path next to a valid labeled one
+        is not checked at all. This is the narrower, stronger assertion: every
+        docs/*.md path in ci-job-steps.sh must resolve, so a squash cannot
+        silently drop a path fix again. The loop below now spans every
+        shared script, not just the dispatcher.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_under_test",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        steps = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        self.assertEqual(
+            checker.doc_ref_errors(steps), [],
+            "--static must pass on the committed tree",
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs/ops").mkdir(parents=True)
+            (root / "docs/ops/bio-core-wheel.md").write_text(
+                "# Wheel\n\n## CI：构建一次，消费一次\n", encoding="utf-8"
+            )
+            good = '# see docs/ops/bio-core-wheel.md, "CI：构建一次，消费一次"'
+            self.assertEqual(checker.doc_ref_errors(good, root), [], good)
+            # A wrap inside the quoted label must fold the same way in both
+            # gates: CJK carries no inter-word space, so the join must vanish.
+            wrapped = (
+                '# see docs/ops/bio-core-wheel.md, "CI：构建一次，\n'
+                '# 消费一次"'
+            )
+            self.assertEqual(checker.doc_ref_errors(wrapped, root), [], wrapped)
+            # A bare dangling path, with no label at all.
+            dangling = "# see docs/build/script-vs-plugin.md#file-sharing"
+            self.assertTrue(
+                checker.doc_ref_errors(dangling, root),
+                "a docs/ path that is not committed must fail --static",
+            )
+            # ...and one hiding next to a perfectly valid labeled citation.
+            alongside = (
+                '# see docs/ops/bio-core-wheel.md, "CI：构建一次，消费一次" and '
+                'docs/build/script-vs-plugin.md#file-sharing'
+            )
+            self.assertTrue(
+                checker.doc_ref_errors(alongside, root),
+                "a dangling path beside a valid citation must fail --static",
+            )
+            stale = '# see docs/ops/bio-core-wheel.md, section "renamed heading"'
+            self.assertTrue(
+                checker.doc_ref_errors(stale, root),
+                "a section hint naming no heading must fail --static",
+            )
+
+    def test_bio_core_static_gate_scans_every_shared_script(self) -> None:
+        """--static must cover the same file set as the contract citation guard.
+
+        Regression for a review finding on PR #120: doc_ref_errors() was called
+        on scripts/ci-job-steps.sh only, while the contract gate scans all
+        SHARED_SCRIPTS. A dangling citation planted in any of the other shared
+        scripts made the contract gate red but left --static green. Both gates
+        now read the same canonical list and must fail on the same plant.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_coverage",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        self.assertEqual(
+            checker.shared_scripts(),
+            list(SHARED_SCRIPTS),
+            "--static and the contract gate must scan the same shared scripts",
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # A minimal but complete synthetic tree, so check_static() itself
+            # (not just doc_ref_errors) runs its loop over every shared script.
+            (root / "scripts").mkdir(parents=True)
+            (root / "docs" / "ops").mkdir(parents=True)
+            (root / "docs" / "ops" / "bio-core-wheel.md").write_text(
+                "# Wheel\n\n## CI：构建一次，消费一次\n", encoding="utf-8"
+            )
+            (root / "packages" / "bio-core").mkdir(parents=True)
+            for name in ("Cargo.toml", "Cargo.lock", "rust-toolchain.toml",
+                         "pyproject.toml"):
+                (root / "packages" / "bio-core" / name).write_text(
+                    "" if name != "rust-toolchain.toml" else 'channel = "1.99.1"\n',
+                    encoding="utf-8",
+                )
+            (root / "packages" / "bio-core" / "src").mkdir()
+            (root / "packages" / "bio-core" / "src" / "lib.rs").write_text(
+                "", encoding="utf-8"
+            )
+            (root / "packages" / "bio-core" / "Cargo.toml").write_text(
+                "[dependencies]\n"
+                'bio = "4"\nnoodles = "0"\nrust-lapper = "1"\n'
+                'bio-seq = "0"\npyo3 = "0"\n', encoding="utf-8"
+            )
+            (root / "scripts" / "test_ci_job_contracts.py").write_text(
+                (ROOT / "scripts" / "test_ci_job_contracts.py").read_text(
+                    encoding="utf-8"
+                ), encoding="utf-8"
+            )
+            for script in SHARED_SCRIPTS:
+                target = root / script
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("", encoding="utf-8")
+            # The dispatcher still needs its job markers to stay quiet.
+            (root / "scripts" / "ci-job-steps.sh").write_text(
+                "bio-core\nbio_core_run()\n", encoding="utf-8"
+            )
+            (root / "scripts" / "verify-bio-core.sh").write_text(
+                "maturin build\nimport soymutdb_bio_core\n-m pytest\n--locked\n",
+                encoding="utf-8",
+            )
+            (root / "scripts" / "verify-backend-tests.sh").write_text(
+                "soymutdb_bio_core-*-cp315-*.whl\n"
+                "--force-reinstall --no-deps\n"
+                "import soymutdb_bio_core as c\n", encoding="utf-8",
+            )
+
+            checker.ROOT = root
+            checker.CRATE = root / "packages" / "bio-core"
+
+            # Baseline: no dangling citations anywhere -> --static green.
+            self.assertEqual(checker.check_static(), 0, "synthetic tree must be clean")
+
+            # Plant a dangling path in a NON-dispatcher shared script. The whole
+            # point of the fix: --static must see it, not just the contract gate.
+            planted = root / "scripts" / "verify-bio-core.sh"
+            planted.write_text(
+                planted.read_text(encoding="utf-8")
+                + "# see docs/build/never-existed.md\n",
+                encoding="utf-8",
+            )
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(
+                    checker.check_static(), 1,
+                    "a dangling path in a non-dispatcher script must fail --static",
+                )
+
+    def test_doc_citation_gates_agree_on_wrapped_citations(self) -> None:
+        """The contract guard and --static must never give opposite signals.
+
+        Both parse wrapped comments with their own copy of the fold. A correct
+        rewrap must stay green in both, and a dangling label must stay red in
+        both; otherwise a future edit to one parser silently reintroduces the
+        inverted signal this guard was added to prevent.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_consistency",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        original = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        good = "CI：构建一次，消费一次"
+        doc = "docs/ops/bio-core-wheel.md"
+        wrapped = original.replace(f'"{good}"', '"CI：构建一次，\n# 消费一次"')
+        dangling = original.replace(f'"{good}"', '"CI: build once,\n# consume once"')
+
+        self.assertEqual(_doc_section_citations(wrapped), [(doc, good)])
+        self.assertEqual(checker.doc_ref_errors(wrapped), [], "false positive in --static")
+        self.assertEqual(
+            _doc_section_citations(dangling),
+            [(doc, "CI: build once, consume once")],
+        )
+        self.assertTrue(checker.doc_ref_errors(dangling), "dangling label must stay red")
 
     def test_github_workflows_delegate_instead_of_inlining_gates(self) -> None:
         ci = _workflow_text("ci.yml")
