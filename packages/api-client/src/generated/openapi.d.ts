@@ -7559,6 +7559,11 @@ export interface components {
         /**
          * ExportQueryResponse
          * @description The durable export record the query builder submitted.
+         *
+         *     ``applied_filters`` echoes exactly what was accepted. There is no
+         *     "unsupported filters" echo: an unknown or unbacked filter is a 422, so a
+         *     successful response cannot have carried one, and a field that is always
+         *     empty would invite a client to read it as "the rest was ignored".
          */
         ExportQueryResponse: {
             /** Export Id */
@@ -7573,8 +7578,6 @@ export interface components {
             applied_filters?: {
                 [key: string]: unknown;
             };
-            /** Unsupported Filters */
-            unsupported_filters?: string[];
         };
         /**
          * ExportRequest

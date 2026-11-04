@@ -183,11 +183,18 @@ export function getVariantExportManifest(
 }
 
 /** Whitelisted no-SQL query over the existing export pipeline. */
+/**
+ * Whitelisted filters for `POST /exports/query`. Every key maps onto a
+ * `VariantExportFilters` field the export worker binds; the API refuses
+ * anything else rather than dropping it.
+ */
 export interface ExportQueryFilters {
   assembly?: string;
   chromosome?: string;
   start?: number;
   end?: number;
+  ref?: string;
+  alt?: string;
   min_af?: number;
   max_af?: number;
   variant_type?: string;

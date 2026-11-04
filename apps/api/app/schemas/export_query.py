@@ -19,13 +19,18 @@ from pydantic import BaseModel, Field, model_validator
 
 from .variant import VariantExportFilters
 
-#: Filters the current variant-export pipeline can actually apply. Each name
-#: maps 1:1 onto a ``VariantExportFilters`` field the worker binds in its SQL.
-SUPPORTED_QUERY_FILTERS: frozenset[str] = frozenset({
-    "assembly", "chromosome", "start", "end", "ref", "alt", "gene_id",
-    "variant_type", "consequence", "impact", "min_af", "max_af",
-    "mutant_line_public_id",
-})
+#: Filters the current variant-export pipeline can actually apply. Derived
+#: from the export schema itself so the whitelist cannot drift from what
+#: ``VariantExportFilters`` accepts: a name listed here that the schema does
+#: not know would be refused one layer later with a confusing error, and a
+#: field added to the schema would be refused here for no reason.
+#:
+#: ``limit`` and ``cursor`` are excluded because an export is not paginated —
+#: ``VariantExportFilters`` accepts them only for query-endpoint compatibility
+#: and does not apply them to an artifact.
+SUPPORTED_QUERY_FILTERS: frozenset[str] = frozenset(
+    VariantExportFilters.model_fields
+) - {"limit", "cursor"}
 
 #: Filters the brief asks for that have no product-backed query path yet.
 #: They are documented, refused explicitly, and never silently dropped.
@@ -71,11 +76,16 @@ class ExportQueryRequest(BaseModel):
 
 
 class ExportQueryResponse(BaseModel):
-    """The durable export record the query builder submitted."""
+    """The durable export record the query builder submitted.
+
+    ``applied_filters`` echoes exactly what was accepted. There is no
+    "unsupported filters" echo: an unknown or unbacked filter is a 422, so a
+    successful response cannot have carried one, and a field that is always
+    empty would invite a client to read it as "the rest was ignored".
+    """
 
     export_id: str
     status: str
     message: str
     format: str
     applied_filters: dict[str, object] = Field(default_factory=dict)
-    unsupported_filters: list[str] = Field(default_factory=list)

@@ -33,16 +33,16 @@ depends_on = None
 _TABLES = ("download_files", "variant_exports")
 _SHA256_CHECK = "ck_{table}_sha256_shape"
 _COLUMNS = (
-    ("sha256", sa.String(64), None),
-    ("license", sa.String(256), None),
-    ("generated_at", sa.DateTime(timezone=True), None),
-    ("source_ref", sa.String(1024), None),
+    ("sha256", sa.String(64)),
+    ("license", sa.String(256)),
+    ("generated_at", sa.DateTime(timezone=True)),
+    ("source_ref", sa.String(1024)),
 )
 
 
 def upgrade() -> None:
     for table in _TABLES:
-        for name, type_, _ in _COLUMNS:
+        for name, type_ in _COLUMNS:
             op.add_column(table, sa.Column(name, type_, nullable=True))
         op.create_check_constraint(
             _SHA256_CHECK.format(table=table),
@@ -54,5 +54,5 @@ def upgrade() -> None:
 def downgrade() -> None:
     for table in _TABLES:
         op.drop_constraint(_SHA256_CHECK.format(table=table), table, type_="check")
-        for name, _, _ in reversed(_COLUMNS):
+        for name, _ in reversed(_COLUMNS):
             op.drop_column(table, name)

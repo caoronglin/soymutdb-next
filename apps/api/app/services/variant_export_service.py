@@ -34,6 +34,7 @@ from ..schemas.variant import (
     ExportDownloadResponse,
     ExportManifestResponse,
     ExportStatusResponse,
+    VariantExportFilters,
 )
 from ..utils.s3 import generate_presigned_url
 
@@ -56,14 +57,16 @@ EXPORT_ARTIFACT_RETENTION_DAYS = 7
 #: per-request grant, not a durable shareable URL.
 EXPORT_DOWNLOAD_URL_TTL_SECONDS = 900
 
-#: Filter keys a manifest may echo. The resolved ``mutant_line_name`` is a
-#: worker join key and the release identity is client-supplied provenance, so
-#: neither is part of the public filter document.
-PUBLIC_MANIFEST_FILTER_KEYS: frozenset[str] = frozenset({
-    "assembly", "chromosome", "start", "end", "ref", "alt", "gene_id",
-    "variant_type", "consequence", "impact", "min_af", "max_af",
-    "mutant_line_public_id",
-})
+#: Filter keys a manifest may echo: exactly the public request fields of
+#: ``VariantExportFilters`` minus the paging/deferred ones. Derived from the
+#: schema rather than hand-listed so a filter added to the export contract is
+#: echoed automatically, and a key the schema does not declare (the resolved
+#: ``mutant_line_name`` join key, the server-set ``release_key``) never is.
+#: ``limit``/``cursor`` are excluded because an export does not paginate and
+#: echoing them would advertise a constraint the artifact does not honour.
+PUBLIC_MANIFEST_FILTER_KEYS: frozenset[str] = frozenset(
+    VariantExportFilters.model_fields
+) - {"limit", "cursor"}
 
 
 def _public_manifest_filters(filters: dict) -> dict[str, object]:

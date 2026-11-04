@@ -24497,13 +24497,6 @@
             "type": "object",
             "additionalProperties": true,
             "title": "Applied Filters"
-          },
-          "unsupported_filters": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "title": "Unsupported Filters"
           }
         },
         "type": "object",
@@ -24514,7 +24507,7 @@
           "format"
         ],
         "title": "ExportQueryResponse",
-        "description": "The durable export record the query builder submitted."
+        "description": "The durable export record the query builder submitted.\n\n``applied_filters`` echoes exactly what was accepted. There is no\n\"unsupported filters\" echo: an unknown or unbacked filter is a 422, so a\nsuccessful response cannot have carried one, and a field that is always\nempty would invite a client to read it as \"the rest was ignored\"."
       },
       "ExportRequest": {
         "properties": {

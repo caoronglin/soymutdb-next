@@ -303,13 +303,15 @@ async def _submit_export(
     export_request: ExportRequest,
     release_context: ReleaseContext,
     current_user: User,
-) -> tuple[dict, str]:
-    """Build the worker filter document and write the record + outbox event.
+) -> uuid.UUID:
+    """Record one export request and queue it — the only place that does so.
 
-    Both the existing ``POST /variants/export`` and the query-builder entry
-    point call this: a second copy would be a second place where release
-    scoping, assembly resolution and provenance could drift apart.
-    Returns ``(filters, assembly_scope)``.
+    Both ``POST /variants/export`` and ``POST /exports/query`` call this.
+    Splitting it (resolving filters here, writing the record and the outbox
+    event at each call site) would be two places where release scoping,
+    assembly resolution, provenance and the command payload could drift
+    apart, and the query builder would quietly gain its own semantics.
+    Returns the new export id; the caller commits.
     """
     filters = export_request.filters.model_dump(
         mode="json", exclude_none=True,
@@ -321,9 +323,17 @@ async def _submit_export(
             release_context=release_context,
         )
     filters["release_key"] = release_context.release_key
+    # One namespace per artifact. The effective assembly is written into the
+    # filters the worker receives, so the worker's SQL, the artifact's
+    # provenance and the export record all state the same assembly instead
+    # of the record advertising a namespace the file does not use.
     assembly_scope = _export_assembly_scope(
         export_request.filters.assembly, release_context
     )
+    # An artifact that would contain no rows must not be recorded as a
+    # successful export: the request is refused instead, so the submitter
+    # learns that the namespace is empty rather than downloading an empty
+    # file that claims to be the release's data.
     if not await _assembly_namespace_exists(
         db, release_context.release_id, assembly_scope
     ):
@@ -333,7 +343,39 @@ async def _submit_export(
             "claim a namespace the release does not have."
         )
     filters["assembly"] = assembly_scope
-    return filters, assembly_scope
+
+    export_id = uuid.uuid4()
+    # The export record is the durable, owner-visible state of the request;
+    # it is written in the same transaction as the outbox event, so a
+    # committed request always has both the command and the record.
+    # ``assembly_key`` records the assembly the *artifact* is built from
+    # (the resolved one), not merely the release default, so the status
+    # endpoint cannot advertise a namespace the file does not use.
+    await export_service.create_record(
+        db,
+        export_id=export_id,
+        user_id=current_user.id,
+        release_key=release_context.release_key,
+        assembly_key=assembly_scope,
+        export_format=export_request.format,
+        compress=export_request.compress,
+        filters=filters,
+    )
+    # The dispatcher owns all broker I/O after commit.
+    await enqueue_task_event(
+        db,
+        event_type="variant_export_requested",
+        aggregate_type="variant_export",
+        aggregate_id=str(export_id),
+        task_name=EXPORT_VARIANTS_TASK,
+        kwargs={
+            "export_id": str(export_id),
+            "filters": filters,
+            "format": export_request.format,
+            "compress": export_request.compress,
+        },
+    )
+    return export_id
 
 
 @router.post(
@@ -372,42 +414,11 @@ async def export_variants(
     request with neither is refused. See ``filters.assembly`` for the exact
     rule and its limits.
     """
-    export_id = uuid.uuid4()
-    filters, assembly_scope = await _submit_export(
+    export_id = await _submit_export(
         db,
         export_request=request,
         release_context=release_context,
         current_user=current_user,
-    )
-    # The export record is the durable, owner-visible state of the request;
-    # it is written in the same transaction as the outbox event, so a
-    # committed request always has both the command and the record.
-    # ``assembly_key`` records the assembly the *artifact* is built from
-    # (the resolved one), not merely the release default, so the status
-    # endpoint cannot advertise a namespace the file does not use.
-    await export_service.create_record(
-        db,
-        export_id=export_id,
-        user_id=current_user.id,
-        release_key=release_context.release_key,
-        assembly_key=assembly_scope,
-        export_format=request.format,
-        compress=request.compress,
-        filters=filters,
-    )
-    # The dispatcher owns all broker I/O after commit.
-    await enqueue_task_event(
-        db,
-        event_type="variant_export_requested",
-        aggregate_type="variant_export",
-        aggregate_id=str(export_id),
-        task_name=EXPORT_VARIANTS_TASK,
-        kwargs={
-            "export_id": str(export_id),
-            "filters": filters,
-            "format": request.format,
-            "compress": request.compress,
-        },
     )
     await db.commit()
 

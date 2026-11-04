@@ -10,25 +10,19 @@ builder.
 
 from __future__ import annotations
 
-import uuid
-
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
 from ...core.security import RoleName
-from ...core.task_contract import EXPORT_VARIANTS_TASK
 from ...models.auth import User
 from ...schemas.export_query import ExportQueryRequest, ExportQueryResponse
 from ...schemas.variant import ExportRequest, VariantExportFilters
-from ...services.outbox_service import enqueue_task_event
 from ...services.release_context import ReleaseContext, get_release_context
-from ...services.variant_export_service import VariantExportService
 from .deps import require_role
 from .variants import _submit_export
 
 router = APIRouter(prefix="/exports", tags=["exports"])
-export_service = VariantExportService()
 
 
 @router.post(
@@ -53,35 +47,11 @@ async def submit_export_query(
         filters=VariantExportFilters(**request.filters),
         compress=request.compress,
     )
-    export_id = uuid.uuid4()
-    filters, assembly_scope = await _submit_export(
+    export_id = await _submit_export(
         db,
         export_request=export_request,
         release_context=release_context,
         current_user=current_user,
-    )
-    await export_service.create_record(
-        db,
-        export_id=export_id,
-        user_id=current_user.id,
-        release_key=release_context.release_key,
-        assembly_key=assembly_scope,
-        export_format=request.format,
-        compress=request.compress,
-        filters=filters,
-    )
-    await enqueue_task_event(
-        db,
-        event_type="variant_export_requested",
-        aggregate_type="variant_export",
-        aggregate_id=str(export_id),
-        task_name=EXPORT_VARIANTS_TASK,
-        kwargs={
-            "export_id": str(export_id),
-            "filters": filters,
-            "format": request.format,
-            "compress": request.compress,
-        },
     )
     await db.commit()
 
