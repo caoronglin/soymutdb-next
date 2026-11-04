@@ -73,6 +73,14 @@ class FakeDbSession:
     ``blast_databases``; ``get_job`` reads ``blast_jobs``. Serving one row for
     every statement would hide a defect where the toggle accidentally rewrote a
     job, so the three entity kinds are kept apart.
+
+    Every executed statement is recorded in ``statements`` so a test can assert
+    on the SQL the service actually emitted, not on a statement the test built
+    itself. Discovery/selection SELECTs (the ones joining ``assemblies``) also
+    honour ``is_active`` in their WHERE clause: when the filter is present a
+    disabled row is not returned, mirroring PostgreSQL. Point lookups by id --
+    the toggle's row lock and ``retry_job``'s catalog read -- carry no such
+    filter by design and still find a disabled row.
     """
 
     def __init__(self, catalog: BlastDatabase, job: BlastJob | None = None):
@@ -80,11 +88,25 @@ class FakeDbSession:
         self.job = job
         self.added: list = []
         self.commits = 0
+        self.statements: list[str] = []
 
     async def execute(self, stmt, params=None):
         sql = str(stmt)
+        self.statements.append(sql)
         if "FROM blast_databases" in sql or "FOR UPDATE" in sql:
-            return _Result([self.catalog])
+            # Discovery/selection statements join assemblies and, when they
+            # carry the SQL-level ``is_active`` filter, cannot return a
+            # disabled row. Point lookups (FOR UPDATE lock, retry's catalog
+            # read) have no active filter and still find the row -- that is
+            # what lets a retry serve a frozen identity after a disable.
+            if (
+                "JOIN assemblies ON" in sql
+                and self._catalog_select_is_active(sql)
+                and self.catalog is not None
+                and self.catalog.is_active is not True
+            ):
+                return _Result([])
+            return _Result([self.catalog] if self.catalog is not None else [])
         if "FROM assemblies" in sql:
             # list_databases filters on Assembly.release_id == CONTEXT.release_id.
             return _Result(
@@ -101,6 +123,21 @@ class FakeDbSession:
         if "FROM blast_jobs" in sql:
             return _Result([self.job] if self.job else [])
         return _Result([])
+
+    @staticmethod
+    def _catalog_select_is_active(sql: str) -> bool:
+        """Whether a statement carries the ``is_active IS true`` SQL filter.
+
+        The backend emits ``IS true`` / ``IS 1`` depending on dialect, so
+        compare case-insensitively. Removing the filter from ``list_databases``
+        or ``_get_active_database`` makes this return False, which the tests
+        assert against directly.
+        """
+        normalized = sql.lower()
+        return (
+            "blast_databases.is_active" in normalized
+            and ("is true" in normalized or "is 1" in normalized)
+        )
 
     def add(self, obj):
         self.added.append(obj)
@@ -214,23 +251,69 @@ async def test_disable_hides_the_database_from_new_searches(admin_client):
 
     assert catalog.is_active is False
     assert db.commits == 1
-    # Both readers of ``is_active`` exclude the row: the SQL WHERE clause
-    # (defense in depth in a real PostgreSQL session) and the per-row
-    # ``_is_runnable_database`` guard the fake session still executes here.
-    from sqlalchemy import select as sa_select
 
-    from app.models.blast import BlastDatabase
-    from app.models.genomic import Assembly
-
-    stmt = (
-        sa_select(BlastDatabase)
-        .join(Assembly, BlastDatabase.assembly_id == Assembly.id)
-        .where(BlastDatabase.is_active.is_(True))
-    )
-    assert "blast_databases.is_active IS true" in str(stmt)
+    # Assert on the statement ``list_databases`` actually emitted, not on a
+    # statement this test built itself. Both the discovery call above and the
+    # one below must carry the SQL-level ``is_active`` filter; removing that
+    # clause from the service makes this assertion fail (and the fake session
+    # stops filtering the disabled row out).
+    discovery = [sql for sql in db.statements if "JOIN assemblies ON" in sql]
+    assert discovery, "list_databases did not query the catalog"
+    for sql in discovery:
+        assert db._catalog_select_is_active(sql), (
+            "list_databases no longer filters on blast_databases.is_active IS true"
+        )
     assert blast_routes.service._is_runnable_database(catalog) is False
     listed = await blast_routes.service.list_databases(db, release_context=CONTEXT)
     assert listed == []
+    assert db._catalog_select_is_active(db.statements[-1])
+
+
+@pytest.mark.asyncio
+async def test_disabled_database_cannot_accept_a_new_submission(admin_client):
+    """Disabling must close the *execution* path, not only discovery.
+
+    ``list_databases`` hiding the row and ``_resolve_database`` refusing to
+    select it are two different readers of ``is_active``. This test drives the
+    real toggle route, then tries to submit a brand-new job against that id on
+    the same session: selection must raise ``NotFoundError`` before any
+    ``BlastJob`` or outbox event is written, and no extra commit may happen.
+    Real PostgreSQL covers the same row in
+    ``test_blast_catalog_postgres.py``; this keeps the control plane's own
+    suite self-contained instead of borrowing that proof.
+    """
+    from app.core.exceptions import NotFoundError
+    from app.models.outbox import OutboxEvent
+    from app.schemas.blast import BlastSubmitRequest
+
+    client, _, db, catalog, _, _ = admin_client
+    response = await client.patch(
+        "/api/v1/blast/databases/7",
+        json={"is_active": False},
+    )
+    assert response.status_code == 200, response.text
+    assert catalog.is_active is False
+    commits_after_toggle = db.commits
+    added_after_toggle = list(db.added)
+
+    request = BlastSubmitRequest(
+        engine="ncbi_blast",
+        program="blastp",
+        database_id=catalog.id,
+        query_sequence=">q\nMKVLAAGIVGLNLGGK",
+    )
+    with pytest.raises(NotFoundError, match="not found or inactive"):
+        await blast_routes.service.submit_job(
+            db, None, request, release_context=CONTEXT
+        )
+
+    # The selection statement really carried the active filter and found no row.
+    assert db._catalog_select_is_active(db.statements[-1])
+    # Only the toggle's own AuditLog may be present; no job and no outbox row.
+    new_objects = db.added[len(added_after_toggle):]
+    assert [obj for obj in new_objects if isinstance(obj, (BlastJob, OutboxEvent))] == []
+    assert db.added == added_after_toggle
+    assert db.commits == commits_after_toggle
 
 
 @pytest.mark.asyncio
