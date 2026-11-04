@@ -2778,7 +2778,7 @@
         "piHelp": "Sum of 2p(1−p) over polymorphic sites, divided by the region length; monomorphic positions contribute zero.",
         "piPerSiteHelp": "2p(1−p) averaged over polymorphic sites only.",
         "piNoPolymorphism": "Not defined: the region holds no polymorphic site.",
-        "thetaHelp": "S / aₙ per base pair, computed from the sample size you supplied.",
+        "thetaHelp": "S / a_n per base pair, computed from the sample size you supplied.",
         "thetaNullNoSampleSize": "Not computed: no sample size was supplied, so θ is undefined.",
         "thetaNullNoSites": "Not defined: the region holds no segregating site.",
         "noVariantsTitle": "No variant in this region",

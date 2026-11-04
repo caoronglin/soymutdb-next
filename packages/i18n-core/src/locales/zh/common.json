@@ -2778,7 +2778,7 @@
         "piHelp": "对多态位点求 2p(1−p) 之和，再除以区间长度；单态位点贡献为零。",
         "piPerSiteHelp": "仅对多态位点求 2p(1−p) 的平均值。",
         "piNoPolymorphism": "未定义：该区间没有多态位点。",
-        "thetaHelp": "每碱基的 S / aₙ，使用你提供的样本量计算。",
+        "thetaHelp": "每碱基的 S / a_n，使用你提供的样本量计算。",
         "thetaNullNoSampleSize": "未计算：没有提供样本量，θ 无定义。",
         "thetaNullNoSites": "未定义：该区间没有分离位点。",
         "noVariantsTitle": "该区间内没有变异",
