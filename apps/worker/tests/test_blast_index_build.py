@@ -86,6 +86,11 @@ class BuildSession:
             from datetime import UTC, datetime
 
             return _Result([(self.state, datetime.now(UTC))])
+        # The real claim reads ``state, build_metadata, source_object_key,
+        # db_type, index_identity, database_id`` (see
+        # ``BlastIndexBuildStore.get_state``). ``database_id`` is not optional
+        # for the fake: unpacking five columns into six names used to raise,
+        # and every caller read the failure as "publication rejected".
         if "blast_index_builds" in text_repr:
             return _Result([(self.state, METADATA, "blast-sources/synthetic.fa",
                              "nucl", self.identity, 1)])

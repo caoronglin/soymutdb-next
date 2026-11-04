@@ -1094,6 +1094,9 @@ class BlastIndexBuildStore:
         searchable only when both the build record and the catalog agree.
         A published directory is never overwritten.
         """
+        # ``blast_catalog.index_identity`` validates and returns the normalized
+        # identity; the previous local alias named it ``validate_identity`` and
+        # raised ImportError, which every caller read as "publication rejected".
         from soymutdb_jobs.blast_catalog import index_identity as validate_identity
 
         validate_identity(identity)
