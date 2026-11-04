@@ -6768,38 +6768,20 @@ export interface components {
         };
         /** GeneDetail */
         GeneDetail: {
-            /**
-             * Id
-             * @default null
-             */
-            id: string | null;
-            /**
-             * Gene Id
-             * @default null
-             */
-            gene_id: string | null;
-            /**
-             * Assembly Id
-             * @default null
-             */
-            assembly_id: string | null;
-            /**
-             * Assembly Name
-             * @default null
-             */
-            assembly_name: string | null;
+            /** Id */
+            id?: string | null;
+            /** Gene Id */
+            gene_id?: string | null;
+            /** Assembly Id */
+            assembly_id?: string | null;
+            /** Assembly Name */
+            assembly_name?: string | null;
             /** Chromosome */
             chromosome: string;
-            /**
-             * Name
-             * @default null
-             */
-            name: string | null;
-            /**
-             * Symbol
-             * @default null
-             */
-            symbol: string | null;
+            /** Name */
+            name?: string | null;
+            /** Symbol */
+            symbol?: string | null;
             /**
              * Biotype
              * @default protein_coding
@@ -6814,11 +6796,8 @@ export interface components {
             /** End Pos */
             end_pos: number;
             strand: components["schemas"]["Strand"];
-            /**
-             * Description
-             * @default null
-             */
-            description: string | null;
+            /** Description */
+            description?: string | null;
             /**
              * Variant Count
              * @default 0
@@ -6828,20 +6807,13 @@ export interface components {
             transcripts?: components["schemas"]["TranscriptResponse"][];
             /** Aliases */
             aliases?: string[];
-            /**
-             * Created At
-             * @default null
-             */
-            created_at: string | null;
-            /**
-             * Updated At
-             * @default null
-             */
-            updated_at: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
             /** Sequences */
             sequences?: components["schemas"]["SequenceAvailability"][];
-            /** @default null */
-            model_evidence: components["schemas"]["EvidenceTag"] | null;
+            model_evidence?: components["schemas"]["EvidenceTag"] | null;
         };
         /** GeneListResponse */
         GeneListResponse: {
@@ -9520,26 +9492,14 @@ export interface components {
              * @enum {string}
              */
             availability: "available" | "unavailable";
-            /**
-             * Reason
-             * @default null
-             */
-            reason: string | null;
-            /**
-             * Length
-             * @default null
-             */
-            length: number | null;
-            /**
-             * Checksum
-             * @default null
-             */
-            checksum: string | null;
-            /**
-             * Sequence
-             * @default null
-             */
-            sequence: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Length */
+            length?: number | null;
+            /** Checksum */
+            checksum?: string | null;
+            /** Sequence */
+            sequence?: string | null;
         };
         /** SettingFieldSchema */
         SettingFieldSchema: {
@@ -9548,8 +9508,7 @@ export interface components {
              * @enum {string}
              */
             kind: "string" | "color" | "integer" | "boolean" | "enum" | "email" | "url" | "uuid";
-            /** Default */
-            default: string | number | boolean | null;
+            default: components["schemas"]["SettingValue"] | null;
             /**
              * Permission
              * @constant
@@ -9580,6 +9539,7 @@ export interface components {
             /** Max Length */
             max_length: number;
         };
+        SettingValue: string | number | boolean;
         /** SettingsDocumentResponse */
         SettingsDocumentResponse: {
             /** Section */
@@ -9588,7 +9548,7 @@ export interface components {
             version: number;
             /** Values */
             values: {
-                [key: string]: string | number | boolean;
+                [key: string]: components["schemas"]["SettingValue"];
             };
         };
         /** SettingsHistoryItem */
@@ -9602,11 +9562,11 @@ export interface components {
             action: "patch" | "put_compat" | "rollback";
             /** Values */
             values: {
-                [key: string]: string | number | boolean;
+                [key: string]: components["schemas"]["SettingValue"];
             };
             /** Changes */
             changes: {
-                [key: string]: string | number | boolean | null;
+                [key: string]: components["schemas"]["SettingValue"] | null;
             };
             /** Actor Id */
             actor_id?: string | null;
@@ -9635,7 +9595,7 @@ export interface components {
             expected_version: number;
             /** Values */
             values: {
-                [key: string]: string | number | boolean;
+                [key: string]: components["schemas"]["SettingValue"];
             };
         };
         /** SettingsRollbackRequest */
@@ -9673,7 +9633,7 @@ export interface components {
             section: string;
             /** Values */
             values: {
-                [key: string]: string | number | boolean;
+                [key: string]: components["schemas"]["SettingValue"];
             };
         };
         /** SettingsValidateResponse */
@@ -9688,7 +9648,7 @@ export interface components {
             valid: true;
             /** Values */
             values: {
-                [key: string]: string | number | boolean;
+                [key: string]: components["schemas"]["SettingValue"];
             };
         };
         /**
