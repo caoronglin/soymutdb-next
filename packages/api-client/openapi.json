@@ -24446,8 +24446,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "gene_id": {
             "title": "Gene Id",
@@ -24458,8 +24457,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "assembly_id": {
             "title": "Assembly Id",
@@ -24470,8 +24468,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "assembly_name": {
             "title": "Assembly Name",
@@ -24482,8 +24479,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "chromosome": {
             "type": "string",
@@ -24498,8 +24494,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "symbol": {
             "title": "Symbol",
@@ -24510,8 +24505,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "biotype": {
             "type": "string",
@@ -24550,8 +24544,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "variant_count": {
             "type": "integer",
@@ -24583,8 +24576,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "updated_at": {
             "title": "Updated At",
@@ -24596,8 +24588,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "sequences": {
             "items": {
@@ -24614,8 +24605,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "annotation_section": {
             "anyOf": [
@@ -24625,8 +24615,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "homolog_section": {
             "anyOf": [
@@ -24636,8 +24625,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "expression_section": {
             "anyOf": [
@@ -24647,8 +24635,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "variants_section": {
             "anyOf": [
@@ -24658,8 +24645,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "phenotype_section": {
             "anyOf": [
@@ -24669,8 +24655,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "literature_section": {
             "anyOf": [
@@ -24680,8 +24665,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           }
         },
         "type": "object",
@@ -32005,8 +31989,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "length": {
             "title": "Length",
@@ -32018,8 +32001,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "checksum": {
             "title": "Checksum",
@@ -32030,8 +32012,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "sequence": {
             "title": "Sequence",
@@ -32042,8 +32023,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           }
         },
         "type": "object",
