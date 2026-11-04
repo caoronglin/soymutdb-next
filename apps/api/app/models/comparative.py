@@ -167,7 +167,13 @@ class GeneFamilyMember(Base):
     #: so a client shows what the source said, not a re-derivation.
     evidence: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
-    family: Mapped[GeneFamily] = relationship(back_populates="members", lazy="noload")
+    # ``raise_on_sql`` rather than ``noload``: a member is always read through
+    # the family (``_members`` selects the rows themselves), so an accidental
+    # lazy access is a bug, and SQLAlchemy 2.1 deprecates ``noload`` for
+    # returning ``None`` instead of raising.
+    family: Mapped[GeneFamily] = relationship(
+        back_populates="members", lazy="raise_on_sql"
+    )
 
     def __repr__(self) -> str:
         return (
