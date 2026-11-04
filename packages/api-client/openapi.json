@@ -4337,63 +4337,6 @@
         "x-idempotent": true
       }
     },
-    "/api/v1/blast/databases/build": {
-      "post": {
-        "tags": [
-          "blast"
-        ],
-        "summary": "Request Blast Index Build",
-        "description": "Queue an immutable index build; construction never runs in this request.\n\nThe catalog row must exist and be buildable (``pending``/``failed`` or a\n``ready`` row being rebuilt). The outbox event carries only the frozen\nmetadata and a validated object reference; the worker resolves binaries,\nstaging, validation and publication.",
-        "operationId": "request_blast_index_build_api_v1_blast_databases_build_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BlastIndexBuildRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "202": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BlastIndexBuildQueued"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/api/v1/blast/jobs/{job_id}": {
       "get": {
         "tags": [
@@ -19905,36 +19848,13 @@
         ],
         "title": "BlastHit"
       },
-      "BlastIndexBuildQueued": {
-        "properties": {
-          "database_id": {
-            "type": "integer",
-            "title": "Database Id"
-          },
-          "queued": {
-            "type": "boolean",
-            "title": "Queued"
-          },
-          "task_name": {
-            "type": "string",
-            "title": "Task Name"
-          }
-        },
-        "type": "object",
-        "required": [
-          "database_id",
-          "queued",
-          "task_name"
-        ],
-        "title": "BlastIndexBuildQueued",
-        "description": "Acknowledgement for an accepted index build request.\n\nDeliberately narrow: the response says *what was queued*, never where the\nworker will write it. Progress is read back from the catalog's\n``build_status``, not from a filesystem path."
-      },
       "BlastIndexBuildRequest": {
         "properties": {
-          "database_id": {
-            "type": "integer",
-            "exclusiveMinimum": 0.0,
-            "title": "Database Id"
+          "source_object_key": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Source Object Key"
           },
           "db_type": {
             "type": "string",
@@ -19944,70 +19864,72 @@
             ],
             "title": "Db Type"
           },
-          "source_object": {
+          "assembly_name": {
             "type": "string",
-            "maxLength": 512,
+            "maxLength": 1024,
             "minLength": 1,
-            "title": "Source Object"
-          },
-          "assembly_id": {
-            "type": "string",
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Assembly Id"
-          },
-          "assembly_version": {
-            "type": "string",
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Assembly Version"
-          },
-          "release_id": {
-            "type": "string",
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Release Id"
+            "title": "Assembly Name"
           },
           "annotation_version": {
             "type": "string",
-            "maxLength": 256,
+            "maxLength": 1024,
             "minLength": 1,
             "title": "Annotation Version"
           },
-          "source_url": {
-            "type": "string",
-            "maxLength": 2048,
-            "minLength": 1,
-            "title": "Source Url"
-          },
           "source_version": {
             "type": "string",
-            "maxLength": 256,
+            "maxLength": 1024,
             "minLength": 1,
             "title": "Source Version"
+          },
+          "source_url": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Source Url"
           },
           "license": {
             "type": "string",
             "maxLength": 1024,
             "minLength": 1,
             "title": "License"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "sequence_type": {
+            "type": "string",
+            "enum": [
+              "genome",
+              "cds",
+              "transcript",
+              "protein",
+              "repeat_masked",
+              "pan_genome",
+              "family_consensus",
+              "custom"
+            ],
+            "title": "Sequence Type",
+            "default": "genome"
           }
         },
+        "additionalProperties": false,
         "type": "object",
         "required": [
-          "database_id",
+          "source_object_key",
           "db_type",
-          "source_object",
-          "assembly_id",
-          "assembly_version",
-          "release_id",
+          "assembly_name",
           "annotation_version",
-          "source_url",
           "source_version",
-          "license"
+          "source_url",
+          "license",
+          "name"
         ],
         "title": "BlastIndexBuildRequest",
-        "description": "Admin-only request to build one immutable NCBI index asynchronously.\n\nOnly identifiers, frozen biological provenance and an object reference are\naccepted. No local filesystem path can pass this boundary."
+        "description": "Admin request to build one immutable NCBI index in a worker.\n\nThe source FASTA is an object-store key under ``blast-sources/`` that was\nuploaded and reviewed beforehand. No local path, binary name or output\ndirectory is accepted from a client. Rebuilds create a new catalog row and\na new content-addressed identity; they never overwrite a published index."
       },
       "BlastIndexBuildResponse": {
         "properties": {

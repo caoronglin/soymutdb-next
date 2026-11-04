@@ -19,7 +19,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from soymutdb_worker.shared import JobStatus, JobStatusUpdate, transition_allowed
 from soymutdb_worker.tables import (
     analysis_jobs,
-    blast_databases_catalog,
+    blast_databases,
     blast_hits,
     blast_index_builds,
     blast_jobs,
@@ -1098,22 +1098,26 @@ class BlastIndexBuildStore:
 
         validate_identity(identity)
         current, _ = self.get_state(build_id) or (None, {})
-        if current != "validating":
+        # Both builders take the ``validating -> publishing`` claim before they
+        # publish, so ``publishing`` is the expected state here -- a build that
+        # is still ``validating`` has not finished re-verifying its artifacts
+        # and must not win the swap.
+        if current != "publishing":
             return False
 
         # Bind the catalog row first. If the guarded UPDATE is rejected the
-        # whole transaction rolls back and the build row stays ``validating``,
+        # whole transaction rolls back and the build row stays ``publishing``,
         # so the caller's failure handler can close it as ``failed`` rather
         # than leaving a build marked published with no searchable index.
         if database_id is not None:
             updated = self._session.execute(
-                update(blast_databases_catalog)
+                update(blast_databases)
                 .where(
-                    blast_databases_catalog.c.id == database_id,
-                    blast_databases_catalog.c.build_status.in_(
+                    blast_databases.c.id == database_id,
+                    blast_databases.c.build_status.in_(
                         ["pending", "building", "validating"]
                     ),
-                    blast_databases_catalog.c.index_version.is_(None),
+                    blast_databases.c.index_version.is_(None),
                 )
                 .values(
                     build_status="published",
@@ -1129,7 +1133,7 @@ class BlastIndexBuildStore:
                 raise ValueError("catalog row missing or already published")
 
         return self.transition(
-            build_id, "published", expected="validating",
+            build_id, "published", expected="publishing",
             fields={
                 "index_identity": identity,
                 "source_sha256": source_sha256,

@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import uuid
-from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
-from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.blast_capability import issue_blast_capability, verify_blast_capability
@@ -14,12 +12,12 @@ from ...core.config import get_settings
 from ...core.database import get_db
 from ...core.exceptions import NotFoundError, ValidationError
 from ...core.ratelimit import public_blast_rate_limiter, resolve_trusted_peer_ip
-from ...core.security import RoleName, require_admin_roles
+from ...core.security import RoleName
 from ...models.auth import User
 from ...schemas.blast import (
     BlastDatabaseResponse,
     BlastGenomeTargetResponse,
-    BlastIndexBuildQueued,
+    BlastIndexBuildRequest,
     BlastIndexBuildResponse,
     BlastJobListResponse,
     BlastJobResponse,
@@ -31,26 +29,6 @@ from ...services.blast_service import BlastService
 from ...services.release_context import ReleaseContext, get_release_context
 from .deps import get_current_user, get_user_roles, require_role
 from .public_blast_route import PublicBlastRoute
-
-
-class BlastIndexBuildRequest(BaseModel):
-    """Admin-only request to build one immutable NCBI index asynchronously.
-
-    Only identifiers, frozen biological provenance and an object reference are
-    accepted. No local filesystem path can pass this boundary.
-    """
-
-    database_id: int = Field(..., gt=0)
-    db_type: Literal["nucl", "prot"]
-    source_object: str = Field(..., min_length=1, max_length=512)
-    assembly_id: str = Field(..., min_length=1, max_length=256)
-    assembly_version: str = Field(..., min_length=1, max_length=256)
-    release_id: str = Field(..., min_length=1, max_length=256)
-    annotation_version: str = Field(..., min_length=1, max_length=256)
-    source_url: str = Field(..., min_length=1, max_length=2048)
-    source_version: str = Field(..., min_length=1, max_length=256)
-    license: str = Field(..., min_length=1, max_length=1024)
-
 
 router = APIRouter(prefix="/blast", tags=["blast"])
 service = BlastService()
@@ -95,59 +73,6 @@ async def submit_blast_job(
     """
     _private(response)
     return await service.submit_job(db, current_user.id, request, release_context=release_context)
-
-
-@router.post(
-    "/databases/build", status_code=202,
-    response_model=BlastIndexBuildQueued,
-    dependencies=[Depends(require_role(RoleName.ADMINISTRATOR))],
-)
-async def request_blast_index_build(
-    request: BlastIndexBuildRequest,
-    response: Response,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> BlastIndexBuildQueued:
-    """Queue an immutable index build; construction never runs in this request.
-
-    The catalog row must exist and be buildable (``pending``/``failed`` or a
-    ``ready`` row being rebuilt). The outbox event carries only the frozen
-    metadata and a validated object reference; the worker resolves binaries,
-    staging, validation and publication.
-    """
-    from ...core.task_contract import BLAST_INDEX_BUILD_TASK
-    from ...services.job_service import build_job_payload
-    from ...services.outbox_service import create_outbox_event
-
-    _private(response)
-    require_admin_roles(get_user_roles(current_user))
-    # JobPayload.job_id is a UUID; a catalog id is not one, so use a fresh
-    # deterministic-per-request UUID that carries no biological meaning.
-    payload = build_job_payload(
-        job_id=uuid.uuid4(),
-        task_name=BLAST_INDEX_BUILD_TASK,
-        payload={
-            "database_id": request.database_id,
-            "db_type": request.db_type,
-            "source_object": request.source_object,
-            **{key: getattr(request, key) for key in (
-                "assembly_id", "assembly_version", "release_id",
-                "annotation_version", "source_url", "source_version", "license",
-            )},
-        },
-        idempotency_key=f"blast-index:{request.database_id}:{uuid.uuid4().hex}",
-    )
-    await create_outbox_event(
-        db,
-        aggregate_type="blast_database",
-        aggregate_id=str(request.database_id),
-        event_type="blast_database.build",
-        payload=payload.model_dump(mode="json"),
-    )
-    await db.commit()
-    return BlastIndexBuildQueued(
-        database_id=request.database_id, queued=True, task_name=BLAST_INDEX_BUILD_TASK,
-    )
 
 
 @router.get("/jobs", response_model=BlastJobListResponse)

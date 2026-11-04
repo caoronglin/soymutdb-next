@@ -15,6 +15,7 @@ import pytest
 
 from app.core.exceptions import ValidationError
 from app.models.blast import BlastDatabase, BlastJob, BlastJobStatus
+from app.models.genomic import Assembly
 from app.schemas.blast import (
     BlastGenomeTargetResponse,
     BlastIndexBuildRequest,
@@ -28,12 +29,37 @@ def _context(release_id: int, assembly_id: int, assembly: str = "Wm82") -> Relea
     return ReleaseContext(release_id=release_id, assembly_id=assembly_id, assembly=assembly)
 
 
-def _session(row):
-    result = SimpleNamespace(
-        scalar_one_or_none=lambda: row,
-        scalars=lambda: SimpleNamespace(all=lambda: [row], first=lambda: row),
+def _session(row, catalog=None, assembly=None):
+    """Session stub answering each table's query with the matching row.
+
+    The catalog/assembly rows are captured when the stub is built, so a lookup
+    can never be served the job row — that is what hides "read a
+    ``blast_databases`` column off ``BlastJob``" defects.
+    """
+    def _pick(stmt):
+        sql = str(stmt)
+        if "FROM blast_databases" in sql:
+            return catalog
+        if "FROM assemblies" in sql:
+            return assembly
+        return row
+
+    def _add(_obj):
+        return None
+
+    return SimpleNamespace(
+        execute=AsyncMock(side_effect=lambda stmt, *a, **k: _result(_pick(stmt))),
+        scalar=AsyncMock(return_value=0),
+        add=_add, commit=AsyncMock(), flush=AsyncMock(), refresh=AsyncMock(),
     )
-    return SimpleNamespace(execute=AsyncMock(return_value=result), add=AsyncMock())
+
+
+def _result(row):
+    return SimpleNamespace(
+        scalar_one_or_none=lambda: row,
+        scalars=lambda: SimpleNamespace(all=lambda: [row] if row is not None else [],
+                                        first=lambda: row),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -133,16 +159,27 @@ async def test_retry_creates_a_new_job_and_new_outbox_event(engine, monkeypatch)
     original = BlastJob(
         id=uuid.uuid4(), user_id=owner, program="blastp", database_id=1,
         query_sequence="MKVLAAGIVGLNLGGK", status=BlastJobStatus.FAILED,
-        parameters={"_search_provenance": {"engine": engine}, "evalue": 1e-5,
-                    "max_target_seqs": 50},
+        parameters={"_search_provenance": {
+                        "engine": engine,
+                        # Retry replays this frozen identity verbatim.
+                        "index_identity": "a" * 64, "fasta_sha256": "b" * 64,
+                        "index_version": "a" * 64, "annotation_version": "v1",
+                        "release_id": 1, "assembly_id": 1,
+                    }, "evalue": 1e-5, "max_target_seqs": 50},
         submitted_at=datetime.now(UTC),
     )
     original.database = BlastDatabase(
         id=1, name="db", db_type="prot", assembly_id=1, is_active=True,
         engine=engine, build_status="published", file_path="/private",
         created_at=datetime.now(UTC),
+        # Retry replays the identity frozen at submission; a retryable NCBI
+        # row therefore has to carry one.
+        index_version="a" * 64, fasta_sha256="b" * 64,
     )
-    db = _session(original)
+    assembly = Assembly(id=1, name="Wm82", version="v4", species="Glycine max",
+                        release_id=1)
+    original.database.assembly = assembly
+    db = _session(original, catalog=original.database, assembly=assembly)
     monkeypatch.setattr(blast_service.settings, "blast_default_db", None)
     created = []
 
@@ -159,7 +196,11 @@ async def test_retry_creates_a_new_job_and_new_outbox_event(engine, monkeypatch)
     result = await service.retry_job(
         db, original.id, owner, [], release_context=_context(1, 1)
     )
-    assert result.job_id == created[0].job_id
+    # Retry re-arms the same row (no copied job); the engine never changes.
+    assert result.job_id == str(original.id)
+    assert created == []
+    assert original.status == BlastJobStatus.PENDING
+    assert original.error_message is None and original.result_path is None
 
 
 @pytest.mark.parametrize("engine", ["diamond", "ncbi_blast"])

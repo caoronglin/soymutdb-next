@@ -239,6 +239,15 @@ def build_index(self: Task, build_id: str | None = None, **kwargs: object) -> di
             raise BuildRequestError("source checksum mismatch during validation")
         self.update_state(state="STARTED", meta={"progress": 85})
 
+        # ``validating -> publishing`` is a required step: the publication
+        # write below is guarded on exactly that state, so skipping it would
+        # reject every build. Publishing is the last claim a builder takes
+        # before it binds the identity to the catalog row.
+        with get_db() as session:
+            store = BlastIndexBuildStore(session)
+            if not store.transition(identifier, "publishing", expected="validating"):
+                return {"build_id": identifier, "skipped": True, "state": "validating"}
+
         with get_db() as session:
             store = BlastIndexBuildStore(session)
             publish_ok = store.publish(

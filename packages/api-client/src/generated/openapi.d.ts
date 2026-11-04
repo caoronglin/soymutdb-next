@@ -1182,31 +1182,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/blast/databases/build": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Request Blast Index Build
-         * @description Queue an immutable index build; construction never runs in this request.
-         *
-         *     The catalog row must exist and be buildable (``pending``/``failed`` or a
-         *     ``ready`` row being rebuilt). The outbox event carries only the frozen
-         *     metadata and a validated object reference; the worker resolves binaries,
-         *     staging, validation and publication.
-         */
-        post: operations["request_blast_index_build_api_v1_blast_databases_build_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/blast/jobs/{job_id}": {
         parameters: {
             query?: never;
@@ -5417,52 +5392,40 @@ export interface components {
             } | null;
         };
         /**
-         * BlastIndexBuildQueued
-         * @description Acknowledgement for an accepted index build request.
-         *
-         *     Deliberately narrow: the response says *what was queued*, never where the
-         *     worker will write it. Progress is read back from the catalog's
-         *     ``build_status``, not from a filesystem path.
-         */
-        BlastIndexBuildQueued: {
-            /** Database Id */
-            database_id: number;
-            /** Queued */
-            queued: boolean;
-            /** Task Name */
-            task_name: string;
-        };
-        /**
          * BlastIndexBuildRequest
-         * @description Admin-only request to build one immutable NCBI index asynchronously.
+         * @description Admin request to build one immutable NCBI index in a worker.
          *
-         *     Only identifiers, frozen biological provenance and an object reference are
-         *     accepted. No local filesystem path can pass this boundary.
+         *     The source FASTA is an object-store key under ``blast-sources/`` that was
+         *     uploaded and reviewed beforehand. No local path, binary name or output
+         *     directory is accepted from a client. Rebuilds create a new catalog row and
+         *     a new content-addressed identity; they never overwrite a published index.
          */
         BlastIndexBuildRequest: {
-            /** Database Id */
-            database_id: number;
+            /** Source Object Key */
+            source_object_key: string;
             /**
              * Db Type
              * @enum {string}
              */
             db_type: "nucl" | "prot";
-            /** Source Object */
-            source_object: string;
-            /** Assembly Id */
-            assembly_id: string;
-            /** Assembly Version */
-            assembly_version: string;
-            /** Release Id */
-            release_id: string;
+            /** Assembly Name */
+            assembly_name: string;
             /** Annotation Version */
             annotation_version: string;
-            /** Source Url */
-            source_url: string;
             /** Source Version */
             source_version: string;
+            /** Source Url */
+            source_url: string;
             /** License */
             license: string;
+            /** Name */
+            name: string;
+            /**
+             * Sequence Type
+             * @default genome
+             * @enum {string}
+             */
+            sequence_type: "genome" | "cds" | "transcript" | "protein" | "repeat_masked" | "pan_genome" | "family_consensus" | "custom";
         };
         /**
          * BlastIndexBuildResponse
@@ -13343,48 +13306,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BlastJobResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    request_blast_index_build_api_v1_blast_databases_build_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BlastIndexBuildRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlastIndexBuildQueued"];
                 };
             };
             /** @description Validation Error */

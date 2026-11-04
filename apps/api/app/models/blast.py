@@ -213,8 +213,12 @@ class BlastJob(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    database: Mapped[BlastDatabase] = relationship(
-        back_populates="jobs", lazy="joined"
+    # The FK is the single source of truth for the target index. An
+    # eager-loaded ORM relationship would ship every ``blast_databases`` column
+    # (``file_path``, ``build_error``, provenance) into every job read, so the
+    # catalog row is fetched explicitly when metadata is needed.
+    database: Mapped[BlastDatabase | None] = relationship(
+        back_populates="jobs", lazy="raise"
     )
     hits: Mapped[list[BlastHit]] = relationship(
         back_populates="job", lazy="noload", cascade="all, delete-orphan"

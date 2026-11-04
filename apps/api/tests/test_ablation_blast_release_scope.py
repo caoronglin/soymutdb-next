@@ -262,13 +262,18 @@ def test_job_response_exposes_the_searched_release_and_assembly():
         submitted_at=datetime.now(UTC),
     )
     database = _make_db()
-    database.assembly = _make_assembly()
+    assembly = _make_assembly()
+    database.assembly = assembly
     job.database = database
 
-    response = BlastService._job_to_response(job)  # noqa: SLF001
+    # The catalog/assembly rows are rendered from explicit arguments: the
+    # relationship is lazy, so a control-plane read can never trigger it.
+    response = BlastService._job_to_response(job, database, assembly)  # noqa: SLF001
 
     assert response.release_id == _RELEASE_ID
     assert response.assembly_name == "Wm82.a4.v1"
+    # Nothing is read through the relationship.
+    assert BlastService._job_to_response(job).release_id is None  # noqa: SLF001
 
 
 @pytest.fixture(autouse=True)
