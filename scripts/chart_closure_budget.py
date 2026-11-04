@@ -364,7 +364,7 @@ def measure_dist(manifest: dict[str, Any], dist: Path, report: Report) -> Measur
         report.add(
             "assets",
             False,
-            f"no .js file under {dist} within the manifest scope {asset_dirs or ["."]}",
+            f"no .js file under {dist} within the manifest scope {asset_dirs or ['.']}",
         )
         return None
 
