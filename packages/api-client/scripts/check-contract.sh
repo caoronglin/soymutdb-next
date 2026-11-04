@@ -25,6 +25,27 @@ echo ">> regenerating client types in temp dir..."
 )
 
 if ! diff -q "$TMP_DIR/openapi.d.ts" "$PKG_DIR/src/generated/openapi.d.ts" >/dev/null; then
+  # TEMPORARY DIAGNOSTIC: the committed snapshot matches a local export of the
+  # same models, so print what the CI interpreter actually emits.
+  echo "=== DIAGNOSTIC d.ts diff ==="
+  diff -u "$PKG_DIR/src/generated/openapi.d.ts" "$TMP_DIR/openapi.d.ts" | head -120 || true
+  echo "=== DIAGNOSTIC json head ==="
+  head -c 400 "$TMP_DIR/openapi.json" || true
+  echo
+  echo "=== DIAGNOSTIC GeneDetail ==="
+  "$API_PYTHON" - "$TMP_DIR/openapi.json" <<'DIAG' || true
+import json, sys
+doc = json.load(open(sys.argv[1]))
+for name in ("GeneDetail", "EvidenceTag", "SequenceAvailability"):
+    print(name, json.dumps(doc["components"]["schemas"].get(name), indent=1)[:1500])
+DIAG
+  echo "=== DIAGNOSTIC committed ==="
+  "$API_PYTHON" - "$PKG_DIR/openapi.json" <<'DIAG' || true
+import json, sys
+doc = json.load(open(sys.argv[1]))
+for name in ("GeneDetail", "EvidenceTag", "SequenceAvailability"):
+    print(name, json.dumps(doc["components"]["schemas"].get(name), indent=1)[:1500])
+DIAG
   echo "CONTRACT DEBT: generated client is out of sync with the backend OpenAPI."
   echo "Run: pnpm --filter @soymutdb/api-client generate:api-client"
   exit 1
