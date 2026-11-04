@@ -24449,7 +24449,7 @@
           "release_key"
         ],
         "title": "ExportManifestResponse",
-        "description": "Citable provenance for a produced variant-export artifact.\n\nThe manifest mirrors the owner-visible status record but adds the byte\nidentity and licence. ``sha256`` is ``None`` when the artifact predates\nchecksum recording; a client must not display that as a valid digest.\n``filters`` carries only the public, non-secret filter keys the submitter\nset \u2014 never the worker-only resolved mutant-line name or any internal id."
+        "description": "Citable provenance for a produced variant-export artifact.\n\nThe manifest mirrors the owner-visible status record but adds the byte\nidentity and licence. ``sha256`` is ``None`` when the artifact predates\nchecksum recording; a client must not display that as a valid digest.\n``filters`` carries only the public, non-secret filter keys the submitter\nset \u2014 never the worker-only resolved mutant-line name or any internal id.\nThe top-level ``assembly_key`` is likewise server-resolved (the one\nassembly namespace the artifact was built from), not a client-supplied\nfilter value."
       },
       "ExportQueryRequest": {
         "properties": {

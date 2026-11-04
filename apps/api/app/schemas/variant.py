@@ -293,6 +293,9 @@ class ExportManifestResponse(BaseModel):
     checksum recording; a client must not display that as a valid digest.
     ``filters`` carries only the public, non-secret filter keys the submitter
     set — never the worker-only resolved mutant-line name or any internal id.
+    The top-level ``assembly_key`` is likewise server-resolved (the one
+    assembly namespace the artifact was built from), not a client-supplied
+    filter value.
     """
 
     export_id: str
