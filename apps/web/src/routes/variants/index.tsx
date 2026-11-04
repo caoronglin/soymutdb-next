@@ -396,7 +396,20 @@ function VariantsComponent() {
                 </Typography.Text>
               ) : null}
               <Table<VariantSummary>
-                rowKey="variant_id"
+                {/* `variant_id` is release-scoped, not canonical: the same
+                number can name another record in another release, and the
+                identifier column already prints it. Keying on it alone would
+                let a cross-release or cross-assembly page collide and have
+                React silently reuse a row. This is row stability for this page
+                only; canonical identity is a separate, larger job.
+
+                The assembly is appended as a serialized part rather than
+                through a separator: `assembly` is nullable, and an empty
+                string is a distinct value from an absent one. A `?? ""`
+                fallback folds both into the same key, and since keys are
+                strings, `["a","b"]` joined by ":" could also spell a
+                neighbour's key. `JSON.stringify` keeps `null` and `""` apart. */}
+                rowKey={(row) => JSON.stringify([row.variant_id, row.assembly ?? null])}
                 onRow={() =>
                   ({ "data-testid": "variant-row" }) as React.HTMLAttributes<HTMLElement>
                 }
@@ -404,10 +417,10 @@ function VariantsComponent() {
                 dataSource={data}
                 loading={query.isLoading}
                 pagination={false}
-                // A wide result table must stay readable on a phone: the table
-                // takes its natural width and the region scrolls sideways
-                // instead of squeezing the identifier column into an
-                // unreadable stub.
+                /* A wide result table must stay readable on a phone: the table
+                takes its natural width and the region scrolls sideways
+                instead of squeezing the identifier column into an unreadable
+                stub. */
                 scroll={{ x: "max-content" }}
                 locale={{
                   emptyText: (
