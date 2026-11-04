@@ -37,6 +37,28 @@ export const queryKeys = {
         context?.releaseId ?? null,
         context?.siteVariant ?? null,
       ] as const,
+    // The catalogue above comes from `/genes/assemblies`; this key belongs to
+    // `/assemblies`, whose payload carries per-assembly counts. They are kept
+    // in separate keys on purpose: merging them would serve one endpoint's
+    // shape to the other's caller.
+    statistics: (context?: { releaseId?: string | null; siteVariant?: "external" | "internal" }) =>
+      [
+        ...queryKeys.assemblies.all(),
+        "statistics-list",
+        context?.releaseId ?? null,
+        context?.siteVariant ?? null,
+      ] as const,
+    detail: (
+      assemblyId: string | number | undefined,
+      context?: { releaseId?: string | null; siteVariant?: "external" | "internal" },
+    ) =>
+      [
+        ...queryKeys.assemblies.all(),
+        "detail",
+        assemblyId ?? null,
+        context?.releaseId ?? null,
+        context?.siteVariant ?? null,
+      ] as const,
   },
   news: {
     all: () => [...queryKeys.all, "news"] as const,

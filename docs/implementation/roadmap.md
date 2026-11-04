@@ -64,17 +64,37 @@ alone):
   signed-in page did not. Both now offer it as tab-separated aligner output
   (`outfmt 6`), and neither renders a link when the job has no stored artifact.
 
-Still open in Phase 1:
+Phase 1 items that were listed here as open have since landed; the list is
+rewritten rather than deleted so a reader can tell what changed:
 
-- asynchronous `makeblastdb` build/publication workflow in the worker, catalog
-  build states and the admin controls for index enable/disable;
-- protein-hit → transcript/gene resolution before genome-browser links;
-- five-program UI wiring against the existing `/blast` page;
-- cancellation, retry and download-expiry coverage for NCBI jobs.
+| Item | State | Where |
+| --- | --- | --- |
+| Asynchronous `makeblastdb` build/publication in the worker, with catalog build states | done | `apps/worker/src/soymutdb_worker/tasks/blast_index.py`, migration `0052` |
+| Admin enable/disable control for an index | **still open** | no HTTP route toggles `blast_databases.is_active`; only the worker's publish path writes it |
+| Protein-hit → transcript/gene resolution before genome-browser links | done | `apps/worker/src/soymutdb_worker/blast_genome_resolution.py`, `BlastService.resolve_genome_target`, `routes/blast.tsx` |
+| Five-program UI wiring on `/blast` | done | `apps/web/src/routes/blast.tsx` (program selector filtered by engine, engine selector disabling DIAMOND for non-`blastp`) |
+| Cancellation, retry and download-expiry coverage on the NCBI path | done | `apps/worker/tests/test_blast_cancel_retry_expiry.py::test_ncbi_jobs_are_guarded_before_the_engine_runs`, `apps/api/tests/test_blast_cancel_retry.py` |
 
-The DIAMOND SQL/worker assertions and the API suite were not executed in this
-environment (no PostgreSQL, no NCBI BLAST+ binaries, Python 3.11 only); the
-TypeScript gates were.
+Two caveats on that table, both of which the repository has already been wrong
+about once:
+
+- the resolution path is scoped in the *relation query*, not after it. A
+  transcript id and an alias are strings that v4 and v5 can both carry, so
+  collecting candidates first and filtering by assembly later leaves the
+  contract standing on one downstream condition. It is now joined and filtered
+  inside each relation query, and
+  `test_blast_genome_resolution.py::test_a_relation_of_another_assembly_is_never_a_candidate`
+  fails if that scoping is removed;
+- the NCBI coverage above is the *guard* (cancelled and past-deadline jobs never
+  reach `get_ncbi_db_path` or the aligner). It does not assert a real NCBI
+  binary produced a result; that remains the opt-in real-binary suite's job.
+
+Verification environment for the numbers this document reports: Python 3.15.2
+via `uv`, no PostgreSQL server and no NCBI BLAST+/DIAMOND binaries in the
+sandbox. `apps/api` therefore runs against its fakes and reports
+`2469 passed, 25 skipped, 0 failed` with 389 `DockerException` errors from the
+testcontainers fixtures; the real-binary and PostgreSQL integration suites stay
+opt-in and are the ones CI must run.
 
 ## Current PR boundary
 

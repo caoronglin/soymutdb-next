@@ -12,6 +12,12 @@ Accepted subject forms, all scoped by ``assembly_id`` and ``release_id``:
 2. exact transcript id (``transcripts.id`` -> ``genes.gene_pk``);
 3. exact, sourced alias (``gene_aliases.alias`` -> ``genes.gene_pk``).
 
+Every one of the three joins ``genes`` and filters ``genes.assembly_id``
+itself. A transcript id or an alias is a plain string that the same value can
+carry in v4 and v5, so "the gene row I found is in the right assembly" cannot
+be established afterwards: the resolution would first collect both namespaces
+and only then rely on one of them being absent.
+
 No suffix stripping, fuzzy matching, coordinate coincidence or string
 similarity. Ambiguous matches are reported ``unresolved`` with a reason; they
 never silently pick one. Nothing here invents a cross-assembly (v4/v5)
@@ -155,20 +161,27 @@ class BlastGenomeResolver:
             owner[str(key)].add(int(gene_pk))
             gene_pks.add(int(gene_pk))
 
-        # (2) exact transcript id -> gene_pk.
+        # (2) exact transcript id -> gene_pk, limited to genes of this assembly.
         for key, gene_pk in self._rows(
-            select(transcripts.c.id, transcripts.c.gene_id).where(
-                transcripts.c.id.in_(unique)
+            select(transcripts.c.id, transcripts.c.gene_id)
+            .select_from(transcripts.join(genes, transcripts.c.gene_id == genes.c.gene_pk))
+            .where(
+                transcripts.c.id.in_(unique),
+                genes.c.assembly_id == self.assembly_id,
             )
         ):
             owner[str(key)].add(int(gene_pk))
             gene_pks.add(int(gene_pk))
 
-        # (3) exact, sourced alias -> gene_pk (explicit relation only).
+        # (3) exact, sourced alias -> gene_pk (explicit relation only), limited
+        # to genes of this assembly: an alias is a string, not a namespace.
         for key, gene_pk in self._rows(
-            select(gene_aliases.c.alias, gene_aliases.c.gene_id).where(
+            select(gene_aliases.c.alias, gene_aliases.c.gene_id)
+            .select_from(gene_aliases.join(genes, gene_aliases.c.gene_id == genes.c.gene_pk))
+            .where(
                 gene_aliases.c.alias.in_(unique),
                 gene_aliases.c.source.is_not(None),
+                genes.c.assembly_id == self.assembly_id,
             )
         ):
             owner[str(key)].add(int(gene_pk))

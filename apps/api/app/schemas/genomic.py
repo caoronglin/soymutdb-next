@@ -254,3 +254,48 @@ class GeneListResponse(BaseModel):
 
 
 GeneDetail.model_rebuild()
+
+
+class AssemblyStatistics(BaseModel):
+    """Counts derived from real rows, scoped to one assembly.
+
+    Every number here is a ``COUNT``/``SUM`` over rows that carry an
+    ``assembly_id`` of their own. Nothing is read from ``Release.gene_count`` or
+    any other denormalised counter: a release owns several assemblies, so a
+    release-level total copied onto each assembly would report the whole
+    release's genes once per assembly.
+
+    ``download_count`` is ``None`` on purpose. ``download_files`` has no
+    assembly column -- it is linked to a release and its ``category`` is free
+    text -- so there is no relation to aggregate over. Guessing an assembly
+    from a category string would invent a number, and borrowing the release's
+    download total would be the same mistake as borrowing its gene count. The
+    field stays in the payload, with a ``reason``, so that "we do not know" is
+    visible instead of looking like a zero.
+    """
+
+    gene_count: int = Field(default=0, ge=0)
+    transcript_count: int = Field(default=0, ge=0)
+    chromosome_count: int = Field(default=0, ge=0)
+    total_length: int = Field(default=0, ge=0)
+    download_count: int | None = None
+    download_count_reason: str | None = None
+
+
+class AssemblySummaryResponse(AssemblyResponse):
+    """An assembly in the resolved release, with its own real counts."""
+
+    release_id: int | None = None
+    release_version: str | None = None
+    statistics: AssemblyStatistics = Field(default_factory=AssemblyStatistics)
+
+
+class AssemblyDetailResponse(AssemblySummaryResponse):
+    """One assembly, its counts, and its chromosomes.
+
+    The chromosome list is what makes "the assembly does not exist" and "the
+    assembly exists but has no chromosomes" distinguishable answers rather
+    than two identical empty payloads.
+    """
+
+    chromosomes: list[ChromosomeResponse] = Field(default_factory=list)

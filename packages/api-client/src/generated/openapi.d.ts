@@ -358,6 +358,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/assemblies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Assemblies
+         * @description List the resolved release's assemblies with their own aggregate counts.
+         *
+         *     Not cached: an assembly with a wrong gene count is worse than an assembly
+         *     fetched twice, and the numbers change when data is imported rather than on
+         *     their own.
+         */
+        get: operations["list_assemblies_api_v1_assemblies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assemblies/{assembly_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Assembly
+         * @description Return one assembly of the resolved release, with its chromosomes.
+         *
+         *     A 404 is returned both for an unknown assembly and for one that belongs to
+         *     another release: the endpoint reveals nothing about assemblies outside the
+         *     resolved release.
+         */
+        get: operations["get_assembly_api_v1_assemblies__assembly_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/gwas/uploads": {
         parameters: {
             query?: never;
@@ -1153,6 +1201,30 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/databases/{database_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Blast Database State
+         * @description Enable/disable a published BLAST index (administrator only).
+         *
+         *     Disabling an index only removes it from *new* searches. Submitted jobs keep
+         *     the provenance frozen at submission time and are never rewritten. There is
+         *     no delete route: a published index is an immutable, auditable record.
+         */
+        patch: operations["update_blast_database_state_api_v1_blast_databases__database_id__patch"];
         trace?: never;
     };
     "/api/v1/blast/jobs": {
@@ -5566,6 +5638,57 @@ export interface components {
              */
             completed_at: string | null;
         };
+        /**
+         * AssemblyDetailResponse
+         * @description One assembly, its counts, and its chromosomes.
+         *
+         *     The chromosome list is what makes "the assembly does not exist" and "the
+         *     assembly exists but has no chromosomes" distinguishable answers rather
+         *     than two identical empty payloads.
+         */
+        AssemblyDetailResponse: {
+            /** Id */
+            id: number | string;
+            /** Name */
+            name: string;
+            /** Species */
+            species: string;
+            /** Version */
+            version: string;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: string | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Release Version
+             * @default null
+             */
+            release_version: string | null;
+            statistics?: components["schemas"]["AssemblyStatistics"];
+            /** Chromosomes */
+            chromosomes?: components["schemas"]["ChromosomeResponse"][];
+        };
         /** AssemblyResponse */
         AssemblyResponse: {
             /** Id */
@@ -5596,6 +5719,101 @@ export interface components {
              * @default null
              */
             updated_at: string | null;
+        };
+        /**
+         * AssemblyStatistics
+         * @description Counts derived from real rows, scoped to one assembly.
+         *
+         *     Every number here is a ``COUNT``/``SUM`` over rows that carry an
+         *     ``assembly_id`` of their own. Nothing is read from ``Release.gene_count`` or
+         *     any other denormalised counter: a release owns several assemblies, so a
+         *     release-level total copied onto each assembly would report the whole
+         *     release's genes once per assembly.
+         *
+         *     ``download_count`` is ``None`` on purpose. ``download_files`` has no
+         *     assembly column -- it is linked to a release and its ``category`` is free
+         *     text -- so there is no relation to aggregate over. Guessing an assembly
+         *     from a category string would invent a number, and borrowing the release's
+         *     download total would be the same mistake as borrowing its gene count. The
+         *     field stays in the payload, with a ``reason``, so that "we do not know" is
+         *     visible instead of looking like a zero.
+         */
+        AssemblyStatistics: {
+            /**
+             * Gene Count
+             * @default 0
+             */
+            gene_count: number;
+            /**
+             * Transcript Count
+             * @default 0
+             */
+            transcript_count: number;
+            /**
+             * Chromosome Count
+             * @default 0
+             */
+            chromosome_count: number;
+            /**
+             * Total Length
+             * @default 0
+             */
+            total_length: number;
+            /**
+             * Download Count
+             * @default null
+             */
+            download_count: number | null;
+            /**
+             * Download Count Reason
+             * @default null
+             */
+            download_count_reason: string | null;
+        };
+        /**
+         * AssemblySummaryResponse
+         * @description An assembly in the resolved release, with its own real counts.
+         */
+        AssemblySummaryResponse: {
+            /** Id */
+            id: number | string;
+            /** Name */
+            name: string;
+            /** Species */
+            species: string;
+            /** Version */
+            version: string;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: string | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Release Version
+             * @default null
+             */
+            release_version: string | null;
+            statistics?: components["schemas"]["AssemblyStatistics"];
         };
         /** BlastDatabaseResponse */
         BlastDatabaseResponse: {
@@ -5691,6 +5909,37 @@ export interface components {
              * @default null
              */
             license: string | null;
+        };
+        /**
+         * BlastDatabaseStateResponse
+         * @description Narrow acknowledgement of a state toggle.
+         *
+         *     ``BlastDatabaseResponse`` is the public discovery shape: it is scoped to a
+         *     published release and carries catalog metadata. This control-plane reply
+         *     must work for *any* catalog row (including one already disabled, or one in
+         *     another release) and must never expose the worker-local ``file_path``.
+         */
+        BlastDatabaseStateResponse: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Is Active */
+            is_active: boolean;
+        };
+        /**
+         * BlastDatabaseStateUpdate
+         * @description Admin toggle for one published catalog row.
+         *
+         *     The only mutable field is ``is_active``. A published index is immutable:
+         *     disabling it stops *new* searches from selecting it, but never deletes the
+         *     row, rewrites a submitted job, or changes the frozen index identity. The
+         *     request is deliberately narrow (``extra="forbid"``) so a caller cannot
+         *     smuggle in a path, a build state or a name through the same route.
+         */
+        BlastDatabaseStateUpdate: {
+            /** Is Active */
+            is_active: boolean;
         };
         /**
          * BlastGenomeTargetResponse
@@ -14003,6 +14252,92 @@ export interface operations {
             };
         };
     };
+    list_assemblies_api_v1_assemblies_get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssemblySummaryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_assembly_api_v1_assemblies__assembly_id__get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                assembly_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssemblyDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     create_upload_api_v1_gwas_uploads_post: {
         parameters: {
             query?: never;
@@ -15444,6 +15779,50 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BlastDatabaseResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_blast_database_state_api_v1_blast_databases__database_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                database_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlastDatabaseStateUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastDatabaseStateResponse"];
                 };
             };
             /** @description Validation Error */

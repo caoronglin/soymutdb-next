@@ -6,11 +6,12 @@ Celery broker being reachable.  A background dispatcher forwards the event
 to the worker afterwards.
 
 Results are stored by the worker in two places: the parsed hits land in the
-``blast_hits`` table (via migration 0008) and the raw output file goes to
-MinIO under ``blast-results/{job_id}.json``.  :meth:`get_result` returns a
-status-aware envelope: pending/running/failed jobs carry no hit list (never a
-placeholder), completed jobs carry the real hits plus a pre-signed download
-URL for the raw output.
+``blast_hits`` table (via migration 0008) and the raw aligner output — the
+tabular ``outfmt 6`` text, not JSON — goes to MinIO under
+``blast-results/{job_id}.txt`` (``tasks/blast.py``). :meth:`get_result` returns
+a status-aware envelope: pending/running/failed jobs carry no hit list (never a
+placeholder), completed jobs carry the real hits plus a pre-signed download URL
+for the raw output.
 """
 
 from __future__ import annotations
@@ -49,6 +50,7 @@ from ..models.blast import (
 from ..models.genomic import Assembly
 from ..schemas.blast import (
     BlastDatabaseResponse,
+    BlastDatabaseStateResponse,
     BlastGenomeTargetResponse,
     BlastIndexBuildRequest,
     BlastIndexBuildResponse,
@@ -280,6 +282,60 @@ class BlastService:
             created_at=build.created_at,
             started_at=build.started_at,
             completed_at=build.completed_at,
+        )
+
+    async def set_database_active(
+        self,
+        db: AsyncSession,
+        database_id: int,
+        is_active: bool,
+        *,
+        actor_id: uuid.UUID,
+        ip_address: str | None = None,
+    ) -> BlastDatabaseStateResponse:
+        """Toggle one catalog row's ``is_active`` flag and record an audit entry.
+
+        A published index is immutable: this only changes whether *new*
+        submissions may select it. No job row, outbox event, frozen provenance,
+        index identity or catalog metadata is touched. In-flight and completed
+        jobs keep running against the identity frozen at submission time; the
+        worker never consults ``is_active``.
+
+        The row is locked for the update so two admins cannot race, and the
+        state + audit entry commit in the caller's transaction (same pattern as
+        ``PluginService.update_enabled``). A no-op toggle still records the
+        action with identical ``from``/``to`` so the audit trail states what
+        the operator asked for.
+        """
+        from sqlalchemy import select
+
+        from ..core.audit import log_action
+
+        row = (await db.execute(
+            select(BlastDatabase)
+            .where(BlastDatabase.id == database_id)
+            .with_for_update()
+        )).scalar_one_or_none()
+        if row is None:
+            raise NotFoundError(f"BLAST database {database_id} not found")
+
+        previous = bool(row.is_active)
+        row.is_active = is_active
+        await db.flush()
+        await log_action(
+            db,
+            user_id=actor_id,
+            action="blast_database_state_update",
+            resource_type="blast_database",
+            resource_id=str(database_id),
+            old_value={"database_id": database_id, "is_active": previous,
+                       "operator": str(actor_id)},
+            new_value={"database_id": database_id, "is_active": is_active,
+                       "operator": str(actor_id)},
+            ip_address=ip_address,
+        )
+        return BlastDatabaseStateResponse(
+            id=row.id, name=row.name, is_active=bool(row.is_active),
         )
 
 

@@ -3557,5 +3557,28 @@
       "noObservationsDesc": "该突变系在已发布版本中没有表型观察记录。",
       "openLine": "打开该突变系"
     }
+  },
+  "assemblies": {
+    "title": "基因组装配",
+    "subtitle": "当前发布版本中的装配。每个数字都由该装配自己的行聚合得出，两套装配不会共用同一个数。",
+    "default": "默认",
+    "release": "发布版本",
+    "releaseUnavailable": "未标注",
+    "downloadsNotRecorded": "未记录",
+    "empty": "该发布版本下没有装配。",
+    "loadFailed": "装配数据加载失败。",
+    "notFound": "该发布版本下没有这套装配。",
+    "noChromosomes": "该装配没有染色体记录。",
+    "backToList": "全部装配",
+    "columns": {
+      "assembly": "装配",
+      "version": "版本",
+      "genes": "基因",
+      "transcripts": "转录本",
+      "chromosomes": "染色体",
+      "length": "总长度 (bp)",
+      "chromosome": "染色体",
+      "downloads": "下载"
+    }
   }
 }

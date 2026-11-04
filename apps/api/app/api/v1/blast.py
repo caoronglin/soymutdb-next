@@ -16,6 +16,8 @@ from ...core.security import RoleName
 from ...models.auth import User
 from ...schemas.blast import (
     BlastDatabaseResponse,
+    BlastDatabaseStateResponse,
+    BlastDatabaseStateUpdate,
     BlastGenomeTargetResponse,
     BlastIndexBuildRequest,
     BlastIndexBuildResponse,
@@ -51,6 +53,37 @@ async def list_blast_databases(
     the databases of draft releases, whose underlying data is not published.
     """
     return await service.list_databases(db, release_context=release_context)
+
+
+@router.patch(
+    "/databases/{database_id}",
+    response_model=BlastDatabaseStateResponse,
+    dependencies=[Depends(require_role(RoleName.ADMINISTRATOR))],
+)
+async def update_blast_database_state(
+    database_id: int,
+    body: BlastDatabaseStateUpdate,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BlastDatabaseStateResponse:
+    """Enable/disable a published BLAST index (administrator only).
+
+    Disabling an index only removes it from *new* searches. Submitted jobs keep
+    the provenance frozen at submission time and are never rewritten. There is
+    no delete route: a published index is an immutable, auditable record.
+    """
+    _private(response)
+    result = await service.set_database_active(
+        db,
+        database_id,
+        body.is_active,
+        actor_id=current_user.id,
+        ip_address=request.client.host if request.client else None,
+    )
+    await db.commit()
+    return result
 
 
 @router.post(

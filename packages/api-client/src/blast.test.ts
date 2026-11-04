@@ -1,4 +1,4 @@
-import { blastDownloadLink, hasCompatibleBlastQueryAlphabet, compatibleBlastDatabases, validateBlastFastaStructure, type BlastProgram, getBlastHits, getBlastJob, getBlastJobs, getPublicBlastDatabases, getPublicBlastJob, getPublicBlastResults, resolveBlastHitGenomeTarget, submitBlastJob, submitPublicBlastJob, cancelBlastJob, retryBlastJob } from "./blast";
+import { blastDownloadLink, hasCompatibleBlastQueryAlphabet, compatibleBlastDatabases, validateBlastFastaStructure, type BlastProgram, getBlastHits, getBlastJob, getBlastJobs, getPublicBlastDatabases, getPublicBlastJob, getPublicBlastResults, resolveBlastHitGenomeTarget, submitBlastJob, submitPublicBlastJob, cancelBlastJob, retryBlastJob, setBlastDatabaseActive } from "./blast";
 import { setReleaseId } from "./client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -204,6 +204,20 @@ describe("BLAST client contract", () => {
     expect(retryUrl).toContain("/blast/jobs/job%201/retry");
     expect(cancelInit.method).toBe("POST");
     expect(retryInit.method).toBe("POST");
+  });
+
+  it("toggles a database with a narrow state body and no delete route", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      json({ id: 7, name: "wm82_a4_genome", is_active: false }),
+    );
+    const state = await setBlastDatabaseActive(7, false);
+    expect(state).toEqual({ id: 7, name: "wm82_a4_genome", is_active: false });
+    const [url, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    expect(url).toContain("/blast/databases/7");
+    expect(init.method).toBe("PATCH");
+    expect(JSON.parse(String(init.body))).toEqual({ is_active: false });
+    // The client has no delete helper: a published index is never erased.
+    expect("deleteBlastDatabase" in await import("./blast")).toBe(false);
   });
 
   it("uses the implemented jobs list and result routes", async () => {

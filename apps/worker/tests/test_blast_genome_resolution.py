@@ -16,6 +16,7 @@ from sqlalchemy import (
     Table,
     create_engine,
     insert,
+    select,
 )
 from sqlalchemy.orm import Session
 
@@ -147,6 +148,58 @@ def test_cross_assembly_isolation(gene_db):
     assert (a["chromosome"], a["start"]) == ("chr01", 12000)
     assert (b["chromosome"], b["start"]) == ("chr02", 99000)
     assert a["assembly_id"] != b["assembly_id"]
+
+
+def test_a_relation_of_another_assembly_is_never_a_candidate(gene_db):
+    """Assembly scope lives in the relation query, not in a later filter.
+
+    A transcript id and an alias are plain strings; the same value can exist in
+    v4 and v5. If the relation lookup collected both namespaces and relied on
+    ``_gene_rows`` to drop the foreign one afterwards, the resolution would be
+    correct only as long as that downstream filter stays in place. This patches
+    ``_gene_rows`` to return every gene it is given — the shape a future caller
+    could have — and asserts the cross-assembly relation still resolves to
+    nothing.
+    """
+    engine = gene_db
+    metadata = MetaData()
+    transcripts = Table("transcripts", metadata, autoload_with=engine)
+    aliases = Table("gene_aliases", metadata, autoload_with=engine)
+    genes = Table("genes", metadata, autoload_with=engine)
+    with engine.begin() as connection:
+        # Both relations point at gene 200, which lives in assembly 43 only.
+        connection.execute(insert(transcripts).values(
+            id="prot.v5only", gene_id=200, is_canonical=True,
+        ))
+        connection.execute(insert(aliases).values(
+            id=9, gene_id=200, alias="V5_ONLY_ALIAS", source="curated",
+        ))
+        rows = connection.execute(
+            select(genes.c.gene_pk, genes.c.accession, genes.c.chromosome_id,
+                   genes.c.start, genes.c.end, genes.c.strand).where(
+                genes.c.gene_pk == 200)
+        ).all()
+
+    resolver, session = _resolver(engine, assembly_id=42)
+
+    def unfiltered(gene_pks):
+        # Deliberately does NOT scope by assembly: this is what a caller that
+        # trusted the relation lookup would get.
+        return {
+            int(pk): resolution.GeneLocus(
+                gene_id=str(accession), chromosome="chr02", start=int(start),
+                end=int(end), strand=str(strand or "+"),
+                assembly_id=43, release_id=7,
+            )
+            for pk, accession, _chromosome_id, start, end, strand in rows
+            if int(pk) in gene_pks
+        }
+
+    resolver._gene_rows = unfiltered  # type: ignore[method-assign]
+    out = resolver.resolve(["prot.v5only", "V5_ONLY_ALIAS"])
+    session.close()
+    for key, record in out.items():
+        assert record == {"status": "unresolved", "reason": "no_exact_relation"}, key
 
 
 def test_assembly_outside_release_is_refused(gene_db):
