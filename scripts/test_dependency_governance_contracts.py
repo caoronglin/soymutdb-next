@@ -1,3 +1,4 @@
+import ast
 import importlib.util
 import json
 import os
@@ -1487,3 +1488,136 @@ def test_malformed_analyzer_timeout_is_a_policy_error(tmp_path: Path) -> None:
 
     assert result.returncode != 0
     assert "timeout_seconds must be a positive integer" in result.stderr
+
+
+def test_every_subprocess_the_runner_launches_is_bounded() -> None:
+    """The runner may not leave any child without a wall-clock ceiling.
+
+    PR #39 failed `Dependency governance` with
+
+        error: 任务超过(10m0s)没有任何输出而被强制关闭
+
+    for 10m28s, and the log never named an analyzer. The per-check ceiling
+    added for #34 covered `_run_check`, but this runner launches three more
+    children of its own -- the declared-license probe, its status re-run, and
+    the exit-code probe -- and `python-licenses-*` is precisely the family that
+    compiles the worker's science stack. An unbounded one of those rebuilds the
+    original failure from inside the code that exists to explain it, and does it
+    with the whole stage's evidence forfeited.
+
+    Asserted on the AST so a fourth `subprocess.run` added later cannot pass by
+    simply being written in a file nobody re-reads.
+    """
+    governance = _governance_module()
+    tree = ast.parse(Path(governance.__file__).read_text(encoding="utf-8"))
+    launches = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in {"run", "check_output", "call", "Popen", "check_call"}
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "subprocess"
+    ]
+    assert launches, "the dependency runner is expected to launch analyzers"
+    for call in launches:
+        keywords = {keyword.arg for keyword in call.keywords}
+        assert "timeout" in keywords, (
+            f"subprocess.{call.func.attr} at line {call.lineno} has no timeout: "
+            "a hung child silently kills the stage and discards every evidence file"
+        )
+
+
+def test_a_hung_license_probe_is_reported_instead_of_killing_the_stage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A probe that never answers must keep its own diagnosis, not hang.
+
+    `_probe_declared_licenses` already treats "no probe data" as "judge by the
+    analyzer's own column", and the status probe already treats an empty answer
+    as `probe_produced_no_declarations`. Both were reachable only by a probe that
+    finished; a probe that stalled could not reach either, so the ceiling turns
+    the hang into the state the caller already knows how to describe.
+    """
+    governance = _governance_module()
+    monkeypatch.setattr(governance, "PROBE_TIMEOUT_SECONDS", 1, raising=False)
+
+    def hang(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        expired = subprocess.TimeoutExpired(cmd=["uv", "run", "python", "-c"], timeout=1)
+        expired.stdout = "partial stdout\n"
+        expired.stderr = "building cyvcf2\n"
+        return governance._kill_on_timeout(expired, 1, "declared-license probe")
+
+    stalled = {}
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        stalled["timeout"] = kwargs.get("timeout")
+        if kwargs.get("timeout") is None:
+            raise AssertionError("the probe was launched without a ceiling")
+        return hang()
+
+    monkeypatch.setattr(governance.subprocess, "run", fake_run)
+    check = next(
+        entry
+        for entry in json.loads(CONFIG.read_text(encoding="utf-8"))["checks"]
+        if entry["name"] == "python-licenses-worker"
+    )
+    command = [
+        argument.replace("{root}", str(ROOT)).replace("{output_dir}", "/tmp/x")
+        for argument in check["command"]
+    ]
+    # The stall is a timeout, not a wrong answer: no probe data, and no
+    # exception escaping to turn the whole audit into a traceback.
+    assert governance._probe_declared_licenses(command) == {}
+    assert stalled["timeout"] == 1
+
+
+def test_the_audit_announces_each_analyzer_before_it_runs(tmp_path: Path) -> None:
+    """A run that only prints at the end is indistinguishable from a dead one.
+
+    CNB's rule is about output, not duration: a stage is killed after ten silent
+    minutes. The per-check ceiling bounds any single analyzer, but the log has to
+    name the analyzer that is currently in flight for that bound to be useful to
+    whoever reads the failure.
+    """
+    config = tmp_path / "two-checks.json"
+    config.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "checks": [
+                    {
+                        "name": f"tool-{index}",
+                        "category": "knip",
+                        "command": [sys.executable, "-c", "print('{}')"],
+                        "report": {
+                            "mode": "stdout",
+                            "path": f"tool-{index}.json",
+                            "format": "json",
+                        },
+                    }
+                    for index in (1, 2)
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "audit",
+            "--config",
+            str(config),
+            "--output",
+            str(tmp_path / "reports"),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "[1/2] tool-1: running" in result.stdout
+    assert "[2/2] tool-2: running" in result.stdout
+    assert "tool-1: passed (passed)" in result.stdout
