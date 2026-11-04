@@ -178,7 +178,11 @@
     "tabs": {
       "overview": "概览",
       "expression": "表达数据",
-      "homologs": "同源基因"
+      "homologs": "同源基因",
+      "annotation": "GO / KEGG",
+      "variants": "变异",
+      "phenotype": "表型",
+      "literature": "文献"
     },
     "expression": {
       "no_data": "暂无表达数据",
@@ -297,6 +301,54 @@
         "unknown": "来源记录未描述其证据来源。"
       },
       "unknownSource": "来源记录未说明其证据来源。"
+    },
+    "sections": {
+      "state": {
+        "empty": "该基因没有{{section}}。",
+        "emptyHint": "本 release 已导入该数据源的快照，只是这条基因在其中没有记录。",
+        "notImported": "本 release 尚未导入{{section}}快照。",
+        "notImportedHint": "本 release 根本没有这类数据的快照，这与「该基因没有」是两件事。",
+        "unreported": "{{section}}：当前 API 版本未返回这一块。",
+        "reason": "原因：{{reason}}"
+      },
+      "annotation": {
+        "title": "GO / KEGG 注释",
+        "empty": "该基因在本 release 中没有 GO 或 KEGG 条目。",
+        "ontology": "本体",
+        "term": "条目 ID",
+        "termName": "名称",
+        "evidenceCode": "证据代码",
+        "qualifier": "限定词",
+        "reference": "参考",
+        "snapshot": "快照来源",
+        "snapshotVersion": "快照版本"
+      },
+      "variants": {
+        "title": "变异",
+        "empty": "该基因在本 release 中没有变异记录。",
+        "total": "总数",
+        "impact": "效应",
+        "count": "数目",
+        "unannotated": "无效应预测"
+      },
+      "phenotype": {
+        "title": "表型",
+        "empty": "该基因的突变体尚未记录表型。",
+        "mutant": "突变体",
+        "category": "类别",
+        "trait": "性状",
+        "value": "取值",
+        "method": "测定方法"
+      },
+      "literature": {
+        "title": "文献",
+        "empty": "该基因尚未关联文献。",
+        "titleColumn": "标题",
+        "authors": "作者",
+        "journal": "期刊",
+        "year": "年份",
+        "identifier": "标识"
+      }
     }
   },
   "variants": {

@@ -235,3 +235,197 @@ def test_snapshot_keeps_null_defaults_on_optional_fields() -> None:
         + "\nRegenerate the snapshot with "
         "`pnpm --filter @soymutdb/api-client generate:api-client`."
     )
+
+
+# ---------------------------------------------------------------------------
+# The snapshot is a fixed point of the normalizer that produces it
+# ---------------------------------------------------------------------------
+# ``scripts/export_contract.py`` owns one spelling of an optional nullable
+# field and one key order for every property. A snapshot that a *different*
+# spelling was hand-written into still passes the checks above -- every
+# reference resolves, one dialect throughout, ``default: null`` on all 584
+# optional fields -- while disagreeing with every real export. That is how
+# ``main`` kept a red frontend gate on a backend nobody had touched, so the
+# fixed point gets its own check.
+
+
+def _export_module() -> Any:
+    """Import the export script without needing the API virtualenv."""
+
+    import importlib.util
+
+    path = SNAPSHOT.parent / "scripts/export_contract.py"
+    spec = importlib.util.spec_from_file_location("_export_contract", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _document_with_optional_fields() -> dict[str, Any]:
+    """The minimum a normalizer needs: the settings documents it touches."""
+
+    schemas: dict[str, Any] = {}
+    for name in (
+        "SettingsDocumentResponse",
+        "SettingsHistoryItem",
+        "SettingsPatchRequest",
+        "SettingsValidateRequest",
+        "SettingsValidateResponse",
+        "SettingFieldSchema",
+    ):
+        properties: dict[str, Any] = {
+            "values": {"additionalProperties": {}},
+            "changes": {"additionalProperties": {}},
+            "default": {},
+        }
+        schemas[name] = {"properties": properties, "type": "object"}
+    return {"components": {"schemas": schemas}, "paths": {}}
+
+
+def test_snapshot_is_a_fixed_point_of_the_export_normalizer() -> None:
+    """Re-normalizing the committed snapshot must change nothing.
+
+    The snapshot is an export, so it has to be what the export produces. A
+    snapshot carrying a spelling the normalizer would rewrite is exactly the
+    drift ``check:contract`` reports as CONTRACT DEBT against a backend that
+    did not move.
+    """
+
+    module = _export_module()
+    document = _document()
+    normalized = module.normalize(json.loads(json.dumps(document)))
+
+    assert json.dumps(normalized, sort_keys=True) == json.dumps(
+        document, sort_keys=True
+    ), (
+        "packages/api-client/openapi.json is not what "
+        "scripts/export_contract.py:normalize emits -- `check:contract` will "
+        "report drift on a backend nobody changed. Run "
+        "`pnpm --filter @soymutdb/api-client generate:api-client`."
+    )
+
+
+def test_normalizer_is_idempotent() -> None:
+    """Normalizing twice must be a byte-level no-op."""
+
+    module = _export_module()
+    document = _document_with_optional_fields()
+    document["components"]["schemas"]["Sample"] = {
+        "properties": {
+            "optional": {
+                "anyOf": [{"type": "string"}, {"type": "null"}],
+                "default": None,
+                "description": "kept",
+                "title": "Optional",
+            }
+        },
+        "type": "object",
+    }
+
+    once = module.normalize(json.loads(json.dumps(document)))
+    twice = module.normalize(json.loads(json.dumps(once)))
+    assert json.dumps(once, sort_keys=True) == json.dumps(twice, sort_keys=True)
+
+
+def test_normalizer_owns_one_spelling_of_an_optional_nullable_field() -> None:
+    """Present or absent, an optional nullable field lands on one shape."""
+
+    module = _export_module()
+    document = _document_with_optional_fields()
+    document["components"]["schemas"]["Sample"] = {
+        "properties": {
+            "with_default": {
+                "title": "Optional",
+                "anyOf": [{"type": "string"}, {"type": "null"}],
+                "default": None,
+            },
+            "without_default": {
+                "title": "Optional",
+                "anyOf": [{"type": "string"}, {"type": "null"}],
+            },
+            "required_with_default": {
+                "title": "Required",
+                "anyOf": [{"type": "string"}, {"type": "null"}],
+                "default": None,
+            },
+            "non_null_default": {
+                "type": "string",
+                "default": "x",
+                "title": "Non Null",
+            },
+        },
+        "required": ["required_with_default"],
+        "type": "object",
+    }
+
+    properties = module.normalize(document)["components"]["schemas"]["Sample"][
+        "properties"
+    ]
+
+    assert properties["with_default"] == properties["without_default"], (
+        "an optional nullable field keeps `default: null` depending on which "
+        "export produced it -- the drift reported as CONTRACT DEBT"
+    )
+    assert properties["required_with_default"]["default"] is None, (
+        "a required field's default is a real contract statement and must survive"
+    )
+    assert properties["non_null_default"]["default"] == "x"
+
+
+# ---------------------------------------------------------------------------
+# The contract gate names what moved
+# ---------------------------------------------------------------------------
+DRIFT_SCRIPT = SNAPSHOT.parent / "scripts/summarize_contract_drift.py"
+
+
+def _run_drift(committed: dict[str, Any], fresh: dict[str, Any]) -> str:
+    """Run the gate's drift summary the way ``check-contract.sh`` does."""
+
+    import subprocess
+    import sys
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as directory:
+        before = Path(directory) / "committed.json"
+        after = Path(directory) / "fresh.json"
+        before.write_text(json.dumps(committed), encoding="utf-8")
+        after.write_text(json.dumps(fresh), encoding="utf-8")
+        completed = subprocess.run(
+            [sys.executable, str(DRIFT_SCRIPT), str(before), str(after)],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    assert completed.returncode == 0, completed.stderr
+    return completed.stdout
+
+
+def test_contract_drift_names_the_schema_that_changed() -> None:
+    """ "CONTRACT DEBT" alone names neither the file nor the cause."""
+
+    committed = {
+        "components": {"schemas": {"GeneDetail": {"properties": {"symbol": {}}}}},
+        "paths": {"/api/v1/genes/{gene_id}": {}, "/api/v1/health/live": {}},
+    }
+    fresh = {
+        "components": {"schemas": {"GeneDetail": {"properties": {"name": {}}}}},
+        "paths": {"/api/v1/genes/{gene_id}": {}, "/api/v1/genes/{gene_id}/sections": {}},
+    }
+
+    output = _run_drift(committed, fresh)
+
+    assert "changed schemas: GeneDetail" in output
+    assert "added paths: /api/v1/genes/{gene_id}/sections" in output
+    assert "removed paths: /api/v1/health/live" in output
+
+
+def test_contract_drift_is_silent_when_the_documents_agree() -> None:
+    """No drift means no output: the caller's own message carries the verdict."""
+
+    document = {
+        "components": {"schemas": {"GeneDetail": {"properties": {}}}},
+        "paths": {"/api/v1/genes": {}},
+    }
+
+    assert _run_drift(document, json.loads(json.dumps(document))).strip() == ""
