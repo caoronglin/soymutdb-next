@@ -22195,6 +22195,35 @@
         "title": "ErrorResponse",
         "type": "object"
       },
+      "EvidenceTag": {
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "experimental",
+              "curated",
+              "predicted",
+              "transferred",
+              "imported",
+              "unknown"
+            ],
+            "title": "Kind"
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "source"
+        ],
+        "title": "EvidenceTag",
+        "description": "Provenance of one displayed assertion."
+      },
       "ExonResponse": {
         "properties": {
           "id": {
@@ -23236,122 +23265,20 @@
           },
           "sequences": {
             "items": {
-              "description": "Per-molecule availability for a gene's sequences.\n\nThe platform currently has no FASTA store: ``genes``/``transcripts`` carry\ncoordinates, not residues. Rather than fabricate a ``sequence`` string (a\ngene page that silently shows a made-up nucleotide string is worse than one\nthat says \"not imported\"), the contract reports availability plus the\nreason. When a sequence store is added, only ``availability`` flips and\nthe residue fields populate \u2014 consumers do not change shape.",
-              "properties": {
-                "molecule": {
-                  "enum": [
-                    "genomic",
-                    "cds",
-                    "transcript",
-                    "protein"
-                  ],
-                  "title": "Molecule",
-                  "type": "string"
-                },
-                "availability": {
-                  "default": "unavailable",
-                  "enum": [
-                    "available",
-                    "unavailable"
-                  ],
-                  "title": "Availability",
-                  "type": "string"
-                },
-                "reason": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "default": null,
-                  "title": "Reason"
-                },
-                "length": {
-                  "anyOf": [
-                    {
-                      "minimum": 0,
-                      "type": "integer"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "default": null,
-                  "title": "Length"
-                },
-                "checksum": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "default": null,
-                  "title": "Checksum"
-                },
-                "sequence": {
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "default": null,
-                  "title": "Sequence"
-                }
-              },
-              "required": [
-                "molecule"
-              ],
-              "type": "object"
+              "$ref": "#/components/schemas/SequenceAvailability"
             },
             "type": "array",
-            "title": "Sequences",
-            "description": null
+            "title": "Sequences"
           },
           "model_evidence": {
             "anyOf": [
               {
-                "description": "Provenance of one displayed assertion.",
-                "properties": {
-                  "kind": {
-                    "enum": [
-                      "experimental",
-                      "curated",
-                      "predicted",
-                      "transferred",
-                      "imported",
-                      "unknown"
-                    ],
-                    "title": "Kind",
-                    "type": "string"
-                  },
-                  "source": {
-                    "maxLength": 256,
-                    "minLength": 1,
-                    "title": "Source",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "kind",
-                  "source"
-                ],
-                "type": "object"
+                "$ref": "#/components/schemas/EvidenceTag"
               },
               {
                 "type": "null"
               }
-            ],
-            "title": "Model Evidence",
-            "description": null
+            ]
           }
         },
         "type": "object",
@@ -30132,6 +30059,80 @@
         "title": "SeqFetchResponse",
         "description": "Extraction result.\n\nSmall results return inline FASTA (``sequence``); results larger than\n10 MiB are stored in S3 and returned as a pre-signed ``download_url``\ninstead (``sequence`` is ``None`` and ``truncated`` is ``False`` \u2013 the\npayload is complete, just delivered out-of-band)."
       },
+      "SequenceAvailability": {
+        "properties": {
+          "molecule": {
+            "type": "string",
+            "enum": [
+              "genomic",
+              "cds",
+              "transcript",
+              "protein"
+            ],
+            "title": "Molecule"
+          },
+          "availability": {
+            "type": "string",
+            "enum": [
+              "available",
+              "unavailable"
+            ],
+            "title": "Availability",
+            "default": "unavailable"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "length": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Length"
+          },
+          "checksum": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Checksum"
+          },
+          "sequence": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sequence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "molecule"
+        ],
+        "title": "SequenceAvailability",
+        "description": "Per-molecule availability for a gene's sequences.\n\nThe platform currently has no FASTA store: ``genes``/``transcripts`` carry\ncoordinates, not residues. Rather than fabricate a ``sequence`` string (a\ngene page that silently shows a made-up nucleotide string is worse than one\nthat says \"not imported\"), the contract reports availability plus the\nreason. When a sequence store is added, only ``availability`` flips and\nthe residue fields populate \u2014 consumers do not change shape."
+      },
       "SettingFieldSchema": {
         "properties": {
           "kind": {
@@ -30151,12 +30152,19 @@
           "default": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/SettingValue"
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Default"
           },
           "permission": {
             "type": "string",
@@ -30239,19 +30247,6 @@
         ],
         "title": "SettingFieldSchema"
       },
-      "SettingValue": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "integer"
-          },
-          {
-            "type": "boolean"
-          }
-        ]
-      },
       "SettingsDocumentResponse": {
         "properties": {
           "section": {
@@ -30265,7 +30260,17 @@
           },
           "values": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/SettingValue"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
             },
             "type": "object",
             "title": "Values"
@@ -30298,7 +30303,17 @@
           },
           "values": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/SettingValue"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
             },
             "type": "object",
             "title": "Values"
@@ -30307,7 +30322,13 @@
             "additionalProperties": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/SettingValue"
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
                 },
                 {
                   "type": "null"
@@ -30406,7 +30427,17 @@
           },
           "values": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/SettingValue"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
             },
             "type": "object",
             "minProperties": 1,
@@ -30500,7 +30531,17 @@
           },
           "values": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/SettingValue"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
             },
             "type": "object",
             "minProperties": 1,
@@ -30529,7 +30570,17 @@
           },
           "values": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/SettingValue"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
             },
             "type": "object",
             "title": "Values"
