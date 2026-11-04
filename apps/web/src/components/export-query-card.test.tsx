@@ -17,9 +17,7 @@ const runtime = vi.hoisted(() => ({
   isResearcher: true,
 }));
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
-}));
+vi.mock("react-i18next", async () => (await import("../test/mocks")).mockTranslation);
 vi.mock("../lib/use-current-user", () => ({
   useIsResearcher: () => ({ isResearcher: runtime.isResearcher, isLoading: false }),
 }));
