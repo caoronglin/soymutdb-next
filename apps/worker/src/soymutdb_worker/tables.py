@@ -283,11 +283,23 @@ analysis_jobs = Table(
 #: and records the produced artifact's object key.  ``status`` uses the shared
 #: job vocabulary (``pending``/``running``/``succeeded``/``failed``), matching
 #: the PostgreSQL enum ``variant_export_status_enum``.
+variant_export_status_enum = ENUM(
+    "pending",
+    "running",
+    "succeeded",
+    "failed",
+    name="variant_export_status_enum",
+    create_type=False,
+)
 variant_exports = Table(
     "variant_exports",
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True),
-    Column("status", String(32)),
+    # Bound to the migration's enum type, not a bare VARCHAR: the worker's
+    # guarded UPDATE is a real ``WHERE status = ...`` against
+    # ``variant_export_status_enum``, and PostgreSQL rejects comparing the enum
+    # column with a varchar literal.
+    Column("status", variant_export_status_enum),
     Column("artifact_path", String(2048)),
     Column("record_count", Integer),
     Column("file_size", Integer),
