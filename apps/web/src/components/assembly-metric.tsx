@@ -17,11 +17,16 @@ import type { AssemblyMetric as AssemblyMetricValue } from "@soymutdb/api-client
 import { Tooltip } from "@/lib/antd";
 import { formatNumber } from "../lib/format";
 
+/**
+ * Reasons this build can actually receive. The backend emits exactly these four
+ * (`assembly_service.DOWNLOAD_COUNT_UNAVAILABLE` plus the `NO_*` codes); a code
+ * listed here without a producer would silently make an unreachable branch look
+ * supported, and a code listed here without a locale entry would print its key.
+ */
 const KNOWN_REASONS = new Set([
   "no_chromosomes",
   "no_genes",
   "no_transcripts",
-  "no_protein_sequences",
   "no_linked_downloads",
 ]);
 

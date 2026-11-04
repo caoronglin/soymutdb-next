@@ -300,13 +300,19 @@ class AssemblyStatistics(BaseModel):
     there is no relation to aggregate over. Guessing an assembly from a category
     string would invent a number, and borrowing the release's download total
     would be the same mistake as borrowing its gene count.
+
+    All five fields are required on purpose. A default of ``AssemblyMetric()``
+    is ``value=None, reason=None``, which the metric's own validator rejects, so
+    a defaulted field could not even be constructed -- and any value that *did*
+    construct would be an unstated measurement. Requiring them moves "somebody
+    forgot to say" from the reader's guess to a schema error at write time.
     """
 
-    gene_count: AssemblyMetric = Field(default_factory=AssemblyMetric)
-    transcript_count: AssemblyMetric = Field(default_factory=AssemblyMetric)
-    chromosome_count: AssemblyMetric = Field(default_factory=AssemblyMetric)
-    total_length: AssemblyMetric = Field(default_factory=AssemblyMetric)
-    download_count: AssemblyMetric = Field(default_factory=AssemblyMetric)
+    gene_count: AssemblyMetric
+    transcript_count: AssemblyMetric
+    chromosome_count: AssemblyMetric
+    total_length: AssemblyMetric
+    download_count: AssemblyMetric
 
 
 class AssemblySummaryResponse(AssemblyResponse):
@@ -314,7 +320,9 @@ class AssemblySummaryResponse(AssemblyResponse):
 
     release_id: int | None = None
     release_version: str | None = None
-    statistics: AssemblyStatistics = Field(default_factory=AssemblyStatistics)
+    #: Required for the same reason the five metrics are: a defaulted statistics
+    #: block would be five unstated numbers, not an empty one.
+    statistics: AssemblyStatistics
 
 
 class AssemblyDetailResponse(AssemblySummaryResponse):

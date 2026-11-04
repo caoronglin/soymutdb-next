@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
 import pytest_asyncio
 
 from app.models.content import DownloadFile, Release, ReleaseStatus
@@ -141,18 +142,35 @@ async def test_list_reports_each_assembly_own_counts(assembly_fixture, client):
         != v5_row["statistics"]["gene_count"]["value"]
     )
 
-    assert v4_row["statistics"]["transcript_count"]["value"] == V4_TRANSCRIPTS
-    assert v5_row["statistics"]["transcript_count"]["value"] == V5_TRANSCRIPTS
+    # Whole-object equality, not just ``.value``: a reason smuggled onto a
+    # known count is a contradiction the wire must not carry, and comparing the
+    # value alone would let it through.
+    assert v4_row["statistics"]["transcript_count"] == {
+        "value": V4_TRANSCRIPTS,
+        "reason": None,
+    }
+    assert v5_row["statistics"]["transcript_count"] == {
+        "value": V5_TRANSCRIPTS,
+        "reason": None,
+    }
 
-    assert v4_row["statistics"]["chromosome_count"]["value"] == len(V4_CHROMOSOMES)
-    assert v5_row["statistics"]["chromosome_count"]["value"] == len(V5_CHROMOSOMES)
+    assert v4_row["statistics"]["chromosome_count"] == {
+        "value": len(V4_CHROMOSOMES),
+        "reason": None,
+    }
+    assert v5_row["statistics"]["chromosome_count"] == {
+        "value": len(V5_CHROMOSOMES),
+        "reason": None,
+    }
 
-    assert v4_row["statistics"]["total_length"]["value"] == sum(
-        length for _, length in V4_CHROMOSOMES
-    )
-    assert v5_row["statistics"]["total_length"]["value"] == sum(
-        length for _, length in V5_CHROMOSOMES
-    )
+    assert v4_row["statistics"]["total_length"] == {
+        "value": sum(length for _, length in V4_CHROMOSOMES),
+        "reason": None,
+    }
+    assert v5_row["statistics"]["total_length"] == {
+        "value": sum(length for _, length in V5_CHROMOSOMES),
+        "reason": None,
+    }
 
     assert v4_row["release_id"] == release.id
     assert v4_row["release_version"] == release.version
@@ -429,3 +447,48 @@ async def test_chromosomes_of_an_unpublished_assembly_are_404_without_rows(
         ]
     finally:
         app.dependency_overrides.pop(get_release_context, None)
+
+
+def test_statistics_cannot_be_constructed_without_stating_each_count():
+    """The schema refuses to invent an unstated statistic.
+
+    ``AssemblyMetric()`` is ``value=None, reason=None`` -- the exact shape the
+    metric's own validator rejects. Leaving ``default_factory`` on these fields
+    therefore made ``AssemblyStatistics()`` unconstructible, and every request
+    that fell back to a default would have raised instead of answering. Requiring
+    the five fields turns "somebody forgot to state this" into a schema error at
+    write time rather than a guess at read time.
+    """
+    from pydantic import ValidationError
+
+    from app.schemas.genomic import AssemblyMetric, AssemblyStatistics, AssemblySummaryResponse
+
+    with pytest.raises(ValidationError):
+        AssemblyMetric()  # noqa: B018 - the constructor is the assertion
+
+    with pytest.raises(ValidationError) as excinfo:
+        AssemblyStatistics()  # noqa: B018
+    missing = {error["loc"][0] for error in excinfo.value.errors()}
+    assert missing == {
+        "gene_count",
+        "transcript_count",
+        "chromosome_count",
+        "total_length",
+        "download_count",
+    }
+
+    complete = AssemblyStatistics(
+        gene_count=AssemblyMetric(value=0),
+        transcript_count=AssemblyMetric(value=0),
+        chromosome_count=AssemblyMetric(reason="no_chromosomes"),
+        total_length=AssemblyMetric(reason="no_chromosomes"),
+        download_count=AssemblyMetric(reason=DOWNLOAD_COUNT_UNAVAILABLE),
+    )
+    # The response must survive the dump/validate round trip the service performs.
+    summary = AssemblySummaryResponse(
+        id="1", name="a", species="s", version="v", statistics=complete
+    )
+    assert AssemblySummaryResponse(**summary.model_dump()).statistics.gene_count.value == 0
+
+    with pytest.raises(ValidationError):
+        AssemblySummaryResponse(id="1", name="a", species="s", version="v")  # noqa: B018

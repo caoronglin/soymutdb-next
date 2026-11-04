@@ -3319,7 +3319,6 @@
     "default": "Default",
     "release": "Release",
     "releaseUnavailable": "Not stated",
-    "downloadsNotRecorded": "Not recorded",
     "empty": "This release has no assemblies.",
     "loadFailed": "Assemblies could not be loaded.",
     "notFound": "No such assembly in this release.",

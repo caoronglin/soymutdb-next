@@ -3319,7 +3319,6 @@
     "default": "默认",
     "release": "发布版本",
     "releaseUnavailable": "未标注",
-    "downloadsNotRecorded": "未记录",
     "empty": "该发布版本下没有装配。",
     "loadFailed": "装配数据加载失败。",
     "notFound": "该发布版本下没有这套装配。",
