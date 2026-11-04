@@ -60,6 +60,60 @@ const HITS = [
   },
 ];
 
+/**
+ * One catalog row in the shape `GET /blast/databases` actually returns.
+ *
+ * `GET /blast/databases` is served by `BlastCatalogService.list_databases`,
+ * which filters on `is_active`, `engine` and `build_status` BEFORE responding
+ * (apps/api/app/services/blast_service.py:129-134) — so a real response can
+ * never omit them. The fixture therefore has to carry them too: the portal
+ * re-applies the same predicate in `compatibleBlastDatabases`
+ * (packages/api-client/src/blast.ts:142-148), and an absent `engine` compares
+ * `undefined === "ncbi_blast"` → false, which empties the select instead of
+ * failing loudly. `engine`/`build_status` are optional in the OpenAPI schema
+ * with defaults, but a database that only carries the defaults is not one the
+ * server would have listed; `ncbi_blast` + `published` is what
+ * `blast.tsx:128-135` submits by default.
+ *
+ * Shared by both stubs below on purpose: the signed-in and anonymous entries
+ * read the same catalog, and they drifted apart once already.
+ */
+const DB_CATALOG_ROW = {
+  id: 1,
+  name: "Wm82_v4_protein",
+  db_type: "prot",
+  assembly_id: 1,
+  assembly_name: "Wm82.a4.v1",
+  assembly_version: "a4.v1",
+  assembly_is_default: true,
+  release_id: 7,
+  is_active: true,
+  engine: "ncbi_blast",
+  build_status: "published",
+  created_at: "2026-01-01T00:00:00Z",
+} as const;
+
+/**
+ * What `GET /blast/jobs/{id}/hits/{subject}/genome-target` returns for a
+ * resolved subject (apps/api/app/services/blast_service.py:435-447). The
+ * client refuses to build a link unless the response echoes the job's own
+ * release AND assembly, so a stub that answered `{}` could never open the
+ * browser — the assertion would have been about the mock, not the page.
+ */
+const GENOME_TARGET = {
+  status: "resolved",
+  gene_id: "Glyma.01G000100",
+  chromosome: "chr01",
+  start: 12000,
+  end: 15000,
+  strand: "+",
+  release_id: 7,
+  assembly_id: 1,
+  assembly_name: "Wm82.a4.v1",
+  locus: "chr01:12000-15000",
+  resolution: "gene_accession",
+} as const;
+
 interface BlastStub {
   submits: unknown[];
 }
@@ -99,18 +153,7 @@ async function stubBlastApis(page: Page): Promise<BlastStub> {
       return route.fulfill({ status: 204, headers, body: "" });
     }
     if (path.endsWith("/blast/databases")) {
-      return json([
-        {
-          id: 1,
-          name: "Wm82_v4_protein",
-          db_type: "prot",
-          assembly_id: 1,
-          assembly_name: "Wm82.a4.v1",
-          assembly_version: "a4.v1",
-          assembly_is_default: true,
-          is_active: true,
-        },
-      ]);
+      return json([DB_CATALOG_ROW]);
     }
     if (path.endsWith("/blast/jobs") && request.method() === "GET") {
       return json({ items: [COMPLETED_JOB, RUNNING_JOB], total: 2, page: 1, page_size: 5 });
@@ -121,6 +164,9 @@ async function stubBlastApis(page: Page): Promise<BlastStub> {
     }
     if (path.endsWith(`/blast/jobs/${COMPLETED_JOB.job_id}/results`)) {
       return json({ hits: HITS, total_hits: HITS.length });
+    }
+    if (path.endsWith(`/blast/jobs/${COMPLETED_JOB.job_id}/hits/Glyma.01G000100/genome-target`)) {
+      return json(GENOME_TARGET);
     }
     if (path.endsWith("/genes/assemblies")) {
       expect(request.headers()["x-soymutdb-release"]).toBe("7");
@@ -153,16 +199,34 @@ test.describe("BLAST — form and routing", () => {
     // level-1 heading; assert the rendered structure instead of binding the
     // heading to one i18n string.
     await expect(page.getByText("BLAST Search").first()).toBeVisible();
-    await expect(page.getByRole("heading", { level: 1 })).toContainText(/search sequences/i);
-    // The current default is DIAMOND BLASTP; both the selected programme
+    // Scoped by accessible name, not by level alone: the portal renders a
+    // second `<h1>` (the hidden document title block), so a bare
+    // `heading[level=1]` lookup is a strict-mode violation, not a product bug.
+    await expect(
+      page.getByRole("heading", { level: 1, name: /search sequences/i }),
+    ).toBeVisible();
+    // The current default is NCBI BLAST+ / BLASTP; both the selected programme
     // and query input must be visible, regardless of backend availability.
-    const programme = page.getByTestId("blast-program");
-    // antd Select renders a div rather than an <input>, so assert the rendered
-    // selection label instead of an input value.
-    await expect(programme).toContainText("BLASTP");
-    // "Reference sequence type" also matches /sequence/i, so target the query
-    // textarea by its exact label ("Input Sequence").
-    await expect(page.getByRole("textbox", { name: "Input Sequence" })).toBeVisible();
+    //
+    // The programme `<Select>` exposes a combobox named by
+    // `blastPublic.program` ("Search program") and carries no test id — this
+    // assertion used to reach for `blast-program`, which never existed on this
+    // route. antd 6 puts `role="combobox"` on an inner readonly `<input>`
+    // (empty from the DOM's point of view) and renders the chosen label as a
+    // sibling text node inside `.ant-select-content`, so the rendered value is
+    // read from that wrapper. Asserting the whole content is the point: a
+    // `toContainText("BLASTP")` would also pass for "TBLASTN"/"TBLASTX".
+    const programme = page.getByRole("combobox", { name: "Search program", exact: true });
+    await expect(programme).toBeVisible();
+    expect(
+      (await programme.evaluate((element) => element.closest(".ant-select-content")?.textContent?.trim()))
+        ?? "",
+      "the programme select must show the default BLASTP",
+    ).toBe("BLASTP");
+    // The query textarea is labelled per program (`blastSearch.proteinInput`
+    // for a protein program), not "Input Sequence" — that key is unused on
+    // both BLAST routes, so the old name only ever matched an empty page.
+    await expect(page.getByRole("textbox", { name: "Protein FASTA query" })).toBeVisible();
   });
 
   test("/search/blast keeps the anonymous entry separate", async ({ page }) => {
@@ -268,10 +332,7 @@ test("anonymous BLAST submits, polls and downloads without account calls", async
     if (url.pathname.includes("/blast/jobs") || url.pathname.endsWith("/auth/me") || url.pathname.endsWith("/jobs/events")) {
       privateCalls.push(url.pathname);
     }
-    if (url.pathname.endsWith("/blast/databases")) return json([{
-      id: 1, name: "Wm82_v4_protein", db_type: "prot", assembly_id: 1,
-      assembly_name: "Wm82.a4.v1", release_id: 7, is_active: true,
-    }]);
+    if (url.pathname.endsWith("/blast/databases")) return json([DB_CATALOG_ROW]);
     if (url.pathname.endsWith("/blast/public/jobs") && request.method() === "POST") {
       submissions++;
       expect(request.headers()["authorization"]).toBeUndefined();
@@ -290,7 +351,8 @@ test("anonymous BLAST submits, polls and downloads without account calls", async
     return json({}, 404);
   });
   await gotoReady(page, "/search/blast");
-  await page.getByRole("textbox", { name: /Input Sequence$/ }).fill(">query\nMKVLAAGIVGLNLGGK");
+  // Same per-program label the signed-in entry uses.
+  await page.getByRole("textbox", { name: "Protein FASTA query" }).fill(">query\nMKVLAAGIVGLNLGGK");
   await page.getByRole("button", { name: "Run BLAST", exact: true }).click();
   await expect(page.getByText("Glyma.01G000100")).toBeVisible();
   await expect(page.getByRole("link", { name: "Download raw results" })).toHaveAttribute(

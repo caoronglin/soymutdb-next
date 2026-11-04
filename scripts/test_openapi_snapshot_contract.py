@@ -445,3 +445,175 @@ def test_snapshot_has_no_frozen_null_defaults() -> None:
     assert properties["non_null_default"]["default"] == "x"
 
 
+
+def test_every_schema_object_carries_the_snapshot_key_order() -> None:
+    """No schema may print its object keys in pydantic's order.
+
+    Every check above compares documents with ``sort_keys=True``, so a schema
+    whose *keys* are in the wrong order but whose *content* is identical is
+    invisible to all of them -- while ``check-contract.sh`` compares the two
+    export files as text with ``diff -q``, so it does see it and reports
+    CONTRACT DEBT for a schema nobody edited.
+
+    That is the fifth shape of the same failure. pydantic emits ``required``
+    before ``title``/``type``; the snapshot carries ``type`` before
+    ``required``. The normalizer only ever reordered *property* objects, so a
+    schema with nothing else to shuffle kept pydantic's order.
+    """
+
+    module = _export_module()
+
+    examples = {
+        "properties": 1,
+        "type": "object",
+        "required": ["a"],
+        "title": "Sample",
+        "description": "kept last",
+    }
+    expected = ["properties", "type", "required", "title", "description"]
+    ordered = module._object_last(dict(examples))
+    assert list(ordered) == expected, (
+        "the normalizer's schema key order drifted from the snapshot's: "
+        f"{list(ordered)} != {expected}"
+    )
+    assert ordered == examples, "reordering must not change or drop a value"
+
+    assert list(module._OBJECT_KEY_ORDER) == [
+        "properties",
+        "additionalProperties",
+        "type",
+        "required",
+        "title",
+        "description",
+        "$defs",
+    ], (
+        "the normalizer's key order drifted from the order asserted above: "
+        f"{list(module._OBJECT_KEY_ORDER)}"
+    )
+
+    # ``_object_last`` has to *move* keys, not merely return them. The checks
+    # below ask whether a schema is already canonical, and an implementation
+    # that is the identity answers "yes" for every schema -- including a
+    # scrambled one. So state the behaviour on a deliberately non-canonical
+    # shape first: pydantic's order (``title`` before ``required``) plus an
+    # unknown keyword, which must survive in place after the known ones.
+    #
+    # The inputs are plain dicts on purpose: the document is read with
+    # ``json.loads``, whose objects print insertion order, so the failure
+    # analysis for the real snapshot is done in plain dicts too.
+    scrambled = {
+        "description": "kept last",
+        "title": "Sample",
+        "required": ["a"],
+        "deprecated": True,
+        "type": "object",
+        "properties": 1,
+    }
+    permuted = module._object_last(dict(scrambled))
+    assert list(permuted) != list(scrambled), (
+        "`_object_last` returned its argument unchanged for a schema whose keys "
+        f"are in pydantic's order ({list(scrambled)}), so it cannot tell a "
+        "canonical document from a scrambled one and the check below passes "
+        "whatever the snapshot holds"
+    )
+    assert list(permuted) == [
+        "properties",
+        "type",
+        "required",
+        "title",
+        "description",
+        "deprecated",
+    ], f"`_object_last` put the keys in an unexpected order: {list(permuted)}"
+    assert permuted == scrambled, "reordering must not change or drop a value"
+
+    # ``deprecated`` above survives because the re-emitter has a second loop
+    # for keys outside the order -- so the assertion above passes for a
+    # `_object_last` whose order table lists only *some* of the keywords a
+    # schema can carry. The gap that leaves is not "drops an unknown key" but
+    # "silently skips a known one": a keyword the table omits is copied by the
+    # catch-all loop, so the value survives and only its position drifts,
+    # which the per-schema check below still reads as canonical because it
+    # judges by the same incomplete table.
+    #
+    # Ask the question directly instead of by proxy: every keyword held by a
+    # schema whose own order the normalizer is responsible for has to be a
+    # member. Anything else is a keyword the normalizer hoists or strands by
+    # accident -- it would win a `diff -q` against a real export only for as
+    # long as no schema grows it.
+    #
+    # No keyword is exempt, trailing ones included: ``$defs`` sits last on the
+    # two error schemas that carry it, but it is still a member here and
+    # dropping it from ``_OBJECT_KEY_ORDER`` reddens this assertion by name.
+    #
+    # That assertion is the *only* thing standing between a trailing keyword
+    # and silence. ``_object_last``'s catch-all loop copies any key the table
+    # omits, and ``_wrong_order`` below judges a keyword's position solely
+    # against the table -- so for a key the table does not list, the value
+    # survives and the order check reads "canonical" whether it is or not.
+    # The two error schemas are what make this check bite for ``$defs`` today;
+    # a ``$defs`` mounted somewhere the scan does not reach (a ``$ref`` alias,
+    # a nested schema) would not appear in ``unlisted`` at all.
+    schemas = _document().get("components", {}).get("schemas", {})
+    unlisted = {
+        keyword
+        for schema in schemas.values()
+        if isinstance(schema, dict) and "properties" in schema
+        for keyword in schema
+        if keyword not in module._OBJECT_KEY_ORDER
+    }
+    assert unlisted == set(), (
+        "`_OBJECT_KEY_ORDER` does not list every keyword the snapshot prints on "
+        f"a schema object: {sorted(unlisted)}. `_object_last` still keeps such a "
+        "keyword (its second loop copies it), so nothing else notices -- but the "
+        "key gets appended instead of placed, and whether that matches a real "
+        "export is then luck rather than order. Add it to `_OBJECT_KEY_ORDER` "
+        "in the position the snapshot prints it."
+    )
+
+    #: The order a schema object must print, ``additionalProperties`` included
+    #: because it is what a schema with free-form values carries.
+    canonical = list(module._OBJECT_KEY_ORDER)
+
+    def _wrong_order(keys: list[str]) -> bool:
+        """True when ``keys`` is not an order-preserving subsequence of ``canonical``.
+
+        Key order is the *whole* schema object, unknown keywords included,
+        exactly as ``diff -q`` reads it. This is the half of the contract that
+        catches a stale snapshot, and it is written against ``canonical``
+        rather than by calling ``_object_last`` so that a no-op implementation
+        cannot mark everything as already ordered.
+
+        Subsequence, not prefix: the question is whether the known keys keep
+        their relative order, so a schema may skip ``additionalProperties``
+        and still be canonical (most do -- only a free-form ``dict`` carries
+        it). Requiring ``known`` to be a leading run of ``canonical`` would
+        fail the common ``properties, type, required, title`` at the fourth
+        position and redden most of the snapshot.
+        """
+
+        known = [key for key in keys if key in canonical]
+        return known != [key for key in canonical if key in keys]
+
+    def _loses_keys(node: dict[str, Any]) -> bool:
+        """True when reordering drops or rewrites something.
+
+        The normalizer runs over the whole document, so a reordering that
+        silently discarded ``required`` or an unknown keyword would edit the
+        contract on the way to making it print nicely.
+        """
+
+        return module._object_last(dict(node)) != node
+
+    misplaced = [
+        name
+        for name, schema in schemas.items()
+        if isinstance(schema, dict)
+        and "properties" in schema
+        and (_wrong_order(list(schema)) or _loses_keys(schema))
+    ]
+    assert misplaced == [], (
+        "these schemas are not in the key order a fresh export prints, so "
+        f"`diff -q` in check-contract.sh reports them as CONTRACT DEBT: {sorted(misplaced)}\n"
+        "Regenerate rather than patch: "
+        "`pnpm --filter @soymutdb/api-client generate:api-client` under Python 3.15."
+    )

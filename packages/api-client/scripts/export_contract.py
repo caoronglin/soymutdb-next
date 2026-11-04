@@ -106,14 +106,48 @@ def _is_nullable(prop: dict[str, Any]) -> bool:
     return any(branch.get("type") == "null" for branch in prop.get("anyOf", ()))
 
 
+#: Object-level keys, in the order the committed snapshot prints them. pydantic
+#: emits ``required`` before ``title``/``type``; the snapshot carries ``type``
+#: before ``required``. ``_title_last`` only ever reordered *property* objects,
+#: so a schema with no other key to shuffle kept the pydantic order and read as
+#: CONTRACT DEBT against a backend that had not moved.
+_OBJECT_KEY_ORDER = (
+    "properties",
+    "additionalProperties",
+    "type",
+    "required",
+    "title",
+    "description",
+    # ``$defs`` trails the schema it is embedded in, matching the snapshot.
+    "$defs",
+)
+
+
+def _object_last(node: dict[str, Any]) -> dict[str, Any]:
+    """Re-emit one schema object in the committed snapshot's key order.
+
+    Deliberately shallow: ``properties`` values are handled by
+    ``_title_last``, and every key not listed in ``_OBJECT_KEY_ORDER`` keeps
+    its relative position after the known ones, so a schema gaining a keyword
+    stays put instead of being silently dropped.
+    """
+
+    ordered: dict[str, Any] = {key: node[key] for key in _OBJECT_KEY_ORDER if key in node}
+    for key, value in node.items():
+        if key not in ordered:
+            ordered[key] = value
+    return ordered
+
+
 def _normalize_properties(document: dict[str, Any]) -> None:
     """One spelling for every property in the document.
 
     Two rules, both derived from the document itself so a new schema needs no
     edit here:
 
-    * an optional nullable field keeps ``default: null``; and
-    * key order matches the snapshot (see ``_title_last``).
+    * an optional nullable field keeps ``default: null``;
+    * property key order matches the snapshot (see ``_title_last``); and
+    * schema object key order matches the snapshot (see ``_object_last``).
     """
 
     def visit(node: Any) -> None:
@@ -127,6 +161,20 @@ def _normalize_properties(document: dict[str, Any]) -> None:
                     if name not in required and _is_nullable(prop):
                         prop.setdefault("default", None)
                     properties[name] = _title_last(prop)
+            # Schema-level key order too, not just property-level: pydantic
+            # emits `required` before `title`/`type`, the snapshot carries
+            # `type` before `required`, and a document holding both spellings
+            # can never match a fresh export.
+            #
+            # Gated on `properties` on purpose: the object shapes elsewhere in
+            # the document (`requestBody`, a parameter object) also carry
+            # `required`, and moving that key there would rewrite the paths
+            # table for no reason. `_object_last` only permutes existing keys,
+            # so clearing and refilling in place is safe.
+            if isinstance(properties, dict):
+                reordered = _object_last(node)
+                node.clear()
+                node.update(reordered)
             for value in node.values():
                 visit(value)
         elif isinstance(node, list):

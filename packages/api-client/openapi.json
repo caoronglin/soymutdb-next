@@ -23753,7 +23753,6 @@
         "description": "A single enriched term (ORA mode)."
       },
       "ErrorDetail": {
-        "description": "Machine-readable error detail (inside the ``error`` envelope).",
         "properties": {
           "code": {
             "type": "string",
@@ -23772,17 +23771,40 @@
             "title": "Details"
           }
         },
+        "type": "object",
         "required": [
           "code",
           "message"
         ],
         "title": "ErrorDetail",
-        "type": "object"
+        "description": "Machine-readable error detail (inside the ``error`` envelope)."
       },
       "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Correlation id (also echoed in the ``X-Request-ID`` header).",
+            "title": "Request Id"
+          },
+          "status_code": {
+            "type": "integer",
+            "description": "HTTP status code.",
+            "title": "Status Code"
+          }
+        },
+        "type": "object",
+        "required": [
+          "error",
+          "request_id",
+          "status_code"
+        ],
+        "title": "ErrorResponse",
+        "description": "Unified error envelope returned by every API error.",
         "$defs": {
           "ErrorDetail": {
-            "description": "Machine-readable error detail (inside the ``error`` envelope).",
             "properties": {
               "code": {
                 "type": "string",
@@ -23801,37 +23823,15 @@
                 "title": "Details"
               }
             },
+            "type": "object",
             "required": [
               "code",
               "message"
             ],
             "title": "ErrorDetail",
-            "type": "object"
+            "description": "Machine-readable error detail (inside the ``error`` envelope)."
           }
-        },
-        "description": "Unified error envelope returned by every API error.",
-        "properties": {
-          "error": {
-            "$ref": "#/components/schemas/ErrorDetail"
-          },
-          "request_id": {
-            "type": "string",
-            "description": "Correlation id (also echoed in the ``X-Request-ID`` header).",
-            "title": "Request Id"
-          },
-          "status_code": {
-            "type": "integer",
-            "description": "HTTP status code.",
-            "title": "Status Code"
-          }
-        },
-        "required": [
-          "error",
-          "request_id",
-          "status_code"
-        ],
-        "title": "ErrorResponse",
-        "type": "object"
+        }
       },
       "EvidenceTag": {
         "properties": {
@@ -24810,7 +24810,6 @@
         "title": "FeatureUpdateRequest"
       },
       "FieldError": {
-        "description": "Field-level validation error for 422 responses.",
         "properties": {
           "field": {
             "type": "string",
@@ -24828,13 +24827,14 @@
             "title": "Type"
           }
         },
+        "type": "object",
         "required": [
           "field",
           "message",
           "type"
         ],
         "title": "FieldError",
-        "type": "object"
+        "description": "Field-level validation error for 422 responses."
       },
       "FieldMappingItem": {
         "properties": {
@@ -35549,63 +35549,6 @@
         "title": "ValidationError"
       },
       "ValidationErrorResponse": {
-        "$defs": {
-          "ErrorDetail": {
-            "description": "Machine-readable error detail (inside the ``error`` envelope).",
-            "properties": {
-              "code": {
-                "type": "string",
-                "description": "Stable machine-readable error code, e.g. ``not_found``.",
-                "title": "Code"
-              },
-              "message": {
-                "type": "string",
-                "description": "Human-readable error message.",
-                "title": "Message"
-              },
-              "details": {
-                "type": "object",
-                "additionalProperties": true,
-                "description": "Optional structured context (never contains secrets or stack traces).",
-                "title": "Details"
-              }
-            },
-            "required": [
-              "code",
-              "message"
-            ],
-            "title": "ErrorDetail",
-            "type": "object"
-          },
-          "FieldError": {
-            "description": "Field-level validation error for 422 responses.",
-            "properties": {
-              "field": {
-                "type": "string",
-                "description": "Dot-joined request field path, e.g. ``query.chromosome``.",
-                "title": "Field"
-              },
-              "message": {
-                "type": "string",
-                "description": "Human-readable validation message.",
-                "title": "Message"
-              },
-              "type": {
-                "type": "string",
-                "description": "Pydantic error type identifier (e.g. ``string_type``).",
-                "title": "Type"
-              }
-            },
-            "required": [
-              "field",
-              "message",
-              "type"
-            ],
-            "title": "FieldError",
-            "type": "object"
-          }
-        },
-        "description": "422 response: unified envelope plus field-level ``errors``.",
         "properties": {
           "error": {
             "$ref": "#/components/schemas/ErrorDetail"
@@ -35629,13 +35572,70 @@
             "title": "Errors"
           }
         },
+        "type": "object",
         "required": [
           "error",
           "request_id",
           "status_code"
         ],
         "title": "ValidationErrorResponse",
-        "type": "object"
+        "description": "422 response: unified envelope plus field-level ``errors``.",
+        "$defs": {
+          "ErrorDetail": {
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "Stable machine-readable error code, e.g. ``not_found``.",
+                "title": "Code"
+              },
+              "message": {
+                "type": "string",
+                "description": "Human-readable error message.",
+                "title": "Message"
+              },
+              "details": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Optional structured context (never contains secrets or stack traces).",
+                "title": "Details"
+              }
+            },
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "title": "ErrorDetail",
+            "description": "Machine-readable error detail (inside the ``error`` envelope)."
+          },
+          "FieldError": {
+            "properties": {
+              "field": {
+                "type": "string",
+                "description": "Dot-joined request field path, e.g. ``query.chromosome``.",
+                "title": "Field"
+              },
+              "message": {
+                "type": "string",
+                "description": "Human-readable validation message.",
+                "title": "Message"
+              },
+              "type": {
+                "type": "string",
+                "description": "Pydantic error type identifier (e.g. ``string_type``).",
+                "title": "Type"
+              }
+            },
+            "type": "object",
+            "required": [
+              "field",
+              "message",
+              "type"
+            ],
+            "title": "FieldError",
+            "description": "Field-level validation error for 422 responses."
+          }
+        }
       },
       "VariantDetail": {
         "properties": {

@@ -111,9 +111,13 @@ test("submits the documented payload and renders summary, missing genes and matr
 
   expect(stub.captured, "the form must POST exactly one analysis").toHaveLength(1);
   expect(stub.captured[0]!.pathname.endsWith("/api/v1/tools/exppattern")).toBe(true);
+  // `conditions: null` is the documented "every expression library" request,
+  // not an omission — assert the four-field payload so the key cannot be
+  // dropped silently.
   expect(stub.captured[0]!.body).toEqual({
     assembly_id: 1,
     genes: ["Glyma.01G000100", "Glyma.02G000200"],
+    conditions: null,
     cluster_rows: false,
     scale: "zscore",
   });

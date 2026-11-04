@@ -141,9 +141,13 @@ test("ORA submits the documented payload and renders summary, tags and term tabl
 
   expect(stub.captured).toHaveLength(1);
   expect(stub.captured[0]!.pathname.endsWith("/api/v1/tools/enrichment")).toBe(true);
+  // Every field the ORA form posts, `values: null` included: the request type
+  // carries the GSEA values slot in both modes and nulls it out for ORA, so a
+  // narrower matcher would let the client drop the key without going red.
   expect(stub.captured[0]!.body).toEqual({
     assembly_id: 1,
     genes: ["Glyma.01G000100", "Glyma.02G000200"],
+    values: null,
     mode: "ora",
     ontology: "go",
     p_threshold: 0.05,
