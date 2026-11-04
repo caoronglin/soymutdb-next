@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/api/v1/admin/analytics/summary": {
+    "/api/v1/health/live": {
         parameters: {
             query?: never;
             header?: never;
@@ -12,29 +12,2523 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Analytics Summary
-         * @description Aggregate visit metrics for the administrator dashboard.
-         *
-         *     Returns event totals, unique sessions, breakdowns by event type, by
-         *     canonical route template and by referrer category, and a daily count
-         *     series.
-         *
-         *     Every label is a fixed constant of this API and never caller data: a route
-         *     template such as ``/mutants/:publicId`` or ``/other``, one of the four
-         *     referrer categories (``direct``, ``search``, ``social``, ``other``), a
-         *     finite event type, or a ``YYYY-MM-DD`` day. Free-text search terms are
-         *     neither queried nor returned, so ``top_searches`` is always empty and
-         *     ``top_searches_available`` is always ``false``.
-         *
-         *     Each section carries an ``*_available`` flag, which is ``false`` when the
-         *     analytics store could not be read: an unavailable store is therefore never
-         *     displayed as a window with no traffic. A referrer category describes a
-         *     client-supplied header hint, not a verified traffic source, and unique
-         *     sessions count opaque cookie sessions, not people.
-         *
-         *     Administrator-only, and the response is ``private, no-store``.
+         * Liveness
+         * @description Liveness probe – always returns 200 if the process is alive.
          */
-        get: operations["analytics_summary_api_v1_admin_analytics_summary_get"];
+        get: operations["liveness_api_v1_health_live_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/health/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Readiness
+         * @description Readiness probe with baseline and extended dependency semantics.
+         *
+         *     Baseline gates PostgreSQL only; extended also gates the Redis broker.
+         */
+        get: operations["readiness_api_v1_health_ready_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register
+         * @description Register a new user account (Argon2id password hashing).
+         *
+         *     Password strength is validated both client-side and server-side.
+         */
+        post: operations["register_api_v1_auth_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login
+         * @description Authenticate and return an access token (refresh token via cookie).
+         *
+         *     Login attempts are limited through the shared Redis-backed fixed-window
+         *     limiter before credential verification. This keeps the limit consistent
+         *     across workers and instances without changing the authentication flow.
+         *
+         *     The refresh token is set as an HttpOnly cookie scoped to ``/api/v1/auth``
+         *     and is **not** included in the JSON response body.  Requests without a
+         *     trusted Origin/Referer are rejected (CSRF defence).
+         */
+        post: operations["login_api_v1_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Token
+         * @description Rotate the refresh cookie into a new access/refresh pair.
+         *
+         *     The presented refresh token is read **only** from the HttpOnly cookie
+         *     (path-scoped to ``/api/v1/auth``).  Rotation is server-side: the old
+         *     token is revoked and a replacement is issued in the same family.  A
+         *     previously rotated token presented again triggers reuse detection and
+         *     revokes the whole family.  Requests without a trusted Origin/Referer
+         *     are rejected (CSRF defence).
+         */
+        post: operations["refresh_token_api_v1_auth_refresh_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Logout
+         * @description Logout: revoke the current refresh family and clear the cookie.
+         *
+         *     Requires a valid Bearer access token.  The refresh cookie (if present)
+         *     identifies the family to revoke; the response also expires the cookie on
+         *     the client.  Requests without a trusted Origin/Referer are rejected
+         *     (CSRF defence).
+         */
+        post: operations["logout_api_v1_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Me
+         * @description Return the currently authenticated user's profile.
+         *
+         *     Uses proper dependency injection via ``Depends(get_current_user)``.
+         */
+        get: operations["get_me_api_v1_auth_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Password
+         * @description Change the current user's password.
+         *
+         *     .. note::
+         *         **Admin password policy** — Administrator account passwords are set
+         *         **only** via the initial configuration (``SOYMUTDB_ADMIN_PASSWORD``
+         *         environment variable) or the ``create_admin.py`` CLI script.
+         *         There is **no** "forgot password" reset flow for administrator accounts.
+         *
+         *         Non-admin users can freely change their own password through this
+         *         endpoint. Administrators may also use it, but if they lock themselves
+         *         out the password must be reset by a system administrator using the
+         *         CLI script.
+         *
+         *     Server-side password strength validation is applied to the new password.
+         */
+        post: operations["change_password_api_v1_auth_change_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/genes/assemblies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Assemblies
+         * @description List only genome assemblies in the resolved published release.
+         *
+         *     Read-hot query cached in Redis (default TTL) via cache-aside; a Redis
+         *     failure degrades to a direct query.  An empty assembly list is cached as
+         *     well (short-circuit for a freshly seeded database) — that empty-result
+         *     caching is the anti-cache-penetration behaviour shared by every
+         *     ``get_or_set`` call site: once a loader result (even an empty one) is
+         *     stored, repeated requests no longer hit the database until the TTL
+         *     expires.
+         */
+        get: operations["list_assemblies_api_v1_genes_assemblies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/genes/assemblies/{assembly_id}/chromosomes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Chromosomes
+         * @description List chromosomes only when the assembly belongs to this release.
+         */
+        get: operations["list_chromosomes_api_v1_genes_assemblies__assembly_id__chromosomes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/genes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Genes
+         * @description List genes with cursor pagination or the portal's page contract.
+         */
+        get: operations["list_genes_api_v1_genes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/genes/region-structure": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Region Structure
+         * @description Every gene in a coordinate window, with its modelled structure.
+         *
+         *     This is what the portal's own genome view needs in order to show a locus
+         *     rather than a gene: the genes that overlap the window, each with its
+         *     transcripts and their typed ``cds`` / ``utr5`` / ``utr3`` segments. Before
+         *     this endpoint the only genome picture the API could produce was centred on
+         *     one gene (``/{gene_id}/genome-view.svg``), so "what surrounds this insertion
+         *     site" had no answer.
+         *
+         *     Declared **before** ``/{gene_id}`` on purpose: FastAPI matches routes in
+         *     declaration order, and the parameterised route would otherwise swallow
+         *     ``region-structure`` as a gene accession and 404.
+         */
+        get: operations["get_region_structure_api_v1_genes_region_structure_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/genes/{gene_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Gene
+         * @description Get gene detail with transcripts and aliases.
+         *
+         *     ``gene_id`` is the assembly-scoped accession. When it exists in
+         *     multiple assemblies, ``assembly_id`` is required; the API returns an
+         *     explicit disambiguation error otherwise.
+         *
+         *     Domain errors (e.g. ``NotFoundError``) propagate to the error envelope;
+         *     unexpected exceptions are converted to a 500 HTTP error so the client
+         *     always receives a structured response.
+         */
+        get: operations["get_gene_api_v1_genes__gene_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/genes/{gene_id}/genome-view.svg": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Gene Genome View
+         * @description Serve the gene's genome picture as a finished SVG.
+         *
+         *     Rendering this on the server removes the track layout from first paint and
+         *     turns the picture into an ordinary cacheable image: the browser (and any
+         *     shared cache) can reuse it across visits, and the gene page still shows a
+         *     picture before its JavaScript has run.
+         *
+         *     Window defaults to the gene body plus a quarter-span flank, matching the
+         *     portal component. ``start``/``end`` override it for a zoomed request.
+         */
+        get: operations["get_gene_genome_view_api_v1_genes__gene_id__genome_view_svg_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/gwas/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Upload
+         * @description Request a pre-signed upload URL for a GWAS input file.
+         *
+         *     Returns a PUT URL valid for 1 hour plus the object key the client must
+         *     send back at submit time.  Nothing is persisted yet.
+         */
+        post: operations["create_upload_api_v1_gwas_uploads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/gwas/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit Gwas Job
+         * @description Submit a GWAS job for the uploaded inputs.
+         *
+         *     Validates the ``gwas/`` key namespace, the phenotype file format, the
+         *     method whitelist and the parameter whitelist, then creates the job row +
+         *     outbox event in one transaction (pending).
+         */
+        post: operations["submit_gwas_job_api_v1_gwas_submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/gwas/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Gwas Job
+         * @description Return the current status of a GWAS job.
+         *
+         *     ``result`` is ``null`` until the job completes; completed jobs carry the
+         *     worker-written summary (MinIO object keys + association statistics).
+         */
+        get: operations["get_gwas_job_api_v1_gwas__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/gwas/{job_id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Gwas Results
+         * @description Return pre-signed download URLs for a completed GWAS job's outputs.
+         *
+         *     Non-completed jobs return no URLs (status-aware envelope); completed jobs
+         *     expose the Manhattan data JSON, the QQ data JSON and the self-contained
+         *     ``Manhattan_QQ.html`` report.
+         */
+        get: operations["get_gwas_results_api_v1_gwas__job_id__results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Job Events
+         * @description Stream job status updates as Server-Sent Events.
+         *
+         *     Event format (one per updated job)::
+         *
+         *         event: job_update
+         *         data: {"job_type": "blast", "job_id": "...", "status": "running",
+         *                "updated_at": "2026-08-09T12:00:00+00:00"}
+         *
+         *     When no job changed in the last poll cycle a ``: ping`` heartbeat
+         *     comment line is emitted instead.  The stream ends when the client
+         *     disconnects.
+         */
+        get: operations["job_events_api_v1_jobs_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/ld": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compute Ld
+         * @description LD heatmap data: variant coordinates + r² matrix.
+         *
+         *     - Region/gene mode returns the variant coordinates in the interval
+         *       (from ``variant_facts``) together with ``r_squared: null`` when no
+         *       per-sample genotype data is available (the store only carries allele
+         *       frequencies).
+         *     - Inline ``genotypes`` mode (sample × variant dosage matrix) computes the
+         *       full pairwise r² matrix (squared Pearson correlation of dosages).
+         */
+        post: operations["compute_ld_api_v1_tools_ld_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/diversity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Nucleotide Diversity
+         * @description Nucleotide diversity (π) and Watterson's θ for a gene / interval.
+         *
+         *     π = Σ 2·p·(1−p) over polymorphic sites, per base pair; θ = S / a_n is
+         *     reported when ``sample_size`` is provided.  Optional ``window_size``
+         *     (bp) returns per-window π for sliding-window plots.
+         */
+        post: operations["nucleotide_diversity_api_v1_tools_diversity_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/allelefreq": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Allele Frequencies
+         * @description Per-variant allele frequencies for a locus / gene / interval.
+         */
+        post: operations["allele_frequencies_api_v1_tools_allelefreq_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/preview/test-data/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Meta
+         * @description Describe the local, unpublished v6 sample and its coordinate space.
+         */
+        get: operations["preview_meta_api_v1_preview_test_data_meta_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/preview/test-data/genes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Genes
+         * @description Find exact GFF gene accessions within the local v6 draft release.
+         */
+        get: operations["preview_genes_api_v1_preview_test_data_genes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/preview/test-data/mutation-sites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Mutation Sites
+         * @description Find source mutation-site records by a 1-based inclusive interval.
+         */
+        get: operations["preview_mutation_sites_api_v1_preview_test_data_mutation_sites_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/preview/test-data/mutation-sites/by-gene": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Preview Mutation Sites For Gene
+         * @description Return the source mutation-site rows attached to one exact gene ID.
+         *
+         *     The catalogue's result tables use this so a searched gene shows the
+         *     operator's own table rows, including the up/downstream ones that a
+         *     coordinate-interval query would miss.
+         */
+        get: operations["preview_mutation_sites_for_gene_api_v1_preview_test_data_mutation_sites_by_gene_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/preview/test-data/mutation-sites/{source_site_key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Preview Update Mutation Site
+         * @description Update the operator-editable fields of one source mutation-site row.
+         *
+         *     `available` is the only field the operator maintains by hand; the rest of
+         *     the row is the uploaded table's content and is replaced on the next import.
+         *     A re-import carries the stored `available` value forward.
+         */
+        patch: operations["preview_update_mutation_site_api_v1_preview_test_data_mutation_sites__source_site_key__patch"];
+        trace?: never;
+    };
+    "/api/v1/variants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Variants
+         * @description Search variants with filters and cursor pagination (limit ≤ 200).
+         *
+         *     The mutant-line filter takes a **public** identifier, resolved to the
+         *     fact's release-scoped line name. A persistence key or historical hash is
+         *     never accepted as a public identifier.
+         */
+        get: operations["list_variants_api_v1_variants_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/variants/region": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Variants By Region
+         * @description Query variants in a genomic region (assembly is required).
+         */
+        get: operations["get_variants_by_region_api_v1_variants_region_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/variants/{variant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Variant
+         * @description Get variant detail by ID.
+         */
+        get: operations["get_variant_api_v1_variants__variant_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/variants/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export Variants
+         * @description Submit an asynchronous export job (vcf/tsv/csv/json/bed).
+         *
+         *     The job is bound to exactly one assembly namespace: a named assembly
+         *     wins, otherwise the resolved release's own assembly scope is used, and a
+         *     request with neither is refused. See ``filters.assembly`` for the exact
+         *     rule and its limits.
+         */
+        post: operations["export_variants_api_v1_variants_export_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/variants/export/{export_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Variant Export Status
+         * @description Return the state of one export (submitter or administrator only).
+         */
+        get: operations["get_variant_export_status_api_v1_variants_export__export_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/variants/export/{export_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Variant Export Download
+         * @description Return a short-lived download link for a completed export.
+         */
+        get: operations["get_variant_export_download_api_v1_variants_export__export_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/seqfetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Seqfetch
+         * @description Extract sequences for up to 200 gene IDs, or one chromosome interval.
+         *
+         *     - ``{"genes": ["Glyma.01G000100", ...]}`` – batch mode; unknown IDs are
+         *       skipped and reported in ``missing`` (never 404).
+         *     - ``{"assembly": "GmWm82.a2.v1", "region": "chr1:1000-2000"}`` – single
+         *       region mode.
+         *
+         *     Results larger than 10 MiB are stored in S3 and returned with a
+         *     pre-signed ``download_url`` (600 s) instead of inline FASTA.
+         */
+        post: operations["seqfetch_api_v1_tools_seqfetch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Global search across the SoyMutDB catalogue
+         * @description Search the published SoyMutDB catalogue.
+         *
+         *     Federated external search (NCBI / UniProt / Ensembl / EMBL-EBI) is retired
+         *     permanently: the ``sources`` parameter, the ``format``/``Accept`` content
+         *     negotiation and the sanitized HTML-fragment response are all gone, so this
+         *     endpoint always answers with JSON catalogue results.
+         *
+         *     The release query/header pin is resolved through the published release
+         *     context dependency; draft and otherwise unavailable release ids are
+         *     rejected, and without a pin the active published release is selected.
+         */
+        get: operations["global_search_api_v1_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search/suggest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Suggest
+         * @description Autocomplete suggestions scoped to the requested published release.
+         */
+        get: operations["suggest_api_v1_search_suggest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/search/internal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Authorized internal search across public and internal identifiers
+         * @description Internal-site search: server-side authorized, audited, uncached.
+         *
+         *     Results carry both identities (public_id / internal_id) and the field
+         *     that matched. The shared search cache is deliberately bypassed so
+         *     authorized rows cannot leak into another scope, and the response is
+         *     marked ``private, no-store``.
+         */
+        get: operations["internal_search_api_v1_search_internal_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stats/dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Dashboard Stats
+         * @description High-level database statistics for the resolved published release.
+         *
+         *     Read-hot aggregation cached in Redis (default TTL) via cache-aside;
+         *     a Redis failure degrades to a direct aggregation. The cache key carries the
+         *     release so one release's aggregate is never served for another.
+         */
+        get: operations["dashboard_stats_api_v1_stats_dashboard_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stats/homepage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Homepage statistics
+         * @description Aggregate statistics for the public home page. Variant counts come from the native PostgreSQL variant_facts projection, falling back to the variant_summaries table; other counts are real PostgreSQL aggregates. Empty results are returned as zeros.
+         */
+        get: operations["homepage_stats_api_v1_stats_homepage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stats/variant-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Variant Type Distribution
+         * @description Variant type distribution (SNP/INS/DEL/MNV/SV) for a published release.
+         *
+         *     The PostgreSQL variant aggregate is bound to the resolved release;
+         *     previously it scanned every release's facts.
+         */
+        get: operations["variant_type_distribution_api_v1_stats_variant_types_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stats/summary/variant-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Variant type summary (name/value)
+         * @description Variant type distribution as ``[{name, value}]`` for charts.
+         *
+         *     Aggregated from the PostgreSQL ``variant_summaries`` table, scoped to the
+         *     resolved published release. Zero-count buckets are omitted so charts can
+         *     fall back to other data sources.
+         */
+        get: operations["variant_type_summary_api_v1_stats_summary_variant_types_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stats/summary/impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Variant counts by predicted impact
+         * @description Variant counts grouped by impact class, scoped to the published release.
+         */
+        get: operations["impact_summary_api_v1_stats_summary_impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stats/chromosome-density": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-chromosome variant density
+         * @description Variant density per chromosome, aggregated from PostgreSQL.
+         *
+         *     ``density_per_kb`` is computed as ``variant_count / (length_bp / 1000)``.
+         *     Read-hot aggregation cached in Redis (default TTL) keyed by
+         *     ``release_id``; a Redis failure degrades to a direct aggregation.  Empty
+         *     results are cached too (anti-penetration): when no data exists the
+         *     loader returns ``[]`` which is memoised until the TTL expires instead of
+         *     re-running the aggregate per request.
+         */
+        get: operations["chromosome_density_summary_api_v1_stats_chromosome_density_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stats/discovery-trend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Cumulative variant discovery trend
+         * @description Cumulative variant counts across *published* releases.
+         *
+         *     Each published release contributes ``new_variants`` (= its recorded
+         *     ``variant_count``) and a running cumulative total. Draft and rolled-back
+         *     releases are excluded, and the trend is anchored on the resolved published
+         *     release rather than an arbitrary caller-supplied id.
+         */
+        get: operations["discovery_trend_api_v1_stats_discovery_trend_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stats/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Per-release statistics
+         * @description Statistics per *published* release (version, date, counts).
+         *
+         *     Public callers may only see releases that reached a published state:
+         *     previously the default (``only_active=false``) listed every release,
+         *     including drafts and rolled-back ones. A rollback is deliberately excluded
+         *     because its counts no longer describe the served data.
+         *
+         *     Read-hot query cached in Redis (default TTL); a Redis failure degrades to a
+         *     direct query. An empty release list is cached as well (anti-penetration) so
+         *     a freshly seeded database does not re-run the query on every request.
+         */
+        get: operations["release_statistics_api_v1_stats_releases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stats/mutagens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Mutant lines grouped by mutagen
+         * @description Number of mutant lines per mutagen, scoped to the published release.
+         */
+        get: operations["mutagen_statistics_api_v1_stats_mutagens_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/stats/density": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Chromosome Density
+         * @description Variant density across a chromosome in the published release.
+         *
+         *     Density is computed entirely from the PostgreSQL ``variant_facts``
+         *     projection, so an unavailable projection is reported as
+         *     capability-unavailable (503). The response model also requires a concrete
+         *     ``chromosome_length``: fabricating ``0`` here would both violate the
+         *     contract and present an empty chromosome as a real result. The query is
+         *     bound to the resolved release, so bins can never mix drafts into a
+         *     published density.
+         */
+        get: operations["chromosome_density_api_v1_stats_density_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/databases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Blast Databases
+         * @description List active BLAST databases in the resolved published release.
+         *
+         *     Database lives outside the release boundary: the list previously included
+         *     the databases of draft releases, whose underlying data is not published.
+         */
+        get: operations["list_blast_databases_api_v1_blast_databases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Blast Jobs
+         * @description List the current user's BLAST jobs, newest first.
+         */
+        get: operations["list_blast_jobs_api_v1_blast_jobs_get"];
+        put?: never;
+        /**
+         * Submit Blast Job
+         * @description Submit a BLAST job (requires researcher role or higher).
+         *
+         *     The target database is resolved inside the published release, so a job can
+         *     never search another release's (including unreleased) database.
+         */
+        post: operations["submit_blast_job_api_v1_blast_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Blast Job
+         * @description Check BLAST job status.
+         */
+        get: operations["get_blast_job_api_v1_blast_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Blast Job
+         * @description Cancel a pending/running BLAST job owned by the caller.
+         *
+         *     The worker re-checks the row before launching the aligner, so a queued
+         *     Celery message that arrives after cancellation cannot start a search.
+         */
+        post: operations["cancel_blast_job_api_v1_blast_jobs__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/jobs/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Blast Job
+         * @description Re-dispatch a failed BLAST job with its original frozen provenance.
+         */
+        post: operations["retry_blast_job_api_v1_blast_jobs__job_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/jobs/{job_id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Blast Results
+         * @description Retrieve BLAST results for a job (status-aware envelope).
+         *
+         *     Returns ``hits=None`` for pending/running/failed jobs; only completed
+         *     jobs carry a hit list (empty means a genuine zero-hit result).
+         */
+        get: operations["get_blast_results_api_v1_blast_jobs__job_id__results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/index-builds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Blast Index Build
+         * @description Request an immutable NCBI index build (admin only).
+         *
+         *     Records the catalog/build rows and one transactional-outbox event in a
+         *     single transaction. ``makeblastdb`` never runs inside this HTTP request;
+         *     the worker on the ``blast`` queue owns construction and publication.
+         */
+        post: operations["create_blast_index_build_api_v1_blast_index_builds_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/index-builds/{build_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Blast Index Build
+         * @description Poll one build's state; no filesystem path or binary name is exposed.
+         */
+        get: operations["get_blast_index_build_api_v1_blast_index_builds__build_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/jobs/{job_id}/hits/{subject_id}/genome-target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Blast Hit Genome Target
+         * @description Resolve a subject to a gene locus in the job's release/assembly.
+         *
+         *     Never derives genomic coordinates from amino-acid alignment positions.
+         *     An unresolved subject returns an explicit reason and no locus.
+         */
+        get: operations["get_blast_hit_genome_target_api_v1_blast_jobs__job_id__hits__subject_id__genome_target_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/public/jobs/{job_id}/hits/{subject_id}/genome-target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Public Blast Hit Genome Target */
+        get: operations["get_public_blast_hit_genome_target_api_v1_blast_public_jobs__job_id__hits__subject_id__genome_target_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/public/jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Public Blast Job
+         * @description Anonymous capability holder may cancel only its own pending job.
+         */
+        post: operations["cancel_public_blast_job_api_v1_blast_public_jobs__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/public/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit Public Blast Job
+         * @description Submit an explicitly anonymous job, even when a bearer session is present.
+         *
+         *     Save the returned capability and send it as X-Blast-Token when polling.
+         *     There is no public listing. Publication/release validation and execution
+         *     reuse the same service, outbox and worker as private jobs.
+         */
+        post: operations["submit_public_blast_job_api_v1_blast_public_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/public/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Public Blast Job */
+        get: operations["get_public_blast_job_api_v1_blast_public_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/public/jobs/{job_id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Public Blast Results */
+        get: operations["get_public_blast_results_api_v1_blast_public_jobs__job_id__results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analyses": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Analysis Jobs
+         * @description List the current user's most recent analysis jobs (newest first).
+         *
+         *     Only jobs owned by the caller are returned; anonymous/lower-role callers
+         *     get 401/403 through the unified error envelope.
+         */
+        get: operations["list_analysis_jobs_api_v1_analyses_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analyses/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Upload
+         * @description Request a pre-signed upload URL for an analysis input file.
+         *
+         *     Returns a POST action valid for 1 hour plus the object key the client must
+         *     send back at submit time.  Nothing is persisted yet.
+         */
+        post: operations["create_upload_api_v1_analyses_uploads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analyses/{analysis_type}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit Analysis
+         * @description Submit an analysis job for the uploaded objects.
+         *
+         *     Validates that every input key belongs to the caller, checks the parameter
+         *     whitelist, then creates the job row + outbox event in one transaction.
+         */
+        post: operations["submit_analysis_api_v1_analyses__analysis_type__submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analyses/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Analysis Job
+         * @description Return the current status of an analysis job.
+         *
+         *     ``result`` is ``null`` until the job completes; completed jobs carry the
+         *     worker-written summary.
+         */
+        get: operations["get_analysis_job_api_v1_analyses__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/analyses/{job_id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Analysis Object
+         * @description Return a pre-signed GET URL for one of the job's own objects.
+         *
+         *     The key must live under ``analyses/{job_id}/``; anything outside that
+         *     prefix (including other jobs' objects) is rejected.
+         */
+        get: operations["download_analysis_object_api_v1_analyses__job_id__download_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tracks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tracks
+         * @description List tracks (optionally filtered by assembly / category).
+         */
+        get: operations["list_tracks_api_v1_tracks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tracks/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Track Categories
+         * @description List track categories.
+         */
+        get: operations["list_track_categories_api_v1_tracks_categories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tracks/jbrowse-config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Jbrowse Config
+         * @description Return a release- and assembly-scoped JBrowse 2 configuration.
+         *
+         *     The release dependency accepts only a published release (or the active
+         *     published pointer).  ``assembly_id`` is intentionally required: an
+         *     assembly name is not a stable identity across release namespaces and must
+         *     never be used to select tracks.  Anonymous responses contain public tracks
+         *     only and may be shared; authenticated responses can include project/private
+         *     tracks and are therefore marked private and non-cacheable.
+         */
+        get: operations["get_jbrowse_config_api_v1_tracks_jbrowse_config_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tracks/{track_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Track
+         * @description Get track detail.
+         */
+        get: operations["get_track_api_v1_tracks__track_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tracks/{track_id}/signed-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Signed Url
+         * @description Get a signed URL for a track file (RBAC-enforced).
+         *
+         *     Public tracks are accessible to any authenticated user.
+         *     Private/project tracks require ownership, ``track_manager``, or
+         *     ``administrator`` role.
+         *
+         *     The URL is a capability: it is always returned ``private, no-store`` so no
+         *     browser or proxy retains it.
+         */
+        get: operations["get_signed_url_api_v1_tracks__track_id__signed_url_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Releases
+         * @description List database releases.
+         *
+         *     Read-hot query cached in Redis (default TTL) keyed by ``status``; a
+         *     Redis failure degrades to a direct query.
+         */
+        get: operations["list_releases_api_v1_releases_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/releases/active": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Active Release
+         * @description Report the release the public surface currently serves.
+         *
+         *     Declared before ``/{release_id}`` so the literal path is not captured by
+         *     the id route. Reads the same ``active_release`` singleton that
+         *     ``services.release_context.resolve_release_context`` resolves against — this
+         *     endpoint adds no second source of truth, only a way for a client to
+         *     notice a switch that happened after its page was built.
+         *
+         *     Returns an empty response (both fields null) before the first publish;
+         *     that is an answer, not an error.
+         */
+        get: operations["get_active_release_api_v1_releases_active_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/releases/{release_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Release */
+        get: operations["get_release_api_v1_releases__release_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mutants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Mutant Lines
+         * @description List public mutant lines from the active published release.
+         *
+         *     ``mutagen`` keeps its historical *exact* match semantics. ``q`` is an
+         *     additive free-text filter that matches a case-insensitive substring of
+         *     the public identifier, the name, the cultivar or the mutagen; it narrows
+         *     the very same release-scoped, public-only candidate set and never widens
+         *     it.
+         *
+         *     Both filters leave the response shape untouched: the endpoint still
+         *     answers with a plain ``list[MutantLineResponse]`` (no envelope), so the
+         *     existing clients keep working.
+         */
+        get: operations["list_mutant_lines_api_v1_mutants_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mutants/{public_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Mutant Line
+         * @description Get a public mutant line by its public identifier.
+         *
+         *     Any value that does not correspond to a visible public record yields
+         *     the same not-found response — including existing internal identifiers.
+         */
+        get: operations["get_mutant_line_api_v1_mutants__public_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mutants/{public_id}/phenotypes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Phenotypes
+         * @description List phenotypes for a public mutant line in the active release.
+         */
+        get: operations["get_phenotypes_api_v1_mutants__public_id__phenotypes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/table-views/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Table View
+         * @description Resolve the ordered column layout for one portal table.
+         */
+        get: operations["get_table_view_api_v1_table_views__kind__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/seeds/inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Inventory
+         * @description List seed inventory for the resolved published release.
+         *
+         *     Rows are bound to a released mutant line; the previous version listed every
+         *     lot in the table, including drafts and other releases, and identified the
+         *     line by its internal key.
+         */
+        get: operations["list_inventory_api_v1_seeds_inventory_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/seeds/inventory/{seed_lot}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Inventory
+         * @description Get a seed lot by its public lot label within the published release.
+         *
+         *     The inventory row's persistence key is not a locator: a request for it (or
+         *     for a lot outside the release) returns the same not-found response.
+         */
+        get: operations["get_inventory_api_v1_seeds_inventory__seed_lot__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/seeds/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Seed Requests
+         * @description List seed requests containing contact data (seed_manager only).
+         */
+        get: operations["list_seed_requests_api_v1_seeds_requests_get"];
+        put?: never;
+        /**
+         * Create Seed Request
+         * @description Submit a seed request (open to all).
+         *
+         *     The requested line is addressed by its public identifier and must exist in
+         *     the resolved published release; a numeric/internal value is refused.
+         */
+        post: operations["create_seed_request_api_v1_seeds_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/seeds/requests/{request_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Seed Request
+         * @description Update a seed request status (requires seed_manager role).
+         */
+        patch: operations["update_seed_request_api_v1_seeds_requests__request_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/seed-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a public seed request
+         * @description Submit a seed request contact (open to all; no authentication).
+         */
+        post: operations["create_seed_request_api_v1_seed_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/seed-requests/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public seed-request demand per gene (counts only)
+         * @description Report how many requests reference each gene ID.
+         *
+         *     Anonymous on purpose: the gene page renders "N requests" beside the seed
+         *     request entry as a demand signal. The payload is counts only — no requester
+         *     name, institution, email, timestamp or status ever leaves
+         *     ``/admin/seed-requests``, so this cannot be turned into an enumeration of
+         *     who asked for what.
+         */
+        get: operations["seed_request_stats_api_v1_seed_requests_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/seed-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List seed requests (seed manager)
+         * @description Paginated admin listing with an optional status filter.
+         */
+        get: operations["list_seed_requests_api_v1_admin_seed_requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/seed-requests/{request_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a seed request status (seed manager)
+         * @description Advance a request's status (pending → approved/rejected → fulfilled).
+         */
+        patch: operations["update_seed_request_api_v1_admin_seed_requests__request_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/content/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Content Snapshot
+         * @description Public content snapshot for static builds (E2-2).
+         *
+         *     Frozen contract in ``docs/design/static-content-richtext-2026-08.md``
+         *     §4.1: schema_version/generated_at/news{source_total,included_total,
+         *     truncated,items}/news_detail{slug: detail|null}/about/publications.
+         *
+         *     Release-aware: pass ``release_id`` (and optionally
+         *     ``page_definition_version``) to build an immutable, release-pinned
+         *     snapshot whose cache key differs by release.  Without an explicit
+         *     ``release_id`` the mutable active-release alias is served, for interactive
+         *     public reads only.
+         *
+         *     Aggregation is cached in Redis for 60 s (cache.py); the response carries
+         *     an ETag so build-time fetchers can short-circuit with 304.
+         */
+        get: operations["content_snapshot_api_v1_content_snapshot_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/content/news": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List News
+         * @description List published news articles.
+         */
+        get: operations["list_news_api_v1_content_news_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/content/news/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get News */
+        get: operations["get_news_api_v1_content_news__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/content/publications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Publications
+         * @description List publications.
+         */
+        get: operations["list_publications_api_v1_content_publications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/content/publications/{doi}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Publication
+         * @description Get one publication by its DOI.
+         *
+         *     ``doi`` is the publication's own scholarly identifier (it contains ``/``, so
+         *     the route uses a path converter). The persistence key is not a locator: a
+         *     numeric value returns the same not-found response as an unknown DOI, so the
+         *     endpoint is not an existence oracle for internal ids.
+         */
+        get: operations["get_publication_api_v1_content_publications__doi__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/content/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Pages
+         * @description List published static pages.
+         */
+        get: operations["list_pages_api_v1_content_pages_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/content/pages/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Page */
+        get: operations["get_page_api_v1_content_pages__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/content/downloads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Downloads
+         * @description List downloadable files belonging to the resolved published release.
+         *
+         *     ``download_files.release_id`` is nullable, and the list previously selected
+         *     every row — including drafts and files not (yet) bound to any release. Both
+         *     are excluded here, so a file only appears once its release is published.
+         */
+        get: operations["list_downloads_api_v1_content_downloads_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/content/downloads/{file_id}/url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Download Url
+         * @description Generate a download URL for a file in the resolved published release.
+         *
+         *     The file must be bound to the resolved release: an id from a draft release
+         *     (or an unbound row) is not a valid locator. If the stored location is an S3
+         *     path a pre-signed URL is minted; a plain HTTP(S) location is returned
+         *     as-is; anything else is refused rather than handed to the client as a
+         *     download target.
+         */
+        get: operations["get_download_url_api_v1_content_downloads__file_id__url_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/news": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List News
+         * @description Paginated public news list (published only).
+         */
+        get: operations["list_news_api_v1_news_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/news/featured": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Featured News
+         * @description Homepage block: 5 featured articles + carousel groups.
+         *
+         *     Read-hot query cached in Redis with a short TTL (60s, content changes
+         *     frequently); a Redis failure degrades to a direct query.
+         */
+        get: operations["featured_news_api_v1_news_featured_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/news/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get News
+         * @description Article detail.
+         *
+         *     Published + visible articles are public.  Draft/hidden articles return a
+         *     valid HMAC preview token URL from the admin endpoint
+         *     (``/admin/news/{id}/preview-token``) and are then accessible with
+         *     ``?preview=<token>&exp=<ts>`` without login.
+         */
+        get: operations["get_news_api_v1_news__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Notifications
+         * @description List the caller's notifications, unread first, newest first.
+         *
+         *     ``total`` / ``unread_count`` reflect the full set (not just the page).
+         */
+        get: operations["list_notifications_api_v1_notifications_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Unread Count
+         * @description Return the caller's unread notification count (bell badge).
+         */
+        get: operations["get_unread_count_api_v1_notifications_unread_count_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Notifications Read
+         * @description Mark a subset (``ids``) or all (``all``) notifications as read.
+         *
+         *     ``ids`` are always scoped to the caller; foreign ids are ignored.
+         */
+        post: operations["mark_notifications_read_api_v1_notifications_read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ontology/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search
+         * @description Search public ontology terms without persisting or executing anything.
+         */
+        get: operations["search_api_v1_ontology_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ontology/term": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Term
+         * @description Read one bounded ontology term by IRI.
+         */
+        get: operations["term_api_v1_ontology_term_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ontology/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Relationship Graph
+         * @description Read a one-hop OLS4 relationship graph with strict node and edge caps.
+         */
+        get: operations["relationship_graph_api_v1_ontology_graph_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/page-definitions/published-routes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Published Routes
+         * @description Return only published, SSG-safe routes with their minimal public payload.
+         */
+        get: operations["get_published_routes_api_v1_page_definitions_published_routes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/page-definitions/{route}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Page Definition
+         * @description Return a published definition for *route* (optionally pinned version).
+         */
+        get: operations["get_page_definition_api_v1_page_definitions__route__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/releases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Release */
+        post: operations["create_release_api_v1_admin_releases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/releases/{release_id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Admin Release */
+        post: operations["validate_admin_release_api_v1_admin_releases__release_id__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/releases/{release_id}/ready": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ready Admin Release */
+        post: operations["ready_admin_release_api_v1_admin_releases__release_id__ready_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/releases/{release_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish Admin Release */
+        post: operations["publish_admin_release_api_v1_admin_releases__release_id__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/releases/{release_id}/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rollback Admin Release */
+        post: operations["rollback_admin_release_api_v1_admin_releases__release_id__rollback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/releases/{release_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Admin Release */
+        get: operations["get_admin_release_api_v1_admin_releases__release_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -58,6 +2552,50 @@ export interface paths {
          *     the ``actor`` field with the username of the user who performed the action.
          */
         get: operations["list_audit_logs_api_v1_admin_audit_logs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/audit-logs/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit Log Stats
+         * @description Aggregate statistics for audit-log visualisation (administrator-only).
+         */
+        get: operations["audit_log_stats_api_v1_admin_audit_logs_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/audit-logs/online-duration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Audit Log Online Duration
+         * @description Compute online duration (seconds) per user from login/logout audit entries.
+         *
+         *     Pairs consecutive login/logout events per user.  Returns a list of dicts
+         *     with ``user_id``, ``username``, ``total_seconds``, and ``login_count``.
+         *     (Administrator-only.)
+         */
+        get: operations["audit_log_online_duration_api_v1_admin_audit_logs_online_duration_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -113,7 +2651,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/audit-logs/online-duration": {
+    "/api/v1/admin/timeout-config": {
         parameters: {
             query?: never;
             header?: never;
@@ -121,14 +2659,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Audit Log Online Duration
-         * @description Compute online duration (seconds) per user from login/logout audit entries.
+         * Get Timeout Config
+         * @description Return the centralized timeout configuration (authenticated users).
          *
-         *     Pairs consecutive login/logout events per user.  Returns a list of dicts
-         *     with ``user_id``, ``username``, ``total_seconds``, and ``login_count``.
-         *     (Administrator-only.)
+         *     These values are set in the backend ``Settings`` and are used by the
+         *     frontend API client to configure request timeouts.
          */
-        get: operations["audit_log_online_duration_api_v1_admin_audit_logs_online_duration_get"];
+        get: operations["get_timeout_config_api_v1_admin_timeout_config_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -137,7 +2674,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/audit-logs/stats": {
+    "/api/v1/admin/dashboard-stats": {
         parameters: {
             query?: never;
             header?: never;
@@ -145,10 +2682,15 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Audit Log Stats
-         * @description Aggregate statistics for audit-log visualisation (administrator-only).
+         * System overview statistics
+         * @description High-level system numbers for the admin dashboard.
+         *
+         *     All values are real aggregations (users/releases from PostgreSQL, variant
+         *     count from the native PostgreSQL projection with a ``variant_summaries``
+         *     fallback).  Change percentages are computed between the last 30 days and
+         *     the previous 30 days; metrics without a temporal source report 0.0.
          */
-        get: operations["audit_log_stats_api_v1_admin_audit_logs_stats_get"];
+        get: operations["admin_dashboard_stats_api_v1_admin_dashboard_stats_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -157,51 +2699,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/build-static": {
+    "/api/v1/admin/dashboard-series": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
-         * Trigger Build
-         * @description Trigger a static page generation job (administrator-only).
+         * Dashboard trend series
+         * @description Time series for the admin dashboard charts.
          *
-         *     Request body::
-         *
-         *         {
-         *             "gene_ids": ["Glyma.01G000100", "Glyma.02G000200"] | null
-         *         }
-         *
-         *     If ``gene_ids`` is ``None``, all genes of the active published release
-         *     will be rebuilt; ``[]`` rebuilds nothing. The build is scoped to a
-         *     published release, so an installation without one is rejected (503)
-         *     instead of queueing work against an unreleased namespace.
+         *     - ``import_throughput``: daily import tasks (completed vs. failed) from
+         *       the PostgreSQL ``import_tasks`` table.
+         *     - ``query_latency``: daily p50/p95/p99 percentiles from the PostgreSQL
+         *       analytics events (empty when that query is unavailable).
+         *     - ``storage_growth``: no reliable storage source exists yet — empty.
          */
-        post: operations["trigger_build_api_v1_admin_build_static_post"];
+        get: operations["admin_dashboard_series_api_v1_admin_dashboard_series_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/build-static/status": {
+    "/api/v1/admin/features": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get Build Status
-         * @description Get the status of the most recent static page build
-         *     (administrator-only).
-         */
-        get: operations["get_build_status_api_v1_admin_build_static_status_get"];
-        put?: never;
+        /** List Features */
+        get: operations["list_features_api_v1_admin_features_get"];
+        /** Update Features */
+        put: operations["update_features_api_v1_admin_features_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -381,383 +2915,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/dashboard-series": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Dashboard trend series
-         * @description Time series for the admin dashboard charts.
-         *
-         *     - ``import_throughput``: daily import tasks (completed vs. failed) from
-         *       the PostgreSQL ``import_tasks`` table.
-         *     - ``query_latency``: daily p50/p95/p99 percentiles from the PostgreSQL
-         *       analytics events (empty when that query is unavailable).
-         *     - ``storage_growth``: no reliable storage source exists yet — empty.
-         */
-        get: operations["admin_dashboard_series_api_v1_admin_dashboard_series_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/dashboard-stats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * System overview statistics
-         * @description High-level system numbers for the admin dashboard.
-         *
-         *     All values are real aggregations (users/releases from PostgreSQL, variant
-         *     count from the native PostgreSQL projection with a ``variant_summaries``
-         *     fallback).  Change percentages are computed between the last 30 days and
-         *     the previous 30 days; metrics without a temporal source report 0.0.
-         */
-        get: operations["admin_dashboard_stats_api_v1_admin_dashboard_stats_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/features": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Features */
-        get: operations["list_features_api_v1_admin_features_get"];
-        /** Update Features */
-        put: operations["update_features_api_v1_admin_features_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/imports": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Imports
-         * @description Paginated list of import tasks with optional filters (administrator-only).
-         */
-        get: operations["list_imports_api_v1_admin_imports_get"];
-        put?: never;
-        /**
-         * Create Import
-         * @description Create a new import task and dispatch it to Celery (administrator-only).
-         *
-         *     Request body::
-         *
-         *         {
-         *             "filename": "expression_data.csv",
-         *             "type": "expression_csv",
-         *             "file_path": "s3://bucket/path/to/file.csv",
-         *             "submitted_by": "user@example.com"
-         *         }
-         */
-        post: operations["create_import_api_v1_admin_imports_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/imports/studio/dataset-versions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Dataset Versions */
-        get: operations["list_dataset_versions_api_v1_admin_imports_studio_dataset_versions_get"];
-        put?: never;
-        /**
-         * Create Dataset Version
-         * @description Record immutable raw-object metadata before any editing begins.
-         */
-        post: operations["create_dataset_version_api_v1_admin_imports_studio_dataset_versions_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/imports/studio/drafts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Drafts
-         * @description List persisted Import Studio drafts for dashboard resume only.
-         *
-         *     This endpoint never creates or validates a draft and exposes no mutable
-         *     source metadata, so dashboard discovery cannot fabricate an import source.
-         */
-        get: operations["list_drafts_api_v1_admin_imports_studio_drafts_get"];
-        put?: never;
-        /**
-         * Create Draft
-         * @description Create an editing draft from an immutable dataset version.
-         */
-        post: operations["create_draft_api_v1_admin_imports_studio_drafts_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/imports/studio/drafts/{draft_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Draft */
-        get: operations["get_draft_api_v1_admin_imports_studio_drafts__draft_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/imports/studio/drafts/{draft_id}/commit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Commit Draft
-         * @description Atomically commit a validated draft and create publication evidence.
-         */
-        post: operations["commit_draft_api_v1_admin_imports_studio_drafts__draft_id__commit_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/imports/studio/drafts/{draft_id}/manifest": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Manifest */
-        get: operations["get_manifest_api_v1_admin_imports_studio_drafts__draft_id__manifest_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/imports/studio/drafts/{draft_id}/mapping": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Update Mapping */
-        put: operations["update_mapping_api_v1_admin_imports_studio_drafts__draft_id__mapping_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/imports/studio/drafts/{draft_id}/patches": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Add Patches */
-        post: operations["add_patches_api_v1_admin_imports_studio_drafts__draft_id__patches_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/imports/studio/drafts/{draft_id}/validate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Validate Draft */
-        post: operations["validate_draft_api_v1_admin_imports_studio_drafts__draft_id__validate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/imports/uploads/multipart": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Start Multipart Upload */
-        post: operations["start_multipart_upload_api_v1_admin_imports_uploads_multipart_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/imports/uploads/multipart/{upload_id}/complete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Finish Multipart Upload */
-        post: operations["finish_multipart_upload_api_v1_admin_imports_uploads_multipart__upload_id__complete_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/imports/{import_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Import
-         * @description Get a single import task detail (administrator-only).
-         */
-        get: operations["get_import_api_v1_admin_imports__import_id__get"];
-        put?: never;
-        post?: never;
-        /**
-         * Delete Import
-         * @description Cancel and delete an import task (administrator-only).
-         *
-         *     If the task is still running, the associated Celery task is revoked.
-         */
-        delete: operations["delete_import_api_v1_admin_imports__import_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/imports/{import_id}/retry": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Retry Import
-         * @description Retry a failed import: reset status, clear error, re-dispatch Celery
-         *     task (administrator-only).
-         */
-        post: operations["retry_import_api_v1_admin_imports__import_id__retry_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/imports/{import_id}/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Import Status
-         * @description Get the live status of an import task, including Celery task state
-         *     (administrator-only).
-         */
-        get: operations["get_import_status_api_v1_admin_imports__import_id__status_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/layout/{page}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Admin Update Layout
-         * @description Create or update the widget layout for a page.
-         */
-        put: operations["admin_update_layout_api_v1_admin_layout__page__put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/admin/media": {
         parameters: {
             query?: never;
@@ -792,70 +2949,6 @@ export interface paths {
         head?: never;
         /** Patch Media */
         patch: operations["patch_media_api_v1_admin_media__asset_id__patch"];
-        trace?: never;
-    };
-    "/api/v1/admin/modules/{module_key}/inspect": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Inspect Module
-         * @description Return a bounded validation preview without persistence or execution.
-         */
-        post: operations["inspect_module_api_v1_admin_modules__module_key__inspect_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/modules/{module_key}/template": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Download Module Template
-         * @description Download a starter template for a module schema.
-         *
-         *     ``format`` is one of ``tsv`` / ``txt`` / ``csv`` / ``xlsx`` (default
-         *     ``tsv``).  ``xlsx`` returns a binary workbook; the text formats return
-         *     plain text with the matching media type and ``Content-Disposition``.
-         */
-        get: operations["download_module_template_api_v1_admin_modules__module_key__template_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/modules/{module_key}/validate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Inspect Module
-         * @description Return a bounded validation preview without persistence or execution.
-         */
-        post: operations["inspect_module_api_v1_admin_modules__module_key__validate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/news": {
@@ -930,26 +3023,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/news/reorder": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Reorder News
-         * @description Apply a full drag-and-drop ordering of ``featured_sort``.
-         */
-        patch: operations["reorder_news_api_v1_admin_news_reorder_patch"];
-        trace?: never;
-    };
     "/api/v1/admin/news/{news_id}": {
         parameters: {
             query?: never;
@@ -974,25 +3047,20 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/news/{news_id}/preview-token": {
+    "/api/v1/admin/news/{news_id}/restore": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Preview Token
-         * @description Mint a 15-minute stateless HMAC preview token for a hidden/draft article.
-         *
-         *     The returned ``url`` (``/api/v1/news/{slug}?preview=<token>&exp=<ts>``)
-         *     can be opened without login; verification happens on the public detail
-         *     endpoint.  The token is NOT a JWT — no server-side state, HMAC-signed
-         *     with ``settings.jwt_secret``.
-         */
-        get: operations["preview_token_api_v1_admin_news__news_id__preview_token_get"];
+        get?: never;
         put?: never;
-        post?: never;
+        /**
+         * Restore News
+         * @description Restore a soft-deleted article; only administrators may do this.
+         */
+        post: operations["restore_news_api_v1_admin_news__news_id__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1019,7 +3087,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/news/{news_id}/restore": {
+    "/api/v1/admin/news/reorder": {
         parameters: {
             query?: never;
             header?: never;
@@ -1028,112 +3096,34 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
         /**
-         * Restore News
-         * @description Restore a soft-deleted article; only administrators may do this.
+         * Reorder News
+         * @description Apply a full drag-and-drop ordering of ``featured_sort``.
          */
-        post: operations["restore_news_api_v1_admin_news__news_id__restore_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
+        patch: operations["reorder_news_api_v1_admin_news_reorder_patch"];
         trace?: never;
     };
-    "/api/v1/admin/page-builder/pages": {
+    "/api/v1/admin/news/{news_id}/preview-token": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Pages */
-        get: operations["list_pages_api_v1_admin_page_builder_pages_get"];
-        put?: never;
-        /** Create Page */
-        post: operations["create_page_api_v1_admin_page_builder_pages_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/page-builder/pages/{page_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Page */
-        get: operations["get_page_api_v1_admin_page_builder_pages__page_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/page-builder/pages/{page_id}/draft": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Update Draft */
-        put: operations["update_draft_api_v1_admin_page_builder_pages__page_id__draft_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/page-builder/pages/{page_id}/preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Preview Page */
-        post: operations["preview_page_api_v1_admin_page_builder_pages__page_id__preview_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/page-builder/pages/{page_id}/publish-request": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Publish Request */
-        post: operations["publish_request_api_v1_admin_page_builder_pages__page_id__publish_request_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/page-builder/pages/{page_id}/versions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Versions */
-        get: operations["list_versions_api_v1_admin_page_builder_pages__page_id__versions_get"];
+        /**
+         * Preview Token
+         * @description Mint a 15-minute stateless HMAC preview token for a hidden/draft article.
+         *
+         *     The returned ``url`` (``/api/v1/news/{slug}?preview=<token>&exp=<ts>``)
+         *     can be opened without login; verification happens on the public detail
+         *     endpoint.  The token is NOT a JWT — no server-side state, HMAC-signed
+         *     with ``settings.jwt_secret``.
+         */
+        get: operations["preview_token_api_v1_admin_news__news_id__preview_token_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1216,6 +3206,109 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/page-builder/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Pages */
+        get: operations["list_pages_api_v1_admin_page_builder_pages_get"];
+        put?: never;
+        /** Create Page */
+        post: operations["create_page_api_v1_admin_page_builder_pages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/page-builder/pages/{page_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Page */
+        get: operations["get_page_api_v1_admin_page_builder_pages__page_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/page-builder/pages/{page_id}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Draft */
+        put: operations["update_draft_api_v1_admin_page_builder_pages__page_id__draft_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/page-builder/pages/{page_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Page */
+        post: operations["preview_page_api_v1_admin_page_builder_pages__page_id__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/page-builder/pages/{page_id}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Versions */
+        get: operations["list_versions_api_v1_admin_page_builder_pages__page_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/page-builder/pages/{page_id}/publish-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Publish Request */
+        post: operations["publish_request_api_v1_admin_page_builder_pages__page_id__publish_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/plugins": {
         parameters: {
             query?: never;
@@ -1267,7 +3360,7 @@ export interface paths {
         patch: operations["update_plugin_state_api_v1_admin_plugins__key__state_patch"];
         trace?: never;
     };
-    "/api/v1/admin/publication": {
+    "/api/v1/admin/publication/targets": {
         parameters: {
             query?: never;
             header?: never;
@@ -1275,10 +3368,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Publications Admin
-         * @description List publications (most recent first), optionally filtered by target.
+         * List Targets
+         * @description List configured publication targets (credentials redacted).
          */
-        get: operations["list_publications_admin_api_v1_admin_publication_get"];
+        get: operations["list_targets_api_v1_admin_publication_targets_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1307,7 +3400,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/publication/targets": {
+    "/api/v1/admin/publication": {
         parameters: {
             query?: never;
             header?: never;
@@ -1315,10 +3408,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Targets
-         * @description List configured publication targets (credentials redacted).
+         * List Publications Admin
+         * @description List publications (most recent first), optionally filtered by target.
          */
-        get: operations["list_targets_api_v1_admin_publication_targets_get"];
+        get: operations["list_publications_admin_api_v1_admin_publication_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1415,109 +3508,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/releases": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Release */
-        post: operations["create_release_api_v1_admin_releases_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/releases/{release_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Admin Release */
-        get: operations["get_admin_release_api_v1_admin_releases__release_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/releases/{release_id}/publish": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Publish Admin Release */
-        post: operations["publish_admin_release_api_v1_admin_releases__release_id__publish_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/releases/{release_id}/ready": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Ready Admin Release */
-        post: operations["ready_admin_release_api_v1_admin_releases__release_id__ready_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/releases/{release_id}/rollback": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Rollback Admin Release */
-        post: operations["rollback_admin_release_api_v1_admin_releases__release_id__rollback_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/releases/{release_id}/validate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Validate Admin Release */
-        post: operations["validate_admin_release_api_v1_admin_releases__release_id__validate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/seed-requests": {
+    "/api/v1/admin/imports": {
         parameters: {
             query?: never;
             header?: never;
@@ -1525,10 +3516,70 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List seed requests (seed manager)
-         * @description Paginated admin listing with an optional status filter.
+         * List Imports
+         * @description Paginated list of import tasks with optional filters (administrator-only).
          */
-        get: operations["list_seed_requests_api_v1_admin_seed_requests_get"];
+        get: operations["list_imports_api_v1_admin_imports_get"];
+        put?: never;
+        /**
+         * Create Import
+         * @description Create a new import task and dispatch it to Celery (administrator-only).
+         *
+         *     Request body::
+         *
+         *         {
+         *             "filename": "expression_data.csv",
+         *             "type": "expression_csv",
+         *             "file_path": "s3://bucket/path/to/file.csv",
+         *             "submitted_by": "user@example.com"
+         *         }
+         */
+        post: operations["create_import_api_v1_admin_imports_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/{import_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Import
+         * @description Get a single import task detail (administrator-only).
+         */
+        get: operations["get_import_api_v1_admin_imports__import_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Import
+         * @description Cancel and delete an import task (administrator-only).
+         *
+         *     If the task is still running, the associated Celery task is revoked.
+         */
+        delete: operations["delete_import_api_v1_admin_imports__import_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/{import_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Import Status
+         * @description Get the live status of an import task, including Celery task state
+         *     (administrator-only).
+         */
+        get: operations["get_import_status_api_v1_admin_imports__import_id__status_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1537,7 +3588,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/seed-requests/{request_id}": {
+    "/api/v1/admin/imports/uploads/multipart": {
         parameters: {
             query?: never;
             header?: never;
@@ -1546,15 +3597,267 @@ export interface paths {
         };
         get?: never;
         put?: never;
+        /** Start Multipart Upload */
+        post: operations["start_multipart_upload_api_v1_admin_imports_uploads_multipart_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/uploads/multipart/{upload_id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finish Multipart Upload */
+        post: operations["finish_multipart_upload_api_v1_admin_imports_uploads_multipart__upload_id__complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/{import_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Import
+         * @description Retry a failed import: reset status, clear error, re-dispatch Celery
+         *     task (administrator-only).
+         */
+        post: operations["retry_import_api_v1_admin_imports__import_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/studio/dataset-versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Dataset Versions */
+        get: operations["list_dataset_versions_api_v1_admin_imports_studio_dataset_versions_get"];
+        put?: never;
+        /**
+         * Create Dataset Version
+         * @description Record immutable raw-object metadata before any editing begins.
+         */
+        post: operations["create_dataset_version_api_v1_admin_imports_studio_dataset_versions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/studio/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Drafts
+         * @description List persisted Import Studio drafts for dashboard resume only.
+         *
+         *     This endpoint never creates or validates a draft and exposes no mutable
+         *     source metadata, so dashboard discovery cannot fabricate an import source.
+         */
+        get: operations["list_drafts_api_v1_admin_imports_studio_drafts_get"];
+        put?: never;
+        /**
+         * Create Draft
+         * @description Create an editing draft from an immutable dataset version.
+         */
+        post: operations["create_draft_api_v1_admin_imports_studio_drafts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/studio/drafts/{draft_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Draft */
+        get: operations["get_draft_api_v1_admin_imports_studio_drafts__draft_id__get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/studio/drafts/{draft_id}/mapping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Mapping */
+        put: operations["update_mapping_api_v1_admin_imports_studio_drafts__draft_id__mapping_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/studio/drafts/{draft_id}/patches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add Patches */
+        post: operations["add_patches_api_v1_admin_imports_studio_drafts__draft_id__patches_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/studio/drafts/{draft_id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate Draft */
+        post: operations["validate_draft_api_v1_admin_imports_studio_drafts__draft_id__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/studio/drafts/{draft_id}/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
         /**
-         * Update a seed request status (seed manager)
-         * @description Advance a request's status (pending → approved/rejected → fulfilled).
+         * Commit Draft
+         * @description Atomically commit a validated draft and create publication evidence.
          */
-        patch: operations["update_seed_request_api_v1_admin_seed_requests__request_id__patch"];
+        post: operations["commit_draft_api_v1_admin_imports_studio_drafts__draft_id__commit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/studio/drafts/{draft_id}/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Manifest */
+        get: operations["get_manifest_api_v1_admin_imports_studio_drafts__draft_id__manifest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/modules/{module_key}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inspect Module
+         * @description Return a bounded validation preview without persistence or execution.
+         */
+        post: operations["inspect_module_api_v1_admin_modules__module_key__validate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/modules/{module_key}/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inspect Module
+         * @description Return a bounded validation preview without persistence or execution.
+         */
+        post: operations["inspect_module_api_v1_admin_modules__module_key__inspect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/modules/{module_key}/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download Module Template
+         * @description Download a starter template for a module schema.
+         *
+         *     ``format`` is one of ``tsv`` / ``txt`` / ``csv`` / ``xlsx`` (default
+         *     ``tsv``).  ``xlsx`` returns a binary workbook; the text formats return
+         *     plain text with the matching media type and ``Content-Disposition``.
+         */
+        get: operations["download_module_template_api_v1_admin_modules__module_key__template_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/settings/schema": {
@@ -1571,6 +3874,26 @@ export interface paths {
         get: operations["get_settings_schema_api_v1_admin_settings_schema_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/settings/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate Settings
+         * @description Validate and normalize a partial settings document without persisting it.
+         */
+        post: operations["validate_settings_api_v1_admin_settings_validate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1601,20 +3924,20 @@ export interface paths {
         patch: operations["patch_admin_site_brand_api_v1_admin_settings_site_brand_patch"];
         trace?: never;
     };
-    "/api/v1/admin/settings/validate": {
+    "/api/v1/admin/settings/{section}/document": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
-         * Validate Settings
-         * @description Validate and normalize a partial settings document without persisting it.
+         * Get Settings Document
+         * @description Return typed live values with the version required by PATCH.
          */
-        post: operations["validate_settings_api_v1_admin_settings_validate_post"];
+        get: operations["get_settings_document_api_v1_admin_settings__section__document_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1659,26 +3982,6 @@ export interface paths {
         patch: operations["patch_settings_api_v1_admin_settings__section__patch"];
         trace?: never;
     };
-    "/api/v1/admin/settings/{section}/document": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Settings Document
-         * @description Return typed live values with the version required by PATCH.
-         */
-        get: operations["get_settings_document_api_v1_admin_settings__section__document_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/admin/settings/{section}/history": {
         parameters: {
             query?: never;
@@ -1714,6 +4017,94 @@ export interface paths {
          */
         post: operations["rollback_settings_api_v1_admin_settings__section__rollback_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/build-static": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trigger Build
+         * @description Trigger a static page generation job (administrator-only).
+         *
+         *     Request body::
+         *
+         *         {
+         *             "gene_ids": ["Glyma.01G000100", "Glyma.02G000200"] | null
+         *         }
+         *
+         *     If ``gene_ids`` is ``None``, all genes of the active published release
+         *     will be rebuilt; ``[]`` rebuilds nothing. The build is scoped to a
+         *     published release, so an installation without one is rejected (503)
+         *     instead of queueing work against an unreleased namespace.
+         */
+        post: operations["trigger_build_api_v1_admin_build_static_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/build-static/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Build Status
+         * @description Get the status of the most recent static page build
+         *     (administrator-only).
+         */
+        get: operations["get_build_status_api_v1_admin_build_static_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/table-views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Table View Templates */
+        get: operations["list_table_view_templates_api_v1_admin_table_views_get"];
+        put?: never;
+        /** Create Table View Template */
+        post: operations["create_table_view_template_api_v1_admin_table_views_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/table-views/{template_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Table View Template */
+        put: operations["update_table_view_template_api_v1_admin_table_views__template_id__put"];
+        post?: never;
+        /** Delete Table View Template */
+        delete: operations["delete_table_view_template_api_v1_admin_table_views__template_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1775,89 +4166,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/table-views": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Table View Templates */
-        get: operations["list_table_view_templates_api_v1_admin_table_views_get"];
-        put?: never;
-        /** Create Table View Template */
-        post: operations["create_table_view_template_api_v1_admin_table_views_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/table-views/{template_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Update Table View Template */
-        put: operations["update_table_view_template_api_v1_admin_table_views__template_id__put"];
-        post?: never;
-        /** Delete Table View Template */
-        delete: operations["delete_table_view_template_api_v1_admin_table_views__template_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/timeout-config": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Timeout Config
-         * @description Return the centralized timeout configuration (authenticated users).
-         *
-         *     These values are set in the backend ``Settings`` and are used by the
-         *     frontend API client to configure request timeouts.
-         */
-        get: operations["get_timeout_config_api_v1_admin_timeout_config_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/uploads/complete": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Complete Upload
-         * @description Verify the object bytes and register a reusable media asset.
-         *
-         *     The endpoint is intentionally separate from presign: an object is not
-         *     selectable in the CMS until the server has checked its bytes, digest, MIME
-         *     type and dimensions. Repeating the request is idempotent for the same key.
-         */
-        post: operations["complete_upload_api_v1_admin_uploads_complete_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/admin/uploads/presign": {
         parameters: {
             query?: never;
@@ -1885,79 +4193,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/admin/widgets": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Admin List Widgets
-         * @description List all widgets (including inactive) with pagination.
-         */
-        get: operations["admin_list_widgets_api_v1_admin_widgets_get"];
-        put?: never;
-        /**
-         * Admin Create Widget
-         * @description Create a new widget definition.
-         */
-        post: operations["admin_create_widget_api_v1_admin_widgets_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/widgets/health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Admin Widget Health
-         * @description Return widget system health metrics.
-         */
-        get: operations["admin_widget_health_api_v1_admin_widgets_health_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/widgets/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Admin Get Widget
-         * @description Get a single widget by name.
-         */
-        get: operations["admin_get_widget_api_v1_admin_widgets__name__get"];
-        /**
-         * Admin Update Widget
-         * @description Update a widget definition and invalidate its cache.
-         */
-        put: operations["admin_update_widget_api_v1_admin_widgets__name__put"];
-        post?: never;
-        /**
-         * Admin Delete Widget
-         * @description Deactivate a widget (soft delete via is_active flag) and invalidate cache.
-         */
-        delete: operations["admin_delete_widget_api_v1_admin_widgets__name__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/admin/widgets/{name}/preview": {
+    "/api/v1/admin/uploads/complete": {
         parameters: {
             query?: never;
             header?: never;
@@ -1967,960 +4203,14 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Admin Preview Widget
-         * @description Preview-render a widget with given parameters (bypasses cache).
-         */
-        post: operations["admin_preview_widget_api_v1_admin_widgets__name__preview_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/analyses": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Analysis Jobs
-         * @description List the current user's most recent analysis jobs (newest first).
+         * Complete Upload
+         * @description Verify the object bytes and register a reusable media asset.
          *
-         *     Only jobs owned by the caller are returned; anonymous/lower-role callers
-         *     get 401/403 through the unified error envelope.
+         *     The endpoint is intentionally separate from presign: an object is not
+         *     selectable in the CMS until the server has checked its bytes, digest, MIME
+         *     type and dimensions. Repeating the request is idempotent for the same key.
          */
-        get: operations["list_analysis_jobs_api_v1_analyses_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/analyses/uploads": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create Upload
-         * @description Request a pre-signed upload URL for an analysis input file.
-         *
-         *     Returns a POST action valid for 1 hour plus the object key the client must
-         *     send back at submit time.  Nothing is persisted yet.
-         */
-        post: operations["create_upload_api_v1_analyses_uploads_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/analyses/{analysis_type}/submit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Submit Analysis
-         * @description Submit an analysis job for the uploaded objects.
-         *
-         *     Validates that every input key belongs to the caller, checks the parameter
-         *     whitelist, then creates the job row + outbox event in one transaction.
-         */
-        post: operations["submit_analysis_api_v1_analyses__analysis_type__submit_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/analyses/{job_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Analysis Job
-         * @description Return the current status of an analysis job.
-         *
-         *     ``result`` is ``null`` until the job completes; completed jobs carry the
-         *     worker-written summary.
-         */
-        get: operations["get_analysis_job_api_v1_analyses__job_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/analyses/{job_id}/download": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Download Analysis Object
-         * @description Return a pre-signed GET URL for one of the job's own objects.
-         *
-         *     The key must live under ``analyses/{job_id}/``; anything outside that
-         *     prefix (including other jobs' objects) is rejected.
-         */
-        get: operations["download_analysis_object_api_v1_analyses__job_id__download_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/change-password": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Change Password
-         * @description Change the current user's password.
-         *
-         *     .. note::
-         *         **Admin password policy** — Administrator account passwords are set
-         *         **only** via the initial configuration (``SOYMUTDB_ADMIN_PASSWORD``
-         *         environment variable) or the ``create_admin.py`` CLI script.
-         *         There is **no** "forgot password" reset flow for administrator accounts.
-         *
-         *         Non-admin users can freely change their own password through this
-         *         endpoint. Administrators may also use it, but if they lock themselves
-         *         out the password must be reset by a system administrator using the
-         *         CLI script.
-         *
-         *     Server-side password strength validation is applied to the new password.
-         */
-        post: operations["change_password_api_v1_auth_change_password_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/login": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Login
-         * @description Authenticate and return an access token (refresh token via cookie).
-         *
-         *     Login attempts are limited through the shared Redis-backed fixed-window
-         *     limiter before credential verification. This keeps the limit consistent
-         *     across workers and instances without changing the authentication flow.
-         *
-         *     The refresh token is set as an HttpOnly cookie scoped to ``/api/v1/auth``
-         *     and is **not** included in the JSON response body.  Requests without a
-         *     trusted Origin/Referer are rejected (CSRF defence).
-         */
-        post: operations["login_api_v1_auth_login_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/logout": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Logout
-         * @description Logout: revoke the current refresh family and clear the cookie.
-         *
-         *     Requires a valid Bearer access token.  The refresh cookie (if present)
-         *     identifies the family to revoke; the response also expires the cookie on
-         *     the client.  Requests without a trusted Origin/Referer are rejected
-         *     (CSRF defence).
-         */
-        post: operations["logout_api_v1_auth_logout_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Me
-         * @description Return the currently authenticated user's profile.
-         *
-         *     Uses proper dependency injection via ``Depends(get_current_user)``.
-         */
-        get: operations["get_me_api_v1_auth_me_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/refresh": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Refresh Token
-         * @description Rotate the refresh cookie into a new access/refresh pair.
-         *
-         *     The presented refresh token is read **only** from the HttpOnly cookie
-         *     (path-scoped to ``/api/v1/auth``).  Rotation is server-side: the old
-         *     token is revoked and a replacement is issued in the same family.  A
-         *     previously rotated token presented again triggers reuse detection and
-         *     revokes the whole family.  Requests without a trusted Origin/Referer
-         *     are rejected (CSRF defence).
-         */
-        post: operations["refresh_token_api_v1_auth_refresh_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/auth/register": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Register
-         * @description Register a new user account (Argon2id password hashing).
-         *
-         *     Password strength is validated both client-side and server-side.
-         */
-        post: operations["register_api_v1_auth_register_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/blast/databases": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Blast Databases
-         * @description List active BLAST databases in the resolved published release.
-         *
-         *     Database lives outside the release boundary: the list previously included
-         *     the databases of draft releases, whose underlying data is not published.
-         */
-        get: operations["list_blast_databases_api_v1_blast_databases_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/blast/index-builds": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create Blast Index Build
-         * @description Request an immutable NCBI index build (admin only).
-         *
-         *     Records the catalog/build rows and one transactional-outbox event in a
-         *     single transaction. ``makeblastdb`` never runs inside this HTTP request;
-         *     the worker on the ``blast`` queue owns construction and publication.
-         */
-        post: operations["create_blast_index_build_api_v1_blast_index_builds_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/blast/index-builds/{build_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Blast Index Build
-         * @description Poll one build's state; no filesystem path or binary name is exposed.
-         */
-        get: operations["get_blast_index_build_api_v1_blast_index_builds__build_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/blast/jobs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Blast Jobs
-         * @description List the current user's BLAST jobs, newest first.
-         */
-        get: operations["list_blast_jobs_api_v1_blast_jobs_get"];
-        put?: never;
-        /**
-         * Submit Blast Job
-         * @description Submit a BLAST job (requires researcher role or higher).
-         *
-         *     The target database is resolved inside the published release, so a job can
-         *     never search another release's (including unreleased) database.
-         */
-        post: operations["submit_blast_job_api_v1_blast_jobs_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/blast/jobs/{job_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Blast Job
-         * @description Check BLAST job status.
-         */
-        get: operations["get_blast_job_api_v1_blast_jobs__job_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/blast/jobs/{job_id}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Cancel Blast Job
-         * @description Cancel a pending/running BLAST job owned by the caller.
-         *
-         *     The worker re-checks the row before launching the aligner, so a queued
-         *     Celery message that arrives after cancellation cannot start a search.
-         */
-        post: operations["cancel_blast_job_api_v1_blast_jobs__job_id__cancel_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/blast/jobs/{job_id}/hits/{subject_id}/genome-target": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Blast Hit Genome Target
-         * @description Resolve a subject to a gene locus in the job's release/assembly.
-         *
-         *     Never derives genomic coordinates from amino-acid alignment positions.
-         *     An unresolved subject returns an explicit reason and no locus.
-         */
-        get: operations["get_blast_hit_genome_target_api_v1_blast_jobs__job_id__hits__subject_id__genome_target_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/blast/jobs/{job_id}/results": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Blast Results
-         * @description Retrieve BLAST results for a job (status-aware envelope).
-         *
-         *     Returns ``hits=None`` for pending/running/failed jobs; only completed
-         *     jobs carry a hit list (empty means a genuine zero-hit result).
-         */
-        get: operations["get_blast_results_api_v1_blast_jobs__job_id__results_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/blast/jobs/{job_id}/retry": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Retry Blast Job
-         * @description Re-dispatch a failed BLAST job with its original frozen provenance.
-         */
-        post: operations["retry_blast_job_api_v1_blast_jobs__job_id__retry_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/blast/public/jobs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Submit Public Blast Job
-         * @description Submit an explicitly anonymous job, even when a bearer session is present.
-         *
-         *     Save the returned capability and send it as X-Blast-Token when polling.
-         *     There is no public listing. Publication/release validation and execution
-         *     reuse the same service, outbox and worker as private jobs.
-         */
-        post: operations["submit_public_blast_job_api_v1_blast_public_jobs_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/blast/public/jobs/{job_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Public Blast Job */
-        get: operations["get_public_blast_job_api_v1_blast_public_jobs__job_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/blast/public/jobs/{job_id}/cancel": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Cancel Public Blast Job
-         * @description Anonymous capability holder may cancel only its own pending job.
-         */
-        post: operations["cancel_public_blast_job_api_v1_blast_public_jobs__job_id__cancel_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/blast/public/jobs/{job_id}/hits/{subject_id}/genome-target": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Public Blast Hit Genome Target */
-        get: operations["get_public_blast_hit_genome_target_api_v1_blast_public_jobs__job_id__hits__subject_id__genome_target_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/blast/public/jobs/{job_id}/results": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Public Blast Results */
-        get: operations["get_public_blast_results_api_v1_blast_public_jobs__job_id__results_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/capabilities": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Capabilities */
-        get: operations["get_capabilities_api_v1_capabilities_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/comparative/artifacts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Request Artifact
-         * @description Queue an alignment or tree for a family.
-         *
-         *     The response is the pending artifact, not a result: the aligner runs in the
-         *     worker through the shared outbox, and the finished object is fetched through
-         *     ``GET /comparative/artifacts/{job_id}``.
-         */
-        post: operations["request_artifact_api_v1_comparative_artifacts_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/comparative/artifacts/{job_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Artifact
-         * @description Status of an alignment/tree, with a pre-signed URL once it succeeded.
-         */
-        get: operations["get_artifact_api_v1_comparative_artifacts__job_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/comparative/families": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Families
-         * @description List gene families/subfamilies in the resolved release.
-         */
-        get: operations["list_families_api_v1_comparative_families_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/comparative/families/compare": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Compare Families
-         * @description Compare two families: shared members, and the members unique to each.
-         */
-        get: operations["compare_families_api_v1_comparative_families_compare_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/comparative/families/{family_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Family
-         * @description One family with its members and per-species coverage.
-         *
-         *     ``coverage`` names the species the family knows about; a species that
-         *     contributed no member is ``state="no_data"`` with ``member_count: null``,
-         *     never an empty member list that would read as "present but empty".
-         */
-        get: operations["get_family_api_v1_comparative_families__family_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/comparative/genes/{gene_id}/orthologs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Gene Orthologs
-         * @description Ortholog/paralog rows for one gene, with the relationship type stated.
-         *
-         *     ``relationship_type`` summarises how many counterparts the source recorded
-         *     per species. It is not derived from sequence similarity: this endpoint never
-         *     reads BLAST hits.
-         */
-        get: operations["get_gene_orthologs_api_v1_comparative_genes__gene_id__orthologs_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/content/downloads": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Downloads
-         * @description List downloadable files belonging to the resolved published release.
-         *
-         *     ``download_files.release_id`` is nullable, and the list previously selected
-         *     every row — including drafts and files not (yet) bound to any release. Both
-         *     are excluded here, so a file only appears once its release is published.
-         */
-        get: operations["list_downloads_api_v1_content_downloads_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/content/downloads/{file_id}/url": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Download Url
-         * @description Generate a download URL for a file in the resolved published release.
-         *
-         *     The file must be bound to the resolved release: an id from a draft release
-         *     (or an unbound row) is not a valid locator. If the stored location is an S3
-         *     path a pre-signed URL is minted; a plain HTTP(S) location is returned
-         *     as-is; anything else is refused rather than handed to the client as a
-         *     download target.
-         */
-        get: operations["get_download_url_api_v1_content_downloads__file_id__url_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/content/news": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List News
-         * @description List published news articles.
-         */
-        get: operations["list_news_api_v1_content_news_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/content/news/{slug}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get News */
-        get: operations["get_news_api_v1_content_news__slug__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/content/pages": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Pages
-         * @description List published static pages.
-         */
-        get: operations["list_pages_api_v1_content_pages_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/content/pages/{slug}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Page */
-        get: operations["get_page_api_v1_content_pages__slug__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/content/publications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Publications
-         * @description List publications.
-         */
-        get: operations["list_publications_api_v1_content_publications_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/content/publications/{doi}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Publication
-         * @description Get one publication by its DOI.
-         *
-         *     ``doi`` is the publication's own scholarly identifier (it contains ``/``, so
-         *     the route uses a path converter). The persistence key is not a locator: a
-         *     numeric value returns the same not-found response as an unknown DOI, so the
-         *     endpoint is not an existence oracle for internal ids.
-         */
-        get: operations["get_publication_api_v1_content_publications__doi__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/content/snapshot": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Content Snapshot
-         * @description Public content snapshot for static builds (E2-2).
-         *
-         *     Frozen contract in ``docs/design/static-content-richtext-2026-08.md``
-         *     §4.1: schema_version/generated_at/news{source_total,included_total,
-         *     truncated,items}/news_detail{slug: detail|null}/about/publications.
-         *
-         *     Release-aware: pass ``release_id`` (and optionally
-         *     ``page_definition_version``) to build an immutable, release-pinned
-         *     snapshot whose cache key differs by release.  Without an explicit
-         *     ``release_id`` the mutable active-release alias is served, for interactive
-         *     public reads only.
-         *
-         *     Aggregation is cached in Redis for 60 s (cache.py); the response carries
-         *     an ETag so build-time fetchers can short-circuit with 304.
-         */
-        get: operations["content_snapshot_api_v1_content_snapshot_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/expression/genes/{gene_id}/expression": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Gene Expression
-         * @description Get a bounded, keyset-paginated expression slice for a gene.
-         *
-         *     ``gene_id`` is the assembly-scoped accession; when it exists in multiple
-         *     assemblies within the published release, ``assembly_id`` is required.
-         *     ``library`` accepts the public sample identifier. The cursor is opaque and
-         *     bound to the release and every filter, so it cannot be replayed against a
-         *     different release or filter set.
-         *
-         *     Complete data exports must use the asynchronous export path rather than
-         *     materialising every matching library in an API worker.
-         */
-        get: operations["get_gene_expression_api_v1_expression_genes__gene_id__expression_get"];
-        put?: never;
-        post?: never;
+        post: operations["complete_upload_api_v1_admin_uploads_complete_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2974,6 +4264,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/expression/genes/{gene_id}/expression": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Gene Expression
+         * @description Get a bounded, keyset-paginated expression slice for a gene.
+         *
+         *     ``gene_id`` is the assembly-scoped accession; when it exists in multiple
+         *     assemblies within the published release, ``assembly_id`` is required.
+         *     ``library`` accepts the public sample identifier. The cursor is opaque and
+         *     bound to the release and every filter, so it cannot be replayed against a
+         *     different release or filter set.
+         *
+         *     Complete data exports must use the asynchronous export path rather than
+         *     materialising every matching library in an API worker.
+         */
+        get: operations["get_gene_expression_api_v1_expression_genes__gene_id__expression_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/expression/search": {
         parameters: {
             query?: never;
@@ -2990,297 +4309,6 @@ export interface paths {
          *     share that gene's assembly.
          */
         get: operations["search_expression_api_v1_expression_search_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/genes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Genes
-         * @description List genes with cursor pagination or the portal's page contract.
-         */
-        get: operations["list_genes_api_v1_genes_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/genes/assemblies": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Assemblies
-         * @description List only genome assemblies in the resolved published release.
-         *
-         *     Read-hot query cached in Redis (default TTL) via cache-aside; a Redis
-         *     failure degrades to a direct query.  An empty assembly list is cached as
-         *     well (short-circuit for a freshly seeded database) — that empty-result
-         *     caching is the anti-cache-penetration behaviour shared by every
-         *     ``get_or_set`` call site: once a loader result (even an empty one) is
-         *     stored, repeated requests no longer hit the database until the TTL
-         *     expires.
-         */
-        get: operations["list_assemblies_api_v1_genes_assemblies_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/genes/assemblies/{assembly_id}/chromosomes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Chromosomes
-         * @description List chromosomes only when the assembly belongs to this release.
-         */
-        get: operations["list_chromosomes_api_v1_genes_assemblies__assembly_id__chromosomes_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/genes/region-structure": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Region Structure
-         * @description Every gene in a coordinate window, with its modelled structure.
-         *
-         *     This is what the portal's own genome view needs in order to show a locus
-         *     rather than a gene: the genes that overlap the window, each with its
-         *     transcripts and their typed ``cds`` / ``utr5`` / ``utr3`` segments. Before
-         *     this endpoint the only genome picture the API could produce was centred on
-         *     one gene (``/{gene_id}/genome-view.svg``), so "what surrounds this insertion
-         *     site" had no answer.
-         *
-         *     Declared **before** ``/{gene_id}`` on purpose: FastAPI matches routes in
-         *     declaration order, and the parameterised route would otherwise swallow
-         *     ``region-structure`` as a gene accession and 404.
-         */
-        get: operations["get_region_structure_api_v1_genes_region_structure_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/genes/{gene_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Gene
-         * @description Get gene detail with transcripts and aliases.
-         *
-         *     ``gene_id`` is the assembly-scoped accession. When it exists in
-         *     multiple assemblies, ``assembly_id`` is required; the API returns an
-         *     explicit disambiguation error otherwise.
-         *
-         *     Domain errors (e.g. ``NotFoundError``) propagate to the error envelope;
-         *     unexpected exceptions are converted to a 500 HTTP error so the client
-         *     always receives a structured response.
-         */
-        get: operations["get_gene_api_v1_genes__gene_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/genes/{gene_id}/genome-view.svg": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Gene Genome View
-         * @description Serve the gene's genome picture as a finished SVG.
-         *
-         *     Rendering this on the server removes the track layout from first paint and
-         *     turns the picture into an ordinary cacheable image: the browser (and any
-         *     shared cache) can reuse it across visits, and the gene page still shows a
-         *     picture before its JavaScript has run.
-         *
-         *     Window defaults to the gene body plus a quarter-span flank, matching the
-         *     portal component. ``start``/``end`` override it for a zoomed request.
-         */
-        get: operations["get_gene_genome_view_api_v1_genes__gene_id__genome_view_svg_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/gwas/submit": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Submit Gwas Job
-         * @description Submit a GWAS job for the uploaded inputs.
-         *
-         *     Validates the ``gwas/`` key namespace, the phenotype file format, the
-         *     method whitelist and the parameter whitelist, then creates the job row +
-         *     outbox event in one transaction (pending).
-         */
-        post: operations["submit_gwas_job_api_v1_gwas_submit_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/gwas/uploads": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create Upload
-         * @description Request a pre-signed upload URL for a GWAS input file.
-         *
-         *     Returns a PUT URL valid for 1 hour plus the object key the client must
-         *     send back at submit time.  Nothing is persisted yet.
-         */
-        post: operations["create_upload_api_v1_gwas_uploads_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/gwas/{job_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Gwas Job
-         * @description Return the current status of a GWAS job.
-         *
-         *     ``result`` is ``null`` until the job completes; completed jobs carry the
-         *     worker-written summary (MinIO object keys + association statistics).
-         */
-        get: operations["get_gwas_job_api_v1_gwas__job_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/gwas/{job_id}/results": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Gwas Results
-         * @description Return pre-signed download URLs for a completed GWAS job's outputs.
-         *
-         *     Non-completed jobs return no URLs (status-aware envelope); completed jobs
-         *     expose the Manhattan data JSON, the QQ data JSON and the self-contained
-         *     ``Manhattan_QQ.html`` report.
-         */
-        get: operations["get_gwas_results_api_v1_gwas__job_id__results_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/health/live": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Liveness
-         * @description Liveness probe – always returns 200 if the process is alive.
-         */
-        get: operations["liveness_api_v1_health_live_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/health/ready": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Readiness
-         * @description Readiness probe with baseline and extended dependency semantics.
-         *
-         *     Baseline gates PostgreSQL only; extended also gates the Redis broker.
-         */
-        get: operations["readiness_api_v1_health_ready_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3338,7 +4366,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/jobs/events": {
+    "/api/v1/comparative/families": {
         parameters: {
             query?: never;
             header?: never;
@@ -3346,20 +4374,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Job Events
-         * @description Stream job status updates as Server-Sent Events.
-         *
-         *     Event format (one per updated job)::
-         *
-         *         event: job_update
-         *         data: {"job_type": "blast", "job_id": "...", "status": "running",
-         *                "updated_at": "2026-08-09T12:00:00+00:00"}
-         *
-         *     When no job changed in the last poll cycle a ``: ping`` heartbeat
-         *     comment line is emitted instead.  The stream ends when the client
-         *     disconnects.
+         * List Families
+         * @description List gene families/subfamilies in the resolved release.
          */
-        get: operations["job_events_api_v1_jobs_events_get"];
+        get: operations["list_families_api_v1_comparative_families_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3368,7 +4386,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/layout/{page}": {
+    "/api/v1/comparative/families/{family_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3376,40 +4394,58 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Layout
-         * @description Return the ordered list of active, public widget descriptors for *page*.
-         */
-        get: operations["get_layout_api_v1_layout__page__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/mutants": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Mutant Lines
-         * @description List public mutant lines from the active published release.
+         * Get Family
+         * @description One family with its members and per-species coverage.
          *
-         *     ``mutagen`` keeps its historical *exact* match semantics. ``q`` is an
-         *     additive free-text filter that matches a case-insensitive substring of
-         *     the public identifier, the name, the cultivar or the mutagen; it narrows
-         *     the very same release-scoped, public-only candidate set and never widens
-         *     it.
+         *     ``coverage`` names the species the family knows about; a species that
+         *     contributed no member is ``state="no_data"`` with ``member_count: null``,
+         *     never an empty member list that would read as "present but empty".
+         */
+        get: operations["get_family_api_v1_comparative_families__family_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comparative/families/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Compare Families
+         * @description Compare two families: shared members, and the members unique to each.
+         */
+        get: operations["compare_families_api_v1_comparative_families_compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comparative/genes/{gene_id}/orthologs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Gene Orthologs
+         * @description Ortholog/paralog rows for one gene, with the relationship type stated.
          *
-         *     Both filters leave the response shape untouched: the endpoint still
-         *     answers with a plain ``list[MutantLineResponse]`` (no envelope), so the
-         *     existing clients keep working.
+         *     ``relationship_type`` summarises how many counterparts the source recorded
+         *     per species. It is not derived from sequence similarity: this endpoint never
+         *     reads BLAST hits.
          */
-        get: operations["list_mutant_lines_api_v1_mutants_get"];
+        get: operations["get_gene_orthologs_api_v1_comparative_genes__gene_id__orthologs_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3418,140 +4454,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/mutants/{public_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Mutant Line
-         * @description Get a public mutant line by its public identifier.
-         *
-         *     Any value that does not correspond to a visible public record yields
-         *     the same not-found response — including existing internal identifiers.
-         */
-        get: operations["get_mutant_line_api_v1_mutants__public_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/mutants/{public_id}/phenotypes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Phenotypes
-         * @description List phenotypes for a public mutant line in the active release.
-         */
-        get: operations["get_phenotypes_api_v1_mutants__public_id__phenotypes_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/news": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List News
-         * @description Paginated public news list (published only).
-         */
-        get: operations["list_news_api_v1_news_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/news/featured": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Featured News
-         * @description Homepage block: 5 featured articles + carousel groups.
-         *
-         *     Read-hot query cached in Redis with a short TTL (60s, content changes
-         *     frequently); a Redis failure degrades to a direct query.
-         */
-        get: operations["featured_news_api_v1_news_featured_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/news/{slug}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get News
-         * @description Article detail.
-         *
-         *     Published + visible articles are public.  Draft/hidden articles return a
-         *     valid HMAC preview token URL from the admin endpoint
-         *     (``/admin/news/{id}/preview-token``) and are then accessible with
-         *     ``?preview=<token>&exp=<ts>`` without login.
-         */
-        get: operations["get_news_api_v1_news__slug__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/notifications": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Notifications
-         * @description List the caller's notifications, unread first, newest first.
-         *
-         *     ``total`` / ``unread_count`` reflect the full set (not just the page).
-         */
-        get: operations["list_notifications_api_v1_notifications_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/notifications/read": {
+    "/api/v1/comparative/artifacts": {
         parameters: {
             query?: never;
             header?: never;
@@ -3561,19 +4464,21 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Mark Notifications Read
-         * @description Mark a subset (``ids``) or all (``all``) notifications as read.
+         * Request Artifact
+         * @description Queue an alignment or tree for a family.
          *
-         *     ``ids`` are always scoped to the caller; foreign ids are ignored.
+         *     The response is the pending artifact, not a result: the aligner runs in the
+         *     worker through the shared outbox, and the finished object is fetched through
+         *     ``GET /comparative/artifacts/{job_id}``.
          */
-        post: operations["mark_notifications_read_api_v1_notifications_read_post"];
+        post: operations["request_artifact_api_v1_comparative_artifacts_post"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/notifications/unread-count": {
+    "/api/v1/comparative/artifacts/{job_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -3581,10 +4486,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Unread Count
-         * @description Return the caller's unread notification count (bell badge).
+         * Get Artifact
+         * @description Status of an alignment/tree, with a pre-signed URL once it succeeded.
          */
-        get: operations["get_unread_count_api_v1_notifications_unread_count_get"];
+        get: operations["get_artifact_api_v1_comparative_artifacts__job_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3593,7 +4498,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/ontology/graph": {
+    "/api/v1/admin/analytics/summary": {
         parameters: {
             query?: never;
             header?: never;
@@ -3601,221 +4506,29 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Relationship Graph
-         * @description Read a one-hop OLS4 relationship graph with strict node and edge caps.
-         */
-        get: operations["relationship_graph_api_v1_ontology_graph_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/ontology/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Search
-         * @description Search public ontology terms without persisting or executing anything.
-         */
-        get: operations["search_api_v1_ontology_search_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/ontology/term": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Term
-         * @description Read one bounded ontology term by IRI.
-         */
-        get: operations["term_api_v1_ontology_term_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/page-definitions/published-routes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Published Routes
-         * @description Return only published, SSG-safe routes with their minimal public payload.
-         */
-        get: operations["get_published_routes_api_v1_page_definitions_published_routes_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/page-definitions/{route}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Page Definition
-         * @description Return a published definition for *route* (optionally pinned version).
-         */
-        get: operations["get_page_definition_api_v1_page_definitions__route__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/preview/test-data/genes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Preview Genes
-         * @description Find exact GFF gene accessions within the local v6 draft release.
-         */
-        get: operations["preview_genes_api_v1_preview_test_data_genes_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/preview/test-data/meta": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Preview Meta
-         * @description Describe the local, unpublished v6 sample and its coordinate space.
-         */
-        get: operations["preview_meta_api_v1_preview_test_data_meta_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/preview/test-data/mutation-sites": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Preview Mutation Sites
-         * @description Find source mutation-site records by a 1-based inclusive interval.
-         */
-        get: operations["preview_mutation_sites_api_v1_preview_test_data_mutation_sites_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/preview/test-data/mutation-sites/by-gene": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Preview Mutation Sites For Gene
-         * @description Return the source mutation-site rows attached to one exact gene ID.
+         * Analytics Summary
+         * @description Aggregate visit metrics for the administrator dashboard.
          *
-         *     The catalogue's result tables use this so a searched gene shows the
-         *     operator's own table rows, including the up/downstream ones that a
-         *     coordinate-interval query would miss.
-         */
-        get: operations["preview_mutation_sites_for_gene_api_v1_preview_test_data_mutation_sites_by_gene_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/preview/test-data/mutation-sites/{source_site_key}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Preview Update Mutation Site
-         * @description Update the operator-editable fields of one source mutation-site row.
+         *     Returns event totals, unique sessions, breakdowns by event type, by
+         *     canonical route template and by referrer category, and a daily count
+         *     series.
          *
-         *     `available` is the only field the operator maintains by hand; the rest of
-         *     the row is the uploaded table's content and is replaced on the next import.
-         *     A re-import carries the stored `available` value forward.
-         */
-        patch: operations["preview_update_mutation_site_api_v1_preview_test_data_mutation_sites__source_site_key__patch"];
-        trace?: never;
-    };
-    "/api/v1/releases": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Releases
-         * @description List database releases.
+         *     Every label is a fixed constant of this API and never caller data: a route
+         *     template such as ``/mutants/:publicId`` or ``/other``, one of the four
+         *     referrer categories (``direct``, ``search``, ``social``, ``other``), a
+         *     finite event type, or a ``YYYY-MM-DD`` day. Free-text search terms are
+         *     neither queried nor returned, so ``top_searches`` is always empty and
+         *     ``top_searches_available`` is always ``false``.
          *
-         *     Read-hot query cached in Redis (default TTL) keyed by ``status``; a
-         *     Redis failure degrades to a direct query.
+         *     Each section carries an ``*_available`` flag, which is ``false`` when the
+         *     analytics store could not be read: an unavailable store is therefore never
+         *     displayed as a window with no traffic. A referrer category describes a
+         *     client-supplied header hint, not a verified traffic source, and unique
+         *     sessions count opaque cookie sessions, not people.
+         *
+         *     Administrator-only, and the response is ``private, no-store``.
          */
-        get: operations["list_releases_api_v1_releases_get"];
+        get: operations["analytics_summary_api_v1_admin_analytics_summary_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3824,7 +4537,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/releases/active": {
+    "/api/v1/site/branding": {
         parameters: {
             query?: never;
             header?: never;
@@ -3832,256 +4545,16 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Active Release
-         * @description Report the release the public surface currently serves.
-         *
-         *     Declared before ``/{release_id}`` so the literal path is not captured by
-         *     the id route. Reads the same ``active_release`` singleton that
-         *     ``services.release_context.resolve_release_context`` resolves against — this
-         *     endpoint adds no second source of truth, only a way for a client to
-         *     notice a switch that happened after its page was built.
-         *
-         *     Returns an empty response (both fields null) before the first publish;
-         *     that is an answer, not an error.
+         * Get Site Branding
+         * @description Return a bilingual brand snapshot for one explicit site artifact.
          */
-        get: operations["get_active_release_api_v1_releases_active_get"];
+        get: operations["get_site_branding_api_v1_site_branding_get"];
         put?: never;
         post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/api/v1/releases/{release_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Release */
-        get: operations["get_release_api_v1_releases__release_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/search": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Global search across the SoyMutDB catalogue
-         * @description Search the published SoyMutDB catalogue.
-         *
-         *     Federated external search (NCBI / UniProt / Ensembl / EMBL-EBI) is retired
-         *     permanently: the ``sources`` parameter, the ``format``/``Accept`` content
-         *     negotiation and the sanitized HTML-fragment response are all gone, so this
-         *     endpoint always answers with JSON catalogue results.
-         *
-         *     The release query/header pin is resolved through the published release
-         *     context dependency; draft and otherwise unavailable release ids are
-         *     rejected, and without a pin the active published release is selected.
-         */
-        get: operations["global_search_api_v1_search_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/search/internal": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Authorized internal search across public and internal identifiers
-         * @description Internal-site search: server-side authorized, audited, uncached.
-         *
-         *     Results carry both identities (public_id / internal_id) and the field
-         *     that matched. The shared search cache is deliberately bypassed so
-         *     authorized rows cannot leak into another scope, and the response is
-         *     marked ``private, no-store``.
-         */
-        get: operations["internal_search_api_v1_search_internal_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/search/suggest": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Suggest
-         * @description Autocomplete suggestions scoped to the requested published release.
-         */
-        get: operations["suggest_api_v1_search_suggest_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/seed-requests": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Submit a public seed request
-         * @description Submit a seed request contact (open to all; no authentication).
-         */
-        post: operations["create_seed_request_api_v1_seed_requests_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/seed-requests/stats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Public seed-request demand per gene (counts only)
-         * @description Report how many requests reference each gene ID.
-         *
-         *     Anonymous on purpose: the gene page renders "N requests" beside the seed
-         *     request entry as a demand signal. The payload is counts only — no requester
-         *     name, institution, email, timestamp or status ever leaves
-         *     ``/admin/seed-requests``, so this cannot be turned into an enumeration of
-         *     who asked for what.
-         */
-        get: operations["seed_request_stats_api_v1_seed_requests_stats_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/seeds/inventory": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Inventory
-         * @description List seed inventory for the resolved published release.
-         *
-         *     Rows are bound to a released mutant line; the previous version listed every
-         *     lot in the table, including drafts and other releases, and identified the
-         *     line by its internal key.
-         */
-        get: operations["list_inventory_api_v1_seeds_inventory_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/seeds/inventory/{seed_lot}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Inventory
-         * @description Get a seed lot by its public lot label within the published release.
-         *
-         *     The inventory row's persistence key is not a locator: a request for it (or
-         *     for a lot outside the release) returns the same not-found response.
-         */
-        get: operations["get_inventory_api_v1_seeds_inventory__seed_lot__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/seeds/requests": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Seed Requests
-         * @description List seed requests containing contact data (seed_manager only).
-         */
-        get: operations["list_seed_requests_api_v1_seeds_requests_get"];
-        put?: never;
-        /**
-         * Create Seed Request
-         * @description Submit a seed request (open to all).
-         *
-         *     The requested line is addressed by its public identifier and must exist in
-         *     the resolved published release; a numeric/internal value is refused.
-         */
-        post: operations["create_seed_request_api_v1_seeds_requests_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/seeds/requests/{request_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Update Seed Request
-         * @description Update a seed request status (requires seed_manager role).
-         */
-        patch: operations["update_seed_request_api_v1_seeds_requests__request_id__patch"];
         trace?: never;
     };
     "/api/v1/site/about": {
@@ -4104,7 +4577,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/site/branding": {
+    "/api/v1/site/home": {
         parameters: {
             query?: never;
             header?: never;
@@ -4112,10 +4585,30 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Get Site Branding
-         * @description Return a bilingual brand snapshot for one explicit site artifact.
+         * Get Home Content
+         * @description Return the variant-specific homepage welcome block.
          */
-        get: operations["get_site_branding_api_v1_site_branding_get"];
+        get: operations["get_home_content_api_v1_site_home_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/site/footer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Footer Content
+         * @description Return the variant-specific footer, with registered defaults.
+         */
+        get: operations["get_footer_content_api_v1_site_footer_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4153,38 +4646,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/site/footer": {
+    "/api/v1/capabilities": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /**
-         * Get Footer Content
-         * @description Return the variant-specific footer, with registered defaults.
-         */
-        get: operations["get_footer_content_api_v1_site_footer_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/site/home": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Home Content
-         * @description Return the variant-specific homepage welcome block.
-         */
-        get: operations["get_home_content_api_v1_site_home_get"];
+        /** Get Capabilities */
+        get: operations["get_capabilities_api_v1_capabilities_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4241,310 +4711,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/stats/chromosome-density": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Per-chromosome variant density
-         * @description Variant density per chromosome, aggregated from PostgreSQL.
-         *
-         *     ``density_per_kb`` is computed as ``variant_count / (length_bp / 1000)``.
-         *     Read-hot aggregation cached in Redis (default TTL) keyed by
-         *     ``release_id``; a Redis failure degrades to a direct aggregation.  Empty
-         *     results are cached too (anti-penetration): when no data exists the
-         *     loader returns ``[]`` which is memoised until the TTL expires instead of
-         *     re-running the aggregate per request.
-         */
-        get: operations["chromosome_density_summary_api_v1_stats_chromosome_density_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/stats/dashboard": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Dashboard Stats
-         * @description High-level database statistics for the resolved published release.
-         *
-         *     Read-hot aggregation cached in Redis (default TTL) via cache-aside;
-         *     a Redis failure degrades to a direct aggregation. The cache key carries the
-         *     release so one release's aggregate is never served for another.
-         */
-        get: operations["dashboard_stats_api_v1_stats_dashboard_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/stats/density": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Chromosome Density
-         * @description Variant density across a chromosome in the published release.
-         *
-         *     Density is computed entirely from the PostgreSQL ``variant_facts``
-         *     projection, so an unavailable projection is reported as
-         *     capability-unavailable (503). The response model also requires a concrete
-         *     ``chromosome_length``: fabricating ``0`` here would both violate the
-         *     contract and present an empty chromosome as a real result. The query is
-         *     bound to the resolved release, so bins can never mix drafts into a
-         *     published density.
-         */
-        get: operations["chromosome_density_api_v1_stats_density_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/stats/discovery-trend": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Cumulative variant discovery trend
-         * @description Cumulative variant counts across *published* releases.
-         *
-         *     Each published release contributes ``new_variants`` (= its recorded
-         *     ``variant_count``) and a running cumulative total. Draft and rolled-back
-         *     releases are excluded, and the trend is anchored on the resolved published
-         *     release rather than an arbitrary caller-supplied id.
-         */
-        get: operations["discovery_trend_api_v1_stats_discovery_trend_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/stats/homepage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Homepage statistics
-         * @description Aggregate statistics for the public home page. Variant counts come from the native PostgreSQL variant_facts projection, falling back to the variant_summaries table; other counts are real PostgreSQL aggregates. Empty results are returned as zeros.
-         */
-        get: operations["homepage_stats_api_v1_stats_homepage_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/stats/mutagens": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Mutant lines grouped by mutagen
-         * @description Number of mutant lines per mutagen, scoped to the published release.
-         */
-        get: operations["mutagen_statistics_api_v1_stats_mutagens_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/stats/releases": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Per-release statistics
-         * @description Statistics per *published* release (version, date, counts).
-         *
-         *     Public callers may only see releases that reached a published state:
-         *     previously the default (``only_active=false``) listed every release,
-         *     including drafts and rolled-back ones. A rollback is deliberately excluded
-         *     because its counts no longer describe the served data.
-         *
-         *     Read-hot query cached in Redis (default TTL); a Redis failure degrades to a
-         *     direct query. An empty release list is cached as well (anti-penetration) so
-         *     a freshly seeded database does not re-run the query on every request.
-         */
-        get: operations["release_statistics_api_v1_stats_releases_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/stats/summary/impact": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Variant counts by predicted impact
-         * @description Variant counts grouped by impact class, scoped to the published release.
-         */
-        get: operations["impact_summary_api_v1_stats_summary_impact_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/stats/summary/variant-types": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Variant type summary (name/value)
-         * @description Variant type distribution as ``[{name, value}]`` for charts.
-         *
-         *     Aggregated from the PostgreSQL ``variant_summaries`` table, scoped to the
-         *     resolved published release. Zero-count buckets are omitted so charts can
-         *     fall back to other data sources.
-         */
-        get: operations["variant_type_summary_api_v1_stats_summary_variant_types_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/stats/variant-types": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Variant Type Distribution
-         * @description Variant type distribution (SNP/INS/DEL/MNV/SV) for a published release.
-         *
-         *     The PostgreSQL variant aggregate is bound to the resolved release;
-         *     previously it scanned every release's facts.
-         */
-        get: operations["variant_type_distribution_api_v1_stats_variant_types_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/table-views/{kind}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Table View
-         * @description Resolve the ordered column layout for one portal table.
-         */
-        get: operations["get_table_view_api_v1_table_views__kind__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tools/allelefreq": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Allele Frequencies
-         * @description Per-variant allele frequencies for a locus / gene / interval.
-         */
-        post: operations["allele_frequencies_api_v1_tools_allelefreq_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tools/diversity": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Nucleotide Diversity
-         * @description Nucleotide diversity (π) and Watterson's θ for a gene / interval.
-         *
-         *     π = Σ 2·p·(1−p) over polymorphic sites, per base pair; θ = S / a_n is
-         *     reported when ``sample_size`` is provided.  Optional ``window_size``
-         *     (bp) returns per-window π for sliding-window plots.
-         */
-        post: operations["nucleotide_diversity_api_v1_tools_diversity_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v1/tools/enrichment": {
         parameters: {
             query?: never;
@@ -4590,62 +4756,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/tools/ld": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Compute Ld
-         * @description LD heatmap data: variant coordinates + r² matrix.
-         *
-         *     - Region/gene mode returns the variant coordinates in the interval
-         *       (from ``variant_facts``) together with ``r_squared: null`` when no
-         *       per-sample genotype data is available (the store only carries allele
-         *       frequencies).
-         *     - Inline ``genotypes`` mode (sample × variant dosage matrix) computes the
-         *       full pairwise r² matrix (squared Pearson correlation of dosages).
-         */
-        post: operations["compute_ld_api_v1_tools_ld_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tools/seqfetch": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Seqfetch
-         * @description Extract sequences for up to 200 gene IDs, or one chromosome interval.
-         *
-         *     - ``{"genes": ["Glyma.01G000100", ...]}`` – batch mode; unknown IDs are
-         *       skipped and reported in ``missing`` (never 404).
-         *     - ``{"assembly": "GmWm82.a2.v1", "region": "chr1:1000-2000"}`` – single
-         *       region mode.
-         *
-         *     Results larger than 10 MiB are stored in S3 and returned with a
-         *     pre-signed ``download_url`` (600 s) instead of inline FASTA.
-         */
-        post: operations["seqfetch_api_v1_tools_seqfetch_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tracks": {
+    "/api/v1/layout/{page}": {
         parameters: {
             query?: never;
             header?: never;
@@ -4653,233 +4764,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List Tracks
-         * @description List tracks (optionally filtered by assembly / category).
+         * Get Layout
+         * @description Return the ordered list of active, public widget descriptors for *page*.
          */
-        get: operations["list_tracks_api_v1_tracks_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tracks/categories": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Track Categories
-         * @description List track categories.
-         */
-        get: operations["list_track_categories_api_v1_tracks_categories_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tracks/jbrowse-config": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Jbrowse Config
-         * @description Return a release- and assembly-scoped JBrowse 2 configuration.
-         *
-         *     The release dependency accepts only a published release (or the active
-         *     published pointer).  ``assembly_id`` is intentionally required: an
-         *     assembly name is not a stable identity across release namespaces and must
-         *     never be used to select tracks.  Anonymous responses contain public tracks
-         *     only and may be shared; authenticated responses can include project/private
-         *     tracks and are therefore marked private and non-cacheable.
-         */
-        get: operations["get_jbrowse_config_api_v1_tracks_jbrowse_config_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tracks/{track_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Track
-         * @description Get track detail.
-         */
-        get: operations["get_track_api_v1_tracks__track_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/tracks/{track_id}/signed-url": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Signed Url
-         * @description Get a signed URL for a track file (RBAC-enforced).
-         *
-         *     Public tracks are accessible to any authenticated user.
-         *     Private/project tracks require ownership, ``track_manager``, or
-         *     ``administrator`` role.
-         *
-         *     The URL is a capability: it is always returned ``private, no-store`` so no
-         *     browser or proxy retains it.
-         */
-        get: operations["get_signed_url_api_v1_tracks__track_id__signed_url_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/variants": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Variants
-         * @description Search variants with filters and cursor pagination (limit ≤ 200).
-         *
-         *     The mutant-line filter takes a **public** identifier, resolved to the
-         *     fact's release-scoped line name. A persistence key or historical hash is
-         *     never accepted as a public identifier.
-         */
-        get: operations["list_variants_api_v1_variants_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/variants/export": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Export Variants
-         * @description Submit an asynchronous export job (vcf/tsv/csv/json/bed).
-         *
-         *     The job is bound to exactly one assembly namespace: a named assembly
-         *     wins, otherwise the resolved release's own assembly scope is used, and a
-         *     request with neither is refused. See ``filters.assembly`` for the exact
-         *     rule and its limits.
-         */
-        post: operations["export_variants_api_v1_variants_export_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/variants/export/{export_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Variant Export Status
-         * @description Return the state of one export (submitter or administrator only).
-         */
-        get: operations["get_variant_export_status_api_v1_variants_export__export_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/variants/export/{export_id}/download": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Variant Export Download
-         * @description Return a short-lived download link for a completed export.
-         */
-        get: operations["get_variant_export_download_api_v1_variants_export__export_id__download_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/variants/region": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Variants By Region
-         * @description Query variants in a genomic region (assembly is required).
-         */
-        get: operations["get_variants_by_region_api_v1_variants_region_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v1/variants/{variant_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Variant
-         * @description Get variant detail by ID.
-         */
-        get: operations["get_variant_api_v1_variants__variant_id__get"];
+        get: operations["get_layout_api_v1_layout__page__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4906,6 +4794,118 @@ export interface paths {
          */
         get: operations["render_widget_api_v1_widget__name__get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/widgets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin List Widgets
+         * @description List all widgets (including inactive) with pagination.
+         */
+        get: operations["admin_list_widgets_api_v1_admin_widgets_get"];
+        put?: never;
+        /**
+         * Admin Create Widget
+         * @description Create a new widget definition.
+         */
+        post: operations["admin_create_widget_api_v1_admin_widgets_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/widgets/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin Get Widget
+         * @description Get a single widget by name.
+         */
+        get: operations["admin_get_widget_api_v1_admin_widgets__name__get"];
+        /**
+         * Admin Update Widget
+         * @description Update a widget definition and invalidate its cache.
+         */
+        put: operations["admin_update_widget_api_v1_admin_widgets__name__put"];
+        post?: never;
+        /**
+         * Admin Delete Widget
+         * @description Deactivate a widget (soft delete via is_active flag) and invalidate cache.
+         */
+        delete: operations["admin_delete_widget_api_v1_admin_widgets__name__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/widgets/{name}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin Preview Widget
+         * @description Preview-render a widget with given parameters (bypasses cache).
+         */
+        post: operations["admin_preview_widget_api_v1_admin_widgets__name__preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/widgets/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin Widget Health
+         * @description Return widget system health metrics.
+         */
+        get: operations["admin_widget_health_api_v1_admin_widgets_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/layout/{page}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Admin Update Layout
+         * @description Create or update the widget layout for a page.
+         */
+        put: operations["admin_update_layout_api_v1_admin_layout__page__put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -11719,10 +11719,997 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    analytics_summary_api_v1_admin_analytics_summary_get: {
+    liveness_api_v1_health_live_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    readiness_api_v1_health_ready_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    register_api_v1_auth_register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    login_api_v1_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Rate limit exceeded; retry after the indicated number of seconds. */
+            429: {
+                headers: {
+                    /** @description Seconds until this login attempt may be retried. */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    refresh_token_api_v1_auth_refresh_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    logout_api_v1_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_me_api_v1_auth_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    change_password_api_v1_auth_change_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PasswordChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_assemblies_api_v1_genes_assemblies_get: {
         parameters: {
             query?: {
-                days?: number;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssemblyResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_chromosomes_api_v1_genes_assemblies__assembly_id__chromosomes_get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                assembly_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChromosomeResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_genes_api_v1_genes_get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                chromosome?: string | null;
+                biotype?: string | null;
+                search?: string | null;
+                q?: string | null;
+                cursor?: string | null;
+                limit?: number;
+                page?: number | null;
+                page_size?: number | null;
+                sort_by?: string;
+                sort_dir?: string;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeneListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_region_structure_api_v1_genes_region_structure_get: {
+        parameters: {
+            query: {
+                assembly_id: number;
+                chromosome: string;
+                start: number;
+                end: number;
+                /** @description Include CDS/UTR segments. False returns gene bodies only. */
+                include_parts?: boolean;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegionStructureResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_gene_api_v1_genes__gene_id__get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                gene_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GeneDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_gene_genome_view_api_v1_genes__gene_id__genome_view_svg_get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                width?: number;
+                start?: number | null;
+                end?: number | null;
+                include?: string;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                gene_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/svg+xml": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_upload_api_v1_gwas_uploads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GwasUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GwasUploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    submit_gwas_job_api_v1_gwas_submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GwasSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GwasJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_gwas_job_api_v1_gwas__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GwasJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_gwas_results_api_v1_gwas__job_id__results_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GwasResultResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    job_events_api_v1_jobs_events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    compute_ld_api_v1_tools_ld_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LdRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LdResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    nucleotide_diversity_api_v1_tools_diversity_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiversityRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiversityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    allele_frequencies_api_v1_tools_allelefreq_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AlleleFreqRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlleleFreqResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_meta_api_v1_preview_test_data_meta_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LocalTestPreviewMeta"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_genes_api_v1_preview_test_data_genes_get: {
+        parameters: {
+            query: {
+                gene_id: string;
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -11736,7 +12723,3842 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AnalyticsSummary"];
+                    "application/json": components["schemas"]["PreviewGeneSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_mutation_sites_api_v1_preview_test_data_mutation_sites_get: {
+        parameters: {
+            query: {
+                chromosome: string;
+                start: number;
+                end: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewMutationSiteSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_mutation_sites_for_gene_api_v1_preview_test_data_mutation_sites_by_gene_get: {
+        parameters: {
+            query: {
+                gene_id: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewMutationSiteItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_update_mutation_site_api_v1_preview_test_data_mutation_sites__source_site_key__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                source_site_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewMutationSiteUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewMutationSiteItem"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_variants_api_v1_variants_get: {
+        parameters: {
+            query?: {
+                assembly?: string | null;
+                chromosome?: string | null;
+                start?: number | null;
+                end?: number | null;
+                ref?: string | null;
+                alt?: string | null;
+                gene_id?: string | null;
+                /** @description Public mutant-line identifier (e.g. SM7QF3Z9P2A). Resolved server-side within the published release; internal ids are rejected. */
+                mutant_line_public_id?: string | null;
+                variant_type?: components["schemas"]["VariantType"] | null;
+                consequence?: components["schemas"]["ConsequenceType"] | null;
+                impact?: components["schemas"]["ImpactLevel"] | null;
+                min_af?: number | null;
+                max_af?: number | null;
+                cursor?: string | null;
+                limit?: number;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_variants_by_region_api_v1_variants_region_get: {
+        parameters: {
+            query: {
+                /** @description Assembly name (required) */
+                assembly: string;
+                chromosome: string;
+                start: number;
+                end: number;
+                max_results?: number;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_variant_api_v1_variants__variant_id__get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                variant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    export_variants_api_v1_variants_export_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportResponse"];
+                };
+            };
+            /** @description Validation Error. The export is refused and nothing is queued, either because the request body failed schema validation (field-level ``errors`` are listed) or because the request could not be bound to exactly one assembly namespace: no assembly was named and the resolved release declares no scope, the resolved assembly name is longer than the export record can store (at most 64 characters), or the resolved release publishes no variants in that assembly namespace. A domain refusal carries the unified envelope with ``error.code`` ``validation_error`` and no ``errors`` list. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_variant_export_status_api_v1_variants_export__export_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_variant_export_download_api_v1_variants_export__export_id__download_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportDownloadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    seqfetch_api_v1_tools_seqfetch_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeqFetchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeqFetchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    global_search_api_v1_search_get: {
+        parameters: {
+            query: {
+                query: string;
+                types?: components["schemas"]["SearchResultType"][] | null;
+                cursor?: string | null;
+                limit?: number;
+                assembly_id?: number | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlobalSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    suggest_api_v1_search_suggest_get: {
+        parameters: {
+            query: {
+                q: string;
+                limit?: number;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    internal_search_api_v1_search_internal_get: {
+        parameters: {
+            query: {
+                query: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InternalSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    dashboard_stats_api_v1_stats_dashboard_get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DashboardStats"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    homepage_stats_api_v1_stats_homepage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomepageStats"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    variant_type_distribution_api_v1_stats_variant_types_get: {
+        parameters: {
+            query?: {
+                assembly?: string | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantTypeDistribution"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    variant_type_summary_api_v1_stats_summary_variant_types_get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VariantTypeSummaryItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    impact_summary_api_v1_stats_summary_impact_get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImpactSummaryItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    chromosome_density_summary_api_v1_stats_chromosome_density_get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChromosomeDensitySummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    discovery_trend_api_v1_stats_discovery_trend_get: {
+        parameters: {
+            query?: {
+                days?: number;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiscoveryTrendPoint"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    release_statistics_api_v1_stats_releases_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    mutagen_statistics_api_v1_stats_mutagens_get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MutagenCount"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    chromosome_density_api_v1_stats_density_get: {
+        parameters: {
+            query: {
+                /** @description Assembly name (required) */
+                assembly: string;
+                chromosome: string;
+                bin_size?: number;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChromosomeDensity"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_blast_databases_api_v1_blast_databases_get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastDatabaseResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_blast_jobs_api_v1_blast_jobs_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    submit_blast_job_api_v1_blast_jobs_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlastSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_blast_job_api_v1_blast_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_blast_job_api_v1_blast_jobs__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    retry_blast_job_api_v1_blast_jobs__job_id__retry_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_blast_results_api_v1_blast_jobs__job_id__results_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastResultResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_blast_index_build_api_v1_blast_index_builds_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlastIndexBuildRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastIndexBuildResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_blast_index_build_api_v1_blast_index_builds__build_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                build_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastIndexBuildResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_blast_hit_genome_target_api_v1_blast_jobs__job_id__hits__subject_id__genome_target_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                subject_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastGenomeTargetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_public_blast_hit_genome_target_api_v1_blast_public_jobs__job_id__hits__subject_id__genome_target_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Blast-Token"?: string | null;
+            };
+            path: {
+                job_id: string;
+                subject_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastGenomeTargetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_public_blast_job_api_v1_blast_public_jobs__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Blast-Token"?: string | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    submit_public_blast_job_api_v1_blast_public_jobs_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlastSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicBlastSubmission"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_public_blast_job_api_v1_blast_public_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Blast-Token"?: string | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_public_blast_results_api_v1_blast_public_jobs__job_id__results_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                "X-Blast-Token"?: string | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastResultResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_analysis_jobs_api_v1_analyses_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysesJobListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_upload_api_v1_analyses_uploads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalysesUploadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysesUploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    submit_analysis_api_v1_analyses__analysis_type__submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                analysis_type: components["schemas"]["AnalysisType"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalysesSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysesSubmitResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_analysis_job_api_v1_analyses__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysesJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    download_analysis_object_api_v1_analyses__job_id__download_get: {
+        parameters: {
+            query: {
+                object_key: string;
+            };
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysesDownloadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_tracks_api_v1_tracks_get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                category_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_track_categories_api_v1_tracks_categories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_jbrowse_config_api_v1_tracks_jbrowse_config_get: {
+        parameters: {
+            query: {
+                /** @description Explicit assembly identity scoped to the selected release */
+                assembly_id: number;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_track_api_v1_tracks__track_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                track_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_signed_url_api_v1_tracks__track_id__signed_url_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                track_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignedUrlResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_releases_api_v1_releases_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["ReleaseStatus"] | null;
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_active_release_api_v1_releases_active_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActiveReleaseResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_release_api_v1_releases__release_id__get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path: {
+                release_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_mutant_lines_api_v1_mutants_get: {
+        parameters: {
+            query?: {
+                mutagen?: string | null;
+                q?: string | null;
+                offset?: number;
+                limit?: number;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MutantLineResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_mutant_line_api_v1_mutants__public_id__get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MutantLineDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_phenotypes_api_v1_mutants__public_id__phenotypes_get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PhenotypeResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_table_view_api_v1_table_views__kind__get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+                species?: string;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                kind: "mutation_sites" | "variants" | "genes" | "mutant_lines";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResolvedTableView"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_inventory_api_v1_seeds_inventory_get: {
+        parameters: {
+            query?: {
+                /** @description Public mutant-line identifier (e.g. SM7K3ZQ9P2AX). */
+                mutant_line_public_id?: string | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeedInventoryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_inventory_api_v1_seeds_inventory__seed_lot__get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                seed_lot: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeedInventoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_seed_requests_api_v1_seeds_requests_get: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["app__schemas__seed__SeedRequestStatus"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__seed__SeedRequestResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_seed_request_api_v1_seeds_requests_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["app__schemas__seed__SeedRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__seed__SeedRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_seed_request_api_v1_seeds_requests__request_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["app__schemas__seed__SeedRequestUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__seed__SeedRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_seed_request_api_v1_seed_requests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["app__schemas__seed_request__SeedRequestCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__seed_request__SeedRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    seed_request_stats_api_v1_seed_requests_stats_get: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated gene IDs. At most MAX_GENE_IDS distinct values are counted; the rest are ignored rather than rejected, so a page can send a whole result set without branching. */
+                gene_ids?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeedRequestStatsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_seed_requests_api_v1_admin_seed_requests_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                status?: components["schemas"]["app__models__seed_request__SeedRequestStatus"] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeedRequestListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_seed_request_api_v1_admin_seed_requests__request_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["app__schemas__seed_request__SeedRequestUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__seed_request__SeedRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    content_snapshot_api_v1_content_snapshot_get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+                page_definition_version?: number | null;
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_news_api_v1_content_news_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_news_api_v1_content_news__slug__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_publications_api_v1_content_publications_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__content__PublicationResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_publication_api_v1_content_publications__doi__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doi: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["app__schemas__content__PublicationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_pages_api_v1_content_pages_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaticPageResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_page_api_v1_content_pages__slug__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaticPageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_downloads_api_v1_content_downloads_get: {
+        parameters: {
+            query?: {
+                category?: string | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DownloadFileResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_download_url_api_v1_content_downloads__file_id__url_get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                file_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignedUrlResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_news_api_v1_news_get: {
+        parameters: {
+            query?: {
+                category?: string | null;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    featured_news_api_v1_news_featured_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsFeaturedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_news_api_v1_news__slug__get: {
+        parameters: {
+            query?: {
+                preview?: string | null;
+                exp?: number | null;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_notifications_api_v1_notifications_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_unread_count_api_v1_notifications_unread_count_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadCountResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    mark_notifications_read_api_v1_notifications_read_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkReadRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkReadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    search_api_v1_ontology_search_get: {
+        parameters: {
+            query: {
+                query: string;
+                ontology?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OntologySearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    term_api_v1_ontology_term_get: {
+        parameters: {
+            query: {
+                ontology: string;
+                iri: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OntologyTermResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    relationship_graph_api_v1_ontology_graph_get: {
+        parameters: {
+            query: {
+                ontology: string;
+                iri: string;
+                max_nodes?: number;
+                max_edges?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OntologyRelationshipGraphResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_published_routes_api_v1_page_definitions_published_routes_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishedPageDefinitionRoute"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_page_definition_api_v1_page_definitions__route__get: {
+        parameters: {
+            query?: {
+                version?: string | null;
+            };
+            header?: never;
+            path: {
+                route: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicPageDefinitionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_release_api_v1_admin_releases_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    validate_admin_release_api_v1_admin_releases__release_id__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                release_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    ready_admin_release_api_v1_admin_releases__release_id__ready_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                release_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseReadyRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    publish_admin_release_api_v1_admin_releases__release_id__publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                release_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    rollback_admin_release_api_v1_admin_releases__release_id__rollback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                release_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReleaseActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_admin_release_api_v1_admin_releases__release_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                release_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -11786,6 +16608,92 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    audit_log_stats_api_v1_admin_audit_logs_stats_get: {
+        parameters: {
+            query?: {
+                period?: string;
+                start_date?: string | null;
+                end_date?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    audit_log_online_duration_api_v1_admin_audit_logs_online_duration_get: {
+        parameters: {
+            query?: {
+                user_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
                 };
             };
             /** @description Validation Error */
@@ -11900,137 +16808,7 @@ export interface operations {
             };
         };
     };
-    audit_log_online_duration_api_v1_admin_audit_logs_online_duration_get: {
-        parameters: {
-            query?: {
-                user_id?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    audit_log_stats_api_v1_admin_audit_logs_stats_get: {
-        parameters: {
-            query?: {
-                period?: string;
-                start_date?: string | null;
-                end_date?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    trigger_build_api_v1_admin_build_static_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["StaticBuildRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_build_status_api_v1_admin_build_static_status_get: {
+    get_timeout_config_api_v1_admin_timeout_config_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -12046,7 +16824,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        [key: string]: unknown;
+                        [key: string]: number;
                     };
                 };
             };
@@ -12057,6 +16835,164 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_dashboard_stats_api_v1_admin_dashboard_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDashboardStats"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    admin_dashboard_series_api_v1_admin_dashboard_series_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDashboardSeries"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_features_api_v1_admin_features_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFeaturesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_features_api_v1_admin_features_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeatureUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminFeaturesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Internal Server Error */
@@ -12523,970 +17459,6 @@ export interface operations {
             };
         };
     };
-    admin_dashboard_series_api_v1_admin_dashboard_series_get: {
-        parameters: {
-            query?: {
-                days?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminDashboardSeries"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    admin_dashboard_stats_api_v1_admin_dashboard_stats_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminDashboardStats"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_features_api_v1_admin_features_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminFeaturesResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    update_features_api_v1_admin_features_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FeatureUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AdminFeaturesResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_imports_api_v1_admin_imports_get: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-                search?: string | null;
-                type?: string | null;
-                status?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    create_import_api_v1_admin_imports_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ImportCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_dataset_versions_api_v1_admin_imports_studio_dataset_versions_get: {
-        parameters: {
-            query?: {
-                dataset_id?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DatasetVersionResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    create_dataset_version_api_v1_admin_imports_studio_dataset_versions_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DatasetVersionCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DatasetVersionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_drafts_api_v1_admin_imports_studio_drafts_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportDraftListItemResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    create_draft_api_v1_admin_imports_studio_drafts_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ImportDraftCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportDraftResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_draft_api_v1_admin_imports_studio_drafts__draft_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                draft_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportDraftResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    commit_draft_api_v1_admin_imports_studio_drafts__draft_id__commit_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                draft_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ImportCommitRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportDraftResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_manifest_api_v1_admin_imports_studio_drafts__draft_id__manifest_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                draft_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicationManifestResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    update_mapping_api_v1_admin_imports_studio_drafts__draft_id__mapping_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                draft_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FieldMappingUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportDraftResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    add_patches_api_v1_admin_imports_studio_drafts__draft_id__patches_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                draft_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DataPatchCreateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportDraftResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    validate_draft_api_v1_admin_imports_studio_drafts__draft_id__validate_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                draft_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ImportValidationRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportDraftResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    start_multipart_upload_api_v1_admin_imports_uploads_multipart_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MultipartStartRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    finish_multipart_upload_api_v1_admin_imports_uploads_multipart__upload_id__complete_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                upload_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MultipartCompletePathRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_import_api_v1_admin_imports__import_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                import_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    delete_import_api_v1_admin_imports__import_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                import_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    retry_import_api_v1_admin_imports__import_id__retry_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                import_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_import_status_api_v1_admin_imports__import_id__status_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                import_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    admin_update_layout_api_v1_admin_layout__page__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                page: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LayoutUpdateRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LayoutResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
     list_media_api_v1_admin_media_get: {
         parameters: {
             query?: {
@@ -13632,136 +17604,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MediaAssetResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    inspect_module_api_v1_admin_modules__module_key__inspect_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                module_key: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ImportInspectionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportInspectionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    download_module_template_api_v1_admin_modules__module_key__template_get: {
-        parameters: {
-            query?: {
-                format?: string;
-            };
-            header?: never;
-            path: {
-                module_key: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    inspect_module_api_v1_admin_modules__module_key__validate_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                module_key: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ImportInspectionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImportInspectionResponse"];
                 };
             };
             /** @description Validation Error */
@@ -13956,48 +17798,6 @@ export interface operations {
             };
         };
     };
-    reorder_news_api_v1_admin_news_reorder_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["NewsReorderRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NewsReorderResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
     update_news_api_v1_admin_news__news_id__put: {
         parameters: {
             query?: never;
@@ -14080,7 +17880,7 @@ export interface operations {
             };
         };
     };
-    preview_token_api_v1_admin_news__news_id__preview_token_get: {
+    restore_news_api_v1_admin_news__news_id__restore_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -14097,7 +17897,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PreviewTokenResponse"];
+                    "application/json": components["schemas"]["NewsDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -14158,7 +17958,49 @@ export interface operations {
             };
         };
     };
-    restore_news_api_v1_admin_news__news_id__restore_post: {
+    reorder_news_api_v1_admin_news_reorder_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NewsReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NewsReorderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_token_api_v1_admin_news__news_id__preview_token_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -14175,303 +18017,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NewsDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_pages_api_v1_admin_page_builder_pages_get: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-                route?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PageDefinitionListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    create_page_api_v1_admin_page_builder_pages_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PageDefinitionCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PageDefinitionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_page_api_v1_admin_page_builder_pages__page_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                page_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PageDefinitionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    update_draft_api_v1_admin_page_builder_pages__page_id__draft_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                page_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PageDefinitionUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PageDefinitionVersionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    preview_page_api_v1_admin_page_builder_pages__page_id__preview_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                page_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PreviewRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PreviewResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    publish_request_api_v1_admin_page_builder_pages__page_id__publish_request_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                page_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PublishRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublishRequestResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_versions_api_v1_admin_page_builder_pages__page_id__versions_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                page_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PageDefinitionVersionResponse"][];
+                    "application/json": components["schemas"]["PreviewTokenResponse"];
                 };
             };
             /** @description Validation Error */
@@ -14774,6 +18320,302 @@ export interface operations {
             };
         };
     };
+    list_pages_api_v1_admin_page_builder_pages_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                route?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageDefinitionListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_page_api_v1_admin_page_builder_pages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageDefinitionCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageDefinitionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_page_api_v1_admin_page_builder_pages__page_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageDefinitionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_draft_api_v1_admin_page_builder_pages__page_id__draft_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageDefinitionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageDefinitionVersionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    preview_page_api_v1_admin_page_builder_pages__page_id__preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_versions_api_v1_admin_page_builder_pages__page_id__versions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageDefinitionVersionResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    publish_request_api_v1_admin_page_builder_pages__page_id__publish_request_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_plugins_api_v1_admin_plugins_get: {
         parameters: {
             query?: never;
@@ -14896,13 +18738,9 @@ export interface operations {
             };
         };
     };
-    list_publications_admin_api_v1_admin_publication_get: {
+    list_targets_api_v1_admin_publication_targets_get: {
         parameters: {
-            query?: {
-                target?: string | null;
-                page?: number;
-                page_size?: number;
-            };
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
@@ -14915,7 +18753,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PublicationListResponse"];
+                    "application/json": components["schemas"]["PublicationTargetListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -14924,7 +18762,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14980,9 +18818,13 @@ export interface operations {
             };
         };
     };
-    list_targets_api_v1_admin_publication_targets_get: {
+    list_publications_admin_api_v1_admin_publication_get: {
         parameters: {
-            query?: never;
+            query?: {
+                target?: string | null;
+                page?: number;
+                page_size?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -14995,7 +18837,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PublicationTargetListResponse"];
+                    "application/json": components["schemas"]["PublicationListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -15004,7 +18846,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Internal Server Error */
@@ -15269,7 +19111,53 @@ export interface operations {
             };
         };
     };
-    create_release_api_v1_admin_releases_post: {
+    list_imports_api_v1_admin_imports_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                search?: string | null;
+                type?: string | null;
+                status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_import_api_v1_admin_imports_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -15278,7 +19166,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ReleaseCreateRequest"];
+                "application/json": components["schemas"]["ImportCreateRequest"];
             };
         };
         responses: {
@@ -15313,12 +19201,12 @@ export interface operations {
             };
         };
     };
-    get_admin_release_api_v1_admin_releases__release_id__get: {
+    get_import_api_v1_admin_imports__import_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                release_id: number;
+                import_id: number;
             };
             cookie?: never;
         };
@@ -15355,31 +19243,23 @@ export interface operations {
             };
         };
     };
-    publish_admin_release_api_v1_admin_releases__release_id__publish_post: {
+    delete_import_api_v1_admin_imports__import_id__delete: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                release_id: number;
+                import_id: number;
             };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReleaseActionRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -15401,104 +19281,12 @@ export interface operations {
             };
         };
     };
-    ready_admin_release_api_v1_admin_releases__release_id__ready_post: {
+    get_import_status_api_v1_admin_imports__import_id__status_get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                release_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReleaseReadyRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    rollback_admin_release_api_v1_admin_releases__release_id__rollback_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                release_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ReleaseActionRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    validate_admin_release_api_v1_admin_releases__release_id__validate_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                release_id: number;
+                import_id: number;
             };
             cookie?: never;
         };
@@ -15535,12 +19323,142 @@ export interface operations {
             };
         };
     };
-    list_seed_requests_api_v1_admin_seed_requests_get: {
+    start_multipart_upload_api_v1_admin_imports_uploads_multipart_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MultipartStartRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    finish_multipart_upload_api_v1_admin_imports_uploads_multipart__upload_id__complete_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                upload_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MultipartCompletePathRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    retry_import_api_v1_admin_imports__import_id__retry_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                import_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_dataset_versions_api_v1_admin_imports_studio_dataset_versions_get: {
         parameters: {
             query?: {
-                page?: number;
-                page_size?: number;
-                status?: components["schemas"]["app__models__seed_request__SeedRequestStatus"] | null;
+                dataset_id?: number;
             };
             header?: never;
             path?: never;
@@ -15554,7 +19472,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SeedRequestListResponse"];
+                    "application/json": components["schemas"]["DatasetVersionResponse"][];
                 };
             };
             /** @description Validation Error */
@@ -15577,18 +19495,180 @@ export interface operations {
             };
         };
     };
-    update_seed_request_api_v1_admin_seed_requests__request_id__patch: {
+    create_dataset_version_api_v1_admin_imports_studio_dataset_versions_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DatasetVersionCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatasetVersionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_drafts_api_v1_admin_imports_studio_drafts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDraftListItemResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_draft_api_v1_admin_imports_studio_drafts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportDraftCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_draft_api_v1_admin_imports_studio_drafts__draft_id__get: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                request_id: string;
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_mapping_api_v1_admin_imports_studio_drafts__draft_id__mapping_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["app__schemas__seed_request__SeedRequestUpdate"];
+                "application/json": components["schemas"]["FieldMappingUpdateRequest"];
             };
         };
         responses: {
@@ -15598,7 +19678,309 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["app__schemas__seed_request__SeedRequestResponse"];
+                    "application/json": components["schemas"]["ImportDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    add_patches_api_v1_admin_imports_studio_drafts__draft_id__patches_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DataPatchCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    validate_draft_api_v1_admin_imports_studio_drafts__draft_id__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportValidationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    commit_draft_api_v1_admin_imports_studio_drafts__draft_id__commit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportCommitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDraftResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_manifest_api_v1_admin_imports_studio_drafts__draft_id__manifest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicationManifestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    inspect_module_api_v1_admin_modules__module_key__validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportInspectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportInspectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    inspect_module_api_v1_admin_modules__module_key__inspect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                module_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportInspectionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportInspectionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    download_module_template_api_v1_admin_modules__module_key__template_get: {
+        parameters: {
+            query?: {
+                format?: string;
+            };
+            header?: never;
+            path: {
+                module_key: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */
@@ -15646,6 +20028,48 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    validate_settings_api_v1_admin_settings_validate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsValidateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsValidateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
             /** @description Internal Server Error */
@@ -15752,18 +20176,16 @@ export interface operations {
             };
         };
     };
-    validate_settings_api_v1_admin_settings_validate_post: {
+    get_settings_document_api_v1_admin_settings__section__document_get: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                section: string;
+            };
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SettingsValidateRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -15771,7 +20193,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SettingsValidateResponse"];
+                    "application/json": components["schemas"]["SettingsDocumentResponse"];
                 };
             };
             /** @description Validation Error */
@@ -15937,46 +20359,6 @@ export interface operations {
             };
         };
     };
-    get_settings_document_api_v1_admin_settings__section__document_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                section: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SettingsDocumentResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
     get_settings_history_api_v1_admin_settings__section__history_get: {
         parameters: {
             query?: {
@@ -16051,6 +20433,255 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    trigger_build_api_v1_admin_build_static_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StaticBuildRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_build_status_api_v1_admin_build_static_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_table_view_templates_api_v1_admin_table_views_get: {
+        parameters: {
+            query?: {
+                kind?: string | null;
+                species?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TableViewTemplateListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_table_view_template_api_v1_admin_table_views_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TableViewTemplateCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TableViewTemplateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_table_view_template_api_v1_admin_table_views__template_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TableViewTemplateUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TableViewTemplateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_table_view_template_api_v1_admin_table_views__template_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                template_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -16274,48 +20905,7 @@ export interface operations {
             };
         };
     };
-    list_table_view_templates_api_v1_admin_table_views_get: {
-        parameters: {
-            query?: {
-                kind?: string | null;
-                species?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TableViewTemplateListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    create_table_view_template_api_v1_admin_table_views_post: {
+    create_upload_presign_api_v1_admin_uploads_presign_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -16324,51 +20914,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["TableViewTemplateCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TableViewTemplateResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    update_table_view_template_api_v1_admin_table_views__template_id__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                template_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TableViewTemplateUpdate"];
+                "application/json": components["schemas"]["UploadPresignRequest"];
             };
         };
         responses: {
@@ -16378,7 +20924,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TableViewTemplateResponse"];
+                    "application/json": components["schemas"]["UploadPresignResponse"];
                 };
             };
             /** @description Validation Error */
@@ -16388,84 +20934,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    delete_table_view_template_api_v1_admin_table_views__template_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                template_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_timeout_config_api_v1_admin_timeout_config_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16521,16 +20989,964 @@ export interface operations {
             };
         };
     };
-    create_upload_presign_api_v1_admin_uploads_presign_post: {
+    list_libraries_api_v1_expression_libraries_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+                tissue?: string | null;
+                treatment?: string | null;
+                assembly_id?: number | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_library_api_v1_expression_libraries__public_id__get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                public_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_gene_expression_api_v1_expression_genes__gene_id__expression_get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                tissue?: string | null;
+                treatment?: string | null;
+                library?: string | null;
+                min_fpkm?: number | null;
+                max_fpkm?: number | null;
+                /** @description Opaque cursor returned by a previous page. */
+                cursor?: string | null;
+                limit?: number;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                gene_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    search_expression_api_v1_expression_search_get: {
+        parameters: {
+            query?: {
+                gene_id?: string | null;
+                assembly_id?: number | null;
+                library?: string | null;
+                tissue?: string | null;
+                treatment?: string | null;
+                min_fpkm?: number | null;
+                max_fpkm?: number | null;
+                page?: number;
+                page_size?: number;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_gene_homologs_api_v1_homologs_genes__gene_id__homologs_get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                /** @description Opaque cursor returned by a previous page. */
+                cursor?: string | null;
+                limit?: number;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                gene_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    search_homologs_api_v1_homologs_search_get: {
+        parameters: {
+            query?: {
+                gene_id?: string | null;
+                assembly_id?: number | null;
+                homolog_species?: string | null;
+                homolog_type?: string | null;
+                /** @description Offset page; ignored when cursor is supplied. */
+                page?: number;
+                page_size?: number;
+                /** @description Opaque cursor from a previous page. */
+                cursor?: string | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_families_api_v1_comparative_families_get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                level?: string | null;
+                page?: number;
+                page_size?: number;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FamilyListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_family_api_v1_comparative_families__family_id__get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                family_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FamilyDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    compare_families_api_v1_comparative_families_compare_get: {
+        parameters: {
+            query: {
+                /** @description Family id on the left side. */
+                left: number;
+                /** @description Family id on the right side. */
+                right: number;
+                assembly_id?: number | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberComparisonResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_gene_orthologs_api_v1_comparative_genes__gene_id__orthologs_get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                homolog_type?: string | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                gene_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrthologResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    request_artifact_api_v1_comparative_artifacts_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtifactRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_artifact_api_v1_comparative_artifacts__job_id__get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    analytics_summary_api_v1_admin_analytics_summary_get: {
+        parameters: {
+            query?: {
+                days?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalyticsSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_site_branding_api_v1_site_branding_get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteBrandResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_about_content_api_v1_site_about_get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AboutContentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_home_content_api_v1_site_home_get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HomeContentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_footer_content_api_v1_site_footer_get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FooterContentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_site_content_api_v1_site_content_get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+                /** @description Return only the keys this variant has a stored value for, instead of every registered key filled with its (English) registered default. A bilingual portal needs the distinction: without it, consuming the endpoint would replace a locale-specific string with the English default on every page load. */
+                only_overrides?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_capabilities_api_v1_capabilities_get: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCapabilitiesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_sra_run_api_v1_sra_run__accession__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                accession: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_soybean_samples_api_v1_sra_samples_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    run_enrichment_api_v1_tools_enrichment_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UploadPresignRequest"];
+                "application/json": components["schemas"]["EnrichmentRequest"];
             };
         };
         responses: {
@@ -16540,7 +21956,136 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UploadPresignResponse"];
+                    "application/json": components["schemas"]["EnrichmentResponse"] | components["schemas"]["EnrichmentGseaResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    exppattern_api_v1_tools_exppattern_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExpPatternRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExpPatternResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_layout_api_v1_layout__page__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LayoutResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    render_widget_api_v1_widget__name__get: {
+        parameters: {
+            query?: {
+                /** @description JSON-encoded widget parameters */
+                params?: string;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/html": string;
                 };
             };
             /** @description Validation Error */
@@ -16634,44 +22179,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    admin_widget_health_api_v1_admin_widgets_health_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WidgetHealthResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16851,344 +22358,7 @@ export interface operations {
             };
         };
     };
-    list_analysis_jobs_api_v1_analyses_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalysesJobListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    create_upload_api_v1_analyses_uploads_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AnalysesUploadRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalysesUploadResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    submit_analysis_api_v1_analyses__analysis_type__submit_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                analysis_type: components["schemas"]["AnalysisType"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AnalysesSubmitRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalysesSubmitResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_analysis_job_api_v1_analyses__job_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalysesJobResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    download_analysis_object_api_v1_analyses__job_id__download_get: {
-        parameters: {
-            query: {
-                object_key: string;
-            };
-            header?: never;
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalysesDownloadResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    change_password_api_v1_auth_change_password_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PasswordChangeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    login_api_v1_auth_login_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LoginRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TokenResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Rate limit exceeded; retry after the indicated number of seconds. */
-            429: {
-                headers: {
-                    /** @description Seconds until this login attempt may be retried. */
-                    "Retry-After"?: number;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    logout_api_v1_auth_logout_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_me_api_v1_auth_me_get: {
+    admin_widget_health_api_v1_admin_widgets_health_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -17203,7 +22373,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UserResponse"];
+                    "application/json": components["schemas"]["WidgetHealthResponse"];
                 };
             };
             /** @description Validation Error */
@@ -17226,2279 +22396,7 @@ export interface operations {
             };
         };
     };
-    refresh_token_api_v1_auth_refresh_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TokenResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    register_api_v1_auth_register_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UserCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_blast_databases_api_v1_blast_databases_get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlastDatabaseResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    create_blast_index_build_api_v1_blast_index_builds_post: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BlastIndexBuildRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlastIndexBuildResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_blast_index_build_api_v1_blast_index_builds__build_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                build_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlastIndexBuildResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_blast_jobs_api_v1_blast_jobs_get: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-                status?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlastJobListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    submit_blast_job_api_v1_blast_jobs_post: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BlastSubmitRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlastJobResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_blast_job_api_v1_blast_jobs__job_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlastJobResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    cancel_blast_job_api_v1_blast_jobs__job_id__cancel_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlastJobResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_blast_hit_genome_target_api_v1_blast_jobs__job_id__hits__subject_id__genome_target_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                job_id: string;
-                subject_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlastGenomeTargetResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_blast_results_api_v1_blast_jobs__job_id__results_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlastResultResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    retry_blast_job_api_v1_blast_jobs__job_id__retry_post: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlastJobResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    submit_public_blast_job_api_v1_blast_public_jobs_post: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BlastSubmitRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicBlastSubmission"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_public_blast_job_api_v1_blast_public_jobs__job_id__get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Blast-Token"?: string | null;
-            };
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlastJobResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    cancel_public_blast_job_api_v1_blast_public_jobs__job_id__cancel_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Blast-Token"?: string | null;
-            };
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlastJobResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_public_blast_hit_genome_target_api_v1_blast_public_jobs__job_id__hits__subject_id__genome_target_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                "X-Blast-Token"?: string | null;
-            };
-            path: {
-                job_id: string;
-                subject_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlastGenomeTargetResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_public_blast_results_api_v1_blast_public_jobs__job_id__results_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-            };
-            header?: {
-                "X-Blast-Token"?: string | null;
-            };
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BlastResultResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_capabilities_api_v1_capabilities_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicCapabilitiesResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    request_artifact_api_v1_comparative_artifacts_post: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ArtifactRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArtifactResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_artifact_api_v1_comparative_artifacts__job_id__get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ArtifactResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_families_api_v1_comparative_families_get: {
-        parameters: {
-            query?: {
-                assembly_id?: number | null;
-                level?: string | null;
-                page?: number;
-                page_size?: number;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FamilyListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    compare_families_api_v1_comparative_families_compare_get: {
-        parameters: {
-            query: {
-                /** @description Family id on the left side. */
-                left: number;
-                /** @description Family id on the right side. */
-                right: number;
-                assembly_id?: number | null;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MemberComparisonResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_family_api_v1_comparative_families__family_id__get: {
-        parameters: {
-            query?: {
-                assembly_id?: number | null;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                family_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FamilyDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_gene_orthologs_api_v1_comparative_genes__gene_id__orthologs_get: {
-        parameters: {
-            query?: {
-                assembly_id?: number | null;
-                homolog_type?: string | null;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                gene_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrthologResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_downloads_api_v1_content_downloads_get: {
-        parameters: {
-            query?: {
-                category?: string | null;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DownloadFileResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_download_url_api_v1_content_downloads__file_id__url_get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                file_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SignedUrlResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_news_api_v1_content_news_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NewsResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_news_api_v1_content_news__slug__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                slug: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NewsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_pages_api_v1_content_pages_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StaticPageResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_page_api_v1_content_pages__slug__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                slug: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["StaticPageResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_publications_api_v1_content_publications_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["app__schemas__content__PublicationResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_publication_api_v1_content_publications__doi__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                doi: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["app__schemas__content__PublicationResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    content_snapshot_api_v1_content_snapshot_get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-                page_definition_version?: number | null;
-                variant?: components["schemas"]["SiteVariant"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_gene_expression_api_v1_expression_genes__gene_id__expression_get: {
-        parameters: {
-            query?: {
-                assembly_id?: number | null;
-                tissue?: string | null;
-                treatment?: string | null;
-                library?: string | null;
-                min_fpkm?: number | null;
-                max_fpkm?: number | null;
-                /** @description Opaque cursor returned by a previous page. */
-                cursor?: string | null;
-                limit?: number;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                gene_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_libraries_api_v1_expression_libraries_get: {
-        parameters: {
-            query?: {
-                page?: number;
-                page_size?: number;
-                tissue?: string | null;
-                treatment?: string | null;
-                assembly_id?: number | null;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_library_api_v1_expression_libraries__public_id__get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                public_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    search_expression_api_v1_expression_search_get: {
-        parameters: {
-            query?: {
-                gene_id?: string | null;
-                assembly_id?: number | null;
-                library?: string | null;
-                tissue?: string | null;
-                treatment?: string | null;
-                min_fpkm?: number | null;
-                max_fpkm?: number | null;
-                page?: number;
-                page_size?: number;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_genes_api_v1_genes_get: {
-        parameters: {
-            query?: {
-                assembly_id?: number | null;
-                chromosome?: string | null;
-                biotype?: string | null;
-                search?: string | null;
-                q?: string | null;
-                cursor?: string | null;
-                limit?: number;
-                page?: number | null;
-                page_size?: number | null;
-                sort_by?: string;
-                sort_dir?: string;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GeneListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_assemblies_api_v1_genes_assemblies_get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AssemblyResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_chromosomes_api_v1_genes_assemblies__assembly_id__chromosomes_get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                assembly_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChromosomeResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_region_structure_api_v1_genes_region_structure_get: {
-        parameters: {
-            query: {
-                assembly_id: number;
-                chromosome: string;
-                start: number;
-                end: number;
-                /** @description Include CDS/UTR segments. False returns gene bodies only. */
-                include_parts?: boolean;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RegionStructureResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_gene_api_v1_genes__gene_id__get: {
-        parameters: {
-            query?: {
-                assembly_id?: number | null;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                gene_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GeneDetail"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_gene_genome_view_api_v1_genes__gene_id__genome_view_svg_get: {
-        parameters: {
-            query?: {
-                assembly_id?: number | null;
-                width?: number;
-                start?: number | null;
-                end?: number | null;
-                include?: string;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                gene_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "image/svg+xml": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    submit_gwas_job_api_v1_gwas_submit_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GwasSubmitRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GwasJobResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    create_upload_api_v1_gwas_uploads_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GwasUploadRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GwasUploadResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_gwas_job_api_v1_gwas__job_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GwasJobResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_gwas_results_api_v1_gwas__job_id__results_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                job_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GwasResultResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    liveness_api_v1_health_live_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    readiness_api_v1_health_ready_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_gene_homologs_api_v1_homologs_genes__gene_id__homologs_get: {
-        parameters: {
-            query?: {
-                assembly_id?: number | null;
-                /** @description Opaque cursor returned by a previous page. */
-                cursor?: string | null;
-                limit?: number;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                gene_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    search_homologs_api_v1_homologs_search_get: {
-        parameters: {
-            query?: {
-                gene_id?: string | null;
-                assembly_id?: number | null;
-                homolog_species?: string | null;
-                homolog_type?: string | null;
-                /** @description Offset page; ignored when cursor is supplied. */
-                page?: number;
-                page_size?: number;
-                /** @description Opaque cursor from a previous page. */
-                cursor?: string | null;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    job_events_api_v1_jobs_events_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_layout_api_v1_layout__page__get: {
+    admin_update_layout_api_v1_admin_layout__page__put: {
         parameters: {
             query?: never;
             header?: never;
@@ -19507,7 +22405,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LayoutUpdateRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -19516,2908 +22418,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LayoutResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_mutant_lines_api_v1_mutants_get: {
-        parameters: {
-            query?: {
-                mutagen?: string | null;
-                q?: string | null;
-                offset?: number;
-                limit?: number;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MutantLineResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_mutant_line_api_v1_mutants__public_id__get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                public_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MutantLineDetail"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_phenotypes_api_v1_mutants__public_id__phenotypes_get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                public_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PhenotypeResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_news_api_v1_news_get: {
-        parameters: {
-            query?: {
-                category?: string | null;
-                page?: number;
-                page_size?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NewsListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    featured_news_api_v1_news_featured_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NewsFeaturedResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_news_api_v1_news__slug__get: {
-        parameters: {
-            query?: {
-                preview?: string | null;
-                exp?: number | null;
-            };
-            header?: never;
-            path: {
-                slug: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NewsDetailResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_notifications_api_v1_notifications_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["NotificationListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    mark_notifications_read_api_v1_notifications_read_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MarkReadRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MarkReadResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_unread_count_api_v1_notifications_unread_count_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UnreadCountResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    relationship_graph_api_v1_ontology_graph_get: {
-        parameters: {
-            query: {
-                ontology: string;
-                iri: string;
-                max_nodes?: number;
-                max_edges?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OntologyRelationshipGraphResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    search_api_v1_ontology_search_get: {
-        parameters: {
-            query: {
-                query: string;
-                ontology?: string | null;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OntologySearchResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    term_api_v1_ontology_term_get: {
-        parameters: {
-            query: {
-                ontology: string;
-                iri: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OntologyTermResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_published_routes_api_v1_page_definitions_published_routes_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublishedPageDefinitionRoute"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_page_definition_api_v1_page_definitions__route__get: {
-        parameters: {
-            query?: {
-                version?: string | null;
-            };
-            header?: never;
-            path: {
-                route: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PublicPageDefinitionResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    preview_genes_api_v1_preview_test_data_genes_get: {
-        parameters: {
-            query: {
-                gene_id: string;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PreviewGeneSearchResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    preview_meta_api_v1_preview_test_data_meta_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LocalTestPreviewMeta"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    preview_mutation_sites_api_v1_preview_test_data_mutation_sites_get: {
-        parameters: {
-            query: {
-                chromosome: string;
-                start: number;
-                end: number;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PreviewMutationSiteSearchResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    preview_mutation_sites_for_gene_api_v1_preview_test_data_mutation_sites_by_gene_get: {
-        parameters: {
-            query: {
-                gene_id: string;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PreviewMutationSiteItem"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    preview_update_mutation_site_api_v1_preview_test_data_mutation_sites__source_site_key__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                source_site_key: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PreviewMutationSiteUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PreviewMutationSiteItem"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_releases_api_v1_releases_get: {
-        parameters: {
-            query?: {
-                status?: components["schemas"]["ReleaseStatus"] | null;
-                variant?: components["schemas"]["SiteVariant"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReleaseResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_active_release_api_v1_releases_active_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ActiveReleaseResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_release_api_v1_releases__release_id__get: {
-        parameters: {
-            query?: {
-                variant?: components["schemas"]["SiteVariant"];
-            };
-            header?: never;
-            path: {
-                release_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReleaseResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    global_search_api_v1_search_get: {
-        parameters: {
-            query: {
-                query: string;
-                types?: components["schemas"]["SearchResultType"][] | null;
-                cursor?: string | null;
-                limit?: number;
-                assembly_id?: number | null;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["GlobalSearchResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    internal_search_api_v1_search_internal_get: {
-        parameters: {
-            query: {
-                query: string;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["InternalSearchResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    suggest_api_v1_search_suggest_get: {
-        parameters: {
-            query: {
-                q: string;
-                limit?: number;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    create_seed_request_api_v1_seed_requests_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["app__schemas__seed_request__SeedRequestCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["app__schemas__seed_request__SeedRequestResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    seed_request_stats_api_v1_seed_requests_stats_get: {
-        parameters: {
-            query?: {
-                /** @description Comma-separated gene IDs. At most MAX_GENE_IDS distinct values are counted; the rest are ignored rather than rejected, so a page can send a whole result set without branching. */
-                gene_ids?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SeedRequestStatsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_inventory_api_v1_seeds_inventory_get: {
-        parameters: {
-            query?: {
-                /** @description Public mutant-line identifier (e.g. SM7K3ZQ9P2AX). */
-                mutant_line_public_id?: string | null;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SeedInventoryResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_inventory_api_v1_seeds_inventory__seed_lot__get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                seed_lot: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SeedInventoryResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_seed_requests_api_v1_seeds_requests_get: {
-        parameters: {
-            query?: {
-                status?: components["schemas"]["app__schemas__seed__SeedRequestStatus"] | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["app__schemas__seed__SeedRequestResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    create_seed_request_api_v1_seeds_requests_post: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["app__schemas__seed__SeedRequestCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["app__schemas__seed__SeedRequestResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    update_seed_request_api_v1_seeds_requests__request_id__patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                request_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["app__schemas__seed__SeedRequestUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["app__schemas__seed__SeedRequestResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_about_content_api_v1_site_about_get: {
-        parameters: {
-            query?: {
-                variant?: components["schemas"]["SiteVariant"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AboutContentResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_site_branding_api_v1_site_branding_get: {
-        parameters: {
-            query?: {
-                variant?: components["schemas"]["SiteVariant"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SiteBrandResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_site_content_api_v1_site_content_get: {
-        parameters: {
-            query?: {
-                variant?: components["schemas"]["SiteVariant"];
-                /** @description Return only the keys this variant has a stored value for, instead of every registered key filled with its (English) registered default. A bilingual portal needs the distinction: without it, consuming the endpoint would replace a locale-specific string with the English default on every page load. */
-                only_overrides?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_footer_content_api_v1_site_footer_get: {
-        parameters: {
-            query?: {
-                variant?: components["schemas"]["SiteVariant"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FooterContentResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_home_content_api_v1_site_home_get: {
-        parameters: {
-            query?: {
-                variant?: components["schemas"]["SiteVariant"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HomeContentResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_sra_run_api_v1_sra_run__accession__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                accession: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_soybean_samples_api_v1_sra_samples_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    chromosome_density_summary_api_v1_stats_chromosome_density_get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChromosomeDensitySummary"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    dashboard_stats_api_v1_stats_dashboard_get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DashboardStats"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    chromosome_density_api_v1_stats_density_get: {
-        parameters: {
-            query: {
-                /** @description Assembly name (required) */
-                assembly: string;
-                chromosome: string;
-                bin_size?: number;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChromosomeDensity"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    discovery_trend_api_v1_stats_discovery_trend_get: {
-        parameters: {
-            query?: {
-                days?: number;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DiscoveryTrendPoint"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    homepage_stats_api_v1_stats_homepage_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HomepageStats"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    mutagen_statistics_api_v1_stats_mutagens_get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MutagenCount"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    release_statistics_api_v1_stats_releases_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReleaseSummary"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    impact_summary_api_v1_stats_summary_impact_get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ImpactSummaryItem"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    variant_type_summary_api_v1_stats_summary_variant_types_get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VariantTypeSummaryItem"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    variant_type_distribution_api_v1_stats_variant_types_get: {
-        parameters: {
-            query?: {
-                assembly?: string | null;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VariantTypeDistribution"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_table_view_api_v1_table_views__kind__get: {
-        parameters: {
-            query?: {
-                variant?: components["schemas"]["SiteVariant"];
-                species?: string;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                kind: "mutation_sites" | "variants" | "genes" | "mutant_lines";
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResolvedTableView"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    allele_frequencies_api_v1_tools_allelefreq_post: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AlleleFreqRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AlleleFreqResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    nucleotide_diversity_api_v1_tools_diversity_post: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DiversityRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DiversityResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    run_enrichment_api_v1_tools_enrichment_post: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["EnrichmentRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EnrichmentResponse"] | components["schemas"]["EnrichmentGseaResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    exppattern_api_v1_tools_exppattern_post: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ExpPatternRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExpPatternResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    compute_ld_api_v1_tools_ld_post: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LdRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LdResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    seqfetch_api_v1_tools_seqfetch_post: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SeqFetchRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SeqFetchResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_tracks_api_v1_tracks_get: {
-        parameters: {
-            query?: {
-                assembly_id?: number | null;
-                category_id?: number | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_track_categories_api_v1_tracks_categories_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_jbrowse_config_api_v1_tracks_jbrowse_config_get: {
-        parameters: {
-            query: {
-                /** @description Explicit assembly identity scoped to the selected release */
-                assembly_id: number;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_track_api_v1_tracks__track_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                track_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_signed_url_api_v1_tracks__track_id__signed_url_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                track_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SignedUrlResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    list_variants_api_v1_variants_get: {
-        parameters: {
-            query?: {
-                assembly?: string | null;
-                chromosome?: string | null;
-                start?: number | null;
-                end?: number | null;
-                ref?: string | null;
-                alt?: string | null;
-                gene_id?: string | null;
-                /** @description Public mutant-line identifier (e.g. SM7QF3Z9P2A). Resolved server-side within the published release; internal ids are rejected. */
-                mutant_line_public_id?: string | null;
-                variant_type?: components["schemas"]["VariantType"] | null;
-                consequence?: components["schemas"]["ConsequenceType"] | null;
-                impact?: components["schemas"]["ImpactLevel"] | null;
-                min_af?: number | null;
-                max_af?: number | null;
-                cursor?: string | null;
-                limit?: number;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VariantListResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    export_variants_api_v1_variants_export_post: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ExportRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExportResponse"];
-                };
-            };
-            /** @description Validation Error. The export is refused and nothing is queued, either because the request body failed schema validation (field-level ``errors`` are listed) or because the request could not be bound to exactly one assembly namespace: no assembly was named and the resolved release declares no scope, the resolved assembly name is longer than the export record can store (at most 64 characters), or the resolved release publishes no variants in that assembly namespace. A domain refusal carries the unified envelope with ``error.code`` ``validation_error`` and no ``errors`` list. */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationErrorResponse"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_variant_export_status_api_v1_variants_export__export_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                export_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExportStatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_variant_export_download_api_v1_variants_export__export_id__download_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                export_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ExportDownloadResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_variants_by_region_api_v1_variants_region_get: {
-        parameters: {
-            query: {
-                /** @description Assembly name (required) */
-                assembly: string;
-                chromosome: string;
-                start: number;
-                end: number;
-                max_results?: number;
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VariantResponse"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    get_variant_api_v1_variants__variant_id__get: {
-        parameters: {
-            query?: {
-                release_id?: number | null;
-            };
-            header?: {
-                "X-SoyMutDB-Release"?: number | null;
-            };
-            path: {
-                variant_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["VariantDetail"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-            /** @description Internal Server Error */
-            500: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-        };
-    };
-    render_widget_api_v1_widget__name__get: {
-        parameters: {
-            query?: {
-                /** @description JSON-encoded widget parameters */
-                params?: string;
-            };
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/html": string;
                 };
             };
             /** @description Validation Error */
