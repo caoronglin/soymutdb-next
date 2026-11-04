@@ -15,9 +15,6 @@ export const SUPPORTED_EXPORT_QUERY_FILTERS = [
   "mutant_line_public_id",
 ] as const;
 
-export type SupportedExportQueryFilter =
-  (typeof SUPPORTED_EXPORT_QUERY_FILTERS)[number];
-
 /** brief §7 filters with no backing query capability yet — refused by the API. */
 export const EXPORT_QUERY_UNSUPPORTED_LABELS = [
   "gene_list", "species", "biotype", "go_term", "kegg_term",
