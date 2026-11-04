@@ -58,6 +58,7 @@ celery_app = Celery(
         "soymutdb_worker.tasks.gwas",
         "soymutdb_worker.tasks.static_pages",
         "soymutdb_worker.tasks.analyses",
+        "soymutdb_worker.tasks.comparative",
         "soymutdb_worker.tasks.email",
         "soymutdb_worker.tasks.release",
         "soymutdb_worker.tasks.static_publish",
@@ -130,6 +131,10 @@ celery_app.conf.update(
         "soymutdb_worker.tasks.cleanup.*": {"queue": "cleanup"},
         "soymutdb_worker.tasks.analyses.*": {"queue": "analyses"},
         "soymutdb_worker.tasks.gwas.*": {"queue": "analyses"},
+        # Alignments and trees share the analyses queue: they are the same kind
+        # of work (a bounded pipeline over stored inputs), and a second queue
+        # would be a second thing to size and monitor.
+        "soymutdb_worker.tasks.comparative.*": {"queue": "analyses"},
         # Email tasks intentionally have NO route: they run on the default queue.
     },
     task_default_queue="default",

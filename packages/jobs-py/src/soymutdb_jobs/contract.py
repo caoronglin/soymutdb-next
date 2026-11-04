@@ -39,6 +39,12 @@ IMPORT_SEED_TASK: Final[str] = "soymutdb_worker.tasks.ingest.import_seed"
 ANALYSIS_FASTP_TASK: Final[str] = "soymutdb_worker.tasks.analyses.run_fastp"
 ANALYSIS_SCANPY_TASK: Final[str] = "soymutdb_worker.tasks.analyses.run_scanpy"
 GWAS_RUN_TASK: Final[str] = "soymutdb_worker.tasks.gwas.run_gwas"
+#: Comparative-genomics artifacts (multiple-sequence alignment, phylogenetic
+#: tree). The API only records the request and enqueues this; the worker runs
+#: an allowlisted aligner/tree builder over the frozen member set.
+COMPARATIVE_ARTIFACT_TASK: Final[str] = (
+    "soymutdb_worker.tasks.comparative.build_artifact"
+)
 #: Email dispatch for contact-style modules (seed requests).  Runs on the
 #: ``default`` queue (no task_routes entry needed).
 SEED_REQUEST_EMAIL_TASK: Final[str] = (
@@ -80,6 +86,7 @@ TASK_QUEUE_MAP: Final[dict[str, str]] = {
     ANALYSIS_FASTP_TASK: QUEUE_ANALYSES,
     ANALYSIS_SCANPY_TASK: QUEUE_ANALYSES,
     GWAS_RUN_TASK: QUEUE_ANALYSES,
+    COMPARATIVE_ARTIFACT_TASK: QUEUE_ANALYSES,
 }
 
 # ---------------------------------------------------------------------------
@@ -94,6 +101,7 @@ PAYLOAD_VERSION: Final[int] = 1
 __all__ = [
     "ANALYSIS_FASTP_TASK",
     "ANALYSIS_SCANPY_TASK",
+    "COMPARATIVE_ARTIFACT_TASK",
     "BLAST_RUN_TASK",
     "BLAST_INDEX_BUILD_TASK",
     "BLAST_BUILD_INDEX_TASK",

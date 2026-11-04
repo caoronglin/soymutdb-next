@@ -156,6 +156,60 @@ gene_homologs = Table(
     Column("source", String(128)),
 )
 
+#: Comparative-genomics membership. API owns the migration; the worker reads
+#: it to resolve the members an artifact is computed from.
+gene_families = Table(
+    "gene_families",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("assembly_id", Integer),
+    Column("release_id", Integer),
+    Column("level", String(16)),
+    Column("external_id", String(128)),
+    Column("name", String(256)),
+    Column("method", String(64)),
+    Column("source_name", String(256)),
+    Column("source_version", String(128)),
+    Column("source_sha256", String(64)),
+)
+
+gene_family_members = Table(
+    "gene_family_members",
+    metadata,
+    Column("id", BigInteger, primary_key=True),
+    Column("family_id", Integer),
+    Column("assembly_id", Integer),
+    Column("release_id", Integer),
+    Column("gene_accession", String(64)),
+    Column("species", String(128)),
+    Column("relationship_type", String(16)),
+    Column("method", String(64)),
+    Column("confidence", Float),
+    Column("evidence", JSONB),
+)
+
+#: Asynchronous alignments and trees. ``input_sha256`` freezes the ordered
+#: member set; ``object_key`` is written only once the artifact succeeded.
+comparative_artifacts = Table(
+    "comparative_artifacts",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("job_id", UUID(as_uuid=True)),
+    Column("artifact_type", String(16)),
+    Column("family_id", Integer),
+    Column("assembly_id", Integer),
+    Column("release_id", Integer),
+    Column("method", String(64)),
+    Column("input_sha256", String(64)),
+    Column("input_member_ids", JSONB),
+    Column("state", String(20)),
+    Column("object_key", String(2048)),
+    Column("object_sha256", String(64)),
+    Column("error_message", Text),
+    Column("created_at", DateTime(timezone=True)),
+    Column("completed_at", DateTime(timezone=True)),
+)
+
 gene_data_cache = Table(
     "gene_data_cache",
     metadata,
@@ -283,11 +337,24 @@ analysis_jobs = Table(
 #: and records the produced artifact's object key.  ``status`` uses the shared
 #: job vocabulary (``pending``/``running``/``succeeded``/``failed``), matching
 #: the PostgreSQL enum ``variant_export_status_enum``.
+variant_export_status_enum = ENUM(
+    "pending",
+    "running",
+    "succeeded",
+    "failed",
+    name="variant_export_status_enum",
+    create_type=False,
+)
 variant_exports = Table(
     "variant_exports",
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True),
-    Column("status", String(32)),
+    # Bound to the migration's enum type, not a bare VARCHAR: the worker's
+    # guarded UPDATE is a real ``WHERE status = ...`` against
+    # ``variant_export_status_enum``, and PostgreSQL rejects comparing the enum
+    # column with a varchar literal. Carried here because PR #20 is still open;
+    # drop this hunk when it merges.
+    Column("status", variant_export_status_enum),
     Column("artifact_path", String(2048)),
     Column("record_count", Integer),
     Column("file_size", Integer),
@@ -457,6 +524,9 @@ def utcnow() -> datetime:
 __all__ = [
     "analysis_jobs",
     "assemblies",
+    "comparative_artifacts",
+    "gene_families",
+    "gene_family_members",
     "blast_databases",
     "blast_hits",
     "blast_index_builds",

@@ -4366,6 +4366,138 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/comparative/families": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Families
+         * @description List gene families/subfamilies in the resolved release.
+         */
+        get: operations["list_families_api_v1_comparative_families_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comparative/families/{family_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Family
+         * @description One family with its members and per-species coverage.
+         *
+         *     ``coverage`` names the species the family knows about; a species that
+         *     contributed no member is ``state="no_data"`` with ``member_count: null``,
+         *     never an empty member list that would read as "present but empty".
+         */
+        get: operations["get_family_api_v1_comparative_families__family_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comparative/families/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Compare Families
+         * @description Compare two families: shared members, and the members unique to each.
+         */
+        get: operations["compare_families_api_v1_comparative_families_compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comparative/genes/{gene_id}/orthologs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Gene Orthologs
+         * @description Ortholog/paralog rows for one gene, with the relationship type stated.
+         *
+         *     ``relationship_type`` summarises how many counterparts the source recorded
+         *     per species. It is not derived from sequence similarity: this endpoint never
+         *     reads BLAST hits.
+         */
+        get: operations["get_gene_orthologs_api_v1_comparative_genes__gene_id__orthologs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comparative/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Artifact
+         * @description Queue an alignment or tree for a family.
+         *
+         *     The response is the pending artifact, not a result: the aligner runs in the
+         *     worker through the shared outbox, and the finished object is fetched through
+         *     ``GET /comparative/artifacts/{job_id}``.
+         */
+        post: operations["request_artifact_api_v1_comparative_artifacts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comparative/artifacts/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Artifact
+         * @description Status of an alignment/tree, with a pre-signed URL once it succeeded.
+         */
+        get: operations["get_artifact_api_v1_comparative_artifacts__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/analytics/summary": {
         parameters: {
             query?: never;
@@ -5266,6 +5398,58 @@ export interface components {
             reference?: string | null;
             /** Qualifier */
             qualifier?: string | null;
+        };
+        /**
+         * ArtifactRequest
+         * @description Request to compute an alignment or tree for a family.
+         */
+        ArtifactRequest: {
+            /** Family Id */
+            family_id: number;
+            /**
+             * Artifact Type
+             * @enum {string}
+             */
+            artifact_type: "msa" | "tree";
+            /** Method */
+            method: string;
+            /** Assembly Id */
+            assembly_id?: number | null;
+        };
+        /**
+         * ArtifactResponse
+         * @description An asynchronous alignment or tree, identified by its job.
+         */
+        ArtifactResponse: {
+            /**
+             * Artifact Type
+             * @enum {string}
+             */
+            artifact_type: "msa" | "tree";
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "running" | "succeeded" | "failed";
+            /** Method */
+            method: string;
+            /** Input Sha256 */
+            input_sha256: string;
+            /** Input Member Ids */
+            input_member_ids?: string[];
+            /** Download Url */
+            download_url?: string | null;
+            /** Error Message */
+            error_message?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Completed At */
+            completed_at?: string | null;
         };
         /** AssemblyResponse */
         AssemblyResponse: {
@@ -6700,6 +6884,127 @@ export interface components {
             /** Source Published At */
             source_published_at?: string | null;
         };
+        /**
+         * FamilyDetailResponse
+         * @description A family with its members and per-species coverage.
+         *
+         *     ``coverage`` names every species the release knows about for this family,
+         *     including species with no row (``state="no_data"``), so a presence/absence
+         *     view can be drawn without the client inventing the missing species.
+         */
+        FamilyDetailResponse: {
+            /** Family Id */
+            family_id: number;
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "gene_family" | "gene_subfamily";
+            /** External Id */
+            external_id: string;
+            /** Name */
+            name: string;
+            /** Method */
+            method: string;
+            /** Method Version */
+            method_version?: string | null;
+            /** Source Name */
+            source_name: string;
+            /** Source Version */
+            source_version: string;
+            /** Source Url */
+            source_url: string;
+            /** Release Id */
+            release_id: number;
+            /** Assembly Id */
+            assembly_id: number;
+            /**
+             * Member Count
+             * @default 0
+             */
+            member_count: number;
+            evidence: components["schemas"]["EvidenceTag"];
+            /** Members */
+            members?: components["schemas"]["FamilyMemberResponse"][];
+            /** Coverage */
+            coverage?: components["schemas"]["SpeciesCoverageResponse"][];
+            /** Relationship Types */
+            relationship_types?: string[];
+        };
+        /** FamilyListResponse */
+        FamilyListResponse: {
+            /** Items */
+            items?: components["schemas"]["FamilyResponse"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Page
+             * @default 1
+             */
+            page: number;
+            /**
+             * Page Size
+             * @default 20
+             */
+            page_size: number;
+        };
+        /** FamilyMemberResponse */
+        FamilyMemberResponse: {
+            /** Gene Accession */
+            gene_accession: string;
+            /** Species */
+            species: string;
+            /**
+             * Relationship Type
+             * @enum {string}
+             */
+            relationship_type: "one_to_one" | "one_to_many" | "many_to_many";
+            /** Method */
+            method?: string | null;
+            /** Confidence */
+            confidence?: number | null;
+            /** Evidence */
+            evidence?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** FamilyResponse */
+        FamilyResponse: {
+            /** Family Id */
+            family_id: number;
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "gene_family" | "gene_subfamily";
+            /** External Id */
+            external_id: string;
+            /** Name */
+            name: string;
+            /** Method */
+            method: string;
+            /** Method Version */
+            method_version?: string | null;
+            /** Source Name */
+            source_name: string;
+            /** Source Version */
+            source_version: string;
+            /** Source Url */
+            source_url: string;
+            /** Release Id */
+            release_id: number;
+            /** Assembly Id */
+            assembly_id: number;
+            /**
+             * Member Count
+             * @default 0
+             */
+            member_count: number;
+            evidence: components["schemas"]["EvidenceTag"];
+        };
         /** FeatureDefinitionResponse */
         FeatureDefinitionResponse: {
             /** Key */
@@ -7844,6 +8149,27 @@ export interface components {
             /** Is Decorative */
             is_decorative?: boolean | null;
         };
+        /**
+         * MemberComparisonResponse
+         * @description Two families side by side: shared and unique members.
+         *
+         *     ``shared`` is set intersection of gene accessions; ``only_left`` /
+         *     ``only_right`` are the differences. Species coverage is reported per side so
+         *     a species missing from one family is visible as ``no_data``, not as "absent
+         *     from the comparison".
+         */
+        MemberComparisonResponse: {
+            left: components["schemas"]["FamilyResponse"];
+            right: components["schemas"]["FamilyResponse"];
+            /** Shared */
+            shared?: components["schemas"]["FamilyMemberResponse"][];
+            /** Only Left */
+            only_left?: components["schemas"]["FamilyMemberResponse"][];
+            /** Only Right */
+            only_right?: components["schemas"]["FamilyMemberResponse"][];
+            /** Coverage */
+            coverage?: components["schemas"]["SpeciesCoverageResponse"][];
+        };
         /** MultipartCompletePathRequest */
         MultipartCompletePathRequest: {
             /** Object Key */
@@ -8379,6 +8705,57 @@ export interface components {
             parents?: string[];
             /** Children */
             children?: string[];
+        };
+        /**
+         * OrthologRecord
+         * @description One directional ortholog/paralog assertion.
+         *
+         *     ``similarity`` deliberately does not appear: a BLAST hit is a similarity
+         *     measurement, not an orthology assignment, and this record exists only for
+         *     rows the source itself classified.
+         */
+        OrthologRecord: {
+            /** Gene Accession */
+            gene_accession: string;
+            /** Counterpart Species */
+            counterpart_species?: string | null;
+            /** Counterpart Gene Id */
+            counterpart_gene_id: string;
+            /**
+             * Homolog Type
+             * @enum {string}
+             */
+            homolog_type: "ortholog" | "paralog";
+            /**
+             * Relationship Type
+             * @enum {string}
+             */
+            relationship_type: "one_to_one" | "one_to_many" | "many_to_many";
+            /** Method */
+            method?: string | null;
+            /** Source */
+            source?: string | null;
+            /** Release Id */
+            release_id?: number | null;
+            /** Confidence */
+            confidence?: number | null;
+            evidence: components["schemas"]["EvidenceTag"];
+        };
+        /** OrthologResponse */
+        OrthologResponse: {
+            /** Gene Id */
+            gene_id: string;
+            /** Assembly Id */
+            assembly_id: number;
+            /** Release Id */
+            release_id: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "available" | "no_data" | "not_imported";
+            /** Records */
+            records?: components["schemas"]["OrthologRecord"][];
         };
         /** PageDefinitionCreate */
         PageDefinitionCreate: {
@@ -9902,6 +10279,25 @@ export interface components {
          * @enum {string}
          */
         SiteVariant: "external" | "internal";
+        /**
+         * SpeciesCoverageResponse
+         * @description Per-species presence in one family.
+         *
+         *     ``state`` is what the client renders. ``member_count`` is ``None`` whenever
+         *     no member row exists -- never 0 with ``state="available"``, because that
+         *     would turn "not imported/not present" into a measured zero.
+         */
+        SpeciesCoverageResponse: {
+            /** Species */
+            species: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "available" | "no_data" | "not_imported";
+            /** Member Count */
+            member_count?: number | null;
+        };
         /** SpeciesInstanceCreate */
         SpeciesInstanceCreate: {
             /** Code */
@@ -20877,6 +21273,280 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_families_api_v1_comparative_families_get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                level?: string | null;
+                page?: number;
+                page_size?: number;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FamilyListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_family_api_v1_comparative_families__family_id__get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                family_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FamilyDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    compare_families_api_v1_comparative_families_compare_get: {
+        parameters: {
+            query: {
+                /** @description Family id on the left side. */
+                left: number;
+                /** @description Family id on the right side. */
+                right: number;
+                assembly_id?: number | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberComparisonResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_gene_orthologs_api_v1_comparative_genes__gene_id__orthologs_get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                homolog_type?: string | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                gene_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrthologResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    request_artifact_api_v1_comparative_artifacts_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtifactRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_artifact_api_v1_comparative_artifacts__job_id__get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactResponse"];
                 };
             };
             /** @description Validation Error */
