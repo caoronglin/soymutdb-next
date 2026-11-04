@@ -71,14 +71,30 @@ function rowKeys(container: HTMLElement): string[] {
   );
 }
 
+/**
+ * These fixtures are hand-built rows, not a snapshot of what `alembic upgrade
+ * head` can return. `variant_id` is minted by `compute_variant_id` from
+ * `release_id + assembly + chromosome + position + ref + alt`, so in a real
+ * database one `variant_id` can never appear under two assemblies in the same
+ * release — the importer has already folded the assembly into the digest.
+ * What is under test here is the key function's correctness, not a shape
+ * Postgres will hand back.
+ */
 describe("variant row keys", () => {
   /**
-   * `variant_id` is unique only inside one release, and the identifier column
-   * already prints it: a page carrying the same variant from two assemblies
-   * would collide on a bare `variant_id` and React would silently reuse a row.
-   * The key therefore carries the assembly the row was read from.
+   * The key is derived, so a whole class of mutations keeps it unique by
+   * accident: the rows differ in `assembly`, so any distinct-suffix rule
+   * separates them. Bucketing the keys asserts the actual contract — two rows
+   * sharing an identifier but differing in assembly land in different buckets,
+   * and nothing else collapses into one.
    */
-  it("gives every rendered row its own key across assemblies", () => {
+  const bucketsOf = (keys: string[]) => {
+    const buckets = new Map<string, number>();
+    for (const key of keys) buckets.set(key, (buckets.get(key) ?? 0) + 1);
+    return [...buckets.values()].sort();
+  };
+
+  it("separates rows that share an identifier and differ in assembly", () => {
     const shared = "18446744073709551615";
     runtime.items = [
       variantRow(shared, { assembly: "Wm82.a4.v1" }),
@@ -89,6 +105,44 @@ describe("variant row keys", () => {
     const keys = rowKeys(container);
     expect(keys).toHaveLength(2);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  /**
+   * A `?? ""` fallback looks equivalent to `?? null` until a row actually
+   * carries `assembly: ""`. This fixture forces that collision: `null` and `""`
+   * must stay different values, so the shared identifier must split three ways
+   * rather than collapsing the empty and absent assembly into one key.
+   */
+  it("separates an absent assembly from an empty one under a shared identifier", () => {
+    const shared = "18446744073709551615";
+    runtime.items = [
+      variantRow(shared, { assembly: "Wm82.a4.v1" }),
+      variantRow(shared, { assembly: null }),
+      variantRow(shared, { assembly: "" }),
+    ];
+    const { container } = render(<Page />);
+
+    const keys = rowKeys(container);
+    expect(keys).toHaveLength(3);
+    expect(new Set(keys).size).toBe(3);
+    expect(bucketsOf(keys)).toEqual([1, 1, 1]);
+  });
+
+  /**
+   * Two rows that agree on both identifier and assembly are the same row said
+   * twice; they must NOT be split, so a key carrying extra noise (an index, a
+   * timestamp) would show up here as three buckets.
+   */
+  it("keeps rows that agree on identifier and assembly in one bucket", () => {
+    const shared = "18446744073709551615";
+    runtime.items = [
+      variantRow(shared, { assembly: "Wm82.a4.v1" }),
+      variantRow(shared, { assembly: "Wm82.a4.v1" }),
+      variantRow(shared, { assembly: null }),
+    ];
+    const { container } = render(<Page />);
+
+    expect(bucketsOf(rowKeys(container))).toEqual([1, 2]);
   });
 
   it("renders duplicate identifiers without a React duplicate-key warning", () => {
