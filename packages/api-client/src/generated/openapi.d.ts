@@ -866,6 +866,185 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/tools/sequence/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sequence Capabilities
+         * @description Supported algorithms, formats, limits and engine availability.
+         */
+        get: operations["sequence_capabilities_api_v1_tools_sequence_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/reverse-complement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reverse Complement */
+        post: operations["reverse_complement_api_v1_tools_sequence_reverse_complement_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/match": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sequence Match */
+        post: operations["sequence_match_api_v1_tools_sequence_match_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/align": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sequence Align */
+        post: operations["sequence_align_api_v1_tools_sequence_align_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sequence Stats */
+        post: operations["sequence_stats_api_v1_tools_sequence_stats_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/orfs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sequence Orfs */
+        post: operations["sequence_orfs_api_v1_tools_sequence_orfs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/translate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sequence Translate */
+        post: operations["sequence_translate_api_v1_tools_sequence_translate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/kmers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sequence Kmers */
+        post: operations["sequence_kmers_api_v1_tools_sequence_kmers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inspect Format
+         * @description Validate a bounded FASTA/FASTQ/BED payload; never accepts a path or URL.
+         */
+        post: operations["inspect_format_api_v1_tools_sequence_inspect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/intervals/overlap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Interval Overlap
+         * @description Overlap user regions with published gene annotations of one assembly.
+         */
+        post: operations["interval_overlap_api_v1_tools_intervals_overlap_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/search": {
         parameters: {
             query?: never;
@@ -6952,6 +7131,21 @@ export interface components {
             created_at: string;
         };
         /**
+         * EngineMetadata
+         * @description Implementation identity; distinct from a biological data release.
+         */
+        EngineMetadata: {
+            /** Engine */
+            engine: string;
+            /** Engine Version */
+            engine_version: string;
+            /**
+             * Request Id
+             * @default null
+             */
+            request_id: string | null;
+        };
+        /**
          * EnrichmentGseaResponse
          * @description GSEA result with assembly, release, and annotation source context.
          */
@@ -7886,6 +8080,41 @@ export interface components {
             /** Order */
             order: number;
         };
+        /**
+         * FormatInspectRequest
+         * @description Bounded raw bytes as a list of integers (no file paths / URLs).
+         */
+        FormatInspectRequest: {
+            /**
+             * Fmt
+             * @enum {string}
+             */
+            fmt: "fasta" | "fastq" | "bed";
+            /**
+             * Data
+             * @description Base64-encoded file content, ≤1 MiB
+             */
+            data: string;
+        };
+        /** FormatInspectResponse */
+        FormatInspectResponse: {
+            /**
+             * Fmt
+             * @enum {string}
+             */
+            fmt: "fasta" | "fastq" | "bed";
+            /** Valid */
+            valid: boolean;
+            /** Record Count */
+            record_count: number;
+            /** Truncated */
+            truncated: boolean;
+            /** Records */
+            records?: {
+                [key: string]: unknown;
+            }[];
+            engine: components["schemas"]["EngineMetadata"];
+        };
         /** GeneDetail */
         GeneDetail: {
             /**
@@ -8724,6 +8953,16 @@ export interface components {
              */
             module_key: string | null;
         };
+        /** InlineTarget */
+        InlineTarget: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "inline";
+            /** Sequence */
+            sequence: string;
+        };
         /** InternalGeneSearchItem */
         InternalGeneSearchItem: {
             /** @default gene */
@@ -8803,6 +9042,72 @@ export interface components {
              * @default 0
              */
             total_count: number;
+        };
+        /** IntervalRegion */
+        IntervalRegion: {
+            /**
+             * Start
+             * @description 1-based inclusive start
+             */
+            start: number;
+            /**
+             * End
+             * @description 1-based inclusive end
+             */
+            end: number;
+        };
+        /** KmerItem */
+        KmerItem: {
+            /** Kmer */
+            kmer: string;
+            /** Count */
+            count: number;
+        };
+        /** KmerRequest */
+        KmerRequest: {
+            /** Sequence */
+            sequence: string;
+            /**
+             * K
+             * @default 4
+             */
+            k: number;
+            /**
+             * Canonical
+             * @default true
+             */
+            canonical: boolean;
+            /**
+             * Ambiguity Policy
+             * @default skip
+             * @enum {string}
+             */
+            ambiguity_policy: "skip" | "reject";
+            /**
+             * Max Items
+             * @default 1000
+             */
+            max_items: number;
+        };
+        /** KmerResponse */
+        KmerResponse: {
+            /** K */
+            k: number;
+            /** Canonical */
+            canonical: boolean;
+            /** Total Windows */
+            total_windows: number;
+            /** Valid Windows */
+            valid_windows: number;
+            /** Skipped Windows */
+            skipped_windows: number;
+            /** Distinct Kmers */
+            distinct_kmers: number;
+            /** Items */
+            items: components["schemas"]["KmerItem"][];
+            /** Limited */
+            limited: boolean;
+            engine: components["schemas"]["EngineMetadata"];
         };
         /** LayoutResponse */
         LayoutResponse: {
@@ -9049,6 +9354,29 @@ export interface components {
         MarkReadResponse: {
             /** Marked */
             marked: number;
+        };
+        /** MatchHit */
+        MatchHit: {
+            /**
+             * Start
+             * @description 1-based inclusive start
+             */
+            start: number;
+            /**
+             * End
+             * @description 1-based inclusive end
+             */
+            end: number;
+            /**
+             * Strand
+             * @enum {string}
+             */
+            strand: "+" | "-";
+            /**
+             * Edit Distance
+             * @default 0
+             */
+            edit_distance: number;
         };
         /**
          * MatchType
@@ -9960,6 +10288,43 @@ export interface components {
             /** Children */
             children?: string[];
         };
+        /** OrfCandidate */
+        OrfCandidate: {
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /**
+             * Strand
+             * @enum {string}
+             */
+            strand: "+" | "-";
+            /** Frame */
+            frame: number;
+        };
+        /** OrfRequest */
+        OrfRequest: {
+            /** Sequence */
+            sequence: string;
+            /**
+             * Min Len
+             * @default 90
+             */
+            min_len: number;
+            /**
+             * Limit
+             * @default 1000
+             */
+            limit: number;
+        };
+        /** OrfResponse */
+        OrfResponse: {
+            /** Candidates */
+            candidates: components["schemas"]["OrfCandidate"][];
+            /** Count */
+            count: number;
+            engine: components["schemas"]["EngineMetadata"];
+        };
         /**
          * OrthologRecord
          * @description One directional ortholog/paralog assertion.
@@ -10025,6 +10390,79 @@ export interface components {
             state: "available" | "no_data" | "not_imported";
             /** Records */
             records?: components["schemas"]["OrthologRecord"][];
+        };
+        /** OverlapHit */
+        OverlapHit: {
+            /** Public Id */
+            public_id: string;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Overlap Bp */
+            overlap_bp: number;
+            /** Source */
+            source: string;
+        };
+        /** OverlapQueryResult */
+        OverlapQueryResult: {
+            query: components["schemas"]["IntervalRegion"];
+            /** Overlap Count */
+            overlap_count: number;
+            /** Covered Bp */
+            covered_bp: number;
+            /** Hits */
+            hits: components["schemas"]["OverlapHit"][];
+            /** Limited */
+            limited: boolean;
+        };
+        /** OverlapRequest */
+        OverlapRequest: {
+            /** Assembly */
+            assembly: string;
+            /** Reference Name */
+            reference_name: string;
+            /** Regions */
+            regions: components["schemas"]["IntervalRegion"][];
+            /**
+             * Coordinate System
+             * @default 1-based-inclusive
+             * @constant
+             */
+            coordinate_system: "1-based-inclusive";
+            /**
+             * Annotation Type
+             * @default gene
+             * @constant
+             */
+            annotation_type: "gene";
+            /**
+             * Mode
+             * @default hits
+             * @enum {string}
+             */
+            mode: "hits" | "count";
+            /**
+             * Max Hits
+             * @default 100
+             */
+            max_hits: number;
+        };
+        /** OverlapResponse */
+        OverlapResponse: {
+            /** Assembly */
+            assembly: string;
+            /** Release */
+            release: string;
+            /**
+             * Coordinate System
+             * @default 1-based-inclusive
+             * @constant
+             */
+            coordinate_system: "1-based-inclusive";
+            /** Queries */
+            queries: components["schemas"]["OverlapQueryResult"][];
+            engine: components["schemas"]["EngineMetadata"];
         };
         /** PageDefinitionCreate */
         PageDefinitionCreate: {
@@ -11252,6 +11690,58 @@ export interface components {
             columns: components["schemas"]["TableColumn"][];
             actions: components["schemas"]["TableActions"];
         };
+        /** ReverseComplementRequest */
+        ReverseComplementRequest: {
+            /** Sequence */
+            sequence: string;
+            /**
+             * Alphabet
+             * @default dna
+             * @enum {string}
+             */
+            alphabet: "dna" | "rna" | "protein";
+            /**
+             * Preserve Case
+             * @default false
+             */
+            preserve_case: boolean;
+        };
+        /** ReverseComplementResponse */
+        ReverseComplementResponse: {
+            /** Sequence */
+            sequence: string;
+            /** Length */
+            length: number;
+            /**
+             * Alphabet
+             * @enum {string}
+             */
+            alphabet: "dna" | "rna" | "protein";
+            engine: components["schemas"]["EngineMetadata"];
+        };
+        /** ScoringConfig */
+        ScoringConfig: {
+            /**
+             * Match
+             * @default 2
+             */
+            match: number;
+            /**
+             * Mismatch
+             * @default -3
+             */
+            mismatch: number;
+            /**
+             * Gap Open
+             * @default -5
+             */
+            gap_open: number;
+            /**
+             * Gap Extend
+             * @default -1
+             */
+            gap_extend: number;
+        };
         /**
          * SearchResultItem
          * @description A single global-search hit (stable public contract).
@@ -11504,6 +11994,57 @@ export interface components {
              */
             expires_in: number | null;
         };
+        /** SequenceAlignRequest */
+        SequenceAlignRequest: {
+            /** Query */
+            query: string;
+            /** Target */
+            target: string;
+            /**
+             * Alphabet
+             * @default dna
+             * @enum {string}
+             */
+            alphabet: "dna" | "rna" | "protein";
+            /**
+             * Mode
+             * @default local
+             * @enum {string}
+             */
+            mode: "local" | "global" | "semiglobal";
+            scoring?: components["schemas"]["ScoringConfig"];
+        };
+        /** SequenceAlignResponse */
+        SequenceAlignResponse: {
+            /** Score */
+            score: number;
+            /** Query Range */
+            query_range: [
+                number,
+                number
+            ];
+            /** Target Range */
+            target_range: [
+                number,
+                number
+            ];
+            /** Cigar */
+            cigar: string;
+            /** Identity */
+            identity: number;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "local" | "global" | "semiglobal";
+            /**
+             * Coordinate System
+             * @default 1-based-inclusive
+             * @constant
+             */
+            coordinate_system: "1-based-inclusive";
+            engine: components["schemas"]["EngineMetadata"];
+        };
         /**
          * SequenceAvailability
          * @description Per-molecule availability for a gene's sequences.
@@ -11547,6 +12088,173 @@ export interface components {
              * @default null
              */
             sequence: string | null;
+        };
+        /**
+         * SequenceCapabilitiesResponse
+         * @description Supported algorithms, formats and limits; never internal paths.
+         */
+        SequenceCapabilitiesResponse: {
+            /** Available */
+            available: boolean;
+            /**
+             * Engine
+             * @default null
+             */
+            engine: string | null;
+            /**
+             * Engine Version
+             * @default null
+             */
+            engine_version: string | null;
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
+            /**
+             * Max Inline Sequence
+             * @default 1048576
+             */
+            max_inline_sequence: number;
+            /**
+             * Max Pattern
+             * @default 256
+             */
+            max_pattern: number;
+            /**
+             * Max Hits
+             * @default 1000
+             */
+            max_hits: number;
+            /**
+             * K Range
+             * @default [
+             *       1,
+             *       32
+             *     ]
+             */
+            k_range: [
+                number,
+                number
+            ];
+            /** Genetic Codes */
+            genetic_codes?: number[];
+            /**
+             * Coordinate System Internal
+             * @default 0-based-half-open
+             */
+            coordinate_system_internal: string;
+            /**
+             * Coordinate System Public
+             * @default 1-based-inclusive
+             */
+            coordinate_system_public: string;
+            /** Programs */
+            programs?: string[];
+            /** Formats */
+            formats?: string[];
+        };
+        /** SequenceMatchRequest */
+        SequenceMatchRequest: {
+            /** Pattern */
+            pattern: string;
+            /** Target */
+            target: components["schemas"]["InlineTarget"];
+            /**
+             * Alphabet
+             * @default dna
+             * @enum {string}
+             */
+            alphabet: "dna" | "rna" | "protein";
+            /**
+             * Mode
+             * @default exact
+             * @enum {string}
+             */
+            mode: "exact" | "approximate";
+            /**
+             * Both Strands
+             * @default true
+             */
+            both_strands: boolean;
+            /**
+             * Max Edits
+             * @default 0
+             */
+            max_edits: number;
+            /**
+             * Iupac Mode
+             * @default literal
+             * @constant
+             */
+            iupac_mode: "literal";
+            /**
+             * Max Hits
+             * @default 100
+             */
+            max_hits: number;
+        };
+        /** SequenceMatchResponse */
+        SequenceMatchResponse: {
+            /** Matches */
+            matches: components["schemas"]["MatchHit"][];
+            /** Count */
+            count: number;
+            /** Limited */
+            limited: boolean;
+            /**
+             * Coordinate System
+             * @default 1-based-inclusive
+             * @constant
+             */
+            coordinate_system: "1-based-inclusive";
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "exact" | "approximate";
+            engine: components["schemas"]["EngineMetadata"];
+        };
+        /** SequenceStatsRequest */
+        SequenceStatsRequest: {
+            /** Sequence */
+            sequence: string;
+            /**
+             * Alphabet
+             * @default dna
+             * @enum {string}
+             */
+            alphabet: "dna" | "rna" | "protein";
+            /**
+             * Ambiguous Gc Policy
+             * @default exclude
+             * @enum {string}
+             */
+            ambiguous_gc_policy: "exclude" | "include";
+        };
+        /** SequenceStatsResponse */
+        SequenceStatsResponse: {
+            /** Length */
+            length: number;
+            /** Gc Count */
+            gc_count: number;
+            /** At Count */
+            at_count: number;
+            /** Ambiguous Count */
+            ambiguous_count: number;
+            /** A */
+            a: number;
+            /** C */
+            c: number;
+            /** G */
+            g: number;
+            /** T */
+            t: number;
+            /** Denominator */
+            denominator: number;
+            /** Gc Fraction */
+            gc_fraction: number;
+            engine: components["schemas"]["EngineMetadata"];
         };
         /** SettingFieldSchema */
         SettingFieldSchema: {
@@ -12537,6 +13245,37 @@ export interface components {
             is_canonical: boolean;
             /** Exons */
             exons?: components["schemas"]["ExonResponse"][];
+        };
+        /** TranslateRequest */
+        TranslateRequest: {
+            /** Sequence */
+            sequence: string;
+            /**
+             * Genetic Code Id
+             * @default 1
+             */
+            genetic_code_id: number;
+            /**
+             * Frame
+             * @default 0
+             */
+            frame: number;
+        };
+        /** TranslateResponse */
+        TranslateResponse: {
+            /** Protein */
+            protein: string;
+            /** Genetic Code Id */
+            genetic_code_id: number;
+            /** Frame */
+            frame: number;
+            /** Warnings */
+            warnings: string[];
+            /** Codons */
+            codons: number;
+            /** Trailing Bases */
+            trailing_bases: number;
+            engine: components["schemas"]["EngineMetadata"];
         };
         /**
          * UnreadCountResponse
@@ -15207,6 +15946,426 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SeqFetchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sequence_capabilities_api_v1_tools_sequence_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SequenceCapabilitiesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reverse_complement_api_v1_tools_sequence_reverse_complement_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReverseComplementRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReverseComplementResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sequence_match_api_v1_tools_sequence_match_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SequenceMatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SequenceMatchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sequence_align_api_v1_tools_sequence_align_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SequenceAlignRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SequenceAlignResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sequence_stats_api_v1_tools_sequence_stats_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SequenceStatsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SequenceStatsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sequence_orfs_api_v1_tools_sequence_orfs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrfRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrfResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sequence_translate_api_v1_tools_sequence_translate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TranslateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sequence_kmers_api_v1_tools_sequence_kmers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KmerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KmerResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    inspect_format_api_v1_tools_sequence_inspect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FormatInspectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FormatInspectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    interval_overlap_api_v1_tools_intervals_overlap_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OverlapRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverlapResponse"];
                 };
             };
             /** @description Validation Error */

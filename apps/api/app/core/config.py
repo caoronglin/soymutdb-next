@@ -325,6 +325,12 @@ class Settings(BaseSettings):
     # --------------------------------------------------------- Feature flags
     feature_registration_enabled: bool = True
 
+    # Rust bio-core engine selector.  ``python`` is documented as a legacy
+    # fallback but there is NO equivalent Python implementation of these
+    # algorithms, so selecting it must fail closed rather than silently return
+    # empty results.  ``rust`` is the only value that enables computation.
+    bio_engine: Literal["rust", "python"] = "rust"
+
     @property
     def refresh_cookie_secure_effective(self) -> bool:
         """Effective ``Secure`` flag for the refresh cookie.

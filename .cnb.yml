@@ -144,6 +144,9 @@ main:
         # GitHub mirror only avoids this because actions/setup-python provides one.
         - name: Frontend verification
           script: bash scripts/ci-job-steps.sh run frontend
+        - name: Rust bio-core
+          # Delegates to scripts/ci-job-steps.sh run bio-core; no Rust logic in YAML.
+          script: bash scripts/ci-job-steps.sh run bio-core
         - name: API + Worker verification
           image: python:3.15
           script: bash scripts/ci-job-steps.sh run api-tests
@@ -254,6 +257,9 @@ main:
         # GitHub mirror only avoids this because actions/setup-python provides one.
         - name: Frontend verification
           script: bash scripts/ci-job-steps.sh run frontend
+        - name: Rust bio-core
+          # Delegates to scripts/ci-job-steps.sh run bio-core; no Rust logic in YAML.
+          script: bash scripts/ci-job-steps.sh run bio-core
         - name: API + Worker verification
           image: python:3.15
           script: bash scripts/ci-job-steps.sh run api-tests
@@ -834,6 +840,9 @@ $:
         # GitHub mirror only avoids this because actions/setup-python provides one.
         - name: Frontend verification
           script: bash scripts/ci-job-steps.sh run frontend
+        - name: Rust bio-core
+          # Delegates to scripts/ci-job-steps.sh run bio-core; no Rust logic in YAML.
+          script: bash scripts/ci-job-steps.sh run bio-core
         - name: API + Worker verification
           image: python:3.15
           script: bash scripts/ci-job-steps.sh run api-tests
