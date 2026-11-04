@@ -18986,6 +18986,7 @@
       "AboutContentResponse": {
         "properties": {
           "title_en": {
+            "title": "Title En",
             "anyOf": [
               {
                 "type": "string"
@@ -18993,10 +18994,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title En"
+            ]
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -19004,10 +19005,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "summary_en": {
+            "title": "Summary En",
             "anyOf": [
               {
                 "type": "string"
@@ -19015,10 +19016,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Summary En"
+            ]
           },
           "summary_zh": {
+            "title": "Summary Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -19026,10 +19027,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Summary Zh"
+            ]
           },
           "content_en": {
+            "title": "Content En",
             "anyOf": [
               {
                 "type": "string"
@@ -19037,10 +19038,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Content En"
+            ]
           },
           "content_zh": {
+            "title": "Content Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -19048,8 +19049,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Content Zh"
+            ]
           }
         },
         "type": "object",
@@ -19059,6 +19059,7 @@
       "ActiveReleaseResponse": {
         "properties": {
           "release_id": {
+            "title": "Release Id",
             "anyOf": [
               {
                 "type": "string"
@@ -19066,10 +19067,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Release Id"
+            ]
           },
           "version": {
+            "title": "Version",
             "anyOf": [
               {
                 "type": "string"
@@ -19077,10 +19078,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Version"
+            ]
           },
           "published_at": {
+            "title": "Published At",
             "anyOf": [
               {
                 "type": "string",
@@ -19089,8 +19090,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Published At"
+            ]
           }
         },
         "type": "object",
@@ -19273,6 +19273,7 @@
             "title": "Title"
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -19280,14 +19281,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "authors": {
             "type": "string",
             "title": "Authors"
           },
           "authors_zh": {
+            "title": "Authors Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -19295,10 +19296,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Authors Zh"
+            ]
           },
           "journal": {
+            "title": "Journal",
             "anyOf": [
               {
                 "type": "string"
@@ -19306,10 +19307,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Journal"
+            ]
           },
           "year": {
+            "title": "Year",
             "anyOf": [
               {
                 "type": "integer"
@@ -19317,10 +19318,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Year"
+            ]
           },
           "doi": {
+            "title": "Doi",
             "anyOf": [
               {
                 "type": "string"
@@ -19328,10 +19329,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Doi"
+            ]
           },
           "pmid": {
+            "title": "Pmid",
             "anyOf": [
               {
                 "type": "string"
@@ -19339,10 +19340,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Pmid"
+            ]
           },
           "abstract": {
+            "title": "Abstract",
             "anyOf": [
               {
                 "type": "string"
@@ -19350,10 +19351,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Abstract"
+            ]
           },
           "abstract_zh": {
+            "title": "Abstract Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -19361,8 +19362,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Abstract Zh"
+            ]
           },
           "is_featured": {
             "type": "boolean",
@@ -19421,6 +19421,7 @@
       "AlleleFreqRequest": {
         "properties": {
           "gene_id": {
+            "title": "Gene Id",
             "anyOf": [
               {
                 "type": "string",
@@ -19429,10 +19430,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Id"
+            ]
           },
           "assembly": {
+            "title": "Assembly",
             "anyOf": [
               {
                 "type": "string",
@@ -19441,10 +19442,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly"
+            ]
           },
           "chromosome": {
+            "title": "Chromosome",
             "anyOf": [
               {
                 "type": "string",
@@ -19453,10 +19454,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Chromosome"
+            ]
           },
           "start": {
+            "title": "Start",
             "anyOf": [
               {
                 "type": "integer",
@@ -19465,10 +19466,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Start"
+            ]
           },
           "end": {
+            "title": "End",
             "anyOf": [
               {
                 "type": "integer",
@@ -19477,8 +19478,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "End"
+            ]
           },
           "max_variants": {
             "type": "integer",
@@ -19499,6 +19499,7 @@
             "title": "Source"
           },
           "gene_id": {
+            "title": "Gene Id",
             "anyOf": [
               {
                 "type": "string"
@@ -19506,8 +19507,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Id"
+            ]
           },
           "assembly": {
             "type": "string",
@@ -19588,6 +19588,7 @@
             "default": "SNP"
           },
           "gene_id": {
+            "title": "Gene Id",
             "anyOf": [
               {
                 "type": "string"
@@ -19595,8 +19596,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Id"
+            ]
           }
         },
         "type": "object",
@@ -19655,6 +19655,7 @@
             "$ref": "#/components/schemas/AnalysisJobStatus"
           },
           "error_message": {
+            "title": "Error Message",
             "anyOf": [
               {
                 "type": "string"
@@ -19662,10 +19663,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Error Message"
+            ]
           },
           "result": {
+            "title": "Result",
             "anyOf": [
               {
                 "additionalProperties": true,
@@ -19674,8 +19675,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Result"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -19755,6 +19755,7 @@
             "title": "Size"
           },
           "content_type": {
+            "title": "Content Type",
             "anyOf": [
               {
                 "type": "string",
@@ -19763,8 +19764,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Content Type"
+            ]
           },
           "checksum_sha256": {
             "type": "string",
@@ -19963,6 +19963,7 @@
             "title": "Terms"
           },
           "source_name": {
+            "title": "Source Name",
             "anyOf": [
               {
                 "type": "string"
@@ -19970,10 +19971,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Source Name"
+            ]
           },
           "source_version": {
+            "title": "Source Version",
             "anyOf": [
               {
                 "type": "string"
@@ -19981,10 +19982,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Source Version"
+            ]
           },
           "source_url": {
+            "title": "Source Url",
             "anyOf": [
               {
                 "type": "string"
@@ -19992,8 +19993,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Source Url"
+            ]
           }
         },
         "type": "object",
@@ -20022,6 +20022,7 @@
             "title": "Term Name"
           },
           "evidence_code": {
+            "title": "Evidence Code",
             "anyOf": [
               {
                 "type": "string"
@@ -20029,8 +20030,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Evidence Code"
+            ]
           },
           "kind": {
             "type": "string",
@@ -20046,6 +20046,7 @@
             "default": "unknown"
           },
           "reference": {
+            "title": "Reference",
             "anyOf": [
               {
                 "type": "string"
@@ -20053,10 +20054,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Reference"
+            ]
           },
           "qualifier": {
+            "title": "Qualifier",
             "anyOf": [
               {
                 "type": "string"
@@ -20064,8 +20065,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Qualifier"
+            ]
           }
         },
         "type": "object",
@@ -20099,6 +20099,7 @@
             "title": "Method"
           },
           "assembly_id": {
+            "title": "Assembly Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -20106,8 +20107,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Id"
+            ]
           }
         },
         "type": "object",
@@ -20160,6 +20160,7 @@
             "title": "Input Member Ids"
           },
           "download_url": {
+            "title": "Download Url",
             "anyOf": [
               {
                 "type": "string"
@@ -20167,10 +20168,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Download Url"
+            ]
           },
           "error_message": {
+            "title": "Error Message",
             "anyOf": [
               {
                 "type": "string"
@@ -20178,10 +20179,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Error Message"
+            ]
           },
           "created_at": {
+            "title": "Created At",
             "anyOf": [
               {
                 "type": "string",
@@ -20190,10 +20191,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Created At"
+            ]
           },
           "completed_at": {
+            "title": "Completed At",
             "anyOf": [
               {
                 "type": "string",
@@ -20202,8 +20203,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Completed At"
+            ]
           }
         },
         "type": "object",
@@ -20243,6 +20243,7 @@
             "title": "Version"
           },
           "description": {
+            "title": "Description",
             "anyOf": [
               {
                 "type": "string"
@@ -20250,8 +20251,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Description"
+            ]
           },
           "is_default": {
             "type": "boolean",
@@ -20259,6 +20259,7 @@
             "default": false
           },
           "created_at": {
+            "title": "Created At",
             "anyOf": [
               {
                 "type": "string",
@@ -20267,10 +20268,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Created At"
+            ]
           },
           "updated_at": {
+            "title": "Updated At",
             "anyOf": [
               {
                 "type": "string",
@@ -20279,8 +20280,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Updated At"
+            ]
           }
         },
         "type": "object",
@@ -20320,6 +20320,7 @@
             "title": "Created At"
           },
           "assembly_name": {
+            "title": "Assembly Name",
             "anyOf": [
               {
                 "type": "string"
@@ -20327,10 +20328,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Name"
+            ]
           },
           "assembly_version": {
+            "title": "Assembly Version",
             "anyOf": [
               {
                 "type": "string"
@@ -20338,10 +20339,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Version"
+            ]
           },
           "assembly_is_default": {
+            "title": "Assembly Is Default",
             "anyOf": [
               {
                 "type": "boolean"
@@ -20349,10 +20350,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Is Default"
+            ]
           },
           "release_id": {
+            "title": "Release Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -20360,8 +20361,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Release Id"
+            ]
           },
           "engine": {
             "type": "string",
@@ -20373,6 +20373,7 @@
             "default": "diamond"
           },
           "sequence_type": {
+            "title": "Sequence Type",
             "anyOf": [
               {
                 "type": "string",
@@ -20390,10 +20391,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Sequence Type"
+            ]
           },
           "annotation_version": {
+            "title": "Annotation Version",
             "anyOf": [
               {
                 "type": "string"
@@ -20401,10 +20402,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Annotation Version"
+            ]
           },
           "source_url": {
+            "title": "Source Url",
             "anyOf": [
               {
                 "type": "string"
@@ -20412,10 +20413,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Source Url"
+            ]
           },
           "sequence_count": {
+            "title": "Sequence Count",
             "anyOf": [
               {
                 "type": "integer",
@@ -20424,10 +20425,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Sequence Count"
+            ]
           },
           "total_length": {
+            "title": "Total Length",
             "anyOf": [
               {
                 "type": "integer",
@@ -20436,10 +20437,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Total Length"
+            ]
           },
           "fasta_sha256": {
+            "title": "Fasta Sha256",
             "anyOf": [
               {
                 "type": "string"
@@ -20447,10 +20448,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Fasta Sha256"
+            ]
           },
           "index_version": {
+            "title": "Index Version",
             "anyOf": [
               {
                 "type": "string"
@@ -20458,8 +20459,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Index Version"
+            ]
           },
           "build_status": {
             "type": "string",
@@ -20481,6 +20481,7 @@
             "default": false
           },
           "license": {
+            "title": "License",
             "anyOf": [
               {
                 "type": "string"
@@ -20488,8 +20489,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "License"
+            ]
           }
         },
         "type": "object",
@@ -20514,6 +20514,7 @@
             "title": "Status"
           },
           "reason": {
+            "title": "Reason",
             "anyOf": [
               {
                 "type": "string",
@@ -20531,10 +20532,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Reason"
+            ]
           },
           "gene_id": {
+            "title": "Gene Id",
             "anyOf": [
               {
                 "type": "string"
@@ -20542,10 +20543,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Id"
+            ]
           },
           "chromosome": {
+            "title": "Chromosome",
             "anyOf": [
               {
                 "type": "string"
@@ -20553,10 +20554,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Chromosome"
+            ]
           },
           "start": {
+            "title": "Start",
             "anyOf": [
               {
                 "type": "integer",
@@ -20565,10 +20566,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Start"
+            ]
           },
           "end": {
+            "title": "End",
             "anyOf": [
               {
                 "type": "integer",
@@ -20577,10 +20578,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "End"
+            ]
           },
           "strand": {
+            "title": "Strand",
             "anyOf": [
               {
                 "type": "string"
@@ -20588,10 +20589,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Strand"
+            ]
           },
           "release_id": {
+            "title": "Release Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -20599,10 +20600,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Release Id"
+            ]
           },
           "assembly_id": {
+            "title": "Assembly Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -20610,10 +20611,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Id"
+            ]
           },
           "assembly_name": {
+            "title": "Assembly Name",
             "anyOf": [
               {
                 "type": "string"
@@ -20621,10 +20622,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Name"
+            ]
           },
           "locus": {
+            "title": "Locus",
             "anyOf": [
               {
                 "type": "string"
@@ -20632,10 +20633,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Locus"
+            ]
           },
           "resolution": {
+            "title": "Resolution",
             "anyOf": [
               {
                 "type": "string",
@@ -20648,8 +20649,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Resolution"
+            ]
           }
         },
         "type": "object",
@@ -20662,6 +20662,7 @@
       "BlastHit": {
         "properties": {
           "query_id": {
+            "title": "Query Id",
             "anyOf": [
               {
                 "type": "string"
@@ -20669,8 +20670,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Query Id"
+            ]
           },
           "hsp_num": {
             "type": "integer",
@@ -20747,6 +20747,7 @@
             "default": "plus"
           },
           "genome_resolution": {
+            "title": "Genome Resolution",
             "anyOf": [
               {
                 "additionalProperties": true,
@@ -20755,8 +20756,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Genome Resolution"
+            ]
           }
         },
         "type": "object",
@@ -20895,6 +20895,7 @@
             "title": "Db Type"
           },
           "index_identity": {
+            "title": "Index Identity",
             "anyOf": [
               {
                 "type": "string"
@@ -20902,10 +20903,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Index Identity"
+            ]
           },
           "sequence_count": {
+            "title": "Sequence Count",
             "anyOf": [
               {
                 "type": "integer"
@@ -20913,10 +20914,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Sequence Count"
+            ]
           },
           "total_length": {
+            "title": "Total Length",
             "anyOf": [
               {
                 "type": "integer"
@@ -20924,10 +20925,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Total Length"
+            ]
           },
           "error_message": {
+            "title": "Error Message",
             "anyOf": [
               {
                 "type": "string"
@@ -20935,8 +20936,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Error Message"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -20944,6 +20944,7 @@
             "title": "Created At"
           },
           "started_at": {
+            "title": "Started At",
             "anyOf": [
               {
                 "type": "string",
@@ -20952,10 +20953,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Started At"
+            ]
           },
           "completed_at": {
+            "title": "Completed At",
             "anyOf": [
               {
                 "type": "string",
@@ -20964,8 +20965,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Completed At"
+            ]
           }
         },
         "type": "object",
@@ -21036,6 +21036,7 @@
             "title": "Database Id"
           },
           "database": {
+            "title": "Database",
             "anyOf": [
               {
                 "type": "string"
@@ -21043,10 +21044,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Database"
+            ]
           },
           "query_sequence": {
+            "title": "Query Sequence",
             "anyOf": [
               {
                 "type": "string"
@@ -21054,8 +21055,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Query Sequence"
+            ]
           },
           "parameters": {
             "additionalProperties": true,
@@ -21073,6 +21073,7 @@
             "title": "Submitted At"
           },
           "started_at": {
+            "title": "Started At",
             "anyOf": [
               {
                 "type": "string",
@@ -21081,10 +21082,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Started At"
+            ]
           },
           "completed_at": {
+            "title": "Completed At",
             "anyOf": [
               {
                 "type": "string",
@@ -21093,10 +21094,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Completed At"
+            ]
           },
           "error_message": {
+            "title": "Error Message",
             "anyOf": [
               {
                 "type": "string"
@@ -21104,10 +21105,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Error Message"
+            ]
           },
           "result_url": {
+            "title": "Result Url",
             "anyOf": [
               {
                 "type": "string"
@@ -21115,10 +21116,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Result Url"
+            ]
           },
           "release_id": {
+            "title": "Release Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -21126,10 +21127,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Release Id"
+            ]
           },
           "assembly_name": {
+            "title": "Assembly Name",
             "anyOf": [
               {
                 "type": "string"
@@ -21137,8 +21138,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Name"
+            ]
           }
         },
         "type": "object",
@@ -21180,6 +21180,7 @@
             "default": 50
           },
           "gap_open": {
+            "title": "Gap Open",
             "anyOf": [
               {
                 "type": "integer",
@@ -21189,10 +21190,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gap Open"
+            ]
           },
           "gap_extend": {
+            "title": "Gap Extend",
             "anyOf": [
               {
                 "type": "integer",
@@ -21202,10 +21203,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gap Extend"
+            ]
           },
           "matrix": {
+            "title": "Matrix",
             "anyOf": [
               {
                 "type": "string"
@@ -21213,10 +21214,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Matrix"
+            ]
           },
           "word_size": {
+            "title": "Word Size",
             "anyOf": [
               {
                 "type": "integer",
@@ -21226,10 +21227,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Word Size"
+            ]
           },
           "dust": {
+            "title": "Dust",
             "anyOf": [
               {
                 "type": "boolean"
@@ -21237,10 +21238,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Dust"
+            ]
           },
           "soft_masking": {
+            "title": "Soft Masking",
             "anyOf": [
               {
                 "type": "boolean"
@@ -21248,10 +21249,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Soft Masking"
+            ]
           },
           "percent_identity": {
+            "title": "Percent Identity",
             "anyOf": [
               {
                 "type": "number",
@@ -21261,8 +21262,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Percent Identity"
+            ]
           }
         },
         "additionalProperties": false,
@@ -21298,6 +21298,7 @@
             "title": "Database Id"
           },
           "query_id": {
+            "title": "Query Id",
             "anyOf": [
               {
                 "type": "string"
@@ -21305,10 +21306,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Query Id"
+            ]
           },
           "query_len": {
+            "title": "Query Len",
             "anyOf": [
               {
                 "type": "integer"
@@ -21316,10 +21317,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Query Len"
+            ]
           },
           "hits": {
+            "title": "Hits",
             "anyOf": [
               {
                 "items": {
@@ -21330,10 +21331,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Hits"
+            ]
           },
           "total_hits": {
+            "title": "Total Hits",
             "anyOf": [
               {
                 "type": "integer"
@@ -21341,10 +21342,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Total Hits"
+            ]
           },
           "search_stats": {
+            "title": "Search Stats",
             "anyOf": [
               {
                 "additionalProperties": true,
@@ -21353,10 +21354,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Search Stats"
+            ]
           },
           "error_message": {
+            "title": "Error Message",
             "anyOf": [
               {
                 "type": "string"
@@ -21364,10 +21365,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Error Message"
+            ]
           },
           "completed_at": {
+            "title": "Completed At",
             "anyOf": [
               {
                 "type": "string",
@@ -21376,10 +21377,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Completed At"
+            ]
           },
           "download_url": {
+            "title": "Download Url",
             "anyOf": [
               {
                 "type": "string"
@@ -21387,8 +21388,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Download Url"
+            ]
           }
         },
         "type": "object",
@@ -21429,6 +21429,7 @@
             "default": "blastp"
           },
           "database_id": {
+            "title": "Database Id",
             "anyOf": [
               {
                 "type": "integer",
@@ -21437,10 +21438,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Database Id"
+            ]
           },
           "database": {
+            "title": "Database",
             "anyOf": [
               {
                 "type": "string",
@@ -21449,8 +21450,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Database"
+            ]
           },
           "query_sequence": {
             "type": "string",
@@ -21725,6 +21725,7 @@
             "title": "Title En"
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -21732,14 +21733,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "content_en": {
             "type": "string",
             "title": "Content En"
           },
           "content_zh": {
+            "title": "Content Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -21747,10 +21748,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Content Zh"
+            ]
           },
           "summary": {
+            "title": "Summary",
             "anyOf": [
               {
                 "type": "string"
@@ -21758,10 +21759,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Summary"
+            ]
           },
           "edited_by": {
+            "title": "Edited By",
             "anyOf": [
               {
                 "type": "string"
@@ -21769,10 +21770,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Edited By"
+            ]
           },
           "edit_comment": {
+            "title": "Edit Comment",
             "anyOf": [
               {
                 "type": "string"
@@ -21780,8 +21781,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Edit Comment"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -21807,6 +21807,7 @@
             "title": "Gene Accession"
           },
           "assembly_id": {
+            "title": "Assembly Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -21814,10 +21815,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Id"
+            ]
           },
           "assembly_name": {
+            "title": "Assembly Name",
             "anyOf": [
               {
                 "type": "string"
@@ -21825,10 +21826,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Name"
+            ]
           },
           "assembly_version": {
+            "title": "Assembly Version",
             "anyOf": [
               {
                 "type": "string"
@@ -21836,8 +21837,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Version"
+            ]
           },
           "relation_type": {
             "type": "string",
@@ -21894,6 +21894,7 @@
             "title": "Assemblies Count"
           },
           "current_release": {
+            "title": "Current Release",
             "anyOf": [
               {
                 "type": "string"
@@ -21901,8 +21902,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Current Release"
+            ]
           },
           "last_updated": {
             "type": "string",
@@ -22030,6 +22030,7 @@
             "title": "Source"
           },
           "license": {
+            "title": "License",
             "anyOf": [
               {
                 "type": "string",
@@ -22038,8 +22039,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "License"
+            ]
           },
           "mime_type": {
             "type": "string",
@@ -22071,6 +22071,7 @@
             "title": "Source Objects"
           },
           "module_key": {
+            "title": "Module Key",
             "anyOf": [
               {
                 "type": "string",
@@ -22080,8 +22081,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Module Key"
+            ]
           }
         },
         "type": "object",
@@ -22126,6 +22126,7 @@
             "title": "Source"
           },
           "license": {
+            "title": "License",
             "anyOf": [
               {
                 "type": "string"
@@ -22133,8 +22134,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "License"
+            ]
           },
           "mime_type": {
             "type": "string",
@@ -22157,6 +22157,7 @@
             "title": "Source Objects"
           },
           "manifest": {
+            "title": "Manifest",
             "anyOf": [
               {
                 "additionalProperties": true,
@@ -22165,30 +22166,29 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Manifest"
+            ]
           },
           "status": {
             "type": "string",
             "title": "Status"
           },
           "created_at": {
+            "title": "Created At",
             "anyOf": [
               {},
               {
                 "type": "null"
               }
-            ],
-            "title": "Created At"
+            ]
           },
           "updated_at": {
+            "title": "Updated At",
             "anyOf": [
               {},
               {
                 "type": "null"
               }
-            ],
-            "title": "Updated At"
+            ]
           }
         },
         "type": "object",
@@ -22251,6 +22251,7 @@
             "title": "Title En"
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -22258,14 +22259,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "slug": {
             "type": "string",
             "title": "Slug"
           },
           "category": {
+            "title": "Category",
             "anyOf": [
               {
                 "type": "string"
@@ -22273,14 +22274,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Category"
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/NewsStatus",
             "default": "draft"
           },
           "published_at": {
+            "title": "Published At",
             "anyOf": [
               {
                 "type": "string",
@@ -22289,8 +22290,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Published At"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -22349,6 +22349,7 @@
       "DiversityRequest": {
         "properties": {
           "gene_id": {
+            "title": "Gene Id",
             "anyOf": [
               {
                 "type": "string",
@@ -22357,10 +22358,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Id"
+            ]
           },
           "assembly": {
+            "title": "Assembly",
             "anyOf": [
               {
                 "type": "string",
@@ -22369,10 +22370,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly"
+            ]
           },
           "chromosome": {
+            "title": "Chromosome",
             "anyOf": [
               {
                 "type": "string",
@@ -22381,10 +22382,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Chromosome"
+            ]
           },
           "start": {
+            "title": "Start",
             "anyOf": [
               {
                 "type": "integer",
@@ -22393,10 +22394,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Start"
+            ]
           },
           "end": {
+            "title": "End",
             "anyOf": [
               {
                 "type": "integer",
@@ -22405,10 +22406,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "End"
+            ]
           },
           "sample_size": {
+            "title": "Sample Size",
             "anyOf": [
               {
                 "type": "integer",
@@ -22418,8 +22419,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Sample Size"
+            ]
           },
           "window_size": {
             "type": "integer",
@@ -22439,6 +22439,7 @@
             "title": "Source"
           },
           "gene_id": {
+            "title": "Gene Id",
             "anyOf": [
               {
                 "type": "string"
@@ -22446,8 +22447,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Id"
+            ]
           },
           "assembly": {
             "type": "string",
@@ -22511,6 +22511,7 @@
             "title": "Theta"
           },
           "windows": {
+            "title": "Windows",
             "anyOf": [
               {
                 "items": {
@@ -22521,8 +22522,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Windows"
+            ]
           }
         },
         "type": "object",
@@ -22585,6 +22585,7 @@
             "title": "Name"
           },
           "description": {
+            "title": "Description",
             "anyOf": [
               {
                 "type": "string"
@@ -22592,14 +22593,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Description"
+            ]
           },
           "file_url": {
             "type": "string",
             "title": "File Url"
           },
           "file_size": {
+            "title": "File Size",
             "anyOf": [
               {
                 "type": "integer"
@@ -22607,10 +22608,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "File Size"
+            ]
           },
           "category": {
+            "title": "Category",
             "anyOf": [
               {
                 "type": "string"
@@ -22618,8 +22619,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Category"
+            ]
           },
           "download_count": {
             "type": "integer",
@@ -22676,6 +22676,7 @@
             "description": "GSEA terms sorted by q-value (asc)"
           },
           "message": {
+            "title": "Message",
             "anyOf": [
               {
                 "type": "string"
@@ -22684,7 +22685,6 @@
                 "type": "null"
               }
             ],
-            "title": "Message",
             "description": "Explanatory note, e.g. when no term passes min_genes"
           },
           "assembly_id": {
@@ -22820,6 +22820,7 @@
             "default": "ora"
           },
           "values": {
+            "title": "Values",
             "anyOf": [
               {
                 "items": {
@@ -22832,7 +22833,6 @@
                 "type": "null"
               }
             ],
-            "title": "Values",
             "description": "Per-gene numeric values (e.g. log2 fold-changes) used to rank genes in 'gsea' mode; required there and must align with 'genes' 1:1"
           },
           "ontology": {
@@ -22913,6 +22913,7 @@
             "description": "Enriched terms sorted by q-value (asc)"
           },
           "message": {
+            "title": "Message",
             "anyOf": [
               {
                 "type": "string"
@@ -22921,7 +22922,6 @@
                 "type": "null"
               }
             ],
-            "title": "Message",
             "description": "Explanatory note, e.g. when no input gene has annotations"
           },
           "assembly_id": {
@@ -23216,6 +23216,7 @@
             "description": "Gene IDs to include in the matrix (1\u201350)."
           },
           "conditions": {
+            "title": "Conditions",
             "anyOf": [
               {
                 "items": {
@@ -23228,7 +23229,6 @@
                 "type": "null"
               }
             ],
-            "title": "Conditions",
             "description": "Expression library names to use as matrix columns; defaults to all libraries (max 200)."
           },
           "cluster_rows": {
@@ -23485,6 +23485,7 @@
             "title": "Release Key"
           },
           "assembly_key": {
+            "title": "Assembly Key",
             "anyOf": [
               {
                 "type": "string"
@@ -23492,10 +23493,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Key"
+            ]
           },
           "record_count": {
+            "title": "Record Count",
             "anyOf": [
               {
                 "type": "integer"
@@ -23503,10 +23504,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Record Count"
+            ]
           },
           "file_size": {
+            "title": "File Size",
             "anyOf": [
               {
                 "type": "integer"
@@ -23514,10 +23515,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "File Size"
+            ]
           },
           "error_message": {
+            "title": "Error Message",
             "anyOf": [
               {
                 "type": "string"
@@ -23525,8 +23526,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Error Message"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -23534,6 +23534,7 @@
             "title": "Created At"
           },
           "started_at": {
+            "title": "Started At",
             "anyOf": [
               {
                 "type": "string",
@@ -23542,10 +23543,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Started At"
+            ]
           },
           "completed_at": {
+            "title": "Completed At",
             "anyOf": [
               {
                 "type": "string",
@@ -23554,10 +23555,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Completed At"
+            ]
           },
           "expires_at": {
+            "title": "Expires At",
             "anyOf": [
               {
                 "type": "string",
@@ -23566,8 +23567,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Expires At"
+            ]
           }
         },
         "type": "object",
@@ -23592,6 +23592,7 @@
             "title": "Library Name"
           },
           "tissue": {
+            "title": "Tissue",
             "anyOf": [
               {
                 "type": "string"
@@ -23599,10 +23600,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Tissue"
+            ]
           },
           "treatment": {
+            "title": "Treatment",
             "anyOf": [
               {
                 "type": "string"
@@ -23610,10 +23611,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Treatment"
+            ]
           },
           "stage": {
+            "title": "Stage",
             "anyOf": [
               {
                 "type": "string"
@@ -23621,10 +23622,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Stage"
+            ]
           },
           "tpm": {
+            "title": "Tpm",
             "anyOf": [
               {
                 "type": "number"
@@ -23632,10 +23633,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Tpm"
+            ]
           },
           "fpkm": {
+            "title": "Fpkm",
             "anyOf": [
               {
                 "type": "number"
@@ -23643,10 +23644,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Fpkm"
+            ]
           },
           "raw_count": {
+            "title": "Raw Count",
             "anyOf": [
               {
                 "type": "integer"
@@ -23654,8 +23655,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Raw Count"
+            ]
           }
         },
         "type": "object",
@@ -23738,6 +23738,7 @@
             "title": "Source Preview Token"
           },
           "source_published_at": {
+            "title": "Source Published At",
             "anyOf": [
               {
                 "type": "string",
@@ -23746,8 +23747,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Source Published At"
+            ]
           }
         },
         "type": "object",
@@ -23788,6 +23788,7 @@
             "title": "Method"
           },
           "method_version": {
+            "title": "Method Version",
             "anyOf": [
               {
                 "type": "string"
@@ -23795,8 +23796,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Method Version"
+            ]
           },
           "source_name": {
             "type": "string",
@@ -23915,6 +23915,7 @@
             "title": "Relationship Type"
           },
           "method": {
+            "title": "Method",
             "anyOf": [
               {
                 "type": "string"
@@ -23922,10 +23923,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Method"
+            ]
           },
           "confidence": {
+            "title": "Confidence",
             "anyOf": [
               {
                 "type": "number",
@@ -23935,10 +23936,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Confidence"
+            ]
           },
           "evidence": {
+            "title": "Evidence",
             "anyOf": [
               {
                 "additionalProperties": true,
@@ -23947,8 +23948,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Evidence"
+            ]
           }
         },
         "type": "object",
@@ -23986,6 +23986,7 @@
             "title": "Method"
           },
           "method_version": {
+            "title": "Method Version",
             "anyOf": [
               {
                 "type": "string"
@@ -23993,8 +23994,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Method Version"
+            ]
           },
           "source_name": {
             "type": "string",
@@ -24172,6 +24172,7 @@
       "FooterContentResponse": {
         "properties": {
           "contact_person": {
+            "title": "Contact Person",
             "anyOf": [
               {
                 "type": "string"
@@ -24179,10 +24180,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Contact Person"
+            ]
           },
           "contact_phone": {
+            "title": "Contact Phone",
             "anyOf": [
               {
                 "type": "string"
@@ -24190,10 +24191,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Contact Phone"
+            ]
           },
           "contact_email": {
+            "title": "Contact Email",
             "anyOf": [
               {
                 "type": "string"
@@ -24201,10 +24202,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Contact Email"
+            ]
           },
           "copyright": {
+            "title": "Copyright",
             "anyOf": [
               {
                 "type": "string"
@@ -24212,10 +24213,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Copyright"
+            ]
           },
           "address": {
+            "title": "Address",
             "anyOf": [
               {
                 "type": "string"
@@ -24223,10 +24224,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Address"
+            ]
           },
           "contact_person_en": {
+            "title": "Contact Person En",
             "anyOf": [
               {
                 "type": "string"
@@ -24234,10 +24235,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Contact Person En"
+            ]
           },
           "contact_person_zh": {
+            "title": "Contact Person Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -24245,10 +24246,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Contact Person Zh"
+            ]
           },
           "contact_phone_value": {
+            "title": "Contact Phone Value",
             "anyOf": [
               {
                 "type": "string"
@@ -24256,10 +24257,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Contact Phone Value"
+            ]
           },
           "contact_email_value": {
+            "title": "Contact Email Value",
             "anyOf": [
               {
                 "type": "string"
@@ -24267,10 +24268,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Contact Email Value"
+            ]
           },
           "address_en": {
+            "title": "Address En",
             "anyOf": [
               {
                 "type": "string"
@@ -24278,10 +24279,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Address En"
+            ]
           },
           "address_zh": {
+            "title": "Address Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -24289,10 +24290,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Address Zh"
+            ]
           },
           "copyright_en": {
+            "title": "Copyright En",
             "anyOf": [
               {
                 "type": "string"
@@ -24300,10 +24301,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Copyright En"
+            ]
           },
           "copyright_zh": {
+            "title": "Copyright Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -24311,8 +24312,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Copyright Zh"
+            ]
           },
           "navigation": {
             "items": {
@@ -24705,6 +24705,7 @@
             "title": "Items"
           },
           "next_cursor": {
+            "title": "Next Cursor",
             "anyOf": [
               {
                 "type": "string"
@@ -24712,8 +24713,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Next Cursor"
+            ]
           },
           "has_more": {
             "type": "boolean",
@@ -24747,6 +24747,7 @@
       "GeneResponse": {
         "properties": {
           "id": {
+            "title": "Id",
             "anyOf": [
               {
                 "type": "string"
@@ -24754,10 +24755,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Id"
+            ]
           },
           "gene_id": {
+            "title": "Gene Id",
             "anyOf": [
               {
                 "type": "string"
@@ -24765,10 +24766,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Id"
+            ]
           },
           "assembly_id": {
+            "title": "Assembly Id",
             "anyOf": [
               {
                 "type": "string"
@@ -24776,10 +24777,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Id"
+            ]
           },
           "assembly_name": {
+            "title": "Assembly Name",
             "anyOf": [
               {
                 "type": "string"
@@ -24787,14 +24788,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Name"
+            ]
           },
           "chromosome": {
             "type": "string",
             "title": "Chromosome"
           },
           "name": {
+            "title": "Name",
             "anyOf": [
               {
                 "type": "string"
@@ -24802,10 +24803,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Name"
+            ]
           },
           "symbol": {
+            "title": "Symbol",
             "anyOf": [
               {
                 "type": "string"
@@ -24813,8 +24814,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Symbol"
+            ]
           },
           "biotype": {
             "type": "string",
@@ -24845,6 +24845,7 @@
             "$ref": "#/components/schemas/Strand"
           },
           "description": {
+            "title": "Description",
             "anyOf": [
               {
                 "type": "string"
@@ -24852,8 +24853,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Description"
+            ]
           },
           "variant_count": {
             "type": "integer",
@@ -24946,6 +24946,7 @@
             "default": false
           },
           "cursor": {
+            "title": "Cursor",
             "anyOf": [
               {
                 "type": "string"
@@ -24953,10 +24954,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Cursor"
+            ]
           },
           "next_cursor": {
+            "title": "Next Cursor",
             "anyOf": [
               {
                 "type": "string"
@@ -24964,8 +24965,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Next Cursor"
+            ]
           },
           "has_more": {
             "type": "boolean",
@@ -25023,6 +25023,7 @@
             "title": "Submitted At"
           },
           "started_at": {
+            "title": "Started At",
             "anyOf": [
               {
                 "type": "string",
@@ -25031,10 +25032,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Started At"
+            ]
           },
           "completed_at": {
+            "title": "Completed At",
             "anyOf": [
               {
                 "type": "string",
@@ -25043,10 +25044,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Completed At"
+            ]
           },
           "error_message": {
+            "title": "Error Message",
             "anyOf": [
               {
                 "type": "string"
@@ -25054,10 +25055,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Error Message"
+            ]
           },
           "result": {
+            "title": "Result",
             "anyOf": [
               {
                 "additionalProperties": true,
@@ -25066,8 +25067,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Result"
+            ]
           }
         },
         "type": "object",
@@ -25114,6 +25114,7 @@
             "$ref": "#/components/schemas/GwasJobStatus"
           },
           "manhattan_url": {
+            "title": "Manhattan Url",
             "anyOf": [
               {
                 "type": "string"
@@ -25121,10 +25122,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Manhattan Url"
+            ]
           },
           "qq_url": {
+            "title": "Qq Url",
             "anyOf": [
               {
                 "type": "string"
@@ -25132,10 +25133,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Qq Url"
+            ]
           },
           "report_url": {
+            "title": "Report Url",
             "anyOf": [
               {
                 "type": "string"
@@ -25143,10 +25144,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Report Url"
+            ]
           },
           "assoc_url": {
+            "title": "Assoc Url",
             "anyOf": [
               {
                 "type": "string"
@@ -25154,10 +25155,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assoc Url"
+            ]
           },
           "n_variants": {
+            "title": "N Variants",
             "anyOf": [
               {
                 "type": "integer"
@@ -25165,10 +25166,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "N Variants"
+            ]
           },
           "error_message": {
+            "title": "Error Message",
             "anyOf": [
               {
                 "type": "string"
@@ -25176,10 +25177,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Error Message"
+            ]
           },
           "completed_at": {
+            "title": "Completed At",
             "anyOf": [
               {
                 "type": "string",
@@ -25188,8 +25189,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Completed At"
+            ]
           }
         },
         "type": "object",
@@ -25217,6 +25217,7 @@
             "title": "Phenotype Object Key"
           },
           "genotype_object_key": {
+            "title": "Genotype Object Key",
             "anyOf": [
               {
                 "type": "string",
@@ -25225,10 +25226,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Genotype Object Key"
+            ]
           },
           "kinship_object_key": {
+            "title": "Kinship Object Key",
             "anyOf": [
               {
                 "type": "string",
@@ -25237,10 +25238,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Kinship Object Key"
+            ]
           },
           "covariate_object_key": {
+            "title": "Covariate Object Key",
             "anyOf": [
               {
                 "type": "string",
@@ -25249,8 +25250,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Covariate Object Key"
+            ]
           },
           "params": {
             "additionalProperties": true,
@@ -25324,6 +25324,7 @@
       "HomeContentResponse": {
         "properties": {
           "welcome_en": {
+            "title": "Welcome En",
             "anyOf": [
               {
                 "type": "string"
@@ -25331,10 +25332,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Welcome En"
+            ]
           },
           "welcome_zh": {
+            "title": "Welcome Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -25342,8 +25343,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Welcome Zh"
+            ]
           }
         },
         "type": "object",
@@ -25407,6 +25407,7 @@
             "default": 0
           },
           "last_release_date": {
+            "title": "Last Release Date",
             "anyOf": [
               {
                 "type": "string",
@@ -25415,10 +25416,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Last Release Date"
+            ]
           },
           "last_release_name": {
+            "title": "Last Release Name",
             "anyOf": [
               {
                 "type": "string"
@@ -25426,8 +25427,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Last Release Name"
+            ]
           }
         },
         "type": "object",
@@ -25453,6 +25453,7 @@
             "title": "Homolog Type"
           },
           "method": {
+            "title": "Method",
             "anyOf": [
               {
                 "type": "string"
@@ -25460,10 +25461,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Method"
+            ]
           },
           "source": {
+            "title": "Source",
             "anyOf": [
               {
                 "type": "string"
@@ -25471,8 +25472,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Source"
+            ]
           },
           "kind": {
             "type": "string",
@@ -25488,6 +25488,7 @@
             "default": "transferred"
           },
           "confidence": {
+            "title": "Confidence",
             "anyOf": [
               {
                 "type": "number",
@@ -25497,8 +25498,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Confidence"
+            ]
           }
         },
         "type": "object",
@@ -25562,6 +25562,7 @@
       "ImportCommitRequest": {
         "properties": {
           "page_id": {
+            "title": "Page Id",
             "anyOf": [
               {
                 "type": "string",
@@ -25570,8 +25571,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Page Id"
+            ]
           },
           "source_id": {
             "type": "string",
@@ -25626,6 +25626,7 @@
             "title": "Type"
           },
           "file_path": {
+            "title": "File Path",
             "anyOf": [
               {
                 "type": "string"
@@ -25633,10 +25634,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "File Path"
+            ]
           },
           "object_key": {
+            "title": "Object Key",
             "anyOf": [
               {
                 "type": "string"
@@ -25644,10 +25645,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Object Key"
+            ]
           },
           "data_set_id": {
+            "title": "Data Set Id",
             "anyOf": [
               {
                 "type": "integer",
@@ -25656,10 +25657,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Data Set Id"
+            ]
           },
           "release_id": {
+            "title": "Release Id",
             "anyOf": [
               {
                 "type": "integer",
@@ -25668,10 +25669,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Release Id"
+            ]
           },
           "assembly": {
+            "title": "Assembly",
             "anyOf": [
               {
                 "type": "string",
@@ -25680,10 +25681,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly"
+            ]
           },
           "module_key": {
+            "title": "Module Key",
             "anyOf": [
               {
                 "type": "string",
@@ -25692,10 +25693,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Module Key"
+            ]
           },
           "schema_version": {
+            "title": "Schema Version",
             "anyOf": [
               {
                 "type": "integer",
@@ -25704,10 +25705,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Schema Version"
+            ]
           },
           "checksum": {
+            "title": "Checksum",
             "anyOf": [
               {
                 "type": "string",
@@ -25716,10 +25717,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Checksum"
+            ]
           },
           "import_draft_id": {
+            "title": "Import Draft Id",
             "anyOf": [
               {
                 "type": "string",
@@ -25728,8 +25729,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Import Draft Id"
+            ]
           },
           "idempotency_key": {
             "type": "string",
@@ -25754,6 +25754,7 @@
             "title": "Dataset Version Id"
           },
           "module_key": {
+            "title": "Module Key",
             "anyOf": [
               {
                 "type": "string",
@@ -25763,8 +25764,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Module Key"
+            ]
           },
           "row_count": {
             "type": "integer",
@@ -25800,6 +25800,7 @@
             "title": "Dataset Version Id"
           },
           "module_key": {
+            "title": "Module Key",
             "anyOf": [
               {
                 "type": "string"
@@ -25807,8 +25808,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Module Key"
+            ]
           },
           "filename": {
             "type": "string",
@@ -25827,13 +25827,13 @@
             "title": "Status"
           },
           "updated_at": {
+            "title": "Updated At",
             "anyOf": [
               {},
               {
                 "type": "null"
               }
-            ],
-            "title": "Updated At"
+            ]
           }
         },
         "type": "object",
@@ -25860,6 +25860,7 @@
             "title": "Dataset Version Id"
           },
           "module_key": {
+            "title": "Module Key",
             "anyOf": [
               {
                 "type": "string"
@@ -25867,8 +25868,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Module Key"
+            ]
           },
           "filename": {
             "type": "string",
@@ -25887,6 +25887,7 @@
             "title": "Source"
           },
           "license": {
+            "title": "License",
             "anyOf": [
               {
                 "type": "string"
@@ -25894,8 +25895,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "License"
+            ]
           },
           "mime_type": {
             "type": "string",
@@ -25927,31 +25927,31 @@
             "title": "Status"
           },
           "committed_at": {
+            "title": "Committed At",
             "anyOf": [
               {},
               {
                 "type": "null"
               }
-            ],
-            "title": "Committed At"
+            ]
           },
           "created_at": {
+            "title": "Created At",
             "anyOf": [
               {},
               {
                 "type": "null"
               }
-            ],
-            "title": "Created At"
+            ]
           },
           "updated_at": {
+            "title": "Updated At",
             "anyOf": [
               {},
               {
                 "type": "null"
               }
-            ],
-            "title": "Updated At"
+            ]
           }
         },
         "type": "object",
@@ -25978,6 +25978,7 @@
             "title": "Code"
           },
           "row": {
+            "title": "Row",
             "anyOf": [
               {
                 "type": "integer"
@@ -25985,8 +25986,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Row"
+            ]
           },
           "message": {
             "type": "string",
@@ -26043,6 +26043,7 @@
             "title": "Format"
           },
           "encoding": {
+            "title": "Encoding",
             "anyOf": [
               {
                 "type": "string"
@@ -26050,10 +26051,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Encoding"
+            ]
           },
           "delimiter": {
+            "title": "Delimiter",
             "anyOf": [
               {
                 "type": "string"
@@ -26061,10 +26062,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Delimiter"
+            ]
           },
           "sheet_name": {
+            "title": "Sheet Name",
             "anyOf": [
               {
                 "type": "string"
@@ -26072,8 +26073,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Sheet Name"
+            ]
           },
           "headers": {
             "items": {
@@ -26195,6 +26195,7 @@
             "title": "Field Mapping"
           },
           "module_key": {
+            "title": "Module Key",
             "anyOf": [
               {
                 "type": "string",
@@ -26204,8 +26205,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Module Key"
+            ]
           }
         },
         "type": "object",
@@ -26230,6 +26230,7 @@
             "title": "Internal Id"
           },
           "name": {
+            "title": "Name",
             "anyOf": [
               {
                 "type": "string"
@@ -26237,8 +26238,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Name"
+            ]
           },
           "matched_field": {
             "type": "string",
@@ -26249,6 +26249,7 @@
             "default": "text"
           },
           "assembly_id": {
+            "title": "Assembly Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -26256,10 +26257,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Id"
+            ]
           },
           "release_id": {
+            "title": "Release Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -26267,10 +26268,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Release Id"
+            ]
           },
           "url": {
+            "title": "Url",
             "anyOf": [
               {
                 "type": "string"
@@ -26278,8 +26279,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Url"
+            ]
           }
         },
         "type": "object",
@@ -26321,6 +26321,7 @@
             "title": "Is Public"
           },
           "release_id": {
+            "title": "Release Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -26328,10 +26329,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Release Id"
+            ]
           },
           "url": {
+            "title": "Url",
             "anyOf": [
               {
                 "type": "string"
@@ -26339,8 +26340,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Url"
+            ]
           }
         },
         "type": "object",
@@ -26394,6 +26394,7 @@
             "title": "Page Name"
           },
           "display_name": {
+            "title": "Display Name",
             "anyOf": [
               {
                 "type": "string"
@@ -26401,8 +26402,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Display Name"
+            ]
           },
           "widgets": {
             "items": {
@@ -26428,6 +26428,7 @@
             "title": "Widget Order"
           },
           "display_name": {
+            "title": "Display Name",
             "anyOf": [
               {
                 "type": "string"
@@ -26435,10 +26436,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Display Name"
+            ]
           },
           "is_active": {
+            "title": "Is Active",
             "anyOf": [
               {
                 "type": "boolean"
@@ -26446,8 +26447,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Is Active"
+            ]
           }
         },
         "type": "object",
@@ -26456,6 +26456,7 @@
       "LdRequest": {
         "properties": {
           "gene_id": {
+            "title": "Gene Id",
             "anyOf": [
               {
                 "type": "string",
@@ -26464,10 +26465,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Id"
+            ]
           },
           "assembly": {
+            "title": "Assembly",
             "anyOf": [
               {
                 "type": "string",
@@ -26476,10 +26477,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly"
+            ]
           },
           "chromosome": {
+            "title": "Chromosome",
             "anyOf": [
               {
                 "type": "string",
@@ -26488,10 +26489,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Chromosome"
+            ]
           },
           "start": {
+            "title": "Start",
             "anyOf": [
               {
                 "type": "integer",
@@ -26500,10 +26501,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Start"
+            ]
           },
           "end": {
+            "title": "End",
             "anyOf": [
               {
                 "type": "integer",
@@ -26512,8 +26513,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "End"
+            ]
           },
           "genotypes": {
             "anyOf": [
@@ -26537,6 +26537,7 @@
             "title": "Source"
           },
           "gene_id": {
+            "title": "Gene Id",
             "anyOf": [
               {
                 "type": "string"
@@ -26544,8 +26545,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Id"
+            ]
           },
           "assembly": {
             "type": "string",
@@ -26575,6 +26575,7 @@
             "title": "Variants"
           },
           "r_squared": {
+            "title": "R Squared",
             "anyOf": [
               {
                 "items": {
@@ -26588,10 +26589,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "R Squared"
+            ]
           },
           "note": {
+            "title": "Note",
             "anyOf": [
               {
                 "type": "string"
@@ -26599,10 +26600,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Note"
+            ]
           },
           "details": {
+            "title": "Details",
             "anyOf": [
               {
                 "additionalProperties": true,
@@ -26611,8 +26612,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Details"
+            ]
           }
         },
         "type": "object",
@@ -26667,6 +26667,7 @@
             "title": "Title"
           },
           "authors": {
+            "title": "Authors",
             "anyOf": [
               {
                 "type": "string"
@@ -26674,10 +26675,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Authors"
+            ]
           },
           "journal": {
+            "title": "Journal",
             "anyOf": [
               {
                 "type": "string"
@@ -26685,10 +26686,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Journal"
+            ]
           },
           "year": {
+            "title": "Year",
             "anyOf": [
               {
                 "type": "integer"
@@ -26696,10 +26697,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Year"
+            ]
           },
           "doi": {
+            "title": "Doi",
             "anyOf": [
               {
                 "type": "string"
@@ -26707,10 +26708,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Doi"
+            ]
           },
           "pmid": {
+            "title": "Pmid",
             "anyOf": [
               {
                 "type": "string"
@@ -26718,8 +26719,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Pmid"
+            ]
           }
         },
         "type": "object",
@@ -26799,6 +26799,7 @@
       "LoginRequest": {
         "properties": {
           "username": {
+            "title": "Username",
             "anyOf": [
               {
                 "type": "string"
@@ -26807,13 +26808,13 @@
                 "type": "null"
               }
             ],
-            "title": "Username",
             "description": "Email address or username",
             "examples": [
               "researcher@univ.edu"
             ]
           },
           "email": {
+            "title": "Email",
             "anyOf": [
               {
                 "type": "string"
@@ -26822,7 +26823,6 @@
                 "type": "null"
               }
             ],
-            "title": "Email",
             "description": "Email address (alternative to ``username``)",
             "examples": [
               "researcher@univ.edu"
@@ -26846,6 +26846,7 @@
       "MarkReadRequest": {
         "properties": {
           "ids": {
+            "title": "Ids",
             "anyOf": [
               {
                 "items": {
@@ -26857,8 +26858,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Ids"
+            ]
           },
           "all": {
             "type": "boolean",
@@ -27012,6 +27012,7 @@
             "title": "Checksum Sha256"
           },
           "width": {
+            "title": "Width",
             "anyOf": [
               {
                 "type": "integer"
@@ -27019,10 +27020,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Width"
+            ]
           },
           "height": {
+            "title": "Height",
             "anyOf": [
               {
                 "type": "integer"
@@ -27030,10 +27031,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Height"
+            ]
           },
           "alt_text": {
+            "title": "Alt Text",
             "anyOf": [
               {
                 "type": "string"
@@ -27041,10 +27042,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Alt Text"
+            ]
           },
           "caption": {
+            "title": "Caption",
             "anyOf": [
               {
                 "type": "string"
@@ -27052,10 +27053,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Caption"
+            ]
           },
           "credit": {
+            "title": "Credit",
             "anyOf": [
               {
                 "type": "string"
@@ -27063,8 +27064,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Credit"
+            ]
           },
           "is_decorative": {
             "type": "boolean",
@@ -27080,6 +27080,7 @@
             "title": "Uploaded By"
           },
           "verified_at": {
+            "title": "Verified At",
             "anyOf": [
               {
                 "type": "string",
@@ -27088,10 +27089,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Verified At"
+            ]
           },
           "archived_at": {
+            "title": "Archived At",
             "anyOf": [
               {
                 "type": "string",
@@ -27100,8 +27101,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Archived At"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -27148,6 +27148,7 @@
       "MediaAssetUpdateRequest": {
         "properties": {
           "alt_text": {
+            "title": "Alt Text",
             "anyOf": [
               {
                 "type": "string",
@@ -27156,10 +27157,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Alt Text"
+            ]
           },
           "caption": {
+            "title": "Caption",
             "anyOf": [
               {
                 "type": "string",
@@ -27168,10 +27169,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Caption"
+            ]
           },
           "credit": {
+            "title": "Credit",
             "anyOf": [
               {
                 "type": "string",
@@ -27180,10 +27181,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Credit"
+            ]
           },
           "is_decorative": {
+            "title": "Is Decorative",
             "anyOf": [
               {
                 "type": "boolean"
@@ -27191,8 +27192,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Is Decorative"
+            ]
           }
         },
         "type": "object",
@@ -27259,6 +27259,7 @@
             "title": "Parts"
           },
           "sha256": {
+            "title": "Sha256",
             "anyOf": [
               {
                 "type": "string",
@@ -27267,8 +27268,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Sha256"
+            ]
           }
         },
         "type": "object",
@@ -27334,6 +27334,7 @@
             "default": "application/octet-stream"
           },
           "data_set_id": {
+            "title": "Data Set Id",
             "anyOf": [
               {
                 "type": "integer",
@@ -27342,8 +27343,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Data Set Id"
+            ]
           }
         },
         "type": "object",
@@ -27385,6 +27385,7 @@
             "title": "Name"
           },
           "mutagen": {
+            "title": "Mutagen",
             "anyOf": [
               {
                 "type": "string"
@@ -27392,8 +27393,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Mutagen"
+            ]
           },
           "cultivar": {
             "anyOf": [
@@ -27419,6 +27419,7 @@
             "default": "Glycine max"
           },
           "description": {
+            "title": "Description",
             "anyOf": [
               {
                 "type": "string"
@@ -27426,10 +27427,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Description"
+            ]
           },
           "generation": {
+            "title": "Generation",
             "anyOf": [
               {
                 "type": "string"
@@ -27437,10 +27438,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Generation"
+            ]
           },
           "phenotype_summary": {
+            "title": "Phenotype Summary",
             "anyOf": [
               {
                 "type": "string"
@@ -27448,8 +27449,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Phenotype Summary"
+            ]
           },
           "is_public": {
             "type": "boolean",
@@ -27488,6 +27488,7 @@
             "title": "Name"
           },
           "mutagen": {
+            "title": "Mutagen",
             "anyOf": [
               {
                 "type": "string"
@@ -27495,8 +27496,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Mutagen"
+            ]
           },
           "cultivar": {
             "anyOf": [
@@ -27534,6 +27534,7 @@
             "title": "Title En"
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string",
@@ -27542,8 +27543,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "content_en": {
             "type": "string",
@@ -27551,6 +27551,7 @@
             "title": "Content En"
           },
           "content_zh": {
+            "title": "Content Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -27558,8 +27559,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Content Zh"
+            ]
           },
           "slug": {
             "type": "string",
@@ -27567,6 +27567,7 @@
             "title": "Slug"
           },
           "category": {
+            "title": "Category",
             "anyOf": [
               {
                 "type": "string",
@@ -27575,10 +27576,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Category"
+            ]
           },
           "cover_url": {
+            "title": "Cover Url",
             "anyOf": [
               {
                 "type": "string",
@@ -27587,10 +27588,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Cover Url"
+            ]
           },
           "cover_asset_id": {
+            "title": "Cover Asset Id",
             "anyOf": [
               {
                 "type": "string",
@@ -27599,10 +27600,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Cover Asset Id"
+            ]
           },
           "cover_alt_text": {
+            "title": "Cover Alt Text",
             "anyOf": [
               {
                 "type": "string",
@@ -27611,8 +27612,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Cover Alt Text"
+            ]
           },
           "featured_sort": {
             "type": "integer",
@@ -27621,6 +27621,7 @@
             "default": 0
           },
           "carousel_group": {
+            "title": "Carousel Group",
             "anyOf": [
               {
                 "type": "string",
@@ -27629,8 +27630,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Carousel Group"
+            ]
           },
           "carousel_sort": {
             "type": "integer",
@@ -27643,6 +27643,7 @@
             "default": "draft"
           },
           "visible_from": {
+            "title": "Visible From",
             "anyOf": [
               {
                 "type": "string",
@@ -27651,10 +27652,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Visible From"
+            ]
           },
           "visible_to": {
+            "title": "Visible To",
             "anyOf": [
               {
                 "type": "string",
@@ -27663,8 +27664,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Visible To"
+            ]
           },
           "is_published": {
             "type": "boolean",
@@ -27672,6 +27672,7 @@
             "default": false
           },
           "source_preview_token": {
+            "title": "Source Preview Token",
             "anyOf": [
               {
                 "type": "string",
@@ -27681,8 +27682,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Source Preview Token"
+            ]
           }
         },
         "type": "object",
@@ -27704,6 +27704,7 @@
             "title": "Title En"
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -27711,14 +27712,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "slug": {
             "type": "string",
             "title": "Slug"
           },
           "category": {
+            "title": "Category",
             "anyOf": [
               {
                 "type": "string"
@@ -27726,10 +27727,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Category"
+            ]
           },
           "cover_url": {
+            "title": "Cover Url",
             "anyOf": [
               {
                 "type": "string"
@@ -27737,10 +27738,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Cover Url"
+            ]
           },
           "cover_asset_id": {
+            "title": "Cover Asset Id",
             "anyOf": [
               {
                 "type": "string",
@@ -27749,10 +27750,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Cover Asset Id"
+            ]
           },
           "cover_alt_text": {
+            "title": "Cover Alt Text",
             "anyOf": [
               {
                 "type": "string"
@@ -27760,8 +27761,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Cover Alt Text"
+            ]
           },
           "featured_sort": {
             "type": "integer",
@@ -27769,6 +27769,7 @@
             "default": 0
           },
           "carousel_group": {
+            "title": "Carousel Group",
             "anyOf": [
               {
                 "type": "string"
@@ -27776,8 +27777,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Carousel Group"
+            ]
           },
           "carousel_sort": {
             "type": "integer",
@@ -27794,6 +27794,7 @@
             "default": false
           },
           "published_at": {
+            "title": "Published At",
             "anyOf": [
               {
                 "type": "string",
@@ -27802,8 +27803,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Published At"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -27820,6 +27820,7 @@
             "title": "Content En"
           },
           "content_zh": {
+            "title": "Content Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -27827,10 +27828,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Content Zh"
+            ]
           },
           "visible_from": {
+            "title": "Visible From",
             "anyOf": [
               {
                 "type": "string",
@@ -27839,10 +27840,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Visible From"
+            ]
           },
           "visible_to": {
+            "title": "Visible To",
             "anyOf": [
               {
                 "type": "string",
@@ -27851,8 +27852,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Visible To"
+            ]
           },
           "source_platform": {
             "anyOf": [
@@ -27865,6 +27865,7 @@
             ]
           },
           "source_url": {
+            "title": "Source Url",
             "anyOf": [
               {
                 "type": "string"
@@ -27872,10 +27873,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Source Url"
+            ]
           },
           "source_published_at": {
+            "title": "Source Published At",
             "anyOf": [
               {
                 "type": "string",
@@ -27884,10 +27885,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Source Published At"
+            ]
           },
           "source_synced_at": {
+            "title": "Source Synced At",
             "anyOf": [
               {
                 "type": "string",
@@ -27896,8 +27897,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Source Synced At"
+            ]
           }
         },
         "type": "object",
@@ -28029,6 +28029,7 @@
             "title": "Title En"
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -28036,14 +28037,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "slug": {
             "type": "string",
             "title": "Slug"
           },
           "category": {
+            "title": "Category",
             "anyOf": [
               {
                 "type": "string"
@@ -28051,14 +28052,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Category"
+            ]
           },
           "is_published": {
             "type": "boolean",
             "title": "Is Published"
           },
           "published_at": {
+            "title": "Published At",
             "anyOf": [
               {
                 "type": "string",
@@ -28067,8 +28068,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Published At"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -28112,6 +28112,7 @@
             "title": "Title En"
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -28119,14 +28120,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "slug": {
             "type": "string",
             "title": "Slug"
           },
           "category": {
+            "title": "Category",
             "anyOf": [
               {
                 "type": "string"
@@ -28134,10 +28135,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Category"
+            ]
           },
           "cover_url": {
+            "title": "Cover Url",
             "anyOf": [
               {
                 "type": "string"
@@ -28145,10 +28146,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Cover Url"
+            ]
           },
           "cover_asset_id": {
+            "title": "Cover Asset Id",
             "anyOf": [
               {
                 "type": "string",
@@ -28157,10 +28158,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Cover Asset Id"
+            ]
           },
           "cover_alt_text": {
+            "title": "Cover Alt Text",
             "anyOf": [
               {
                 "type": "string"
@@ -28168,8 +28169,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Cover Alt Text"
+            ]
           },
           "featured_sort": {
             "type": "integer",
@@ -28177,6 +28177,7 @@
             "default": 0
           },
           "carousel_group": {
+            "title": "Carousel Group",
             "anyOf": [
               {
                 "type": "string"
@@ -28184,8 +28185,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Carousel Group"
+            ]
           },
           "carousel_sort": {
             "type": "integer",
@@ -28202,6 +28202,7 @@
             "default": false
           },
           "published_at": {
+            "title": "Published At",
             "anyOf": [
               {
                 "type": "string",
@@ -28210,8 +28211,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Published At"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -28238,6 +28238,7 @@
       "NewsUpdate": {
         "properties": {
           "title_en": {
+            "title": "Title En",
             "anyOf": [
               {
                 "type": "string",
@@ -28247,10 +28248,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title En"
+            ]
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string",
@@ -28259,10 +28260,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "content_en": {
+            "title": "Content En",
             "anyOf": [
               {
                 "type": "string",
@@ -28271,10 +28272,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Content En"
+            ]
           },
           "content_zh": {
+            "title": "Content Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -28282,10 +28283,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Content Zh"
+            ]
           },
           "slug": {
+            "title": "Slug",
             "anyOf": [
               {
                 "type": "string",
@@ -28294,10 +28295,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Slug"
+            ]
           },
           "category": {
+            "title": "Category",
             "anyOf": [
               {
                 "type": "string",
@@ -28306,10 +28307,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Category"
+            ]
           },
           "cover_url": {
+            "title": "Cover Url",
             "anyOf": [
               {
                 "type": "string",
@@ -28318,10 +28319,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Cover Url"
+            ]
           },
           "cover_asset_id": {
+            "title": "Cover Asset Id",
             "anyOf": [
               {
                 "type": "string",
@@ -28330,10 +28331,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Cover Asset Id"
+            ]
           },
           "cover_alt_text": {
+            "title": "Cover Alt Text",
             "anyOf": [
               {
                 "type": "string",
@@ -28342,10 +28343,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Cover Alt Text"
+            ]
           },
           "featured_sort": {
+            "title": "Featured Sort",
             "anyOf": [
               {
                 "type": "integer",
@@ -28354,10 +28355,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Featured Sort"
+            ]
           },
           "carousel_group": {
+            "title": "Carousel Group",
             "anyOf": [
               {
                 "type": "string",
@@ -28366,10 +28367,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Carousel Group"
+            ]
           },
           "carousel_sort": {
+            "title": "Carousel Sort",
             "anyOf": [
               {
                 "type": "integer",
@@ -28378,8 +28379,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Carousel Sort"
+            ]
           },
           "status": {
             "anyOf": [
@@ -28392,6 +28392,7 @@
             ]
           },
           "visible_from": {
+            "title": "Visible From",
             "anyOf": [
               {
                 "type": "string",
@@ -28400,10 +28401,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Visible From"
+            ]
           },
           "visible_to": {
+            "title": "Visible To",
             "anyOf": [
               {
                 "type": "string",
@@ -28412,10 +28413,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Visible To"
+            ]
           },
           "is_published": {
+            "title": "Is Published",
             "anyOf": [
               {
                 "type": "boolean"
@@ -28423,10 +28424,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Is Published"
+            ]
           },
           "source_preview_token": {
+            "title": "Source Preview Token",
             "anyOf": [
               {
                 "type": "string",
@@ -28436,8 +28437,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Source Preview Token"
+            ]
           },
           "clear_source_provenance": {
             "type": "boolean",
@@ -28494,6 +28494,7 @@
             "title": "Body"
           },
           "link": {
+            "title": "Link",
             "anyOf": [
               {
                 "type": "string"
@@ -28501,10 +28502,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Link"
+            ]
           },
           "read_at": {
+            "title": "Read At",
             "anyOf": [
               {
                 "type": "string",
@@ -28513,8 +28514,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Read At"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -28548,6 +28548,7 @@
             "title": "Target"
           },
           "label": {
+            "title": "Label",
             "anyOf": [
               {
                 "type": "string",
@@ -28556,8 +28557,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Label"
+            ]
           }
         },
         "type": "object",
@@ -28577,6 +28577,7 @@
             "title": "Iri"
           },
           "label": {
+            "title": "Label",
             "anyOf": [
               {
                 "type": "string",
@@ -28585,8 +28586,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Label"
+            ]
           },
           "is_obsolete": {
             "type": "boolean",
@@ -28650,6 +28650,7 @@
             "title": "Query"
           },
           "ontology": {
+            "title": "Ontology",
             "anyOf": [
               {
                 "type": "string"
@@ -28657,8 +28658,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Ontology"
+            ]
           },
           "count": {
             "type": "integer",
@@ -28683,6 +28683,7 @@
       "OntologySearchResult": {
         "properties": {
           "term_id": {
+            "title": "Term Id",
             "anyOf": [
               {
                 "type": "string"
@@ -28690,10 +28691,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Term Id"
+            ]
           },
           "label": {
+            "title": "Label",
             "anyOf": [
               {
                 "type": "string"
@@ -28701,14 +28702,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Label"
+            ]
           },
           "iri": {
             "type": "string",
             "title": "Iri"
           },
           "ontology_name": {
+            "title": "Ontology Name",
             "anyOf": [
               {
                 "type": "string"
@@ -28716,8 +28717,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Ontology Name"
+            ]
           },
           "description": {
             "items": {
@@ -28752,6 +28752,7 @@
             "title": "Iri"
           },
           "label": {
+            "title": "Label",
             "anyOf": [
               {
                 "type": "string"
@@ -28759,10 +28760,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Label"
+            ]
           },
           "ontology_name": {
+            "title": "Ontology Name",
             "anyOf": [
               {
                 "type": "string"
@@ -28770,8 +28771,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Ontology Name"
+            ]
           },
           "description": {
             "items": {
@@ -28820,6 +28820,7 @@
             "title": "Gene Accession"
           },
           "counterpart_species": {
+            "title": "Counterpart Species",
             "anyOf": [
               {
                 "type": "string"
@@ -28827,8 +28828,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Counterpart Species"
+            ]
           },
           "counterpart_gene_id": {
             "type": "string",
@@ -28852,6 +28852,7 @@
             "title": "Relationship Type"
           },
           "method": {
+            "title": "Method",
             "anyOf": [
               {
                 "type": "string"
@@ -28859,10 +28860,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Method"
+            ]
           },
           "source": {
+            "title": "Source",
             "anyOf": [
               {
                 "type": "string"
@@ -28870,10 +28871,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Source"
+            ]
           },
           "release_id": {
+            "title": "Release Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -28881,10 +28882,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Release Id"
+            ]
           },
           "confidence": {
+            "title": "Confidence",
             "anyOf": [
               {
                 "type": "number",
@@ -28894,8 +28895,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Confidence"
+            ]
           },
           "evidence": {
             "$ref": "#/components/schemas/EvidenceTag"
@@ -29118,6 +29118,7 @@
             "title": "Definition"
           },
           "edit_comment": {
+            "title": "Edit Comment",
             "anyOf": [
               {
                 "type": "string",
@@ -29126,8 +29127,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Edit Comment"
+            ]
           }
         },
         "type": "object",
@@ -29163,6 +29163,7 @@
             "title": "Definition"
           },
           "edited_by": {
+            "title": "Edited By",
             "anyOf": [
               {
                 "type": "string",
@@ -29171,10 +29172,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Edited By"
+            ]
           },
           "edit_comment": {
+            "title": "Edit Comment",
             "anyOf": [
               {
                 "type": "string"
@@ -29182,10 +29183,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Edit Comment"
+            ]
           },
           "published_at": {
+            "title": "Published At",
             "anyOf": [
               {
                 "type": "string",
@@ -29194,8 +29195,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Published At"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -29245,6 +29245,7 @@
             "title": "Label"
           },
           "description": {
+            "title": "Description",
             "anyOf": [
               {
                 "type": "string"
@@ -29252,8 +29253,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Description"
+            ]
           },
           "category": {
             "type": "string",
@@ -29267,6 +29267,7 @@
             "title": "Definition"
           },
           "preview_image_id": {
+            "title": "Preview Image Id",
             "anyOf": [
               {
                 "type": "string",
@@ -29275,8 +29276,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Preview Image Id"
+            ]
           },
           "sort_order": {
             "type": "integer",
@@ -29395,6 +29395,7 @@
       "PageTemplateUpdate": {
         "properties": {
           "label": {
+            "title": "Label",
             "anyOf": [
               {
                 "type": "string",
@@ -29404,10 +29405,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Label"
+            ]
           },
           "description": {
+            "title": "Description",
             "anyOf": [
               {
                 "type": "string"
@@ -29415,10 +29416,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Description"
+            ]
           },
           "category": {
+            "title": "Category",
             "anyOf": [
               {
                 "type": "string",
@@ -29427,10 +29428,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Category"
+            ]
           },
           "definition": {
+            "title": "Definition",
             "anyOf": [
               {
                 "additionalProperties": true,
@@ -29439,10 +29440,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Definition"
+            ]
           },
           "preview_image_id": {
+            "title": "Preview Image Id",
             "anyOf": [
               {
                 "type": "string",
@@ -29451,10 +29452,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Preview Image Id"
+            ]
           },
           "sort_order": {
+            "title": "Sort Order",
             "anyOf": [
               {
                 "type": "integer"
@@ -29462,8 +29463,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Sort Order"
+            ]
           }
         },
         "type": "object",
@@ -29528,6 +29528,7 @@
             "title": "Trait Name"
           },
           "trait_value": {
+            "title": "Trait Value",
             "anyOf": [
               {
                 "type": "string"
@@ -29535,10 +29536,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Trait Value"
+            ]
           },
           "unit": {
+            "title": "Unit",
             "anyOf": [
               {
                 "type": "string"
@@ -29546,10 +29547,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Unit"
+            ]
           },
           "measurement_method": {
+            "title": "Measurement Method",
             "anyOf": [
               {
                 "type": "string"
@@ -29557,8 +29558,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Measurement Method"
+            ]
           }
         },
         "type": "object",
@@ -29590,6 +29590,7 @@
             "title": "Trait Name"
           },
           "trait_value": {
+            "title": "Trait Value",
             "anyOf": [
               {
                 "type": "string"
@@ -29597,10 +29598,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Trait Value"
+            ]
           },
           "unit": {
+            "title": "Unit",
             "anyOf": [
               {
                 "type": "string"
@@ -29608,10 +29609,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Unit"
+            ]
           },
           "description": {
+            "title": "Description",
             "anyOf": [
               {
                 "type": "string"
@@ -29619,8 +29620,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Description"
+            ]
           }
         },
         "type": "object",
@@ -29676,6 +29676,7 @@
       "PluginCapabilityResponse": {
         "properties": {
           "version": {
+            "title": "Version",
             "anyOf": [
               {
                 "type": "string"
@@ -29683,8 +29684,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Version"
+            ]
           },
           "installed": {
             "type": "boolean",
@@ -29707,6 +29707,7 @@
             "default": false
           },
           "public_url": {
+            "title": "Public Url",
             "anyOf": [
               {
                 "type": "string"
@@ -29714,8 +29715,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Public Url"
+            ]
           },
           "assemblies": {
             "items": {
@@ -29725,6 +29725,7 @@
             "title": "Assemblies"
           },
           "reason": {
+            "title": "Reason",
             "anyOf": [
               {
                 "type": "string"
@@ -29732,8 +29733,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Reason"
+            ]
           }
         },
         "type": "object",
@@ -30168,6 +30168,7 @@
             "title": "Available"
           },
           "gene_v2": {
+            "title": "Gene V2",
             "anyOf": [
               {
                 "type": "string"
@@ -30175,10 +30176,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene V2"
+            ]
           },
           "gene_v4": {
+            "title": "Gene V4",
             "anyOf": [
               {
                 "type": "string"
@@ -30186,10 +30187,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene V4"
+            ]
           },
           "gene_dn53": {
+            "title": "Gene Dn53",
             "anyOf": [
               {
                 "type": "string"
@@ -30197,8 +30198,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Dn53"
+            ]
           }
         },
         "type": "object",
@@ -30449,6 +30449,7 @@
             "title": "Title"
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string",
@@ -30457,8 +30458,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "authors": {
             "type": "string",
@@ -30466,6 +30466,7 @@
             "title": "Authors"
           },
           "authors_zh": {
+            "title": "Authors Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -30473,10 +30474,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Authors Zh"
+            ]
           },
           "journal": {
+            "title": "Journal",
             "anyOf": [
               {
                 "type": "string",
@@ -30485,10 +30486,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Journal"
+            ]
           },
           "year": {
+            "title": "Year",
             "anyOf": [
               {
                 "type": "integer",
@@ -30498,10 +30499,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Year"
+            ]
           },
           "doi": {
+            "title": "Doi",
             "anyOf": [
               {
                 "type": "string",
@@ -30510,10 +30511,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Doi"
+            ]
           },
           "pmid": {
+            "title": "Pmid",
             "anyOf": [
               {
                 "type": "string",
@@ -30522,10 +30523,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Pmid"
+            ]
           },
           "abstract": {
+            "title": "Abstract",
             "anyOf": [
               {
                 "type": "string"
@@ -30533,10 +30534,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Abstract"
+            ]
           },
           "abstract_zh": {
+            "title": "Abstract Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -30544,8 +30545,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Abstract Zh"
+            ]
           },
           "is_featured": {
             "type": "boolean",
@@ -30613,13 +30613,13 @@
             "title": "Manifest"
           },
           "published_at": {
+            "title": "Published At",
             "anyOf": [
               {},
               {
                 "type": "null"
               }
-            ],
-            "title": "Published At"
+            ]
           }
         },
         "type": "object",
@@ -30642,6 +30642,7 @@
             "title": "Release Id"
           },
           "page_definition_version": {
+            "title": "Page Definition Version",
             "anyOf": [
               {
                 "type": "integer",
@@ -30650,10 +30651,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Page Definition Version"
+            ]
           },
           "build_artifact_url": {
+            "title": "Build Artifact Url",
             "anyOf": [
               {
                 "type": "string",
@@ -30662,8 +30663,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Build Artifact Url"
+            ]
           }
         },
         "type": "object",
@@ -30754,6 +30754,7 @@
       "PublicationUpdate": {
         "properties": {
           "title": {
+            "title": "Title",
             "anyOf": [
               {
                 "type": "string",
@@ -30763,10 +30764,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title"
+            ]
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string",
@@ -30775,10 +30776,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "authors": {
+            "title": "Authors",
             "anyOf": [
               {
                 "type": "string",
@@ -30787,10 +30788,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Authors"
+            ]
           },
           "authors_zh": {
+            "title": "Authors Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -30798,10 +30799,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Authors Zh"
+            ]
           },
           "journal": {
+            "title": "Journal",
             "anyOf": [
               {
                 "type": "string",
@@ -30810,10 +30811,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Journal"
+            ]
           },
           "year": {
+            "title": "Year",
             "anyOf": [
               {
                 "type": "integer",
@@ -30823,10 +30824,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Year"
+            ]
           },
           "doi": {
+            "title": "Doi",
             "anyOf": [
               {
                 "type": "string",
@@ -30835,10 +30836,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Doi"
+            ]
           },
           "pmid": {
+            "title": "Pmid",
             "anyOf": [
               {
                 "type": "string",
@@ -30847,10 +30848,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Pmid"
+            ]
           },
           "abstract": {
+            "title": "Abstract",
             "anyOf": [
               {
                 "type": "string"
@@ -30858,10 +30859,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Abstract"
+            ]
           },
           "abstract_zh": {
+            "title": "Abstract Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -30869,10 +30870,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Abstract Zh"
+            ]
           },
           "is_featured": {
+            "title": "Is Featured",
             "anyOf": [
               {
                 "type": "boolean"
@@ -30880,8 +30881,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Is Featured"
+            ]
           }
         },
         "type": "object",
@@ -30890,6 +30890,7 @@
       "PublishRequest": {
         "properties": {
           "version_id": {
+            "title": "Version Id",
             "anyOf": [
               {
                 "type": "string",
@@ -30898,10 +30899,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Version Id"
+            ]
           },
           "reason": {
+            "title": "Reason",
             "anyOf": [
               {
                 "type": "string",
@@ -30910,8 +30911,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Reason"
+            ]
           }
         },
         "type": "object",
@@ -30938,6 +30938,7 @@
             "$ref": "#/components/schemas/PageDefinitionStatusEnum"
           },
           "event_id": {
+            "title": "Event Id",
             "anyOf": [
               {
                 "type": "string"
@@ -30945,8 +30946,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Event Id"
+            ]
           }
         },
         "type": "object",
@@ -31026,6 +31026,7 @@
             "title": "Gene Id"
           },
           "name": {
+            "title": "Name",
             "anyOf": [
               {
                 "type": "string"
@@ -31033,8 +31034,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Name"
+            ]
           },
           "chromosome": {
             "type": "string",
@@ -31154,6 +31154,7 @@
             "title": "Id"
           },
           "name": {
+            "title": "Name",
             "anyOf": [
               {
                 "type": "string"
@@ -31161,8 +31162,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Name"
+            ]
           },
           "biotype": {
             "type": "string",
@@ -31254,6 +31254,7 @@
             "title": "Name"
           },
           "description": {
+            "title": "Description",
             "anyOf": [
               {
                 "type": "string",
@@ -31262,10 +31263,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Description"
+            ]
           },
           "assembly": {
+            "title": "Assembly",
             "anyOf": [
               {
                 "type": "string",
@@ -31274,8 +31275,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly"
+            ]
           },
           "data_set_ids": {
             "items": {
@@ -31331,6 +31331,7 @@
             "title": "Name"
           },
           "description": {
+            "title": "Description",
             "anyOf": [
               {
                 "type": "string"
@@ -31338,8 +31339,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Description"
+            ]
           },
           "variant_count": {
             "type": "integer",
@@ -31363,6 +31363,7 @@
             "$ref": "#/components/schemas/ReleaseStatus"
           },
           "published_at": {
+            "title": "Published At",
             "anyOf": [
               {
                 "type": "string",
@@ -31371,8 +31372,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Published At"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -31531,6 +31531,7 @@
             "title": "Id"
           },
           "name": {
+            "title": "Name",
             "anyOf": [
               {
                 "type": "string"
@@ -31538,10 +31539,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Name"
+            ]
           },
           "description": {
+            "title": "Description",
             "anyOf": [
               {
                 "type": "string"
@@ -31549,8 +31550,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Description"
+            ]
           },
           "score": {
             "type": "number",
@@ -31563,6 +31563,7 @@
             "default": "text"
           },
           "url": {
+            "title": "Url",
             "anyOf": [
               {
                 "type": "string"
@@ -31570,8 +31571,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Url"
+            ]
           },
           "source": {
             "type": "string",
@@ -31579,6 +31579,7 @@
             "default": "internal"
           },
           "release_id": {
+            "title": "Release Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -31586,10 +31587,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Release Id"
+            ]
           },
           "assembly_id": {
+            "title": "Assembly Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -31597,10 +31598,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Id"
+            ]
           },
           "assembly": {
+            "title": "Assembly",
             "anyOf": [
               {
                 "type": "string"
@@ -31608,8 +31609,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly"
+            ]
           },
           "cross_version": {
             "items": {
@@ -31663,6 +31663,7 @@
             "default": "not_imported"
           },
           "count": {
+            "title": "Count",
             "anyOf": [
               {
                 "type": "integer",
@@ -31671,8 +31672,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Count"
+            ]
           },
           "evidence": {
             "anyOf": [
@@ -31685,6 +31685,7 @@
             ]
           },
           "reason": {
+            "title": "Reason",
             "anyOf": [
               {
                 "type": "string"
@@ -31692,8 +31693,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Reason"
+            ]
           }
         },
         "type": "object",
@@ -31718,6 +31718,7 @@
             "title": "Quantity Grams"
           },
           "location": {
+            "title": "Location",
             "anyOf": [
               {
                 "type": "string"
@@ -31725,10 +31726,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Location"
+            ]
           },
           "harvest_date": {
+            "title": "Harvest Date",
             "anyOf": [
               {
                 "type": "string",
@@ -31737,10 +31738,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Harvest Date"
+            ]
           },
           "viability_pct": {
+            "title": "Viability Pct",
             "anyOf": [
               {
                 "type": "number"
@@ -31748,10 +31749,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Viability Pct"
+            ]
           },
           "notes": {
+            "title": "Notes",
             "anyOf": [
               {
                 "type": "string"
@@ -31759,8 +31760,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Notes"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -31860,6 +31860,7 @@
       "SeqFetchRequest": {
         "properties": {
           "genes": {
+            "title": "Genes",
             "anyOf": [
               {
                 "items": {
@@ -31872,10 +31873,10 @@
                 "type": "null"
               }
             ],
-            "title": "Genes",
             "description": "Gene IDs to extract (\u2264200)."
           },
           "assembly": {
+            "title": "Assembly",
             "anyOf": [
               {
                 "type": "string",
@@ -31885,10 +31886,10 @@
                 "type": "null"
               }
             ],
-            "title": "Assembly",
             "description": "Assembly name (see /genes/assemblies) for region mode."
           },
           "region": {
+            "title": "Region",
             "anyOf": [
               {
                 "type": "string",
@@ -31898,7 +31899,6 @@
                 "type": "null"
               }
             ],
-            "title": "Region",
             "description": "1-based interval, e.g. 'chr1:1000-2000'."
           }
         },
@@ -31914,6 +31914,7 @@
             "default": "fasta"
           },
           "sequence": {
+            "title": "Sequence",
             "anyOf": [
               {
                 "type": "string"
@@ -31922,7 +31923,6 @@
                 "type": "null"
               }
             ],
-            "title": "Sequence",
             "description": "Inline FASTA text when under the size cap."
           },
           "count": {
@@ -31947,6 +31947,7 @@
             "description": "Requested gene IDs that were not found."
           },
           "download_url": {
+            "title": "Download Url",
             "anyOf": [
               {
                 "type": "string"
@@ -31955,10 +31956,10 @@
                 "type": "null"
               }
             ],
-            "title": "Download Url",
             "description": "Pre-signed download URL for large results."
           },
           "expires_in": {
+            "title": "Expires In",
             "anyOf": [
               {
                 "type": "integer"
@@ -31967,7 +31968,6 @@
                 "type": "null"
               }
             ],
-            "title": "Expires In",
             "description": "download_url lifetime in seconds."
           }
         },
@@ -32127,6 +32127,7 @@
             "title": "Allowed Url Hosts"
           },
           "minimum": {
+            "title": "Minimum",
             "anyOf": [
               {
                 "type": "integer"
@@ -32134,10 +32135,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Minimum"
+            ]
           },
           "maximum": {
+            "title": "Maximum",
             "anyOf": [
               {
                 "type": "integer"
@@ -32145,8 +32146,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Maximum"
+            ]
           },
           "max_length": {
             "type": "integer",
@@ -32259,6 +32259,7 @@
             "title": "Changes"
           },
           "actor_id": {
+            "title": "Actor Id",
             "anyOf": [
               {
                 "type": "string",
@@ -32267,8 +32268,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Actor Id"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -32276,6 +32276,7 @@
             "title": "Created At"
           },
           "rollback_from_version": {
+            "title": "Rollback From Version",
             "anyOf": [
               {
                 "type": "integer",
@@ -32284,10 +32285,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Rollback From Version"
+            ]
           },
           "reason": {
+            "title": "Reason",
             "anyOf": [
               {
                 "type": "string"
@@ -32295,8 +32296,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Reason"
+            ]
           }
         },
         "additionalProperties": false,
@@ -32521,6 +32521,7 @@
             "title": "Url"
           },
           "index_url": {
+            "title": "Index Url",
             "anyOf": [
               {
                 "type": "string"
@@ -32528,8 +32529,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Index Url"
+            ]
           },
           "expires_in": {
             "type": "integer",
@@ -32537,6 +32537,7 @@
             "description": "URL validity in seconds."
           },
           "request_id": {
+            "title": "Request Id",
             "anyOf": [
               {
                 "type": "string"
@@ -32544,8 +32545,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Request Id"
+            ]
           }
         },
         "type": "object",
@@ -32578,6 +32578,7 @@
       "SiteBrandPatchValues": {
         "properties": {
           "name_zh": {
+            "title": "Name Zh",
             "anyOf": [
               {
                 "type": "string",
@@ -32587,10 +32588,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Name Zh"
+            ]
           },
           "name_en": {
+            "title": "Name En",
             "anyOf": [
               {
                 "type": "string",
@@ -32600,10 +32601,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Name En"
+            ]
           },
           "icon_url": {
+            "title": "Icon Url",
             "anyOf": [
               {
                 "type": "string",
@@ -32612,8 +32613,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Icon Url"
+            ]
           }
         },
         "additionalProperties": false,
@@ -32632,6 +32632,7 @@
             "title": "Name En"
           },
           "icon_url": {
+            "title": "Icon Url",
             "anyOf": [
               {
                 "type": "string"
@@ -32639,8 +32640,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Icon Url"
+            ]
           },
           "variant": {
             "type": "string",
@@ -32671,6 +32671,7 @@
             "title": "Name En"
           },
           "icon_url": {
+            "title": "Icon Url",
             "anyOf": [
               {
                 "type": "string"
@@ -32678,8 +32679,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Icon Url"
+            ]
           }
         },
         "type": "object",
@@ -32715,6 +32715,7 @@
             "title": "State"
           },
           "member_count": {
+            "title": "Member Count",
             "anyOf": [
               {
                 "type": "integer",
@@ -32723,8 +32724,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Member Count"
+            ]
           }
         },
         "type": "object",
@@ -32763,6 +32763,7 @@
             "title": "Api Base Url"
           },
           "jbrowse_base_url": {
+            "title": "Jbrowse Base Url",
             "anyOf": [
               {
                 "type": "string",
@@ -32771,10 +32772,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Jbrowse Base Url"
+            ]
           },
           "portal_base_url": {
+            "title": "Portal Base Url",
             "anyOf": [
               {
                 "type": "string",
@@ -32783,8 +32784,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Portal Base Url"
+            ]
           },
           "is_enabled": {
             "type": "boolean",
@@ -32797,6 +32797,7 @@
             "default": false
           },
           "notes": {
+            "title": "Notes",
             "anyOf": [
               {
                 "type": "string"
@@ -32804,8 +32805,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Notes"
+            ]
           }
         },
         "additionalProperties": false,
@@ -32845,6 +32845,7 @@
             "title": "Checked At"
           },
           "last_checked_at": {
+            "title": "Last Checked At",
             "anyOf": [
               {
                 "type": "string",
@@ -32853,10 +32854,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Last Checked At"
+            ]
           },
           "last_error_at": {
+            "title": "Last Error At",
             "anyOf": [
               {
                 "type": "string",
@@ -32865,14 +32866,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Last Error At"
+            ]
           },
           "is_stale": {
             "type": "boolean",
             "title": "Is Stale"
           },
           "error_code": {
+            "title": "Error Code",
             "anyOf": [
               {
                 "type": "string"
@@ -32880,8 +32881,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Error Code"
+            ]
           },
           "remote_management": {
             "type": "string",
@@ -32953,6 +32953,7 @@
             "title": "Api Base Url"
           },
           "jbrowse_base_url": {
+            "title": "Jbrowse Base Url",
             "anyOf": [
               {
                 "type": "string",
@@ -32961,10 +32962,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Jbrowse Base Url"
+            ]
           },
           "portal_base_url": {
+            "title": "Portal Base Url",
             "anyOf": [
               {
                 "type": "string",
@@ -32973,8 +32974,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Portal Base Url"
+            ]
           },
           "is_enabled": {
             "type": "boolean",
@@ -32987,6 +32987,7 @@
             "default": false
           },
           "notes": {
+            "title": "Notes",
             "anyOf": [
               {
                 "type": "string"
@@ -32994,14 +32995,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Notes"
+            ]
           },
           "id": {
             "type": "integer",
             "title": "Id"
           },
           "site_url": {
+            "title": "Site Url",
             "anyOf": [
               {
                 "type": "string"
@@ -33009,8 +33010,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Site Url"
+            ]
           },
           "connection_state": {
             "type": "string",
@@ -33025,6 +33025,7 @@
             "default": "unknown"
           },
           "last_checked_at": {
+            "title": "Last Checked At",
             "anyOf": [
               {
                 "type": "string",
@@ -33033,10 +33034,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Last Checked At"
+            ]
           },
           "last_error_at": {
+            "title": "Last Error At",
             "anyOf": [
               {
                 "type": "string",
@@ -33045,8 +33046,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Last Error At"
+            ]
           },
           "is_stale": {
             "type": "boolean",
@@ -33089,6 +33089,7 @@
       "SpeciesInstanceUpdate": {
         "properties": {
           "name": {
+            "title": "Name",
             "anyOf": [
               {
                 "type": "string",
@@ -33098,10 +33099,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Name"
+            ]
           },
           "api_base_url": {
+            "title": "Api Base Url",
             "anyOf": [
               {
                 "type": "string",
@@ -33111,10 +33112,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Api Base Url"
+            ]
           },
           "jbrowse_base_url": {
+            "title": "Jbrowse Base Url",
             "anyOf": [
               {
                 "type": "string",
@@ -33123,10 +33124,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Jbrowse Base Url"
+            ]
           },
           "portal_base_url": {
+            "title": "Portal Base Url",
             "anyOf": [
               {
                 "type": "string",
@@ -33135,10 +33136,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Portal Base Url"
+            ]
           },
           "is_enabled": {
+            "title": "Is Enabled",
             "anyOf": [
               {
                 "type": "boolean"
@@ -33146,10 +33147,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Is Enabled"
+            ]
           },
           "is_local": {
+            "title": "Is Local",
             "anyOf": [
               {
                 "type": "boolean"
@@ -33157,10 +33158,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Is Local"
+            ]
           },
           "notes": {
+            "title": "Notes",
             "anyOf": [
               {
                 "type": "string"
@@ -33168,8 +33169,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Notes"
+            ]
           }
         },
         "additionalProperties": false,
@@ -33179,6 +33179,7 @@
       "StaticBuildRequest": {
         "properties": {
           "gene_ids": {
+            "title": "Gene Ids",
             "anyOf": [
               {
                 "items": {
@@ -33190,8 +33191,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Ids"
+            ]
           }
         },
         "type": "object",
@@ -33212,6 +33212,7 @@
             "title": "Title En"
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string",
@@ -33220,8 +33221,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "content_en": {
             "type": "string",
@@ -33229,6 +33229,7 @@
             "title": "Content En"
           },
           "content_zh": {
+            "title": "Content Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -33236,10 +33237,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Content Zh"
+            ]
           },
           "summary": {
+            "title": "Summary",
             "anyOf": [
               {
                 "type": "string"
@@ -33247,10 +33248,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Summary"
+            ]
           },
           "category": {
+            "title": "Category",
             "anyOf": [
               {
                 "type": "string",
@@ -33259,8 +33260,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Category"
+            ]
           },
           "sort_order": {
             "type": "integer",
@@ -33273,6 +33273,7 @@
             "default": "draft"
           },
           "edit_comment": {
+            "title": "Edit Comment",
             "anyOf": [
               {
                 "type": "string"
@@ -33280,8 +33281,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Edit Comment"
+            ]
           }
         },
         "type": "object",
@@ -33307,6 +33307,7 @@
             "title": "Title En"
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -33314,14 +33315,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "content_en": {
             "type": "string",
             "title": "Content En"
           },
           "content_zh": {
+            "title": "Content Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -33329,14 +33330,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Content Zh"
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/PageStatus",
             "default": "draft"
           },
           "category": {
+            "title": "Category",
             "anyOf": [
               {
                 "type": "string"
@@ -33344,10 +33345,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Category"
+            ]
           },
           "summary": {
+            "title": "Summary",
             "anyOf": [
               {
                 "type": "string"
@@ -33355,8 +33356,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Summary"
+            ]
           },
           "sort_order": {
             "type": "integer",
@@ -33374,6 +33374,7 @@
             "title": "Updated At"
           },
           "author_name": {
+            "title": "Author Name",
             "anyOf": [
               {
                 "type": "string"
@@ -33381,10 +33382,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Author Name"
+            ]
           },
           "published_at": {
+            "title": "Published At",
             "anyOf": [
               {
                 "type": "string",
@@ -33393,8 +33394,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Published At"
+            ]
           },
           "current_version": {
             "type": "integer",
@@ -33417,6 +33417,7 @@
       "StaticPageMigrationDryRunRequest": {
         "properties": {
           "slugs": {
+            "title": "Slugs",
             "anyOf": [
               {
                 "items": {
@@ -33431,8 +33432,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Slugs"
+            ]
           }
         },
         "type": "object",
@@ -33493,6 +33493,7 @@
             "title": "Outcome"
           },
           "error_code": {
+            "title": "Error Code",
             "anyOf": [
               {
                 "type": "string"
@@ -33500,10 +33501,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Error Code"
+            ]
           },
           "message": {
+            "title": "Message",
             "anyOf": [
               {
                 "type": "string"
@@ -33511,8 +33512,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Message"
+            ]
           }
         },
         "type": "object",
@@ -33539,6 +33539,7 @@
             "title": "Title En"
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -33546,14 +33547,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "content_en": {
             "type": "string",
             "title": "Content En"
           },
           "content_zh": {
+            "title": "Content Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -33561,14 +33562,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Content Zh"
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/PageStatus",
             "default": "draft"
           },
           "category": {
+            "title": "Category",
             "anyOf": [
               {
                 "type": "string"
@@ -33576,10 +33577,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Category"
+            ]
           },
           "summary": {
+            "title": "Summary",
             "anyOf": [
               {
                 "type": "string"
@@ -33587,8 +33588,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Summary"
+            ]
           },
           "sort_order": {
             "type": "integer",
@@ -33620,6 +33620,7 @@
       "StaticPageUpdate": {
         "properties": {
           "title_en": {
+            "title": "Title En",
             "anyOf": [
               {
                 "type": "string",
@@ -33629,10 +33630,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title En"
+            ]
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -33640,10 +33641,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "content_en": {
+            "title": "Content En",
             "anyOf": [
               {
                 "type": "string"
@@ -33651,10 +33652,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Content En"
+            ]
           },
           "content_zh": {
+            "title": "Content Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -33662,10 +33663,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Content Zh"
+            ]
           },
           "summary": {
+            "title": "Summary",
             "anyOf": [
               {
                 "type": "string"
@@ -33673,10 +33674,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Summary"
+            ]
           },
           "category": {
+            "title": "Category",
             "anyOf": [
               {
                 "type": "string"
@@ -33684,10 +33685,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Category"
+            ]
           },
           "sort_order": {
+            "title": "Sort Order",
             "anyOf": [
               {
                 "type": "integer",
@@ -33696,10 +33697,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Sort Order"
+            ]
           },
           "edit_comment": {
+            "title": "Edit Comment",
             "anyOf": [
               {
                 "type": "string"
@@ -33707,8 +33708,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Edit Comment"
+            ]
           }
         },
         "type": "object",
@@ -33820,6 +33820,7 @@
             "default": "external"
           },
           "release_id": {
+            "title": "Release Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -33827,8 +33828,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Release Id"
+            ]
           },
           "is_default": {
             "type": "boolean",
@@ -33847,6 +33847,7 @@
             "$ref": "#/components/schemas/TableActions"
           },
           "notes": {
+            "title": "Notes",
             "anyOf": [
               {
                 "type": "string"
@@ -33854,8 +33855,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Notes"
+            ]
           },
           "kind": {
             "type": "string",
@@ -33923,6 +33923,7 @@
             "default": "external"
           },
           "release_id": {
+            "title": "Release Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -33930,8 +33931,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Release Id"
+            ]
           },
           "is_default": {
             "type": "boolean",
@@ -33950,6 +33950,7 @@
             "$ref": "#/components/schemas/TableActions"
           },
           "notes": {
+            "title": "Notes",
             "anyOf": [
               {
                 "type": "string"
@@ -33957,8 +33958,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Notes"
+            ]
           },
           "id": {
             "type": "integer",
@@ -33994,6 +33994,7 @@
       "TableViewTemplateUpdate": {
         "properties": {
           "name": {
+            "title": "Name",
             "anyOf": [
               {
                 "type": "string",
@@ -34003,10 +34004,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Name"
+            ]
           },
           "columns": {
+            "title": "Columns",
             "anyOf": [
               {
                 "items": {
@@ -34018,8 +34019,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Columns"
+            ]
           },
           "actions": {
             "anyOf": [
@@ -34032,6 +34032,7 @@
             ]
           },
           "is_default": {
+            "title": "Is Default",
             "anyOf": [
               {
                 "type": "boolean"
@@ -34039,10 +34040,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Is Default"
+            ]
           },
           "release_id": {
+            "title": "Release Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -34050,10 +34051,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Release Id"
+            ]
           },
           "notes": {
+            "title": "Notes",
             "anyOf": [
               {
                 "type": "string"
@@ -34061,8 +34062,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Notes"
+            ]
           }
         },
         "additionalProperties": false,
@@ -34136,6 +34136,7 @@
             "title": "Gene Id"
           },
           "name": {
+            "title": "Name",
             "anyOf": [
               {
                 "type": "string"
@@ -34143,8 +34144,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Name"
+            ]
           },
           "biotype": {
             "type": "string",
@@ -34324,6 +34324,7 @@
             ]
           },
           "organization_id": {
+            "title": "Organization Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -34331,8 +34332,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Organization Id"
+            ]
           },
           "role_name": {
             "type": "string",
@@ -34389,6 +34389,7 @@
             "title": "Is Superuser"
           },
           "role_name": {
+            "title": "Role Name",
             "anyOf": [
               {
                 "type": "string"
@@ -34396,8 +34397,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Role Name"
+            ]
           },
           "effective_roles": {
             "items": {
@@ -34407,6 +34407,7 @@
             "title": "Effective Roles"
           },
           "organization_id": {
+            "title": "Organization Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -34414,8 +34415,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Organization Id"
+            ]
           },
           "joined_at": {
             "type": "string",
@@ -34423,6 +34423,7 @@
             "title": "Joined At"
           },
           "last_login_at": {
+            "title": "Last Login At",
             "anyOf": [
               {
                 "type": "string",
@@ -34431,8 +34432,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Last Login At"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -34592,6 +34592,7 @@
       "VariantDetail": {
         "properties": {
           "id": {
+            "title": "Id",
             "anyOf": [
               {
                 "type": "string"
@@ -34599,10 +34600,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Id"
+            ]
           },
           "assembly_id": {
+            "title": "Assembly Id",
             "anyOf": [
               {
                 "type": "string"
@@ -34610,10 +34611,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Id"
+            ]
           },
           "assembly": {
+            "title": "Assembly",
             "anyOf": [
               {
                 "type": "string"
@@ -34621,10 +34622,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly"
+            ]
           },
           "variant_id": {
+            "title": "Variant Id",
             "anyOf": [
               {
                 "type": "string"
@@ -34632,8 +34633,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Variant Id"
+            ]
           },
           "chromosome": {
             "type": "string",
@@ -34658,6 +34658,7 @@
             "$ref": "#/components/schemas/VariantType"
           },
           "quality": {
+            "title": "Quality",
             "anyOf": [
               {
                 "type": "number",
@@ -34666,8 +34667,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Quality"
+            ]
           },
           "filter_status": {
             "type": "string",
@@ -34675,6 +34675,7 @@
             "default": "PASS"
           },
           "allele_frequency": {
+            "title": "Allele Frequency",
             "anyOf": [
               {
                 "type": "number",
@@ -34684,10 +34685,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Allele Frequency"
+            ]
           },
           "gene_id": {
+            "title": "Gene Id",
             "anyOf": [
               {
                 "type": "string"
@@ -34695,10 +34696,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Id"
+            ]
           },
           "gene_symbol": {
+            "title": "Gene Symbol",
             "anyOf": [
               {
                 "type": "string"
@@ -34706,8 +34707,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Symbol"
+            ]
           },
           "consequence": {
             "anyOf": [
@@ -34730,6 +34730,7 @@
             ]
           },
           "transcript_id": {
+            "title": "Transcript Id",
             "anyOf": [
               {
                 "type": "string"
@@ -34737,10 +34738,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Transcript Id"
+            ]
           },
           "hgvs_c": {
+            "title": "Hgvs C",
             "anyOf": [
               {
                 "type": "string"
@@ -34748,10 +34749,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Hgvs C"
+            ]
           },
           "hgvs_p": {
+            "title": "Hgvs P",
             "anyOf": [
               {
                 "type": "string"
@@ -34759,10 +34760,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Hgvs P"
+            ]
           },
           "sift_score": {
+            "title": "Sift Score",
             "anyOf": [
               {
                 "type": "number",
@@ -34772,10 +34773,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Sift Score"
+            ]
           },
           "sift_prediction": {
+            "title": "Sift Prediction",
             "anyOf": [
               {
                 "type": "string"
@@ -34783,10 +34784,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Sift Prediction"
+            ]
           },
           "depth": {
+            "title": "Depth",
             "anyOf": [
               {
                 "type": "integer",
@@ -34795,10 +34796,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Depth"
+            ]
           },
           "genotype": {
+            "title": "Genotype",
             "anyOf": [
               {
                 "type": "string"
@@ -34806,10 +34807,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Genotype"
+            ]
           },
           "created_at": {
+            "title": "Created At",
             "anyOf": [
               {
                 "type": "string",
@@ -34818,10 +34819,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Created At"
+            ]
           },
           "updated_at": {
+            "title": "Updated At",
             "anyOf": [
               {
                 "type": "string",
@@ -34830,8 +34831,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Updated At"
+            ]
           }
         },
         "type": "object",
@@ -34848,6 +34848,7 @@
       "VariantExportFilters": {
         "properties": {
           "assembly": {
+            "title": "Assembly",
             "anyOf": [
               {
                 "type": "string"
@@ -34856,10 +34857,10 @@
                 "type": "null"
               }
             ],
-            "title": "Assembly",
             "description": "Assembly namespace of the exported file (e.g. ``Wm82.a4.v1``). A named assembly wins; when the request names none, the resolved release's own assembly scope is used; a request whose release declares no scope is refused. One export carries exactly one assembly namespace. The name is checked for length (at most 64 characters) and against the release's own facts: a namespace the release publishes no variants in is refused, because an artifact without rows would claim a namespace the release does not have."
           },
           "chromosome": {
+            "title": "Chromosome",
             "anyOf": [
               {
                 "type": "string"
@@ -34867,10 +34868,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Chromosome"
+            ]
           },
           "start": {
+            "title": "Start",
             "anyOf": [
               {
                 "type": "integer",
@@ -34879,10 +34880,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Start"
+            ]
           },
           "end": {
+            "title": "End",
             "anyOf": [
               {
                 "type": "integer",
@@ -34891,10 +34892,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "End"
+            ]
           },
           "ref": {
+            "title": "Ref",
             "anyOf": [
               {
                 "type": "string",
@@ -34904,10 +34905,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Ref"
+            ]
           },
           "alt": {
+            "title": "Alt",
             "anyOf": [
               {
                 "type": "string",
@@ -34917,10 +34918,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Alt"
+            ]
           },
           "gene_id": {
+            "title": "Gene Id",
             "anyOf": [
               {
                 "type": "string"
@@ -34928,8 +34929,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Id"
+            ]
           },
           "variant_type": {
             "anyOf": [
@@ -34962,6 +34962,7 @@
             ]
           },
           "min_af": {
+            "title": "Min Af",
             "anyOf": [
               {
                 "type": "number",
@@ -34971,10 +34972,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Min Af"
+            ]
           },
           "max_af": {
+            "title": "Max Af",
             "anyOf": [
               {
                 "type": "number",
@@ -34984,10 +34985,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Max Af"
+            ]
           },
           "cursor": {
+            "title": "Cursor",
             "anyOf": [
               {
                 "type": "string"
@@ -34996,10 +34997,10 @@
                 "type": "null"
               }
             ],
-            "title": "Cursor",
             "description": "Opaque signed keyset cursor."
           },
           "limit": {
+            "title": "Limit",
             "anyOf": [
               {
                 "type": "integer",
@@ -35010,10 +35011,10 @@
                 "type": "null"
               }
             ],
-            "title": "Limit",
             "description": "Accepted for compatibility with the variant query filters, but not applied to an export: an artifact contains every record that matches the other filters, bounded by the export budget. A caller that wants a page of rows uses the variant list endpoint."
           },
           "mutant_line_public_id": {
+            "title": "Mutant Line Public Id",
             "anyOf": [
               {
                 "type": "string"
@@ -35021,8 +35022,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Mutant Line Public Id"
+            ]
           }
         },
         "additionalProperties": false,
@@ -35040,6 +35040,7 @@
             "title": "Items"
           },
           "next_cursor": {
+            "title": "Next Cursor",
             "anyOf": [
               {
                 "type": "string"
@@ -35047,10 +35048,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Next Cursor"
+            ]
           },
           "total_count": {
+            "title": "Total Count",
             "anyOf": [
               {
                 "type": "integer"
@@ -35059,7 +35060,6 @@
                 "type": "null"
               }
             ],
-            "title": "Total Count",
             "description": "May be null for large result sets."
           },
           "has_more": {
@@ -35075,6 +35075,7 @@
       "VariantResponse": {
         "properties": {
           "id": {
+            "title": "Id",
             "anyOf": [
               {
                 "type": "string"
@@ -35082,10 +35083,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Id"
+            ]
           },
           "assembly_id": {
+            "title": "Assembly Id",
             "anyOf": [
               {
                 "type": "string"
@@ -35093,10 +35094,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly Id"
+            ]
           },
           "assembly": {
+            "title": "Assembly",
             "anyOf": [
               {
                 "type": "string"
@@ -35104,10 +35105,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Assembly"
+            ]
           },
           "variant_id": {
+            "title": "Variant Id",
             "anyOf": [
               {
                 "type": "string"
@@ -35115,8 +35116,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Variant Id"
+            ]
           },
           "chromosome": {
             "type": "string",
@@ -35141,6 +35141,7 @@
             "$ref": "#/components/schemas/VariantType"
           },
           "quality": {
+            "title": "Quality",
             "anyOf": [
               {
                 "type": "number",
@@ -35149,8 +35150,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Quality"
+            ]
           },
           "filter_status": {
             "type": "string",
@@ -35158,6 +35158,7 @@
             "default": "PASS"
           },
           "allele_frequency": {
+            "title": "Allele Frequency",
             "anyOf": [
               {
                 "type": "number",
@@ -35167,10 +35168,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Allele Frequency"
+            ]
           },
           "gene_id": {
+            "title": "Gene Id",
             "anyOf": [
               {
                 "type": "string"
@@ -35178,10 +35179,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Id"
+            ]
           },
           "gene_symbol": {
+            "title": "Gene Symbol",
             "anyOf": [
               {
                 "type": "string"
@@ -35189,8 +35190,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Gene Symbol"
+            ]
           },
           "consequence": {
             "anyOf": [
@@ -35230,6 +35230,7 @@
             "$ref": "#/components/schemas/SectionStatus"
           },
           "total": {
+            "title": "Total",
             "anyOf": [
               {
                 "type": "integer",
@@ -35238,8 +35239,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Total"
+            ]
           },
           "by_impact": {
             "additionalProperties": {
@@ -35362,6 +35362,7 @@
             "title": "Display Name"
           },
           "description": {
+            "title": "Description",
             "anyOf": [
               {
                 "type": "string"
@@ -35369,8 +35370,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Description"
+            ]
           },
           "category": {
             "$ref": "#/components/schemas/WidgetCategoryEnum",
@@ -35383,6 +35383,7 @@
             "title": "Template Path"
           },
           "data_source": {
+            "title": "Data Source",
             "anyOf": [
               {
                 "type": "string",
@@ -35391,8 +35392,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Data Source"
+            ]
           },
           "params_schema": {
             "additionalProperties": true,
@@ -35628,6 +35628,7 @@
             "title": "Display Name"
           },
           "description": {
+            "title": "Description",
             "anyOf": [
               {
                 "type": "string"
@@ -35635,8 +35636,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Description"
+            ]
           },
           "category": {
             "$ref": "#/components/schemas/WidgetCategoryEnum"
@@ -35646,6 +35646,7 @@
             "title": "Template Path"
           },
           "data_source": {
+            "title": "Data Source",
             "anyOf": [
               {
                 "type": "string"
@@ -35653,8 +35654,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Data Source"
+            ]
           },
           "params_schema": {
             "additionalProperties": true,
@@ -35708,6 +35708,7 @@
       "WidgetUpdate": {
         "properties": {
           "display_name": {
+            "title": "Display Name",
             "anyOf": [
               {
                 "type": "string",
@@ -35717,10 +35718,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Display Name"
+            ]
           },
           "description": {
+            "title": "Description",
             "anyOf": [
               {
                 "type": "string"
@@ -35728,8 +35729,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Description"
+            ]
           },
           "category": {
             "anyOf": [
@@ -35742,6 +35742,7 @@
             ]
           },
           "template_path": {
+            "title": "Template Path",
             "anyOf": [
               {
                 "type": "string",
@@ -35751,10 +35752,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Template Path"
+            ]
           },
           "data_source": {
+            "title": "Data Source",
             "anyOf": [
               {
                 "type": "string",
@@ -35763,10 +35764,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Data Source"
+            ]
           },
           "params_schema": {
+            "title": "Params Schema",
             "anyOf": [
               {
                 "additionalProperties": true,
@@ -35775,10 +35776,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Params Schema"
+            ]
           },
           "cache_ttl": {
+            "title": "Cache Ttl",
             "anyOf": [
               {
                 "type": "integer",
@@ -35788,10 +35789,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Cache Ttl"
+            ]
           },
           "admin_config": {
+            "title": "Admin Config",
             "anyOf": [
               {
                 "additionalProperties": true,
@@ -35800,8 +35801,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Admin Config"
+            ]
           },
           "permissions": {
             "anyOf": [
@@ -35814,6 +35814,7 @@
             ]
           },
           "is_active": {
+            "title": "Is Active",
             "anyOf": [
               {
                 "type": "boolean"
@@ -35821,8 +35822,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Is Active"
+            ]
           }
         },
         "type": "object",
@@ -35846,6 +35846,7 @@
             "title": "Title"
           },
           "title_zh": {
+            "title": "Title Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -35853,14 +35854,14 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Title Zh"
+            ]
           },
           "authors": {
             "type": "string",
             "title": "Authors"
           },
           "authors_zh": {
+            "title": "Authors Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -35868,10 +35869,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Authors Zh"
+            ]
           },
           "journal": {
+            "title": "Journal",
             "anyOf": [
               {
                 "type": "string"
@@ -35879,10 +35880,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Journal"
+            ]
           },
           "year": {
+            "title": "Year",
             "anyOf": [
               {
                 "type": "integer"
@@ -35890,10 +35891,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Year"
+            ]
           },
           "doi": {
+            "title": "Doi",
             "anyOf": [
               {
                 "type": "string"
@@ -35901,10 +35902,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Doi"
+            ]
           },
           "pmid": {
+            "title": "Pmid",
             "anyOf": [
               {
                 "type": "string"
@@ -35912,10 +35913,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Pmid"
+            ]
           },
           "abstract": {
+            "title": "Abstract",
             "anyOf": [
               {
                 "type": "string"
@@ -35923,10 +35924,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Abstract"
+            ]
           },
           "abstract_zh": {
+            "title": "Abstract Zh",
             "anyOf": [
               {
                 "type": "string"
@@ -35934,8 +35935,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Abstract Zh"
+            ]
           },
           "is_featured": {
             "type": "boolean",
@@ -35978,6 +35978,7 @@
             "title": "Release Id"
           },
           "page_definition_version": {
+            "title": "Page Definition Version",
             "anyOf": [
               {
                 "type": "integer"
@@ -35985,10 +35986,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Page Definition Version"
+            ]
           },
           "manifest_digest": {
+            "title": "Manifest Digest",
             "anyOf": [
               {
                 "type": "string"
@@ -35996,10 +35997,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Manifest Digest"
+            ]
           },
           "artifact_url": {
+            "title": "Artifact Url",
             "anyOf": [
               {
                 "type": "string"
@@ -36007,10 +36008,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Artifact Url"
+            ]
           },
           "build_artifact_url": {
+            "title": "Build Artifact Url",
             "anyOf": [
               {
                 "type": "string"
@@ -36018,10 +36019,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Build Artifact Url"
+            ]
           },
           "remote_id": {
+            "title": "Remote Id",
             "anyOf": [
               {
                 "type": "string"
@@ -36029,10 +36030,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Remote Id"
+            ]
           },
           "previous_publication_id": {
+            "title": "Previous Publication Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -36040,10 +36041,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Previous Publication Id"
+            ]
           },
           "superseded_by_publication_id": {
+            "title": "Superseded By Publication Id",
             "anyOf": [
               {
                 "type": "integer"
@@ -36051,10 +36052,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Superseded By Publication Id"
+            ]
           },
           "error_message": {
+            "title": "Error Message",
             "anyOf": [
               {
                 "type": "string"
@@ -36062,10 +36063,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Error Message"
+            ]
           },
           "requested_by": {
+            "title": "Requested By",
             "anyOf": [
               {
                 "type": "string"
@@ -36073,8 +36074,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Requested By"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -36165,6 +36165,7 @@
             "$ref": "#/components/schemas/app__schemas__seed__SeedRequestStatus"
           },
           "quantity_requested": {
+            "title": "Quantity Requested",
             "anyOf": [
               {
                 "type": "number"
@@ -36172,8 +36173,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Quantity Requested"
+            ]
           },
           "requester_name": {
             "type": "string",
@@ -36192,6 +36192,7 @@
             "title": "Purpose"
           },
           "tracking_number": {
+            "title": "Tracking Number",
             "anyOf": [
               {
                 "type": "string"
@@ -36199,10 +36200,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Tracking Number"
+            ]
           },
           "notes": {
+            "title": "Notes",
             "anyOf": [
               {
                 "type": "string"
@@ -36210,8 +36211,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Notes"
+            ]
           },
           "created_at": {
             "type": "string",
@@ -36219,6 +36219,7 @@
             "title": "Created At"
           },
           "reviewed_at": {
+            "title": "Reviewed At",
             "anyOf": [
               {
                 "type": "string",
@@ -36227,8 +36228,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Reviewed At"
+            ]
           }
         },
         "type": "object",
@@ -36262,6 +36262,7 @@
             "$ref": "#/components/schemas/app__schemas__seed__SeedRequestStatus"
           },
           "tracking_number": {
+            "title": "Tracking Number",
             "anyOf": [
               {
                 "type": "string",
@@ -36270,10 +36271,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Tracking Number"
+            ]
           },
           "notes": {
+            "title": "Notes",
             "anyOf": [
               {
                 "type": "string",
@@ -36282,8 +36283,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Notes"
+            ]
           }
         },
         "type": "object",
@@ -36327,6 +36327,7 @@
             "title": "Gene Ids"
           },
           "notes": {
+            "title": "Notes",
             "anyOf": [
               {
                 "type": "string",
@@ -36335,8 +36336,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Notes"
+            ]
           }
         },
         "type": "object",
@@ -36380,6 +36380,7 @@
             "title": "Gene Ids"
           },
           "notes": {
+            "title": "Notes",
             "anyOf": [
               {
                 "type": "string"
@@ -36387,8 +36388,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Notes"
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/app__models__seed_request__SeedRequestStatus"
@@ -36399,6 +36399,7 @@
             "title": "Created At"
           },
           "processed_at": {
+            "title": "Processed At",
             "anyOf": [
               {
                 "type": "string",
@@ -36407,10 +36408,10 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Processed At"
+            ]
           },
           "processed_by": {
+            "title": "Processed By",
             "anyOf": [
               {
                 "type": "string"
@@ -36418,8 +36419,7 @@
               {
                 "type": "null"
               }
-            ],
-            "title": "Processed By"
+            ]
           }
         },
         "type": "object",

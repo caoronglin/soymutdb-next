@@ -21,15 +21,34 @@ gate rejects -- again without saying which file or why. #25 did exactly that
 when it spliced six ``/api/v1/comparative/*`` paths at their alphabetical
 position and moved 222 of the 223 existing keys.
 
+The second failure mode is subtler and cost a red frontend gate on main: the
+snapshot and the generated client disagreed about *one* field family, because
+``scripts/export_contract.py`` restated a pydantic serialization detail through
+a hand-kept list of field names that had gone stale. A snapshot generated
+while the list covered half of ``GeneDetail`` froze ``default: null`` on those
+fields and omitted it on the rest; from then on every real export disagreed
+with it, and the diff only said "CONTRACT DEBT".
+
+The contract these tests state is the one that makes the gate meaningful:
+
+* the normalizer is a pure function of the document — it owns exactly one
+  spelling of an optional nullable field, and applying it twice changes
+  nothing; and
+* the snapshot and the generated client declare the same field set per
+  schema, so one of them being regenerated without the other shows up here
+  instead of as "CONTRACT DEBT".
+
 The checks below need neither Python 3.15 nor the API virtualenv, so they run
 in the dependency-free contracts layer and name the actual cause.
 """
+
 from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 SNAPSHOT = Path(__file__).resolve().parents[1] / "packages/api-client/openapi.json"
 GENERATED = SNAPSHOT.parent / "src/generated/openapi.d.ts"
@@ -58,7 +77,7 @@ def _component_names(document: dict[str, Any]) -> set[str]:
 
 def _component_refs(document: dict[str, Any]) -> set[str]:
     return {
-        ref[len(COMPONENT_PREFIX):]
+        ref[len(COMPONENT_PREFIX) :]
         for ref in _refs(document)
         if ref.startswith(COMPONENT_PREFIX)
     }
@@ -140,4 +159,202 @@ def test_generated_client_keeps_snapshot_path_order() -> None:
         "order, so the snapshot must keep FastAPI's router-registration order "
         "-- run `pnpm --filter @soymutdb/api-client generate:api-client` under "
         "Python 3.15 instead of reordering the JSON."
+    )
+
+
+# ---------------------------------------------------------------------------
+# The normalizer: one spelling for an optional nullable field
+# ---------------------------------------------------------------------------
+
+EXPORT_SCRIPT = (
+    Path(__file__).resolve().parents[1]
+    / "packages/api-client/scripts/export_contract.py"
+)
+
+
+def _export_module() -> Any:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("export_contract", EXPORT_SCRIPT)
+    assert spec and spec.loader, f"cannot load {EXPORT_SCRIPT}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _document_with_optional_fields() -> dict[str, Any]:
+    """A minimal document exercising every spelling the normalizer must unify."""
+
+    return {
+        "components": {
+            "schemas": {
+                name: {
+                    "properties": {
+                        "values": {"additionalProperties": {}},
+                        "changes": {"additionalProperties": {}},
+                        "default": {},
+                    },
+                    "type": "object",
+                }
+                for name in (
+                    "SettingsDocumentResponse",
+                    "SettingsHistoryItem",
+                    "SettingsPatchRequest",
+                    "SettingsValidateRequest",
+                    "SettingsValidateResponse",
+                    "SettingFieldSchema",
+                )
+            }
+        }
+    }
+
+
+def test_normalizer_owns_both_spellings_of_an_optional_nullable_field() -> None:
+    """``default: null`` present or absent must land on the same shape."""
+
+    module = _export_module()
+    document = _document_with_optional_fields()
+    properties = {
+        "with_default": {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "default": None,
+            "title": "Optional",
+        },
+        "without_default": {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "title": "Optional",
+        },
+        "required_with_default": {
+            "anyOf": [{"type": "string"}, {"type": "null"}],
+            "default": None,
+            "title": "Required",
+        },
+        "non_null_default": {"type": "string", "default": "x", "title": "Non Null"},
+    }
+    document["components"]["schemas"]["Sample"] = {
+        "properties": properties,
+        "required": ["required_with_default"],
+        "type": "object",
+    }
+
+    normalized = module.normalize(document)["components"]["schemas"]["Sample"][
+        "properties"
+    ]
+
+    assert normalized["with_default"] == normalized["without_default"], (
+        "an optional nullable field keeps `default: null` depending on which "
+        "export produced it — that is the drift the frontend contract gate "
+        "reports as CONTRACT DEBT"
+    )
+    assert "default" not in normalized["without_default"]
+    assert normalized["required_with_default"]["default"] is None, (
+        "a required field's default is a real contract statement and must survive"
+    )
+    assert normalized["non_null_default"]["default"] == "x"
+
+
+def test_normalizer_is_idempotent() -> None:
+    """Normalizing twice must be a byte-level no-op."""
+
+    module = _export_module()
+    document = _document_with_optional_fields()
+    document["components"]["schemas"]["Sample"] = {
+        "properties": {
+            "optional": {
+                "anyOf": [{"type": "string"}, {"type": "null"}],
+                "default": None,
+                "title": "Optional",
+                "description": "kept",
+            }
+        },
+        "type": "object",
+    }
+
+    once = module.normalize(json.loads(json.dumps(document)))
+    twice = module.normalize(json.loads(json.dumps(once)))
+    assert json.dumps(once, sort_keys=True) == json.dumps(twice, sort_keys=True)
+
+
+# ---------------------------------------------------------------------------
+# The snapshot and the generated client agree on field shape
+# ---------------------------------------------------------------------------
+
+_TS_SCHEMA_KEY = re.compile(r"^ {8}(?P<name>[A-Za-z_][A-Za-z0-9_]*): \{$")
+_TS_TOP_LEVEL_END = re.compile(r"^ {4}\};$")
+_TS_FIELD_START = re.compile(r"^ {12}(?P<name>[A-Za-z_][A-Za-z0-9_]*)")
+_TS_FIELD_END = re.compile(r"^ {12}.*;\s*$")
+
+
+def _schema_field_shapes(text: str) -> dict[str, list[str]]:
+    """Map each schema name to the fields it declares.
+
+    A field ``F`` of a schema starts a twelve-space line ``F: ...`` and ends
+    at the terminating ``;`` of that declaration. Everything between the two
+    belongs to the field (a nested object body), so a member of a nested
+    object is never mistaken for a field of the schema.
+    """
+
+    schemas: dict[str, list[str]] = {}
+    current: str | None = None
+    pending: str | None = None
+    for line in text.splitlines():
+        if _TS_TOP_LEVEL_END.match(line):
+            current = None
+            pending = None
+            continue
+        key = _TS_SCHEMA_KEY.match(line)
+        if key:
+            current = key.group("name")
+            schemas.setdefault(current, [])
+            pending = None
+            continue
+        if current is None:
+            continue
+        if pending is None:
+            field = _TS_FIELD_START.match(line)
+            if field:
+                schemas[current].append(field.group("name"))
+                pending = field.group("name")
+        if pending is not None and _TS_FIELD_END.match(line):
+            pending = None
+    return schemas
+
+
+def test_generated_client_declares_every_snapshot_field() -> None:
+    """The snapshot and the client must describe the same field set per schema.
+
+    This is the local, Python-only half of the frontend contract gate: it
+    cannot re-export the app (no 3.15 here), but it does catch the committed
+    pair disagreeing — the state that made the gate red while both files
+    looked plausible.
+    """
+
+    from_snapshot = {
+        name: set(schema["properties"])
+        for name, schema in _document().get("components", {}).get("schemas", {}).items()
+        if isinstance(schema.get("properties"), dict)
+    }
+    from_client = _schema_field_shapes(GENERATED.read_text(encoding="utf-8"))
+
+    mismatched: list[str] = []
+    for name, fields in from_snapshot.items():
+        client_fields = set(from_client.get(name, ()))
+        if not client_fields:
+            continue
+        missing = sorted(fields - client_fields)
+        extra = sorted(client_fields - fields)
+        if missing:
+            mismatched.append(
+                f"{name}: in the snapshot, absent from the client: {missing}"
+            )
+        if extra:
+            mismatched.append(
+                f"{name}: in the client, absent from the snapshot: {extra}"
+            )
+    assert mismatched == [], (
+        "packages/api-client/openapi.json and src/generated/openapi.d.ts "
+        "disagree about these fields:\n  "
+        + "\n  ".join(mismatched[:20])
+        + "\nRegenerate both files together under Python 3.15: "
+        "`pnpm --filter @soymutdb/api-client generate:api-client`."
     )
