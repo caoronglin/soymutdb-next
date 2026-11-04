@@ -20,7 +20,13 @@
 
 import { queryOptions } from "@tanstack/react-query";
 
-import { getAssemblies, getAssemblyChromosomes, getReleaseId } from "@soymutdb/api-client";
+import {
+  getAssemblies,
+  getAssembly,
+  getAssemblyChromosomes,
+  getReleaseId,
+  listAssemblies,
+} from "@soymutdb/api-client";
 import { queryKeys } from "@soymutdb/query-keys";
 
 import type { SiteVariant } from "./deployment";
@@ -59,6 +65,40 @@ export function assemblyChromosomesQueryOptions(
       assertAssemblyRelease(context);
       if (context.assemblyId == null) throw new Error("Assembly is unresolved");
       return getAssemblyChromosomes(context.assemblyId);
+    },
+    enabled: context.assemblyId != null,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * Per-assembly counts (`GET /assemblies`).
+ *
+ * Deliberately its own factory and its own key, not an extension of
+ * `assembliesQueryOptions`: that one feeds assembly *pickers*, and swapping in
+ * a payload whose shape includes statistics would break every picker at once.
+ */
+export function assemblyStatisticsQueryOptions(context: DeploymentContext) {
+  return queryOptions({
+    queryKey: queryKeys.assemblies.statistics(context),
+    queryFn: () => {
+      assertAssemblyRelease(context);
+      return listAssemblies();
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** One assembly with its chromosomes (`GET /assemblies/{id}`). */
+export function assemblyDetailQueryOptions(
+  context: DeploymentContext & { assemblyId: string | number | undefined },
+) {
+  return queryOptions({
+    queryKey: queryKeys.assemblies.detail(context.assemblyId, context),
+    queryFn: () => {
+      assertAssemblyRelease(context);
+      if (context.assemblyId == null) throw new Error("Assembly is unresolved");
+      return getAssembly(context.assemblyId);
     },
     enabled: context.assemblyId != null,
     staleTime: 5 * 60_000,

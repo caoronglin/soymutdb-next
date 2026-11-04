@@ -62,6 +62,7 @@ _STATIC_PAGE_TEMPLATES: tuple[str, ...] = (
     "/about",
     "/analytics",
     "/analyses",
+    "/assemblies",
     "/analyses/fastp",
     "/analyses/scanpy",
     "/blast",
@@ -96,6 +97,7 @@ _STATIC_PAGE_TEMPLATES: tuple[str, ...] = (
 #: accepts a caller-chosen parameter name.
 _DYNAMIC_PAGE_TEMPLATES: tuple[str, ...] = (
     "/analyses/:jobId",
+    "/assemblies/:assemblyId",
     "/comparative/:familyId",
     "/genes/:geneId",
     "/mutants/:publicId",

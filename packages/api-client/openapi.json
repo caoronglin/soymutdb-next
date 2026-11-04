@@ -1215,6 +1215,177 @@
         "x-idempotent": true
       }
     },
+    "/api/v1/assemblies": {
+      "get": {
+        "tags": [
+          "assemblies"
+        ],
+        "summary": "List Assemblies",
+        "description": "List the resolved release's assemblies with their own aggregate counts.\n\nNot cached: an assembly with a wrong gene count is worse than an assembly\nfetched twice, and the numbers change when data is imported rather than on\ntheir own.",
+        "operationId": "list_assemblies_api_v1_assemblies_get",
+        "parameters": [
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AssemblySummaryResponse"
+                  },
+                  "title": "Response List Assemblies Api V1 Assemblies Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/assemblies/{assembly_id}": {
+      "get": {
+        "tags": [
+          "assemblies"
+        ],
+        "summary": "Get Assembly",
+        "description": "Return one assembly of the resolved release, with its chromosomes.\n\nA 404 is returned both for an unknown assembly and for one that belongs to\nanother release: the endpoint reveals nothing about assemblies outside the\nresolved release.",
+        "operationId": "get_assembly_api_v1_assemblies__assembly_id__get",
+        "parameters": [
+          {
+            "name": "assembly_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Assembly Id"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssemblyDetailResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
     "/api/v1/gwas/uploads": {
       "post": {
         "tags": [
@@ -20256,6 +20427,119 @@
         "title": "ArtifactResponse",
         "description": "An asynchronous alignment or tree, identified by its job."
       },
+      "AssemblyDetailResponse": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "species": {
+            "type": "string",
+            "title": "Species"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "is_default": {
+            "type": "boolean",
+            "default": false,
+            "title": "Is Default"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Updated At"
+          },
+          "release_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Release Id"
+          },
+          "release_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Release Version"
+          },
+          "statistics": {
+            "$ref": "#/components/schemas/AssemblyStatistics"
+          },
+          "chromosomes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChromosomeResponse"
+            },
+            "title": "Chromosomes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "species",
+          "version"
+        ],
+        "title": "AssemblyDetailResponse",
+        "description": "One assembly, its counts, and its chromosomes.\n\nThe chromosome list is what makes \"the assembly does not exist\" and \"the\nassembly exists but has no chromosomes\" distinguishable answers rather\nthan two identical empty payloads."
+      },
       "AssemblyResponse": {
         "properties": {
           "id": {
@@ -20333,6 +20617,167 @@
           "version"
         ],
         "title": "AssemblyResponse"
+      },
+      "AssemblyStatistics": {
+        "properties": {
+          "gene_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "default": 0,
+            "title": "Gene Count"
+          },
+          "transcript_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "default": 0,
+            "title": "Transcript Count"
+          },
+          "chromosome_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "default": 0,
+            "title": "Chromosome Count"
+          },
+          "total_length": {
+            "type": "integer",
+            "minimum": 0.0,
+            "default": 0,
+            "title": "Total Length"
+          },
+          "download_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Download Count"
+          },
+          "download_count_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Download Count Reason"
+          }
+        },
+        "type": "object",
+        "title": "AssemblyStatistics",
+        "description": "Counts derived from real rows, scoped to one assembly.\n\nEvery number here is a ``COUNT``/``SUM`` over rows that carry an\n``assembly_id`` of their own. Nothing is read from ``Release.gene_count`` or\nany other denormalised counter: a release owns several assemblies, so a\nrelease-level total copied onto each assembly would report the whole\nrelease's genes once per assembly.\n\n``download_count`` is ``None`` on purpose. ``download_files`` has no\nassembly column -- it is linked to a release and its ``category`` is free\ntext -- so there is no relation to aggregate over. Guessing an assembly\nfrom a category string would invent a number, and borrowing the release's\ndownload total would be the same mistake as borrowing its gene count. The\nfield stays in the payload, with a ``reason``, so that \"we do not know\" is\nvisible instead of looking like a zero."
+      },
+      "AssemblySummaryResponse": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "species": {
+            "type": "string",
+            "title": "Species"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Description"
+          },
+          "is_default": {
+            "type": "boolean",
+            "default": false,
+            "title": "Is Default"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Updated At"
+          },
+          "release_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Release Id"
+          },
+          "release_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Release Version"
+          },
+          "statistics": {
+            "$ref": "#/components/schemas/AssemblyStatistics"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "species",
+          "version"
+        ],
+        "title": "AssemblySummaryResponse",
+        "description": "An assembly in the resolved release, with its own real counts."
       },
       "BlastDatabaseResponse": {
         "properties": {

@@ -3312,5 +3312,28 @@
       "body": "Gene families and orthologous groups for this gene, with the source's own relationship classification.",
       "open": "Open orthologs and paralogs"
     }
+  },
+  "assemblies": {
+    "title": "Genome assemblies",
+    "subtitle": "Assemblies in the current release. Every count is aggregated from that assembly's own rows, so two assemblies never share one number.",
+    "default": "Default",
+    "release": "Release",
+    "releaseUnavailable": "Not stated",
+    "downloadsNotRecorded": "Not recorded",
+    "empty": "This release has no assemblies.",
+    "loadFailed": "Assemblies could not be loaded.",
+    "notFound": "No such assembly in this release.",
+    "noChromosomes": "This assembly has no chromosome rows.",
+    "backToList": "All assemblies",
+    "columns": {
+      "assembly": "Assembly",
+      "version": "Version",
+      "genes": "Genes",
+      "transcripts": "Transcripts",
+      "chromosomes": "Chromosomes",
+      "length": "Total length (bp)",
+      "chromosome": "Chromosome",
+      "downloads": "Downloads"
+    }
   }
 }

@@ -13,6 +13,8 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as BlastRouteImport } from './routes/blast'
+import { Route as AssembliesIndexRouteImport } from './routes/assemblies/index'
+import { Route as AssembliesAssemblyIdRouteImport } from './routes/assemblies/$assemblyId'
 import { Route as BrowserRouteImport } from './routes/browser'
 import { Route as CompareRouteImport } from './routes/compare'
 import { Route as DownloadsRouteImport } from './routes/downloads'
@@ -61,6 +63,16 @@ const AboutRoute = AboutRouteImport.update({
 const AnalyticsRoute = AnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssembliesIndexRoute = AssembliesIndexRouteImport.update({
+  id: '/assemblies/',
+  path: '/assemblies/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssembliesAssemblyIdRoute = AssembliesAssemblyIdRouteImport.update({
+  id: '/assemblies/$assemblyId',
+  path: '/assemblies/$assemblyId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlastRoute = BlastRouteImport.update({
@@ -263,6 +275,8 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/analytics': typeof AnalyticsRoute
+  '/assemblies/': typeof AssembliesIndexRoute
+  '/assemblies/$assemblyId': typeof AssembliesAssemblyIdRoute
   '/blast': typeof BlastRoute
   '/browser': typeof BrowserRoute
   '/comparative/': typeof ComparativeIndexRoute
@@ -303,6 +317,8 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/analytics': typeof AnalyticsRoute
+  '/assemblies/': typeof AssembliesIndexRoute
+  '/assemblies/$assemblyId': typeof AssembliesAssemblyIdRoute
   '/blast': typeof BlastRoute
   '/browser': typeof BrowserRoute
   '/comparative/': typeof ComparativeIndexRoute
@@ -325,6 +341,8 @@ export interface FileRoutesByTo {
   '/sra': typeof SraRoute
   '/tools': typeof ToolsIndexRoute
   '/comparative': typeof ComparativeIndexRoute
+  '/assemblies': typeof AssembliesIndexRoute
+  '/assemblies/$assemblyId': typeof AssembliesAssemblyIdRoute
   '/tools/seqfetch': typeof ToolsSeqfetchRoute
   '/tools/enrichment': typeof ToolsEnrichmentRoute
   '/tools/exppattern': typeof ToolsExppatternRoute
@@ -424,6 +442,8 @@ export interface FileRouteTypes {
     | '/analyses/$jobId'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/assemblies'
+    | '/assemblies/$assemblyId'
     | '/'
     | '/about'
     | '/analytics'
@@ -508,6 +528,8 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   AnalyticsRoute: typeof AnalyticsRoute
+  AssembliesIndexRoute: typeof AssembliesIndexRoute
+  AssembliesAssemblyIdRoute: typeof AssembliesAssemblyIdRoute
   BlastRoute: typeof BlastRoute
   BrowserRoute: typeof BrowserRoute
   CompareRoute: typeof CompareRoute
@@ -558,6 +580,20 @@ declare module '@tanstack/react-router' {
       path: '/analytics'
       fullPath: '/analytics'
       preLoaderRoute: typeof AnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assemblies/': {
+      id: '/assemblies/'
+      path: '/assemblies/'
+      fullPath: '/assemblies/'
+      preLoaderRoute: typeof AssembliesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assemblies/$assemblyId': {
+      id: '/assemblies/$assemblyId'
+      path: '/assemblies/$assemblyId'
+      fullPath: '/assemblies/$assemblyId'
+      preLoaderRoute: typeof AssembliesAssemblyIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blast': {
@@ -812,6 +848,8 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   AnalyticsRoute: AnalyticsRoute,
+  AssembliesIndexRoute: AssembliesIndexRoute,
+  AssembliesAssemblyIdRoute: AssembliesAssemblyIdRoute,
   BlastRoute: BlastRoute,
   BrowserRoute: BrowserRoute,
   CompareRoute: CompareRoute,

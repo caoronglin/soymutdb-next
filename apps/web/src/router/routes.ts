@@ -53,6 +53,8 @@ export interface PortalRouteDefinition {
     | "analyses-fastp"
     | "analyses-scanpy"
     | "analyses-job"
+    | "assemblies"
+    | "assembly"
     | "sra"
     | "seed-request"
     | "guide"
@@ -208,6 +210,26 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
       description: "Browse the analysis tools that complement identifier and location search.",
       prerender: true,
       sitemap: false,
+    },
+  },
+  {
+    path: "/assemblies",
+    name: "assemblies",
+    componentKey: "assemblies",
+    meta: {
+      title: "Assemblies — SoyMutDB",
+      description: "Genome assemblies in the current release, each with its own gene, transcript and chromosome counts.",
+      prerender: true,
+      sitemap: true,
+    },
+  },
+  {
+    path: "/assemblies/:assemblyId",
+    name: "assembly",
+    componentKey: "assembly",
+    meta: {
+      title: "Assembly — SoyMutDB",
+      description: "One genome assembly: its chromosomes, total length and the counts derived from its own rows.",
     },
   },
   {

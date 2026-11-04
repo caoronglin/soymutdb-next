@@ -45,6 +45,7 @@ export { attachCsrf } from "./csrf";
 
 export * from "./comparative";
 export * from "./genes";
+export * from "./assemblies";
 export * from "./variants";
 export * from "./blast";
 export * from "./mutant-lines";
