@@ -382,3 +382,49 @@ def test_native_public_export_masks_internal_names_and_unreleased_facts(native_d
         assert "PRIVATE_NAME" not in str(record)
         assert "HIDDEN_NAME" not in str(record)
         assert "MUT-000002" not in str(record)
+
+
+def test_finalize_refuses_a_duplicate_identity_reaching_staging(native_database):
+    """A duplicate identity that spans two staged batches must fail closed with a
+    diagnosable error, not with PostgreSQL's ``CardinalityViolation`` (#51).
+
+    ``stage_batch`` collapses duplicates inside one call, but the staging primary
+    key is ``(import_id, assembly_id, variant_id)``: the same ``variant_id`` under
+    two assemblies survives into ``variant_facts``' own ``(release_id,
+    variant_id)`` arbiter, and ``ON CONFLICT DO UPDATE`` cannot touch one row
+    twice. That error used to escape the ``written != expected_rows`` gate and
+    reach ``ingest.py`` as ``native_variant_import_failed`` with no offending id.
+    """
+    get_db, observer = native_database
+    import_id = _manifest(get_db)
+    _stage(get_db, import_id, [_row()], assembly_id=4)
+    _stage(get_db, import_id, [_row()], assembly_id=5)
+    with pytest.raises(ConflictingVariantRowsError) as failure:
+        with get_db() as session:
+            PostgresVariantStore(session).finalize(
+                release_id=1, assembly_id=4, import_id=import_id, expected_rows=2,
+            )
+    assert failure.value.conflicts == [(18446744073709551615, 2)]
+    with observer.connect() as connection:
+        assert connection.execute(text("SELECT count(*) FROM variant_facts")).scalar() == 0
+
+
+def test_derived_identity_is_persisted_as_a_number_not_a_string():
+    """``variant_id`` is numeric on the write path, a string on the read path.
+
+    ``VariantResponse.id`` and ``VariantResponse.variant_id`` are Python ``str``
+    (``variant_service._row_to_response``) and the web layer keys rows on
+    whatever arrives; the store persists the same identifier as
+    ``NUMERIC(20,0)``. That asymmetry is why an identity derived from a hash
+    cannot be widened by concatenation here -- and why a row key that leans on
+    the response string is not leaning on the storage value (#51).
+    """
+    from sqlalchemy import Numeric, literal, select
+    from sqlalchemy.dialects import postgresql
+
+    identifier = 18446744073709551615
+    compiled = select(literal(identifier, Numeric(20, 0))).compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True},
+    )
+    assert "18446744073709551615" in str(compiled)
+    assert "::" not in str(compiled), "no text cast: the value stays numeric"
