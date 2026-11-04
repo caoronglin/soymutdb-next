@@ -70,6 +70,13 @@ def test_ncbi_task_uses_existing_lifecycle_and_result_storage(
 
     session = FakeSession()
     monkeypatch.setattr(blast, "get_db", lambda: _fake_db(session))
+    # The resolver looks relations up in the database and finds none for the
+    # fake subject, so the hit is stored as an explicit "unresolved" record.
+    # Patching the lookups keeps that a property of this test, not of the fake
+    # session's column projection.
+    monkeypatch.setattr(
+        blast.BlastGenomeResolver, "resolve", lambda self, subject_ids: {}
+    )
     monkeypatch.setattr(blast, "get_ncbi_db_path", lambda *args, **kwargs: tmp_path / "db")
     monkeypatch.setattr(blast, "notify_completed", lambda *args, **kwargs: None)
     monkeypatch.setattr(blast, "upload_file", lambda *args, **kwargs: None)

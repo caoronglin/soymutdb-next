@@ -3,8 +3,11 @@
 # SoyMutDB — provision the system build prerequisites for the worker science
 # stack in a Python 3.15 CI container.
 # =============================================================================
-# On Python 3.15 the worker's science stack ships no manylinux wheels, so pip
-# (and the governance analyzers' `uv run --project apps/worker`) compile sdists:
+# The worker's locked runtime graph has no cp315 wheels for h5py, cyvcf2,
+# pandas or numcodecs, so pip install -e "apps/worker[dev]" (backend gate) and
+# the governance analyzers' `uv run --locked --project apps/worker` both build
+# those sdists from source. On a bare `python:3.15` CI image the first failure
+# is h5py:
 #
 #   * h5py resolves HDF5 through pkg-config and needs libhdf5-dev;
 #   * cyvcf2 builds a bundled htslib, whose configure probes zlib/bzip2/xz
@@ -13,16 +16,19 @@
 #   * psycopg2-binary uses pg_config from libpq-dev.
 #
 # infra/docker/Dockerfile.worker installs this same set for the production
-# image. Keep the package list in sync with that Dockerfile's apt-get block.
-# Both the backend test gate (verify-backend-tests.sh) and the dependency
-# governance gate (ci-job-steps.sh dependency_governance_step) call this one
-# script, so CNB and GitHub execute identical bytes.
+# image; keep the package list (PACKAGES below) in sync with that Dockerfile's
+# apt-get block. The backend test gate (verify-backend-tests.sh) and the
+# dependency-governance gate (ci-job-steps.sh dependency_governance_step) both
+# call this one script, so CNB and GitHub execute identical bytes.
+#
+# Every CNB stage runs in its own fresh container, and the `Dependency
+# governance` stage is not reached by the `API + Worker verification` stage's
+# apt installs — which is why that stage calls this script too.
 #
 # Callers must export HDF5_PKGCONFIG_NAME=hdf5-serial before the worker
-# resolution. Two gates reach the worker runtime on Python 3.15 and both own
-# that export: scripts/verify-backend-tests.sh (worker editable install) and
-# scripts/ci-job-steps.sh (dependency-governance license analyzer, whose
-# `uv run --locked --project apps/worker` also builds h5py from sdist).
+# resolution: Debian trixie only ships the serial .pc file. Both gates that
+# reach the worker runtime on Python 3.15 own that export: verify-backend-tests.sh
+# (worker editable install) and ci-job-steps.sh (governance license analyzer).
 #
 # Usage: bash scripts/install-worker-science-build-deps.sh
 # =============================================================================
@@ -75,6 +81,17 @@ if [[ "$(id -u)" -ne 0 ]]; then
   apt_cmd=(sudo -E apt-get)
 fi
 
+# Same package families as infra/docker/Dockerfile.worker:
+#   build-essential  C/C++ compiler for h5py, pandas, numcodecs, cyvcf2
+#   pkg-config       h5py resolves HDF5 through it (serial flavour)
+#   libhdf5-dev      h5py's HDF5 headers/libraries
+#   zlib1g-dev
+#   libbz2-dev       cyvcf2 builds a bundled htslib; its configure picks up
+#   liblzma-dev      these system compression headers when present
+#   libpq-dev        psycopg2-binary uses pg_config
+#   autoconf
+#   automake         cyvcf2's CMake runs `autoreconf -i` on the bundled
+#   libtool          htslib, which needs the autotools at build time
 DEBIAN_FRONTEND=noninteractive "${apt_cmd[@]}" update -qq
 DEBIAN_FRONTEND=noninteractive "${apt_cmd[@]}" install -y --no-install-recommends \
   "${PACKAGES[@]}"

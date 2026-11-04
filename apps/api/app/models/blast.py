@@ -60,8 +60,11 @@ class BlastDatabase(Base, TimestampMixin):
             "'pan_genome', 'family_consensus', 'custom')",
             name="ck_blast_catalog_sequence_type",
         ),
+        #: One vocabulary across the ORM, migration 0052 and
+        #: ``soymutdb_jobs.blast_catalog_state``. ``ready`` is the legacy
+        #: terminal spelling still carried by pre-existing catalogs.
         CheckConstraint(
-            "build_status IN ('pending', 'building', 'validating', "
+            "build_status IN ('pending', 'building', 'validating', 'publishing', "
             "'published', 'failed', 'ready')",
             name="ck_blast_catalog_build_status",
         ),
@@ -126,6 +129,22 @@ class BlastDatabase(Base, TimestampMixin):
     )
     provenance: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     license: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Index-build bookkeeping. These are control-plane columns: public
+    # discovery never exposes them, and no worker-local path is stored.
+    build_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    build_attempt: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    build_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    build_finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    index_health_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     assembly = relationship("Assembly", lazy="joined")
     jobs: Mapped[list[BlastJob]] = relationship(
@@ -243,6 +262,9 @@ class BlastHit(Base):
     subject_strand: Mapped[str] = mapped_column(
         String(8), default="plus", nullable=False
     )
+    #: Proven genomic interval for protein/transcript hits, or an explicit
+    #: "unresolved" record. Amino-acid alignment coordinates are never used.
+    genome_resolution: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     job: Mapped[BlastJob] = relationship(back_populates="hits")
 

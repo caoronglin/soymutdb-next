@@ -1,4 +1,4 @@
-"""PostgreSQL roundtrip for asynchronous immutable index builds (0052)."""
+"""PostgreSQL roundtrip for asynchronous immutable index builds (0054)."""
 from __future__ import annotations
 
 import importlib.util
@@ -11,7 +11,7 @@ from alembic.operations import Operations
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-MIGRATION = Path(__file__).resolve().parents[1] / "migrations/versions/0052_blast_index_builds.py"
+MIGRATION = Path(__file__).resolve().parents[1] / "migrations/versions/0054_blast_index_builds.py"
 CATALOG = Path(__file__).resolve().parents[1] / "migrations/versions/0050_blast_index_catalog.py"
 
 
@@ -103,3 +103,42 @@ async def test_downgrade_is_clean_for_legacy_only_rows(db_connection):
     assert (await db_connection.execute(text(
         "SELECT build_status FROM blast_databases WHERE id=1"
     ))).scalar_one() == "pending"
+
+
+def test_build_revision_chains_after_the_lifecycle_revision() -> None:
+    """One alembic head, not two.
+
+    Both halves of the asynchronous-index work landed as revision ``0052`` off
+    ``0051``: the lifecycle/bookkeeping half and the ``blast_index_builds``
+    half. Two revisions sharing an id (and two nodes off one parent) make
+    ``alembic upgrade head`` ambiguous, so the build half is ``0054`` and
+    chains after ``0053``. This asserts the chain, not just the filename, so a
+    future rename cannot silently re-fork it.
+    """
+    import ast
+
+    versions = Path(__file__).resolve().parents[1] / "migrations/versions"
+    revision_of: dict[str, str] = {}
+    parent_of: dict[str, str | None] = {}
+    for path in versions.glob("*.py"):
+        assigned: dict[str, object] = {}
+        for node in ast.parse(path.read_text(encoding="utf-8")).body:
+            if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
+                if isinstance(node.value, ast.Constant):
+                    assigned[node.targets[0].id] = node.value.value
+        revision = assigned.get("revision")
+        if not isinstance(revision, str):
+            continue
+        assert revision not in revision_of, f"duplicate revision {revision}"
+        revision_of[revision] = path.name
+        parent = assigned.get("down_revision")
+        parent_of[revision] = parent if isinstance(parent, str) else None
+
+    assert revision_of["0054"] == "0054_blast_index_builds.py"
+    assert parent_of["0054"] == "0053"
+    assert revision_of["0052"] == "0052_blast_index_build_state.py"
+    assert parent_of["0052"] == "0051"
+    # The blast lifecycle must not fork: exactly one node has no children.
+    children = set(parent_of.values())
+    blast_heads = [r for r in revision_of if r >= "0050" and r not in children]
+    assert blast_heads == ["0054"], blast_heads

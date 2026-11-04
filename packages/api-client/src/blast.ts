@@ -43,7 +43,7 @@ export interface BlastDatabase {
   fasta_sha256?: string | null;
   index_version?: string | null;
   /** Mirrors the backend catalog state machine (see openapi.d.ts). */
-  build_status?: "pending" | "building" | "validating" | "published" | "failed" | "ready";
+  build_status?: "pending" | "building" | "validating" | "publishing" | "published" | "failed" | "ready";
   /** Database default within assembly, engine and database type. */
   is_default?: boolean;
   license?: string | null;
@@ -83,6 +83,23 @@ export interface BlastHit {
   evalue: number;
   bit_score: number;
   query_id?: string | null;
+  /** Assembly-scoped genomic locus, only when a protein/transcript subject was
+   * resolved through an explicit relation. Never derived from AA coordinates. */
+  genome_resolution?: BlastGenomeResolution | null;
+}
+
+/** Proven genomic interval or an explicit "unresolved" reason. */
+export interface BlastGenomeResolution {
+  status: "resolved" | "unresolved";
+  reason?: string;
+  gene_id?: string;
+  chromosome?: string;
+  start?: number;
+  end?: number;
+  strand?: string;
+  assembly_id?: number;
+  release_id?: number;
+  relation?: string;
 }
 
 export interface BlastJobParams {
@@ -174,6 +191,7 @@ export function getPublicBlastJob(jobId: string, accessToken: string): Promise<B
   }).then(normalizeJob);
 }
 
+/** Public result reads are always no-store: download URLs are short-lived. */
 export function getPublicBlastResults(
   jobId: string,
   accessToken: string,
@@ -223,7 +241,6 @@ export function getBlastJobs(params: {
 export function getBlastJob(jobId: string): Promise<BlastJob> {
   return http.get<BlastJobApi>(`/blast/jobs/${jobId}`).then(normalizeJob);
 }
-
 export function getBlastHits(
   jobId: string,
   params: {
@@ -435,7 +452,8 @@ export function retryBlastJob(jobId: string): Promise<BlastJob> {
   return http.post<BlastJobApi>(`/blast/jobs/${encodeURIComponent(jobId)}/retry`).then(normalizeJob);
 }
 
-export type BlastIndexBuildState = "pending" | "building" | "validating" | "published" | "failed" | "ready";
+export type BlastIndexBuildState =
+  | "pending" | "building" | "validating" | "publishing" | "published" | "failed" | "ready";
 
 export interface BlastIndexBuild {
   build_id: string;
@@ -464,9 +482,26 @@ export interface BlastIndexBuildRequest {
   sequence_type?: BlastDatabase["sequence_type"];
 }
 
+/**
+ * Acknowledgement for an accepted build request.
+ *
+ * Deliberately narrow: it says what was queued, never where the worker will
+ * write it. Progress is read back from the catalog's `build_status`.
+ */
+export interface BlastIndexBuildQueued {
+  database_id: number;
+  queued: boolean;
+  task_name: string;
+}
+
 /** Admin-only: enqueue a worker build. No makeblastdb runs in the request. */
 export function requestBlastIndexBuild(payload: BlastIndexBuildRequest): Promise<BlastIndexBuild> {
   return http.post<BlastIndexBuild>("/blast/index-builds", { json: payload });
+}
+
+/** Admin-only: the lifecycle entry point (`POST /blast/databases/build`). */
+export function queueBlastIndexBuild(databaseId: number): Promise<BlastIndexBuildQueued> {
+  return http.post<BlastIndexBuildQueued>("/blast/databases/build", { json: { database_id: databaseId } });
 }
 
 export function getBlastIndexBuild(buildId: string): Promise<BlastIndexBuild> {

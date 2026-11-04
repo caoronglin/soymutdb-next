@@ -10,6 +10,8 @@ EXPECTED_TASKS = {
     "soymutdb_worker.tasks.analyses.run_scanpy",
     "soymutdb_worker.tasks.blast.run_blast",
     "soymutdb_worker.tasks.blast_index.build_index",
+    "soymutdb_worker.tasks.blast_index_tasks.build_blast_index",
+    "soymutdb_worker.tasks.blast_index_tasks.check_blast_index_health",
     "soymutdb_worker.tasks.cleanup.cleanup_expired_blast_jobs",
     "soymutdb_worker.tasks.cleanup.cleanup_temp_files",
     "soymutdb_worker.tasks.email.send_seed_request_email",

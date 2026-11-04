@@ -10,6 +10,8 @@ from ipaddress import ip_address
 from typing import Final
 from urllib.parse import urlsplit
 
+from . import blast_catalog_state as state
+
 
 def public_source_url(value: object) -> str | None:
     """Omit private paths, credential URLs and known private authorities."""
@@ -46,51 +48,54 @@ def public_source_url(value: object) -> str | None:
 # Index build lifecycle
 # ---------------------------------------------------------------------------
 #
-# One owner for the catalog build vocabulary: the API records and exposes it,
-# the worker advances it, and both agree on which states are searchable.
-# ``ready`` is the legacy spelling of a published DIAMOND index; it remains a
-# valid searchable state so migration 0050's existing rows keep working.
-# New NCBI builds go through the full pending → building → validating →
-# published lifecycle; ``failed`` is terminal with a recorded reason.
+# One vocabulary for the whole catalog, re-exported from
+# ``soymutdb_jobs.blast_catalog_state`` so the ORM check constraint, the worker's
+# state machine and the API's wire model cannot drift into two spellings. That
+# module owns ``STATES`` / ``COLUMN_STATES`` / ``TRANSITIONS``; the names below
+# stay for the callers that only validate or gate on searchability.
+#
+# ``ready`` is the legacy spelling of a published DIAMOND index and stays a
+# valid searchable value so migration 0050's existing rows keep working; the
+# state machine never writes it back. New NCBI builds walk
+# pending → building → validating → publishing → published, and ``failed`` is
+# terminal with a recorded reason.
 
-BUILD_STATES: Final[frozenset[str]] = frozenset({
-    "pending", "building", "validating", "published", "failed", "ready",
-})
+#: Every state the catalog column's check constraint must accept.
+BUILD_STATES: Final[frozenset[str]] = frozenset(state.COLUMN_STATES)
 #: Only a published index may be selected for a search.
-SEARCHABLE_BUILD_STATES: Final[frozenset[str]] = frozenset({"published", "ready"})
+SEARCHABLE_BUILD_STATES: Final[frozenset[str]] = frozenset(state.SEARCHABLE_STATES)
 #: Immutable indexes: a rebuild produces a new ``index_version`` identity and
 #: a new catalog row; an existing identity is never mutated or overwritten.
-TERMINAL_BUILD_STATES: Final[frozenset[str]] = frozenset({"published", "failed", "ready"})
+TERMINAL_BUILD_STATES: Final[frozenset[str]] = frozenset(
+    {state.PUBLISHED, state.FAILED, state.LEGACY_READY}
+)
 
+#: Legal steps of the lifecycle state machine, keyed by current state. ``ready``
+#: is accepted as an input (a legacy row that is still being read) but has no
+#: outgoing edge: a legacy index is replaced by a new row, not re-driven.
 BUILD_TRANSITIONS: Final[dict[str, frozenset[str]]] = {
-    "pending": frozenset({"building", "failed"}),
-    "building": frozenset({"validating", "failed"}),
-    "validating": frozenset({"published", "failed"}),
-    # A failed row is never retried in place: submit a new build that resolves
-    # to a new immutable identity. Terminal states have no outgoing edges.
-    "published": frozenset(),
-    "failed": frozenset(),
-    "ready": frozenset(),
+    **state.TRANSITIONS,
+    state.LEGACY_READY: frozenset(),
 }
 
 
-def validate_build_state(state: object) -> str:
+def validate_build_state(value: object) -> str:
     """Reject unknown build states instead of guessing their meaning."""
-    if not isinstance(state, str) or state not in BUILD_STATES:
-        raise ValueError(f"unknown BLAST index build state: {state!r}")
-    return state
+    if not isinstance(value, str) or value not in BUILD_STATES:
+        raise ValueError(f"unknown BLAST index build state: {value!r}")
+    return value
 
 
 def build_transition_allowed(current: str, target: str) -> bool:
     """Return whether ``current -> target`` is a legal catalog build step."""
     validate_build_state(current)
     validate_build_state(target)
-    return target in BUILD_TRANSITIONS[current]
+    return state.transition_allowed(current, target)
 
 
-def is_searchable_build_state(state: str) -> bool:
+def is_searchable_build_state(value: str) -> bool:
     """A search may target only a published (or legacy-ready) index."""
-    return validate_build_state(state) in SEARCHABLE_BUILD_STATES
+    return validate_build_state(value) in SEARCHABLE_BUILD_STATES
 
 
 def index_identity(value: object) -> str:

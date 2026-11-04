@@ -47,6 +47,7 @@ celery_app = Celery(
     include=[
         "soymutdb_worker.tasks.blast",
         "soymutdb_worker.tasks.blast_index",
+        "soymutdb_worker.tasks.blast_index_tasks",
         "soymutdb_worker.tasks.export",
         "soymutdb_worker.tasks.ingest",
         "soymutdb_worker.tasks.stats",
@@ -104,6 +105,10 @@ celery_app.conf.update(
             "task": "soymutdb_worker.tasks.cleanup.cleanup_expired_blast_jobs",
             "schedule": 3600,  # every hour
         },
+        "check-blast-index-health": {
+            "task": "soymutdb_worker.tasks.blast_index_tasks.check_blast_index_health",
+            "schedule": 3600,  # hourly re-verification of published indexes
+        },
         "cleanup-temp-files": {
             "task": "soymutdb_worker.tasks.cleanup.cleanup_temp_files",
             "schedule": 3600 * 6,  # every 6 hours
@@ -115,6 +120,10 @@ celery_app.conf.update(
         "soymutdb_worker.tasks.expression.*": {"queue": "ingest"},
         "soymutdb_worker.tasks.homolog.*": {"queue": "ingest"},
         "soymutdb_worker.tasks.blast.*": {"queue": "blast"},
+        "soymutdb_worker.tasks.blast_index_tasks.check_blast_index_health": {
+            "queue": "cleanup"
+        },
+        "soymutdb_worker.tasks.blast_index_tasks.*": {"queue": "blast"},
         "soymutdb_worker.tasks.export.*": {"queue": "export"},
         "soymutdb_worker.tasks.stats.*": {"queue": "stats"},
         "soymutdb_worker.tasks.static_pages.*": {"queue": "stats"},
@@ -137,6 +146,7 @@ celery_app.autodiscover_tasks(
         "soymutdb_worker.tasks.ingest",
         "soymutdb_worker.tasks.blast",
         "soymutdb_worker.tasks.blast_index",
+        "soymutdb_worker.tasks.blast_index_tasks",
         "soymutdb_worker.tasks.export",
         "soymutdb_worker.tasks.stats",
         "soymutdb_worker.tasks.cleanup",

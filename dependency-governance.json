@@ -299,7 +299,9 @@
         "mode": "file",
         "path": "pip-audit-api.json",
         "format": "json"
-      }
+      },
+      "normalize": "accepted-advisories",
+      "accept_file": "security/advisory-acceptances.json"
     },
     {
       "name": "pip-audit-worker",
@@ -313,7 +315,9 @@
         "mode": "file",
         "path": "pip-audit-worker.json",
         "format": "json"
-      }
+      },
+      "normalize": "accepted-advisories",
+      "accept_file": "security/advisory-acceptances.json"
     },
     {
       "name": "pip-audit-mcp-server",
@@ -327,7 +331,9 @@
         "mode": "file",
         "path": "pip-audit-mcp-server.json",
         "format": "json"
-      }
+      },
+      "normalize": "accepted-advisories",
+      "accept_file": "security/advisory-acceptances.json"
     }
   ]
 }

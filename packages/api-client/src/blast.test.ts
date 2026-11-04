@@ -1,4 +1,4 @@
-import { blastDownloadLink, hasCompatibleBlastQueryAlphabet, compatibleBlastDatabases, validateBlastFastaStructure, type BlastProgram, getBlastHits, getBlastJob, getBlastJobs, getPublicBlastDatabases, getPublicBlastJob, getPublicBlastResults, resolveBlastHitGenomeTarget, submitBlastJob, submitPublicBlastJob } from "./blast";
+import { blastDownloadLink, hasCompatibleBlastQueryAlphabet, compatibleBlastDatabases, validateBlastFastaStructure, type BlastProgram, getBlastHits, getBlastJob, getBlastJobs, getPublicBlastDatabases, getPublicBlastJob, getPublicBlastResults, resolveBlastHitGenomeTarget, submitBlastJob, submitPublicBlastJob, cancelBlastJob, retryBlastJob } from "./blast";
 import { setReleaseId } from "./client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -191,6 +191,19 @@ describe("BLAST client contract", () => {
     expect(await resolveBlastHitGenomeTarget(job, "protein/a.1")).toBeNull();
     expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain("/hits/protein%2Fa.1/genome-target");
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls the cancel and retry routes with encoded job ids", async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(json({ job_id: "job-1", database_id: 1, status: "cancelled" }))
+      .mockResolvedValueOnce(json({ job_id: "job-1", database_id: 1, status: "pending" }));
+    expect((await cancelBlastJob("job/1")).id).toBe("job-1");
+    expect((await retryBlastJob("job 1")).status).toBe("pending");
+    const [cancelUrl, cancelInit] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    const [retryUrl, retryInit] = vi.mocked(fetch).mock.calls[1] as [string, RequestInit];
+    expect(cancelUrl).toContain("/blast/jobs/job%2F1/cancel");
+    expect(retryUrl).toContain("/blast/jobs/job%201/retry");
+    expect(cancelInit.method).toBe("POST");
+    expect(retryInit.method).toBe("POST");
   });
 
   it("uses the implemented jobs list and result routes", async () => {

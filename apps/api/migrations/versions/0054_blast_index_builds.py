@@ -1,8 +1,11 @@
 """Asynchronous, immutable BLAST index builds (worker-only execution).
 
-Adds the build lifecycle record and widens the catalog build-status check to
-the shared ``pending -> building -> validating -> published / failed`` state
-machine. The legacy ``ready`` spelling stays valid for existing DIAMOND rows.
+Adds the build lifecycle record, the published-identity guard and the
+permissive catalog status check. The vocabulary itself is owned by
+``0052_blast_index_build_state`` (which runs first); this revision repeats the
+same unrestricted list because the two were written independently, and it
+records ``publishing`` so a build between the guarded swap and its terminal
+write is representable.
 
 Downgrade refuses any non-legacy state so an old binary cannot reinterpret a
 published/validating NCBI index as a ready DIAMOND index.
@@ -13,12 +16,14 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision = "0052"
-down_revision = "0051"
+revision = "0054"
+down_revision = "0053"
 branch_labels = None
 depends_on = None
 
-_NEW_STATES = ("pending", "building", "validating", "published", "failed", "ready")
+_NEW_STATES = (
+    "pending", "building", "validating", "publishing", "published", "failed", "ready",
+)
 
 
 def upgrade() -> None:
@@ -46,7 +51,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name="pk_blast_index_builds"),
         sa.ForeignKeyConstraint(["database_id"], ["blast_databases.id"], ondelete="SET NULL"),
         sa.CheckConstraint(
-            "state IN ('pending', 'building', 'validating', 'published', 'failed', 'ready')",
+            f"state IN ({', '.join(repr(name) for name in _NEW_STATES)})",
             name="ck_blast_index_build_state",
         ),
         sa.CheckConstraint("db_type IN ('nucl', 'prot')", name="ck_blast_index_build_db_type"),
@@ -59,11 +64,13 @@ def upgrade() -> None:
     op.create_index("ix_blast_index_build_state", "blast_index_builds", ["state"])
     op.create_index("ix_blast_index_build_catalog", "blast_index_builds", ["database_id"])
 
-    # Widen the catalog vocabulary and freeze published identities.
+    # Republish the catalog vocabulary once more, now that the lifecycle can
+    # actually reach `publishing`; the constraint stays the union of both
+    # revisions rather than the narrower list 0052 first installed.
     op.drop_constraint("ck_blast_catalog_build_status", "blast_databases", type_="check")
     op.create_check_constraint(
         "ck_blast_catalog_build_status", "blast_databases",
-        "build_status IN ('pending', 'building', 'validating', 'published', 'failed', 'ready')",
+        f"build_status IN ({', '.join(repr(name) for name in _NEW_STATES)})",
     )
     op.create_check_constraint(
         "ck_blast_catalog_index_identity", "blast_databases",
@@ -81,7 +88,9 @@ def downgrade() -> None:
         DO $$ BEGIN
             IF EXISTS (
                 SELECT 1 FROM blast_databases
-                WHERE build_status IN ('building', 'validating', 'published', 'failed')
+                WHERE build_status IN (
+                    'building', 'validating', 'publishing', 'published', 'failed'
+                )
             ) OR EXISTS (SELECT 1 FROM blast_index_builds) THEN
                 RAISE EXCEPTION 'Cannot downgrade BLAST catalog with asynchronous '
                     'index builds; reconcile these rows before rollback';

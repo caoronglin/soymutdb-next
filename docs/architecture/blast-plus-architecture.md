@@ -57,22 +57,29 @@ transaction. Celery performs execution, parses tabular output into normalized
 HSP rows, uploads raw output, and performs idempotent status/result writes.
 Resource caps cover CPU, memory, wall time, output size and per-user
 concurrency. Database construction uses `makeblastdb`, validation uses
-`blastdbcmd`, and publication is atomic with failed-build cleanup.
+`blastdbcmd`, and publication is atomic with failed-build cleanup, driven by a
+persisted catalog state machine (`pending → building → validating → publishing →
+ready / failed`). Only `ready` indexes are searchable.
 
 The outbox payload freezes `engine`, `database_type`, `index_identity`,
 `fasta_sha256`, `release_key`, `assembly` and `assembly_id` at submission. The
 worker re-verifies the immutable index manifest against those values before it
 touches a binary, so a job from release A can never execute against a release-B
-index.
+index. Cancellation and expiry are re-checked by the worker before launching a
+process; retries are explicit, owner-scoped, and reuse frozen
+index/release/assembly provenance. Download URLs never outlive the job deadline.
 
 ## Biological correctness
 
-Amino-acid coordinates from `blastp` are never treated as genomic coordinates.
-Gene/browser links are created only after an exact protein/transcript/gene
-lookup in the job's release and assembly. Result downloads include checksum,
-expiry and provenance. Unsupported program/database pairs fail validation
-before a worker is queued. A BLAST hit is a similarity candidate, never an
-orthology assertion.
+Amino-acid coordinates from `blastp`/`blastx`/`tblastn` are never treated as
+genomic coordinates. Gene/browser links are created only after an explicit,
+assembly-scoped protein/transcript/alias → gene resolution in the job's release.
+Unresolved and ambiguous subjects are persisted as
+`genome_resolution.status = "unresolved"` with a machine-readable reason; no
+suffix stripping, fuzzy matching or coordinate coincidence is used. Result
+downloads include checksum, expiry and provenance. Unsupported program/database
+pairs fail validation before a worker is queued. A BLAST hit is a similarity
+candidate, never an orthology assertion.
 
 ## Async build and publication slice
 
@@ -125,6 +132,12 @@ persistence and duplicate-delivery idempotency. See
 [`docs/implementation/blast-verification-pr.md`](../implementation/blast-verification-pr.md)
 for commands, pass counts and environment limits.
 
+The additive catalog migration and the worker-owned immutable NCBI index
+builder implement the preparation layer described in
+[index operations](../ops/blast-index-builder.md). The asynchronous catalog
+build lifecycle, per-hit genome resolution and cancelled/expired/retried job
+handling are implemented in this slice; the DIAMOND worker path is unchanged.
+
 ## Remaining limitations
 
 - Index construction is worker-triggered asynchronously, but there is no admin
@@ -135,6 +148,6 @@ for commands, pass counts and environment limits.
   catalog rows must be provisioned by operators.
 - DIAMOND `blastp` remains the only DIAMOND program. Custom researcher-uploaded
   FASTA databases are catalog metadata, not an implemented ingestion workflow.
-- Genome-browser links from protein hits require the corresponding
-  protein/transcript/gene mapping data to be present in the release; the
-  contract refuses to fabricate a genomic locus when it is absent.
+- Index construction runs inside Celery on the worker's local immutable volume
+  (`BLAST_INDEX_ROOT`), not through object storage; see
+  [index operations](../ops/blast-index-builder.md) for the rationale.

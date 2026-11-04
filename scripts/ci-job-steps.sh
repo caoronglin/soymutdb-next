@@ -467,13 +467,16 @@ dependency_governance_step() {
   ensure_governance_python
   dependency_governance_env
 
-  # The Python license/vulnerability analyzers run `uv run --project apps/worker`,
-  # which compiles the whole science stack from sdists on CPython 3.15. That
-  # needs the same C/HDF5/htslib toolchain as the worker image; CNB gives every
-  # stage a fresh container, so the earlier "Compiler prerequisites" stage does
-  # not carry over. Without this, python-licenses-worker reports
-  # `normalization_unavailable:license-expressions` because the analyzer crashed
-  # building cyvcf2's bundled htslib before it could write a report.
+  # The `python-licenses-worker` analyzer runs `uv run --locked --no-dev
+  # --project apps/worker --with pip-licenses …`, which resolves the worker's
+  # whole runtime graph. On CPython 3.15 there are no wheels for the science
+  # stack, so uv compiles those sdists and needs the same system prerequisites as
+  # infra/docker/Dockerfile.worker. CNB gives every stage a fresh container, so
+  # the `Compiler prerequisites` stage's apt installs do NOT reach this one;
+  # without them the analyzer crashes while building cyvcf2's bundled htslib and
+  # the fail-closed gate reports `normalization_unavailable:license-expressions`
+  # — a toolchain error wearing the costume of a license finding. Provision the
+  # same idempotent recipe here and point h5py at Debian's serial flavour.
   local rc=0
   export HDF5_PKGCONFIG_NAME="${HDF5_PKGCONFIG_NAME:-hdf5-serial}"
   bash "${REPO_ROOT}/scripts/install-worker-science-build-deps.sh" || rc=$?

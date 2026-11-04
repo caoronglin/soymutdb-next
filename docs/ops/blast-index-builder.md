@@ -4,9 +4,11 @@ The operator tool prepares and verifies NCBI indexes. Production builds are
 driven asynchronously by the worker (see [Asynchronous build lifecycle](#asynchronous-build-lifecycle));
 the CLI remains an operator/verification tool. NCBI BLAST+ is the default search
 engine for all five programs; DIAMOND `blastp` remains an explicitly selected
-backend. Only **published** catalog rows are searchable; building and failed
-entries are excluded from search discovery and submission. Do not assign an NCBI
-prefix to a DIAMOND catalog row, or a DIAMOND index to an NCBI row.
+backend. Only **published** catalog rows (plus the legacy ``ready`` spelling
+carried by pre-existing DIAMOND catalogs) are searchable; building, validating
+and publishing entries are excluded from search discovery and submission. Do not
+assign an NCBI prefix to a DIAMOND catalog row, or a DIAMOND index to an NCBI
+row.
 
 ## Storage decision: worker-local indexes, one path only
 
@@ -66,10 +68,37 @@ python -m soymutdb_worker.blast_index verify \
 
 Build occurs in a sibling `.build-*` staging directory. Fixed argument arrays invoke `makeblastdb`; `blastdbcmd -info` and explicit sequence lengths independently check database type, sequence count and total indexed letters. The builder hashes every index artifact, writes a canonical manifest, fsyncs the files/directory, then publishes with a locked atomic rename. The identity includes build options, source hashes, metadata, and both binary hashes/versions. A changed source, metadata or binary creates a new identity. Reuse verifies the exact manifest, complete artifact inventory/checksums and database contents. Corruption is rejected; an existing index is never repaired or overwritten implicitly. Binary provenance must match during verification.
 
-The manifest contains relative artifact names and no source/index filesystem path. Index files and manifest remain operator artifacts; no new API exposes them. Publication does **not** upload index objects: the verified immutable directory
-stays on the worker's local volume. PostgreSQL remains authoritative for
+The manifest contains relative artifact names and no source/index filesystem
+path. Index files and manifest remain operator artifacts; no API exposes them,
+and publication never uploads index objects: the verified immutable directory
+stays on the worker's local volume. PostgreSQL stays authoritative for
 catalog/visibility/workflow state; the worker advances the shared build state
 machine and binds one content-addressed identity to one catalog row.
+
+## Runtime lifecycle (Celery)
+
+`blast_index_tasks.build_blast_index` is the only runtime caller of the builder
+(see [Asynchronous build lifecycle](#asynchronous-build-lifecycle) for the
+request path). It runs on the `blast` queue, never inside an HTTP request, and
+drives a persisted catalog state machine:
+
+`pending → building → validating → publishing → published`, with `failed`
+reachable from every in-flight state. Only `published` rows -- plus the legacy
+`ready` spelling pre-existing DIAMOND catalogs carry -- are selectable by
+`submit_job`. Every transition is a guarded conditional UPDATE keyed on the
+expected state, so duplicate deliveries cannot double-publish and a stale
+delivery cannot resurrect a cancelled build. A rebuild produces a new
+content-addressed identity; the old index directory is never mutated or
+overwritten, and stays searchable until the final `publishing → published` swap
+wins.
+
+Failures clean `.build-*` / `.verify-*` staging, record a sanitized reason
+(`build_error`), and never delete a previously published identity.
+`blast_index_tasks.check_blast_index_health` runs hourly: it re-verifies each
+published manifest, artifact checksums and database contents with
+`blastdbcmd`, and marks a corrupt index `failed` so discovery stops selecting
+it. Rebuild (new identity) is the only recovery; an index is never repaired in
+place.
 
 ## Resource limits and recovery
 
@@ -89,28 +118,35 @@ The current source ceiling and in-memory parser are not a validated whole-soybea
 
 ## Migration and rollback
 
-Migration `0050` adds explicit engine/provenance metadata and readiness constraints. It reuses the historical `sequence_count`, `total_length` and `build_status` columns, preserving their values and defaults. Existing rows gain `engine=diamond` and `is_default=false`; legacy `build_status=pending` remains pending and is excluded from search. Before rollout, inspect the actual catalog statuses. An operator must verify an existing DIAMOND index before explicitly promoting its catalog status to ready; migration never fabricates readiness. Newly inserted databases inherit pending until explicitly verified. Only known protein rows are backfilled with `sequence_type=protein`; unknown nucleotide subtype, source, annotation and license remain NULL. Active default entries are unique per assembly/engine/database type. Counts and FASTA checksums have database constraints.
+Migrations `0052`/`0053`/`0054` add resumable build states, bookkeeping, the `blast_index_builds` record with its published-identity guard, and per-hit genome resolution (`0054` chains after `0053`, so both halves of the lifecycle land on one alembic head). Migration `0050` adds explicit engine/provenance metadata and readiness constraints. It reuses the historical `sequence_count`, `total_length` and `build_status` columns, preserving their values and defaults. Existing rows gain `engine=diamond` and `is_default=false`; legacy `build_status=pending` remains pending and is excluded from search. Before rollout, inspect the actual catalog statuses. An operator must verify an existing DIAMOND index before explicitly promoting its catalog status to ready; migration never fabricates readiness. Newly inserted databases inherit pending until explicitly verified. Only known protein rows are backfilled with `sequence_type=protein`; unknown nucleotide subtype, source, annotation and license remain NULL. Active default entries are unique per assembly/engine/database type. Counts and FASTA checksums have database constraints.
 
 Public discovery emits only explicit safe metadata and runnable published-release rows. Local `file_path` and arbitrary private `provenance` JSON stay private. Existing configured database selection remains first; fallback uses the default assembly and eligible catalog defaults deterministically.
 
-Migration 0050's downgrade refuses any non-DIAMOND, building or failed row; migration 0052's downgrade additionally refuses validating/published rows and any build record. Legacy pending and ready remain representable by the old schema. It preserves the three historical columns. This guard exists to prevent an old binary from treating an incompatible index as a ready DIAMOND database. Back up the catalog, quiesce writers, and reconcile those rows and dependent jobs before downgrade. Removing the additive metadata loses that metadata; preserve a backup. Do not delete active indexes or jobs merely to force rollback.
+Migration 0050's downgrade refuses any non-DIAMOND, building or failed row; migration 0052's downgrade additionally refuses validating/publishing/published rows, and 0054's refuses any surviving build record. Legacy pending and ready remain representable by the old schema. It preserves the three historical columns. This guard exists to prevent an old binary from treating an incompatible index as a ready DIAMOND database. Back up the catalog, quiesce writers, and reconcile those rows and dependent jobs before downgrade. Removing the additive metadata loses that metadata; preserve a backup. Do not delete active indexes or jobs merely to force rollback.
 
 
 ## Asynchronous build lifecycle
 
-An administrator requests a build through ``POST /api/v1/blast/index-builds``.
-That HTTP handler only inserts a ``blast_index_builds`` row, a pending catalog
-row and one transactional-outbox event in a single transaction. It never
-invokes ``makeblastdb``. The outbox dispatcher forwards
-``soymutdb_worker.tasks.blast_index.build_index`` to the dedicated ``blast``
-queue; the worker alone reads the reviewed FASTA, builds into a private staging
-directory, verifies and publishes.
+A build is queued through the admin catalog lifecycle:
 
-State machine (one owner: ``soymutdb_jobs.blast_catalog``):
+- ``POST /api/v1/blast/databases/build`` records one transactional-outbox event
+  for an **existing** catalog row (the lifecycle entry point), or
+- ``POST /api/v1/blast/index-builds`` inserts a ``blast_index_builds`` row, a
+  pending catalog row and the outbox event together.
+
+Neither handler invokes ``makeblastdb``; both run in a single transaction. The
+outbox dispatcher forwards ``soymutdb_worker.tasks.blast_index.build_index``
+(the legacy single-shot builder) or
+``soymutdb_worker.tasks.blast_index_tasks.build_blast_index`` (the
+lifecycle-owning builder) to the dedicated ``blast`` queue; the worker alone
+reads the reviewed FASTA, builds into a private staging directory, verifies and
+publishes.
+
+State machine (one owner: ``soymutdb_jobs.blast_catalog_state``):
 
 ```
-pending -> building -> validating -> published
-    \-> failed            \-> failed       (terminal, with sanitized reason)
+pending -> building -> validating -> publishing -> published
+    \-> failed            \-> failed       \-> failed   (terminal, sanitized reason)
 ```
 
 Only ``published`` (and the legacy ``ready`` spelling for existing DIAMOND
@@ -119,8 +155,8 @@ row's ``is_active`` flag, so a newly built index enters discovery without a
 separate operator step. ``failed`` is terminal: retry means a **new** build
 request with a **new** catalog row and a **new** content-addressed identity;
 nothing is rebuilt in place. A redelivered outbox event while a build
-is ``building``/``validating`` is skipped, so two builders can never publish the
-same identity. Publication is a guarded conditional UPDATE shared with the
+is ``building``/``validating``/``publishing`` is skipped, so two builders can
+never publish the same identity. Publication is a guarded conditional UPDATE shared with the
 catalog row in one transaction.
 
 Failures clear staging and record a sanitized reason; child stderr, local paths

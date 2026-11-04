@@ -26,11 +26,13 @@ from soymutdb_jobs.protein_fasta import PROTEIN_ALPHABET as PROTEIN_ALPHABET
 
 from ..core.compat import StrEnum
 
-#: Catalog build states are owned by ``soymutdb_jobs.blast_catalog``. Keep the
-#: wire vocabulary in sync with the state machine: a published NCBI index must
-#: survive response validation instead of being rejected as an unknown value.
+#: Catalog build states are owned by ``soymutdb_jobs.blast_catalog_state``; this
+#: alias is the wire spelling of its ``COLUMN_STATES``. A published NCBI index --
+#: and every in-flight ``publishing`` row a client polls -- must survive response
+#: validation instead of being rejected as an unknown value.
 BuildState = Literal[
-    "pending", "building", "validating", "published", "failed", "ready",
+    "pending", "building", "validating", "publishing", "published", "failed",
+    "ready",
 ]
 
 #: Allowed characters for a BLAST database *name* — matches the worker-side
@@ -214,6 +216,10 @@ class BlastHit(BaseModel):
     bit_score: float
     query_strand: str = "plus"
     subject_strand: str = "plus"
+    #: Assembly-scoped genomic location, present only when the hit's subject
+    #: was resolved through an explicit protein/transcript/gene relation.
+    #: ``status`` is "resolved" or "unresolved" with a machine-readable reason.
+    genome_resolution: dict[str, Any] | None = None
 
 
 class BlastHsp(BaseModel):
@@ -286,6 +292,10 @@ class BlastDatabaseResponse(BaseModel):
     total_length: int | None = Field(default=None, ge=0)
     fasta_sha256: str | None = None
     index_version: str | None = None
+    #: Must match ``soymutdb_jobs.blast_catalog_state.COLUMN_STATES``: the catalog's
+    #: check constraint, the worker's state machine and this response share one
+    #: vocabulary, including the in-flight ``publishing`` state and the legacy
+    #: ``ready`` spelling pre-existing catalogs still carry.
     build_status: BuildState = "pending"
     is_default: bool = False
     license: str | None = None
@@ -448,3 +458,16 @@ class BlastGenomeTargetResponse(BaseModel):
         elif self.locus is not None or self.resolution is not None or self.start is not None:
             raise ValueError("unresolved target must not carry coordinates")
         return self
+
+
+class BlastIndexBuildQueued(BaseModel):
+    """Acknowledgement for an accepted index build request.
+
+    Deliberately narrow: the response says *what was queued*, never where the
+    worker will write it. Progress is read back from the catalog's
+    ``build_status``, not from a filesystem path.
+    """
+
+    database_id: int
+    queued: bool
+    task_name: str

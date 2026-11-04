@@ -19,9 +19,10 @@ import re
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from soymutdb_jobs.blast_catalog import (
-    is_searchable_build_state,
-)
+# One owner for the catalog vocabulary: the ORM check constraint, the worker's
+# state machine and every query filter read `blast_catalog_state`.
+from soymutdb_jobs.blast_catalog import is_searchable_build_state
+from soymutdb_jobs.blast_catalog_state import SEARCHABLE_STATES
 from soymutdb_jobs.blast_search import PROGRAM_DATABASE_TYPES, normalize_query
 from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -103,7 +104,7 @@ class BlastService:
         *,
         release_context: ReleaseContext,
     ) -> list[BlastDatabaseResponse]:
-        """List ready supported indexes in the published release.
+        """List published, supported indexes in the published release.
 
         Unfinished indexes stay private to the catalog control plane. Program
         compatibility is enforced again at selection; the release join hides
@@ -115,7 +116,7 @@ class BlastService:
             .where(
                 BlastDatabase.is_active.is_(True),
                 BlastDatabase.engine.in_(["diamond", "ncbi_blast"]),
-                BlastDatabase.build_status.in_(["published", "ready"]),
+                BlastDatabase.build_status.in_(sorted(SEARCHABLE_STATES)),
                 Assembly.release_id == release_context.release_id,
             )
         )
@@ -398,7 +399,7 @@ class BlastService:
         engine: str = "ncbi_blast",
         program: str = "blastp",
     ) -> BlastDatabase | None:
-        """Fetch one ready program/engine-compatible index in the published release.
+        """Fetch one published, program/engine-compatible index in the release.
 
         Only executable ``blast_databases`` rows of the *resolved release* are the
         database whitelist: anything not matching is refused here (defense in
@@ -411,7 +412,7 @@ class BlastService:
             .where(
                 BlastDatabase.is_active.is_(True),
                 BlastDatabase.engine.in_(["diamond", "ncbi_blast"]),
-                BlastDatabase.build_status.in_(["published", "ready"]),
+                BlastDatabase.build_status.in_(sorted(SEARCHABLE_STATES)),
                 Assembly.release_id == release_context.release_id,
                 BlastDatabase.engine == engine,
                 BlastDatabase.db_type == PROGRAM_DATABASE_TYPES[program],
@@ -622,6 +623,7 @@ class BlastService:
                 # Provenance: the worker (and any later reader of the result)
                 # must know which release/assembly namespace was searched.
                 "release_key": release_context.release_key,
+                "release_id": release_context.release_id,
                 "assembly": release_context.assembly,
                 "assembly_id": blast_db.assembly_id,
             },
@@ -885,6 +887,7 @@ class BlastService:
                     bit_score=h.bit_score,
                     query_strand=h.query_strand,
                     subject_strand=h.subject_strand,
+                    genome_resolution=getattr(h, "genome_resolution", None),
                 )
                 for h in page
             ],

@@ -19,9 +19,13 @@ def test_full_lifecycle_is_the_only_legal_path():
     assert BUILD_TRANSITIONS == {
         "pending": frozenset({"building", "failed"}),
         "building": frozenset({"validating", "failed"}),
-        "validating": frozenset({"published", "failed"}),
-        "published": frozenset(),
-        "failed": frozenset(),
+        "validating": frozenset({"publishing", "failed"}),
+        "publishing": frozenset({"published", "failed"}),
+        # A published row may start a rebuild that targets a *new* identity;
+        # the old row stays searchable until the new one is swapped in.
+        "published": frozenset({"building", "failed"}),
+        # A failed build is retried in place only through an explicit re-claim.
+        "failed": frozenset({"building"}),
         "ready": frozenset(),
     }
     assert set(BUILD_STATES) == set(BUILD_TRANSITIONS)
@@ -35,10 +39,14 @@ def test_full_lifecycle_is_the_only_legal_path():
     ("pending", "failed", True),
     ("building", "validating", True),
     ("building", "published", False),
-    ("validating", "published", True),
+    ("validating", "publishing", True),
+    ("validating", "published", False),
     ("validating", "failed", True),
+    ("publishing", "published", True),
+    ("publishing", "failed", True),
+    ("publishing", "building", False),
     ("published", "pending", False),
-    ("failed", "building", False),
+    ("failed", "building", True),
     ("ready", "building", False),
 ])
 def test_transitions(current, target, allowed):
@@ -47,7 +55,7 @@ def test_transitions(current, target, allowed):
 
 @pytest.mark.parametrize("state,searchable", [
     ("pending", False), ("building", False), ("validating", False),
-    ("published", True), ("failed", False), ("ready", True),
+    ("publishing", False), ("published", True), ("failed", False), ("ready", True),
 ])
 def test_only_published_indexes_are_searchable(state, searchable):
     assert is_searchable_build_state(state) is searchable

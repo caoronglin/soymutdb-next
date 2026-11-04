@@ -3649,10 +3649,38 @@ class DeliveryArchitectureTests(unittest.TestCase):
         )
 
         # Same package names and pkg-config flavour as the production image.
-        for package in ("libhdf5-dev", "pkg-config"):
+        # The full recipe matters: `uv run --locked` in the governance gate
+        # builds h5py/cyvcf2/pandas/numcodecs from sdists, so it needs the C
+        # toolchain, HDF5 and htslib's compression headers too, not just the
+        # two packages the pip-based backend gate needs.
+        for package in (
+            "build-essential",
+            "libhdf5-dev",
+            "pkg-config",
+            "zlib1g-dev",
+            "libbz2-dev",
+            "liblzma-dev",
+        ):
             self.assertIn(package, prereq, package)
             self.assertIn(package, dockerfile, package)
+        # cyvcf2's bundled htslib runs `autoreconf -i` at build time, which
+        # `uv run --locked` reaches but the pip-based backend gate does not;
+        # these are CI-only prerequisites, so they live in the script alone.
+        for package in ("autoconf", "automake", "libtool"):
+            self.assertIn(package, prereq, package)
         self.assertIn("HDF5_PKGCONFIG_NAME=hdf5-serial", dockerfile)
+
+        # Every CNB stage is a fresh container, so the governance stage cannot
+        # inherit the backend stage's apt installs. It must provision the same
+        # prerequisites for its own `uv run` license/pip-audit analyzers.
+        steps = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        start = steps.index("dependency_governance_step() {")
+        governance = steps[start : steps.index("\n}\n", start)]
+        self.assertIn(
+            "scripts/install-worker-science-build-deps.sh", governance,
+            "the governance stage must provision worker science build deps",
+        )
+        self.assertIn("export HDF5_PKGCONFIG_NAME=", governance)
 
         # The prerequisite script is a real, strict, executable shared script.
         self.assertIn("set -euo pipefail", prereq)

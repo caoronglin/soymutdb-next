@@ -4,8 +4,10 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -481,6 +483,127 @@ def test_license_projection_distributes_nested_alternatives() -> None:
     ) == [["Apache-2.0"]]
 
 
+def test_license_probe_is_reachable_from_the_configured_command() -> None:
+    """The probe must be derivable from the command the policy actually runs.
+
+    Two defects made `declared` come back empty on every run, which is the same
+    signal as "the probe could not run", so `python-licenses-worker` failed with
+    `normalization_unavailable:license-expressions` on a healthy environment:
+
+    * the probe passed `path=sys.path` to `importlib.metadata.distributions()`,
+      and under `python -c` `sys.path[0]` is `''` -- an empty search path that
+      reads no distribution at all and prints `{}`;
+    * `_rewrite_for_probe` matched the literal `pip-licenses`, which occurs in
+      the `--with pip-licenses==5.0.0` selector *before* the entry point, so the
+      rewrite returned `None` as soon as the probe itself was handed back in.
+
+    Both are asserted from the policy file, so the check cannot silently stop
+    probing after a config edit.
+    """
+    governance = _governance_module()
+    for name in ("python-licenses-api", "python-licenses-worker", "python-licenses-mcp-server"):
+        check = next(
+            entry
+            for entry in json.loads(CONFIG.read_text(encoding="utf-8"))["checks"]
+            if entry["name"] == name
+        )
+        command = [
+            argument.replace("{root}", str(ROOT)).replace("{output_dir}", "/tmp/x")
+            for argument in check["command"]
+        ]
+        probe = governance._rewrite_for_probe(command)
+        assert probe is not None, f"{name}: the probe must be derivable"
+        assert probe[:2] == ["uv", "run"], name
+        assert probe[-3:-1] == ["python", "-c"], name
+        assert probe[-1] == governance.PROBE_SCRIPT, name
+        assert "pip-licenses" not in probe, f"{name}: the analyzer tail must be gone"
+    # The probe reads `*.dist-info/METADATA` files off the search path instead of
+    # enumerating `importlib.metadata.distributions()`: resolving a distribution
+    # imports it, so the old probe executed the package it was describing (the
+    # worker graph died and 55 distributions projected as `UNKNOWN`).
+    assert "importlib.metadata as metadata" not in governance.PROBE_SCRIPT.split("\n", 40)[3]
+    assert ".dist-info" in governance.PROBE_SCRIPT
+    assert "email.parser" in governance.PROBE_SCRIPT
+    # Empty `sys.path` entries are dropped: under `python -c` one sits at
+    # `sys.path[0]` and resolves to the CWD, which would describe the checkout's
+    # stray `.dist-info` instead of the venv. `VIRTUAL_ENV`/`sys.prefix` are
+    # added back because a `uv run` environment reaches editable first-party
+    # packages through a `.pth` file.
+    assert "if entry" in governance.PROBE_SCRIPT
+    assert "VIRTUAL_ENV" in governance.PROBE_SCRIPT
+    assert "sys.prefix" in governance.PROBE_SCRIPT
+    # A probe that ran-but-found-nothing must be distinguishable from a crash.
+    assert "probe:ready" in governance.PROBE_SCRIPT
+
+    # Idempotent: feeding the rewritten command back in selects the same
+    # environment again instead of appending a second probe.
+    reused = governance._rewrite_for_probe(probe)
+    assert reused is not None and reused.count(governance.PROBE_SCRIPT) == 1
+    # Not a `uv run` invocation: degrade rather than probe a guess.
+    assert governance._rewrite_for_probe(["python3", "scripts/x.py"]) is None
+    assert governance._rewrite_for_probe(["uv"]) is None
+    assert governance._rewrite_for_probe(["uv", "run"]) is None
+
+
+def test_license_probe_crashes_are_not_read_as_an_empty_probe() -> None:
+    """A dying probe must fail the gate, not look like "no probe data".
+
+    `uv run … python -c <probe>` reports the interpreter's status, and `uv`
+    returns 0 for it, so a probe that raised leaves stdout empty and exit 0 --
+    the exact pair the projection treats as "the probe was not consulted".
+    """
+    governance = _governance_module()
+    check = next(
+        entry
+        for entry in json.loads(CONFIG.read_text(encoding="utf-8"))["checks"]
+        if entry["name"] == "python-licenses-api"
+    )
+    command = [
+        argument.replace("{root}", str(ROOT)).replace("{output_dir}", "/tmp/x")
+        for argument in check["command"]
+    ]
+    probe = governance._rewrite_for_probe(command)
+    status_probe = governance._probe_for_exit_code(probe)
+    assert status_probe is not None
+    assert status_probe[:-1] == probe[:-1]
+    assert status_probe[-1].startswith(governance.PROBE_SCRIPT)
+    assert status_probe[-1].rstrip().endswith("sys.exit(1)")
+
+    # The marker only makes a crash visible: a healthy probe still prints its
+    # answer, and the forced exit only shows up in the process status.
+    broken = "raise RuntimeError('probe is broken')\n"
+    for script in (broken, broken + governance.EXIT_MARKER):
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert completed.returncode != 0, completed
+        assert completed.stdout == ""
+
+    # The check that actually runs: the probe answers, and then `uv` still
+    # reports the forced non-zero status -- so the answer is the signal, and a
+    # healthy probe is not failed for exiting 1.
+    healthy = governance.PROBE_SCRIPT + governance.EXIT_MARKER
+    completed = subprocess.run(
+        [sys.executable, "-c", healthy],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 1
+    assert json.loads(completed.stdout.strip().splitlines()[-1]) != {}
+
+    # A command that is not the rewritten probe is refused rather than mangled.
+    assert (
+        governance._probe_for_exit_code(
+            ["uv", "run", "--project", "apps/api", "pip-licenses"]
+        )
+        is None
+    )
+
+
 def test_license_probe_reads_the_three_metadata_sources(tmp_path: Path) -> None:
     """The probe's precedence, executed as the probe itself runs it.
 
@@ -871,6 +994,29 @@ def test_license_check_runner_probes_and_records_the_declaration(
     assert declared["pep639only"]["license_expression"] == "MIT"
 
 
+def test_knip_treats_admin_vitest_doubles_as_entry_points() -> None:
+    """The doubles are reached through `vi.mock`, which Knip cannot follow.
+
+    `vi.mock("@/lib/antd", async () => (await import("../test/antd-double")))`
+    hides the import inside a factory, so every export of a double reported as
+    unused -- 57 of them for `antd-double.tsx` -- and the dependency gate failed
+    on real test infrastructure. Knip has no per-file "exports are consumed by a
+    mock" rule, so the doubles are entry points: removing one still breaks the
+    analysis instead of silently passing.
+    """
+    knip = json.loads((ROOT / "knip.json").read_text(encoding="utf-8"))
+    entry = knip["workspaces"]["apps/admin"]["entry"]
+    assert "src/test/antd-double.tsx" in entry
+    assert "src/test/mocks.ts" in entry
+    assert "src/test/vitest-env.d.ts" in entry
+    # `mocks.ts` ships `mockTranslation`, reached through the same mock-specifier
+    # shape, so flaky-render doubles stay out of the unused-export report too.
+    assert (ROOT / "apps/admin/src/test/mocks.ts").is_file()
+    # The doubles really are mocked, not imported as ordinary modules.
+    admin_sources = list((ROOT / "apps/admin/src").rglob("*.test.tsx"))
+    assert any("test/antd-double" in path.read_text(encoding="utf-8") for path in admin_sources)
+
+
 def test_root_scripts_and_knip_configuration_are_executable_contracts() -> None:
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     knip = json.loads((ROOT / "knip.json").read_text(encoding="utf-8"))
@@ -952,6 +1098,133 @@ def test_governance_failures_show_exact_packages_without_changing_verdict(tmp_pa
 
     row.update(name="missing-tool", report="nonexistent.json")
     assert "report unavailable" in module._audit_failure_evidence(row, tmp_path)[0]
+
+
+def test_pip_audit_checks_are_judged_by_the_acceptance_record() -> None:
+    """The acceptance record is the vulnerability policy, for both analyzers.
+
+    `pip-audit-*` declared no `normalize`, so the gate recorded every one of
+    them as `normalization_unavailable:accepted-advisories` and no signature
+    could ever change a Python finding. Builds cnb-1s0-1k6h45gk9 (main) and
+    cnb-t3b-1k6h4teke (this PR) failed identically on newly published
+    `certifi` / `pillow` advisories against unchanged locks, with the record at
+    `security/advisory-acceptances.json` empty and therefore unused.
+
+    Declaring the gate must not soften it: a finding nothing accepts is still a
+    failure, and the accepted ones stay visible with their expiry.
+    """
+    policy = json.loads(CONFIG.read_text(encoding="utf-8"))
+    audited = [
+        check for check in policy["checks"] if check["name"].startswith("pip-audit-")
+    ]
+    assert audited, "the policy must keep its Python vulnerability gates"
+    for check in audited:
+        assert check.get("normalize") == "accepted-advisories", check["name"]
+        assert (
+            check.get("accept_file") == "security/advisory-acceptances.json"
+        ), check["name"]
+
+    governance = _governance_module()
+    report = Path(tempfile.mkdtemp()) / "soymutdb-pip-audit-probe.json"
+    report.write_text(
+        json.dumps(
+            {
+                "dependencies": [
+                    {
+                        "name": "certifi",
+                        "version": "2026.7.22",
+                        "vulns": [
+                            {"id": "PYSEC-2026-4320", "fix_versions": ["2026.10.18"]}
+                        ],
+                    },
+                    {
+                        "name": "pillow",
+                        "version": "12.3.0",
+                        "vulns": [{"id": "GHSA-22hg-r758-rrw9", "fix_versions": []}],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    # Empty record: both findings fail, exactly as the CI gate reported them.
+    passed, findings, accepted = governance.evaluate_pip_audit_report(report, [])
+    assert not passed
+    assert accepted == []
+    assert any("PYSEC-2026-4320" in finding for finding in findings)
+    assert any("GHSA-22hg-r758-rrw9" in finding for finding in findings)
+
+    # A signed acceptance for one advisory clears only that advisory.
+    from datetime import date, timedelta
+
+    today = date.today()
+    acceptance = {
+        "advisory": "PYSEC-2026-4320",
+        "package": "certifi",
+        "vulnerable_range": "==2026.7.22",
+        "title": "probe",
+        "introduced_by": "certifi",
+        "severity_reached": "high",
+        "reachability": ["probe only"],
+        "rationale": "probe only",
+        "accepted_by": "probe-approver",
+        "accepted_on": today.isoformat(),
+        "expires_on": (today + timedelta(days=14)).isoformat(),
+        "review": "probe only",
+    }
+    record = report.parent / "soymutdb-acceptance-probe.json"
+
+    record.write_text(
+        json.dumps({"schema_version": 1, "acceptances": [acceptance]}),
+        encoding="utf-8",
+    )
+    try:
+        entries = governance.load_advisory_acceptances(record, today=today)
+        passed, findings, accepted = governance.evaluate_pip_audit_report(
+            report, entries
+        )
+        assert not passed, "an unaccepted second advisory must still fail"
+        assert [item["advisory"] for item in accepted] == ["PYSEC-2026-4320"]
+        assert any("GHSA-22hg-r758-rrw9" in finding for finding in findings)
+        # Accepted findings stay in the evidence, with the expiry.
+        row = {
+            "name": "pip-audit-api",
+            "status": "passed",
+            "report": "pip-audit-api.json",
+            "accepted": accepted,
+        }
+        evidence = governance._audit_failure_evidence(row, report.parent)
+        assert any("PYSEC-2026-4320" in line for line in evidence)
+
+        # Expired: back to a failure, never a warning.
+        expired = dict(acceptance, expires_on="2020-01-01")
+        record.write_text(
+            json.dumps({"schema_version": 1, "acceptances": [expired]}),
+            encoding="utf-8",
+        )
+        entries = governance.load_advisory_acceptances(record, today=today)
+        passed, findings, accepted = governance.evaluate_pip_audit_report(
+            report, entries
+        )
+        assert not passed
+        assert accepted and accepted[0]["expired"] is True
+    finally:
+        record.unlink(missing_ok=True)
+        report.unlink(missing_ok=True)
+
+
+def test_pip_audit_projection_refuses_a_payload_it_cannot_read() -> None:
+    """A malformed report is a policy error, never a pass."""
+    governance = _governance_module()
+    for payload in ('{"dependencies": null}', "[]", '{"dependencies": {}}'):
+        with pytest.raises(governance.AcceptancePolicyError):
+            governance._pip_audit_advisories(json.loads(payload))
+
+    # An empty but well-formed report is a clean pass, not an error.
+    empty = Path(tempfile.mkdtemp()) / "soymutdb-pip-clean.json"
+    empty.write_text('{"dependencies": []}', encoding="utf-8")
+    assert governance.evaluate_pip_audit_report(empty, [])[0] is True
 
 
 def test_declared_license_probe_reads_metadata_without_importing_a_distribution(

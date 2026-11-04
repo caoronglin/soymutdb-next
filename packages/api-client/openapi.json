@@ -4337,6 +4337,63 @@
         "x-idempotent": true
       }
     },
+    "/api/v1/blast/databases/build": {
+      "post": {
+        "tags": [
+          "blast"
+        ],
+        "summary": "Request Blast Index Build",
+        "description": "Queue an immutable index build; construction never runs in this request.\n\nThe catalog row must exist and be buildable (``pending``/``failed`` or a\n``ready`` row being rebuilt). The outbox event carries only the frozen\nmetadata and a validated object reference; the worker resolves binaries,\nstaging, validation and publication.",
+        "operationId": "request_blast_index_build_api_v1_blast_databases_build_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BlastIndexBuildRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlastIndexBuildQueued"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/blast/jobs/{job_id}": {
       "get": {
         "tags": [
@@ -4395,6 +4452,158 @@
           }
         },
         "x-idempotent": true
+      }
+    },
+    "/api/v1/blast/jobs/{job_id}/cancel": {
+      "post": {
+        "tags": [
+          "blast"
+        ],
+        "summary": "Cancel Blast Job",
+        "description": "Cancel a pending/running BLAST job owned by the caller.\n\nThe worker re-checks the row before launching the aligner, so a queued\nCelery message that arrives after cancellation cannot start a search.",
+        "operationId": "cancel_blast_job_api_v1_blast_jobs__job_id__cancel_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlastJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/blast/jobs/{job_id}/retry": {
+      "post": {
+        "tags": [
+          "blast"
+        ],
+        "summary": "Retry Blast Job",
+        "description": "Re-dispatch a failed BLAST job with its original frozen provenance.",
+        "operationId": "retry_blast_job_api_v1_blast_jobs__job_id__retry_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BlastJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/blast/jobs/{job_id}/results": {
@@ -4700,158 +4909,6 @@
           }
         },
         "x-idempotent": true
-      }
-    },
-    "/api/v1/blast/jobs/{job_id}/cancel": {
-      "post": {
-        "tags": [
-          "blast"
-        ],
-        "summary": "Cancel Blast Job",
-        "description": "Cancel a pending/running job (engine-independent).",
-        "operationId": "cancel_blast_job_api_v1_blast_jobs__job_id__cancel_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "job_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Job Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BlastJobResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/v1/blast/jobs/{job_id}/retry": {
-      "post": {
-        "tags": [
-          "blast"
-        ],
-        "summary": "Retry Blast Job",
-        "description": "Retry a failed/expired job as a new job with the same search contract.",
-        "operationId": "retry_blast_job_api_v1_blast_jobs__job_id__retry_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "job_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "title": "Job Id"
-            }
-          },
-          {
-            "name": "release_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Release Id"
-            }
-          },
-          {
-            "name": "X-SoyMutDB-Release",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer",
-                  "minimum": 1
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "X-Soymutdb-Release"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BlastJobResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Internal Server Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
       }
     },
     "/api/v1/blast/public/jobs/{job_id}/hits/{subject_id}/genome-target": {
@@ -19539,6 +19596,7 @@
               "pending",
               "building",
               "validating",
+              "publishing",
               "published",
               "failed",
               "ready"
@@ -19816,6 +19874,18 @@
             "type": "string",
             "title": "Subject Strand",
             "default": "plus"
+          },
+          "genome_resolution": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Genome Resolution"
           }
         },
         "type": "object",
@@ -19835,13 +19905,36 @@
         ],
         "title": "BlastHit"
       },
+      "BlastIndexBuildQueued": {
+        "properties": {
+          "database_id": {
+            "type": "integer",
+            "title": "Database Id"
+          },
+          "queued": {
+            "type": "boolean",
+            "title": "Queued"
+          },
+          "task_name": {
+            "type": "string",
+            "title": "Task Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "database_id",
+          "queued",
+          "task_name"
+        ],
+        "title": "BlastIndexBuildQueued",
+        "description": "Acknowledgement for an accepted index build request.\n\nDeliberately narrow: the response says *what was queued*, never where the\nworker will write it. Progress is read back from the catalog's\n``build_status``, not from a filesystem path."
+      },
       "BlastIndexBuildRequest": {
         "properties": {
-          "source_object_key": {
-            "type": "string",
-            "maxLength": 2048,
-            "minLength": 1,
-            "title": "Source Object Key"
+          "database_id": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Database Id"
           },
           "db_type": {
             "type": "string",
@@ -19851,72 +19944,70 @@
             ],
             "title": "Db Type"
           },
-          "assembly_name": {
+          "source_object": {
             "type": "string",
-            "maxLength": 1024,
+            "maxLength": 512,
             "minLength": 1,
-            "title": "Assembly Name"
+            "title": "Source Object"
+          },
+          "assembly_id": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Assembly Id"
+          },
+          "assembly_version": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Assembly Version"
+          },
+          "release_id": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Release Id"
           },
           "annotation_version": {
             "type": "string",
-            "maxLength": 1024,
+            "maxLength": 256,
             "minLength": 1,
             "title": "Annotation Version"
           },
-          "source_version": {
-            "type": "string",
-            "maxLength": 1024,
-            "minLength": 1,
-            "title": "Source Version"
-          },
           "source_url": {
             "type": "string",
-            "maxLength": 1024,
+            "maxLength": 2048,
             "minLength": 1,
             "title": "Source Url"
+          },
+          "source_version": {
+            "type": "string",
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Source Version"
           },
           "license": {
             "type": "string",
             "maxLength": 1024,
             "minLength": 1,
             "title": "License"
-          },
-          "name": {
-            "type": "string",
-            "maxLength": 256,
-            "minLength": 1,
-            "title": "Name"
-          },
-          "sequence_type": {
-            "type": "string",
-            "enum": [
-              "genome",
-              "cds",
-              "transcript",
-              "protein",
-              "repeat_masked",
-              "pan_genome",
-              "family_consensus",
-              "custom"
-            ],
-            "title": "Sequence Type",
-            "default": "genome"
           }
         },
-        "additionalProperties": false,
         "type": "object",
         "required": [
-          "source_object_key",
+          "database_id",
           "db_type",
-          "assembly_name",
+          "source_object",
+          "assembly_id",
+          "assembly_version",
+          "release_id",
           "annotation_version",
-          "source_version",
           "source_url",
-          "license",
-          "name"
+          "source_version",
+          "license"
         ],
         "title": "BlastIndexBuildRequest",
-        "description": "Admin request to build one immutable NCBI index in a worker.\n\nThe source FASTA is an object-store key under ``blast-sources/`` that was\nuploaded and reviewed beforehand. No local path, binary name or output\ndirectory is accepted from a client. Rebuilds create a new catalog row and\na new content-addressed identity; they never overwrite a published index."
+        "description": "Admin-only request to build one immutable NCBI index asynchronously.\n\nOnly identifiers, frozen biological provenance and an object reference are\naccepted. No local filesystem path can pass this boundary."
       },
       "BlastIndexBuildResponse": {
         "properties": {
@@ -19938,6 +20029,7 @@
               "pending",
               "building",
               "validating",
+              "publishing",
               "published",
               "failed",
               "ready"
