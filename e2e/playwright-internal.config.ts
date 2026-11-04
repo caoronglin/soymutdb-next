@@ -29,7 +29,7 @@ const baseURL = explicitBase || OFFLINE_BASE;
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: /(internal-site|route-smoke)\.spec\.ts/,
+  testMatch: /(internal-site|route-smoke|expression-phenotype)\.spec\.ts/,
   workers: 1,
   fullyParallel: false,
   timeout: 60_000,

@@ -49,7 +49,15 @@ import {
  *
  * The scan is sequential inside `scanPhenotypes`, but this page reads the same
  * per-line queries through `useQueries`, so the budget is also the number of
- * parallel per-line reads the page can issue without stalling a route.
+ * parallel per-line reads the page can issue.
+ *
+ * Why 40: a browser opens about six HTTP/1.1 connections per origin, so 40
+ * requests occupy the pool for a few waves — long enough to be visible, short
+ * enough to stay below the point where the rest of the page stalls behind
+ * them. It is a per-page ceiling, not a data limit: raising it past the pool
+ * size buys latency, not coverage, because the cut is still a scan and the
+ * page already says so. Removing it entirely is the real fix, and that needs a
+ * cross-line phenotype endpoint (see the open item in the PR).
  */
 export const PHENOTYPE_LINE_BUDGET = 40;
 

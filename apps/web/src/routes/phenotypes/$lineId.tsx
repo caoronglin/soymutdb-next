@@ -34,6 +34,30 @@ export const Route = createFileRoute("/phenotypes/$lineId")({
   component: PhenotypeLineDetail,
 });
 
+/**
+ * Row identity for the observation table, built only from public values.
+ *
+ * The observation tuple identifies a row inside its line, so no persistence
+ * key is needed — and none may be used: whatever this returns ends up in
+ * `data-row-key` in the DOM.
+ */
+export function phenotypeRowKey(
+  row: Pick<
+    PhenotypeResponse,
+    "trait_category" | "trait_name" | "trait_value" | "unit" | "description"
+  >,
+  linePublicId: string,
+): string {
+  return [
+    linePublicId,
+    row.trait_category,
+    row.trait_name,
+    row.trait_value ?? "",
+    row.unit ?? "",
+    row.description ?? "",
+  ].join("|");
+}
+
 function PhenotypeLineDetail() {
   const { t } = useTranslation();
   const { lineId } = Route.useParams();
@@ -209,8 +233,12 @@ function PhenotypeLineDetail() {
                 description={t("phenotypes.detail.noObservationsDesc")}
               />
             ) : (
+              // Ant Design writes the row key into `data-row-key`. `id` is the
+              // observation's persistence key, so using it here would put a
+              // private identifier in the document; the key is built from the
+              // public tuple instead.
               <Table<PhenotypeResponse>
-                rowKey="id"
+                rowKey={(row) => phenotypeRowKey(row, line.public_id)}
                 columns={columns}
                 dataSource={observations}
                 pagination={false}

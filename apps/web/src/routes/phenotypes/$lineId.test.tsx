@@ -99,6 +99,17 @@ describe("phenotype line detail", () => {
     expect(screen.getByText("82.5")).toBeTruthy();
   });
 
+  it("never puts the observation persistence key in the document", async () => {
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Plant height")).toBeTruthy());
+    // Ant Design renders the row key as `data-row-key`. The payload's `id` is
+    // the private persistence key, so it must not survive into the DOM.
+    const html = document.body.innerHTML;
+    expect(html).not.toContain(observation.id);
+    expect(html).not.toContain(`data-row-key="${observation.id}"`);
+  });
+
   it("says the line has no observation instead of showing an empty table", async () => {
     api.getMutantLinePhenotypes.mockResolvedValue([]);
 
