@@ -5329,6 +5329,7 @@ export interface components {
              *
              *     `variant_id` is only unique per (release, assembly); a row that travels
              *     without its namespace cannot be identified once two scopes meet.
+             * @title Assembly
              */
             assembly: string;
             /** Chromosome */
@@ -8913,7 +8914,10 @@ export interface components {
         LdVariant: {
             /** Variant Id */
             variant_id: string;
-            /** @description Assembly namespace the variant was read from (see AlleleFreqVariant). */
+            /**
+             * @description Assembly namespace the variant was read from (see AlleleFreqVariant).
+             * @title Assembly
+             */
             assembly: string;
             /** Chromosome */
             chromosome: string;

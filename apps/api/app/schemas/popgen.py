@@ -82,6 +82,7 @@ class AlleleFreqRequest(RegionQuery):
 class AlleleFreqVariant(BaseModel):
     variant_id: str
     assembly: str = Field(
+        title="Assembly",
         description=(
             # The line breaks are part of the published description: the
             # committed OpenAPI snapshot spells this field that way.
@@ -200,7 +201,8 @@ class LdRequest(RegionQuery):
 class LdVariant(BaseModel):
     variant_id: str
     assembly: str = Field(
-        description="Assembly namespace the variant was read from (see AlleleFreqVariant)."
+        title="Assembly",
+        description="Assembly namespace the variant was read from (see AlleleFreqVariant).",
     )
     chromosome: str
     position: int
