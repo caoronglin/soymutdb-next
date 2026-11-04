@@ -243,7 +243,6 @@ JOBS=(
   mcp-e2e
   image-build
   release
-  dump-openapi
 )
 
 list_jobs() {
@@ -672,24 +671,6 @@ Commands:
 
 Jobs: see `list`.
 USAGE
-}
-
-# -----------------------------------------------------------------------------
-# dump-openapi — TEMPORARY diagnostic, delete with its .cnb.yml stage
-# -----------------------------------------------------------------------------
-# check:contract regenerates the client from a schema exported by
-# apps/api/.venv/bin/python on the pinned 3.15 interpreter. The committed
-# snapshot matches a local export byte-for-byte, so when the gate still reports
-# CONTRACT DEBT the remaining explanation is an export-time difference between
-# the two interpreters. This job copies the CI-side artifact into
-# `artifacts/`, which endStages uploads, so the delta can be diffed rather than
-# guessed at. It is not a gate and asserts nothing.
-dump_openapi_run() {
-  local output="${REPO_ROOT}/artifacts/openapi-ci.json"
-  mkdir -p "$(dirname "${output}")"
-  PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}" \
-    "${REPO_ROOT}/apps/api/.venv/bin/python" \
-    "${REPO_ROOT}/apps/api/scripts/export_openapi.py" --output "${output}"
 }
 
 main() {
