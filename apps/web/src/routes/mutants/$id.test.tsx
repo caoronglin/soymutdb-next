@@ -108,3 +108,55 @@ describe("mutant line detail", () => {
     expect(html).not.toContain(`data-row-key="${observation.id}"`);
   });
 });
+
+describe("mutant line detail — row identity", () => {
+  // A table with ONE row has exactly one distinct key, so *any* row-key
+  // strategy produces unique keys and passes. That is why `rowKey="id"` (the
+  // persistence key) survived here: the leak path and the correctness path both
+  // rendered the same DOM. Two observations make uniqueness a real assertion.
+  const second: PhenotypeResponse = {
+    id: "911912",
+    mutant_line_public_id: "SMA1",
+    trait_category: "morphology",
+    trait_name: "Pod number",
+    trait_value: "41",
+    unit: "count",
+    description: null,
+  };
+
+  beforeEach(() => {
+    api.getMutantLinePhenotypes.mockResolvedValue([observation, second]);
+  });
+
+  it("keeps two observations with distinct row keys and hides their internal ids", async () => {
+    renderPage();
+
+    await waitFor(() => expect(screen.getByText("Plant height")).toBeTruthy());
+    await waitFor(() => expect(screen.getByText("Pod number")).toBeTruthy());
+
+    const keys = [...document.body.querySelectorAll("[data-row-key]")].map(
+      (node) => node.getAttribute("data-row-key") ?? "",
+    );
+    expect(keys.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(keys).size).toBe(keys.length);
+
+    const html = document.body.innerHTML;
+    for (const internal of [observation.id, second.id]) {
+      expect(html).not.toContain(internal);
+    }
+  });
+
+  // The render tuple is keyed on the observation's *content*, so a second page
+  // of observations reuses the row. Pinning the shape keeps the tuple from
+  // silently growing a field that is stable across rows (the internal id) or
+  // dropping one that separates them.
+  it("derives the row key from the public tuple, not from the payload id", async () => {
+    const { phenotypeRowKey } = await import("../phenotypes/$lineId");
+    const a = phenotypeRowKey(observation, "SMA1");
+    const b = phenotypeRowKey(second, "SMA1");
+    expect(a).not.toBe(b);
+    expect(a).not.toContain(observation.id);
+    expect(b).not.toContain(second.id);
+    expect(a).toBe(phenotypeRowKey({ ...observation, id: "999999" }, "SMA1"));
+  });
+});
