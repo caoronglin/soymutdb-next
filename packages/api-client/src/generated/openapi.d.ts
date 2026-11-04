@@ -5225,6 +5225,48 @@ export interface components {
             /** Events By Day Available */
             events_by_day_available: boolean;
         };
+        /**
+         * AnnotationSection
+         * @description The gene's GO/KEGG section, or the reason it is absent.
+         */
+        AnnotationSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Terms */
+            terms?: components["schemas"]["AnnotationTerm"][];
+            /** Source Name */
+            source_name?: string | null;
+            /** Source Version */
+            source_version?: string | null;
+            /** Source Url */
+            source_url?: string | null;
+        };
+        /**
+         * AnnotationTerm
+         * @description One GO/KEGG assertion with the evidence code its source carried.
+         */
+        AnnotationTerm: {
+            /**
+             * Ontology
+             * @enum {string}
+             */
+            ontology: "go" | "kegg";
+            /** Term Id */
+            term_id: string;
+            /** Term Name */
+            term_name: string;
+            /** Evidence Code */
+            evidence_code?: string | null;
+            /**
+             * Kind
+             * @default unknown
+             * @enum {string}
+             */
+            kind: "experimental" | "curated" | "predicted" | "transferred" | "imported" | "unknown";
+            /** Reference */
+            reference?: string | null;
+            /** Qualifier */
+            qualifier?: string | null;
+        };
         /** AssemblyResponse */
         AssemblyResponse: {
             /** Id */
@@ -6596,6 +6638,34 @@ export interface components {
             expires_at?: string | null;
         };
         /**
+         * ExpressionRecord
+         * @description One expression measurement. Absent values stay absent, never 0.
+         */
+        ExpressionRecord: {
+            /** Library Id */
+            library_id: string;
+            /** Library Name */
+            library_name: string;
+            /** Tissue */
+            tissue?: string | null;
+            /** Treatment */
+            treatment?: string | null;
+            /** Stage */
+            stage?: string | null;
+            /** Tpm */
+            tpm?: number | null;
+            /** Fpkm */
+            fpkm?: number | null;
+            /** Raw Count */
+            raw_count?: number | null;
+        };
+        /** ExpressionSection */
+        ExpressionSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Records */
+            records?: components["schemas"]["ExpressionRecord"][];
+        };
+        /**
          * ExternalArticlePlatform
          * @description Approved external article origins for an explicit editor preview.
          * @enum {string}
@@ -6768,38 +6838,20 @@ export interface components {
         };
         /** GeneDetail */
         GeneDetail: {
-            /**
-             * Id
-             * @default null
-             */
-            id: string | null;
-            /**
-             * Gene Id
-             * @default null
-             */
-            gene_id: string | null;
-            /**
-             * Assembly Id
-             * @default null
-             */
-            assembly_id: string | null;
-            /**
-             * Assembly Name
-             * @default null
-             */
-            assembly_name: string | null;
+            /** Id */
+            id?: string | null;
+            /** Gene Id */
+            gene_id?: string | null;
+            /** Assembly Id */
+            assembly_id?: string | null;
+            /** Assembly Name */
+            assembly_name?: string | null;
             /** Chromosome */
             chromosome: string;
-            /**
-             * Name
-             * @default null
-             */
-            name: string | null;
-            /**
-             * Symbol
-             * @default null
-             */
-            symbol: string | null;
+            /** Name */
+            name?: string | null;
+            /** Symbol */
+            symbol?: string | null;
             /**
              * Biotype
              * @default protein_coding
@@ -6814,11 +6866,8 @@ export interface components {
             /** End Pos */
             end_pos: number;
             strand: components["schemas"]["Strand"];
-            /**
-             * Description
-             * @default null
-             */
-            description: string | null;
+            /** Description */
+            description?: string | null;
             /**
              * Variant Count
              * @default 0
@@ -6828,20 +6877,19 @@ export interface components {
             transcripts?: components["schemas"]["TranscriptResponse"][];
             /** Aliases */
             aliases?: string[];
-            /**
-             * Created At
-             * @default null
-             */
-            created_at: string | null;
-            /**
-             * Updated At
-             * @default null
-             */
-            updated_at: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
             /** Sequences */
             sequences?: components["schemas"]["SequenceAvailability"][];
-            /** @default null */
-            model_evidence: components["schemas"]["EvidenceTag"] | null;
+            model_evidence?: components["schemas"]["EvidenceTag"] | null;
+            annotation_section?: components["schemas"]["AnnotationSection"] | null;
+            homolog_section?: components["schemas"]["HomologSection"] | null;
+            expression_section?: components["schemas"]["ExpressionSection"] | null;
+            variants_section?: components["schemas"]["VariantSection"] | null;
+            phenotype_section?: components["schemas"]["PhenotypeSection"] | null;
+            literature_section?: components["schemas"]["LiteratureSection"] | null;
         };
         /** GeneListResponse */
         GeneListResponse: {
@@ -7149,6 +7197,39 @@ export interface components {
             last_release_date?: string | null;
             /** Last Release Name */
             last_release_name?: string | null;
+        };
+        /**
+         * HomologRecord
+         * @description One ortholog/paralog assertion, with cross-assembly context.
+         */
+        HomologRecord: {
+            /** Homolog Species */
+            homolog_species: string;
+            /** Homolog Gene Id */
+            homolog_gene_id: string;
+            /**
+             * Homolog Type
+             * @enum {string}
+             */
+            homolog_type: "ortholog" | "paralog";
+            /** Method */
+            method?: string | null;
+            /** Source */
+            source?: string | null;
+            /**
+             * Kind
+             * @default transferred
+             * @enum {string}
+             */
+            kind: "experimental" | "curated" | "predicted" | "transferred" | "imported" | "unknown";
+            /** Confidence */
+            confidence?: number | null;
+        };
+        /** HomologSection */
+        HomologSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Records */
+            records?: components["schemas"]["HomologRecord"][];
         };
         /**
          * ImpactLevel
@@ -7540,6 +7621,30 @@ export interface components {
             ref_allele: string;
             /** Alt Allele */
             alt_allele: string;
+        };
+        /**
+         * LiteratureRecord
+         * @description One publication, identified by DOI/PMID rather than its row key.
+         */
+        LiteratureRecord: {
+            /** Title */
+            title: string;
+            /** Authors */
+            authors?: string | null;
+            /** Journal */
+            journal?: string | null;
+            /** Year */
+            year?: number | null;
+            /** Doi */
+            doi?: string | null;
+            /** Pmid */
+            pmid?: string | null;
+        };
+        /** LiteratureSection */
+        LiteratureSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Records */
+            records?: components["schemas"]["LiteratureRecord"][];
         };
         /** LocalTestPreviewMeta */
         LocalTestPreviewMeta: {
@@ -8526,6 +8631,26 @@ export interface components {
             new_password: string;
         };
         /**
+         * PhenotypeRecord
+         * @description One phenotype observation linked to the gene through a mutant line.
+         */
+        PhenotypeRecord: {
+            /** Mutant Public Id */
+            mutant_public_id: string;
+            /** Mutant Name */
+            mutant_name: string;
+            /** Trait Category */
+            trait_category: string;
+            /** Trait Name */
+            trait_name: string;
+            /** Trait Value */
+            trait_value?: string | null;
+            /** Unit */
+            unit?: string | null;
+            /** Measurement Method */
+            measurement_method?: string | null;
+        };
+        /**
          * PhenotypeResponse
          * @description Public representation of a phenotype observation.
          */
@@ -8544,6 +8669,12 @@ export interface components {
             unit?: string | null;
             /** Description */
             description?: string | null;
+        };
+        /** PhenotypeSection */
+        PhenotypeSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Records */
+            records?: components["schemas"]["PhenotypeRecord"][];
         };
         /** PluginApiCompatibility */
         PluginApiCompatibility: {
@@ -9355,6 +9486,28 @@ export interface components {
          */
         SearchResultType: "gene" | "variant" | "mutant_line" | "phenotype" | "publication";
         /**
+         * SectionStatus
+         * @description Presence, provenance and evidence strength of one gene-detail section.
+         */
+        SectionStatus: {
+            /**
+             * Section
+             * @enum {string}
+             */
+            section: "annotation" | "homolog" | "expression" | "variants" | "phenotype" | "literature";
+            /**
+             * State
+             * @default not_imported
+             * @enum {string}
+             */
+            state: "available" | "empty" | "not_imported";
+            /** Count */
+            count?: number | null;
+            evidence?: components["schemas"]["EvidenceTag"] | null;
+            /** Reason */
+            reason?: string | null;
+        };
+        /**
          * SeedInventoryResponse
          * @description Public seed-inventory projection.
          *
@@ -9520,26 +9673,14 @@ export interface components {
              * @enum {string}
              */
             availability: "available" | "unavailable";
-            /**
-             * Reason
-             * @default null
-             */
-            reason: string | null;
-            /**
-             * Length
-             * @default null
-             */
-            length: number | null;
-            /**
-             * Checksum
-             * @default null
-             */
-            checksum: string | null;
-            /**
-             * Sequence
-             * @default null
-             */
-            sequence: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Length */
+            length?: number | null;
+            /** Checksum */
+            checksum?: string | null;
+            /** Sequence */
+            sequence?: string | null;
         };
         /** SettingFieldSchema */
         SettingFieldSchema: {
@@ -9548,8 +9689,7 @@ export interface components {
              * @enum {string}
              */
             kind: "string" | "color" | "integer" | "boolean" | "enum" | "email" | "url" | "uuid";
-            /** Default */
-            default: string | number | boolean | null;
+            default: components["schemas"]["SettingValue"] | null;
             /**
              * Permission
              * @constant
@@ -9580,6 +9720,7 @@ export interface components {
             /** Max Length */
             max_length: number;
         };
+        SettingValue: string | number | boolean;
         /** SettingsDocumentResponse */
         SettingsDocumentResponse: {
             /** Section */
@@ -9588,7 +9729,7 @@ export interface components {
             version: number;
             /** Values */
             values: {
-                [key: string]: string | number | boolean;
+                [key: string]: components["schemas"]["SettingValue"];
             };
         };
         /** SettingsHistoryItem */
@@ -9602,11 +9743,11 @@ export interface components {
             action: "patch" | "put_compat" | "rollback";
             /** Values */
             values: {
-                [key: string]: string | number | boolean;
+                [key: string]: components["schemas"]["SettingValue"];
             };
             /** Changes */
             changes: {
-                [key: string]: string | number | boolean | null;
+                [key: string]: components["schemas"]["SettingValue"] | null;
             };
             /** Actor Id */
             actor_id?: string | null;
@@ -9635,7 +9776,7 @@ export interface components {
             expected_version: number;
             /** Values */
             values: {
-                [key: string]: string | number | boolean;
+                [key: string]: components["schemas"]["SettingValue"];
             };
         };
         /** SettingsRollbackRequest */
@@ -9673,7 +9814,7 @@ export interface components {
             section: string;
             /** Values */
             values: {
-                [key: string]: string | number | boolean;
+                [key: string]: components["schemas"]["SettingValue"];
             };
         };
         /** SettingsValidateResponse */
@@ -9688,7 +9829,7 @@ export interface components {
             valid: true;
             /** Values */
             values: {
-                [key: string]: string | number | boolean;
+                [key: string]: components["schemas"]["SettingValue"];
             };
         };
         /**
@@ -10667,6 +10808,19 @@ export interface components {
             gene_symbol?: string | null;
             consequence?: components["schemas"]["ConsequenceType"] | null;
             impact?: components["schemas"]["ImpactLevel"] | null;
+        };
+        /**
+         * VariantSection
+         * @description Release- and assembly-scoped variant totals for the gene.
+         */
+        VariantSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Total */
+            total?: number | null;
+            /** By Impact */
+            by_impact?: {
+                [key: string]: number;
+            };
         };
         /**
          * VariantType

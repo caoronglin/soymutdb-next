@@ -80,6 +80,121 @@ export interface EvidenceTag {
   source: string;
 }
 
+/**
+ * How much a section has to show.
+ *
+ * ``not_imported`` is not an empty result: the release holds no snapshot for
+ * this data at all. ``count`` is ``null`` in that case — never ``0`` — so a
+ * caller cannot mistake "unknown" for "measured zero".
+ */
+export type GeneSectionState = "available" | "empty" | "not_imported";
+
+export type GeneSectionName =
+  | "annotation"
+  | "homolog"
+  | "expression"
+  | "variants"
+  | "phenotype"
+  | "literature";
+
+/** Presence, provenance and evidence of one gene-detail section. */
+export interface GeneSectionStatus {
+  section: GeneSectionName;
+  state: GeneSectionState;
+  count: number | null;
+  evidence: EvidenceTag | null;
+  reason: string | null;
+}
+
+/** One GO/KEGG assertion, keeping the source's evidence code. */
+export interface GeneAnnotationTerm {
+  ontology: "go" | "kegg";
+  term_id: string;
+  term_name: string;
+  /** The source's code verbatim (``IDA``, ``IEA``...); ``null`` if absent. */
+  evidence_code: string | null;
+  kind: EvidenceKind;
+  reference: string | null;
+  qualifier: string | null;
+}
+
+export interface GeneAnnotationSection {
+  status: GeneSectionStatus;
+  terms: GeneAnnotationTerm[];
+  source_name: string | null;
+  source_version: string | null;
+  source_url: string | null;
+}
+
+export interface GeneHomologRecord {
+  homolog_species: string;
+  homolog_gene_id: string;
+  homolog_type: "ortholog" | "paralog";
+  /** How the relation was established; ``null`` when the source is silent. */
+  method: string | null;
+  source: string | null;
+  /** Always ``transferred``: the row describes another locus. */
+  kind: EvidenceKind;
+  confidence: number | null;
+}
+
+export interface GeneHomologSection {
+  status: GeneSectionStatus;
+  records: GeneHomologRecord[];
+}
+
+export interface GeneExpressionRecord {
+  library_id: string;
+  library_name: string;
+  tissue: string | null;
+  treatment: string | null;
+  stage: string | null;
+  /** Units are independently optional; ``null`` means not measured. */
+  tpm: number | null;
+  fpkm: number | null;
+  raw_count: number | null;
+}
+
+export interface GeneExpressionSection {
+  status: GeneSectionStatus;
+  records: GeneExpressionRecord[];
+}
+
+export interface GeneVariantSection {
+  status: GeneSectionStatus;
+  total: number | null;
+  by_impact: Record<string, number>;
+}
+
+export interface GenePhenotypeRecord {
+  mutant_public_id: string;
+  mutant_name: string;
+  trait_category: string;
+  trait_name: string;
+  trait_value: string | null;
+  unit: string | null;
+  measurement_method: string | null;
+}
+
+export interface GenePhenotypeSection {
+  status: GeneSectionStatus;
+  records: GenePhenotypeRecord[];
+}
+
+export interface GeneLiteratureRecord {
+  title: string;
+  authors: string | null;
+  journal: string | null;
+  year: number | null;
+  doi: string | null;
+  pmid: string | null;
+}
+
+export interface GeneLiteratureSection {
+  status: GeneSectionStatus;
+  records: GeneLiteratureRecord[];
+}
+
 export interface GeneDetail extends GeneSummary {
   source: string;
   extra: Record<string, unknown>;
@@ -93,6 +208,17 @@ export interface GeneDetail extends GeneSummary {
   sequences?: GeneSequenceAvailability[];
   /** How the gene model came to exist; ``null`` when the source is silent. */
   model_evidence?: EvidenceTag | null;
+  /**
+   * Optional blocks. Each carries its own status, so "this gene has none" and
+   * "this release never imported them" stay distinguishable. Optional on the
+   * wire: an older API build omits them rather than sending empty lists.
+   */
+  annotation_section?: GeneAnnotationSection | null;
+  homolog_section?: GeneHomologSection | null;
+  expression_section?: GeneExpressionSection | null;
+  variants_section?: GeneVariantSection | null;
+  phenotype_section?: GenePhenotypeSection | null;
+  literature_section?: GeneLiteratureSection | null;
   snp_count?: number;
   indel_count?: number;
   sv_count?: number;

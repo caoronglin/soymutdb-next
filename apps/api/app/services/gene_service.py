@@ -24,6 +24,7 @@ from ..schemas.genomic import (
     TranscriptPartResponse,
     TranscriptResponse,
 )
+from .gene_detail_sections import load_gene_sections
 from .release_context import (
     ReleaseContext,
     decode_bound_cursor,
@@ -251,9 +252,7 @@ class GeneService:
         back as ``0`` for every row (the React table rendered an always-empty
         column) and an unscoped count would have spanned draft releases.
         """
-        variant_count = _variant_count_subquery(release_context.release_id).label(
-            "variant_count"
-        )
+        variant_count = _variant_count_subquery(release_context.release_id).label("variant_count")
         stmt = (
             select(Gene, variant_count)
             .join(Assembly, Gene.assembly_id == Assembly.id)
@@ -289,14 +288,12 @@ class GeneService:
             stmt = stmt.where(Gene.assembly_id == int(params.assembly_id))
         if params.chromosome is not None:
             # genes stores a chromosome_id FK; filter via the joined name.
-            stmt = stmt.join(
-                Chromosome, Gene.chromosome_id == Chromosome.id
-            ).where(Chromosome.name == params.chromosome)
+            stmt = stmt.join(Chromosome, Gene.chromosome_id == Chromosome.id).where(
+                Chromosome.name == params.chromosome
+            )
             if params.assembly_id is not None:
                 # same chromosome names exist across assemblies.
-                stmt = stmt.where(
-                    Chromosome.assembly_id == int(params.assembly_id)
-                )
+                stmt = stmt.where(Chromosome.assembly_id == int(params.assembly_id))
         if params.biotype is not None:
             stmt = stmt.where(Gene.biotype == params.biotype)
         if params.search:
@@ -366,16 +363,12 @@ class GeneService:
         genes = [gene for gene, _count in rows]
 
         has_more = (
-            len(genes) > params.limit
-            if params.page is None
-            else params.page * page_size < total
+            len(genes) > params.limit if params.page is None else params.page * page_size < total
         )
         if has_more and params.page is None:
             genes = genes[: params.limit]
 
-        items = [
-            self._gene_to_response(gene, count) for gene, count in rows[: len(genes)]
-        ]
+        items = [self._gene_to_response(gene, count) for gene, count in rows[: len(genes)]]
         next_cursor = (
             encode_cursor(
                 genes[-1].accession,
@@ -431,8 +424,7 @@ class GeneService:
             raise NotFoundError(f"Gene {gene_id} not found")
         if len(genes) > 1:
             raise ValidationError(
-                f"Gene {gene_id} exists in multiple assemblies; "
-                "supply an explicit assembly_id",
+                f"Gene {gene_id} exists in multiple assemblies; supply an explicit assembly_id",
                 details={
                     "code": "ambiguous_assembly",
                     "assemblies": [
@@ -447,9 +439,7 @@ class GeneService:
         gene = genes[0]
 
         # Transcripts + exons are eager-loaded via relationship.
-        transcripts = [
-            self._transcript_to_response(t) for t in gene.transcripts
-        ]
+        transcripts = [self._transcript_to_response(t) for t in gene.transcripts]
         aliases = [a.alias for a in gene.aliases]
 
         # The detail header renders this as the gene's variant total. It must be
@@ -468,6 +458,11 @@ class GeneService:
             )
             or 0
         )
+
+        # Optional sections are assembled after the header so each one can
+        # report its own presence (`empty` vs `not_imported`) instead of being
+        # flattened into an empty list.
+        sections = await load_gene_sections(db, gene, release_context=release_context)
 
         return GeneDetail(
             id=str(gene.accession),
@@ -488,6 +483,7 @@ class GeneService:
             variant_count=variant_count,
             sequences=gene_sequence_availability(),
             model_evidence=gene_model_evidence(gene),
+            **sections,
             created_at=gene.created_at,
             updated_at=gene.updated_at,
         )
@@ -510,9 +506,9 @@ class GeneService:
             return {}
         stmt = select(Gene).where(Gene.accession.in_(list(accessions)))
         if release_context is not None:
-            stmt = stmt.join(
-                Assembly, Gene.assembly_id == Assembly.id
-            ).where(Assembly.release_id == release_context.release_id)
+            stmt = stmt.join(Assembly, Gene.assembly_id == Assembly.id).where(
+                Assembly.release_id == release_context.release_id
+            )
         if assembly_id is not None:
             stmt = stmt.where(Gene.assembly_id == int(assembly_id))
         result = await db.execute(stmt)
@@ -547,8 +543,7 @@ class GeneService:
             raise NotFoundError(f"Gene {accession} not found")
         if len(matches) > 1:
             raise ValidationError(
-                f"Gene {accession} exists in multiple assemblies; "
-                "supply an explicit assembly_id",
+                f"Gene {accession} exists in multiple assemblies; supply an explicit assembly_id",
                 details={"code": "ambiguous_assembly"},
             )
         return matches[0]
@@ -638,13 +633,9 @@ class GeneService:
             ],
         )
 
-    async def list_assemblies(
-        self, db: AsyncSession, *, release_id: int
-    ) -> list[AssemblyResponse]:
+    async def list_assemblies(self, db: AsyncSession, *, release_id: int) -> list[AssemblyResponse]:
         result = await db.execute(
-            select(Assembly)
-            .where(Assembly.release_id == release_id)
-            .order_by(Assembly.name)
+            select(Assembly).where(Assembly.release_id == release_id).order_by(Assembly.name)
         )
         return [
             AssemblyResponse(
