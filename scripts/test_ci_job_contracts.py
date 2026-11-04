@@ -576,7 +576,141 @@ class DeliveryArchitectureTests(unittest.TestCase):
             "the Rust gate extends .cnb.yml + ci-job-steps.sh; a separate "
             "pipeline is what §13.1 forbids",
         )
+    def test_bio_core_wheel_is_built_once_and_only_consumed_by_the_backend_gate(self) -> None:
+        """The backend gate installs the wheel; it never builds one.
 
+        Regression for a real review finding on PR #105: the api-tests CNB
+        stage is a bare `python:3.15` (no curl / cargo / C linker), so a
+        `maturin build` inside scripts/verify-backend-tests.sh dies on the first
+        CI run for a reason unrelated to the change, and an uncached native
+        build (bio / noodles / rust-lapper / bio-seq, thin LTO) would add
+        minutes to every PR push. The wheel must be built ONCE by the bio-core
+        job and only CONSUMED by the backend gate (spec §13.5: install, do not
+        merely build). A missing wheel must still fail closed, never skip.
+        """
+        producer = (ROOT / "scripts/verify-bio-core.sh").read_text(encoding="utf-8")
+        backend = (ROOT / "scripts/verify-backend-tests.sh").read_text(encoding="utf-8")
+
+        # The producer owns the only maturin build and writes the wheel to the
+        # directory both gates agree on.
+        self.assertIn("maturin build", producer)
+        self.assertIn("artifacts/wheels", producer)
+        self.assertIn("SOYMUTDB_BIO_CORE_WHEEL_DIR", producer)
+
+        # The backend gate must NOT bootstrap a Rust toolchain or build the
+        # crate: that is the whole point of crossing the job boundary.
+        for forbidden in (
+            "sh.rustup.rs",
+            "maturin build",
+            "pip install --quiet \"maturin",
+            "RUSTUP_HOME",
+            "CARGO_HOME",
+            "command -v cc",
+            "command -v cargo",
+        ):
+            self.assertNotIn(forbidden, backend, forbidden)
+
+        # It still installs the exact artifact, imports it, and runs the wheel
+        # contract pytest — §13.5 is preserved, not weakened.
+        self.assertIn("--force-reinstall --no-deps", backend)
+        self.assertIn("import soymutdb_bio_core as c", backend)
+        self.assertIn("packages/bio-core/python_tests", backend)
+        self.assertIn("soymutdb_bio_core-*-cp315-*.whl", backend)
+
+        # Fail-closed: absent / ambiguous wheel is a hard exit, not a skip.
+        self.assertIn("expected exactly one cp315 bio-core wheel", backend)
+        self.assertIn("#BIO_CORE_WHEELS[@]} -ne 1", backend)
+        for skip in ("pytest.skip", "SKIPPED", "exit 0 #"):
+            self.assertNotIn(skip, backend, skip)
+
+    def test_github_mirror_hands_the_wheel_from_bio_core_to_api_tests(self) -> None:
+        """GitHub jobs do not share a filesystem: the wheel crosses as an artifact.
+
+        CNB shares /workspace between stages of one pipeline; GitHub Actions
+        needs an explicit upload/download pair plus a `needs` edge, otherwise
+        the api-tests job would fail closed on a wheel nobody produced there.
+        """
+        workflow = _workflow_text("ci.yml")
+        parsed = yaml.safe_load(workflow)
+        jobs = parsed["jobs"]
+
+        bio_core = jobs["bio-core"]
+        api_tests = jobs["api-tests"]
+        upload_steps = [
+            step for step in bio_core["steps"]
+            if "upload-artifact" in str(step.get("uses", ""))
+        ]
+        self.assertEqual(len(upload_steps), 1, "bio-core must upload exactly one wheel artifact")
+        upload = upload_steps[0]
+        self.assertEqual(upload["with"]["name"], "bio-core-wheel")
+        self.assertIn("artifacts/wheels/soymutdb_bio_core-*-cp315-*.whl", upload["with"]["path"])
+        self.assertEqual(upload["with"]["if-no-files-found"], "error")
+
+        download_steps = [
+            step for step in api_tests["steps"]
+            if "download-artifact" in str(step.get("uses", ""))
+        ]
+        self.assertEqual(len(download_steps), 1, "api-tests must download the wheel artifact")
+        download = download_steps[0]
+        self.assertEqual(download["with"]["name"], "bio-core-wheel")
+        self.assertEqual(download["with"]["path"], "artifacts/wheels")
+
+        # Ordering is explicit, so a failed producer stops the consumer instead
+        # of letting it fail on a stale or missing wheel.
+        self.assertEqual(api_tests["needs"], "bio-core")
+
+    def test_cnb_verify_pipelines_build_the_wheel_before_the_backend_gate(self) -> None:
+        """CNB shares /workspace: the producer stage must precede the consumer.
+
+        Every verify pipeline (PR / main push / manual) runs bio-core then
+        api-tests as ordered stages. If the order flips or the bio-core stage is
+        dropped, the backend gate fails closed on a wheel nobody produced. The
+        backend stage stays on the bare python:3.15 image — that is precisely
+        why it must not own a Rust toolchain.
+        """
+        for branch, event in (
+            ("main", "pull_request"),
+            ("main", "push"),
+            ("$", "web_trigger_verify"),
+        ):
+            pipelines = [
+                pipeline
+                for pipeline in _cnb_pipelines(branch, event)
+                if pipeline.get("name") == "verify"
+                or (event == "web_trigger_verify" and pipeline.get("name") == "verify-manual")
+            ]
+            self.assertTrue(pipelines, f"missing verify pipeline for {branch}/{event}")
+            for pipeline in pipelines:
+                stages = pipeline.get("stages", [])
+                names = [str(stage.get("name", "")) for stage in stages]
+                self.assertIn("Rust bio-core", names, f"{branch}/{event}: no wheel producer")
+                self.assertIn(
+                    "API + Worker verification", names,
+                    f"{branch}/{event}: no backend gate",
+                )
+                self.assertLess(
+                    names.index("Rust bio-core"),
+                    names.index("API + Worker verification"),
+                    f"{branch}/{event}: bio-core must run before api-tests",
+                )
+                api_stage = stages[names.index("API + Worker verification")]
+                self.assertEqual(
+                    api_stage.get("image"), "python:3.15",
+                    f"{branch}/{event}: api-tests must stay on the toolchain-free image",
+                )
+
+    def test_check_bio_core_wheel_static_parses_cargo_manifest(self) -> None:
+        """The static gate must parse Cargo.toml, not grep literal strings.
+
+        A string-match gate breaks on a reformat or a workspace-inherited
+        `pyo3.workspace = true`; tomllib is the real parser and is stdlib on the
+        pinned 3.15.
+        """
+        checker = (ROOT / "scripts/check_bio_core_wheel.py").read_text(encoding="utf-8")
+        self.assertIn("import tomllib", checker)
+        self.assertIn("tomllib.loads", checker)
+        self.assertIn('cargo.get("dependencies", {})', checker)
+        self.assertNotIn('"bio ="', checker)
 
     def test_github_workflows_delegate_instead_of_inlining_gates(self) -> None:
         ci = _workflow_text("ci.yml")

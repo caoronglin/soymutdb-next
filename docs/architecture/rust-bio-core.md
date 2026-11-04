@@ -69,9 +69,9 @@ FastAPI /api/v1/tools/sequence/*   →  Pydantic 限额  →  sequence_tools_ser
 ## 5. CI / 门禁（复用单一执行来源）
 
 - `scripts/ci-job-steps.sh` 的 `bio-core` job → `scripts/verify-bio-core.sh`：
-  `cargo fmt --check` → `clippy -D warnings` → `cargo test`（unit + golden + adversarial）→ `maturin build --locked` → **安装该 wheel** → import smoke → 真实科学断言 → `pytest python_tests`。
+  `cargo fmt --check` → `clippy -D warnings` → `cargo test`（unit + golden + adversarial）→ `maturin build --locked` → **安装该 wheel** → import smoke → 真实科学断言 → `pytest python_tests`。这是 wheel 的**唯一生产者**，产物写入 `artifacts/wheels/`。
 - `.cnb.yml`（PR/push/manual）、`.cnb/pipelines/verify.yml`、`.github/workflows/ci.yml` 三方各只写一行 `run bio-core` 委托，无平行 `rust.yml`。
-- `scripts/verify-backend-tests.sh` 在 API pytest 之前把**同一个 wheel** 装进 API venv，并跑 wheel 契约 pytest，保证后端套件跑的是发布制品而非源码 import。
+- `scripts/verify-backend-tests.sh` 在 API pytest 之前把**同一个 wheel** 装进 API venv，并跑 wheel 契约 pytest，保证后端套件跑的是发布制品而非源码 import。该脚本**只消费不构建**：`api-tests` 阶段是裸 `python:3.15`，没有 Rust 工具链。CNB 靠 `/workspace` 跨 stage 共享（bio-core 排在 api-tests 之前），GitHub 靠 `upload/download-artifact` + `needs` 交接；缺 wheel 一律失败关闭。
 - `scripts/smoke.sh`：`--profile contracts` 跑 `check_bio_core_wheel.py --static`；`--profile runtime` 跑 `--runtime`（import + 真实算法）。缺 wheel 一律 FAIL，不 SKIP 冒充 PASS。
 - `scripts/test_ci_job_contracts.py` 断言 job inventory、两家 provider 委托、wheel 产物与 smoke 集成。
 

@@ -38,9 +38,12 @@ stages:
 - name: Frontend verification
   script: bash scripts/ci-job-steps.sh run frontend
 # Rust bio-core gates, delegated to the shared job body (see .cnb.yml).
+# SINGLE wheel producer: artifacts/wheels/ is shared through /workspace with the
+# next stage, so api-tests (a bare python:3.15) only installs the wheel.
 - name: Rust bio-core
   script: bash scripts/ci-job-steps.sh run bio-core
 - name: API + Worker verification
+  # Consumes the wheel; verify-backend-tests.sh fails closed when it is absent.
   image: python:3.15
   script: bash scripts/ci-job-steps.sh run api-tests
 # Mirrors the root .cnb.yml stage. The repo contract suites had no CI coverage
