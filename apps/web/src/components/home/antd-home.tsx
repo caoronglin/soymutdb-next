@@ -126,14 +126,14 @@ function LatestNewsPanel() {
   }
 
   if (query.isError) {
-    return <Alert type="error" showIcon title={t("home.newsUnavailable", { defaultValue: "最新动态暂不可用" })} description={t("home.newsRetry", { defaultValue: "请稍后重试，当前没有使用演示数据替代。" })} />;
+    return <Alert type="error" showIcon title={t("home.newsUnavailable")} description={t("home.newsRetry")} />;
   }
 
   const items: NewsSummary[] = query.data?.featured.slice(0, 5) ?? [];
   if (items.length === 0) {
     return (
       <div data-testid="home-news-empty">
-        <Empty description={t("home.noNews", { defaultValue: "暂无已发布新闻" })} />
+        <Empty description={t("home.noNews")} />
       </div>
     );
   }
@@ -155,7 +155,7 @@ function LatestNewsPanel() {
               {pickNewsTitle(item, i18n.language)}
             </Link>
             <span className="block text-xs text-muted-foreground">
-              {item.category ? `${item.category} · ` : ""}{item.published_at ? formatDate(item.published_at) : t("home.newsMeta", { defaultValue: "最新发布" })}
+              {item.category ? `${item.category} · ` : ""}{item.published_at ? formatDate(item.published_at) : t("home.newsMeta")}
             </span>
           </div>
         </li>
@@ -216,10 +216,10 @@ export function AntdHome() {
             {get("hero.eyebrow", t("home.heroEyebrow"))}
           </Text>
           <Title level={1} style={{ margin: "18px 0 14px", color: "var(--foreground)", fontSize: "clamp(2rem, 4.5vw, 3rem)", lineHeight: 1.15, fontWeight: 700 }}>
-            {get("hero.title", t("home.heroTitle", { defaultValue: "探索多物种突变的未知疆域" }))}
+            {get("hero.title", t("home.heroTitle"))}
           </Title>
           <Paragraph style={{ maxWidth: "58ch", margin: "0 auto", color: "var(--muted-foreground)", fontSize: "clamp(1rem, 1.5vw, 1.1rem)", lineHeight: 1.7 }}>
-            {get("hero.subtitle", t("home.heroSubtitle", { defaultValue: "新一代多物种突变数据库，从基因组到表型一站探索。" }))}
+            {get("hero.subtitle", t("home.heroSubtitle"))}
           </Paragraph>
           <div className="mt-8">
             <PortalSearchBox testId="home-search" />
@@ -228,7 +228,7 @@ export function AntdHome() {
             <div className="mx-auto mt-10 aspect-[16/9] w-full max-w-3xl overflow-hidden rounded-2xl border border-border/60 shadow-sm">
               <img
                 src={heroImage}
-                alt={t("home.heroTitle", { defaultValue: "探索多物种突变的未知疆域" })}
+                alt={t("home.heroTitle")}
                 loading="lazy"
                 className="h-full w-full object-cover"
               />
@@ -246,10 +246,10 @@ export function AntdHome() {
           <Col xs={24} lg={9} className="flex flex-col">
             <div className="mb-3 flex items-baseline justify-between gap-3">
               <Title level={3} className="font-bold" style={{ margin: 0 }}>
-                {t("home.latestNews", { defaultValue: "最新动态" })}
+                {t("home.latestNews")}
               </Title>
               <Link to="/news" search={{ category: undefined, page: undefined }} className="home-section-link shrink-0 text-primary" style={{ fontWeight: 500 }}>
-                {t("home.openTool", { defaultValue: "进入" })} →
+                {t("home.openTool")} →
               </Link>
             </div>
             <Card className="flex-1 rounded-xl border border-border bg-card shadow-sm" styles={{ body: { padding: "4px 20px" } }}>
@@ -285,7 +285,7 @@ export function AntdHome() {
                           {t(slide.subKey, { defaultValue: slide.sub })}
                         </Paragraph>
                         <Button type="primary" onClick={goSearch} style={{ marginTop: 8 }}>
-                          {t("home.heroPrimary", { defaultValue: "开始探索" })} <ArrowRightOutlined />
+                          {t("home.heroPrimary")} <ArrowRightOutlined />
                         </Button>
                       </div>
                     </FluidGradient>
@@ -303,10 +303,10 @@ export function AntdHome() {
       <div className="container-prose pb-20 pt-4 md:pt-6">
         <div className="mb-5 flex items-baseline justify-between gap-3">
           <Title level={3} style={{ margin: 0, fontWeight: 700 }}>
-            {t("home.featuredTools", { defaultValue: "搜索工具" })}
+            {t("home.featuredTools")}
           </Title>
           <Link to="/search" className="home-section-link shrink-0 text-primary" style={{ fontWeight: 500 }}>
-            {t("home.openTool", { defaultValue: "进入" })} →
+            {t("home.openTool")} →
           </Link>
         </div>
 

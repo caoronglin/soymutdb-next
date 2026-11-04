@@ -140,6 +140,51 @@ check("a template rendered as visible JSX text is still copy", () => {
   assert(out.stderr.includes("Showing"), `expected the visible template to be named, got: ${out.stderr}`);
 });
 
+check("Chinese copy in a JSX child is reported", () => {
+  // Regression: the allowlist pattern `^[\\W\\d_]+$` classified every CJK
+  // code point as a non-word character, so a pure-Chinese string matched the
+  // "punctuation and digits only" exemption and was never reported. Half the
+  // portal's copy is Chinese; the guard was silent on all of it.
+  const out = run({ "page.tsx": `export default function P() {\n  return <p>\u57fa\u56e0\u7ec4\u89c6\u56fe</p>;\n}\n` });
+  assert(out.code === 1, `expected exit 1 for Chinese JSX text, got ${out.code}`);
+  assert(out.stderr.includes("\u57fa\u56e0\u7ec4\u89c6\u56fe"), `expected the Chinese literal to be named, got: ${out.stderr}`);
+});
+
+check("Chinese copy in a visible attribute is reported", () => {
+  const out = run({ "page.tsx": `export default function P() {\n  return <Button aria-label="\u5de6\u79fb" />;\n}\n` });
+  assert(out.code === 1, `expected exit 1 for a Chinese aria-label, got ${out.code}`);
+  assert(out.stderr.includes("\u5de6\u79fb"), `expected the Chinese label to be named, got: ${out.stderr}`);
+});
+
+check("a Chinese defaultValue in a visible position is reported like an English one", () => {
+  // The guard already inspects `defaultValue` fallbacks. The CJK exemption made
+  // the same shape pass in Chinese and fail in English, which is the bug.
+  const zh = run({
+    "page.tsx": `export default function P() {\n  return <p>{t("a.b", { defaultValue: "\u57fa\u56e0\u7ec4\u89c6\u56fe" })}</p>;\n}\n`,
+  });
+  const en = run({
+    "page.tsx": `export default function P() {\n  return <p>{t("a.b", { defaultValue: "Genome view" })}</p>;\n}\n`,
+  });
+  assert(en.code === 1, `expected the English defaultValue to be reported, got ${en.code}`);
+  assert(zh.code === 1, `expected the Chinese defaultValue to be reported too, got ${zh.code}`);
+  assert(zh.stderr.includes("\u57fa\u56e0\u7ec4\u89c6\u56fe"), `expected the Chinese fallback to be named, got: ${zh.stderr}`);
+});
+
+check("punctuation and digit-only strings are still exempt", () => {
+  // The exemption exists for separators and counts, not for prose. Widening it
+  // is what hid the Chinese copy, so pin that the original purpose still holds.
+  const out = run({
+    "sep.tsx": `export default function Sep() {\n  return <p>\u2014 \u00b7 \u00d7 \u2192</p>;\n}\n` +
+      `export function Count() {\n  return <span>1,234</span>;\n}\n`,
+  });
+  assert(out.code === 0, `expected exit 0 for separators and digits, got ${out.code}: ${out.stderr}`);
+});
+
+check("a mixed Chinese and English string is reported", () => {
+  const out = run({ "page.tsx": `export default function P() {\n  return <p>\u5df2\u53d1\u5e03 published rows</p>;\n}\n` });
+  assert(out.code === 1, `expected exit 1 for mixed copy, got ${out.code}`);
+});
+
 let failed = 0;
 for (const result of results) {
   if (result.ok) {

@@ -308,12 +308,8 @@ function GeneIdSearchComponent() {
               flank: INSERTION_FLANK_BP,
             }}
             className="link-underline font-mono text-xs font-medium text-primary"
-            title={t("genes.mutationSites.openLocus", {
-              defaultValue: "在基因组视图中打开该插入位点（上下游各 10 kb）",
-            })}
-            aria-label={t("genes.mutationSites.openLocus", {
-              defaultValue: "在基因组视图中打开该插入位点（上下游各 10 kb）",
-            })}
+            title={t("genes.mutationSites.openLocus")}
+            aria-label={t("genes.mutationSites.openLocus")}
           >
             {row.site.source_site_key}
           </Link>
@@ -349,7 +345,7 @@ function GeneIdSearchComponent() {
       render: (_, row) =>
         row.site ? (
           <Tag color={row.site.confidence === "H" ? "green" : "default"}>
-            {row.site.confidence === "H" ? "高" : "低"}
+            {row.site.confidence === "H" ? t("genes.confidence.high") : t("genes.confidence.low")}
           </Tag>
         ) : (
           <span className="text-muted-foreground">—</span>
@@ -391,7 +387,7 @@ function GeneIdSearchComponent() {
       render: (_, row) =>
         row.site ? (
           <Tag color={row.site.available ? "green" : "default"}>
-            {row.site.available ? "是" : "否"}
+            {row.site.available ? t("common.yes") : t("common.no")}
           </Tag>
         ) : (
           <span className="text-muted-foreground">—</span>

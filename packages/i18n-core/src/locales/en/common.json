@@ -352,6 +352,11 @@
         "year": "Year",
         "identifier": "Identifier"
       }
+    },
+    "confidence": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
     }
   },
   "variants": {
@@ -3199,7 +3204,8 @@
       "all": "All",
       "genes": "Genes",
       "markers": "Markers"
-    }
+    },
+    "pointer": "Cursor"
   },
   "dataTable": {
     "title": "Data table",

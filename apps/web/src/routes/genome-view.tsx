@@ -177,43 +177,43 @@ function LocusGenomeViewPage() {
   const renderControls = React.useCallback(
     (api: GenomeViewControlsApi) => (
       <Flex wrap align="center" gap={8}>
-        <Tooltip title={t("genomeView.controls.panLeft", { defaultValue: "左移" })}>
+        <Tooltip title={t("genomeView.controls.panLeft")}>
           <Button
             size="small"
             icon={<LeftOutlined />}
-            aria-label={t("genomeView.controls.panLeft", { defaultValue: "左移" })}
+            aria-label={t("genomeView.controls.panLeft")}
             onClick={() => api.pan(-api.panStepBp)}
           />
         </Tooltip>
-        <Tooltip title={t("genomeView.controls.panRight", { defaultValue: "右移" })}>
+        <Tooltip title={t("genomeView.controls.panRight")}>
           <Button
             size="small"
             icon={<RightOutlined />}
-            aria-label={t("genomeView.controls.panRight", { defaultValue: "右移" })}
+            aria-label={t("genomeView.controls.panRight")}
             onClick={() => api.pan(api.panStepBp)}
           />
         </Tooltip>
-        <Tooltip title={t("genomeView.controls.zoomIn", { defaultValue: "放大" })}>
+        <Tooltip title={t("genomeView.controls.zoomIn")}>
           <Button
             size="small"
             icon={<ZoomInOutlined />}
-            aria-label={t("genomeView.controls.zoomIn", { defaultValue: "放大" })}
+            aria-label={t("genomeView.controls.zoomIn")}
             onClick={() => api.zoom(ZOOM_STEP)}
           />
         </Tooltip>
-        <Tooltip title={t("genomeView.controls.zoomOut", { defaultValue: "缩小" })}>
+        <Tooltip title={t("genomeView.controls.zoomOut")}>
           <Button
             size="small"
             icon={<ZoomOutOutlined />}
-            aria-label={t("genomeView.controls.zoomOut", { defaultValue: "缩小" })}
+            aria-label={t("genomeView.controls.zoomOut")}
             onClick={() => api.zoom(1 / ZOOM_STEP)}
           />
         </Tooltip>
-        <Tooltip title={t("genomeView.controls.reset", { defaultValue: "复位" })}>
+        <Tooltip title={t("genomeView.controls.reset")}>
           <Button
             size="small"
             icon={<CompressOutlined />}
-            aria-label={t("genomeView.controls.reset", { defaultValue: "复位" })}
+            aria-label={t("genomeView.controls.reset")}
             onClick={api.reset}
           />
         </Tooltip>
@@ -245,14 +245,14 @@ function LocusGenomeViewPage() {
           className="link-underline inline-flex items-center gap-1 text-sm text-muted-foreground"
         >
           <ArrowLeftOutlined aria-hidden />
-          {t("genomeView.back", { defaultValue: "返回基因搜索" })}
+          {t("genomeView.back")}
         </Link>
 
-        <p className="eyebrow mt-6">{t("genomeView.eyebrow", { defaultValue: "基因组视图" })}</p>
+        <p className="eyebrow mt-6">{t("genomeView.eyebrow")}</p>
         <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight">
           {search.chromosome && search.position != null
             ? `${search.chromosome}:${formatNumber(search.position)}`
-            : t("genomeView.title", { defaultValue: "位点基因组视图" })}
+            : t("genomeView.title")}
         </h1>
         {structure ? (
           <Typography.Paragraph type="secondary" className="mt-2">
@@ -270,9 +270,7 @@ function LocusGenomeViewPage() {
             className="mt-6"
             type="warning"
             showIcon
-            title={t("genomeView.missingParams", {
-              defaultValue: "链接缺少组装版本、染色体或位点参数。",
-            })}
+            title={t("genomeView.missingParams")}
           />
         ) : null}
 
@@ -281,7 +279,7 @@ function LocusGenomeViewPage() {
             className="mt-6"
             type="error"
             showIcon
-            title={t("genomeView.loadError", { defaultValue: "无法加载该位点的注释。" })}
+            title={t("genomeView.loadError")}
           />
         ) : null}
 
@@ -289,7 +287,7 @@ function LocusGenomeViewPage() {
           className="mt-6"
           title={
             <span className="text-base">
-              {t("genomeView.cardTitle", { defaultValue: "位点注释" })}
+              {t("genomeView.cardTitle")}
             </span>
           }
           extra={
@@ -309,9 +307,7 @@ function LocusGenomeViewPage() {
             <Skeleton active paragraph={{ rows: 5 }} title={false} />
           ) : !structure || structure.genes.length === 0 ? (
             <Empty
-              description={t("genomeView.noGenes", {
-                defaultValue: "该窗口内没有已注释的基因。",
-              })}
+              description={t("genomeView.noGenes")}
             />
           ) : (
             <GenomeView
@@ -331,7 +327,7 @@ function LocusGenomeViewPage() {
             className="mt-6"
             title={
               <span className="text-base">
-                {t("genomeView.geneList", { defaultValue: "窗口内基因" })}
+                {t("genomeView.geneList")}
               </span>
             }
           >
@@ -356,13 +352,11 @@ function LocusGenomeViewPage() {
                     </Typography.Text>
                     {withStructure ? (
                       <Tag color="green" className="m-0 text-[10px]">
-                        {t("genomeView.hasStructure", {
-                          defaultValue: "含 CDS/UTR",
-                        })}
+                        {t("genomeView.hasStructure")}
                       </Tag>
                     ) : (
                       <Tag className="m-0 text-[10px]">
-                        {t("genomeView.bodyOnly", { defaultValue: "仅基因主体" })}
+                        {t("genomeView.bodyOnly")}
                       </Tag>
                     )}
                   </Flex>
