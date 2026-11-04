@@ -268,7 +268,7 @@ export function useVariantExport({
     }
     const timer = setTimeout(() => setPollExpired(true), remaining);
     return () => clearTimeout(timer);
-  }, [exportId, exportStatus]);
+  }, [exportId, exportStatus, pollDeadlineMs]);
 
   return {
     submitState,
