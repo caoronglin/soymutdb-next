@@ -396,7 +396,13 @@ function VariantsComponent() {
                 </Typography.Text>
               ) : null}
               <Table<VariantSummary>
-                rowKey="variant_id"
+                // `variant_id` is release-scoped, not canonical: the same
+                // number can name another record in another release, and the
+                // identifier column already prints it. Keying on it alone would
+                // let a cross-release or cross-assembly page collide and have
+                // React silently reuse a row. This is row stability for this
+                // page only; canonical identity is a separate, larger job.
+                rowKey={(row) => `${row.assembly ?? ""}:${row.variant_id}`}
                 onRow={() =>
                   ({ "data-testid": "variant-row" }) as React.HTMLAttributes<HTMLElement>
                 }
