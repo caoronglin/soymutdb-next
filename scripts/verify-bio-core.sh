@@ -104,12 +104,16 @@ WHEEL="$(ls -1 "${WHEEL_DIR}"/soymutdb_bio_core-*-cp315-*.whl 2>/dev/null | head
 echo "wheel: ${WHEEL}"
 
 step "wheel import + real scientific smoke"
-# Install into an isolated target so the ambient interpreter is not mutated,
-# then execute the exact compiled artifact (not the source tree).
+# Build an isolated venv: the CI image's system Python 3.15 has NO pytest
+# (real build cnb-6e3-1k6jsptrg died with "No module named pytest").  Creating
+# a throwaway venv installs both pytest and the exact wheel without mutating
+# the pipeline image, and keeps this gate identical on CNB / GitHub / a laptop.
 SMOKE_DIR="$(mktemp -d)"
 trap 'rm -rf "${SMOKE_DIR}"' EXIT
-"${PY}" -m pip install --quiet --no-deps --target "${SMOKE_DIR}" "${WHEEL}"
-PYTHONPATH="${SMOKE_DIR}" "${PY}" - <<'PY'
+"${PY}" -m venv "${SMOKE_DIR}/venv"
+SMOKE_PY="${SMOKE_DIR}/venv/bin/python"
+"${SMOKE_PY}" -m pip install --quiet pytest "${WHEEL}"
+"${SMOKE_PY}" - <<'PY'
 import soymutdb_bio_core as c
 
 cap = c.capabilities()
@@ -135,7 +139,6 @@ print("bio-core wheel smoke: PASS")
 PY
 
 step "wheel contract tests (pytest against the installed artifact)"
-PYTHONPATH="${SMOKE_DIR}" "${PY}" -m pytest \
-  "${CRATE_DIR}/python_tests" -q
+"${SMOKE_PY}" -m pytest "${CRATE_DIR}/python_tests" -q
 
 echo "==> bio-core verification: PASS"

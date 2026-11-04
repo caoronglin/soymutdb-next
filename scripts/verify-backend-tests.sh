@@ -87,12 +87,44 @@ step "Deprecated-API ratchet"
 "${VENV_PYTHON}" scripts/check_deprecated_api_usage.py --self-test
 "${VENV_PYTHON}" scripts/check_deprecated_api_usage.py
 
+step "Install the Rust bio-core wheel into the API test venv"
+# The /tools/sequence/* and /tools/intervals/overlap endpoints are backed by a
+# private compiled extension.  Their API tests (and the wheel contract tests)
+# must run against the SAME artifact the release images ship, not against a
+# source-tree import or a Python look-alike.  A missing wheel is a hard failure
+# here: the sequence tools are specified to fail closed with 503, so the gate
+# cannot quietly pass without the engine present.
+BIO_CORE_WHEEL_DIR="${SOYMUTDB_BIO_CORE_WHEEL_DIR:-${REPO_ROOT}/artifacts/wheels}"
+export CARGO_HOME="${CARGO_HOME:-${TMPDIR:-/tmp}/soymutdb-cargo}"
+export RUSTUP_HOME="${RUSTUP_HOME:-${TMPDIR:-/tmp}/soymutdb-rustup}"
+export PATH="${CARGO_HOME}/bin:${PATH}"
+command -v cargo >/dev/null 2>&1 || {
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --profile minimal --default-toolchain none --no-modify-path
+}
+command -v cc >/dev/null 2>&1 || { echo "missing C linker (cc) for the Rust wheel" >&2; exit 1; }
+"${VENV_PYTHON}" -m pip install --quiet "maturin==1.16.0"
+mkdir -p "${BIO_CORE_WHEEL_DIR}"
+(
+  cd "${REPO_ROOT}/packages/bio-core"
+  "${VENV_PYTHON}" -m maturin build --release --locked \
+    --interpreter "${VENV_PYTHON}" --out "${BIO_CORE_WHEEL_DIR}"
+)
+BIO_CORE_WHEEL="$(ls -1 "${BIO_CORE_WHEEL_DIR}"/soymutdb_bio_core-*-cp315-*.whl | head -1)"
+[[ -n "${BIO_CORE_WHEEL}" ]] || { echo "no cp315 bio-core wheel produced" >&2; exit 1; }
+"${VENV_PYTHON}" -m pip install --quiet --force-reinstall --no-deps "${BIO_CORE_WHEEL}"
+"${VENV_PYTHON}" -c "import soymutdb_bio_core as c; print('bio-core wheel:', c.capabilities()['engine_version'])"
+
 step "Shared job contract pytest"
 # packages/jobs-py is the canonical owner of the job payloads, the status
 # machine and the protein-FASTA submission contract. Both the API and the
 # worker validate against it, so its own tests belong to this gate; without
 # this step a change to the shared owner would be unexercised here.
 PYTHONPATH="${REPO_ROOT}" "${VENV_PYTHON}" -m pytest packages/jobs-py/tests -q
+
+step "Rust bio-core wheel contract (pytest against the installed artifact)"
+PYTHONPATH="${REPO_ROOT}" "${VENV_PYTHON}" -m pytest \
+  "${REPO_ROOT}/packages/bio-core/python_tests" -q
 
 step "API pytest (full tree)"
 (

@@ -502,6 +502,9 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertIn("maturin build", verify)
         self.assertIn("import soymutdb_bio_core", verify)
         self.assertIn("-m pytest", verify)
+        # Regression for cnb-6e3-1k6jsptrg: the CNB system Python 3.15 has
+        # no pytest, so the wheel gate must build its own throwaway venv.
+        self.assertIn("-m venv", verify)
         self.assertIn("--locked", verify)
         # The crate pins its own compiler; no second Rust version in the YAML.
         pin = (ROOT / "packages/bio-core/rust-toolchain.toml").read_text(encoding="utf-8")

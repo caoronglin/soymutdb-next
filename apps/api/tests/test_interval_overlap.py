@@ -98,6 +98,9 @@ async def test_overlap_count_vs_union_coverage() -> None:
         "Glyma.01G000100", "Glyma.01G000200", "Glyma.01G000300"
     }
     assert all(h.start in (10, 19) for h in q.hits)
+    # Pin both endpoints: contract for the conversion from the kernel's
+    # 0-based half-open (start0, end0) to 1-based inclusive (start, end).
+    assert {(h.start, h.end) for h in q.hits} == {(10, 20), (19, 30)}
 
 
 @pytest.mark.asyncio
