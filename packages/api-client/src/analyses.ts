@@ -52,8 +52,10 @@ export function requestUpload(
     filename,
     size,
     checksum_sha256: checksumSha256,
+    // The snapshot declares this field as always present (`default: null`), so
+    // an omitted content type goes on the wire as an explicit null.
+    content_type: contentType ?? null,
   };
-  if (contentType !== undefined) body.content_type = contentType;
   return http.post<AnalysesUploadResponse>("/analyses/uploads", { json: body });
 }
 
