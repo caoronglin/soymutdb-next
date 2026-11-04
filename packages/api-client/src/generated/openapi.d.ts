@@ -5325,7 +5325,6 @@ export interface components {
             /** Variant Id */
             variant_id: string;
             /**
-             * Assembly
              * @description Assembly namespace the variant was read from.
              *
              *     `variant_id` is only unique per (release, assembly); a row that travels
@@ -8905,10 +8904,7 @@ export interface components {
         LdVariant: {
             /** Variant Id */
             variant_id: string;
-            /**
-             * Assembly
-             * @description Assembly namespace the variant was read from (see AlleleFreqVariant).
-             */
+            /** @description Assembly namespace the variant was read from (see AlleleFreqVariant). */
             assembly: string;
             /** Chromosome */
             chromosome: string;
