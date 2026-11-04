@@ -5,7 +5,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeneOrthologs } from "@soymutdb/api-client";
 
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", async () => (await import("../../test/mocks")).mockTranslation);
 vi.mock("../../lib/release-scope", () => ({ useReleaseId: () => "2026.09" }));
 
 const api = vi.hoisted(() => ({ getGeneOrthologs: vi.fn() }));
@@ -119,7 +119,14 @@ describe("GeneOrthologSection", () => {
     const { container } = renderSection();
 
     await waitFor(() => expect(screen.getByText("GSO_1")).toBeTruthy());
-    const text = container.textContent ?? "";
+    // The section's own hint says the relationship types come from the
+    // imported rows *rather than* from sequence similarity — so the copy
+    // contains "similarity" on purpose. Drop that one sentence before scanning
+    // for score vocabulary, or the guard fails on its own disclaimer.
+    const hint = container.querySelector("p.text-xs")?.textContent ?? "";
+    expect(hint).toMatch(/rather than|not from/i);
+    const text = (container.textContent ?? "").replace(hint, "");
+
     // No e-value, bit score or identity column exists because the record has none.
     expect(text).not.toMatch(/e-?value/i);
     expect(text).not.toMatch(/bitscore|bit score/i);

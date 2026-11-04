@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeneFamilyList } from "@soymutdb/api-client";
+import { catalogs } from "@soymutdb/i18n-core";
 
 const runtime = vi.hoisted(() => ({
   search: { page: 1, assembly: "", level: "" } as Record<string, unknown>,
@@ -20,7 +21,7 @@ vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
 }));
 
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", async () => (await import("../../test/mocks")).mockTranslation);
 vi.mock("../../lib/release-scope", () => ({ useReleaseId: () => "2026.09" }));
 vi.mock("../../components/route-motion", () => ({
   FadeUp: ({ children }: { children: React.ReactNode }) => children,
@@ -88,10 +89,14 @@ describe("comparative family list", () => {
 
     await waitFor(() => expect(screen.getByTestId("comparative-empty")).toBeTruthy());
     const empty = screen.getByTestId("comparative-empty");
+    const list = (catalogs.en as unknown as {
+      comparative: { list: Record<string, string> };
+    }).comparative.list;
     // The copy says the scope holds no import; it must not claim "0 families".
-    expect(empty.textContent).toContain("comparative.list.empty");
-    expect(empty.textContent).toContain("comparative.list.emptyHint");
-    expect(empty.textContent).not.toContain("comparative.list.total");
+    expect(empty.textContent).toContain(list.empty);
+    expect(empty.textContent).toContain(list.emptyHint);
+    expect(empty.textContent).not.toContain(list.total.replace("{{total}}", "0"));
+    expect(empty.textContent).not.toMatch(/\b0 families\b/);
   });
 
   it("passes the URL filters and page straight to the API", async () => {

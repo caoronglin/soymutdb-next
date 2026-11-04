@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ComparativeArtifact } from "@soymutdb/api-client";
 
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", async () => (await import("../../test/mocks")).mockTranslation);
 vi.mock("../../lib/release-scope", () => ({ useReleaseId: () => "2026.09" }));
 
 const api = vi.hoisted(() => ({

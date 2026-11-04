@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeneFamilyDetail } from "@soymutdb/api-client";
+import { catalogs } from "@soymutdb/i18n-core";
 
 const runtime = vi.hoisted(() => ({
   params: { familyId: "9" },
@@ -20,7 +21,7 @@ vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
 }));
 
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+vi.mock("react-i18next", async () => (await import("../../test/mocks")).mockTranslation);
 vi.mock("../../lib/release-scope", () => ({ useReleaseId: () => "2026.09" }));
 vi.mock("../../components/route-motion", () => ({
   FadeUp: ({ children }: { children: React.ReactNode }) => children,
@@ -153,7 +154,12 @@ describe("family detail coverage", () => {
     api.getFamily.mockRejectedValue(new Error("Not Found"));
     renderPage();
 
-    await waitFor(() => expect(screen.getByText("comparative.detail.notFound")).toBeTruthy());
+    // The shared double resolves the catalog, so assert the copy the page
+    // renders rather than the key string.
+    const notFound = (catalogs.en as unknown as {
+      comparative: { detail: Record<string, string> };
+    }).comparative.detail.notFound;
+    await waitFor(() => expect(screen.getByText(notFound)).toBeTruthy());
     expect(screen.queryByTestId("family-provenance")).toBeNull();
   });
 });

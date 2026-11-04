@@ -2,11 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach } from "vitest";
 
+import { catalogs } from "@soymutdb/i18n-core";
 import { CoverageTable, ComparativeStateNotice, coverageCount } from "./coverage-states";
 import type { SpeciesCoverage } from "@soymutdb/api-client";
 
-// Assert keys, never prose: the copy is locale data, the behaviour is not.
-vi.mock("react-i18next", () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+// The shared double resolves the real catalog, so these assertions read the
+// same copy the page renders. Comparing against the raw key would only pass
+// for a double that returns keys verbatim.
+vi.mock("react-i18next", async () => (await import("../../test/mocks")).mockTranslation);
+
+const EN = catalogs.en as unknown as {
+  comparative: { coverage: Record<string, string> };
+};
+const copy = (key: string) => EN.comparative.coverage[key];
 
 afterEach(() => cleanup());
 
@@ -53,8 +61,9 @@ describe("CoverageTable", () => {
     const notImported = document.querySelector('[data-coverage-state="not_imported"]');
 
     // Two different claims cannot share one label...
-    expect(noData?.textContent).toBe("comparative.coverage.no_data");
-    expect(notImported?.textContent).toBe("comparative.coverage.not_imported");
+    expect(noData?.textContent).toBe(copy("no_data"));
+    expect(notImported?.textContent).toBe(copy("not_imported"));
+    expect(copy("no_data")).not.toBe("comparative.coverage.no_data");
     expect(noData?.textContent).not.toBe(notImported?.textContent);
     // ...nor one colour.
     expect(noData?.className).not.toBe(notImported?.className);
@@ -75,7 +84,7 @@ describe("ComparativeStateNotice", () => {
       <ComparativeStateNotice state="not_imported" />,
     );
     expect(notImported.innerHTML).not.toBe(noDataHtml);
-    expect(notImported.textContent).toContain("comparative.coverage.not_imported");
-    expect(noDataHtml).toContain("comparative.coverage.no_data");
+    expect(notImported.textContent).toContain(copy("not_imported"));
+    expect(noDataHtml).toContain(copy("no_data"));
   });
 });

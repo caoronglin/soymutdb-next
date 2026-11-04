@@ -36,7 +36,10 @@ The contract these tests state is the one that makes the gate meaningful:
   nothing; and
 * the snapshot and the generated client declare the same field set per
   schema, so one of them being regenerated without the other shows up here
-  instead of as "CONTRACT DEBT".
+  instead of as "CONTRACT DEBT"; and
+* the snapshot is a fixed point of the normalizer, so a file frozen before
+  its schemas grew cannot sit in the tree looking authoritative while every
+  real export disagrees with it.
 
 The checks below need neither Python 3.15 nor the API virtualenv, so they run
 in the dependency-free contracts layer and name the actual cause.
@@ -357,4 +360,56 @@ def test_generated_client_declares_every_snapshot_field() -> None:
         + "\n  ".join(mismatched[:20])
         + "\nRegenerate both files together under Python 3.15: "
         "`pnpm --filter @soymutdb/api-client generate:api-client`."
+    )
+
+
+# ---------------------------------------------------------------------------
+# The snapshot itself obeys the normalizer's rule
+# ---------------------------------------------------------------------------
+
+
+def test_snapshot_has_no_frozen_null_defaults() -> None:
+    """No optional nullable field in the snapshot carries ``default: null``.
+
+    This is the third shape of #33's failure and the one the checks above
+    cannot see. ``export_contract.py`` unifies optional nullable properties by
+    *removing* ``default: null``; a snapshot that still spells it on some
+    fields was written before the fields existed (or by a stale export), and
+    from then on every real export disagrees with it on exactly those fields.
+    #23 added the comparative sections to ``GeneDetail`` and the snapshot kept
+    seven of them flagged, so the gate failed on a document nobody had
+    touched -- 20 fields, reported as "CONTRACT DEBT" with no file named.
+
+    Applying the normalizer to the snapshot makes that state self-evident: a
+    document that is already normalized is a fixed point of it. Neither the
+    re-export nor the normalizer can run here (no Python 3.15, no API
+    dependencies), but this states the same contract in the layer that runs
+    without either.
+    """
+
+    module = _export_module()
+    snapshot = _document()
+    normalized = module.normalize(json.loads(json.dumps(snapshot)))
+    if normalized == snapshot:
+        return
+
+    frozen: list[str] = []
+    before = snapshot["components"]["schemas"]
+    after = normalized["components"]["schemas"]
+    for name, schema in before.items():
+        properties = schema.get("properties") if isinstance(schema, dict) else None
+        if not isinstance(properties, dict):
+            continue
+        for field, prop in properties.items():
+            restored = after[name]["properties"][field]
+            if prop != restored:
+                frozen.append(f"{name}.{field}")
+    raise AssertionError(
+        "packages/api-client/openapi.json is not a fixed point of its own "
+        f"normalizer: {len(frozen)} field(s) differ from the spelling the "
+        f"export would write, e.g. {sorted(frozen)[:8]}. Those fields were "
+        "frozen before the schema grew them, or a hand edit reinstated the "
+        "spelling the normalizer removes -- either way every real export then "
+        "disagrees with this file. Regenerate rather than patch: "
+        "`pnpm --filter @soymutdb/api-client generate:api-client` under Python 3.15."
     )

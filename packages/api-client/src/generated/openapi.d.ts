@@ -7143,38 +7143,20 @@ export interface components {
         };
         /** GeneDetail */
         GeneDetail: {
-            /**
-             * Id
-             * @default null
-             */
-            id: string | null;
-            /**
-             * Gene Id
-             * @default null
-             */
-            gene_id: string | null;
-            /**
-             * Assembly Id
-             * @default null
-             */
-            assembly_id: string | null;
-            /**
-             * Assembly Name
-             * @default null
-             */
-            assembly_name: string | null;
+            /** Id */
+            id?: string | null;
+            /** Gene Id */
+            gene_id?: string | null;
+            /** Assembly Id */
+            assembly_id?: string | null;
+            /** Assembly Name */
+            assembly_name?: string | null;
             /** Chromosome */
             chromosome: string;
-            /**
-             * Name
-             * @default null
-             */
-            name: string | null;
-            /**
-             * Symbol
-             * @default null
-             */
-            symbol: string | null;
+            /** Name */
+            name?: string | null;
+            /** Symbol */
+            symbol?: string | null;
             /**
              * Biotype
              * @default protein_coding
@@ -7189,11 +7171,8 @@ export interface components {
             /** End Pos */
             end_pos: number;
             strand: components["schemas"]["Strand"];
-            /**
-             * Description
-             * @default null
-             */
-            description: string | null;
+            /** Description */
+            description?: string | null;
             /**
              * Variant Count
              * @default 0
@@ -7203,32 +7182,19 @@ export interface components {
             transcripts?: components["schemas"]["TranscriptResponse"][];
             /** Aliases */
             aliases?: string[];
-            /**
-             * Created At
-             * @default null
-             */
-            created_at: string | null;
-            /**
-             * Updated At
-             * @default null
-             */
-            updated_at: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
             /** Sequences */
             sequences?: components["schemas"]["SequenceAvailability"][];
-            /** @default null */
-            model_evidence: components["schemas"]["EvidenceTag"] | null;
-            /** @default null */
-            annotation_section: components["schemas"]["AnnotationSection"] | null;
-            /** @default null */
-            homolog_section: components["schemas"]["HomologSection"] | null;
-            /** @default null */
-            expression_section: components["schemas"]["ExpressionSection"] | null;
-            /** @default null */
-            variants_section: components["schemas"]["VariantSection"] | null;
-            /** @default null */
-            phenotype_section: components["schemas"]["PhenotypeSection"] | null;
-            /** @default null */
-            literature_section: components["schemas"]["LiteratureSection"] | null;
+            model_evidence?: components["schemas"]["EvidenceTag"] | null;
+            annotation_section?: components["schemas"]["AnnotationSection"] | null;
+            homolog_section?: components["schemas"]["HomologSection"] | null;
+            expression_section?: components["schemas"]["ExpressionSection"] | null;
+            variants_section?: components["schemas"]["VariantSection"] | null;
+            phenotype_section?: components["schemas"]["PhenotypeSection"] | null;
+            literature_section?: components["schemas"]["LiteratureSection"] | null;
         };
         /** GeneListResponse */
         GeneListResponse: {
@@ -10084,26 +10050,14 @@ export interface components {
              * @enum {string}
              */
             availability: "available" | "unavailable";
-            /**
-             * Reason
-             * @default null
-             */
-            reason: string | null;
-            /**
-             * Length
-             * @default null
-             */
-            length: number | null;
-            /**
-             * Checksum
-             * @default null
-             */
-            checksum: string | null;
-            /**
-             * Sequence
-             * @default null
-             */
-            sequence: string | null;
+            /** Reason */
+            reason?: string | null;
+            /** Length */
+            length?: number | null;
+            /** Checksum */
+            checksum?: string | null;
+            /** Sequence */
+            sequence?: string | null;
         };
         /** SettingFieldSchema */
         SettingFieldSchema: {
