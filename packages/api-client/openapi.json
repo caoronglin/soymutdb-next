@@ -20535,7 +20535,8 @@
           "id",
           "name",
           "species",
-          "version"
+          "version",
+          "statistics"
         ],
         "title": "AssemblyDetailResponse",
         "description": "One assembly, its counts, and its chromosomes.\n\nThe chromosome list is what makes \"the assembly does not exist\" and \"the\nassembly exists but has no chromosomes\" distinguishable answers rather\nthan two identical empty payloads."
@@ -20669,8 +20670,15 @@
           }
         },
         "type": "object",
+        "required": [
+          "gene_count",
+          "transcript_count",
+          "chromosome_count",
+          "total_length",
+          "download_count"
+        ],
         "title": "AssemblyStatistics",
-        "description": "Counts derived from real rows, scoped to one assembly.\n\nEvery number here is a ``COUNT``/``SUM`` over rows that carry an\n``assembly_id`` of their own. Nothing is read from ``Release.gene_count`` or\nany other denormalised counter: a release owns several assemblies, so a\nrelease-level total copied onto each assembly would report the whole\nrelease's genes once per assembly.\n\nEach count is an :class:`AssemblyMetric` rather than a bare ``int`` so that\n\"we could not count this\" survives the trip to the client. A histogram over\nan empty assembly and an assembly whose statistics were never computed both\nused to arrive as ``0``; with the metric shape the second arrives as\n``{\"value\": null, \"reason\": \"...\"}`` and the page can say so.\n\n``download_count`` is always unknown. ``download_files`` has no assembly\ncolumn -- it is linked to a release and its ``category`` is free text -- so\nthere is no relation to aggregate over. Guessing an assembly from a category\nstring would invent a number, and borrowing the release's download total\nwould be the same mistake as borrowing its gene count."
+        "description": "Counts derived from real rows, scoped to one assembly.\n\nEvery number here is a ``COUNT``/``SUM`` over rows that carry an\n``assembly_id`` of their own. Nothing is read from ``Release.gene_count`` or\nany other denormalised counter: a release owns several assemblies, so a\nrelease-level total copied onto each assembly would report the whole\nrelease's genes once per assembly.\n\nEach count is an :class:`AssemblyMetric` rather than a bare ``int`` so that\n\"we could not count this\" survives the trip to the client. A histogram over\nan empty assembly and an assembly whose statistics were never computed both\nused to arrive as ``0``; with the metric shape the second arrives as\n``{\"value\": null, \"reason\": \"...\"}`` and the page can say so.\n\n``download_count`` is always unknown. ``download_files`` has no assembly\ncolumn -- it is linked to a release and its ``category`` is free text -- so\nthere is no relation to aggregate over. Guessing an assembly from a category\nstring would invent a number, and borrowing the release's download total\nwould be the same mistake as borrowing its gene count.\n\nAll five fields are required on purpose. A default of ``AssemblyMetric()``\nis ``value=None, reason=None``, which the metric's own validator rejects, so\na defaulted field could not even be constructed -- and any value that *did*\nconstruct would be an unstated measurement. Requiring them moves \"somebody\nforgot to say\" from the reader's guess to a schema error at write time."
       },
       "AssemblySummaryResponse": {
         "properties": {
@@ -20773,7 +20781,8 @@
           "id",
           "name",
           "species",
-          "version"
+          "version",
+          "statistics"
         ],
         "title": "AssemblySummaryResponse",
         "description": "An assembly in the resolved release, with its own real counts."
