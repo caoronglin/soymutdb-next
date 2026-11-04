@@ -1,9 +1,11 @@
 /**
  * One assembly (`/assemblies/$assemblyId`).
  *
- * The counts come from the same per-assembly aggregate as the list page. The
- * chromosome table is the reason this page exists: an assembly with zero
- * chromosomes and an assembly that does not exist must not look the same.
+ * The counts come from the same per-assembly aggregate as the list page, and
+ * are rendered through the same `AssemblyMetricText`: a count that could not be
+ * derived says so and says why, instead of printing a zero. The chromosome table
+ * is the reason this page exists: an assembly with zero chromosomes and an
+ * assembly that does not exist must not look the same.
  */
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -19,8 +21,9 @@ import {
 } from "@/lib/antd";
 import { ArrowLeftOutlined as ArrowLeft } from "@ant-design/icons";
 import type { AssemblyChromosome } from "@soymutdb/api-client";
+import { AssemblyMetricText } from "../../components/assembly-metric";
 import { FadeUp } from "../../components/route-motion";
-import { formatNumber, formatPosition } from "../../lib/format";
+import { formatPosition } from "../../lib/format";
 import { assemblyDetailQueryOptions } from "../../lib/query-options";
 import { useReleaseId } from "../../lib/release-scope";
 import { SITE_VARIANT } from "../../lib/site-variant";
@@ -99,25 +102,32 @@ function AssemblyDetailComponent() {
 
         <Descriptions column={2} size="small" className="mb-4">
           <Descriptions.Item label={t("assemblies.columns.genes")}>
-            {formatNumber(assembly.statistics.gene_count)}
+            <AssemblyMetricText metric={assembly.statistics.gene_count} testId="assembly-genes" />
           </Descriptions.Item>
           <Descriptions.Item label={t("assemblies.columns.transcripts")}>
-            {formatNumber(assembly.statistics.transcript_count)}
+            <AssemblyMetricText
+              metric={assembly.statistics.transcript_count}
+              testId="assembly-transcripts"
+            />
           </Descriptions.Item>
           <Descriptions.Item label={t("assemblies.columns.chromosomes")}>
-            {formatNumber(assembly.statistics.chromosome_count)}
+            <AssemblyMetricText
+              metric={assembly.statistics.chromosome_count}
+              testId="assembly-chromosomes"
+            />
           </Descriptions.Item>
           <Descriptions.Item label={t("assemblies.columns.length")}>
-            {formatPosition(assembly.statistics.total_length)}
+            <AssemblyMetricText
+              metric={assembly.statistics.total_length}
+              basePairs
+              testId="assembly-length"
+            />
           </Descriptions.Item>
           <Descriptions.Item label={t("assemblies.columns.downloads")} span={2}>
-            <span
-              className="text-xs opacity-70"
-              title={assembly.statistics.download_count_reason ?? undefined}
-              data-download-count="unavailable"
-            >
-              {t("assemblies.downloadsNotRecorded")}
-            </span>
+            <AssemblyMetricText
+              metric={assembly.statistics.download_count}
+              testId="assembly-downloads"
+            />
           </Descriptions.Item>
           <Descriptions.Item label={t("assemblies.release")} span={2}>
             {assembly.release_version ?? t("assemblies.releaseUnavailable")}

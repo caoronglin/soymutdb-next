@@ -3566,7 +3566,6 @@
     "default": "默认",
     "release": "发布版本",
     "releaseUnavailable": "未标注",
-    "downloadsNotRecorded": "未记录",
     "empty": "该发布版本下没有装配。",
     "loadFailed": "装配数据加载失败。",
     "notFound": "该发布版本下没有这套装配。",
@@ -3581,6 +3580,15 @@
       "length": "总长度 (bp)",
       "chromosome": "染色体",
       "downloads": "下载"
+    },
+    "metric": {
+      "unknown": "未统计",
+      "reason": {
+        "no_chromosomes": "该装配下没有染色体记录。",
+        "no_genes": "该装配尚未导入注释。",
+        "no_transcripts": "该装配下没有转录本记录。",
+        "no_linked_downloads": "该装配没有关联的下载文件。"
+      }
     }
   }
 }

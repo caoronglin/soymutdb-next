@@ -7,16 +7,18 @@
  * point of the page: a reader comparing v4 and v5 must not be shown the same
  * number twice.
  *
- * `download_count` is rendered as "not recorded", not as 0 and not as the
- * release's download total. `download_files` has no assembly dimension.
+ * Every count is an `AssemblyMetric`: a number, or "not counted" plus the
+ * reason the aggregate could not answer. `download_count` is always the second
+ * kind -- `download_files` has no assembly dimension -- and is never shown as 0
+ * nor replaced by the release's download total.
  */
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Card, Empty, Skeleton, Table, Tag, type TableColumnsType } from "@/lib/antd";
 import type { AssemblySummary } from "@soymutdb/api-client";
+import { AssemblyMetricText } from "../../components/assembly-metric";
 import { FadeUp } from "../../components/route-motion";
-import { formatNumber } from "../../lib/format";
 import { assemblyStatisticsQueryOptions } from "../../lib/query-options";
 import { useReleaseId } from "../../lib/release-scope";
 import { SITE_VARIANT } from "../../lib/site-variant";
@@ -63,40 +65,35 @@ function AssembliesComponent() {
       title: t("assemblies.columns.genes"),
       key: "gene_count",
       align: "right",
-      render: (_value, row) => formatNumber(row.statistics.gene_count),
+      render: (_value, row) => <AssemblyMetricText metric={row.statistics.gene_count} />,
     },
     {
       title: t("assemblies.columns.transcripts"),
       key: "transcript_count",
       align: "right",
-      render: (_value, row) => formatNumber(row.statistics.transcript_count),
+      render: (_value, row) => <AssemblyMetricText metric={row.statistics.transcript_count} />,
     },
     {
       title: t("assemblies.columns.chromosomes"),
       key: "chromosome_count",
       align: "right",
-      render: (_value, row) => formatNumber(row.statistics.chromosome_count),
+      render: (_value, row) => (
+        <AssemblyMetricText metric={row.statistics.chromosome_count} />
+      ),
     },
     {
       title: t("assemblies.columns.length"),
       key: "total_length",
       align: "right",
-      render: (_value, row) => formatNumber(row.statistics.total_length),
+      render: (_value, row) => (
+        <AssemblyMetricText metric={row.statistics.total_length} basePairs />
+      ),
     },
     {
       title: t("assemblies.columns.downloads"),
       key: "download_count",
       align: "right",
-      // A dash plus the reason, never a zero: this number does not exist.
-      render: (_value, row) => (
-        <span
-          className="text-xs opacity-70"
-          title={row.statistics.download_count_reason ?? undefined}
-          data-download-count="unavailable"
-        >
-          {t("assemblies.downloadsNotRecorded")}
-        </span>
-      ),
+      render: (_value, row) => <AssemblyMetricText metric={row.statistics.download_count} />,
     },
   ];
 

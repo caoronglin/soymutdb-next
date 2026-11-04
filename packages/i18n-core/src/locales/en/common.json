@@ -3566,7 +3566,6 @@
     "default": "Default",
     "release": "Release",
     "releaseUnavailable": "Not stated",
-    "downloadsNotRecorded": "Not recorded",
     "empty": "This release has no assemblies.",
     "loadFailed": "Assemblies could not be loaded.",
     "notFound": "No such assembly in this release.",
@@ -3581,6 +3580,15 @@
       "length": "Total length (bp)",
       "chromosome": "Chromosome",
       "downloads": "Downloads"
+    },
+    "metric": {
+      "unknown": "Not counted",
+      "reason": {
+        "no_chromosomes": "No chromosome rows are recorded for this assembly.",
+        "no_genes": "No annotation has been imported for this assembly.",
+        "no_transcripts": "No transcripts are recorded for this assembly.",
+        "no_linked_downloads": "No download file is linked to this assembly."
+      }
     }
   }
 }
