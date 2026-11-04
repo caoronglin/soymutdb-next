@@ -27,6 +27,15 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_VERSION = 1
 
+#: Per-analyzer wall-clock ceiling, in seconds. CNB kills a stage that prints
+#: nothing for ten minutes, and an analyzer that hangs -- `uv run` compiling the
+#: worker's science stack, `pnpm dlx` resolving a fresh tool -- says nothing
+#: until it finishes. Without a ceiling the whole stage dies with
+#: "task exceeded 10m with no output" and leaves no record of *which* analyzer
+#: was still running, which is the one fact the evidence bundle needs.
+#: A check may override it with `"timeout_seconds"` in the policy.
+DEFAULT_CHECK_TIMEOUT_SECONDS = 240
+
 # `scripts/compose_loader.py` is a sibling module, not an installed package: the
 # suite is collected by path (`pytest scripts/…`), which does not put `scripts/`
 # on `sys.path`.
@@ -798,6 +807,48 @@ def _rewrite_for_probe(command: list[str]) -> list[str] | None:
     return ["uv", "run", *selector, "python", "-c", PROBE_SCRIPT]
 
 
+def _check_timeout_seconds(check: dict[str, Any]) -> int:
+    """Resolve the wall-clock ceiling for one analyzer.
+
+    The policy override exists because the analyzers differ by an order of
+    magnitude: `pnpm duplicate-versions` answers in a second, while
+    `python-licenses-worker` compiles the science stack on a cold uv cache.
+    """
+    override = check.get("timeout_seconds", DEFAULT_CHECK_TIMEOUT_SECONDS)
+    if not isinstance(override, int) or isinstance(override, bool) or override <= 0:
+        raise ValueError(
+            f"{check.get('name')}: timeout_seconds must be a positive integer, "
+            f"got {override!r}"
+        )
+    return override
+
+
+def _timeout_stderr(
+    expired: subprocess.TimeoutExpired, timeout_seconds: int
+) -> str:
+    """Explain a killed analyzer in the same file the evidence bundle reads.
+
+    The partial output matters: a compile that stalled shows the last package
+    it was building, which is the difference between "the network is slow" and
+    "h5py needs headers this image does not have".
+    """
+    lines = [
+        f"analyzer exceeded its {timeout_seconds}s ceiling and was killed",
+        f"command: {' '.join(str(part) for part in expired.cmd)}",
+    ]
+    partial = expired.stderr
+    if isinstance(partial, bytes):
+        partial = partial.decode("utf-8", "replace")
+    if partial and partial.strip():
+        lines.extend(["", "--- stderr captured before the kill ---", partial.strip()])
+    stdout = expired.stdout
+    if isinstance(stdout, bytes):
+        stdout = stdout.decode("utf-8", "replace")
+    if stdout and stdout.strip():
+        lines.extend(["", "--- stdout captured before the kill ---", stdout.strip()])
+    return "\n".join(lines) + "\n"
+
+
 def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
     name = str(check["name"])
     category = str(check["category"])
@@ -831,14 +882,31 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
     if cwd != ROOT and ROOT not in cwd.parents:
         raise ValueError(f"audit cwd escapes repository: {cwd_value}")
 
-    completed = subprocess.run(
-        command,
-        cwd=cwd,
-        check=False,
-        capture_output=True,
-        text=True,
-        env=os.environ.copy(),
-    )
+    timeout_seconds = _check_timeout_seconds(check)
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=cwd,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as expired:
+        # Name the analyzer instead of letting the whole stage die silent. The
+        # runner records a failed row for THIS check and moves on, so the other
+        # sixteen still produce their evidence.
+        stderr_path.write_text(
+            _timeout_stderr(expired, timeout_seconds), encoding="utf-8"
+        )
+        result_row.update(
+            {
+                "reason": f"analyzer_timeout:{timeout_seconds}s",
+                "status": "failed",
+            }
+        )
+        return result_row
     stderr_path.write_text(completed.stderr, encoding="utf-8")
     mode = str(report["mode"])
     if mode == "stdout":
@@ -1301,6 +1369,9 @@ def run_audits(config_path: Path, output: Path) -> int:
     if not isinstance(checks, list) or not checks:
         raise ValueError("dependency governance policy must contain checks")
     for check in checks:
+        # Validate the ceiling before any analyzer runs: a malformed value must
+        # be a policy error, not a failure discovered three minutes into a build.
+        _check_timeout_seconds(check)
         if check.get("normalize") == "license-expressions":
             allow_file = check.get("allow_file")
             if not isinstance(allow_file, str) or not allow_file:

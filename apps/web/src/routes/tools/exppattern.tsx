@@ -94,6 +94,8 @@ function ExpPatternInner() {
       runExpPattern({
         assembly_id: Number(assemblyId),
         genes: parseGenes(genesRaw),
+        // `null` asks the server for every expression library.
+        conditions: null,
         cluster_rows: clusterRows,
         scale,
       }),

@@ -84,7 +84,7 @@ export function seqFetchGenes(assembly: string, genes: string[]): Promise<SeqFet
   return request<SeqFetchResponse>("/tools/seqfetch", {
     method: "POST",
     auth: false,
-    json: { assembly, genes } satisfies SeqFetchRequest,
+    json: { assembly, genes, region: null } satisfies SeqFetchRequest,
     timeoutMs: TimeoutPresets.CRITICAL,
   });
 }
@@ -97,7 +97,7 @@ export function seqFetchRegion(
   return request<SeqFetchResponse>("/tools/seqfetch", {
     method: "POST",
     auth: false,
-    json: { assembly, region } satisfies SeqFetchRequest,
+    json: { assembly, genes: null, region } satisfies SeqFetchRequest,
     timeoutMs: TimeoutPresets.CRITICAL,
   });
 }

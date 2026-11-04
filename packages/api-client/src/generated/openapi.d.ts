@@ -4939,18 +4939,36 @@ export interface components {
          * @description Editable "About us" content backed by ``system_settings``.
          */
         AboutContentResponse: {
-            /** Title En */
-            title_en?: string | null;
-            /** Title Zh */
-            title_zh?: string | null;
-            /** Summary En */
-            summary_en?: string | null;
-            /** Summary Zh */
-            summary_zh?: string | null;
-            /** Content En */
-            content_en?: string | null;
-            /** Content Zh */
-            content_zh?: string | null;
+            /**
+             * Title En
+             * @default null
+             */
+            title_en: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
+            /**
+             * Summary En
+             * @default null
+             */
+            summary_en: string | null;
+            /**
+             * Summary Zh
+             * @default null
+             */
+            summary_zh: string | null;
+            /**
+             * Content En
+             * @default null
+             */
+            content_en: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
         };
         /**
          * ActiveReleaseResponse
@@ -4966,12 +4984,21 @@ export interface components {
          *     already embedded in the served page, so this discloses nothing new.
          */
         ActiveReleaseResponse: {
-            /** Release Id */
-            release_id?: string | null;
-            /** Version */
-            version?: string | null;
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: string | null;
+            /**
+             * Version
+             * @default null
+             */
+            version: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
         };
         /**
          * AdminDashboardSeries
@@ -5049,7 +5076,8 @@ export interface components {
             /** Key */
             key: string;
             status: components["schemas"]["PluginCapabilityResponse"];
-            manifest?: components["schemas"]["PluginManifestMetadata"] | null;
+            /** @default null */
+            manifest: components["schemas"]["PluginManifestMetadata"] | null;
         };
         /** AdminPluginsResponse */
         AdminPluginsResponse: {
@@ -5093,24 +5121,48 @@ export interface components {
         AdminPublicationResponse: {
             /** Title */
             title: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Authors */
             authors: string;
-            /** Authors Zh */
-            authors_zh?: string | null;
-            /** Journal */
-            journal?: string | null;
-            /** Year */
-            year?: number | null;
-            /** Doi */
-            doi?: string | null;
-            /** Pmid */
-            pmid?: string | null;
-            /** Abstract */
-            abstract?: string | null;
-            /** Abstract Zh */
-            abstract_zh?: string | null;
+            /**
+             * Authors Zh
+             * @default null
+             */
+            authors_zh: string | null;
+            /**
+             * Journal
+             * @default null
+             */
+            journal: string | null;
+            /**
+             * Year
+             * @default null
+             */
+            year: number | null;
+            /**
+             * Doi
+             * @default null
+             */
+            doi: string | null;
+            /**
+             * Pmid
+             * @default null
+             */
+            pmid: string | null;
+            /**
+             * Abstract
+             * @default null
+             */
+            abstract: string | null;
+            /**
+             * Abstract Zh
+             * @default null
+             */
+            abstract_zh: string | null;
             /**
              * Is Featured
              * @default false
@@ -5143,16 +5195,31 @@ export interface components {
          * @description Allele-frequency query (per locus / gene / interval).
          */
         AlleleFreqRequest: {
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Assembly */
-            assembly?: string | null;
-            /** Chromosome */
-            chromosome?: string | null;
-            /** Start */
-            start?: number | null;
-            /** End */
-            end?: number | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
+            /**
+             * Chromosome
+             * @default null
+             */
+            chromosome: string | null;
+            /**
+             * Start
+             * @default null
+             */
+            start: number | null;
+            /**
+             * End
+             * @default null
+             */
+            end: number | null;
             /**
              * Max Variants
              * @default 10000
@@ -5163,8 +5230,11 @@ export interface components {
         AlleleFreqResponse: {
             /** Source */
             source: string;
-            /** Gene Id */
-            gene_id?: string | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
             /** Assembly */
             assembly: string;
             /** Chromosome */
@@ -5197,8 +5267,11 @@ export interface components {
              * @default SNP
              */
             variant_type: string;
-            /** Gene Id */
-            gene_id?: string | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
         };
         /** AnalysesDownloadResponse */
         AnalysesDownloadResponse: {
@@ -5221,10 +5294,16 @@ export interface components {
             job_id: string;
             analysis_type: components["schemas"]["AnalysisType"];
             status: components["schemas"]["AnalysisJobStatus"];
-            /** Error Message */
-            error_message?: string | null;
-            /** Result */
-            result?: {
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
+            /**
+             * Result
+             * @default null
+             */
+            result: {
                 [key: string]: unknown;
             } | null;
             /**
@@ -5263,8 +5342,11 @@ export interface components {
             filename: string;
             /** Size */
             size: number;
-            /** Content Type */
-            content_type?: string | null;
+            /**
+             * Content Type
+             * @default null
+             */
+            content_type: string | null;
             /** Checksum Sha256 */
             checksum_sha256: string;
         };
@@ -5365,12 +5447,21 @@ export interface components {
             status: components["schemas"]["SectionStatus"];
             /** Terms */
             terms?: components["schemas"]["AnnotationTerm"][];
-            /** Source Name */
-            source_name?: string | null;
-            /** Source Version */
-            source_version?: string | null;
-            /** Source Url */
-            source_url?: string | null;
+            /**
+             * Source Name
+             * @default null
+             */
+            source_name: string | null;
+            /**
+             * Source Version
+             * @default null
+             */
+            source_version: string | null;
+            /**
+             * Source Url
+             * @default null
+             */
+            source_url: string | null;
         };
         /**
          * AnnotationTerm
@@ -5386,18 +5477,27 @@ export interface components {
             term_id: string;
             /** Term Name */
             term_name: string;
-            /** Evidence Code */
-            evidence_code?: string | null;
+            /**
+             * Evidence Code
+             * @default null
+             */
+            evidence_code: string | null;
             /**
              * Kind
              * @default unknown
              * @enum {string}
              */
             kind: "experimental" | "curated" | "predicted" | "transferred" | "imported" | "unknown";
-            /** Reference */
-            reference?: string | null;
-            /** Qualifier */
-            qualifier?: string | null;
+            /**
+             * Reference
+             * @default null
+             */
+            reference: string | null;
+            /**
+             * Qualifier
+             * @default null
+             */
+            qualifier: string | null;
         };
         /**
          * ArtifactRequest
@@ -5413,8 +5513,11 @@ export interface components {
             artifact_type: "msa" | "tree";
             /** Method */
             method: string;
-            /** Assembly Id */
-            assembly_id?: number | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: number | null;
         };
         /**
          * ArtifactResponse
@@ -5442,14 +5545,26 @@ export interface components {
             input_sha256: string;
             /** Input Member Ids */
             input_member_ids?: string[];
-            /** Download Url */
-            download_url?: string | null;
-            /** Error Message */
-            error_message?: string | null;
-            /** Created At */
-            created_at?: string | null;
-            /** Completed At */
-            completed_at?: string | null;
+            /**
+             * Download Url
+             * @default null
+             */
+            download_url: string | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
         };
         /** AssemblyResponse */
         AssemblyResponse: {
@@ -5461,17 +5576,26 @@ export interface components {
             species: string;
             /** Version */
             version: string;
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /**
              * Is Default
              * @default false
              */
             is_default: boolean;
-            /** Created At */
-            created_at?: string | null;
-            /** Updated At */
-            updated_at?: string | null;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: string | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: string | null;
         };
         /** BlastDatabaseResponse */
         BlastDatabaseResponse: {
@@ -5490,34 +5614,67 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-            /** Assembly Name */
-            assembly_name?: string | null;
-            /** Assembly Version */
-            assembly_version?: string | null;
-            /** Assembly Is Default */
-            assembly_is_default?: boolean | null;
-            /** Release Id */
-            release_id?: number | null;
+            /**
+             * Assembly Name
+             * @default null
+             */
+            assembly_name: string | null;
+            /**
+             * Assembly Version
+             * @default null
+             */
+            assembly_version: string | null;
+            /**
+             * Assembly Is Default
+             * @default null
+             */
+            assembly_is_default: boolean | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
             /**
              * Engine
              * @default diamond
              * @enum {string}
              */
             engine: "diamond" | "ncbi_blast";
-            /** Sequence Type */
-            sequence_type?: ("genome" | "cds" | "transcript" | "protein" | "repeat_masked" | "pan_genome" | "family_consensus" | "custom") | null;
-            /** Annotation Version */
-            annotation_version?: string | null;
-            /** Source Url */
-            source_url?: string | null;
-            /** Sequence Count */
-            sequence_count?: number | null;
-            /** Total Length */
-            total_length?: number | null;
-            /** Fasta Sha256 */
-            fasta_sha256?: string | null;
-            /** Index Version */
-            index_version?: string | null;
+            /**
+             * Sequence Type
+             * @default null
+             */
+            sequence_type: ("genome" | "cds" | "transcript" | "protein" | "repeat_masked" | "pan_genome" | "family_consensus" | "custom") | null;
+            /**
+             * Annotation Version
+             * @default null
+             */
+            annotation_version: string | null;
+            /**
+             * Source Url
+             * @default null
+             */
+            source_url: string | null;
+            /**
+             * Sequence Count
+             * @default null
+             */
+            sequence_count: number | null;
+            /**
+             * Total Length
+             * @default null
+             */
+            total_length: number | null;
+            /**
+             * Fasta Sha256
+             * @default null
+             */
+            fasta_sha256: string | null;
+            /**
+             * Index Version
+             * @default null
+             */
+            index_version: string | null;
             /**
              * Build Status
              * @default pending
@@ -5529,8 +5686,11 @@ export interface components {
              * @default false
              */
             is_default: boolean;
-            /** License */
-            license?: string | null;
+            /**
+             * License
+             * @default null
+             */
+            license: string | null;
         };
         /**
          * BlastGenomeTargetResponse
@@ -5546,33 +5706,69 @@ export interface components {
              * @enum {string}
              */
             status: "resolved" | "unresolved";
-            /** Reason */
-            reason?: ("job_not_completed" | "authorization_failed" | "unsupported_program" | "subject_not_found" | "ambiguous_subject" | "assembly_mismatch" | "no_genomic_coordinates" | "invalid_subject_id") | null;
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Chromosome */
-            chromosome?: string | null;
-            /** Start */
-            start?: number | null;
-            /** End */
-            end?: number | null;
-            /** Strand */
-            strand?: string | null;
-            /** Release Id */
-            release_id?: number | null;
-            /** Assembly Id */
-            assembly_id?: number | null;
-            /** Assembly Name */
-            assembly_name?: string | null;
-            /** Locus */
-            locus?: string | null;
-            /** Resolution */
-            resolution?: ("gene_accession" | "gene_alias" | "transcript_id") | null;
+            /**
+             * Reason
+             * @default null
+             */
+            reason: ("job_not_completed" | "authorization_failed" | "unsupported_program" | "subject_not_found" | "ambiguous_subject" | "assembly_mismatch" | "no_genomic_coordinates" | "invalid_subject_id") | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Chromosome
+             * @default null
+             */
+            chromosome: string | null;
+            /**
+             * Start
+             * @default null
+             */
+            start: number | null;
+            /**
+             * End
+             * @default null
+             */
+            end: number | null;
+            /**
+             * Strand
+             * @default null
+             */
+            strand: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: number | null;
+            /**
+             * Assembly Name
+             * @default null
+             */
+            assembly_name: string | null;
+            /**
+             * Locus
+             * @default null
+             */
+            locus: string | null;
+            /**
+             * Resolution
+             * @default null
+             */
+            resolution: ("gene_accession" | "gene_alias" | "transcript_id") | null;
         };
         /** BlastHit */
         BlastHit: {
-            /** Query Id */
-            query_id?: string | null;
+            /**
+             * Query Id
+             * @default null
+             */
+            query_id: string | null;
             /** Hsp Num */
             hsp_num: number;
             /** Subject Id */
@@ -5612,8 +5808,11 @@ export interface components {
              * @default plus
              */
             subject_strand: string;
-            /** Genome Resolution */
-            genome_resolution?: {
+            /**
+             * Genome Resolution
+             * @default null
+             */
+            genome_resolution: {
                 [key: string]: unknown;
             } | null;
         };
@@ -5674,23 +5873,41 @@ export interface components {
              * @enum {string}
              */
             db_type: "nucl" | "prot";
-            /** Index Identity */
-            index_identity?: string | null;
-            /** Sequence Count */
-            sequence_count?: number | null;
-            /** Total Length */
-            total_length?: number | null;
-            /** Error Message */
-            error_message?: string | null;
+            /**
+             * Index Identity
+             * @default null
+             */
+            index_identity: string | null;
+            /**
+             * Sequence Count
+             * @default null
+             */
+            sequence_count: number | null;
+            /**
+             * Total Length
+             * @default null
+             */
+            total_length: number | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-            /** Started At */
-            started_at?: string | null;
-            /** Completed At */
-            completed_at?: string | null;
+            /**
+             * Started At
+             * @default null
+             */
+            started_at: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
         };
         /** BlastJobListResponse */
         BlastJobListResponse: {
@@ -5717,10 +5934,16 @@ export interface components {
             program: components["schemas"]["BlastProgram"];
             /** Database Id */
             database_id: number;
-            /** Database */
-            database?: string | null;
-            /** Query Sequence */
-            query_sequence?: string | null;
+            /**
+             * Database
+             * @default null
+             */
+            database: string | null;
+            /**
+             * Query Sequence
+             * @default null
+             */
+            query_sequence: string | null;
             /** Parameters */
             parameters?: {
                 [key: string]: unknown;
@@ -5735,18 +5958,36 @@ export interface components {
              * Format: date-time
              */
             submitted_at: string;
-            /** Started At */
-            started_at?: string | null;
-            /** Completed At */
-            completed_at?: string | null;
-            /** Error Message */
-            error_message?: string | null;
-            /** Result Url */
-            result_url?: string | null;
-            /** Release Id */
-            release_id?: number | null;
-            /** Assembly Name */
-            assembly_name?: string | null;
+            /**
+             * Started At
+             * @default null
+             */
+            started_at: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
+            /**
+             * Result Url
+             * @default null
+             */
+            result_url: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Assembly Name
+             * @default null
+             */
+            assembly_name: string | null;
         };
         /**
          * BlastJobStatus
@@ -5765,20 +6006,41 @@ export interface components {
              * @default 50
              */
             max_target_seqs: number;
-            /** Gap Open */
-            gap_open?: number | null;
-            /** Gap Extend */
-            gap_extend?: number | null;
-            /** Matrix */
-            matrix?: string | null;
-            /** Word Size */
-            word_size?: number | null;
-            /** Dust */
-            dust?: boolean | null;
-            /** Soft Masking */
-            soft_masking?: boolean | null;
-            /** Percent Identity */
-            percent_identity?: number | null;
+            /**
+             * Gap Open
+             * @default null
+             */
+            gap_open: number | null;
+            /**
+             * Gap Extend
+             * @default null
+             */
+            gap_extend: number | null;
+            /**
+             * Matrix
+             * @default null
+             */
+            matrix: string | null;
+            /**
+             * Word Size
+             * @default null
+             */
+            word_size: number | null;
+            /**
+             * Dust
+             * @default null
+             */
+            dust: boolean | null;
+            /**
+             * Soft Masking
+             * @default null
+             */
+            soft_masking: boolean | null;
+            /**
+             * Percent Identity
+             * @default null
+             */
+            percent_identity: number | null;
         };
         /**
          * BlastProgram
@@ -5801,24 +6063,48 @@ export interface components {
             program: components["schemas"]["BlastProgram"];
             /** Database Id */
             database_id: number;
-            /** Query Id */
-            query_id?: string | null;
-            /** Query Len */
-            query_len?: number | null;
-            /** Hits */
-            hits?: components["schemas"]["BlastHit"][] | null;
-            /** Total Hits */
-            total_hits?: number | null;
-            /** Search Stats */
-            search_stats?: {
+            /**
+             * Query Id
+             * @default null
+             */
+            query_id: string | null;
+            /**
+             * Query Len
+             * @default null
+             */
+            query_len: number | null;
+            /**
+             * Hits
+             * @default null
+             */
+            hits: components["schemas"]["BlastHit"][] | null;
+            /**
+             * Total Hits
+             * @default null
+             */
+            total_hits: number | null;
+            /**
+             * Search Stats
+             * @default null
+             */
+            search_stats: {
                 [key: string]: unknown;
             } | null;
-            /** Error Message */
-            error_message?: string | null;
-            /** Completed At */
-            completed_at?: string | null;
-            /** Download Url */
-            download_url?: string | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
+            /**
+             * Download Url
+             * @default null
+             */
+            download_url: string | null;
         };
         /**
          * BlastSubmitProgram
@@ -5836,10 +6122,16 @@ export interface components {
             engine: "ncbi_blast" | "diamond";
             /** @default blastp */
             program: components["schemas"]["BlastSubmitProgram"];
-            /** Database Id */
-            database_id?: number | null;
-            /** Database */
-            database?: string | null;
+            /**
+             * Database Id
+             * @default null
+             */
+            database_id: number | null;
+            /**
+             * Database
+             * @default null
+             */
+            database: string | null;
             /** Query Sequence */
             query_sequence: string;
             parameters?: components["schemas"]["BlastParameters"];
@@ -5962,18 +6254,33 @@ export interface components {
             version: number;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Content En */
             content_en: string;
-            /** Content Zh */
-            content_zh?: string | null;
-            /** Summary */
-            summary?: string | null;
-            /** Edited By */
-            edited_by?: string | null;
-            /** Edit Comment */
-            edit_comment?: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
+            /**
+             * Summary
+             * @default null
+             */
+            summary: string | null;
+            /**
+             * Edited By
+             * @default null
+             */
+            edited_by: string | null;
+            /**
+             * Edit Comment
+             * @default null
+             */
+            edit_comment: string | null;
             /**
              * Created At
              * Format: date-time
@@ -5994,12 +6301,21 @@ export interface components {
         CrossVersionLink: {
             /** Gene Accession */
             gene_accession: string;
-            /** Assembly Id */
-            assembly_id?: number | null;
-            /** Assembly Name */
-            assembly_name?: string | null;
-            /** Assembly Version */
-            assembly_version?: string | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: number | null;
+            /**
+             * Assembly Name
+             * @default null
+             */
+            assembly_name: string | null;
+            /**
+             * Assembly Version
+             * @default null
+             */
+            assembly_version: string | null;
             /** Relation Type */
             relation_type: string;
             /** Provenance Source */
@@ -6021,8 +6337,11 @@ export interface components {
             total_users: number;
             /** Assemblies Count */
             assemblies_count: number;
-            /** Current Release */
-            current_release?: string | null;
+            /**
+             * Current Release
+             * @default null
+             */
+            current_release: string | null;
             /**
              * Last Updated
              * Format: date-time
@@ -6077,8 +6396,11 @@ export interface components {
             checksum_sha256: string;
             /** Source */
             source: string;
-            /** License */
-            license?: string | null;
+            /**
+             * License
+             * @default null
+             */
+            license: string | null;
             /**
              * Mime Type
              * @default application/octet-stream
@@ -6098,8 +6420,11 @@ export interface components {
             source_objects?: {
                 [key: string]: unknown;
             }[];
-            /** Module Key */
-            module_key?: string | null;
+            /**
+             * Module Key
+             * @default null
+             */
+            module_key: string | null;
         };
         /** DatasetVersionResponse */
         DatasetVersionResponse: {
@@ -6120,8 +6445,11 @@ export interface components {
             checksum_sha256: string;
             /** Source */
             source: string;
-            /** License */
-            license?: string | null;
+            /**
+             * License
+             * @default null
+             */
+            license: string | null;
             /** Mime Type */
             mime_type: string;
             /** Row Count */
@@ -6132,16 +6460,25 @@ export interface components {
             source_objects: {
                 [key: string]: unknown;
             }[];
-            /** Manifest */
-            manifest?: {
+            /**
+             * Manifest
+             * @default null
+             */
+            manifest: {
                 [key: string]: unknown;
             } | null;
             /** Status */
             status: string;
-            /** Created At */
-            created_at?: unknown | null;
-            /** Updated At */
-            updated_at?: unknown | null;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: unknown | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: unknown | null;
         };
         /**
          * DeletedNewsListResponse
@@ -6166,16 +6503,25 @@ export interface components {
             id: string;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Slug */
             slug: string;
-            /** Category */
-            category?: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
             /** @default draft */
             status: components["schemas"]["NewsStatus"];
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -6221,18 +6567,36 @@ export interface components {
          *     window for plotting.
          */
         DiversityRequest: {
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Assembly */
-            assembly?: string | null;
-            /** Chromosome */
-            chromosome?: string | null;
-            /** Start */
-            start?: number | null;
-            /** End */
-            end?: number | null;
-            /** Sample Size */
-            sample_size?: number | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
+            /**
+             * Chromosome
+             * @default null
+             */
+            chromosome: string | null;
+            /**
+             * Start
+             * @default null
+             */
+            start: number | null;
+            /**
+             * End
+             * @default null
+             */
+            end: number | null;
+            /**
+             * Sample Size
+             * @default null
+             */
+            sample_size: number | null;
             /**
              * Window Size
              * @default 0
@@ -6243,8 +6607,11 @@ export interface components {
         DiversityResponse: {
             /** Source */
             source: string;
-            /** Gene Id */
-            gene_id?: string | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
             /** Assembly */
             assembly: string;
             /** Chromosome */
@@ -6265,8 +6632,11 @@ export interface components {
             pi_per_site: number | null;
             /** Theta */
             theta: number | null;
-            /** Windows */
-            windows?: components["schemas"]["DiversityWindow"][] | null;
+            /**
+             * Windows
+             * @default null
+             */
+            windows: components["schemas"]["DiversityWindow"][] | null;
         };
         /** DiversityWindow */
         DiversityWindow: {
@@ -6287,14 +6657,23 @@ export interface components {
             id: string;
             /** Name */
             name: string;
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /** File Url */
             file_url: string;
-            /** File Size */
-            file_size?: number | null;
-            /** Category */
-            category?: string | null;
+            /**
+             * File Size
+             * @default null
+             */
+            file_size: number | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
             /**
              * Download Count
              * @default 0
@@ -6340,8 +6719,9 @@ export interface components {
             /**
              * Message
              * @description Explanatory note, e.g. when no term passes min_genes
+             * @default null
              */
-            message?: string | null;
+            message: string | null;
             /** Assembly Id */
             assembly_id: number;
             /** Release Id */
@@ -6431,8 +6811,9 @@ export interface components {
             /**
              * Values
              * @description Per-gene numeric values (e.g. log2 fold-changes) used to rank genes in 'gsea' mode; required there and must align with 'genes' 1:1
+             * @default null
              */
-            values?: number[] | null;
+            values: number[] | null;
             /**
              * Ontology
              * @description Annotation source: 'go' or 'kegg'
@@ -6493,8 +6874,9 @@ export interface components {
             /**
              * Message
              * @description Explanatory note, e.g. when no input gene has annotations
+             * @default null
              */
-            message?: string | null;
+            message: string | null;
             /** Assembly Id */
             assembly_id: number;
             /** Release Id */
@@ -6680,8 +7062,9 @@ export interface components {
             /**
              * Conditions
              * @description Expression library names to use as matrix columns; defaults to all libraries (max 200).
+             * @default null
              */
-            conditions?: string[] | null;
+            conditions: string[] | null;
             /**
              * Cluster Rows
              * @description Reorder matrix rows by clustering (hierarchical when SciPy is available, otherwise mean-expression sort).
@@ -6801,25 +7184,46 @@ export interface components {
             format: string;
             /** Release Key */
             release_key: string;
-            /** Assembly Key */
-            assembly_key?: string | null;
-            /** Record Count */
-            record_count?: number | null;
-            /** File Size */
-            file_size?: number | null;
-            /** Error Message */
-            error_message?: string | null;
+            /**
+             * Assembly Key
+             * @default null
+             */
+            assembly_key: string | null;
+            /**
+             * Record Count
+             * @default null
+             */
+            record_count: number | null;
+            /**
+             * File Size
+             * @default null
+             */
+            file_size: number | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-            /** Started At */
-            started_at?: string | null;
-            /** Completed At */
-            completed_at?: string | null;
-            /** Expires At */
-            expires_at?: string | null;
+            /**
+             * Started At
+             * @default null
+             */
+            started_at: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
+            /**
+             * Expires At
+             * @default null
+             */
+            expires_at: string | null;
         };
         /**
          * ExpressionRecord
@@ -6830,18 +7234,36 @@ export interface components {
             library_id: string;
             /** Library Name */
             library_name: string;
-            /** Tissue */
-            tissue?: string | null;
-            /** Treatment */
-            treatment?: string | null;
-            /** Stage */
-            stage?: string | null;
-            /** Tpm */
-            tpm?: number | null;
-            /** Fpkm */
-            fpkm?: number | null;
-            /** Raw Count */
-            raw_count?: number | null;
+            /**
+             * Tissue
+             * @default null
+             */
+            tissue: string | null;
+            /**
+             * Treatment
+             * @default null
+             */
+            treatment: string | null;
+            /**
+             * Stage
+             * @default null
+             */
+            stage: string | null;
+            /**
+             * Tpm
+             * @default null
+             */
+            tpm: number | null;
+            /**
+             * Fpkm
+             * @default null
+             */
+            fpkm: number | null;
+            /**
+             * Raw Count
+             * @default null
+             */
+            raw_count: number | null;
         };
         /** ExpressionSection */
         ExpressionSection: {
@@ -6881,8 +7303,11 @@ export interface components {
             content_html: string;
             /** Source Preview Token */
             source_preview_token: string;
-            /** Source Published At */
-            source_published_at?: string | null;
+            /**
+             * Source Published At
+             * @default null
+             */
+            source_published_at: string | null;
         };
         /**
          * FamilyDetailResponse
@@ -6906,8 +7331,11 @@ export interface components {
             name: string;
             /** Method */
             method: string;
-            /** Method Version */
-            method_version?: string | null;
+            /**
+             * Method Version
+             * @default null
+             */
+            method_version: string | null;
             /** Source Name */
             source_name: string;
             /** Source Version */
@@ -6962,12 +7390,21 @@ export interface components {
              * @enum {string}
              */
             relationship_type: "one_to_one" | "one_to_many" | "many_to_many";
-            /** Method */
-            method?: string | null;
-            /** Confidence */
-            confidence?: number | null;
-            /** Evidence */
-            evidence?: {
+            /**
+             * Method
+             * @default null
+             */
+            method: string | null;
+            /**
+             * Confidence
+             * @default null
+             */
+            confidence: number | null;
+            /**
+             * Evidence
+             * @default null
+             */
+            evidence: {
                 [key: string]: unknown;
             } | null;
         };
@@ -6986,8 +7423,11 @@ export interface components {
             name: string;
             /** Method */
             method: string;
-            /** Method Version */
-            method_version?: string | null;
+            /**
+             * Method Version
+             * @default null
+             */
+            method_version: string | null;
             /** Source Name */
             source_name: string;
             /** Source Version */
@@ -7071,32 +7511,71 @@ export interface components {
          * @description Variant-specific, plain-text footer content and visible navigation.
          */
         FooterContentResponse: {
-            /** Contact Person */
-            contact_person?: string | null;
-            /** Contact Phone */
-            contact_phone?: string | null;
-            /** Contact Email */
-            contact_email?: string | null;
-            /** Copyright */
-            copyright?: string | null;
-            /** Address */
-            address?: string | null;
-            /** Contact Person En */
-            contact_person_en?: string | null;
-            /** Contact Person Zh */
-            contact_person_zh?: string | null;
-            /** Contact Phone Value */
-            contact_phone_value?: string | null;
-            /** Contact Email Value */
-            contact_email_value?: string | null;
-            /** Address En */
-            address_en?: string | null;
-            /** Address Zh */
-            address_zh?: string | null;
-            /** Copyright En */
-            copyright_en?: string | null;
-            /** Copyright Zh */
-            copyright_zh?: string | null;
+            /**
+             * Contact Person
+             * @default null
+             */
+            contact_person: string | null;
+            /**
+             * Contact Phone
+             * @default null
+             */
+            contact_phone: string | null;
+            /**
+             * Contact Email
+             * @default null
+             */
+            contact_email: string | null;
+            /**
+             * Copyright
+             * @default null
+             */
+            copyright: string | null;
+            /**
+             * Address
+             * @default null
+             */
+            address: string | null;
+            /**
+             * Contact Person En
+             * @default null
+             */
+            contact_person_en: string | null;
+            /**
+             * Contact Person Zh
+             * @default null
+             */
+            contact_person_zh: string | null;
+            /**
+             * Contact Phone Value
+             * @default null
+             */
+            contact_phone_value: string | null;
+            /**
+             * Contact Email Value
+             * @default null
+             */
+            contact_email_value: string | null;
+            /**
+             * Address En
+             * @default null
+             */
+            address_en: string | null;
+            /**
+             * Address Zh
+             * @default null
+             */
+            address_zh: string | null;
+            /**
+             * Copyright En
+             * @default null
+             */
+            copyright_en: string | null;
+            /**
+             * Copyright Zh
+             * @default null
+             */
+            copyright_zh: string | null;
             /** Navigation */
             navigation?: components["schemas"]["FooterNavigationGroup"][];
         };
@@ -7234,8 +7713,11 @@ export interface components {
         GeneListResponse: {
             /** Items */
             items?: components["schemas"]["GeneResponse"][];
-            /** Next Cursor */
-            next_cursor?: string | null;
+            /**
+             * Next Cursor
+             * @default null
+             */
+            next_cursor: string | null;
             /**
              * Has More
              * @default false
@@ -7264,20 +7746,38 @@ export interface components {
         };
         /** GeneResponse */
         GeneResponse: {
-            /** Id */
-            id?: string | null;
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Assembly Id */
-            assembly_id?: string | null;
-            /** Assembly Name */
-            assembly_name?: string | null;
+            /**
+             * Id
+             * @default null
+             */
+            id: string | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: string | null;
+            /**
+             * Assembly Name
+             * @default null
+             */
+            assembly_name: string | null;
             /** Chromosome */
             chromosome: string;
-            /** Name */
-            name?: string | null;
-            /** Symbol */
-            symbol?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * Symbol
+             * @default null
+             */
+            symbol: string | null;
             /**
              * Biotype
              * @default protein_coding
@@ -7292,8 +7792,11 @@ export interface components {
             /** End Pos */
             end_pos: number;
             strand: components["schemas"]["Strand"];
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /**
              * Variant Count
              * @default 0
@@ -7335,10 +7838,16 @@ export interface components {
              * @default false
              */
             ambiguous: boolean;
-            /** Cursor */
-            cursor?: string | null;
-            /** Next Cursor */
-            next_cursor?: string | null;
+            /**
+             * Cursor
+             * @default null
+             */
+            cursor: string | null;
+            /**
+             * Next Cursor
+             * @default null
+             */
+            next_cursor: string | null;
             /**
              * Has More
              * @default false
@@ -7374,14 +7883,26 @@ export interface components {
              * Format: date-time
              */
             submitted_at: string;
-            /** Started At */
-            started_at?: string | null;
-            /** Completed At */
-            completed_at?: string | null;
-            /** Error Message */
-            error_message?: string | null;
-            /** Result */
-            result?: {
+            /**
+             * Started At
+             * @default null
+             */
+            started_at: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
+            /**
+             * Result
+             * @default null
+             */
+            result: {
                 [key: string]: unknown;
             } | null;
         };
@@ -7411,20 +7932,41 @@ export interface components {
             job_id: string;
             method: components["schemas"]["GwasMethod"];
             status: components["schemas"]["GwasJobStatus"];
-            /** Manhattan Url */
-            manhattan_url?: string | null;
-            /** Qq Url */
-            qq_url?: string | null;
-            /** Report Url */
-            report_url?: string | null;
-            /** Assoc Url */
-            assoc_url?: string | null;
-            /** N Variants */
-            n_variants?: number | null;
-            /** Error Message */
-            error_message?: string | null;
-            /** Completed At */
-            completed_at?: string | null;
+            /**
+             * Manhattan Url
+             * @default null
+             */
+            manhattan_url: string | null;
+            /**
+             * Qq Url
+             * @default null
+             */
+            qq_url: string | null;
+            /**
+             * Report Url
+             * @default null
+             */
+            report_url: string | null;
+            /**
+             * Assoc Url
+             * @default null
+             */
+            assoc_url: string | null;
+            /**
+             * N Variants
+             * @default null
+             */
+            n_variants: number | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
         };
         /** GwasSubmitRequest */
         GwasSubmitRequest: {
@@ -7433,12 +7975,21 @@ export interface components {
             object_type: components["schemas"]["GwasFileType"];
             /** Phenotype Object Key */
             phenotype_object_key: string;
-            /** Genotype Object Key */
-            genotype_object_key?: string | null;
-            /** Kinship Object Key */
-            kinship_object_key?: string | null;
-            /** Covariate Object Key */
-            covariate_object_key?: string | null;
+            /**
+             * Genotype Object Key
+             * @default null
+             */
+            genotype_object_key: string | null;
+            /**
+             * Kinship Object Key
+             * @default null
+             */
+            kinship_object_key: string | null;
+            /**
+             * Covariate Object Key
+             * @default null
+             */
+            covariate_object_key: string | null;
             /** Params */
             params?: {
                 [key: string]: unknown;
@@ -7477,10 +8028,16 @@ export interface components {
          *     settings API can never serve untrusted markup.
          */
         HomeContentResponse: {
-            /** Welcome En */
-            welcome_en?: string | null;
-            /** Welcome Zh */
-            welcome_zh?: string | null;
+            /**
+             * Welcome En
+             * @default null
+             */
+            welcome_en: string | null;
+            /**
+             * Welcome Zh
+             * @default null
+             */
+            welcome_zh: string | null;
         };
         /**
          * HomepageStats
@@ -7532,10 +8089,16 @@ export interface components {
              * @default 0
              */
             seed_accessions: number;
-            /** Last Release Date */
-            last_release_date?: string | null;
-            /** Last Release Name */
-            last_release_name?: string | null;
+            /**
+             * Last Release Date
+             * @default null
+             */
+            last_release_date: string | null;
+            /**
+             * Last Release Name
+             * @default null
+             */
+            last_release_name: string | null;
         };
         /**
          * HomologRecord
@@ -7551,18 +8114,27 @@ export interface components {
              * @enum {string}
              */
             homolog_type: "ortholog" | "paralog";
-            /** Method */
-            method?: string | null;
-            /** Source */
-            source?: string | null;
+            /**
+             * Method
+             * @default null
+             */
+            method: string | null;
+            /**
+             * Source
+             * @default null
+             */
+            source: string | null;
             /**
              * Kind
              * @default transferred
              * @enum {string}
              */
             kind: "experimental" | "curated" | "predicted" | "transferred" | "imported" | "unknown";
-            /** Confidence */
-            confidence?: number | null;
+            /**
+             * Confidence
+             * @default null
+             */
+            confidence: number | null;
         };
         /** HomologSection */
         HomologSection: {
@@ -7590,8 +8162,11 @@ export interface components {
         };
         /** ImportCommitRequest */
         ImportCommitRequest: {
-            /** Page Id */
-            page_id?: string | null;
+            /**
+             * Page Id
+             * @default null
+             */
+            page_id: string | null;
             /**
              * Source Id
              * @default dataset
@@ -7622,24 +8197,51 @@ export interface components {
              * @enum {string}
              */
             type: "vcf" | "gff3" | "fasta" | "blast_db" | "seed_data" | "expression_csv" | "homolog_csv" | "module_tsv";
-            /** File Path */
-            file_path?: string | null;
-            /** Object Key */
-            object_key?: string | null;
-            /** Data Set Id */
-            data_set_id?: number | null;
-            /** Release Id */
-            release_id?: number | null;
-            /** Assembly */
-            assembly?: string | null;
-            /** Module Key */
-            module_key?: string | null;
-            /** Schema Version */
-            schema_version?: number | null;
-            /** Checksum */
-            checksum?: string | null;
-            /** Import Draft Id */
-            import_draft_id?: string | null;
+            /**
+             * File Path
+             * @default null
+             */
+            file_path: string | null;
+            /**
+             * Object Key
+             * @default null
+             */
+            object_key: string | null;
+            /**
+             * Data Set Id
+             * @default null
+             */
+            data_set_id: number | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
+            /**
+             * Module Key
+             * @default null
+             */
+            module_key: string | null;
+            /**
+             * Schema Version
+             * @default null
+             */
+            schema_version: number | null;
+            /**
+             * Checksum
+             * @default null
+             */
+            checksum: string | null;
+            /**
+             * Import Draft Id
+             * @default null
+             */
+            import_draft_id: string | null;
             /** Idempotency Key */
             idempotency_key: string;
         };
@@ -7650,8 +8252,11 @@ export interface components {
              * Format: uuid
              */
             dataset_version_id: string;
-            /** Module Key */
-            module_key?: string | null;
+            /**
+             * Module Key
+             * @default null
+             */
+            module_key: string | null;
             /** Row Count */
             row_count: number;
             /** Column Count */
@@ -7669,8 +8274,11 @@ export interface components {
              * Format: uuid
              */
             dataset_version_id: string;
-            /** Module Key */
-            module_key?: string | null;
+            /**
+             * Module Key
+             * @default null
+             */
+            module_key: string | null;
             /** Filename */
             filename: string;
             /** Row Count */
@@ -7679,8 +8287,11 @@ export interface components {
             column_count: number;
             /** Status */
             status: string;
-            /** Updated At */
-            updated_at?: unknown | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: unknown | null;
         };
         /** ImportDraftResponse */
         ImportDraftResponse: {
@@ -7694,8 +8305,11 @@ export interface components {
              * Format: uuid
              */
             dataset_version_id: string;
-            /** Module Key */
-            module_key?: string | null;
+            /**
+             * Module Key
+             * @default null
+             */
+            module_key: string | null;
             /** Filename */
             filename: string;
             /** Object Key */
@@ -7704,8 +8318,11 @@ export interface components {
             checksum_sha256: string;
             /** Source */
             source: string;
-            /** License */
-            license?: string | null;
+            /**
+             * License
+             * @default null
+             */
+            license: string | null;
             /** Mime Type */
             mime_type: string;
             /** Row Count */
@@ -7722,19 +8339,31 @@ export interface components {
             };
             /** Status */
             status: string;
-            /** Committed At */
-            committed_at?: unknown | null;
-            /** Created At */
-            created_at?: unknown | null;
-            /** Updated At */
-            updated_at?: unknown | null;
+            /**
+             * Committed At
+             * @default null
+             */
+            committed_at: unknown | null;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: unknown | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: unknown | null;
         };
         /** ImportInspectionErrorResponse */
         ImportInspectionErrorResponse: {
             /** Code */
             code: string;
-            /** Row */
-            row?: number | null;
+            /**
+             * Row
+             * @default null
+             */
+            row: number | null;
             /** Message */
             message: string;
         };
@@ -7759,12 +8388,21 @@ export interface components {
             filename: string;
             /** Format */
             format: string;
-            /** Encoding */
-            encoding?: string | null;
-            /** Delimiter */
-            delimiter?: string | null;
-            /** Sheet Name */
-            sheet_name?: string | null;
+            /**
+             * Encoding
+             * @default null
+             */
+            encoding: string | null;
+            /**
+             * Delimiter
+             * @default null
+             */
+            delimiter: string | null;
+            /**
+             * Sheet Name
+             * @default null
+             */
+            sheet_name: string | null;
             /** Headers */
             headers?: string[];
             /** Row Count */
@@ -7814,8 +8452,11 @@ export interface components {
             column_count: number;
             /** Field Mapping */
             field_mapping?: components["schemas"]["FieldMappingItem"][];
-            /** Module Key */
-            module_key?: string | null;
+            /**
+             * Module Key
+             * @default null
+             */
+            module_key: string | null;
         };
         /** InternalGeneSearchItem */
         InternalGeneSearchItem: {
@@ -7825,18 +8466,30 @@ export interface components {
             gene_id: string;
             /** Internal Id */
             internal_id: string;
-            /** Name */
-            name?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
             /** Matched Field */
             matched_field: string;
             /** @default text */
             match_type: components["schemas"]["MatchType"];
-            /** Assembly Id */
-            assembly_id?: number | null;
-            /** Release Id */
-            release_id?: number | null;
-            /** Url */
-            url?: string | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: number | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Url
+             * @default null
+             */
+            url: string | null;
         };
         /**
          * InternalMutantSearchItem
@@ -7860,10 +8513,16 @@ export interface components {
             match_type: components["schemas"]["MatchType"];
             /** Is Public */
             is_public: boolean;
-            /** Release Id */
-            release_id?: number | null;
-            /** Url */
-            url?: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Url
+             * @default null
+             */
+            url: string | null;
         };
         /** InternalSearchResponse */
         InternalSearchResponse: {
@@ -7883,8 +8542,11 @@ export interface components {
         LayoutResponse: {
             /** Page Name */
             page_name: string;
-            /** Display Name */
-            display_name?: string | null;
+            /**
+             * Display Name
+             * @default null
+             */
+            display_name: string | null;
             /** Widgets */
             widgets?: components["schemas"]["WidgetDescriptor"][];
         };
@@ -7892,10 +8554,16 @@ export interface components {
         LayoutUpdateRequest: {
             /** Widget Order */
             widget_order?: string[];
-            /** Display Name */
-            display_name?: string | null;
-            /** Is Active */
-            is_active?: boolean | null;
+            /**
+             * Display Name
+             * @default null
+             */
+            display_name: string | null;
+            /**
+             * Is Active
+             * @default null
+             */
+            is_active: boolean | null;
         };
         /**
          * LdRequest
@@ -7909,24 +8577,43 @@ export interface components {
          *     returned for plotting).
          */
         LdRequest: {
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Assembly */
-            assembly?: string | null;
-            /** Chromosome */
-            chromosome?: string | null;
-            /** Start */
-            start?: number | null;
-            /** End */
-            end?: number | null;
-            genotypes?: components["schemas"]["GenotypeMatrix"] | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
+            /**
+             * Chromosome
+             * @default null
+             */
+            chromosome: string | null;
+            /**
+             * Start
+             * @default null
+             */
+            start: number | null;
+            /**
+             * End
+             * @default null
+             */
+            end: number | null;
+            /** @default null */
+            genotypes: components["schemas"]["GenotypeMatrix"] | null;
         };
         /** LdResponse */
         LdResponse: {
             /** Source */
             source: string;
-            /** Gene Id */
-            gene_id?: string | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
             /** Assembly */
             assembly: string;
             /** Chromosome */
@@ -7939,12 +8626,21 @@ export interface components {
             n_variants: number;
             /** Variants */
             variants: components["schemas"]["LdVariant"][];
-            /** R Squared */
-            r_squared?: number[][] | null;
-            /** Note */
-            note?: string | null;
-            /** Details */
-            details?: {
+            /**
+             * R Squared
+             * @default null
+             */
+            r_squared: number[][] | null;
+            /**
+             * Note
+             * @default null
+             */
+            note: string | null;
+            /**
+             * Details
+             * @default null
+             */
+            details: {
                 [key: string]: unknown;
             } | null;
         };
@@ -7968,16 +8664,31 @@ export interface components {
         LiteratureRecord: {
             /** Title */
             title: string;
-            /** Authors */
-            authors?: string | null;
-            /** Journal */
-            journal?: string | null;
-            /** Year */
-            year?: number | null;
-            /** Doi */
-            doi?: string | null;
-            /** Pmid */
-            pmid?: string | null;
+            /**
+             * Authors
+             * @default null
+             */
+            authors: string | null;
+            /**
+             * Journal
+             * @default null
+             */
+            journal: string | null;
+            /**
+             * Year
+             * @default null
+             */
+            year: number | null;
+            /**
+             * Doi
+             * @default null
+             */
+            doi: string | null;
+            /**
+             * Pmid
+             * @default null
+             */
+            pmid: string | null;
         };
         /** LiteratureSection */
         LiteratureSection: {
@@ -8027,15 +8738,17 @@ export interface components {
             /**
              * Username
              * @description Email address or username
+             * @default null
              * @example researcher@univ.edu
              */
-            username?: string | null;
+            username: string | null;
             /**
              * Email
              * @description Email address (alternative to ``username``)
+             * @default null
              * @example researcher@univ.edu
              */
-            email?: string | null;
+            email: string | null;
             /**
              * Password
              * @example S3cureP@ss!
@@ -8047,8 +8760,11 @@ export interface components {
          * @description Mark a subset of notifications read (``ids``) or all of them (``all``).
          */
         MarkReadRequest: {
-            /** Ids */
-            ids?: string[] | null;
+            /**
+             * Ids
+             * @default null
+             */
+            ids: string[] | null;
             /**
              * All
              * @default false
@@ -8123,16 +8839,31 @@ export interface components {
             size_bytes: number;
             /** Checksum Sha256 */
             checksum_sha256: string;
-            /** Width */
-            width?: number | null;
-            /** Height */
-            height?: number | null;
-            /** Alt Text */
-            alt_text?: string | null;
-            /** Caption */
-            caption?: string | null;
-            /** Credit */
-            credit?: string | null;
+            /**
+             * Width
+             * @default null
+             */
+            width: number | null;
+            /**
+             * Height
+             * @default null
+             */
+            height: number | null;
+            /**
+             * Alt Text
+             * @default null
+             */
+            alt_text: string | null;
+            /**
+             * Caption
+             * @default null
+             */
+            caption: string | null;
+            /**
+             * Credit
+             * @default null
+             */
+            credit: string | null;
             /**
              * Is Decorative
              * @default false
@@ -8144,10 +8875,16 @@ export interface components {
              * Format: uuid
              */
             uploaded_by: string;
-            /** Verified At */
-            verified_at?: string | null;
-            /** Archived At */
-            archived_at?: string | null;
+            /**
+             * Verified At
+             * @default null
+             */
+            verified_at: string | null;
+            /**
+             * Archived At
+             * @default null
+             */
+            archived_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -8174,14 +8911,26 @@ export interface components {
          * @description Editable accessibility metadata; object identity is immutable.
          */
         MediaAssetUpdateRequest: {
-            /** Alt Text */
-            alt_text?: string | null;
-            /** Caption */
-            caption?: string | null;
-            /** Credit */
-            credit?: string | null;
-            /** Is Decorative */
-            is_decorative?: boolean | null;
+            /**
+             * Alt Text
+             * @default null
+             */
+            alt_text: string | null;
+            /**
+             * Caption
+             * @default null
+             */
+            caption: string | null;
+            /**
+             * Credit
+             * @default null
+             */
+            credit: string | null;
+            /**
+             * Is Decorative
+             * @default null
+             */
+            is_decorative: boolean | null;
         };
         /**
          * MemberComparisonResponse
@@ -8210,8 +8959,11 @@ export interface components {
             object_key: string;
             /** Parts */
             parts: components["schemas"]["MultipartPart"][];
-            /** Sha256 */
-            sha256?: string | null;
+            /**
+             * Sha256
+             * @default null
+             */
+            sha256: string | null;
         };
         /** MultipartPart */
         MultipartPart: {
@@ -8236,8 +8988,11 @@ export interface components {
              * @default application/octet-stream
              */
             content_type: string;
-            /** Data Set Id */
-            data_set_id?: number | null;
+            /**
+             * Data Set Id
+             * @default null
+             */
+            data_set_id: number | null;
         };
         /**
          * MutagenCount
@@ -8261,8 +9016,11 @@ export interface components {
             public_id: string;
             /** Name */
             name: string;
-            /** Mutagen */
-            mutagen?: string | null;
+            /**
+             * Mutagen
+             * @default null
+             */
+            mutagen: string | null;
             /**
              * Cultivar
              * @default Williams 82
@@ -8278,12 +9036,21 @@ export interface components {
              * @default Glycine max
              */
             species: string;
-            /** Description */
-            description?: string | null;
-            /** Generation */
-            generation?: string | null;
-            /** Phenotype Summary */
-            phenotype_summary?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
+            /**
+             * Generation
+             * @default null
+             */
+            generation: string | null;
+            /**
+             * Phenotype Summary
+             * @default null
+             */
+            phenotype_summary: string | null;
             /**
              * Is Public
              * @default true
@@ -8312,8 +9079,11 @@ export interface components {
             public_id: string;
             /** Name */
             name: string;
-            /** Mutagen */
-            mutagen?: string | null;
+            /**
+             * Mutagen
+             * @default null
+             */
+            mutagen: string | null;
             /**
              * Cultivar
              * @default Williams 82
@@ -8329,29 +9099,50 @@ export interface components {
         NewsCreate: {
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Content En */
             content_en: string;
-            /** Content Zh */
-            content_zh?: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
             /** Slug */
             slug: string;
-            /** Category */
-            category?: string | null;
-            /** Cover Url */
-            cover_url?: string | null;
-            /** Cover Asset Id */
-            cover_asset_id?: string | null;
-            /** Cover Alt Text */
-            cover_alt_text?: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Cover Url
+             * @default null
+             */
+            cover_url: string | null;
+            /**
+             * Cover Asset Id
+             * @default null
+             */
+            cover_asset_id: string | null;
+            /**
+             * Cover Alt Text
+             * @default null
+             */
+            cover_alt_text: string | null;
             /**
              * Featured Sort
              * @default 0
              */
             featured_sort: number;
-            /** Carousel Group */
-            carousel_group?: string | null;
+            /**
+             * Carousel Group
+             * @default null
+             */
+            carousel_group: string | null;
             /**
              * Carousel Sort
              * @default 0
@@ -8359,17 +9150,26 @@ export interface components {
             carousel_sort: number;
             /** @default draft */
             status: components["schemas"]["NewsStatus"];
-            /** Visible From */
-            visible_from?: string | null;
-            /** Visible To */
-            visible_to?: string | null;
+            /**
+             * Visible From
+             * @default null
+             */
+            visible_from: string | null;
+            /**
+             * Visible To
+             * @default null
+             */
+            visible_to: string | null;
             /**
              * Is Published
              * @default false
              */
             is_published: boolean;
-            /** Source Preview Token */
-            source_preview_token?: string | null;
+            /**
+             * Source Preview Token
+             * @default null
+             */
+            source_preview_token: string | null;
         };
         /**
          * NewsDetailResponse
@@ -8380,25 +9180,43 @@ export interface components {
             id: string;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Slug */
             slug: string;
-            /** Category */
-            category?: string | null;
-            /** Cover Url */
-            cover_url?: string | null;
-            /** Cover Asset Id */
-            cover_asset_id?: string | null;
-            /** Cover Alt Text */
-            cover_alt_text?: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Cover Url
+             * @default null
+             */
+            cover_url: string | null;
+            /**
+             * Cover Asset Id
+             * @default null
+             */
+            cover_asset_id: string | null;
+            /**
+             * Cover Alt Text
+             * @default null
+             */
+            cover_alt_text: string | null;
             /**
              * Featured Sort
              * @default 0
              */
             featured_sort: number;
-            /** Carousel Group */
-            carousel_group?: string | null;
+            /**
+             * Carousel Group
+             * @default null
+             */
+            carousel_group: string | null;
             /**
              * Carousel Sort
              * @default 0
@@ -8411,8 +9229,11 @@ export interface components {
              * @default false
              */
             is_published: boolean;
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -8425,19 +9246,38 @@ export interface components {
             updated_at: string;
             /** Content En */
             content_en: string;
-            /** Content Zh */
-            content_zh?: string | null;
-            /** Visible From */
-            visible_from?: string | null;
-            /** Visible To */
-            visible_to?: string | null;
-            source_platform?: components["schemas"]["ExternalArticlePlatform"] | null;
-            /** Source Url */
-            source_url?: string | null;
-            /** Source Published At */
-            source_published_at?: string | null;
-            /** Source Synced At */
-            source_synced_at?: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
+            /**
+             * Visible From
+             * @default null
+             */
+            visible_from: string | null;
+            /**
+             * Visible To
+             * @default null
+             */
+            visible_to: string | null;
+            /** @default null */
+            source_platform: components["schemas"]["ExternalArticlePlatform"] | null;
+            /**
+             * Source Url
+             * @default null
+             */
+            source_url: string | null;
+            /**
+             * Source Published At
+             * @default null
+             */
+            source_published_at: string | null;
+            /**
+             * Source Synced At
+             * @default null
+             */
+            source_synced_at: string | null;
         };
         /**
          * NewsFeaturedResponse
@@ -8486,16 +9326,25 @@ export interface components {
             id: string;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Slug */
             slug: string;
-            /** Category */
-            category?: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
             /** Is Published */
             is_published: boolean;
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -8521,25 +9370,43 @@ export interface components {
             id: string;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Slug */
             slug: string;
-            /** Category */
-            category?: string | null;
-            /** Cover Url */
-            cover_url?: string | null;
-            /** Cover Asset Id */
-            cover_asset_id?: string | null;
-            /** Cover Alt Text */
-            cover_alt_text?: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Cover Url
+             * @default null
+             */
+            cover_url: string | null;
+            /**
+             * Cover Asset Id
+             * @default null
+             */
+            cover_asset_id: string | null;
+            /**
+             * Cover Alt Text
+             * @default null
+             */
+            cover_alt_text: string | null;
             /**
              * Featured Sort
              * @default 0
              */
             featured_sort: number;
-            /** Carousel Group */
-            carousel_group?: string | null;
+            /**
+             * Carousel Group
+             * @default null
+             */
+            carousel_group: string | null;
             /**
              * Carousel Sort
              * @default 0
@@ -8552,8 +9419,11 @@ export interface components {
              * @default false
              */
             is_published: boolean;
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -8567,39 +9437,88 @@ export interface components {
         };
         /** NewsUpdate */
         NewsUpdate: {
-            /** Title En */
-            title_en?: string | null;
-            /** Title Zh */
-            title_zh?: string | null;
-            /** Content En */
-            content_en?: string | null;
-            /** Content Zh */
-            content_zh?: string | null;
-            /** Slug */
-            slug?: string | null;
-            /** Category */
-            category?: string | null;
-            /** Cover Url */
-            cover_url?: string | null;
-            /** Cover Asset Id */
-            cover_asset_id?: string | null;
-            /** Cover Alt Text */
-            cover_alt_text?: string | null;
-            /** Featured Sort */
-            featured_sort?: number | null;
-            /** Carousel Group */
-            carousel_group?: string | null;
-            /** Carousel Sort */
-            carousel_sort?: number | null;
-            status?: components["schemas"]["NewsStatus"] | null;
-            /** Visible From */
-            visible_from?: string | null;
-            /** Visible To */
-            visible_to?: string | null;
-            /** Is Published */
-            is_published?: boolean | null;
-            /** Source Preview Token */
-            source_preview_token?: string | null;
+            /**
+             * Title En
+             * @default null
+             */
+            title_en: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
+            /**
+             * Content En
+             * @default null
+             */
+            content_en: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
+            /**
+             * Slug
+             * @default null
+             */
+            slug: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Cover Url
+             * @default null
+             */
+            cover_url: string | null;
+            /**
+             * Cover Asset Id
+             * @default null
+             */
+            cover_asset_id: string | null;
+            /**
+             * Cover Alt Text
+             * @default null
+             */
+            cover_alt_text: string | null;
+            /**
+             * Featured Sort
+             * @default null
+             */
+            featured_sort: number | null;
+            /**
+             * Carousel Group
+             * @default null
+             */
+            carousel_group: string | null;
+            /**
+             * Carousel Sort
+             * @default null
+             */
+            carousel_sort: number | null;
+            /** @default null */
+            status: components["schemas"]["NewsStatus"] | null;
+            /**
+             * Visible From
+             * @default null
+             */
+            visible_from: string | null;
+            /**
+             * Visible To
+             * @default null
+             */
+            visible_to: string | null;
+            /**
+             * Is Published
+             * @default null
+             */
+            is_published: boolean | null;
+            /**
+             * Source Preview Token
+             * @default null
+             */
+            source_preview_token: string | null;
             /**
              * Clear Source Provenance
              * @default false
@@ -8631,10 +9550,16 @@ export interface components {
             title: string;
             /** Body */
             body: string;
-            /** Link */
-            link?: string | null;
-            /** Read At */
-            read_at?: string | null;
+            /**
+             * Link
+             * @default null
+             */
+            link: string | null;
+            /**
+             * Read At
+             * @default null
+             */
+            read_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -8650,8 +9575,11 @@ export interface components {
             source: string;
             /** Target */
             target: string;
-            /** Label */
-            label?: string | null;
+            /**
+             * Label
+             * @default null
+             */
+            label: string | null;
         };
         /**
          * OntologyRelationshipGraphNode
@@ -8660,8 +9588,11 @@ export interface components {
         OntologyRelationshipGraphNode: {
             /** Iri */
             iri: string;
-            /** Label */
-            label?: string | null;
+            /**
+             * Label
+             * @default null
+             */
+            label: string | null;
             /**
              * Is Obsolete
              * @default false
@@ -8691,8 +9622,11 @@ export interface components {
         OntologySearchResponse: {
             /** Query */
             query: string;
-            /** Ontology */
-            ontology?: string | null;
+            /**
+             * Ontology
+             * @default null
+             */
+            ontology: string | null;
             /** Count */
             count: number;
             /** Items */
@@ -8700,14 +9634,23 @@ export interface components {
         };
         /** OntologySearchResult */
         OntologySearchResult: {
-            /** Term Id */
-            term_id?: string | null;
-            /** Label */
-            label?: string | null;
+            /**
+             * Term Id
+             * @default null
+             */
+            term_id: string | null;
+            /**
+             * Label
+             * @default null
+             */
+            label: string | null;
             /** Iri */
             iri: string;
-            /** Ontology Name */
-            ontology_name?: string | null;
+            /**
+             * Ontology Name
+             * @default null
+             */
+            ontology_name: string | null;
             /** Description */
             description?: string[];
             /** Synonyms */
@@ -8722,10 +9665,16 @@ export interface components {
         OntologyTermResponse: {
             /** Iri */
             iri: string;
-            /** Label */
-            label?: string | null;
-            /** Ontology Name */
-            ontology_name?: string | null;
+            /**
+             * Label
+             * @default null
+             */
+            label: string | null;
+            /**
+             * Ontology Name
+             * @default null
+             */
+            ontology_name: string | null;
             /** Description */
             description?: string[];
             /** Synonyms */
@@ -8751,8 +9700,11 @@ export interface components {
         OrthologRecord: {
             /** Gene Accession */
             gene_accession: string;
-            /** Counterpart Species */
-            counterpart_species?: string | null;
+            /**
+             * Counterpart Species
+             * @default null
+             */
+            counterpart_species: string | null;
             /** Counterpart Gene Id */
             counterpart_gene_id: string;
             /**
@@ -8765,14 +9717,26 @@ export interface components {
              * @enum {string}
              */
             relationship_type: "one_to_one" | "one_to_many" | "many_to_many";
-            /** Method */
-            method?: string | null;
-            /** Source */
-            source?: string | null;
-            /** Release Id */
-            release_id?: number | null;
-            /** Confidence */
-            confidence?: number | null;
+            /**
+             * Method
+             * @default null
+             */
+            method: string | null;
+            /**
+             * Source
+             * @default null
+             */
+            source: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Confidence
+             * @default null
+             */
+            confidence: number | null;
             evidence: components["schemas"]["EvidenceTag"];
         };
         /** OrthologResponse */
@@ -8887,8 +9851,11 @@ export interface components {
             definition: {
                 [key: string]: unknown;
             };
-            /** Edit Comment */
-            edit_comment?: string | null;
+            /**
+             * Edit Comment
+             * @default null
+             */
+            edit_comment: string | null;
         };
         /** PageDefinitionVersionResponse */
         PageDefinitionVersionResponse: {
@@ -8909,12 +9876,21 @@ export interface components {
             definition: {
                 [key: string]: unknown;
             };
-            /** Edited By */
-            edited_by?: string | null;
-            /** Edit Comment */
-            edit_comment?: string | null;
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Edited By
+             * @default null
+             */
+            edited_by: string | null;
+            /**
+             * Edit Comment
+             * @default null
+             */
+            edit_comment: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -8937,8 +9913,11 @@ export interface components {
             key: string;
             /** Label */
             label: string;
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /**
              * Category
              * @default general
@@ -8948,8 +9927,11 @@ export interface components {
             definition: {
                 [key: string]: unknown;
             };
-            /** Preview Image Id */
-            preview_image_id?: string | null;
+            /**
+             * Preview Image Id
+             * @default null
+             */
+            preview_image_id: string | null;
             /**
              * Sort Order
              * @default 0
@@ -9004,20 +9986,38 @@ export interface components {
         };
         /** PageTemplateUpdate */
         PageTemplateUpdate: {
-            /** Label */
-            label?: string | null;
-            /** Description */
-            description?: string | null;
-            /** Category */
-            category?: string | null;
-            /** Definition */
-            definition?: {
+            /**
+             * Label
+             * @default null
+             */
+            label: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Definition
+             * @default null
+             */
+            definition: {
                 [key: string]: unknown;
             } | null;
-            /** Preview Image Id */
-            preview_image_id?: string | null;
-            /** Sort Order */
-            sort_order?: number | null;
+            /**
+             * Preview Image Id
+             * @default null
+             */
+            preview_image_id: string | null;
+            /**
+             * Sort Order
+             * @default null
+             */
+            sort_order: number | null;
         };
         /** PageTemplateValidationResponse */
         PageTemplateValidationResponse: {
@@ -9054,12 +10054,21 @@ export interface components {
             trait_category: string;
             /** Trait Name */
             trait_name: string;
-            /** Trait Value */
-            trait_value?: string | null;
-            /** Unit */
-            unit?: string | null;
-            /** Measurement Method */
-            measurement_method?: string | null;
+            /**
+             * Trait Value
+             * @default null
+             */
+            trait_value: string | null;
+            /**
+             * Unit
+             * @default null
+             */
+            unit: string | null;
+            /**
+             * Measurement Method
+             * @default null
+             */
+            measurement_method: string | null;
         };
         /**
          * PhenotypeResponse
@@ -9074,12 +10083,21 @@ export interface components {
             trait_category: string;
             /** Trait Name */
             trait_name: string;
-            /** Trait Value */
-            trait_value?: string | null;
-            /** Unit */
-            unit?: string | null;
-            /** Description */
-            description?: string | null;
+            /**
+             * Trait Value
+             * @default null
+             */
+            trait_value: string | null;
+            /**
+             * Unit
+             * @default null
+             */
+            unit: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
         };
         /** PhenotypeSection */
         PhenotypeSection: {
@@ -9096,8 +10114,11 @@ export interface components {
         };
         /** PluginCapabilityResponse */
         PluginCapabilityResponse: {
-            /** Version */
-            version?: string | null;
+            /**
+             * Version
+             * @default null
+             */
+            version: string | null;
             /**
              * Installed
              * @default false
@@ -9118,12 +10139,18 @@ export interface components {
              * @default false
              */
             healthy: boolean;
-            /** Public Url */
-            public_url?: string | null;
+            /**
+             * Public Url
+             * @default null
+             */
+            public_url: string | null;
             /** Assemblies */
             assemblies?: string[];
-            /** Reason */
-            reason?: string | null;
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
         };
         /** PluginHealthcheck */
         PluginHealthcheck: {
@@ -9315,12 +10342,21 @@ export interface components {
             feature: string;
             /** Available */
             available: boolean;
-            /** Gene V2 */
-            gene_v2?: string | null;
-            /** Gene V4 */
-            gene_v4?: string | null;
-            /** Gene Dn53 */
-            gene_dn53?: string | null;
+            /**
+             * Gene V2
+             * @default null
+             */
+            gene_v2: string | null;
+            /**
+             * Gene V4
+             * @default null
+             */
+            gene_v4: string | null;
+            /**
+             * Gene Dn53
+             * @default null
+             */
+            gene_dn53: string | null;
         };
         /** PreviewMutationSiteSearchResponse */
         PreviewMutationSiteSearchResponse: {
@@ -9448,24 +10484,48 @@ export interface components {
         PublicationCreate: {
             /** Title */
             title: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Authors */
             authors: string;
-            /** Authors Zh */
-            authors_zh?: string | null;
-            /** Journal */
-            journal?: string | null;
-            /** Year */
-            year?: number | null;
-            /** Doi */
-            doi?: string | null;
-            /** Pmid */
-            pmid?: string | null;
-            /** Abstract */
-            abstract?: string | null;
-            /** Abstract Zh */
-            abstract_zh?: string | null;
+            /**
+             * Authors Zh
+             * @default null
+             */
+            authors_zh: string | null;
+            /**
+             * Journal
+             * @default null
+             */
+            journal: string | null;
+            /**
+             * Year
+             * @default null
+             */
+            year: number | null;
+            /**
+             * Doi
+             * @default null
+             */
+            doi: string | null;
+            /**
+             * Pmid
+             * @default null
+             */
+            pmid: string | null;
+            /**
+             * Abstract
+             * @default null
+             */
+            abstract: string | null;
+            /**
+             * Abstract Zh
+             * @default null
+             */
+            abstract_zh: string | null;
             /**
              * Is Featured
              * @default false
@@ -9501,18 +10561,27 @@ export interface components {
             manifest: {
                 [key: string]: unknown;
             };
-            /** Published At */
-            published_at?: unknown | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: unknown | null;
         };
         /** PublicationRequest */
         PublicationRequest: {
             target: components["schemas"]["PublicationTarget"];
             /** Release Id */
             release_id: number;
-            /** Page Definition Version */
-            page_definition_version?: number | null;
-            /** Build Artifact Url */
-            build_artifact_url?: string | null;
+            /**
+             * Page Definition Version
+             * @default null
+             */
+            page_definition_version: number | null;
+            /**
+             * Build Artifact Url
+             * @default null
+             */
+            build_artifact_url: string | null;
         };
         /** PublicationRollbackRequest */
         PublicationRollbackRequest: {
@@ -9547,38 +10616,77 @@ export interface components {
         };
         /** PublicationUpdate */
         PublicationUpdate: {
-            /** Title */
-            title?: string | null;
-            /** Title Zh */
-            title_zh?: string | null;
-            /** Authors */
-            authors?: string | null;
-            /** Authors Zh */
-            authors_zh?: string | null;
-            /** Journal */
-            journal?: string | null;
-            /** Year */
-            year?: number | null;
-            /** Doi */
-            doi?: string | null;
-            /** Pmid */
-            pmid?: string | null;
-            /** Abstract */
-            abstract?: string | null;
-            /** Abstract Zh */
-            abstract_zh?: string | null;
-            /** Is Featured */
-            is_featured?: boolean | null;
+            /**
+             * Title
+             * @default null
+             */
+            title: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
+            /**
+             * Authors
+             * @default null
+             */
+            authors: string | null;
+            /**
+             * Authors Zh
+             * @default null
+             */
+            authors_zh: string | null;
+            /**
+             * Journal
+             * @default null
+             */
+            journal: string | null;
+            /**
+             * Year
+             * @default null
+             */
+            year: number | null;
+            /**
+             * Doi
+             * @default null
+             */
+            doi: string | null;
+            /**
+             * Pmid
+             * @default null
+             */
+            pmid: string | null;
+            /**
+             * Abstract
+             * @default null
+             */
+            abstract: string | null;
+            /**
+             * Abstract Zh
+             * @default null
+             */
+            abstract_zh: string | null;
+            /**
+             * Is Featured
+             * @default null
+             */
+            is_featured: boolean | null;
         };
         /**
          * PublishRequest
          * @description Request publication of the latest draft/preview version.
          */
         PublishRequest: {
-            /** Version Id */
-            version_id?: string | null;
-            /** Reason */
-            reason?: string | null;
+            /**
+             * Version Id
+             * @default null
+             */
+            version_id: string | null;
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
         };
         /** PublishRequestResponse */
         PublishRequestResponse: {
@@ -9595,8 +10703,11 @@ export interface components {
             /** Version */
             version: number;
             status: components["schemas"]["PageDefinitionStatusEnum"];
-            /** Event Id */
-            event_id?: string | null;
+            /**
+             * Event Id
+             * @default null
+             */
+            event_id: string | null;
         };
         /**
          * PublishedPageDefinitionRoute
@@ -9643,8 +10754,11 @@ export interface components {
         RegionGeneResponse: {
             /** Gene Id */
             gene_id: string;
-            /** Name */
-            name?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
             /** Chromosome */
             chromosome: string;
             /** Start */
@@ -9698,8 +10812,11 @@ export interface components {
         RegionTranscriptResponse: {
             /** Id */
             id: string;
-            /** Name */
-            name?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
             /**
              * Biotype
              * @default mRNA
@@ -9739,10 +10856,16 @@ export interface components {
             version: string;
             /** Name */
             name: string;
-            /** Description */
-            description?: string | null;
-            /** Assembly */
-            assembly?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
             /** Data Set Ids */
             data_set_ids: number[];
         };
@@ -9765,8 +10888,11 @@ export interface components {
             version: string;
             /** Name */
             name: string;
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /**
              * Variant Count
              * @default 0
@@ -9783,8 +10909,11 @@ export interface components {
              */
             mutant_line_count: number;
             status: components["schemas"]["ReleaseStatus"];
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -9864,10 +10993,16 @@ export interface components {
             type: components["schemas"]["SearchResultType"];
             /** Id */
             id: string;
-            /** Name */
-            name?: string | null;
-            /** Description */
-            description?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /**
              * Score
              * @default 0
@@ -9875,19 +11010,31 @@ export interface components {
             score: number;
             /** @default text */
             match_type: components["schemas"]["MatchType"];
-            /** Url */
-            url?: string | null;
+            /**
+             * Url
+             * @default null
+             */
+            url: string | null;
             /**
              * Source
              * @default internal
              */
             source: string;
-            /** Release Id */
-            release_id?: number | null;
-            /** Assembly Id */
-            assembly_id?: number | null;
-            /** Assembly */
-            assembly?: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: number | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
             /** Cross Version */
             cross_version?: components["schemas"]["CrossVersionLink"][];
         };
@@ -9912,11 +11059,18 @@ export interface components {
              * @enum {string}
              */
             state: "available" | "empty" | "not_imported";
-            /** Count */
-            count?: number | null;
-            evidence?: components["schemas"]["EvidenceTag"] | null;
-            /** Reason */
-            reason?: string | null;
+            /**
+             * Count
+             * @default null
+             */
+            count: number | null;
+            /** @default null */
+            evidence: components["schemas"]["EvidenceTag"] | null;
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
         };
         /**
          * SeedInventoryResponse
@@ -9934,14 +11088,26 @@ export interface components {
             seed_lot: string;
             /** Quantity Grams */
             quantity_grams: number;
-            /** Location */
-            location?: string | null;
-            /** Harvest Date */
-            harvest_date?: string | null;
-            /** Viability Pct */
-            viability_pct?: number | null;
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Location
+             * @default null
+             */
+            location: string | null;
+            /**
+             * Harvest Date
+             * @default null
+             */
+            harvest_date: string | null;
+            /**
+             * Viability Pct
+             * @default null
+             */
+            viability_pct: number | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
             /**
              * Created At
              * Format: date-time
@@ -10000,18 +11166,21 @@ export interface components {
             /**
              * Genes
              * @description Gene IDs to extract (≤200).
+             * @default null
              */
-            genes?: string[] | null;
+            genes: string[] | null;
             /**
              * Assembly
              * @description Assembly name (see /genes/assemblies) for region mode.
+             * @default null
              */
-            assembly?: string | null;
+            assembly: string | null;
             /**
              * Region
              * @description 1-based interval, e.g. 'chr1:1000-2000'.
+             * @default null
              */
-            region?: string | null;
+            region: string | null;
         };
         /**
          * SeqFetchResponse
@@ -10031,8 +11200,9 @@ export interface components {
             /**
              * Sequence
              * @description Inline FASTA text when under the size cap.
+             * @default null
              */
-            sequence?: string | null;
+            sequence: string | null;
             /**
              * Count
              * @description Number of extracted sequences.
@@ -10053,13 +11223,15 @@ export interface components {
             /**
              * Download Url
              * @description Pre-signed download URL for large results.
+             * @default null
              */
-            download_url?: string | null;
+            download_url: string | null;
             /**
              * Expires In
              * @description download_url lifetime in seconds.
+             * @default null
              */
-            expires_in?: number | null;
+            expires_in: number | null;
         };
         /**
          * SequenceAvailability
@@ -10137,10 +11309,16 @@ export interface components {
             allowed_values?: string[];
             /** Allowed Url Hosts */
             allowed_url_hosts?: string[];
-            /** Minimum */
-            minimum?: number | null;
-            /** Maximum */
-            maximum?: number | null;
+            /**
+             * Minimum
+             * @default null
+             */
+            minimum: number | null;
+            /**
+             * Maximum
+             * @default null
+             */
+            maximum: number | null;
             /** Max Length */
             max_length: number;
         };
@@ -10172,17 +11350,26 @@ export interface components {
             changes: {
                 [key: string]: string | number | boolean | null;
             };
-            /** Actor Id */
-            actor_id?: string | null;
+            /**
+             * Actor Id
+             * @default null
+             */
+            actor_id: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-            /** Rollback From Version */
-            rollback_from_version?: number | null;
-            /** Reason */
-            reason?: string | null;
+            /**
+             * Rollback From Version
+             * @default null
+             */
+            rollback_from_version: number | null;
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
         };
         /** SettingsHistoryResponse */
         SettingsHistoryResponse: {
@@ -10262,15 +11449,21 @@ export interface components {
         SignedUrlResponse: {
             /** Url */
             url: string;
-            /** Index Url */
-            index_url?: string | null;
+            /**
+             * Index Url
+             * @default null
+             */
+            index_url: string | null;
             /**
              * Expires In
              * @description URL validity in seconds.
              */
             expires_in: number;
-            /** Request Id */
-            request_id?: string | null;
+            /**
+             * Request Id
+             * @default null
+             */
+            request_id: string | null;
         };
         /** SiteBrandPatchRequest */
         SiteBrandPatchRequest: {
@@ -10283,12 +11476,21 @@ export interface components {
          * @description Sparse site-brand patch. An explicit null icon clears the selection.
          */
         SiteBrandPatchValues: {
-            /** Name Zh */
-            name_zh?: string | null;
-            /** Name En */
-            name_en?: string | null;
-            /** Icon Url */
-            icon_url?: string | null;
+            /**
+             * Name Zh
+             * @default null
+             */
+            name_zh: string | null;
+            /**
+             * Name En
+             * @default null
+             */
+            name_en: string | null;
+            /**
+             * Icon Url
+             * @default null
+             */
+            icon_url: string | null;
         };
         /**
          * SiteBrandResponse
@@ -10299,8 +11501,11 @@ export interface components {
             name_zh: string;
             /** Name En */
             name_en: string;
-            /** Icon Url */
-            icon_url?: string | null;
+            /**
+             * Icon Url
+             * @default null
+             */
+            icon_url: string | null;
             /**
              * Variant
              * @enum {string}
@@ -10316,8 +11521,11 @@ export interface components {
             name_zh: string;
             /** Name En */
             name_en: string;
-            /** Icon Url */
-            icon_url?: string | null;
+            /**
+             * Icon Url
+             * @default null
+             */
+            icon_url: string | null;
         };
         /**
          * SiteVariant
@@ -10341,8 +11549,11 @@ export interface components {
              * @enum {string}
              */
             state: "available" | "no_data" | "not_imported";
-            /** Member Count */
-            member_count?: number | null;
+            /**
+             * Member Count
+             * @default null
+             */
+            member_count: number | null;
         };
         /** SpeciesInstanceCreate */
         SpeciesInstanceCreate: {
@@ -10354,10 +11565,16 @@ export interface components {
             species: string;
             /** Api Base Url */
             api_base_url: string;
-            /** Jbrowse Base Url */
-            jbrowse_base_url?: string | null;
-            /** Portal Base Url */
-            portal_base_url?: string | null;
+            /**
+             * Jbrowse Base Url
+             * @default null
+             */
+            jbrowse_base_url: string | null;
+            /**
+             * Portal Base Url
+             * @default null
+             */
+            portal_base_url: string | null;
             /**
              * Is Enabled
              * @default true
@@ -10368,8 +11585,11 @@ export interface components {
              * @default false
              */
             is_local: boolean;
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
         };
         /** SpeciesInstanceHealthResponse */
         SpeciesInstanceHealthResponse: {
@@ -10387,14 +11607,23 @@ export interface components {
              * Format: date-time
              */
             checked_at: string;
-            /** Last Checked At */
-            last_checked_at?: string | null;
-            /** Last Error At */
-            last_error_at?: string | null;
+            /**
+             * Last Checked At
+             * @default null
+             */
+            last_checked_at: string | null;
+            /**
+             * Last Error At
+             * @default null
+             */
+            last_error_at: string | null;
             /** Is Stale */
             is_stale: boolean;
-            /** Error Code */
-            error_code?: string | null;
+            /**
+             * Error Code
+             * @default null
+             */
+            error_code: string | null;
             /**
              * Remote Management
              * @enum {string}
@@ -10418,10 +11647,16 @@ export interface components {
             species: string;
             /** Api Base Url */
             api_base_url: string;
-            /** Jbrowse Base Url */
-            jbrowse_base_url?: string | null;
-            /** Portal Base Url */
-            portal_base_url?: string | null;
+            /**
+             * Jbrowse Base Url
+             * @default null
+             */
+            jbrowse_base_url: string | null;
+            /**
+             * Portal Base Url
+             * @default null
+             */
+            portal_base_url: string | null;
             /**
              * Is Enabled
              * @default true
@@ -10432,22 +11667,34 @@ export interface components {
              * @default false
              */
             is_local: boolean;
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
             /** Id */
             id: number;
-            /** Site Url */
-            site_url?: string | null;
+            /**
+             * Site Url
+             * @default null
+             */
+            site_url: string | null;
             /**
              * Connection State
              * @default unknown
              * @enum {string}
              */
             connection_state: "unknown" | "healthy" | "unhealthy" | "disabled" | "unconfigured";
-            /** Last Checked At */
-            last_checked_at?: string | null;
-            /** Last Error At */
-            last_error_at?: string | null;
+            /**
+             * Last Checked At
+             * @default null
+             */
+            last_checked_at: string | null;
+            /**
+             * Last Error At
+             * @default null
+             */
+            last_error_at: string | null;
             /**
              * Is Stale
              * @default true
@@ -10471,20 +11718,41 @@ export interface components {
         };
         /** SpeciesInstanceUpdate */
         SpeciesInstanceUpdate: {
-            /** Name */
-            name?: string | null;
-            /** Api Base Url */
-            api_base_url?: string | null;
-            /** Jbrowse Base Url */
-            jbrowse_base_url?: string | null;
-            /** Portal Base Url */
-            portal_base_url?: string | null;
-            /** Is Enabled */
-            is_enabled?: boolean | null;
-            /** Is Local */
-            is_local?: boolean | null;
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * Api Base Url
+             * @default null
+             */
+            api_base_url: string | null;
+            /**
+             * Jbrowse Base Url
+             * @default null
+             */
+            jbrowse_base_url: string | null;
+            /**
+             * Portal Base Url
+             * @default null
+             */
+            portal_base_url: string | null;
+            /**
+             * Is Enabled
+             * @default null
+             */
+            is_enabled: boolean | null;
+            /**
+             * Is Local
+             * @default null
+             */
+            is_local: boolean | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
         };
         /**
          * StaticBuildRequest
@@ -10495,8 +11763,11 @@ export interface components {
          *     build exactly as the administrator wrote it and simply not be counted.
          */
         StaticBuildRequest: {
-            /** Gene Ids */
-            gene_ids?: string[] | null;
+            /**
+             * Gene Ids
+             * @default null
+             */
+            gene_ids: string[] | null;
         };
         /** StaticPageCreate */
         StaticPageCreate: {
@@ -10504,16 +11775,28 @@ export interface components {
             slug: string;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Content En */
             content_en: string;
-            /** Content Zh */
-            content_zh?: string | null;
-            /** Summary */
-            summary?: string | null;
-            /** Category */
-            category?: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
+            /**
+             * Summary
+             * @default null
+             */
+            summary: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
             /**
              * Sort Order
              * @default 0
@@ -10521,8 +11804,11 @@ export interface components {
             sort_order: number;
             /** @default draft */
             status: components["schemas"]["PageStatus"];
-            /** Edit Comment */
-            edit_comment?: string | null;
+            /**
+             * Edit Comment
+             * @default null
+             */
+            edit_comment: string | null;
         };
         /**
          * StaticPageDetailResponse
@@ -10535,18 +11821,30 @@ export interface components {
             slug: string;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Content En */
             content_en: string;
-            /** Content Zh */
-            content_zh?: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
             /** @default draft */
             status: components["schemas"]["PageStatus"];
-            /** Category */
-            category?: string | null;
-            /** Summary */
-            summary?: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Summary
+             * @default null
+             */
+            summary: string | null;
             /**
              * Sort Order
              * @default 0
@@ -10562,10 +11860,16 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /** Author Name */
-            author_name?: string | null;
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Author Name
+             * @default null
+             */
+            author_name: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
             /**
              * Current Version
              * @default 1
@@ -10577,8 +11881,11 @@ export interface components {
          * @description Optional unique StaticPage slug selection for a non-mutating preview.
          */
         StaticPageMigrationDryRunRequest: {
-            /** Slugs */
-            slugs?: string[] | null;
+            /**
+             * Slugs
+             * @default null
+             */
+            slugs: string[] | null;
         };
         /** StaticPageMigrationDryRunResponse */
         StaticPageMigrationDryRunResponse: {
@@ -10603,10 +11910,16 @@ export interface components {
             route: string;
             /** Outcome */
             outcome: string;
-            /** Error Code */
-            error_code?: string | null;
-            /** Message */
-            message?: string | null;
+            /**
+             * Error Code
+             * @default null
+             */
+            error_code: string | null;
+            /**
+             * Message
+             * @default null
+             */
+            message: string | null;
         };
         /** StaticPageResponse */
         StaticPageResponse: {
@@ -10616,18 +11929,30 @@ export interface components {
             slug: string;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Content En */
             content_en: string;
-            /** Content Zh */
-            content_zh?: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
             /** @default draft */
             status: components["schemas"]["PageStatus"];
-            /** Category */
-            category?: string | null;
-            /** Summary */
-            summary?: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Summary
+             * @default null
+             */
+            summary: string | null;
             /**
              * Sort Order
              * @default 0
@@ -10646,22 +11971,46 @@ export interface components {
         };
         /** StaticPageUpdate */
         StaticPageUpdate: {
-            /** Title En */
-            title_en?: string | null;
-            /** Title Zh */
-            title_zh?: string | null;
-            /** Content En */
-            content_en?: string | null;
-            /** Content Zh */
-            content_zh?: string | null;
-            /** Summary */
-            summary?: string | null;
-            /** Category */
-            category?: string | null;
-            /** Sort Order */
-            sort_order?: number | null;
-            /** Edit Comment */
-            edit_comment?: string | null;
+            /**
+             * Title En
+             * @default null
+             */
+            title_en: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
+            /**
+             * Content En
+             * @default null
+             */
+            content_en: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
+            /**
+             * Summary
+             * @default null
+             */
+            summary: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Sort Order
+             * @default null
+             */
+            sort_order: number | null;
+            /**
+             * Edit Comment
+             * @default null
+             */
+            edit_comment: string | null;
         };
         /**
          * StorageGrowthPoint
@@ -10737,8 +12086,11 @@ export interface components {
              * @enum {string}
              */
             site_variant: "external" | "internal";
-            /** Release Id */
-            release_id?: number | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
             /**
              * Is Default
              * @default false
@@ -10747,8 +12099,11 @@ export interface components {
             /** Columns */
             columns: components["schemas"]["TableColumn"][];
             actions?: components["schemas"]["TableActions"];
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
             /**
              * Kind
              * @default mutation_sites
@@ -10778,8 +12133,11 @@ export interface components {
              * @enum {string}
              */
             site_variant: "external" | "internal";
-            /** Release Id */
-            release_id?: number | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
             /**
              * Is Default
              * @default false
@@ -10788,8 +12146,11 @@ export interface components {
             /** Columns */
             columns: components["schemas"]["TableColumn"][];
             actions?: components["schemas"]["TableActions"];
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
             /** Id */
             id: number;
             /** Kind */
@@ -10807,17 +12168,33 @@ export interface components {
         };
         /** TableViewTemplateUpdate */
         TableViewTemplateUpdate: {
-            /** Name */
-            name?: string | null;
-            /** Columns */
-            columns?: components["schemas"]["TableColumn"][] | null;
-            actions?: components["schemas"]["TableActions"] | null;
-            /** Is Default */
-            is_default?: boolean | null;
-            /** Release Id */
-            release_id?: number | null;
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * Columns
+             * @default null
+             */
+            columns: components["schemas"]["TableColumn"][] | null;
+            /** @default null */
+            actions: components["schemas"]["TableActions"] | null;
+            /**
+             * Is Default
+             * @default null
+             */
+            is_default: boolean | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
         };
         /**
          * TokenResponse
@@ -10867,8 +12244,11 @@ export interface components {
             id: string;
             /** Gene Id */
             gene_id: string;
-            /** Name */
-            name?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
             /**
              * Biotype
              * @default mRNA
@@ -10962,8 +12342,11 @@ export interface components {
              * @example Jane Doe
              */
             full_name: string;
-            /** Organization Id */
-            organization_id?: number | null;
+            /**
+             * Organization Id
+             * @default null
+             */
+            organization_id: number | null;
             /**
              * Role Name
              * @description Public registration always creates a viewer account.
@@ -10990,19 +12373,28 @@ export interface components {
             is_active: boolean;
             /** Is Superuser */
             is_superuser: boolean;
-            /** Role Name */
-            role_name?: string | null;
+            /**
+             * Role Name
+             * @default null
+             */
+            role_name: string | null;
             /** Effective Roles */
             effective_roles?: string[];
-            /** Organization Id */
-            organization_id?: number | null;
+            /**
+             * Organization Id
+             * @default null
+             */
+            organization_id: number | null;
             /**
              * Joined At
              * Format: date-time
              */
             joined_at: string;
-            /** Last Login At */
-            last_login_at?: string | null;
+            /**
+             * Last Login At
+             * @default null
+             */
+            last_login_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -11100,14 +12492,26 @@ export interface components {
          * @description Extended variant information with annotation and linked entities.
          */
         VariantDetail: {
-            /** Id */
-            id?: string | null;
-            /** Assembly Id */
-            assembly_id?: string | null;
-            /** Assembly */
-            assembly?: string | null;
-            /** Variant Id */
-            variant_id?: string | null;
+            /**
+             * Id
+             * @default null
+             */
+            id: string | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: string | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
+            /**
+             * Variant Id
+             * @default null
+             */
+            variant_id: string | null;
             /** Chromosome */
             chromosome: string;
             /** Position */
@@ -11117,39 +12521,80 @@ export interface components {
             /** Alt Allele */
             alt_allele: string;
             variant_type: components["schemas"]["VariantType"];
-            /** Quality */
-            quality?: number | null;
+            /**
+             * Quality
+             * @default null
+             */
+            quality: number | null;
             /**
              * Filter Status
              * @default PASS
              */
             filter_status: string;
-            /** Allele Frequency */
-            allele_frequency?: number | null;
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Gene Symbol */
-            gene_symbol?: string | null;
-            consequence?: components["schemas"]["ConsequenceType"] | null;
-            impact?: components["schemas"]["ImpactLevel"] | null;
-            /** Transcript Id */
-            transcript_id?: string | null;
-            /** Hgvs C */
-            hgvs_c?: string | null;
-            /** Hgvs P */
-            hgvs_p?: string | null;
-            /** Sift Score */
-            sift_score?: number | null;
-            /** Sift Prediction */
-            sift_prediction?: string | null;
-            /** Depth */
-            depth?: number | null;
-            /** Genotype */
-            genotype?: string | null;
-            /** Created At */
-            created_at?: string | null;
-            /** Updated At */
-            updated_at?: string | null;
+            /**
+             * Allele Frequency
+             * @default null
+             */
+            allele_frequency: number | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Gene Symbol
+             * @default null
+             */
+            gene_symbol: string | null;
+            /** @default null */
+            consequence: components["schemas"]["ConsequenceType"] | null;
+            /** @default null */
+            impact: components["schemas"]["ImpactLevel"] | null;
+            /**
+             * Transcript Id
+             * @default null
+             */
+            transcript_id: string | null;
+            /**
+             * Hgvs C
+             * @default null
+             */
+            hgvs_c: string | null;
+            /**
+             * Hgvs P
+             * @default null
+             */
+            hgvs_p: string | null;
+            /**
+             * Sift Score
+             * @default null
+             */
+            sift_score: number | null;
+            /**
+             * Sift Prediction
+             * @default null
+             */
+            sift_prediction: string | null;
+            /**
+             * Depth
+             * @default null
+             */
+            depth: number | null;
+            /**
+             * Genotype
+             * @default null
+             */
+            genotype: string | null;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: string | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: string | null;
         };
         /**
          * VariantExportFilters
@@ -11159,39 +12604,72 @@ export interface components {
             /**
              * Assembly
              * @description Assembly namespace of the exported file (e.g. ``Wm82.a4.v1``). A named assembly wins; when the request names none, the resolved release's own assembly scope is used; a request whose release declares no scope is refused. One export carries exactly one assembly namespace. The name is checked for length (at most 64 characters) and against the release's own facts: a namespace the release publishes no variants in is refused, because an artifact without rows would claim a namespace the release does not have.
+             * @default null
              */
-            assembly?: string | null;
-            /** Chromosome */
-            chromosome?: string | null;
-            /** Start */
-            start?: number | null;
-            /** End */
-            end?: number | null;
-            /** Ref */
-            ref?: string | null;
-            /** Alt */
-            alt?: string | null;
-            /** Gene Id */
-            gene_id?: string | null;
-            variant_type?: components["schemas"]["VariantType"] | null;
-            consequence?: components["schemas"]["ConsequenceType"] | null;
-            impact?: components["schemas"]["ImpactLevel"] | null;
-            /** Min Af */
-            min_af?: number | null;
-            /** Max Af */
-            max_af?: number | null;
+            assembly: string | null;
+            /**
+             * Chromosome
+             * @default null
+             */
+            chromosome: string | null;
+            /**
+             * Start
+             * @default null
+             */
+            start: number | null;
+            /**
+             * End
+             * @default null
+             */
+            end: number | null;
+            /**
+             * Ref
+             * @default null
+             */
+            ref: string | null;
+            /**
+             * Alt
+             * @default null
+             */
+            alt: string | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /** @default null */
+            variant_type: components["schemas"]["VariantType"] | null;
+            /** @default null */
+            consequence: components["schemas"]["ConsequenceType"] | null;
+            /** @default null */
+            impact: components["schemas"]["ImpactLevel"] | null;
+            /**
+             * Min Af
+             * @default null
+             */
+            min_af: number | null;
+            /**
+             * Max Af
+             * @default null
+             */
+            max_af: number | null;
             /**
              * Cursor
              * @description Opaque signed keyset cursor.
+             * @default null
              */
-            cursor?: string | null;
+            cursor: string | null;
             /**
              * Limit
              * @description Accepted for compatibility with the variant query filters, but not applied to an export: an artifact contains every record that matches the other filters, bounded by the export budget. A caller that wants a page of rows uses the variant list endpoint.
+             * @default null
              */
-            limit?: number | null;
-            /** Mutant Line Public Id */
-            mutant_line_public_id?: string | null;
+            limit: number | null;
+            /**
+             * Mutant Line Public Id
+             * @default null
+             */
+            mutant_line_public_id: string | null;
         };
         /**
          * VariantListResponse
@@ -11200,13 +12678,17 @@ export interface components {
         VariantListResponse: {
             /** Items */
             items?: components["schemas"]["VariantResponse"][];
-            /** Next Cursor */
-            next_cursor?: string | null;
+            /**
+             * Next Cursor
+             * @default null
+             */
+            next_cursor: string | null;
             /**
              * Total Count
              * @description May be null for large result sets.
+             * @default null
              */
-            total_count?: number | null;
+            total_count: number | null;
             /**
              * Has More
              * @default false
@@ -11218,14 +12700,26 @@ export interface components {
          * @description Compact variant representation for list endpoints.
          */
         VariantResponse: {
-            /** Id */
-            id?: string | null;
-            /** Assembly Id */
-            assembly_id?: string | null;
-            /** Assembly */
-            assembly?: string | null;
-            /** Variant Id */
-            variant_id?: string | null;
+            /**
+             * Id
+             * @default null
+             */
+            id: string | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: string | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
+            /**
+             * Variant Id
+             * @default null
+             */
+            variant_id: string | null;
             /** Chromosome */
             chromosome: string;
             /** Position */
@@ -11235,21 +12729,35 @@ export interface components {
             /** Alt Allele */
             alt_allele: string;
             variant_type: components["schemas"]["VariantType"];
-            /** Quality */
-            quality?: number | null;
+            /**
+             * Quality
+             * @default null
+             */
+            quality: number | null;
             /**
              * Filter Status
              * @default PASS
              */
             filter_status: string;
-            /** Allele Frequency */
-            allele_frequency?: number | null;
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Gene Symbol */
-            gene_symbol?: string | null;
-            consequence?: components["schemas"]["ConsequenceType"] | null;
-            impact?: components["schemas"]["ImpactLevel"] | null;
+            /**
+             * Allele Frequency
+             * @default null
+             */
+            allele_frequency: number | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Gene Symbol
+             * @default null
+             */
+            gene_symbol: string | null;
+            /** @default null */
+            consequence: components["schemas"]["ConsequenceType"] | null;
+            /** @default null */
+            impact: components["schemas"]["ImpactLevel"] | null;
         };
         /**
          * VariantSection
@@ -11257,8 +12765,11 @@ export interface components {
          */
         VariantSection: {
             status: components["schemas"]["SectionStatus"];
-            /** Total */
-            total?: number | null;
+            /**
+             * Total
+             * @default null
+             */
+            total: number | null;
             /** By Impact */
             by_impact?: {
                 [key: string]: number;
@@ -11327,14 +12838,20 @@ export interface components {
             name: string;
             /** Display Name */
             display_name: string;
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /** @default custom */
             category: components["schemas"]["WidgetCategoryEnum"];
             /** Template Path */
             template_path: string;
-            /** Data Source */
-            data_source?: string | null;
+            /**
+             * Data Source
+             * @default null
+             */
+            data_source: string | null;
             /** Params Schema */
             params_schema?: {
                 [key: string]: unknown;
@@ -11481,13 +12998,19 @@ export interface components {
             name: string;
             /** Display Name */
             display_name: string;
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             category: components["schemas"]["WidgetCategoryEnum"];
             /** Template Path */
             template_path: string;
-            /** Data Source */
-            data_source?: string | null;
+            /**
+             * Data Source
+             * @default null
+             */
+            data_source: string | null;
             /** Params Schema */
             params_schema?: {
                 [key: string]: unknown;
@@ -11521,28 +13044,54 @@ export interface components {
         };
         /** WidgetUpdate */
         WidgetUpdate: {
-            /** Display Name */
-            display_name?: string | null;
-            /** Description */
-            description?: string | null;
-            category?: components["schemas"]["WidgetCategoryEnum"] | null;
-            /** Template Path */
-            template_path?: string | null;
-            /** Data Source */
-            data_source?: string | null;
-            /** Params Schema */
-            params_schema?: {
+            /**
+             * Display Name
+             * @default null
+             */
+            display_name: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
+            /** @default null */
+            category: components["schemas"]["WidgetCategoryEnum"] | null;
+            /**
+             * Template Path
+             * @default null
+             */
+            template_path: string | null;
+            /**
+             * Data Source
+             * @default null
+             */
+            data_source: string | null;
+            /**
+             * Params Schema
+             * @default null
+             */
+            params_schema: {
                 [key: string]: unknown;
             } | null;
-            /** Cache Ttl */
-            cache_ttl?: number | null;
-            /** Admin Config */
-            admin_config?: {
+            /**
+             * Cache Ttl
+             * @default null
+             */
+            cache_ttl: number | null;
+            /**
+             * Admin Config
+             * @default null
+             */
+            admin_config: {
                 [key: string]: unknown;
             } | null;
-            permissions?: components["schemas"]["WidgetPermissionEnum"] | null;
-            /** Is Active */
-            is_active?: boolean | null;
+            /** @default null */
+            permissions: components["schemas"]["WidgetPermissionEnum"] | null;
+            /**
+             * Is Active
+             * @default null
+             */
+            is_active: boolean | null;
         };
         /**
          * SeedRequestStatus
@@ -11562,24 +13111,48 @@ export interface components {
         app__schemas__content__PublicationResponse: {
             /** Title */
             title: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Authors */
             authors: string;
-            /** Authors Zh */
-            authors_zh?: string | null;
-            /** Journal */
-            journal?: string | null;
-            /** Year */
-            year?: number | null;
-            /** Doi */
-            doi?: string | null;
-            /** Pmid */
-            pmid?: string | null;
-            /** Abstract */
-            abstract?: string | null;
-            /** Abstract Zh */
-            abstract_zh?: string | null;
+            /**
+             * Authors Zh
+             * @default null
+             */
+            authors_zh: string | null;
+            /**
+             * Journal
+             * @default null
+             */
+            journal: string | null;
+            /**
+             * Year
+             * @default null
+             */
+            year: number | null;
+            /**
+             * Doi
+             * @default null
+             */
+            doi: string | null;
+            /**
+             * Pmid
+             * @default null
+             */
+            pmid: string | null;
+            /**
+             * Abstract
+             * @default null
+             */
+            abstract: string | null;
+            /**
+             * Abstract Zh
+             * @default null
+             */
+            abstract_zh: string | null;
             /**
              * Is Featured
              * @default false
@@ -11601,24 +13174,51 @@ export interface components {
             status: components["schemas"]["PublicationStatus"];
             /** Release Id */
             release_id: number;
-            /** Page Definition Version */
-            page_definition_version?: number | null;
-            /** Manifest Digest */
-            manifest_digest?: string | null;
-            /** Artifact Url */
-            artifact_url?: string | null;
-            /** Build Artifact Url */
-            build_artifact_url?: string | null;
-            /** Remote Id */
-            remote_id?: string | null;
-            /** Previous Publication Id */
-            previous_publication_id?: number | null;
-            /** Superseded By Publication Id */
-            superseded_by_publication_id?: number | null;
-            /** Error Message */
-            error_message?: string | null;
-            /** Requested By */
-            requested_by?: string | null;
+            /**
+             * Page Definition Version
+             * @default null
+             */
+            page_definition_version: number | null;
+            /**
+             * Manifest Digest
+             * @default null
+             */
+            manifest_digest: string | null;
+            /**
+             * Artifact Url
+             * @default null
+             */
+            artifact_url: string | null;
+            /**
+             * Build Artifact Url
+             * @default null
+             */
+            build_artifact_url: string | null;
+            /**
+             * Remote Id
+             * @default null
+             */
+            remote_id: string | null;
+            /**
+             * Previous Publication Id
+             * @default null
+             */
+            previous_publication_id: number | null;
+            /**
+             * Superseded By Publication Id
+             * @default null
+             */
+            superseded_by_publication_id: number | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
+            /**
+             * Requested By
+             * @default null
+             */
+            requested_by: string | null;
             /**
              * Created At
              * Format: date-time
@@ -11663,8 +13263,11 @@ export interface components {
             /** Mutant Line Public Id */
             mutant_line_public_id: string;
             status: components["schemas"]["app__schemas__seed__SeedRequestStatus"];
-            /** Quantity Requested */
-            quantity_requested?: number | null;
+            /**
+             * Quantity Requested
+             * @default null
+             */
+            quantity_requested: number | null;
             /** Requester Name */
             requester_name: string;
             /** Requester Email */
@@ -11673,17 +13276,26 @@ export interface components {
             requester_institution: string;
             /** Purpose */
             purpose: string;
-            /** Tracking Number */
-            tracking_number?: string | null;
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Tracking Number
+             * @default null
+             */
+            tracking_number: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-            /** Reviewed At */
-            reviewed_at?: string | null;
+            /**
+             * Reviewed At
+             * @default null
+             */
+            reviewed_at: string | null;
         };
         /**
          * SeedRequestStatus
@@ -11693,10 +13305,16 @@ export interface components {
         /** SeedRequestUpdate */
         app__schemas__seed__SeedRequestUpdate: {
             status: components["schemas"]["app__schemas__seed__SeedRequestStatus"];
-            /** Tracking Number */
-            tracking_number?: string | null;
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Tracking Number
+             * @default null
+             */
+            tracking_number: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
         };
         /**
          * SeedRequestCreate
@@ -11716,8 +13334,11 @@ export interface components {
             country: string;
             /** Gene Ids */
             gene_ids: string[];
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
         };
         /**
          * SeedRequestResponse
@@ -11736,18 +13357,27 @@ export interface components {
             country: string;
             /** Gene Ids */
             gene_ids: string[];
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
             status: components["schemas"]["app__models__seed_request__SeedRequestStatus"];
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-            /** Processed At */
-            processed_at?: string | null;
-            /** Processed By */
-            processed_by?: string | null;
+            /**
+             * Processed At
+             * @default null
+             */
+            processed_at: string | null;
+            /**
+             * Processed By
+             * @default null
+             */
+            processed_by: string | null;
         };
         /**
          * SeedRequestUpdate
