@@ -47,9 +47,9 @@ import {
 /**
  * Lines the page is willing to read before it starts reporting a partial view.
  *
- * The scan is sequential inside `scanPhenotypes`, but this page reads the same
- * per-line queries through `useQueries`, so the budget is also the number of
- * parallel per-line reads the page can issue.
+ * The scan is this page's `useQueries` fan-out over the per-line endpoint (see
+ * `-scan.ts`), so the budget is also the number of parallel per-line reads the
+ * page can issue.
  *
  * Why 40: a browser opens about six HTTP/1.1 connections per origin, so 40
  * requests occupy the pool for a few waves — long enough to be visible, short
