@@ -63,7 +63,14 @@ export interface PortalRouteDefinition {
     | "analytics"
     | "comparative"
     | "family"
-    | "compare";
+    | "compare"
+    | "expression"
+    | "expression-sample"
+    | "phenotypes"
+    | "phenotype-line"
+    | "ld"
+    | "diversity"
+    | "allelefreq";
   meta: PortalRouteMeta;
 }
 
@@ -348,6 +355,42 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
     },
   },
   {
+    path: "/expression",
+    name: "expression",
+    componentKey: "expression",
+    meta: {
+      title: "Expression libraries — SoyMutDB",
+      description:
+        "Browse released expression libraries with their study, source, assembly and developmental stage, and the genes measured in each one.",
+      prerender: true,
+      sitemap: true,
+    },
+  },
+  {
+    path: "/expression/:sampleId",
+    name: "expression-sample",
+    componentKey: "expression-sample",
+    meta: { title: "Expression library — SoyMutDB" },
+  },
+  {
+    path: "/phenotypes",
+    name: "phenotypes",
+    componentKey: "phenotypes",
+    meta: {
+      title: "Phenotype browser — SoyMutDB",
+      description:
+        "Recorded trait observations across released mutant lines, each traceable to the line that carries it.",
+      prerender: true,
+      sitemap: true,
+    },
+  },
+  {
+    path: "/phenotypes/:lineId",
+    name: "phenotype-line",
+    componentKey: "phenotype-line",
+    meta: { title: "Mutant line phenotypes — SoyMutDB" },
+  },
+  {
     path: "/about",
     name: "about",
     componentKey: "about",
@@ -422,6 +465,40 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
       description: "Run GO or KEGG enrichment analysis within a selected genome assembly.",
       prerender: true,
       sitemap: true,
+    },
+  },
+  {
+    path: "/tools/ld",
+    name: "ld",
+    componentKey: "ld",
+    meta: {
+      title: "Linkage disequilibrium — SoyMutDB",
+      description:
+        "Variant coordinates and pairwise r² for a gene or interval. r² is reported as not computable when no genotype data exists.",
+      prerender: true,
+      sitemap: false,
+    },
+  },
+  {
+    path: "/tools/diversity",
+    name: "diversity",
+    componentKey: "diversity",
+    meta: {
+      title: "Nucleotide diversity — SoyMutDB",
+      description: "Nucleotide diversity (π) and Watterson's θ for a gene or an interval.",
+      prerender: true,
+      sitemap: false,
+    },
+  },
+  {
+    path: "/tools/allelefreq",
+    name: "allelefreq",
+    componentKey: "allelefreq",
+    meta: {
+      title: "Allele frequency — SoyMutDB",
+      description: "Per-variant allele frequencies for a gene or an interval.",
+      prerender: true,
+      sitemap: false,
     },
   },
   {

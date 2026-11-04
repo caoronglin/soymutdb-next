@@ -28,14 +28,21 @@ import { Route as ToolsIndexRouteImport } from './routes/tools/index'
 import { Route as ToolsSeqfetchRouteImport } from './routes/tools/seqfetch'
 import { Route as ToolsEnrichmentRouteImport } from './routes/tools/enrichment'
 import { Route as ToolsExppatternRouteImport } from './routes/tools/exppattern'
+import { Route as ToolsAllelefreqRouteImport } from './routes/tools/allelefreq'
+import { Route as ToolsDiversityRouteImport } from './routes/tools/diversity'
+import { Route as ToolsLdRouteImport } from './routes/tools/ld'
 import { Route as ComparativeIndexRouteImport } from './routes/comparative/index'
 import { Route as ComparativeFamilyIdRouteImport } from './routes/comparative/$familyId'
+import { Route as ExpressionIndexRouteImport } from './routes/expression/index'
+import { Route as ExpressionSampleIdRouteImport } from './routes/expression/$sampleId'
 import { Route as GenesIndexRouteImport } from './routes/genes/index'
 import { Route as GenesGeneIdRouteImport } from './routes/genes/$geneId'
 import { Route as MutantsIndexRouteImport } from './routes/mutants/index'
 import { Route as MutantsIdRouteImport } from './routes/mutants/$id'
 import { Route as NewsIndexRouteImport } from './routes/news/index'
 import { Route as NewsSlugRouteImport } from './routes/news/$slug'
+import { Route as PhenotypesIndexRouteImport } from './routes/phenotypes/index'
+import { Route as PhenotypesLineIdRouteImport } from './routes/phenotypes/$lineId'
 import { Route as VariantsIndexRouteImport } from './routes/variants/index'
 import { Route as AnalysesIndexRouteImport } from './routes/analyses/index'
 import { Route as AnalysesFastpRouteImport } from './routes/analyses/fastp'
@@ -143,6 +150,21 @@ const ToolsExppatternRoute = ToolsExppatternRouteImport.update({
   path: '/tools/exppattern',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ToolsAllelefreqRoute = ToolsAllelefreqRouteImport.update({
+  id: '/tools/allelefreq',
+  path: '/tools/allelefreq',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ToolsDiversityRoute = ToolsDiversityRouteImport.update({
+  id: '/tools/diversity',
+  path: '/tools/diversity',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ToolsLdRoute = ToolsLdRouteImport.update({
+  id: '/tools/ld',
+  path: '/tools/ld',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ComparativeIndexRoute = ComparativeIndexRouteImport.update({
   id: '/comparative/',
   path: '/comparative/',
@@ -151,6 +173,16 @@ const ComparativeIndexRoute = ComparativeIndexRouteImport.update({
 const ComparativeFamilyIdRoute = ComparativeFamilyIdRouteImport.update({
   id: '/comparative/$familyId',
   path: '/comparative/$familyId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExpressionIndexRoute = ExpressionIndexRouteImport.update({
+  id: '/expression/',
+  path: '/expression/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExpressionSampleIdRoute = ExpressionSampleIdRouteImport.update({
+  id: '/expression/$sampleId',
+  path: '/expression/$sampleId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GenesIndexRoute = GenesIndexRouteImport.update({
@@ -181,6 +213,16 @@ const NewsIndexRoute = NewsIndexRouteImport.update({
 const NewsSlugRoute = NewsSlugRouteImport.update({
   id: '/news/$slug',
   path: '/news/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PhenotypesIndexRoute = PhenotypesIndexRouteImport.update({
+  id: '/phenotypes/',
+  path: '/phenotypes/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PhenotypesLineIdRoute = PhenotypesLineIdRouteImport.update({
+  id: '/phenotypes/$lineId',
+  path: '/phenotypes/$lineId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const VariantsIndexRoute = VariantsIndexRouteImport.update({
@@ -269,10 +311,14 @@ export interface FileRoutesByFullPath {
   '/comparative/$familyId': typeof ComparativeFamilyIdRoute
   '/compare': typeof CompareRoute
   '/downloads': typeof DownloadsRoute
+  '/expression/': typeof ExpressionIndexRoute
+  '/expression/$sampleId': typeof ExpressionSampleIdRoute
   '/genome-view': typeof GenomeViewRoute
   '/guide': typeof GuideRoute
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
+  '/phenotypes/': typeof PhenotypesIndexRoute
+  '/phenotypes/$lineId': typeof PhenotypesLineIdRoute
   '/publications': typeof PublicationsRoute
   '/search': typeof SearchRoute
   '/search/genes': typeof SearchGenesRoute
@@ -286,6 +332,9 @@ export interface FileRoutesByFullPath {
   '/tools/seqfetch': typeof ToolsSeqfetchRoute
   '/tools/enrichment': typeof ToolsEnrichmentRoute
   '/tools/exppattern': typeof ToolsExppatternRoute
+  '/tools/allelefreq': typeof ToolsAllelefreqRoute
+  '/tools/diversity': typeof ToolsDiversityRoute
+  '/tools/ld': typeof ToolsLdRoute
   '/genes/$geneId': typeof GenesGeneIdRoute
   '/mutants/$id': typeof MutantsIdRoute
   '/mutants/': typeof MutantsIndexRoute
@@ -309,10 +358,14 @@ export interface FileRoutesByTo {
   '/comparative/$familyId': typeof ComparativeFamilyIdRoute
   '/compare': typeof CompareRoute
   '/downloads': typeof DownloadsRoute
+  '/expression': typeof ExpressionIndexRoute
+  '/expression/$sampleId': typeof ExpressionSampleIdRoute
   '/genome-view': typeof GenomeViewRoute
   '/guide': typeof GuideRoute
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
+  '/phenotypes': typeof PhenotypesIndexRoute
+  '/phenotypes/$lineId': typeof PhenotypesLineIdRoute
   '/publications': typeof PublicationsRoute
   '/search': typeof SearchRoute
   '/search/genes': typeof SearchGenesRoute
@@ -328,6 +381,9 @@ export interface FileRoutesByTo {
   '/tools/seqfetch': typeof ToolsSeqfetchRoute
   '/tools/enrichment': typeof ToolsEnrichmentRoute
   '/tools/exppattern': typeof ToolsExppatternRoute
+  '/tools/allelefreq': typeof ToolsAllelefreqRoute
+  '/tools/diversity': typeof ToolsDiversityRoute
+  '/tools/ld': typeof ToolsLdRoute
   '/genes/$geneId': typeof GenesGeneIdRoute
   '/mutants/$id': typeof MutantsIdRoute
   '/mutants': typeof MutantsIndexRoute
@@ -351,10 +407,14 @@ export interface FileRoutesById {
   '/comparative/$familyId': typeof ComparativeFamilyIdRoute
   '/compare': typeof CompareRoute
   '/downloads': typeof DownloadsRoute
+  '/expression/': typeof ExpressionIndexRoute
+  '/expression/$sampleId': typeof ExpressionSampleIdRoute
   '/genome-view': typeof GenomeViewRoute
   '/guide': typeof GuideRoute
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
+  '/phenotypes/': typeof PhenotypesIndexRoute
+  '/phenotypes/$lineId': typeof PhenotypesLineIdRoute
   '/publications': typeof PublicationsRoute
   '/search': typeof SearchRoute
   '/search/genes': typeof SearchGenesRoute
@@ -368,6 +428,9 @@ export interface FileRoutesById {
   '/tools/seqfetch': typeof ToolsSeqfetchRoute
   '/tools/enrichment': typeof ToolsEnrichmentRoute
   '/tools/exppattern': typeof ToolsExppatternRoute
+  '/tools/allelefreq': typeof ToolsAllelefreqRoute
+  '/tools/diversity': typeof ToolsDiversityRoute
+  '/tools/ld': typeof ToolsLdRoute
   '/genes/$geneId': typeof GenesGeneIdRoute
   '/mutants/$id': typeof MutantsIdRoute
   '/mutants/': typeof MutantsIndexRoute
@@ -393,10 +456,14 @@ export interface FileRouteTypes {
     | '/comparative/$familyId'
     | '/compare'
     | '/downloads'
+    | '/expression/'
+    | '/expression/$sampleId'
     | '/genome-view'
     | '/guide'
     | '/help'
     | '/login'
+    | '/phenotypes/'
+    | '/phenotypes/$lineId'
     | '/publications'
     | '/search'
     | '/search/genes'
@@ -410,6 +477,9 @@ export interface FileRouteTypes {
     | '/tools/seqfetch'
     | '/tools/enrichment'
     | '/tools/exppattern'
+    | '/tools/allelefreq'
+    | '/tools/diversity'
+    | '/tools/ld'
     | '/genes/$geneId'
     | '/mutants/$id'
     | '/mutants/'
@@ -433,10 +503,14 @@ export interface FileRouteTypes {
     | '/comparative/$familyId'
     | '/compare'
     | '/downloads'
+    | '/expression'
+    | '/expression/$sampleId'
     | '/genome-view'
     | '/guide'
     | '/help'
     | '/login'
+    | '/phenotypes'
+    | '/phenotypes/$lineId'
     | '/publications'
     | '/search'
     | '/search/genes'
@@ -451,6 +525,9 @@ export interface FileRouteTypes {
     | '/tools/seqfetch'
     | '/tools/enrichment'
     | '/tools/exppattern'
+    | '/tools/allelefreq'
+    | '/tools/diversity'
+    | '/tools/ld'
     | '/genes/$geneId'
     | '/mutants/$id'
     | '/mutants'
@@ -473,10 +550,14 @@ export interface FileRouteTypes {
     | '/comparative/$familyId'
     | '/compare'
     | '/downloads'
+    | '/expression/'
+    | '/expression/$sampleId'
     | '/genome-view'
     | '/guide'
     | '/help'
     | '/login'
+    | '/phenotypes/'
+    | '/phenotypes/$lineId'
     | '/publications'
     | '/search'
     | '/search/genes'
@@ -490,6 +571,9 @@ export interface FileRouteTypes {
     | '/tools/seqfetch'
     | '/tools/enrichment'
     | '/tools/exppattern'
+    | '/tools/allelefreq'
+    | '/tools/diversity'
+    | '/tools/ld'
     | '/genes/$geneId'
     | '/mutants/$id'
     | '/mutants/'
@@ -512,10 +596,14 @@ export interface RootRouteChildren {
   BrowserRoute: typeof BrowserRoute
   CompareRoute: typeof CompareRoute
   DownloadsRoute: typeof DownloadsRoute
+  ExpressionIndexRoute: typeof ExpressionIndexRoute
+  ExpressionSampleIdRoute: typeof ExpressionSampleIdRoute
   GenomeViewRoute: typeof GenomeViewRoute
   GuideRoute: typeof GuideRoute
   HelpRoute: typeof HelpRoute
   LoginRoute: typeof LoginRoute
+  PhenotypesIndexRoute: typeof PhenotypesIndexRoute
+  PhenotypesLineIdRoute: typeof PhenotypesLineIdRoute
   PublicationsRoute: typeof PublicationsRoute
   SearchRoute: typeof SearchRoute
   SeedRequestRoute: typeof SeedRequestRoute
@@ -524,6 +612,9 @@ export interface RootRouteChildren {
   ToolsSeqfetchRoute: typeof ToolsSeqfetchRoute
   ToolsEnrichmentRoute: typeof ToolsEnrichmentRoute
   ToolsExppatternRoute: typeof ToolsExppatternRoute
+  ToolsAllelefreqRoute: typeof ToolsAllelefreqRoute
+  ToolsDiversityRoute: typeof ToolsDiversityRoute
+  ToolsLdRoute: typeof ToolsLdRoute
   GenesGeneIdRoute: typeof GenesGeneIdRoute
   MutantsIndexRoute: typeof MutantsIndexRoute
   MutantsIdRoute: typeof MutantsIdRoute
@@ -588,6 +679,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DownloadsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/expression/': {
+      id: '/expression/'
+      path: '/expression/'
+      fullPath: '/expression/'
+      preLoaderRoute: typeof ExpressionIndexImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/expression/$sampleId': {
+      id: '/expression/$sampleId'
+      path: '/expression/$sampleId'
+      fullPath: '/expression/$sampleId'
+      preLoaderRoute: typeof ExpressionSampleIdImport
+      parentRoute: typeof rootRouteImport
+    }
     '/genome-view': {
       id: '/genome-view'
       path: '/genome-view'
@@ -614,6 +719,20 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/phenotypes/': {
+      id: '/phenotypes/'
+      path: '/phenotypes'
+      fullPath: '/phenotypes/'
+      preLoaderRoute: typeof PhenotypesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/phenotypes/$lineId': {
+      id: '/phenotypes/$lineId'
+      path: '/phenotypes/$lineId'
+      fullPath: '/phenotypes/$lineId'
+      preLoaderRoute: typeof PhenotypesLineIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/publications': {
@@ -805,6 +924,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ToolsExppatternRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tools/allelefreq': {
+      id: '/tools/allelefreq'
+      path: '/tools/allelefreq'
+      fullPath: '/tools/allelefreq'
+      preLoaderRoute: typeof ToolsAllelefreqRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tools/diversity': {
+      id: '/tools/diversity'
+      path: '/tools/diversity'
+      fullPath: '/tools/diversity'
+      preLoaderRoute: typeof ToolsDiversityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tools/ld': {
+      id: '/tools/ld'
+      path: '/tools/ld'
+      fullPath: '/tools/ld'
+      preLoaderRoute: typeof ToolsLdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -816,10 +956,14 @@ const rootRouteChildren: RootRouteChildren = {
   BrowserRoute: BrowserRoute,
   CompareRoute: CompareRoute,
   DownloadsRoute: DownloadsRoute,
+  ExpressionIndexRoute: ExpressionIndexRoute,
+  ExpressionSampleIdRoute: ExpressionSampleIdRoute,
   GenomeViewRoute: GenomeViewRoute,
   GuideRoute: GuideRoute,
   HelpRoute: HelpRoute,
   LoginRoute: LoginRoute,
+  PhenotypesIndexRoute: PhenotypesIndexRoute,
+  PhenotypesLineIdRoute: PhenotypesLineIdRoute,
   PublicationsRoute: PublicationsRoute,
   SearchRoute: SearchRouteWithChildren,
   SeedRequestRoute: SeedRequestRoute,

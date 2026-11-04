@@ -69,12 +69,14 @@ _STATIC_PAGE_TEMPLATES: tuple[str, ...] = (
     "/comparative",
     "/compare",
     "/downloads",
+    "/expression",
     "/genes",
     "/guide",
     "/help",
     "/login",
     "/mutants",
     "/news",
+    "/phenotypes",
     "/publications",
     "/search",
     "/search/blast",
@@ -86,8 +88,11 @@ _STATIC_PAGE_TEMPLATES: tuple[str, ...] = (
     "/seed-request",
     "/sra",
     "/tools",
+    "/tools/allelefreq",
+    "/tools/diversity",
     "/tools/enrichment",
     "/tools/exppattern",
+    "/tools/ld",
     "/tools/seqfetch",
     "/variants",
 )
@@ -97,9 +102,11 @@ _STATIC_PAGE_TEMPLATES: tuple[str, ...] = (
 _DYNAMIC_PAGE_TEMPLATES: tuple[str, ...] = (
     "/analyses/:jobId",
     "/comparative/:familyId",
+    "/expression/:sampleId",
     "/genes/:geneId",
     "/mutants/:publicId",
     "/news/:slug",
+    "/phenotypes/:lineId",
 )
 
 CANONICAL_PAGE_TEMPLATES: frozenset[str] = frozenset(_STATIC_PAGE_TEMPLATES) | frozenset(

@@ -69,6 +69,15 @@ export interface ExpressionLibraryPage {
   page_size: number;
 }
 
+/** Get one expression library by its public sample id. */
+export async function getExpressionLibrary(
+  publicId: string,
+): Promise<ExpressionLibrary> {
+  return http.get<ExpressionLibrary>(
+    `/expression/libraries/${encodeURIComponent(publicId)}`,
+  );
+}
+
 export async function getExpressionLibraries(params?: {
   page?: number;
   page_size?: number;
