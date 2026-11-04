@@ -1621,3 +1621,205 @@ def test_the_audit_announces_each_analyzer_before_it_runs(tmp_path: Path) -> Non
     assert "[1/2] tool-1: running" in result.stdout
     assert "[2/2] tool-2: running" in result.stdout
     assert "tool-1: passed (passed)" in result.stdout
+
+
+def test_pip_audit_policy_never_reresolves_the_audited_graph() -> None:
+    """Build cnb-40u-1k6jjga6d: `pip-audit-worker: failed (analyzer_timeout:240s)`.
+
+    The audited graph is fully pinned by `uv export --locked`, but pip-audit
+    resolved it again in a throwaway virtualenv unless told otherwise, and a
+    resolution that builds the worker's science sdists on CPython 3.15 outlives
+    any ceiling this gate can afford. `--disable-pip` (with `--no-deps`, the one
+    combination that may skip pip without hashes) audits the exported pins
+    directly; `--no-header` drops `uv export`'s command comment, which pip-audit
+    would otherwise have to parse.
+    """
+    policy = json.loads(CONFIG.read_text(encoding="utf-8"))
+    pip_audits = [
+        check for check in policy["checks"] if check["name"].startswith("pip-audit-")
+    ]
+    assert len(pip_audits) == 3
+    for check in pip_audits:
+        script = check["command"][-1]
+        assert "--disable-pip" in script, check["name"]
+        assert "--no-deps" in script, check["name"]
+        assert "uv export --locked" in script, check["name"]
+        assert "--no-header" in script, check["name"]
+        # The audited pins are the evidence this check names.
+        assert check["normalize_recipe"].startswith("/tmp/")
+        assert check["normalize_recipe"] in script
+
+
+def test_a_mutating_audit_command_is_refused_even_when_it_exits_zero(
+    tmp_path: Path,
+) -> None:
+    """An audit that rewrites its own input cannot report on it.
+
+    `pip-audit --fix` (and `--dry-run`) run the resolver and write the
+    normalized requirements file back, then exit 0. Judged by exit status alone
+    that is a pass over a graph the run just edited.
+    """
+    governance = _governance_module()
+    for command in (
+        ["bash", "-c", "pip-audit --fix -r requirements.txt"],
+        ["bash", "-c", "pip-audit --dry-run -r requirements.txt"],
+    ):
+        assert governance._harms_audited_input(command) is True
+    for command in (
+        ["bash", "-c", "pip-audit --no-deps --disable-pip -r requirements.txt"],
+        "pip-audit --fix",
+        None,
+    ):
+        assert governance._harms_audited_input(command) is False
+
+    config = tmp_path / "mutating.json"
+    config.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "checks": [
+                    {
+                        "name": "pip-audit-probe",
+                        "category": "vulnerabilities",
+                        "command": [sys.executable, "-c", "print('{\"dependencies\": []}')"],
+                        "mutating_command": ["bash", "-c", "pip-audit --fix -r x"],
+                        "report": {
+                            "mode": "stdout",
+                            "path": "pip-audit-probe.json",
+                            "format": "json",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "audit",
+            "--config",
+            str(config),
+            "--output",
+            str(tmp_path / "reports"),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1, result.stdout
+    assert "mutating_command_forbidden" in result.stdout
+    summary = json.loads((tmp_path / "reports/summary.json").read_text(encoding="utf-8"))
+    assert summary["checks"][0]["status"] == "failed"
+    # The in-process report handle is not evidence and must not be serialized.
+    assert "report_path" not in summary["checks"][0]
+
+
+def test_an_acceptance_follows_the_pin_it_was_written_for() -> None:
+    """A renewal for `==1.2.3` says nothing about `==1.2.4`.
+
+    Acceptances are written against what the audit reported. Once the audited
+    pin moves -- a dependency bump, a re-exported lock -- the old record has to
+    stop matching, or an approval outlives the finding it was written for. A
+    newly published repair version is the other direction: it changes the
+    finding's `fixed=` list without changing the pin, and must not invalidate a
+    record about that same pin.
+    """
+    governance = _governance_module()
+
+    def same(reported: str, accepted: str) -> bool:
+        return governance._same_audited_pin(reported, accepted)
+
+    assert same("vulnerable===1.2.3; fixed=1.2.4, 1.3.0", "vulnerable===1.2.3; fixed=")
+    assert same(
+        "vulnerable===1.2.3; fixed=1.2.4, 1.3.0",
+        "vulnerable===1.2.3; fixed=1.2.4",
+    )
+    assert not same(
+        "vulnerable===1.2.4; fixed=1.2.5", "vulnerable===1.2.3; fixed=1.2.4"
+    )
+    assert not same(
+        "vulnerable===1.2.3; fixed=1.2.4", "vulnerable===1.2.3; fixed=1.3.0"
+    )
+
+
+def test_a_resolver_free_audit_still_judges_every_exported_pin(tmp_path: Path) -> None:
+    """The mitigation must not turn "no write-back" into "no findings".
+
+    `pip-audit --disable-pip` never produces the normalized requirements file
+    that the `--fix` pass used to write back, so a run can exit 0 without a
+    report. The policy names the pins it audited; the runner rebuilds the
+    report from them only after checking every pin still matches, which is the
+    same concession `--fix` made minus the rewrite.
+    """
+    governance = _governance_module()
+    requirements = tmp_path / "worker-audit-requirements.txt"
+    requirements.write_text(
+        """# This file was autogenerated by uv via the following command:
+celery==5.7.0
+cyvcf2==0.33.0 \\
+    --hash=sha256:deadbeef
+numpy==2.3.4 ; python_version >= '3.11'
+soymutdb-jobs @ file:///workspace/packages/jobs-py
+""",
+        encoding="utf-8",
+    )
+    assert governance._pinned_requirements(requirements) == [
+        {"name": "celery", "version": "5.7.0"},
+        {"name": "cyvcf2", "version": "0.33.0"},
+        {"name": "numpy", "version": "2.3.4"},
+    ]
+
+    report = tmp_path / "pip-audit-worker.json"
+    row = {
+        "name": "pip-audit-worker",
+        "exit_code": 0,
+        "report": report.name,
+        "report_available": False,
+        "report_path": report,
+        "status": "passed",
+    }
+    check = {
+        "normalize_recipe": str(requirements),
+        "normalize_recipe_note": "input: the exported pins",
+    }
+    Path(f"{requirements}.accepted.json").write_text(
+        json.dumps(
+            {
+                "dependencies": [
+                    {"name": "celery", "version": "5.7.0"},
+                    {"name": "cyvcf2", "version": "0.33.0"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert governance._prepare_acceptance_report(check, row) is False
+    assert row["status"] == "failed"
+    assert row["reason"].startswith("normalize_recipe_stale")
+
+    row.update({"status": "passed"})
+    Path(f"{requirements}.accepted.json").write_text(
+        json.dumps(
+            {
+                "dependencies": [
+                    {"name": "celery", "version": "5.7.0"},
+                    {"name": "cyvcf2", "version": "0.33.0"},
+                    {"name": "numpy", "version": "2.3.4"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert governance._prepare_acceptance_report(check, row) is None
+    assert row["status"] == "passed"
+    assert row["report_available"] is True
+    rebuilt = json.loads(report.read_text(encoding="utf-8"))
+    assert [entry["name"] for entry in rebuilt["dependencies"]] == [
+        "celery",
+        "cyvcf2",
+        "numpy",
+    ]
+    assert governance.evaluate_pip_audit_report(report, []) == (True, [], [])
