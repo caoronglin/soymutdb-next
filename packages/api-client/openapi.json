@@ -23268,7 +23268,8 @@
               "$ref": "#/components/schemas/SequenceAvailability"
             },
             "type": "array",
-            "title": "Sequences"
+            "title": "Sequences",
+            "default": []
           },
           "model_evidence": {
             "anyOf": [

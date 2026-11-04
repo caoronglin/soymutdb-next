@@ -6804,8 +6804,11 @@ export interface components {
             created_at?: string | null;
             /** Updated At */
             updated_at?: string | null;
-            /** Sequences */
-            sequences?: components["schemas"]["SequenceAvailability"][];
+            /**
+             * Sequences
+             * @default []
+             */
+            sequences: components["schemas"]["SequenceAvailability"][];
             model_evidence?: components["schemas"]["EvidenceTag"] | null;
         };
         /** GeneListResponse */
