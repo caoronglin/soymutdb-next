@@ -59,6 +59,7 @@ export * from "./homolog";
 export * from "./sra";
 export * from "./analyses";
 export * from "./tools";
+export * from "./popgen";
 export * from "./news";
 export * from "./site";
 export * from "./publications";

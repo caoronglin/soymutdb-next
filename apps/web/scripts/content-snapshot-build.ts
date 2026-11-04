@@ -251,6 +251,9 @@ export function buildContentDocuments(options: BuildOptions): BuildReport {
       },
       origin,
       "external",
+      // This document gets a real <main> below; a "enable JavaScript" fallback
+      // would then be false for exactly the client it is written for.
+      { shellFallback: false },
     );
     const html = injectStaticContent(
       document,

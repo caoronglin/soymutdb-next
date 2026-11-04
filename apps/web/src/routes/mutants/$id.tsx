@@ -7,6 +7,7 @@ import { isMutantLineDetailRecord } from "../../lib/api-contract-guards";
 import { FadeUp } from "../../components/route-motion";
 import { queryKeys } from "../../lib/query-keys";
 import { SITE_VARIANT } from "../../lib/site-variant";
+import { phenotypeRowKey } from "../phenotypes/$lineId";
 
 // Keep URL validation aligned with the public API contract. The server remains
 // authoritative for normalization and existence; this gate only rejects blank,
@@ -91,7 +92,7 @@ function MutantDetail() {
           <h2 id="mutant-phenotypes" className="font-display text-2xl font-semibold">{t("mutants.phenotypes.title")}</h2>
           <Alert className="mt-4" type="info" showIcon title={t("mutants.phenotypes.boundary")} />
           <div className="mt-5">
-            {phenotypeQuery.isLoading ? <Skeleton active paragraph={{ rows: 4 }} aria-label={t("mutants.phenotypes.loading")} /> : phenotypeQuery.isError ? <Empty description={t("mutants.phenotypes.error")} /> : <Table<PhenotypeResponse> rowKey="id" columns={phenotypeColumns} dataSource={phenotypeQuery.data ?? []} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description={t("mutants.phenotypes.empty")} /> }} />}
+            {phenotypeQuery.isLoading ? <Skeleton active paragraph={{ rows: 4 }} aria-label={t("mutants.phenotypes.loading")} /> : phenotypeQuery.isError ? <Empty description={t("mutants.phenotypes.error")} /> : <Table<PhenotypeResponse> rowKey={(row) => phenotypeRowKey(row, line.public_id)} columns={phenotypeColumns} dataSource={phenotypeQuery.data ?? []} pagination={false} scroll={{ x: true }} locale={{ emptyText: <Empty description={t("mutants.phenotypes.empty")} /> }} />}
           </div>
         </section>
       </main>

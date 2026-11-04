@@ -390,7 +390,11 @@ def _ensure_source(app: str, filename: str, source_dir: Path | None, TTFont) -> 
             f"error: {chosen} is not a full HarmonyOS Sans SC font "
             f"(cmap={cmap_count}, bytes={size}); refusing to cache it as a source."
         )
-    print(f"cached full source {chosen.relative_to(REPO_ROOT)} -> {cache.relative_to(REPO_ROOT)}")
+    try:
+        origin = chosen.relative_to(REPO_ROOT).as_posix()
+    except ValueError:  # --source-dir outside the repo
+        origin = str(chosen)
+    print(f"cached full source {origin} -> {cache.relative_to(REPO_ROOT)}")
     return cache
 
 
@@ -406,6 +410,11 @@ def _subset(source: Path, destination: Path, charset_text: str) -> None:
         subsetter = subset.Subsetter(options=options)
         subsetter.populate(text=charset_text)
         subsetter.subset(font)
+        # ``subset.Options.flavor`` does not propagate to the loaded font, so
+        # ``font.save`` would write a bare sfnt under a ``.woff2`` name. Set the
+        # flavor on the font itself; otherwise the "woff2" files are ~2x bigger
+        # (uncompressed) and the per-file budgets fail.
+        font.flavor = "woff2"
         destination.parent.mkdir(parents=True, exist_ok=True)
         font.save(destination)
     finally:

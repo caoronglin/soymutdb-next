@@ -174,6 +174,52 @@ export const queryKeys = {
       context.siteVariant,
     ] as const,
   },
+  // Expression libraries are release- and assembly-bound reads: the API joins
+  // every library to the published release's assemblies, so the key carries
+  // both boundaries plus each filter that changes the result set.
+  expression: {
+    all: () => [...queryKeys.all, "expression"] as const,
+    libraries: (context: {
+      page: number;
+      pageSize: number;
+      tissue: string | null;
+      treatment: string | null;
+      assemblyId: number | null;
+      releaseId: string | null;
+      siteVariant: "external" | "internal";
+    }) =>
+      [
+        ...queryKeys.expression.all(),
+        "libraries",
+        context.page,
+        context.pageSize,
+        context.tissue ?? null,
+        context.treatment ?? null,
+        context.assemblyId ?? null,
+        context.releaseId,
+        context.siteVariant,
+      ] as const,
+    library: (publicId: string, releaseId: string | null, siteVariant: "external" | "internal") =>
+      [...queryKeys.expression.all(), "library", publicId, releaseId, siteVariant] as const,
+    // One library's expression rows. Keyed by the public sample id, never the
+    // persistence key, so an internal identifier cannot leak through a cache.
+    rows: (context: {
+      library: string;
+      page: number;
+      pageSize: number;
+      releaseId: string | null;
+      siteVariant: "external" | "internal";
+    }) =>
+      [
+        ...queryKeys.expression.all(),
+        "rows",
+        context.library,
+        context.page,
+        context.pageSize,
+        context.releaseId,
+        context.siteVariant,
+      ] as const,
+  },
   mutants: {
     all: () => [...queryKeys.all, "mutants"] as const,
     // Public mutant lines keyed by filter + site/release so caches never cross

@@ -96,6 +96,11 @@ const NAV_GROUPS: ReadonlyArray<NavGroupDef> = [
       { kind: "link", to: "/tools/enrichment", labelKey: "tools.enrichment.title" },
       { kind: "link", to: "/tools/exppattern", labelKey: "tools.exppattern.title" },
       { kind: "separator" },
+      // Data browsers (not tools with a form): released expression libraries
+      // and recorded phenotype observations.
+      { kind: "link", to: "/expression", labelKey: "nav.expression" },
+      { kind: "link", to: "/phenotypes", labelKey: "nav.phenotypes" },
+      { kind: "separator" },
       { kind: "link", to: "/tools", labelKey: "nav.allTools" },
     ],
   },

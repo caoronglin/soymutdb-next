@@ -63,12 +63,44 @@ export function escapeHtml(value: string): string {
   return value.replace(/[&<>"']/g, (character) => HTML_ESCAPES[character]);
 }
 
-/** Replace `<title>` and append page metadata before `</head>`. */
+/**
+ * Body text for a document that is only a title around a JS app.
+ *
+ * Every prerendered document is the built shell with a head swap. That is fine
+ * for a reader who runs JS, but a crawler or a no-JS client gets a correct
+ * `<title>` over an empty body — indistinguishable from a page that failed to
+ * load. The fallback sits beside the mount container, outside React's control.
+ *
+ * The copy deliberately states what the page is *for* without claiming a result
+ * exists: it says the tool needs a query, not that data is missing.
+ */
+const SHELL_MOUNT_PATTERN = /<div\b[^>]*\bid=["'](?:root|app)["'][^>]*>\s*<\/div>/i;
+
+function shellFallback(entry: StaticRouteEntry): string {
+  const summary = entry.description ? `<p>${escapeHtml(entry.description)}</p>` : "";
+  return (
+    `<div class="soymutdb-shell-fallback">` +
+    `<h1>${escapeHtml(entry.title)}</h1>` +
+    summary +
+    `<noscript>This page is a web application: enable JavaScript to load it.</noscript>` +
+    `</div>`
+  );
+}
+
+/**
+ * Replace `<title>` and append page metadata before `</head>`.
+ *
+ * `shellFallback: true` adds the readable body text a JS-only page needs. It is
+ * opt-in because the build script that writes content-bearing documents calls
+ * this same function: a document that already carries a real `<main>` must not
+ * also carry "enable JavaScript", which would be a lie on a no-JS client.
+ */
 export function injectPageHead(
   html: string,
   entry: StaticRouteEntry,
   origin?: string,
   siteVariant: SiteVariant = "external",
+  options: { shellFallback?: boolean } = { shellFallback: true },
 ): string {
   const withTitle = html.replace(
     /<title>[\s\S]*?<\/title>/,
@@ -94,8 +126,15 @@ export function injectPageHead(
       tags.push(fullPolicy);
     }
   }
-  if (tags.length === 0) return document;
-  return document.replace("</head>", `  ${tags.join("\n    ")}\n  </head>`);
+  // The fallback goes *after* the mount container, never inside it: the
+  // content-snapshot build only recognises an empty `#root`, and `createRoot`
+  // clears that node on boot anyway. Sibling text survives for the crawler that
+  // never runs the app; text inside the mount would be dropped on boot.
+  const withFallback = options.shellFallback
+    ? document.replace(SHELL_MOUNT_PATTERN, (match) => `${match}${shellFallback(entry)}`)
+    : document;
+  if (tags.length === 0) return withFallback;
+  return withFallback.replace("</head>", `  ${tags.join("\n    ")}\n  </head>`);
 }
 
 export function renderSitemap(entries: readonly StaticRouteEntry[], origin: string): string {
