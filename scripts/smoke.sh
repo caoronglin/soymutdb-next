@@ -123,6 +123,12 @@ smoke_contracts() {
     scripts/test_backup_restore_contracts.py
     scripts/test_native_backup_runtime.py
     scripts/test_ci_job_contracts.py
+    # The committed OpenAPI snapshot is an export, not a source file. A hand
+    # edit to it (4975dbd inlined a hoisted type alias and deleted its
+    # component) surfaces in CI only as "CONTRACT DEBT" from the frontend gate,
+    # which names neither the file nor the reason. This suite names it, and
+    # needs no Python 3.15.
+    scripts/test_openapi_snapshot_contract.py
     # The offline browser-gate inventory (scripts/test_artifact_e2e_gate.py)
     # must fail a build when a gate is dropped from the sweep or the sweep stops
     # failing closed.

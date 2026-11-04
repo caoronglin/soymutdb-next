@@ -14,7 +14,13 @@ PublicSettingKind = Literal[
 PublicSettingPermission = Literal["administrator"]
 PublicSettingScope = Literal["global"]
 PublicSettingRedaction = Literal["none", "omit"]
-type SettingValue = str | int | bool
+#: Plain assignment, not a PEP 695 ``type`` alias. A ``type`` alias is a
+#: referenceable object, so pydantic hoists it into
+#: ``components/schemas/SettingValue`` and emits ``$ref`` at every use site --
+#: which is how ``components["schemas"]["SettingValue"]`` reached the generated
+#: client for every settings payload. Nothing else canonicalises the document,
+#: so the union stays inline.
+SettingValue = str | int | bool
 
 
 class SettingFieldSchema(BaseModel):
