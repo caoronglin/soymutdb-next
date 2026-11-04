@@ -6802,16 +6802,16 @@ export interface components {
                  */
                 molecule: "genomic" | "cds" | "transcript" | "protein";
                 /**
-                 * Availability
                  * @description Why a section has nothing to show.
                  *
-                 *     ``unavailable`` is the only honest answer when the platform holds no
-                 *     sequence store. It is *not* ``empty``: "we never imported this" and "this
-                 *     gene has no isoforms" are different scientific statements, and the portal
-                 *     renders them differently.
+                 *         ``unavailable`` is the only honest answer when the platform holds no
+                 *         sequence store. It is *not* ``empty``: "we never imported this" and "this
+                 *         gene has no isoforms" are different scientific statements, and the portal
+                 *         renders them differently.
+                 * @default unavailable
                  * @enum {string}
                  */
-                availability?: "available" | "unavailable";
+                availability: "available" | "unavailable";
                 /**
                  * Reason
                  * @default null

@@ -23234,125 +23234,125 @@
             ],
             "title": "Updated At"
           },
-        "sequences": {
-          "items": {
-            "description": "Per-molecule availability for a gene's sequences.\n\nThe platform currently has no FASTA store: ``genes``/``transcripts`` carry\ncoordinates, not residues. Rather than fabricate a ``sequence`` string (a\ngene page that silently shows a made-up nucleotide string is worse than one\nthat says \"not imported\"), the contract reports availability plus the\nreason. When a sequence store is added, only ``availability`` flips and\nthe residue fields populate — consumers do not change shape.",
-            "properties": {
-              "molecule": {
-                "enum": [
-                  "genomic",
-                  "cds",
-                  "transcript",
-                  "protein"
-                ],
-                "title": "Molecule",
-                "type": "string"
-              },
-              "availability": {
-                "description": "Why a section has nothing to show.\n\n``unavailable`` is the only honest answer when the platform holds no\nsequence store. It is *not* ``empty``: \"we never imported this\" and \"this\ngene has no isoforms\" are different scientific statements, and the portal\nrenders them differently.",
-                "enum": [
-                  "available",
-                  "unavailable"
-                ],
-                "title": "Availability",
-                "type": "string"
-              },
-              "reason": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Reason"
-              },
-              "length": {
-                "anyOf": [
-                  {
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Length"
-              },
-              "checksum": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Checksum"
-              },
-              "sequence": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Sequence"
-              }
-            },
-            "required": [
-              "molecule"
-            ],
-            "type": "object"
-          },
-          "type": "array",
-          "title": "Sequences",
-          "description": null
-        },
-        "model_evidence": {
-          "anyOf": [
-            {
-              "description": "Provenance of one displayed assertion.",
+          "sequences": {
+            "items": {
+              "description": "Per-molecule availability for a gene's sequences.\n\nThe platform currently has no FASTA store: ``genes``/``transcripts`` carry\ncoordinates, not residues. Rather than fabricate a ``sequence`` string (a\ngene page that silently shows a made-up nucleotide string is worse than one\nthat says \"not imported\"), the contract reports availability plus the\nreason. When a sequence store is added, only ``availability`` flips and\nthe residue fields populate \u2014 consumers do not change shape.",
               "properties": {
-                "kind": {
+                "molecule": {
                   "enum": [
-                    "experimental",
-                    "curated",
-                    "predicted",
-                    "transferred",
-                    "imported",
-                    "unknown"
+                    "genomic",
+                    "cds",
+                    "transcript",
+                    "protein"
                   ],
-                  "title": "EvidenceKind",
+                  "title": "Molecule",
                   "type": "string"
                 },
-                "source": {
-                  "maxLength": 256,
-                  "minLength": 1,
-                  "title": "Source",
-                  "type": "string"
+                "availability": {
+                  "description": "Why a section has nothing to show.\n\n    ``unavailable`` is the only honest answer when the platform holds no\n    sequence store. It is *not* ``empty``: \"we never imported this\" and \"this\n    gene has no isoforms\" are different scientific statements, and the portal\n    renders them differently.\n    ",
+                  "enum": [
+                    "available",
+                    "unavailable"
+                  ],
+                  "type": "string",
+                  "default": "unavailable"
+                },
+                "reason": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "Reason"
+                },
+                "length": {
+                  "anyOf": [
+                    {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "Length"
+                },
+                "checksum": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "Checksum"
+                },
+                "sequence": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "Sequence"
                 }
               },
               "required": [
-                "kind",
-                "source"
+                "molecule"
               ],
               "type": "object"
             },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Model Evidence",
-          "description": null
-        }
+            "type": "array",
+            "title": "Sequences",
+            "description": null
+          },
+          "model_evidence": {
+            "anyOf": [
+              {
+                "description": "Provenance of one displayed assertion.",
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "experimental",
+                      "curated",
+                      "predicted",
+                      "transferred",
+                      "imported",
+                      "unknown"
+                    ],
+                    "title": "EvidenceKind",
+                    "type": "string"
+                  },
+                  "source": {
+                    "maxLength": 256,
+                    "minLength": 1,
+                    "title": "Source",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "source"
+                ],
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Evidence",
+            "description": null
+          }
         },
         "type": "object",
         "required": [
