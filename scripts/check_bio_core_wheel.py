@@ -7,8 +7,8 @@ never as a skipped pass:
 1. Static (Python 3.11+ for stdlib tomllib; the pinned CI floor is 3.15): the
    crate declares a pinned toolchain, its lock file is committed, the CI job is
    registered in the shared dispatcher, the verification script actually
-   installs + imports the wheel, and every docs/ citation in the dispatcher
-   resolves. The manifest is parsed, not grep-ed.
+   installs + imports the wheel, and every docs/ citation in every shared
+   script resolves. The manifest is parsed, not grep-ed.
 2. Runtime (CPython 3.15 with the wheel installed): import the compiled
    extension and execute real scientific assertions.
 
@@ -35,13 +35,31 @@ DOC_REF = re.compile(r"docs/[\w./-]+\.md(?![.\w/-])")
 SECTION_HINT = re.compile(r'(?:,\s*|section\s+)"([^"]+)"')
 
 
-def doc_ref_errors(text: str, root: Path = ROOT) -> list[str]:
+def shared_scripts() -> list[str]:
+    """Read the canonical SHARED_SCRIPTS list from the contract test.
+
+    The wheel static gate and the contract gate must scan the same files. The
+    list lives in test_ci_job_contracts.py; parsing its source with stdlib keeps
+    one source of truth without importing that module (which needs PyYAML).
+    """
+    source = (ROOT / "scripts" / "test_ci_job_contracts.py").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(r"SHARED_SCRIPTS\s*=\s*\((.*?)\n\)", source, re.DOTALL)
+    if match is None:
+        raise RuntimeError("SHARED_SCRIPTS not found in test_ci_job_contracts.py")
+    return re.findall(r'"([^"]+)"', match.group(1))
+
+
+def doc_ref_errors(
+    text: str, root: Path = ROOT, source: str = "ci-job-steps.sh"
+) -> list[str]:
     """Fail when a docs/ citation points at a missing file or section.
 
     A squash dropped a citation fix and reintroduced a path into a directory
-    that never existed; neither review nor any gate noticed. Called on the
-    shared dispatcher only: every cited path plus a quoted section hint beside
-    it. A dangling path or a renamed heading now fails instead of lingering.
+    that never existed; neither review nor any gate noticed. Called on every
+    shared script: every cited path plus a quoted section hint beside it. A
+    dangling path or a renamed heading now fails instead of lingering.
     """
     errors: list[str] = []
 
@@ -57,7 +75,7 @@ def doc_ref_errors(text: str, root: Path = ROOT) -> list[str]:
             ref = match.group(0)
             doc = root / ref
             if not doc.is_file():
-                errors.append(f"ci-job-steps.sh cites missing doc {ref!r}")
+                errors.append(f"{source} cites missing doc {ref!r}")
                 continue
             hint = SECTION_HINT.search(line[match.end():match.end() + 120])
             if not hint:
@@ -69,7 +87,7 @@ def doc_ref_errors(text: str, root: Path = ROOT) -> list[str]:
             }
             if hint.group(1) not in headings:
                 errors.append(
-                    f"ci-job-steps.sh cites missing section {hint.group(1)!r} in {ref}"
+                    f"{source} cites missing section {hint.group(1)!r} in {ref}"
                 )
     return errors
 
@@ -113,9 +131,20 @@ def check_static() -> int:
                     errors.append(f"Cargo.toml dependency {dep!r} has no version/workspace pin")
 
     steps = (ROOT / "scripts" / "ci-job-steps.sh").read_text(encoding="utf-8")
-    errors.extend(doc_ref_errors(steps))
     if "bio-core" not in steps or "bio_core_run()" not in steps:
         errors.append("bio-core job is not registered in scripts/ci-job-steps.sh")
+
+    # Scan every shared script, not just the dispatcher. The contract gate does
+    # the same; a dangling doc citation planted in any of the others used to pass
+    # --static silently. doc_ref_errors already takes a root, so this is a loop.
+    for script in shared_scripts():
+        path = ROOT / script
+        if not path.is_file():
+            errors.append(f"missing shared script: {script}")
+            continue
+        errors.extend(
+            doc_ref_errors(path.read_text(encoding="utf-8"), root=ROOT, source=script)
+        )
     verify = (ROOT / "scripts" / "verify-bio-core.sh").read_text(encoding="utf-8")
     for marker in ("maturin build", "import soymutdb_bio_core", "-m pytest", "--locked"):
         if marker not in verify:

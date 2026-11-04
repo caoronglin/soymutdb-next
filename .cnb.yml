@@ -762,7 +762,7 @@ $:
   # the "start, confirm, detach" contract that mode expects.
   #
   # The stage body remains a single `bash <script>` call, so the platform's `sh`
-  # never parses bash syntax (docs/ops/ci-cd.md, "Stage shell").
+  # never parses bash syntax (docs/ops/ci-cd.md, "Stage shell：CNB 用 `sh` 执行 stage 脚本").
   vscode:
     - name: soy-mut-db-development
       runner:

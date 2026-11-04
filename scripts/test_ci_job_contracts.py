@@ -10,6 +10,8 @@ Run with: python3 -m unittest scripts.test_ci_job_contracts -v
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import re
@@ -712,9 +714,23 @@ class DeliveryArchitectureTests(unittest.TestCase):
         ]
         self.assertIn(good, headings)
 
+        # The committed tree itself must parse. Without this assertion the
+        # regression is only self-contained in the neighbouring guard: a
+        # mutation that drops the citation entirely would leave this test's
+        # wrapped/dangling derivations silently empty.
+        self.assertEqual(_doc_section_citations(original), [(doc, good)])
+
         wrapped = original.replace(f'"{good}"', '"CI：构建一次，\n# 消费一次"')
         self.assertNotEqual(wrapped, original)
         self.assertEqual(_doc_section_citations(wrapped), [(doc, good)])
+
+        # A wrap right after the ASCII "CI" takes the space-keeping branch and
+        # yields a spurious space in BOTH gates. Pin the shape so a future
+        # "fix" to one fold cannot silently diverge from the other.
+        after_ci = original.replace(f'"{good}"', '"CI\n# ：构建一次，消费一次"')
+        self.assertEqual(
+            _doc_section_citations(after_ci), [(doc, "CI ：构建一次，消费一次")]
+        )
 
         dangling = original.replace(f'"{good}"', '"CI: build once,\n# consume once"')
         self.assertEqual(
@@ -820,7 +836,8 @@ class DeliveryArchitectureTests(unittest.TestCase):
         yields zero citations, and a dangling path next to a valid labeled one
         is not checked at all. This is the narrower, stronger assertion: every
         docs/*.md path in ci-job-steps.sh must resolve, so a squash cannot
-        silently drop a path fix again.
+        silently drop a path fix again. The loop below now spans every
+        shared script, not just the dispatcher.
         """
         import importlib.util
 
@@ -872,6 +889,98 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 checker.doc_ref_errors(stale, root),
                 "a section hint naming no heading must fail --static",
             )
+
+    def test_bio_core_static_gate_scans_every_shared_script(self) -> None:
+        """--static must cover the same file set as the contract citation guard.
+
+        Regression for a review finding on PR #120: doc_ref_errors() was called
+        on scripts/ci-job-steps.sh only, while the contract gate scans all
+        SHARED_SCRIPTS. A dangling citation planted in any of the other shared
+        scripts made the contract gate red but left --static green. Both gates
+        now read the same canonical list and must fail on the same plant.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_coverage",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        self.assertEqual(
+            checker.shared_scripts(),
+            list(SHARED_SCRIPTS),
+            "--static and the contract gate must scan the same shared scripts",
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # A minimal but complete synthetic tree, so check_static() itself
+            # (not just doc_ref_errors) runs its loop over every shared script.
+            (root / "scripts").mkdir(parents=True)
+            (root / "docs" / "ops").mkdir(parents=True)
+            (root / "docs" / "ops" / "bio-core-wheel.md").write_text(
+                "# Wheel\n\n## CI：构建一次，消费一次\n", encoding="utf-8"
+            )
+            (root / "packages" / "bio-core").mkdir(parents=True)
+            for name in ("Cargo.toml", "Cargo.lock", "rust-toolchain.toml",
+                         "pyproject.toml"):
+                (root / "packages" / "bio-core" / name).write_text(
+                    "" if name != "rust-toolchain.toml" else 'channel = "1.99.1"\n',
+                    encoding="utf-8",
+                )
+            (root / "packages" / "bio-core" / "src").mkdir()
+            (root / "packages" / "bio-core" / "src" / "lib.rs").write_text(
+                "", encoding="utf-8"
+            )
+            (root / "packages" / "bio-core" / "Cargo.toml").write_text(
+                "[dependencies]\n"
+                'bio = "4"\nnoodles = "0"\nrust-lapper = "1"\n'
+                'bio-seq = "0"\npyo3 = "0"\n', encoding="utf-8"
+            )
+            (root / "scripts" / "test_ci_job_contracts.py").write_text(
+                (ROOT / "scripts" / "test_ci_job_contracts.py").read_text(
+                    encoding="utf-8"
+                ), encoding="utf-8"
+            )
+            for script in SHARED_SCRIPTS:
+                target = root / script
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("", encoding="utf-8")
+            # The dispatcher still needs its job markers to stay quiet.
+            (root / "scripts" / "ci-job-steps.sh").write_text(
+                "bio-core\nbio_core_run()\n", encoding="utf-8"
+            )
+            (root / "scripts" / "verify-bio-core.sh").write_text(
+                "maturin build\nimport soymutdb_bio_core\n-m pytest\n--locked\n",
+                encoding="utf-8",
+            )
+            (root / "scripts" / "verify-backend-tests.sh").write_text(
+                "soymutdb_bio_core-*-cp315-*.whl\n"
+                "--force-reinstall --no-deps\n"
+                "import soymutdb_bio_core as c\n", encoding="utf-8",
+            )
+
+            checker.ROOT = root
+            checker.CRATE = root / "packages" / "bio-core"
+
+            # Baseline: no dangling citations anywhere -> --static green.
+            self.assertEqual(checker.check_static(), 0, "synthetic tree must be clean")
+
+            # Plant a dangling path in a NON-dispatcher shared script. The whole
+            # point of the fix: --static must see it, not just the contract gate.
+            planted = root / "scripts" / "verify-bio-core.sh"
+            planted.write_text(
+                planted.read_text(encoding="utf-8")
+                + "# see docs/build/never-existed.md\n",
+                encoding="utf-8",
+            )
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(
+                    checker.check_static(), 1,
+                    "a dangling path in a non-dispatcher script must fail --static",
+                )
 
     def test_doc_citation_gates_agree_on_wrapped_citations(self) -> None:
         """The contract guard and --static must never give opposite signals.
