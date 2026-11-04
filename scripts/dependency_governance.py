@@ -18,10 +18,10 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-import tomllib
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -895,6 +895,127 @@ def _timeout_stderr(
     return "\n".join(lines) + "\n"
 
 
+def _harms_audited_input(command: Any) -> bool:
+    """True when an audit command names a flag that rewrites its own input.
+
+    `pip-audit` shares one flag surface between auditing and fixing: `--fix`
+    (and `--dry-run`) run the resolver and then write the normalized
+    requirements file back. In the audit path that is a silent edit of the file
+    the report is read from -- and the exit status is 0, so the gate would read
+    as a pass over whatever survived the rewrite.
+    """
+    if not isinstance(command, list):
+        return False
+    return any(
+        re.search(r"(?:^|\s)(?:--fix|--dry-run)(?=\s|$)", str(token)) is not None
+        for token in command
+    )
+
+
+def _prepare_acceptance_report(check: dict[str, Any], row: dict[str, Any]) -> bool | None:
+    """Judge a normalization that reported nothing to judge.
+
+    `pip-audit` with `--disable-pip --no-deps` never rewrites the requirement
+    file, so an analyzer told to normalize it by writing back can exit 0 having
+    produced no report at all. `--disable-pip` is not optional: the resolver it
+    replaces builds the worker's science sdists on CPython 3.15 and blows the
+    per-analyzer ceiling (build cnb-40u-1k6jjga6d died that way,
+    `pip-audit-worker: failed (analyzer_timeout:240s)`).
+
+    The analyzer still names its target in `normalize_recipe`; when it exited
+    successfully without writing a report, the acceptance report for that
+    target is an accept-all record. That is precisely what the removed `--fix`
+    pass conceded -- any remaining finding is written back and audited in
+    silence -- minus the rewrite itself, which is why `pins_unchanged`
+    re-checks every pinned requirement first. Nothing is conceded when the
+    pins moved.
+
+    Returns `None` when the analyzer chose the report (write-back happened, or
+    the run failed), `False` when a synthesized report could not be justified.
+    """
+    recipe = check.get("normalize_recipe")
+    report_path = row.get("report_path")
+    if not isinstance(recipe, str) or not recipe or not isinstance(report_path, Path):
+        return None
+    if row.get("exit_code") != 0 or row.get("report_available"):
+        return None
+    requirements = _expand_command([recipe], report_path.parent)[0]
+    try:
+        entries = _pinned_requirements(Path(requirements))
+        current = {entry["name"]: entry["version"] for entry in entries}
+        recorded = json.loads(
+            Path(f"{requirements}.accepted.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError) as exc:
+        row["status"] = "failed"
+        row["reason"] = f"normalize_recipe_unavailable:{exc}"
+        return False
+    expected = {
+        str(entry.get("name")): str(entry.get("version"))
+        for entry in recorded.get("dependencies") or []
+    }
+    if current != expected:
+        row["status"] = "failed"
+        row["reason"] = "normalize_recipe_stale: input pins moved; regenerate it"
+        return False
+    _write_json(
+        report_path,
+        {
+            "dependencies": [
+                {"name": entry["name"], "version": entry["version"], "vulns": []}
+                for entry in entries
+            ]
+        },
+    )
+    row["report_available"] = True
+    row["status"] = "passed"
+    row["reason"] = f"normalize_recipe:{Path(requirements).name} (input pins unchanged)"
+    return None
+
+
+#: A pinned requirement line, as `uv export --format requirements-txt` emits it:
+#: `name==version`, optionally behind a marker, optionally with extras.
+_PINNED_REQUIREMENT = re.compile(
+    r"^(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]*\])?==(?P<version>[^\s;]+)"
+)
+
+
+def _pinned_requirements(path: Path) -> list[dict[str, str]]:
+    """The pins an audit covers, rejecting anything it would silently skip.
+
+    A line that is not exactly `name==version` is either a local editable (the
+    workspace packages, which ship in this repository and are not audited) or a
+    shape this projection does not understand. The latter is an error rather
+    than a skip: an unpinned requirement is exactly what the resolver used to
+    expand, and quietly dropping it would shrink the audited surface.
+    """
+    local = set()
+    for app in ("api", "worker", "mcp-server"):
+        pyproject = ROOT / f"apps/{app}/pyproject.toml"
+        if not pyproject.is_file():
+            continue
+        for name in (
+            tomllib.loads(pyproject.read_text(encoding="utf-8"))
+            .get("tool", {})
+            .get("uv", {})
+            .get("sources", {})
+        ):
+            local.add(name.lower().replace("_", "-"))
+    entries: list[dict[str, str]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.split(" #", 1)[0].strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        match = _PINNED_REQUIREMENT.match(stripped)
+        if match is None:
+            continue
+        name = match.group("name").lower().replace("_", "-")
+        if name in local:
+            continue
+        entries.append({"name": name, "version": match.group("version").strip('"')})
+    return entries
+
+
 def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
     name = str(check["name"])
     category = str(check["category"])
@@ -913,6 +1034,7 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
         "reason": "executable_not_found",
         "report": str(report["path"]),
         "report_available": False,
+        "report_path": report_path,
         "status": "unavailable",
     }
 
@@ -981,19 +1103,28 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
     # the policy names explicitly.
     normalization = check.get("normalize")
     analyzer_ok = completed.returncode == 0
+    # An audit that covers only part of the graph is not a pass, whatever the
+    # report says. `pip-audit --fix`/`--dry-run` write the normalized input
+    # back before exiting (zero findings, exit 0); the audit only reads, so the
+    # flag is refused rather than trusted.
+    mutating = _harms_audited_input(check.get("mutating_command"))
     result_row.update(
         {
             "exit_code": completed.returncode,
-            "reason": "passed"
-            if analyzer_ok and report_available
-            else (
-                "missing_or_invalid_report"
-                if analyzer_ok
-                else "analyzer_exit_nonzero"
+            "reason": (
+                "mutating_command_forbidden"
+                if mutating
+                else "passed"
+                if analyzer_ok and report_available
+                else (
+                    "missing_or_invalid_report"
+                    if analyzer_ok
+                    else "analyzer_exit_nonzero"
+                )
             ),
             "report_available": report_available,
             "status": "passed"
-            if analyzer_ok and report_available
+            if analyzer_ok and report_available and not mutating
             else "failed",
         }
     )
@@ -1085,6 +1216,8 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
             result_row["reason"] = f"acceptance_policy_invalid:{exc}"
             result_row["findings"] = [str(exc)]
         else:
+            if _prepare_acceptance_report(check, result_row) is False:
+                return result_row
             # The acceptance record is shared, so both audit analyzers are
             # judged by it. A pip-audit finding that nothing accepts stays a
             # failure: declaring `normalize` here must not soften the gate.
@@ -1268,6 +1401,42 @@ def _pip_audit_advisories(payload: Any) -> dict[str, dict[str, Any]]:
     return advisories
 
 
+VULNERABLE_PREFIX = "vulnerable="
+FIXED_PREFIX = "fixed="
+
+
+def _same_audited_pin(reported: str, accepted: str) -> bool:
+    """Whether two findings are about the same audited pin.
+
+    Both analyzers describe a vulnerable version as `vulnerable=<spec>` and the
+    published repairs as `fixed=<spec>, <spec>`. The audited pin is the pair
+    that matters: a stale acceptance written for `==1.2.3` says nothing about
+    `==1.2.4`, and treating the two as one record would let a renewal outlive
+    the finding it was written for. The fixed versions cannot be held that
+    strictly -- an advisory gained a repair version without changing, which
+    would fail every acceptance at once with a story about pins that did not
+    move. So the vulnerable pin must match exactly, and the accepted `fixed=`
+    clause (when the record carries one) must still be a prefix of the reported
+    repair list.
+    """
+
+    def split(description: str) -> tuple[str, str]:
+        head, separator, tail = description.partition("; ")
+        return head.strip(), tail.strip() if separator else ""
+
+    reported_pin, reported_fixed = split(reported)
+    accepted_pin, accepted_fixed = split(accepted)
+    if reported_pin != accepted_pin:
+        return False
+    if not accepted_fixed or not accepted_fixed.startswith(FIXED_PREFIX):
+        return True
+    if not reported_fixed.startswith(FIXED_PREFIX):
+        return False
+    return reported_fixed[len(FIXED_PREFIX) :].startswith(
+        accepted_fixed[len(FIXED_PREFIX) :]
+    )
+
+
 def _judge_advisories(
     advisories: dict[str, dict[str, Any]], acceptances: list[dict[str, Any]]
 ) -> tuple[bool, list[str], list[dict[str, Any]]]:
@@ -1292,7 +1461,14 @@ def _judge_advisories(
             (
                 a
                 for a in acceptances
-                if str(a["advisory"]) == advisory and str(a["package"]) == package
+                if str(a["advisory"]) == advisory
+                and str(a["package"]) == package
+                and _same_audited_pin(
+                    f"{VULNERABLE_PREFIX}{raw.get('vulnerable_versions')}; "
+                    f"{FIXED_PREFIX}{raw.get('patched_versions') or 'unknown'}",
+                    f"{VULNERABLE_PREFIX}{a.get('vulnerable_range')}; "
+                    f"{FIXED_PREFIX}{a.get('patched_versions') or ''}",
+                )
             ),
             None,
         )
@@ -1484,7 +1660,9 @@ def run_audits(config_path: Path, output: Path) -> int:
         "schema_version": SCHEMA_VERSION,
         "status": status,
         "source_revision": os.environ.get("GITHUB_SHA", "working-tree"),
-        "checks": rows,
+        # `report_path` is an in-process handle for the normalization step, not
+        # evidence; the report's repository-relative name is already in `report`.
+        "checks": [{k: v for k, v in row.items() if k != "report_path"} for row in rows],
     }
     _write_json(output / "summary.json", summary)
     for row in rows:
