@@ -2816,6 +2816,7 @@
         "heatmapTitle": "r² matrix",
         "heatmapDesc": "Pairwise r² between the variants of the region, computed from the genotype matrix you supplied.",
         "heatmapLegend": "Variant",
+        "resultsTitle": "Linkage results",
         "heatmapEmpty": "The r² matrix is empty.",
         "variantsTitle": "Variants in the region",
         "variantsDesc": "Coordinates of every variant the query resolved."

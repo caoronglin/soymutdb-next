@@ -2816,6 +2816,7 @@
         "heatmapTitle": "r² 矩阵",
         "heatmapDesc": "区间内变异两两之间的 r²，由你提供的基因型矩阵计算得出。",
         "heatmapLegend": "变异",
+        "resultsTitle": "连锁分析结果",
         "heatmapEmpty": "r² 矩阵为空。",
         "variantsTitle": "区间内的变异",
         "variantsDesc": "本次查询解析出的所有变异坐标。"
