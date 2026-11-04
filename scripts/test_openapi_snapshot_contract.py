@@ -476,6 +476,13 @@ def test_every_schema_object_carries_the_snapshot_key_order() -> None:
         "the normalizer's schema key order drifted from the snapshot's: "
         f"{list(ordered)} != {expected}"
     )
+    # ``dict ==`` ignores order, so this line says "the pairing survived", not
+    # "the keys moved": it would pass on an ``_object_last`` that returned its
+    # argument untouched, and it would pass on one that printed the very order
+    # the assertion above rejects. The order question is ``list(ordered)``,
+    # one line up. Keep that split when judging a failure here -- reading this
+    # line as an order check costs a round of analysis, because it looks like
+    # the hole this test exists to close.
     assert ordered == examples, "reordering must not change or drop a value"
 
     assert list(module._OBJECT_KEY_ORDER) == [
@@ -524,6 +531,9 @@ def test_every_schema_object_carries_the_snapshot_key_order() -> None:
         "description",
         "deprecated",
     ], f"`_object_last` put the keys in an unexpected order: {list(permuted)}"
+    # Same split as above: values here, positions in the ``list(permuted)``
+    # assertion. ``dict ==`` cannot fail on a reordering, so a red line in this
+    # file is a moved or dropped *value*, never a moved key.
     assert permuted == scrambled, "reordering must not change or drop a value"
 
     # ``deprecated`` above survives because the re-emitter has a second loop
