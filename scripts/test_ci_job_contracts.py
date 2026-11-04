@@ -2071,6 +2071,19 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertTrue((ROOT / "scripts/check_variant_row_key_contract.py").is_file())
         self.assertTrue((ROOT / "scripts/test_variant_row_key_contract.py").is_file())
 
+    def test_api_client_base_path_guard_is_wired_into_both_gates(self) -> None:
+        """PR #117 doubled /api/v1 in the sequence client; a source guard is
+        the only gate that reads .ts path construction. Both the frontend gate
+        and the contracts smoke layer must run it, and its regression suite
+        must prove the doubled-BASE shape fails."""
+        frontend = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
+        self.assertIn("scripts/check_api_client_base_path.py --self-test", frontend)
+        self.assertIn("scripts/check_api_client_base_path.py", frontend)
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        self.assertIn("scripts/test_api_client_base_path_guard.py", smoke)
+        self.assertTrue((ROOT / "scripts/check_api_client_base_path.py").is_file())
+        self.assertTrue((ROOT / "scripts/test_api_client_base_path_guard.py").is_file())
+
     def test_package_script_invocations_do_not_double_up_the_separator(self) -> None:
         """`pnpm run <script> -- --flag` forwards a literal "--" to the script.
 

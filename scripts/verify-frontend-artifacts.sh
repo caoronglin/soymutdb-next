@@ -150,6 +150,14 @@ python3 scripts/check_variant_row_key_contract.py
 step "Backend-editable content key contract"
 python3 scripts/check_content_key_contract.py
 
+# PR #117 shipped BASE = "/api/v1/tools/sequence" while buildUrl already
+# prepends apiBaseUrl: every operation resolved to a doubled prefix. The
+# OpenAPI/schema gates read snapshots, not .ts path construction, so this
+# source-level guard is the only thing that names the regression before vitest.
+step "api-client base-path guard (no duplicated /api/v1 in request paths)"
+python3 scripts/check_api_client_base_path.py --self-test
+python3 scripts/check_api_client_base_path.py
+
 step "Admin transport and session boundary"
 python3 scripts/check_admin_content_architecture.py
 
