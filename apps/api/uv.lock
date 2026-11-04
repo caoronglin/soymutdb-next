@@ -1508,6 +1508,7 @@ source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
     { name = "alembic" },
+    { name = "anyio" },
     { name = "argon2-cffi" },
     { name = "asyncpg" },
     { name = "bleach" },
@@ -1553,6 +1554,7 @@ dev = [
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.10.0" },
     { name = "alembic", specifier = ">=1.14.0" },
+    { name = "anyio", specifier = ">=4.0.0" },
     { name = "argon2-cffi", specifier = ">=23.1.0" },
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "bleach", specifier = ">=6.0.0" },
