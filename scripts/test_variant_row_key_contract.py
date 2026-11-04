@@ -1,0 +1,89 @@
+"""Regression tests for the variants row-key source guard.
+
+The guard exists because a stale-base branch reverted both the row key and the
+two test cases that would have caught it. Vitest reported 2/2 green and the
+OpenAPI gate has no opinion about frontend source, so the co-regression shipped
+silently. These tests run against synthetic trees: each negative must fail.
+"""
+from pathlib import Path
+
+import pytest
+
+from scripts import check_variant_row_key_contract as guard
+
+GOOD_SOURCE = '''
+<Table<VariantSummary>
+  rowKey={(row) => JSON.stringify([row.variant_id, row.assembly ?? null])}
+/>
+'''
+
+BAD_SOURCE = '''
+<Table<VariantSummary>
+  rowKey={(row) => `${row.assembly ?? ""}:${row.variant_id}`}
+/>
+'''
+
+GOOD_TEST = '''
+describe("variant row keys", () => {
+  it("separates rows that share an identifier and differ in assembly", () => {});
+  it("separates an absent assembly from an empty one under a shared identifier", () => {});
+  it("keeps rows that agree on identifier and assembly in one bucket", () => {});
+  it("renders duplicate identifiers without a React duplicate-key warning", () => {});
+});
+'''
+
+SHORT_TEST = '''
+describe("variant row keys", () => {
+  it("gives every rendered row its own key across assemblies", () => {});
+  it("renders duplicate identifiers without a React duplicate-key warning", () => {});
+});
+'''
+
+
+@pytest.fixture
+def tree(tmp_path):
+    return tmp_path
+
+
+def put(tree: Path, name: str, text: str) -> Path:
+    path = tree / name
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def run(tree: Path, source: str, test: str) -> int:
+    return guard.main([
+        "--source-path", str(put(tree, "index.tsx", source)),
+        "--test-path", str(put(tree, "row-key.test.tsx", test)),
+    ])
+
+
+def test_current_contract_is_accepted(tree):
+    assert run(tree, GOOD_SOURCE, GOOD_TEST) == 0
+
+
+def test_regressed_source_with_matching_short_test_is_rejected(tree, capsys):
+    assert run(tree, BAD_SOURCE, SHORT_TEST) == 1
+    out = capsys.readouterr().err
+    assert "JSON.stringify" in out
+    assert "2 cases" in out
+
+
+def test_regressed_source_alone_is_rejected(tree, capsys):
+    assert run(tree, BAD_SOURCE, GOOD_TEST) == 1
+    assert "JSON.stringify" in capsys.readouterr().err
+
+
+def test_short_test_alone_is_rejected(tree, capsys):
+    assert run(tree, GOOD_SOURCE, SHORT_TEST) == 1
+    out = capsys.readouterr().err
+    assert "missing case" in out
+
+
+def test_missing_test_file_is_rejected(tree, capsys):
+    source = put(tree, "index.tsx", GOOD_SOURCE)
+    assert guard.main([
+        "--source-path", str(source),
+        "--test-path", str(tree / "absent.test.tsx"),
+    ]) == 1
+    assert "missing" in capsys.readouterr().err

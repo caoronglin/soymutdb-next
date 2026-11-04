@@ -123,6 +123,10 @@ smoke_contracts() {
     scripts/test_backup_restore_contracts.py
     scripts/test_native_backup_runtime.py
     scripts/test_ci_job_contracts.py
+    # A stale-base branch carried an older variants row key AND the shorter
+    # test file that matches it: vitest stayed green (2/2) and no contract gate
+    # reads frontend source. This suite proves the guard fails on that pair.
+    scripts/test_variant_row_key_contract.py
     # The committed OpenAPI snapshot is an export, not a source file. A hand
     # edit to it (4975dbd inlined a hoisted type alias and deleted its
     # component) surfaces in CI only as "CONTRACT DEBT" from the frontend gate,

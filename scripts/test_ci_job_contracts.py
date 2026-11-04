@@ -1921,6 +1921,22 @@ class DeliveryArchitectureTests(unittest.TestCase):
         gate = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
         self.assertIn("SOYMUTDB_CI_DEMO_API_URL", gate)
 
+    def test_variant_row_key_guard_is_wired_into_both_gates(self) -> None:
+        """A source+test co-reversion must fail, not stay green.
+
+        A stale-base branch carried an older ``rowKey`` together with the two
+        test cases that match it: vitest reported 2/2 and the OpenAPI gate has
+        no opinion about frontend source. The guard reads the committed sources
+        independently of the test runner, so deleting tests cannot make it
+        greener. Both the frontend gate and the contracts layer must invoke it.
+        """
+        frontend = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
+        self.assertIn("scripts/check_variant_row_key_contract.py", frontend)
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        self.assertIn("scripts/test_variant_row_key_contract.py", smoke)
+        self.assertTrue((ROOT / "scripts/check_variant_row_key_contract.py").is_file())
+        self.assertTrue((ROOT / "scripts/test_variant_row_key_contract.py").is_file())
+
     def test_package_script_invocations_do_not_double_up_the_separator(self) -> None:
         """`pnpm run <script> -- --flag` forwards a literal "--" to the script.
 
