@@ -89,6 +89,7 @@ const NAV_GROUPS: ReadonlyArray<NavGroupDef> = [
     labelKey: "nav.tools",
     children: [
       { kind: "link", to: "/blast", labelKey: "nav.blast" },
+      { kind: "link", to: "/comparative", labelKey: "nav.comparative" },
       { kind: "link", to: "/analyses", labelKey: "nav.analyses" },
       { kind: "separator" },
       { kind: "link", to: "/tools/seqfetch", labelKey: "tools.seqfetch.title" },

@@ -41,6 +41,7 @@ import {
   type HomologRecord,
   type TestDataPreviewMutationSite,
 } from "@soymutdb/api-client";
+import { GeneOrthologSection } from "../../components/comparative/ortholog-section";
 import { GeneGenomeView } from "../../components/gene-genome-view";
 import { GeneSeedRequestEntry } from "../../components/gene-seed-request-entry";
 import { FadeUp, ScaleIn } from "../../components/route-motion";
@@ -515,6 +516,19 @@ function GeneDetailComponent() {
                         locale={{ emptyText: t("genes.homologs.no_data") }}
                       />
                     )}
+                  </ScaleIn>
+                ),
+              },
+              {
+                // Comparative genomics lives on its own tab rather than inside
+                // "Homologs": the homolog table is the older per-row view, while
+                // these rows carry the source's own relationship classification
+                // (one_to_one / one_to_many / many_to_many) and its evidence tag.
+                key: "orthologs",
+                label: t("comparative.orthologs.title"),
+                children: (
+                  <ScaleIn>
+                    <GeneOrthologSection geneId={gene.gene_id ?? geneId} assemblyId={assembly} />
                   </ScaleIn>
                 ),
               },

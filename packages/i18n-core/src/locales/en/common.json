@@ -45,7 +45,8 @@
     "internalBadge": "Internal",
     "primaryLabel": "Primary navigation",
     "quickSearchLabel": "Quick search (Cmd+K)",
-    "searchPlaceholder": "Search…"
+    "searchPlaceholder": "Search…",
+    "comparative": "Comparative"
   },
   "home": {
     "subtitle": "Soybean mutant database",
@@ -3161,5 +3162,103 @@
     },
     "downloadFilenameHint": "Raw aligner output (tab-separated)",
     "engineDiamondBlastp": "DIAMOND (blastp)"
+  },
+  "comparative": {
+    "title": "Comparative genomics",
+    "subtitle": "Gene families and orthologous groups imported from a named source, with its method and version stated on every record.",
+    "filters": {
+      "assembly": "Assembly",
+      "allAssemblies": "All assemblies",
+      "level": "Level",
+      "allLevels": "All levels",
+      "clear": "Clear filters",
+      "searchParamsNote": "Filters are kept in the URL, so this view can be linked and shared."
+    },
+    "level": {
+      "gene_family": "Gene family",
+      "gene_subfamily": "Subfamily"
+    },
+    "list": {
+      "family": "Family",
+      "name": "Name",
+      "members": "Members",
+      "method": "Method",
+      "source": "Source",
+      "release": "Release",
+      "empty": "No gene families are imported for this release and filter.",
+      "emptyHint": "An absent family table is not a family count of zero: nothing was imported for the selected scope.",
+      "total": "{{total}} families",
+      "pageInfo": "Page {{page}} of {{pages}}",
+      "loadError": "The family list could not be loaded."
+    },
+    "detail": {
+      "backToList": "All families",
+      "externalId": "Source accession",
+      "method": "Method",
+      "methodVersion": "Method version",
+      "sourceName": "Source",
+      "sourceVersion": "Source version",
+      "sourceUrl": "Source link",
+      "release": "Release",
+      "assembly": "Assembly",
+      "memberCount": "Members",
+      "relationshipTypes": "Relationship types",
+      "membersTitle": "Members",
+      "memberGene": "Gene",
+      "memberSpecies": "Species",
+      "memberRelationship": "Relationship",
+      "memberMethod": "Method",
+      "memberConfidence": "Confidence",
+      "membersEmpty": "This family has no imported member rows.",
+      "provenanceTitle": "Provenance",
+      "provenanceNote": "A family is a computational grouping. The method that produced it is part of the record, not an optional annotation.",
+      "loadError": "The family could not be loaded.",
+      "notFound": "No such family in this release.",
+      "artifactsTitle": "Alignment and tree",
+      "artifactsNote": "An alignment or tree is computed asynchronously and is only valid for the exact member set hashed below.",
+      "requestMsa": "Compute alignment",
+      "requestTree": "Build tree",
+      "polling": "Waiting for the worker…",
+      "inputSha": "Input sha256",
+      "inputMembers": "Frozen members",
+      "download": "Download result",
+      "downloadUnavailable": "The worker finished without publishing a downloadable object.",
+      "requestFailed": "The request was rejected.",
+      "pollTimedOut": "Stopped polling after {{seconds}}s. The job may still be running; reload to check again."
+    },
+    "coverage": {
+      "title": "Species coverage",
+      "species": "Species",
+      "state": "State",
+      "members": "Members",
+      "available": "Imported",
+      "no_data": "No record for this species in the source",
+      "no_dataHint": "The source has no row for this species. It is not a measured zero.",
+      "not_imported": "No snapshot for this family in this release",
+      "not_importedHint": "This release never imported this family's snapshot, so absence here says nothing about the species."
+    },
+    "relationship": {
+      "one_to_one": "one_to_one",
+      "one_to_many": "one_to_many",
+      "many_to_many": "many_to_many"
+    },
+    "orthologs": {
+      "title": "Orthologs and paralogs",
+      "hint": "Relationship types come from the imported rows, not from sequence similarity.",
+      "gene": "Gene",
+      "species": "Species",
+      "type": "Relationship",
+      "method": "Method",
+      "source": "Source",
+      "no_data": "The source has no homolog record for this gene in this release.",
+      "not_imported": "This release never imported a homolog snapshot for this assembly.",
+      "empty": "No rows for this gene.",
+      "loadError": "The homolog record could not be loaded."
+    },
+    "geneLink": {
+      "title": "Comparative genomics",
+      "body": "Gene families and orthologous groups for this gene, with the source's own relationship classification.",
+      "open": "Open orthologs and paralogs"
+    }
   }
 }

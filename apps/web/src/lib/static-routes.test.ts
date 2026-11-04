@@ -22,6 +22,7 @@ describe("deriveStaticRouteEntries", () => {
       "/analytics",
       "/blast",
       "/browser",
+      "/comparative",
       "/compare",
       "/downloads",
       "/genes",
@@ -49,6 +50,7 @@ describe("deriveStaticRouteEntries", () => {
     expect(paths).not.toContain("/genes/:geneId");
     expect(paths).not.toContain("/mutants/:publicId");
     expect(paths).not.toContain("/news/:slug");
+    expect(paths).not.toContain("/comparative/:familyId");
   });
 
   it("never lists the internal variant in the sitemap", () => {

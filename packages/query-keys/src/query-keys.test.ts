@@ -211,6 +211,32 @@ describe("queryKeys", () => {
     expect(detail[2]).toBe("detail");
   });
 
+  it("scopes comparative reads by family context and keeps artifacts off the family key", () => {
+    const base = { assemblyId: "2", level: "gene_family", page: 1, pageSize: 20, releaseId: "2026.09", siteVariant: "external" as const };
+    const key = queryKeys.comparative.families(base);
+    // A different assembly answers with a different member set.
+    expect(queryKeys.comparative.families({ ...base, assemblyId: "3" })).not.toEqual(key);
+    expect(queryKeys.comparative.families({ ...base, level: "gene_subfamily" })).not.toEqual(key);
+    expect(queryKeys.comparative.families({ ...base, page: 2 })).not.toEqual(key);
+    expect(queryKeys.comparative.families({ ...base, releaseId: "2026.10" })).not.toEqual(key);
+    expect(queryKeys.comparative.families({ ...base, siteVariant: "internal" })).not.toEqual(key);
+
+    const detail = queryKeys.comparative.family({
+      familyId: 12,
+      assemblyId: "2",
+      releaseId: "2026.09",
+      siteVariant: "external",
+    });
+    expect(detail.slice(0, 2)).toEqual(["soymutdb", "comparative"]);
+    expect(detail).toContain(12);
+
+    // A finished alignment belongs to a frozen input set, not to the family's
+    // current membership: the artifact key must not collide with the family key.
+    const artifact = queryKeys.comparative.artifact("job-1", "2026.09", "external");
+    expect(artifact).not.toEqual(detail);
+    expect(queryKeys.comparative.artifact("job-2", "2026.09", "external")).not.toEqual(artifact);
+  });
+
   it("scopes the export cache by export id and session", () => {
     // The export record is owner-scoped: the id identifies the request and
     // the session identifies the account that may read it.
