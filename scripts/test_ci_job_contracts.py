@@ -896,6 +896,198 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 "a section hint naming no heading must fail --static",
             )
 
+    def test_doc_section_hint_is_checked_before_the_path_too(self) -> None:
+        """A section named *before* the path must resolve, not pass silently.
+
+        Regression for #141. SECTION_HINT only searched the 120 chars after a
+        docs/ path, so `section "NOPE" in docs/ops/bio-core-wheel.md` parsed as
+        zero citations and --static stayed green on a label naming no heading.
+        DOC_REF has no leading anchor, so the path was always found; the miss
+        was entirely on the hint side. Both orderings now share one checker.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_pre_path",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        good = "CI：构建一次，消费一次"
+        doc = "bio-core-wheel.md"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs" / "ops").mkdir(parents=True)
+            (root / "docs" / "ops" / doc).write_text(
+                f"# Wheel\n\n## {good}\n", encoding="utf-8"
+            )
+            shipped = [
+                f'# see docs/ops/{doc}, "{good}"',
+                f'# see docs/ops/{doc}, section "{good}"',
+                f'# see section "{good}" in docs/ops/{doc}',
+            ]
+            for text in shipped:
+                self.assertEqual(
+                    checker.doc_ref_errors(text, root), [],
+                    f"a real section must stay green in every form: {text}",
+                )
+
+            dangling = [
+                f'# see section "NOPE" in docs/ops/{doc}',
+                # Wrapped across comment lines, the shape the shipped citation
+                # in ci-job-steps.sh already takes.
+                f'# see section \n# "NOPE" in docs/ops/{doc}',
+            ]
+            for text in dangling:
+                self.assertTrue(
+                    checker.doc_ref_errors(text, root),
+                    f"a pre-path label naming no heading must fail: {text}",
+                )
+
+            # A dangling path stays red on the pre-path form as well, so the
+            # widened hint cannot mask the path check.
+            self.assertTrue(
+                checker.doc_ref_errors('# see section "X" in docs/ghost/gone.md', root),
+                "a pre-path citation of a missing doc must fail",
+            )
+            # A quoted string with no comma or `section` in front of a path is
+            # not a citation: widening must not turn any quote into a heading.
+            self.assertEqual(
+                checker.doc_ref_errors(f'# "{good}" is unrelated to docs/ops/{doc}', root),
+                [],
+                "an unrelated quoted string beside a path is not a section hint",
+            )
+
+    def test_unquoted_section_heading_is_not_a_citation(self) -> None:
+        """Unquoted headings stay out of scope — decided, not overlooked.
+
+        #141 asked for a deliberate call. A citation is checked only when its
+        label is quoted and sits beside a docs/ path behind a comma or the word
+        `section`. An unquoted heading (`see the section 构建一次 消费一次 in
+        docs/…`) has no delimiter telling the gate where the heading ends, so
+        accepting it would mean guessing at prose extent and red-flagging any
+        sentence that happens to contain a path. Out of scope: writers must
+        quote the label, which the shipped citations already do.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_unquoted",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        good = "CI：构建一次，消费一次"
+        doc = "bio-core-wheel.md"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs" / "ops").mkdir(parents=True)
+            (root / "docs" / "ops" / doc).write_text(
+                f"# Wheel\n\n## {good}\n", encoding="utf-8"
+            )
+            for text in (
+                f"# see the section {good} in docs/ops/{doc}",
+                f"# see the section 完全不存在 的标题 in docs/ops/{doc}",
+            ):
+                self.assertEqual(
+                    checker.doc_ref_errors(text, root), [],
+                    f"unquoted heading is out of scope by decision: {text}",
+                )
+            # The quoted form of the same sentence IS checked, so the scope
+            # boundary is the quotation, not the word order.
+            self.assertTrue(
+                checker.doc_ref_errors(f'# see the section "完全不存在 的标题" in docs/ops/{doc}', root),
+                "quoting the label puts it back in scope",
+            )
+
+    def test_prose_mentions_of_a_doc_path_are_not_citations(self) -> None:
+        """A path named inside a sentence must not be followed as a citation.
+
+        Regression for the first CI run of #142: the gate scans every shared
+        script, and it is one, so --static read its own docstrings -- where it
+        says "every docs/ citation ... resolves". Those example paths were
+        chased as links, and the Contract suites stage failed on a file the
+        checker itself had invented. Line-leading paths and real citations stay
+        checked; prose stays prose.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_prose",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs" / "ops").mkdir(parents=True)
+            (root / "docs" / "ops" / "bio-core-wheel.md").write_text(
+                "# Wheel\n\n## CI：构建一次，消费一次\n", encoding="utf-8"
+            )
+            # Prose: the shape the checker's own docstrings take.
+            for text in (
+                "# --static reads every docs/ghost/gone.md path in a sentence",
+                "# a dangling docs/ghost/gone.md citation must fail",
+                "# cited in docs/ghost/gone.md only as an example path",
+                '"""Fail when a docs/ghost/gone.md citation is dangling."""',
+            ):
+                self.assertEqual(
+                    checker.doc_ref_errors(text, root), [],
+                    f"prose is not a citation: {text}",
+                )
+            # Citations stay checked in every shape the gate documents.
+            for text in (
+                "# see docs/ghost/gone.md",
+                '# see (docs/ghost/gone.md, "CI：构建一次，消费一次")',
+                '# see docs/ops/bio-core-wheel.md, "renamed heading"',
+                '# see section "renamed heading" in docs/ops/bio-core-wheel.md',
+                "        # docs/ghost/gone.md",
+            ):
+                self.assertTrue(
+                    checker.doc_ref_errors(text, root),
+                    f"a citation must still be resolved: {text}",
+                )
+
+    def test_bio_core_static_gate_passes_on_its_own_source(self) -> None:
+        """--static must be green on every shared script, this checker included.
+
+        The checker is one of the files it reads, so its own docstrings are part
+        of the input. Pinning the committed tree keeps a future explanatory
+        example from failing the gate it explains.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_selfscan",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        for script in SHARED_SCRIPTS:
+            self.assertEqual(
+                checker.doc_ref_errors(
+                    (ROOT / script).read_text(encoding="utf-8"), source=script
+                ),
+                [],
+                f"--static must be green on {script}",
+            )
+        # The checker is not itself in SHARED_SCRIPTS, but --static reads its own
+        # docstrings through check_static(), so prose there must stay prose.
+        self.assertEqual(
+            checker.doc_ref_errors(
+                (ROOT / "scripts" / "check_bio_core_wheel.py").read_text(
+                    encoding="utf-8"
+                ),
+                source="scripts/check_bio_core_wheel.py",
+            ),
+            [],
+            "--static must be green on its own source",
+        )
+
     def test_bio_core_static_gate_scans_every_shared_script(self) -> None:
         """--static must cover the same file set as the contract citation guard.
 

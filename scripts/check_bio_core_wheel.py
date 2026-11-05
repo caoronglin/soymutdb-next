@@ -2,13 +2,14 @@
 """Fail when the Rust bio-core contract is inconsistent or the wheel is absent.
 
 Two independent checks, so a missing prerequisite is reported as a failure,
-never as a skipped pass:
+never as a skipped pass. The static check also rejects a dangling documentation
+citation in any shared script; the full contract is spelled out below.
 
-1. Static (Python 3.11+ for stdlib tomllib; the pinned CI floor is 3.15): the
-   crate declares a pinned toolchain, its lock file is committed, the CI job is
-   registered in the shared dispatcher, the verification script actually
-   installs + imports the wheel, and every docs/ citation in every shared
-   script resolves. The manifest is parsed, not grep-ed.
+1. Static: the crate declares a pinned toolchain, its lock file is committed,
+   the CI job is registered in the shared dispatcher, the verification script
+   actually installs + imports the wheel, and every documentation citation in
+   every shared script resolves to a committed file and a real heading. The
+   manifest is parsed, not grep-ed.
 2. Runtime (CPython 3.15 with the wheel installed): import the compiled
    extension and execute real scientific assertions.
 
@@ -32,7 +33,27 @@ ROOT = Path(__file__).resolve().parents[1]
 CRATE = ROOT / "packages" / "bio-core"
 
 DOC_REF = re.compile(r"docs/[\w./-]+\.md(?![.\w/-])")
+# A docs/ path inside a sentence is prose, not a citation. --static reads this
+# very file, so the rule cannot treat its own explanation as a link. Only the
+# shapes a citation really takes count: parenthesised or comma-introduced, a
+# line-leading path in a block comment, or one behind the doc path itself.
+PROSE_BEFORE_PATH = (
+    "every", "each", "any", "a", "an", "the", "no", "doc", "docs", "document",
+    "file", "path", "missing", "cited", "cites", "cite", "unresolved", "dangling",
+    "real", "of", "to", "with", "from", "by", "for", "on", "into", "than", "as",
+    "in", "section",
+)
+# A quoted label beside a path, in either order: after a comma or the word
+# `section`, or in front of the path. Only the post-path form used to be
+# searched, so a dangling label written first stayed silently green.
 SECTION_HINT = re.compile(r'(?:,\s*|section\s+)"([^"]+)"')
+SECTION_HINT_BEFORE = re.compile(r'section\s+"([^"]+)"[^"]*?$')
+PRE_PATH_WINDOW = 120
+# An unquoted heading is deliberately NOT parsed: the `docs/` path already
+# carries a mandatory quotation in every checked form, so an unquoted run of
+# prose beside it is a coincidence, not a citation. Guessing at the run's
+# extent turns reading prose into a contract; see
+# test_unquoted_section_heading_is_not_a_citation in test_ci_job_contracts.py.
 
 
 def shared_scripts() -> list[str]:
@@ -51,6 +72,65 @@ def shared_scripts() -> list[str]:
     return re.findall(r'"([^"]+)"', match.group(1))
 
 
+def section_labels(line: str, start: int, end: int) -> list[str]:
+    """Return every quoted section label attached to one docs/ path.
+
+    Both orderings count. `end` is the end of the path match, so the post-path
+    form is the window that follows it, and the pre-path form is the window
+    before `start`. A label is only read when the preceding token is a comma or
+    the word `section`, which is what keeps an unrelated quoted string in the
+    same comment from being mistaken for a citation.
+    """
+    labels: list[str] = []
+    after = SECTION_HINT.search(line[end:end + PRE_PATH_WINDOW])
+    if after:
+        labels.append(after.group(1))
+    before = SECTION_HINT_BEFORE.search(line[max(0, start - PRE_PATH_WINDOW):start])
+    if before:
+        labels.append(before.group(1))
+    return labels
+
+
+def is_doc_citation(prefix: str) -> bool:
+    """True when `prefix` — the text before a docs/ path — introduces a citation.
+
+    A path inside a sentence is prose, not a citation. The checker is itself a
+    shared script, so --static reads this file too and its own docstrings spell
+    out what the guard accepts; those mentions must not be followed as links.
+    The allowlist covers the shapes a citation actually takes — parenthesised or
+    comma-introduced, line-leading in a shell block comment, or behind
+    `in`/`see`/`and` — and everything else stays prose, which keeps the rule
+    closed instead of chasing an open-ended list of English nouns.
+    """
+    stripped = prefix.rstrip()
+    if stripped.endswith(("(", "（", ",", "，", ";", "；", ":", "：", "\u3001")):
+        return True
+    # Strip the comment marker, so a line-leading path is recognised as one.
+    line_prefix = re.sub(r"^\s*(?:[\w./-]+\s+)?#+[ \t]*", "", stripped)
+    first = line_prefix.split()[:1]
+    if first and first[0] in ("docs", "in", "see", "cf."):
+        return True
+    words = re.findall(r"[\w.]+", stripped)
+    return not words or words[-1].lower() not in PROSE_BEFORE_PATH
+
+
+def _fold_wrapped_comments(text: str) -> str:
+    """Join a wrapped `#` comment continuation onto the line it continues.
+
+    The whole `\n` + indent + `#` prefix is replaced by the separator, so the
+    fold is observable: re-emitting `"#"` with a single space would reproduce
+    the matched text byte for byte and silently do nothing. ASCII prose needs a
+    space where the line break stood in for one (`"build once,\n# consume"`),
+    while CJK headings carry no inter-word spaces so the break must vanish
+    (`"构建一次，\n# 消费一次"`).
+    """
+    def join(match: re.Match[str]) -> str:
+        prev = match.string[match.start() - 1]
+        return "" if unicodedata.east_asian_width(prev) in ("W", "F") else " "
+
+    return re.sub(r"\n[ \t]*#[ \t]*", join, text)
+
+
 def doc_ref_errors(
     text: str, root: Path = ROOT, source: str = "ci-job-steps.sh"
 ) -> list[str]:
@@ -62,33 +142,26 @@ def doc_ref_errors(
     dangling path or a renamed heading now fails instead of lingering.
     """
     errors: list[str] = []
-
-    # Fold wrapped comment lines the same way as test_ci_job_contracts.py:
-    # CJK headings have no inter-word spaces, so a wrap there must vanish.
-    def fold_wrap(match: re.Match[str]) -> str:
-        prev = match.string[match.start() - 1]
-        return "" if unicodedata.east_asian_width(prev) in ("W", "F") else " "
-
-    flat = re.sub(r"\n[ \t]*#[ \t]*", fold_wrap, text)
-    for line in flat.splitlines():
+    for line in _fold_wrapped_comments(text).splitlines():
         for match in DOC_REF.finditer(line):
+            if not is_doc_citation(line[:match.start()]):
+                continue
             ref = match.group(0)
             doc = root / ref
             if not doc.is_file():
                 errors.append(f"{source} cites missing doc {ref!r}")
                 continue
-            hint = SECTION_HINT.search(line[match.end():match.end() + 120])
-            if not hint:
+            labels = section_labels(line, match.start(), match.end())
+            if not labels:
                 continue
             headings = {
                 heading.lstrip("#").strip()
                 for heading in doc.read_text(encoding="utf-8").splitlines()
                 if re.match(r"#{1,6}\s", heading)
             }
-            if hint.group(1) not in headings:
-                errors.append(
-                    f"{source} cites missing section {hint.group(1)!r} in {ref}"
-                )
+            for label in labels:
+                if label not in headings:
+                    errors.append(f"{source} cites missing section {label!r} in {ref}")
     return errors
 
 
