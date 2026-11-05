@@ -36,18 +36,41 @@ points that are literals in this file, not derived from either artifact. The
 snapshot's response and request distributions must each equal their baseline
 exactly, and the generated client's per-component counts must equal the sum of
 the two baselines exactly. Nothing is one-sided and nothing is self-referential,
-so a coordinated regenerate of both halves cannot pass by moving together.
+so a coordinated regenerate of both halves cannot pass by moving together --
+for *distribution*. Which operation declares each body is pinned separately by
+``_BODY_PAIR_DIGEST`` below.
 
-The three literals are the one place a human may edit to make a red guard
-green, so ``_PINNED_ARTIFACTS`` records which committed bytes they were counted
-from. Re-pinning the counts alone -- the regenerate that drifts both halves and
-then "fixes" the numbers it broke -- is reported as the artifact having moved.
+The distribution literals are the one place a human may edit to make a red
+guard green, so ``_PINNED_ARTIFACTS`` records which committed bytes they were
+counted from. Re-pinning the counts alone -- the regenerate that drifts both
+halves and then "fixes" the numbers it broke -- is reported as the artifact
+having moved. ``_BODY_PAIR_DIGEST`` is the fourth literal: a permutation that
+preserves every count still changes the pair set, so it has its own pin.
 
 The generator prints response and request bodies as the same
 ``"application/json": components["schemas"][...];`` line, which is why the
 client total (807) exceeds the response-only count (722): the 85 request
 occurrences are the surplus. Splitting the baseline makes that surplus an
 explicit, pinned part of the contract instead of an absorbed difference.
+
+Distribution is not topology
+----------------------------
+The two baselines pin *how many* of each component exist, not *which operation*
+declares each one. A permutation of two same-count bodies -- register and
+login swapping ``UserCreate`` / ``LoginRequest``, say -- preserves every count,
+keeps both halves agreeing and leaves no component undeclared, yet the client
+types the wrong request body on the login form. 105 of 136 response components
+and 79 of 82 request components sit at count 1, so nearly any two are
+swappable. ``_BODY_PAIR_DIGEST`` closes that: it pins the sorted
+``(method, path, status|requestBody, component)`` tuples, so topology and
+distribution are frozen together. Canonical form (regenerate with it):
+
+* uppercase the HTTP method;
+* sort the 807 tuples by the tuple itself (method, path, status, component);
+* join each tuple's four fields with one space, records with ``\n``;
+* ``sha256`` of that UTF-8 string, no trailing newline.
+
+The baselines stay as the *readable* diagnostic; the digest is the strict pin.
 
 Reads committed bytes only: stdlib, no API venv, no Python 3.15, no PostgreSQL.
 Run directly or collect with pytest:
@@ -309,9 +332,9 @@ _REQUEST_BODY_BASELINE = {
 # "806 not 807" is a better first signal than a 218-component diff.
 _CLIENT_BODY_TOTAL = 807
 
-# What the three literals above are a distribution *of*: the committed artifact
-# blobs they were counted from, by object id. Without this a regenerate that
-# moves both halves and then re-pins the numbers passes -- the guard would be
+# What the three distribution literals are a count *of*: the committed artifact
+# blobs they were counted from, by object id. Without this a regenerate moves
+# both halves and then re-pins the numbers passes -- the guard would be
 # asserting that a baseline equals itself. Recorded, not derived: recomputing
 # these from the artifacts would make the pin self-referential again, which is
 # the whole failure this file replaced.
@@ -319,6 +342,13 @@ _PINNED_ARTIFACTS = {
     "snapshot_blob": "3660886cabc443fe574ffff6c65ee84132262009",
     "generated_blob": "5f2c4a407d96083abdac8ac67e44a40f3ed68a89",
 }
+
+# Strict topology pin. The two baselines above cannot see a permutation of two
+# same-count bodies between operations; this digest of the sorted (method, path,
+# status|requestBody, component) tuples can. Independent of both artifacts, as
+# literal as the baselines. Regenerate with _body_pair_digest() on an
+# intentionally changed contract and update in the same commit, with a reason.
+_BODY_PAIR_DIGEST = "f3382283236a34ddf96d10ce984a36bc6266f87d2c63de13aa066f54611a3ecc"
 
 
 def _operations(document: dict) -> list[tuple[str, str, dict]]:
@@ -360,6 +390,32 @@ def _request_bodies(document: dict) -> dict[str, int]:
     return counts
 
 
+def _body_pairs(document: dict) -> list[tuple[str, str, str, str]]:
+    """Every (method, path, status|requestBody, component) body declaration."""
+    pairs: list[tuple[str, str, str, str]] = []
+    for path, method, operation in _operations(document):
+        for status, response in operation.get("responses", {}).items():
+            for name in _ref_bodies(response):
+                pairs.append((method, path, status, name))
+        for name in _ref_bodies(operation.get("requestBody") or {}):
+            pairs.append((method, path, "requestBody", name))
+    return pairs
+
+
+def _body_pair_digest(document: dict) -> str:
+    """sha256 of the canonical, sorted body-pair set (see module docstring).
+
+    Uppercase the method, sort by the tuple itself, join fields with one space
+    and records with a newline; hash the UTF-8 bytes with no trailing newline.
+    """
+    canonical = sorted(
+        (method.upper(), path, status, component)
+        for method, path, status, component in _body_pairs(document)
+    )
+    blob = "\n".join(" ".join(pair) for pair in canonical)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def _client_bodies(generated: str) -> dict[str, int]:
     counts: dict[str, int] = {}
     for match in BODY.finditer(generated):
@@ -385,10 +441,11 @@ def _git_blob(path: Path) -> str:
 def _baseline_moved_with_the_artifacts() -> list[str]:
     """A baseline edit is only legitimate alongside the artifact edit it pins.
 
-    The three literals above are the one place in this file a human may edit to
-    make a red guard green. Nothing so far tied that edit to the artifacts it
-    describes, so a regenerate that drifts both halves *and* re-pins the counts
-    passed every check -- the guard compared a baseline to itself.
+    The distribution literals above are the one place in this file a human may
+    edit to make a red guard green. Nothing so far tied that edit to the
+    artifacts it describes, so a regenerate that drifts both halves *and*
+    re-pins the counts passed every check -- the guard compared a baseline to
+    itself.
 
     ``_PINNED_ARTIFACTS`` records which bytes the numbers were counted from. It
     is a literal too, so updating it is part of the same deliberate act: you
@@ -455,6 +512,17 @@ def failures(document: dict, generated: str, smoke: str) -> list[str]:
         found.append(
             "snapshot request bodies differ from the pinned "
             f"_REQUEST_BODY_BASELINE: {_diff(_REQUEST_BODY_BASELINE, requests)}"
+        )
+
+    # Strict topology pin. The two baselines are multisets, blind to a
+    # permutation of two same-count bodies between operations; the digest of
+    # the declared pair set sees it. The baselines remain the readable
+    # diagnostic, this is the strict pin.
+    digest = _body_pair_digest(document)
+    if digest != _BODY_PAIR_DIGEST:
+        found.append(
+            "snapshot body-pair set moved: the pinned _BODY_PAIR_DIGEST is "
+            f"{_BODY_PAIR_DIGEST}, the declared pairs hash to {digest}"
         )
 
     # Exact, two-directional cross-artifact equality against the baselines.
@@ -525,6 +593,63 @@ def _retype_first_request(document: dict, old: str, new: str) -> None:
                 schema["$ref"] = f"{COMPONENT_PREFIX}{new}"
                 return
     raise AssertionError(f"no requestBody declares {old}")
+
+
+def _swap_client_lines(generated: str, first: str, second: str) -> str:
+    """Exchange the first occurrence of two distinct body lines, in place."""
+    a = f'"application/json": components["schemas"]["{first}"];'
+    b = f'"application/json": components["schemas"]["{second}"];'
+    placeholder = '"application/json": components["schemas"]["__SWAP__"];'
+    assert a in generated and b in generated
+    return generated.replace(a, placeholder, 1).replace(b, a, 1).replace(
+        placeholder, b, 1
+    )
+
+
+def test_committed_tree_digest_matches_the_pinned_pair_set() -> None:
+    document, _generated, _smoke = _load()
+    assert _body_pair_digest(document) == _BODY_PAIR_DIGEST
+    assert len(_body_pairs(document)) == _CLIENT_BODY_TOTAL
+
+
+def test_coordinated_request_body_permutation_is_rejected() -> None:
+    """register/login swap request bodies in BOTH halves; counts untouched.
+
+    The two baselines are multisets, so a permutation of two count-1 components
+    leaves every assertion above GREEN while the client types the wrong body on
+    the login form. Only the pair-set digest sees the topology change.
+    """
+    document, generated, smoke = _load()
+    register = document["paths"]["/api/v1/auth/register"]["post"]["requestBody"]
+    login = document["paths"]["/api/v1/auth/login"]["post"]["requestBody"]
+    register_ref = register["content"]["application/json"]["schema"]
+    login_ref = login["content"]["application/json"]["schema"]
+    assert register_ref["$ref"] == f"{COMPONENT_PREFIX}UserCreate"
+    assert login_ref["$ref"] == f"{COMPONENT_PREFIX}LoginRequest"
+    register_ref["$ref"] = f"{COMPONENT_PREFIX}LoginRequest"
+    login_ref["$ref"] = f"{COMPONENT_PREFIX}UserCreate"
+    generated = _swap_client_lines(generated, "UserCreate", "LoginRequest")
+    found = failures(document, generated, smoke)
+    assert _response_bodies(document) == _RESPONSE_BODY_BASELINE
+    assert _request_bodies(document) == _REQUEST_BODY_BASELINE
+    assert _any(found, "_BODY_PAIR_DIGEST"), found
+
+
+def test_coordinated_response_body_permutation_is_rejected() -> None:
+    """Two 200s swap their success components in BOTH halves; counts untouched."""
+    document, generated, smoke = _load()
+    genes = document["paths"]["/api/v1/genes"]["get"]["responses"]["200"]
+    detail = document["paths"]["/api/v1/genes/{gene_id}"]["get"]["responses"]["200"]
+    g_ref = genes["content"]["application/json"]["schema"]["$ref"]
+    d_ref = detail["content"]["application/json"]["schema"]["$ref"]
+    assert g_ref == f"{COMPONENT_PREFIX}GeneListResponse"
+    assert d_ref == f"{COMPONENT_PREFIX}GeneDetail"
+    genes["content"]["application/json"]["schema"]["$ref"] = d_ref
+    detail["content"]["application/json"]["schema"]["$ref"] = g_ref
+    generated = _swap_client_lines(generated, "GeneListResponse", "GeneDetail")
+    found = failures(document, generated, smoke)
+    assert _response_bodies(document) == _RESPONSE_BODY_BASELINE
+    assert _any(found, "_BODY_PAIR_DIGEST"), found
 
 
 def test_committed_tree_has_matching_response_bodies() -> None:
