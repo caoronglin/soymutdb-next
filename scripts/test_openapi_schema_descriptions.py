@@ -15,7 +15,9 @@ by a brittle assertion inside a fixture.
 """
 from __future__ import annotations
 
+import ast
 import json
+import re
 import sys
 from collections import Counter
 from pathlib import Path
@@ -441,3 +443,159 @@ def test_title_named_property_rows_are_pinned() -> None:
     assert drifted != guard._SCHEMA_TITLE_DIGEST
     found = guard.failures(snapshot=snapshot, generated=_GENERATED)
     assert any("_SCHEMA_TITLE_DIGEST" in f for f in found), found
+
+
+# ---------------------------------------------------------------------------
+# Description half: the independent, order-sensitive client literal
+# ---------------------------------------------------------------------------
+
+
+def _rotated_client_descriptions() -> str:
+    """Rotate three distinct @description values, keeping count + multiset."""
+    block = guard._COMPONENT_SCHEMAS.search(_GENERATED)
+    assert block is not None
+    body = block.group("body")
+    lines = body.split("\n")
+    pattern = re.compile(r"^(\s*\* @description )(.*)$")
+    picks: list[tuple[int, str, str]] = []
+    seen: set[str] = set()
+    for i, line in enumerate(lines):
+        match = pattern.match(line)
+        if not match:
+            continue
+        value = match.group(2)
+        if value in seen:
+            continue
+        seen.add(value)
+        picks.append((i, match.group(1), value))
+        if len(picks) == 3:
+            break
+    assert len(picks) == 3
+    values = [v for _, _, v in picks]
+    for index, (i, prefix, _) in enumerate(picks):
+        lines[i] = prefix + values[(index + 1) % 3]
+    rotated_body = "\n".join(lines)
+    start = block.start("body")
+    end = block.end("body")
+    return _GENERATED[:start] + rotated_body + _GENERATED[end:]
+
+
+def test_client_description_rotation_is_invisible_to_the_multiset_doors() -> None:
+    """Same count, same multiset, all pre-existing doors still green."""
+    rotated = _rotated_client_descriptions()
+    original = guard.client_descriptions(_GENERATED)
+    after = guard.client_descriptions(rotated)
+    assert rotated != _GENERATED
+    assert len(original) == len(after)
+    assert Counter(original) == Counter(after)
+    assert guard._digest(guard.rows(json.loads(_SNAPSHOT))) == (
+        guard._SCHEMA_DESCRIPTION_DIGEST
+    )
+    # Door 3 compares a multiset against the pinned rows: rotation is silent.
+    pinned_first_lines = Counter(
+        value.split("\n", 1)[0] for _, value in guard.rows(json.loads(_SNAPSHOT))
+    )
+    pinned_first_lines[guard._SYNTHETIC_CLIENT_DESCRIPTION] += 1
+    assert Counter(after) == pinned_first_lines
+
+
+def test_client_description_sequence_digest_catches_the_rotation() -> None:
+    """The new order-sensitive literal is the only door that fires."""
+    rotated = _rotated_client_descriptions()
+    assert guard._digest_client_description_sequence(
+        guard.client_descriptions(rotated)
+    ) != guard._CLIENT_DESCRIPTION_SEQUENCE_DIGEST
+    found = guard.failures(snapshot=_SNAPSHOT, generated=rotated)
+    assert any("_CLIENT_DESCRIPTION_SEQUENCE_DIGEST" in f for f in found), found
+
+
+def test_co_revert_with_an_honest_digest_repin_is_rejected() -> None:
+    """Re-pinning only the snapshot literal must not silence the client door.
+
+    This is the decisive control: before this door, a coordinated rewrite of
+    both halves plus one reviewed re-pin left the whole layer green.
+    """
+    snapshot = _snapshot_with(
+        lambda node: node.__setitem__("description", _drifted_value())
+    )
+    generated = _generated_with(_drifted_value())
+    repinned = guard._digest(guard.rows(json.loads(snapshot)))
+    assert repinned != guard._SCHEMA_DESCRIPTION_DIGEST
+    found = guard.failures(
+        snapshot=snapshot, generated=generated, digest=repinned
+    )
+    assert any("_CLIENT_DESCRIPTION_SEQUENCE_DIGEST" in f for f in found), found
+
+
+def test_client_description_sequence_is_an_independent_literal() -> None:
+    """The pin must be a source literal, not derived from the guarded bytes."""
+    tree = ast.parse(Path(guard.__file__).read_text(encoding="utf-8"))
+    for node in tree.body:
+        targets: list[ast.expr] = []
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+            value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+            value = node.value
+        else:
+            continue
+        for target in targets:
+            if (
+                isinstance(target, ast.Name)
+                and target.id == "_CLIENT_DESCRIPTION_SEQUENCE_DIGEST"
+            ):
+                assert isinstance(value, ast.Constant)
+                assert isinstance(value.value, str)
+                assert len(value.value) == 64
+                return
+    raise AssertionError(
+        "_CLIENT_DESCRIPTION_SEQUENCE_DIGEST is not a module-level literal"
+    )
+
+
+def test_client_description_count_door_is_load_bearing() -> None:
+    found = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=_GENERATED,
+        expected_client_description_lines=guard._EXPECTED_CLIENT_DESCRIPTION_LINES + 1,
+    )
+    assert any("_EXPECTED_CLIENT_DESCRIPTION_LINES" in f for f in found), found
+
+
+def test_both_description_digests_must_move_together() -> None:
+    """Re-pinning only one of the two literals is never a green tree."""
+    snapshot = _snapshot_with(
+        lambda node: node.__setitem__("description", _drifted_value())
+    )
+    generated = _generated_with(_drifted_value())
+    snapshot_digest = guard._digest(guard.rows(json.loads(snapshot)))
+    client_digest = guard._digest_client_description_sequence(
+        guard.client_descriptions(generated)
+    )
+    assert guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        digest=snapshot_digest,
+    ), "re-pinning only the snapshot literal must stay red"
+    assert guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        client_description_sequence_digest=client_digest,
+    ), "re-pinning only the client literal must stay red"
+    # Door 3 is bound to the committed rows (the pinned multiset), so even a
+    # reviewed change that re-pins BOTH digest literals is still named there.
+    # The two digest doors go silent; the multiset door is the authority. A
+    # legitimate prose change must move the digest, the client sequence, the
+    # pinned multiset AND both artifacts in one commit and say why.
+    found = guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        digest=snapshot_digest,
+        client_description_sequence_digest=client_digest,
+    )
+    assert not any("_SCHEMA_DESCRIPTION_DIGEST" in f for f in found), found
+    assert not any(
+        "_CLIENT_DESCRIPTION_SEQUENCE_DIGEST" in f for f in found
+    ), found
+    assert any("@description lines disagree" in f for f in found), found
