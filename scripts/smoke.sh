@@ -307,6 +307,7 @@ should_run() {
 }
 
 if should_run contracts; then
+  "${PYTHON_BIN}" scripts/check_contracts_registry_collection.py || rc=$?
   run_layer contracts smoke_contracts
 fi
 

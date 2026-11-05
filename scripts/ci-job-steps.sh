@@ -480,6 +480,7 @@ smoke_contracts_run() {
   # install, no API venv and no service, which is why it can run as its own cheap
   # stage instead of being appended to a heavier job.
   ensure_contracts_python
+  python3 "${REPO_ROOT}/scripts/check_contracts_registry_collection.py" --self-test
   bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts
 }
 
