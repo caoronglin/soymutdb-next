@@ -43,7 +43,13 @@ collectible" cell: registered, collectible, invoked — and vacuous.
 - `_DRIFT_PLANTS` — a source edit that disables one *check* the guard owns.
   `drift_probe()` applies it to the real tree, runs the wired `--self-test`,
   and requires a non-zero exit. This answers "does the guard still detect
-  drift at all", and every wired guard has one.
+  drift at all", and every wired guard has one. `_plant()` returns
+  `rc=None` when the plant itself failed (unreadable source, missing anchor,
+  no-op replacement, failed subprocess); `drift_errors()` reports that as an
+  unrun probe instead of reading a bare non-zero `rc` as "caught". Without
+  that distinction an edit that deletes a plant's own anchor immunises itself
+  against the very probe meant to catch it. The companion suite pins both
+  limbs from a second file.
 - `_SELF_TEST_GUTS` — a second plant, at the entry point instead of at a
   check: stop the plain run reading the committed tree. This is the shape no
   output-based floor can see. A guard whose self-test plants its own mutations
@@ -206,4 +212,6 @@ The probe re-runs the wired self-tests once per plant (~9 s of the layer). It
 is a teeth check, not a second copy of their assertions: the guards remain the sole owners of what
 each mutation means. A guard that legitimately changes its success line must
 update its signature here in the same commit; that is the reviewed action,
-pinned by the companion suite.
+pinned by the companion suite. A registered plant whose anchor drifts away
+from the committed source no longer proves anything; the probe says so by name
+instead of silently counting a failed plant as a detection.

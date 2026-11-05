@@ -517,6 +517,52 @@ class TeethGuardContract(unittest.TestCase):
             guard.BOTH_CALLS = original
         self.assertEqual(guard.both_call_errors(smoke, guard.wired_self_tests(smoke)), [])
 
+    def test_a_deleted_drift_plant_anchor_is_not_read_as_detection(self) -> None:
+        # The probe's own failure used to share a channel with a caught drift:
+        # rc!=0 from _plant was read as "the guard went red". Deleting a plant's
+        # anchor therefore immunised the injection against this very probe.
+        wired = guard.wired_self_tests(_smoke())
+        victim = "scripts/check_error_code_catalog.py"
+        pre_fix = guard.drift_errors(wired, {(victim, "wire"): (1, "anchor missing")})
+        self.assertFalse(
+            any(victim in f for f in pre_fix),
+            "rc=1 (pre-fix shape) proves nothing and must stay silent here",
+        )
+        found = guard.drift_errors(
+            wired, {(victim, "wire"): (None, "drift plant anchor missing")}
+        )
+        self.assertTrue(
+            any(victim in f and "drift plant was not run" in f for f in found), found
+        )
+        self.assertIn("rc is None", GUARD.read_text(encoding="utf-8"))
+
+    def test_a_deleted_gut_plant_anchor_is_not_read_as_a_survivor(self) -> None:
+        wired = guard.wired_self_tests(_smoke())
+        victim = "scripts/check_error_code_catalog.py"
+        found = guard.gut_errors(
+            wired,
+            {
+                (victim, "self-test"): (None, "gut plant anchor missing"),
+                (victim, "plain"): (0, ""),
+            },
+        )
+        self.assertTrue(
+            any(victim in f and "gut plant was not run" in f for f in found), found
+        )
+
+    def test_the_repaired_enum_plant_anchor_is_present(self) -> None:
+        # A stale anchor silently disabled one of the registered plants on main:
+        # _plant returned "anchor missing" and drift_errors read rc=1 as caught.
+        source = (ROOT / "scripts/check_openapi_published_enums.py").read_text(
+            encoding="utf-8"
+        )
+        for path, fragment, _replacement, _why in guard._DRIFT_PLANTS:
+            if path.endswith("check_openapi_published_enums.py"):
+                self.assertIn(fragment, source, "the enum drift plant anchor drifted")
+                break
+        else:
+            self.fail("published_enums has no registered drift plant")
+
     def test_the_cardinality_ablation_reaches_the_guards_own_self_test(self) -> None:
         source = GUARD.read_text(encoding="utf-8")
         self.assertIn("BOTH_CALLS has", source)
