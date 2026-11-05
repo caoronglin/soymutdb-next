@@ -344,6 +344,8 @@ should_run() {
 }
 
 if should_run contracts; then
+  # Top-level scope has no rc; only FAILED decides the exit status.
+  "${PYTHON_BIN}" scripts/check_contracts_registry_collection.py || FAILED+=("contracts registry")
   run_layer contracts smoke_contracts
 fi
 
