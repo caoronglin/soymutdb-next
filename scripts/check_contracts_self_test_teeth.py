@@ -92,6 +92,11 @@ BOTH_CALLS: frozenset[str] = frozenset(
         "scripts/check_variant_summary_assembly_consistency.py",
     }
 )
+# Membership alone is data, not mechanism: dropping one row *and* that guard's
+# plain run in the same edit makes every rule below agree with the edited tree
+# (nothing is left to complain about). The reviewed cardinality turns it into a
+# counted floor. A fourth both-calls pair needs the same reviewed edit here.
+BOTH_CALLS_SIZE = 3
 
 # Pinned success signatures. Counts are deliberately not pinned: a legitimate
 # new ablation changes "OK (11 checks)" to "OK (12 checks)" and must stay
@@ -536,6 +541,12 @@ def both_call_errors(smoke: str, wired: dict[str, list[str]]) -> list[str]:
         f"wired --self-test guard {p!r} also has a plain run but is not in BOTH_CALLS"
         for p in sorted((set(wired) & plain) - BOTH_CALLS)
     ]
+    if len(BOTH_CALLS) != BOTH_CALLS_SIZE:
+        problems.append(
+            f"BOTH_CALLS has {len(BOTH_CALLS)} member(s), expected "
+            f"{BOTH_CALLS_SIZE}: dropping a row and its plain run together "
+            "must not stay silent"
+        )
     return problems
 
 
@@ -1314,6 +1325,38 @@ def self_test() -> int:
             and not evidence_errors(control),
         )
     )
+    # 11. The residual the floor's third rule cannot see: dropping a
+    # BOTH_CALLS row *and* that guard's plain run in the same edit leaves
+    # every *membership* rule silent -- no row is left to complain about.
+    # Both limbs: the coordinated edit is blind to membership, and the
+    # reviewed cardinality is the only net that names it.
+    shrunk_floor = frozenset(p for p in BOTH_CALLS if p != victim)
+    lost_row = "\n".join(
+        line for line in smoke.splitlines()
+        if line.strip() != f'"${{PYTHON_BIN}}" {victim} || rc=$?'
+    ) + "\n"
+    original_floor = globals()["BOTH_CALLS"]
+    globals()["BOTH_CALLS"] = shrunk_floor
+    try:
+        found = both_call_errors(lost_row, wired_self_tests(lost_row))
+        membership_blind = not any(
+            "lost its plain run" in f
+            or "not in BOTH_CALLS" in f
+            or "no longer wired" in f
+            for f in found
+        )
+        cardinality_named = any("BOTH_CALLS has" in f for f in found)
+        cases.append(
+            (
+                "shrinking BOTH_CALLS membership is named by the counted floor",
+                victim,
+                len(shrunk_floor) == BOTH_CALLS_SIZE - 1
+                and membership_blind
+                and cardinality_named,
+            )
+        )
+    finally:
+        globals()["BOTH_CALLS"] = original_floor
 
     for label, target_name, caught in cases:
         print(f"PASS self-test: {label} -> {target_name}")
