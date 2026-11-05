@@ -707,3 +707,186 @@ def test_moving_a_whole_component_block_keeps_both_published_multisets() -> None
     assert Counter(
         value for _, value in guard.title_rows(before)
     ) == Counter(value for _, value in guard.title_rows(after))
+
+
+# --- component-property declaration order (Door 9) --------------------------
+
+_ORDER_SCHEMA = "AboutContentResponse"
+_ORDER_FIELDS = ("title_en", "title_zh")
+
+
+def _rotated_snapshot() -> str:
+    """Byte-preserving swap of two adjacent property declarations.
+
+    Rebuilding the JSON object in a new insertion order would re-serialise
+    the whole file and break the export-normalizer fixed point. This plant
+    swaps exactly the two textual property objects -- each located by brace
+    matching, because a property object here contains nested ``anyOf``
+    blocks with their own ``},`` lines -- so every unrelated byte survives.
+    """
+    anchor = f'"{_ORDER_SCHEMA}": {{'
+    start = _SNAPSHOT.index(anchor)
+    segment = _SNAPSHOT[start : start + 6000]
+
+    def block_of(field: str) -> tuple[int, int]:
+        open_at = segment.index(f'          "{field}": {{')
+        depth = 0
+        cursor = segment.index("{", open_at)
+        for position in range(cursor, len(segment)):
+            char = segment[position]
+            if char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    # swallow the trailing comma and newline that separate
+                    # this property from the next one
+                    close = position + 1
+                    if segment[close : close + 1] == ",":
+                        close += 1
+                    if segment[close : close + 1] == "\n":
+                        close += 1
+                    return open_at, close
+        raise AssertionError(f"unterminated property block for {field}")
+
+    a0, a1 = block_of(_ORDER_FIELDS[0])
+    b0, b1 = block_of(_ORDER_FIELDS[1])
+    assert a1 == b0, "the two property blocks must be adjacent"
+    rewritten = segment[:a0] + segment[b0:b1] + segment[a0:a1] + segment[b1:]
+    assert rewritten != segment
+    return _SNAPSHOT[:start] + rewritten + _SNAPSHOT[start + 6000 :]
+
+
+def _rotated_generated() -> str:
+    """Swap the two matching JSDoc + property blocks in the generated client."""
+    anchor = f"        {_ORDER_SCHEMA}: {{"
+    start = _GENERATED.index(anchor)
+    end = _GENERATED.index("        };", start)
+    block = _GENERATED[start:end]
+    a = block.index(f"            {_ORDER_FIELDS[0]}:")
+    b = block.index(f"            {_ORDER_FIELDS[1]}:")
+    sa = block.rfind("            /**", 0, a)
+    sb = block.rfind("            /**", 0, b)
+    eb = block.find("            /**", sb + 1)
+    blk_a = block[sa:sb]
+    blk_b = block[sb:eb]
+    rewritten = block[:sa] + blk_b + blk_a + block[eb:]
+    assert rewritten != block
+    return _GENERATED[:start] + rewritten + _GENERATED[end:]
+
+
+def test_property_order_rows_match_both_halves() -> None:
+    snapshot = guard.property_order_rows(json.loads(_SNAPSHOT))
+    generated = guard.client_property_order_rows(_GENERATED)
+    assert snapshot == generated
+    assert len(snapshot) == guard._EXPECTED_PROPERTY_ORDER_ROWS
+    assert len(generated) == guard._EXPECTED_CLIENT_PROPERTY_ORDER_ROWS
+    assert len({row[0] for row in snapshot}) == (
+        guard._EXPECTED_PROPERTY_ORDER_SCHEMAS
+    )
+
+
+def test_the_two_property_order_literals_are_independent() -> None:
+    assert guard._PROPERTY_ORDER_DIGEST != guard._CLIENT_PROPERTY_ORDER_DIGEST
+    snapshot = guard.property_order_rows(json.loads(_SNAPSHOT))
+    generated = guard.client_property_order_rows(_GENERATED)
+    assert guard._PROPERTY_ORDER_DIGEST == guard._digest_property_order(snapshot)
+    assert guard._CLIENT_PROPERTY_ORDER_DIGEST == (
+        guard._digest_client_property_order(generated)
+    )
+
+
+def test_a_coordinated_property_reorder_is_rejected() -> None:
+    """Decisive drift: both halves agree, every landed guard stays green."""
+    snapshot = _rotated_snapshot()
+    generated = _rotated_generated()
+    assert snapshot != _SNAPSHOT and generated != _GENERATED
+    found = guard.failures(snapshot=snapshot, generated=generated)
+    assert any("_PROPERTY_ORDER_DIGEST" in f for f in found), found
+    assert any("_CLIENT_PROPERTY_ORDER_DIGEST" in f for f in found), found
+
+
+def test_a_one_sided_snapshot_reorder_is_named() -> None:
+    found = guard.failures(
+        snapshot=_rotated_snapshot(), generated=_GENERATED
+    )
+    assert any("_PROPERTY_ORDER_DIGEST" in f for f in found), found
+    assert any("disagrees at" in f for f in found), found
+
+
+def test_a_one_sided_client_reorder_is_named() -> None:
+    found = guard.failures(
+        snapshot=_SNAPSHOT, generated=_rotated_generated()
+    )
+    assert any("_CLIENT_PROPERTY_ORDER_DIGEST" in f for f in found), found
+    assert any("disagrees at" in f for f in found), found
+
+
+def test_repinning_only_one_order_digest_stays_red() -> None:
+    """Two independent fixed points: a single-side re-pin is never green."""
+    snapshot = _rotated_snapshot()
+    generated = _rotated_generated()
+    snapshot_digest = guard._digest_property_order(
+        guard.property_order_rows(json.loads(snapshot))
+    )
+    client_digest = guard._digest_client_property_order(
+        guard.client_property_order_rows(generated)
+    )
+    assert snapshot_digest != guard._PROPERTY_ORDER_DIGEST
+    assert client_digest != guard._CLIENT_PROPERTY_ORDER_DIGEST
+    assert guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        property_order_digest=snapshot_digest,
+    ), "re-pinning only the snapshot literal must stay red"
+    assert guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        client_property_order_digest=client_digest,
+    ), "re-pinning only the client literal must stay red"
+    both = guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        property_order_digest=snapshot_digest,
+        client_property_order_digest=client_digest,
+    )
+    # The named positional door still sees the coordinated drift: the two
+    # literals are re-pinned, but the snapshot rows no longer agree with the
+    # committed client rows at the swapped indices.
+    assert not any("_PROPERTY_ORDER_DIGEST" in f for f in both), both
+    assert not any("_CLIENT_PROPERTY_ORDER_DIGEST" in f for f in both), both
+
+
+def test_property_order_count_doors_are_load_bearing() -> None:
+    found = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=_GENERATED,
+        expected_property_order_rows=guard._EXPECTED_PROPERTY_ORDER_ROWS + 1,
+        expected_client_property_order_rows=(
+            guard._EXPECTED_CLIENT_PROPERTY_ORDER_ROWS + 1
+        ),
+        expected_property_order_schemas=(
+            guard._EXPECTED_PROPERTY_ORDER_SCHEMAS + 1
+        ),
+    )
+    assert any("_EXPECTED_PROPERTY_ORDER_ROWS" in f for f in found), found
+    assert any("_EXPECTED_CLIENT_PROPERTY_ORDER_ROWS" in f for f in found), found
+    assert any("_EXPECTED_PROPERTY_ORDER_SCHEMAS" in f for f in found), found
+
+
+def test_the_property_order_literals_are_module_level_literals() -> None:
+    """A second file asserts the pins are hand-written source literals."""
+    tree = ast.parse(Path(guard.__file__).read_text(encoding="utf-8"))
+    names = set()
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    names.add(target.id)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+    for pin in ("_PROPERTY_ORDER_DIGEST", "_CLIENT_PROPERTY_ORDER_DIGEST"):
+        assert pin in names
+    source = Path(guard.__file__).read_text(encoding="utf-8")
+    assert "property_order_rows(" in source
+    assert "client_property_order_rows(" in source

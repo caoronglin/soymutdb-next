@@ -164,3 +164,40 @@ API import, no wheel, no database, no workspace install. It does not parse
 multi-line JSDoc continuation text — the generator's rendering of those is a
 second, brittle ledger. First lines carry the identity; the digest carries the
 full value.
+
+## Door 9 — component-property declaration order
+
+`openapi.json` publishes **2083** direct component-property declarations
+across **335** schemas that render a standalone interface block.
+`openapi-typescript` prints each component's fields in the snapshot's
+insertion order, so the generated interface's field sequence is itself a
+published, client-visible shape (IDE completion order, object key
+enumeration). Every landed digest on this surface walks *values* —
+descriptions, titles, types, requiredness, constraints — or *field sets*;
+none reads the positional `(component, index, field)` triple.
+
+**Decisive ablation on live bytes:** byte-preserving swap of two adjacent
+`AboutContentResponse` properties in **both** artifacts, with both
+`_PINNED_ARTIFACTS` blob ids honestly re-pinned, left all twelve wired
+`check_openapi_*.py` guards, every `test_openapi_*` suite and
+`bash scripts/smoke.sh --profile contracts` at **SMOKE PASS** while two
+client-visible declarations silently swapped positions.
+
+`check_openapi_schema_descriptions.py` now pins two independent literals:
+
+- `_PROPERTY_ORDER_DIGEST` — sha256 over canonical sorted
+  `(component, index, field)` rows from the snapshot, read from nowhere.
+- `_CLIENT_PROPERTY_ORDER_DIGEST` — a second, separately hand-written sha256
+  over the same triples parsed from the generated `components.schemas`
+  blocks. Re-pinning only the snapshot side leaves this door red on a
+  coordinated co-revert.
+- `_EXPECTED_PROPERTY_ORDER_ROWS` / `_EXPECTED_PROPERTY_ORDER_SCHEMAS` /
+  `_EXPECTED_CLIENT_PROPERTY_ORDER_ROWS` — exact count doors.
+- A named positional cross-artifact door reports a one-sided reorder by
+  component and index, so the two digests are not the only net.
+
+The companion suite (`test_openapi_schema_descriptions.py`, collected by the
+contracts layer) adds eight cases: row equality across halves, literal
+independence, the decisive coordinated co-revert, both one-sided halves,
+single-digest re-pin staying red, count doors, and the module-level literal
+check. Zero new wiring, zero generated-artifact changes.
