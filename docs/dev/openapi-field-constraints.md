@@ -203,3 +203,34 @@ re-pin `_DEFAULT_TAG_DIGEST` and `_EXPECTED_DEFAULT_TAGS` in the same commit as
 `openapi.d.ts`. The companion suite pins the literal from a second file, proves
 the two generated JSDoc projections (`@default` and `@example`) are distinct,
 and asserts both ablation shapes are named.
+
+## Phase 5 — the generated `@example` half is value-pinned, not just counted
+
+Door 5 pinned the generated half's **cardinality** (7 strict `@example` tags)
+and the snapshot half's **values** (the independent `_EXAMPLE_DIGEST`); the
+generated half's own values were pinned only *transitively* through that
+snapshot digest. Rewriting one `@example` value in `openapi.d.ts` alone
+(`Jane Doe` → `John Roe`) keeps all 7 tags, leaves the snapshot digest and
+both count doors silent, and — once `generated_blob` is honestly re-pinned —
+passes the whole contracts layer as SMOKE PASS. That is a
+hand-edit-of-generated-file shape rather than a regenerate shape, and the
+published contract value still cannot move silently because the snapshot
+digest covers the same 7 values, but door 5 must not be read as "the generated
+half is pinned". (Door 6 pins the *positions* of the 896 `@default` tags; it
+does not read `@example` values.)
+
+Phase 4 / door 7 (in flight as #302) pins the *values* of the 896 generated
+`@default` tags; it does not read `@example`. This phase is the orthogonal
+column on the other JSDoc projection, hence door 8 / Phase 5 rather than a
+second claim on door 7.
+
+Door 8 closes the asymmetry inside the same already-registered guard, with zero
+new wiring: once the snapshot digest matches its literal and the tag count is
+exact, the generated `@example` values are compared **in order** against the
+digest-pinned snapshot projection. Ordered comparison (not a multiset) also
+catches a same-count permutation that moves one tag's value onto another field.
+Door 8 deliberately stands down when the snapshot digest drifts, so a
+snapshot-side change is named by door 5 with full failure resolution rather
+than being double-counted. Read data: `--self-test` 16 → 18 cases, companion
+suite 32 → 38 passed, `openapi.json` / `openapi.d.ts` byte-for-byte unchanged,
+and the three hot wiring files untouched.

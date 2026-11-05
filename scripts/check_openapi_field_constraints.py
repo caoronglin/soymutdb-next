@@ -52,6 +52,15 @@ API import, no wheel, no database, no workspace install. It pins:
   doors on both halves. The generated half counts only strict ``* @example ``
   JSDoc markers: a ``@description`` blob containing ``user@example.com`` is
   a decoy that a naive ``'@example' in line`` scan would miscount as an 8th;
+* door 8 -- the generated half's **values**, matched in order against the
+  digest-pinned snapshot projection. Door 5 answers "how many tags"; door 8
+  answers "what do they say". A one-sided rewrite of one ``@example`` value
+  keeps all 7 tags, leaves the snapshot digest and both count doors silent,
+  and -- once ``generated_blob`` is honestly re-pinned -- passes the whole
+  contracts layer. The chain is independent at its root: ``_EXAMPLE_DIGEST``
+  is a hand-written literal over the snapshot, and door 8 stands down when
+  that digest does not match, so a snapshot-side drift is named by door 1
+  with full failure resolution instead of being double-counted.
 * a one-sided drop, add, retype or move of any single constraint/example is
   named by its path, so the failure says which field changed.
 
@@ -447,6 +456,30 @@ def failures(
             f"{actual_tags}. Re-pin the tag digest in the same commit as "
             "both artifacts, with a reason."
         )
+
+    # Door 8 -- the generated half's example values, not just its cardinality.
+    # The expected sequence is the snapshot's canonical ``examples`` rows,
+    # authoritative only because door 5's independent literal matched.
+    # Gating on the digest and the tag cardinality keeps failure resolution:
+    # a snapshot-side drift is named by door 1, a dropped/added tag by the
+    # count door, and only a value/order drift in the generated half lands
+    # here. Comparing in order (not as a multiset) also catches a same-count
+    # permutation that moves one tag's value onto another field.
+    snapshot_example_values = tuple(value for _, _, value in example_rows_)
+    if (
+        actual_example_digest == pinned_example_digest
+        and len(gen_examples) == pinned_generated
+        and tuple(gen_examples) != snapshot_example_values
+    ):
+        found.append(
+            "generated @example values disagree with the pinned published "
+            f"examples (client renders {tuple(gen_examples)!r}, snapshot pins "
+            f"{snapshot_example_values!r}). Door 5 fixes how many tags are "
+            "emitted; door 8 matches their values against the digest-pinned "
+            "snapshot projection. A one-sided rewrite of one @example value "
+            "keeps all 7 tags and, once generated_blob is re-pinned, leaves "
+            "every other door silent."
+        )
     return found
 
 
@@ -677,7 +710,55 @@ def self_test() -> int:
         else:
             print(f"PASS self-test: {name!r} is caught -> {len(found)} failure(s)")
 
-    total = len(cases) + len(example_cases) + len(default_tag_cases)
+    # Door 8's plants also need the generated half, in their own dict so the
+    # teeth guard's pinned ``cases``/``example_cases`` probes stay put. The
+    # snapshot stays clean: the digest, both count doors and the @default
+    # floor are all silent, and only door 8 names the drift.
+    example_value_cases: dict[str, tuple[str, str]] = {}
+
+    # 1. The decisive shape: one @example value rewritten in the generated
+    #    half only. All 7 tags survive; honest generated_blob re-pinning used
+    #    to leave the whole contracts layer SMOKE PASS.
+    value_rewrite_gen = generated.replace(
+        "@example Jane Doe", "@example John Roe", 1
+    )
+    assert value_rewrite_gen != generated
+    example_value_cases["one-sided generated example value rewritten"] = (
+        snapshot_clean,
+        value_rewrite_gen,
+    )
+
+    # 2. A same-count value permutation in the generated half: swap two
+    #    distinct values between two tags. Cardinality is unchanged, so only
+    #    door 8 (ordered value match) can name it.
+    permuted_gen = (
+        generated.replace("@example Jane Doe", "@example __SWAP__", 1)
+        .replace("@example viewer", "@example Jane Doe", 1)
+        .replace("@example __SWAP__", "@example viewer", 1)
+    )
+    assert permuted_gen != generated
+    assert sorted(generated_examples(permuted_gen)) == sorted(
+        generated_examples(generated)
+    )
+    example_value_cases["same-count generated example value permutation"] = (
+        snapshot_clean,
+        permuted_gen,
+    )
+
+    for name, (snapshot, gen) in example_value_cases.items():
+        found = failures(snapshot=snapshot, generated=gen)
+        if not found:
+            print(f"SELF-TEST FAIL: {name!r} was NOT caught")
+            failures_count += 1
+        else:
+            print(f"PASS self-test: {name!r} is caught -> {len(found)} failure(s)")
+
+    total = (
+        len(cases)
+        + len(example_cases)
+        + len(default_tag_cases)
+        + len(example_value_cases)
+    )
     print(f"self-test: {total} cases, {failures_count} failure(s)")
     return 1 if failures_count else 0
 
