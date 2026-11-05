@@ -657,7 +657,7 @@ def test_coordinated_response_body_permutation_is_rejected() -> None:
 
 
 def test_committed_tree_has_matching_response_bodies() -> None:
-    assert failures(*_load()) == []
+    assert not (found := failures(*_load())), found
 
 
 def test_success_body_dropped_from_the_client_is_rejected() -> None:
@@ -895,7 +895,7 @@ def _run() -> int:
         try:
             test()
         except AssertionError as exc:
-            problems.append(f"{test.__name__}: {exc or 'assertion failed'}")
+            problems.append(f"{test.__name__}: {str(exc) or 'assertion failed'}")
     if problems:
         for problem in problems:
             print(f"openapi-snapshot-bodies: FAIL: {problem}", file=sys.stderr)

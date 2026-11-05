@@ -172,7 +172,7 @@ def _run_all() -> int:
         try:
             case()
         except AssertionError as exc:
-            problems.append(f"{case.__name__}: {exc or 'assertion failed'}")
+            problems.append(f"{case.__name__}: {str(exc) or 'assertion failed'}")
     if problems:
         for problem in problems:
             print(f"openapi-operation-id-floor-tests: FAIL: {problem}", file=sys.stderr)

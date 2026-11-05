@@ -322,7 +322,7 @@ def _any(failures_list: list[str], needle: str) -> bool:
 
 
 def test_committed_tree_advertises_the_runtime_behavior_contracts() -> None:
-    assert failures(*_load()) == []
+    assert not (found := failures(*_load())), found
 
 
 def test_a_dropped_500_is_rejected() -> None:
@@ -633,7 +633,7 @@ def test_a_genuinely_new_pagination_contract_stays_green_with_a_repin() -> None:
     globals()["_PAGINATION_BASELINE"] = dict(saved)
     globals()["_PAGINATION_BASELINE"][key] = {"mode": "keyset"}
     try:
-        assert failures(document, generated, augmented, smoke) == []
+        assert not (found := failures(document, generated, augmented, smoke)), found
     finally:
         globals()["_PAGINATION_BASELINE"] = saved
 
@@ -667,7 +667,7 @@ def main() -> int:
         except (AssertionError, StopIteration) as exc:
             # A whole-set co-revert empties the setup data some checks sample;
             # report it as a failed check instead of escaping as a traceback.
-            problems.append(f"{test.__name__}: {exc or 'assertion failed'}")
+            problems.append(f"{test.__name__}: {str(exc) or 'assertion failed'}")
     if problems:
         if _whole_set_co_revert():
             print(

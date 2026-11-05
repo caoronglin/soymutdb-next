@@ -982,7 +982,7 @@ def _run() -> int:
         try:
             test()
         except AssertionError as exc:
-            problems.append(f"{test.__name__}: {exc or 'assertion failed'}")
+            problems.append(f"{test.__name__}: {str(exc) or 'assertion failed'}")
     if problems:
         for problem in problems:
             print(f"openapi-snapshot-contract: FAIL: {problem}", file=sys.stderr)

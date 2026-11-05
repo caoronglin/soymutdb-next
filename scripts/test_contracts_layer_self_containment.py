@@ -103,7 +103,7 @@ def current() -> tuple[str, str, str, str]:
 
 
 def test_committed_tree_is_self_contained() -> None:
-    assert failures(*current()) == []
+    assert not (found := failures(*current())), found
 
 
 def test_reintroducing_a_node_call_is_rejected() -> None:
@@ -169,7 +169,7 @@ def main() -> int:
         try:
             test()
         except AssertionError as exc:
-            problems.append(f"{test.__name__}: {exc or 'assertion failed'}")
+            problems.append(f"{test.__name__}: {str(exc) or 'assertion failed'}")
     if problems:
         for problem in problems:
             print(f"contracts-layer self-containment: FAIL: {problem}", file=sys.stderr)
