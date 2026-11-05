@@ -76,6 +76,7 @@ import ast
 import copy
 import functools
 import json
+import symtable
 import sys
 from pathlib import Path
 from typing import Any
@@ -206,6 +207,55 @@ def _kw_expr(kwargs: dict[str, ast.expr], name: str) -> str | None:
     return ast.unparse(value) if value is not None else None
 
 
+# The three keyword values whose *spelling* ``_kw_expr`` pins. A local
+# rebinding of any root of these expressions inside ``create_app`` would make
+# the running app export different metadata while leaving the call-site text
+# (and therefore the byte lock and the parsed-call check) unchanged.
+_WATCHED_KWARGS = ("title", "description", "openapi_tags")
+
+
+def _watched_names(main: str) -> set[str]:
+    """Root names referenced by the watched ``FastAPI(...)`` keyword values."""
+    kwargs = _fastapi_kwargs(ast.parse(main))
+    names: set[str] = set()
+    for name in _WATCHED_KWARGS:
+        value = kwargs.get(name)
+        if value is None:
+            continue
+        for node in ast.walk(value):
+            if isinstance(node, ast.Name):
+                names.add(node.id)
+    return names
+
+
+def _shadowed_wiring_names(main: str) -> list[str]:
+    """Names rebound in ``create_app``'s own scope before ``FastAPI(...)``.
+
+    ``_kw_expr`` proves the keyword still *reads* ``OPENAPI_DESCRIPTION``; it
+    cannot prove that name still resolves to the module-level constant. A local
+    assignment, parameter, import, ``global`` declaration or augmented assign
+    in ``create_app`` rebinds it, so the running app publishes different bytes
+    than the locked snapshot while every existing check stays green. Use the
+    standard library symbol table (real scope resolution), not a textual walk,
+    so a same-name local in a nested helper is not a false positive.
+    """
+    watched = _watched_names(main)
+    if not watched:
+        return []
+    table = symtable.symtable(main, "<main>", "exec")
+    create_app = next(
+        (child for child in table.get_children() if child.get_name() == "create_app"),
+        None,
+    )
+    if create_app is None:
+        return []
+    return sorted(
+        symbol.get_name()
+        for symbol in create_app.get_symbols()
+        if symbol.get_name() in watched and (symbol.is_local() or symbol.is_assigned())
+    )
+
+
 def source_facts(main: str, config: str) -> dict[str, Any]:
     """Derive the metadata the backend *intends* to publish from source bytes."""
     main_tree = ast.parse(main)
@@ -327,6 +377,21 @@ def failures(
         found.append("create_app() no longer passes OPENAPI_DESCRIPTION as description")
     if facts["tags_expr"] != "OPENAPI_TAGS":
         found.append("create_app() no longer passes OPENAPI_TAGS as openapi_tags")
+    try:
+        shadowed = _shadowed_wiring_names(main)
+    except (SyntaxError, ValueError) as exc:
+        # ``symtable`` compiles, so it rejects a few shapes ``ast.parse``
+        # accepts (e.g. duplicate parameters). Report a clean FAIL instead of
+        # letting the exception escape the guard (the #166 StopIteration class).
+        found.append(f"main.py does not compile as a metadata source: {exc}")
+    else:
+        if shadowed:
+            found.append(
+                "create_app() rebinds metadata names in its local scope ("
+                + ", ".join(shadowed)
+                + "): the FastAPI(...) call would read a different value than "
+                "the locked module-level constant"
+            )
 
     # 4. The generated client must NOT start encoding this metadata. Its
     #    absence is the premise for "one committed artifact"; if a future
@@ -548,6 +613,32 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
         )
         return snapshot, generated, golden, main, config, smoke
 
+    def source_wiring_shadowed_by_local_rebinding(snapshot, generated, golden, main, config, smoke):
+        # Keep every FastAPI(...) keyword byte-for-byte as committed; rebind the
+        # names it references in create_app's own scope, BEFORE the call. The
+        # running app then exports "(rewritten)" / a hollow tag list, while the
+        # module-level literals (and the golden/snapshot) are untouched. A
+        # parsed-call / substring guard cannot see this: the expression text is
+        # still OPENAPI_DESCRIPTION / OPENAPI_TAGS, it just resolves elsewhere.
+        main = main.replace(
+            '    """Create and configure the FastAPI application."""\n    app = FastAPI(',
+            '    """Create and configure the FastAPI application."""\n'
+            '    OPENAPI_DESCRIPTION = "(rewritten)"\n'
+            '    OPENAPI_TAGS = [{"name": "x"}]\n'
+            '    app = FastAPI(',
+            1,
+        )
+        return snapshot, generated, golden, main, config, smoke
+
+    def source_wiring_uncompilable(snapshot, generated, golden, main, config, smoke):
+        # ast.parse accepts duplicate parameters; symtable (which compiles)
+        # rejects them. A guard that called symtable without guarding would let
+        # a SyntaxError escape as a traceback instead of a clean FAIL.
+        main = main.replace(
+            "def create_app() -> FastAPI:", "def create_app(x, x) -> FastAPI:", 1
+        )
+        return snapshot, generated, golden, main, config, smoke
+
     def source_config_renamed(snapshot, generated, golden, main, config, smoke):
         config = config.replace('app_name: str = "SoyMutDB"', 'app_name: str = "OtherDB"', 1)
         return snapshot, generated, golden, main, config, smoke
@@ -581,6 +672,16 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
             "description/tags unwired with decoy comment",
             source_wiring_unwired_with_decoy_comment,
             "OPENAPI_DESCRIPTION as description",
+        ),
+        (
+            "description/tags shadowed by local rebinding",
+            source_wiring_shadowed_by_local_rebinding,
+            "rebinds metadata names in its local scope",
+        ),
+        (
+            "create_app does not compile under symtable",
+            source_wiring_uncompilable,
+            "does not compile as a metadata source",
         ),
         ("config app_name renamed", source_config_renamed, "no longer matches the golden lock"),
         ("create_app deleted", delete_create_app, "no longer defines create_app"),
