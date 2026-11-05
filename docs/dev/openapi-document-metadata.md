@@ -291,9 +291,10 @@ moves the set; an extra key moves both. The guard names `extra=` and
 The `--self-test` gains one ablation (`phantom info key added`) that injects
 the key into a copy of the committed snapshot; the companion suite pins,
 from a second file, that (a) the literal is hand-written in the guard source,
-(b) the ablation is driven by its named mutator, (c) stripping only the shape
-door makes the drifted tree green again, and (d) re-pinning both literals in
-one reviewed act stays green. The exact ablation count is pinned at 29, so
+(b) the ablation is driven by its named mutator, (c) stripping BOTH the shape
+door and the count door makes the drifted tree green again -- stripping only
+one leaves the other red -- and (d) re-pinning both literals in one reviewed
+act stays green. The exact ablation count is pinned at 29, so
 deleting a case cannot quietly restore an older count.
 
 Zero wiring churn: `smoke.sh`, `REQUIRED_GUARD_CALLS`, `_WIRED_SELF_TESTS`,
