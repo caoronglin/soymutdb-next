@@ -58,9 +58,9 @@ None of the guards in the table above reads them, and none *can*:
 
 | Keyword | Why no two-artifact check sees it | Client-visible how |
 | --- | --- | --- |
-| `prefixItems` | not a scalar in `_FIELD_CONSTRAINT_DIGEST`'s `_KEYS` vocabulary | rendered as a **positional tuple**: `query_range: [number, number];` |
-| `minProperties` / `maxProperties` | bounds a free-form map the generator prints as an index signature | the bound simply cannot be expressed in TypeScript, so the runtime is the only other reader |
-| `discriminator` | the generator drops it entirely and prints a `@constant` note | names the property a client must switch on |
+| `prefixItems` | not in `_FIELD_CONSTRAINT_DIGEST`'s `_KEYS` | a **positional tuple** |
+| `minProperties` / `maxProperties` | bounds a map printed as index sig | not expressible in TS |
+| `discriminator` | dropped; printed as a `@constant` note | names the switcher |
 
 Four published tuples carry `prefixItems` (`ExpPatternResponse.value_range`,
 `SequenceAlignResponse.query_range` / `.target_range`,
