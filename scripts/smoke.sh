@@ -468,10 +468,13 @@ smoke_contracts() {
   # make this a dead guard -- it would pass while the real source regressed.
   "${PYTHON_BIN}" scripts/check_variant_summary_assembly_consistency.py --self-test || rc=$?
   "${PYTHON_BIN}" scripts/check_variant_summary_assembly_consistency.py || rc=$?
-  # Eighteen guards are wired here through --self-test alone. If one of
-  # their self_test bodies is replaced with `return 0`, the call is still
-  # present, still pinned and still green: this guard runs each one as a
-  # real process and requires its pinned evidence of mutation cases.
+  # Most guards are wired here through --self-test alone. A pinned subset
+  # (BOTH_CALLS in the teeth guard) is deliberately called twice: the
+  # --self-test proves the guard still has a signal, the plain run is the
+  # only call that reads the committed tree. If a self_test body is replaced
+  # with `return 0`, the call is still present, still pinned and still green:
+  # this guard runs each one as a real process and requires its pinned
+  # evidence of mutation cases.
   "${PYTHON_BIN}" scripts/check_contracts_self_test_teeth.py --self-test || rc=$?
   # §4a (PR #206): the placeholder-origin regex is committed twice. Only the
   # production scanner has a behavioural suite reading it back; the static
