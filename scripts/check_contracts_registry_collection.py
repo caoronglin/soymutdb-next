@@ -738,13 +738,11 @@ def self_test() -> int:
     unpinned_files["scripts/test_unpinned_new_suite.py"] = (
         "def test_unpinned():\n    assert True\n"
     )
-    cases.append(("an unpinned gating suite is added to tests=()",
-                  smoke.replace(
-                      extra_row,
-                      "    scripts/test_unpinned_new_suite.py\n" + extra_row,
-                      1,
-                  ),
-                  unpinned_files, ci_steps))
+    unpinned_smoke = smoke.replace(
+        extra_row,
+        "    scripts/test_unpinned_new_suite.py\n" + extra_row,
+        1,
+    )
 
     pytest_line = '  "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?\n'
     assert pytest_line in smoke, "self-test could not locate the gating pytest line"
@@ -772,6 +770,20 @@ def self_test() -> int:
             f"PASS self-test: {label} -> {len(found)} failure(s)",
             f"FAIL self-test: {label} was NOT caught",
         )
+    # This case must fail FOR THE PIN, and only for the pin. The generic
+    # ``bool(found)`` loop above also passes when the plant is dropped:
+    # ``check()`` then reports "does not exist" first, so the vacuous probe
+    # survives both a removed plant and a gutted ``unpinned`` half. Asserting
+    # the single failure is the pin itself closes both escapes.
+    unpinned_found = wiring_errors(unpinned_smoke, unpinned_files, ci_steps)
+    report(
+        len(unpinned_found) == 1
+        and "not pinned in PINNED_SUITES" in unpinned_found[0],
+        f"PASS self-test: an unpinned gating suite is added to tests=() -> "
+        f"{len(unpinned_found)} failure(s), for the pin",
+        f"FAIL self-test: an unpinned gating suite is added to tests=() "
+        f"did not fail for the pin alone: {unpinned_found}",
+    )
     fresh = wiring_errors(smoke7, mutant7, ci_steps)
     report(
         bool(fresh) and any("is wired but not pinned" in f for f in fresh),
