@@ -415,6 +415,48 @@ def test_source_contract_rejects_duplicate_governance_analyzer(
     assert check["name"] in " ".join(failures), failures
 
 
+@pytest.mark.parametrize(
+    "check",
+    [
+        {"name": "covert", "category": "vulnerabilities", "command": ["true"],
+         "mutating_command": "cd crates && cargo deny check"},
+        {"name": "covert-recipe", "category": "vulnerabilities", "command": ["true"],
+         "normalize_recipe": "cargo audit --json"},
+    ],
+)
+def test_source_contract_rejects_a_cargo_command_in_a_sidecar_field(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, check: dict
+) -> None:
+    """A cargo invocation only in mutating_command/normalize_recipe still counts.
+
+    ``dependency_governance.py`` consumes both fields as executable text. A
+    check whose only cargo call lives there would publish a second Rust finding
+    set while a guard that inspects just ``command`` stays green.
+    """
+    fake = _synthetic_tree(tmp_path)
+    policy_file = fake / "dependency-governance.json"
+    config = json.loads(policy_file.read_text(encoding="utf-8"))
+    config["checks"].append(check)
+    policy_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    monkeypatch.setattr(guard, "ROOT", fake)
+    failures = guard.source_failures()
+    assert any("exactly one Rust finding set" in f for f in failures), failures
+    assert check["name"] in " ".join(failures), failures
+
+
+def test_source_contract_fails_closed_on_a_non_object_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A non-object checks[] entry cannot be certified as data, so fail closed."""
+    fake = _synthetic_tree(tmp_path)
+    policy_file = fake / "dependency-governance.json"
+    config = json.loads(policy_file.read_text(encoding="utf-8"))
+    config["checks"].append("cargo audit")
+    policy_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    monkeypatch.setattr(guard, "ROOT", fake)
+    assert any("exactly one Rust finding set" in f for f in guard.source_failures())
+
+
 def test_source_contract_accepts_the_committed_governance_policy(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
