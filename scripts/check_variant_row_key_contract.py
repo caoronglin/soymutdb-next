@@ -39,6 +39,29 @@ def strip_comments(text: str) -> str:
     return re.sub(r"/\*[\s\S]*?\*/|//[^\n]*", "", text)
 
 
+def case_bodies(test: str) -> list[tuple[str, str]]:
+    """Return (case name, body text) for every it(...) in the stripped source."""
+    stripped = strip_comments(test)
+    found: list[tuple[str, str]] = []
+    for match in re.finditer(r"\bit\(\s*[\"']([^\"']+)[\"']", stripped):
+        brace = stripped.find("{", match.end())
+        if brace == -1:
+            found.append((match.group(1), ""))
+            continue
+        depth = 0
+        end = brace
+        while end < len(stripped):
+            if stripped[end] == "{":
+                depth += 1
+            elif stripped[end] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            end += 1
+        found.append((match.group(1), stripped[brace:end]))
+    return found
+
+
 def inspect(source: str, test: str) -> list[str]:
     failures: list[str] = []
     body = strip_comments(source)
@@ -62,6 +85,11 @@ def inspect(source: str, test: str) -> list[str]:
     for name in REQUIRED_CASES:
         if not any(name in case for case in cases):
             failures.append(f"row-key regression suite is missing case: {name}")
+
+    # Counting names is not enough: an emptied body still reports 4 green cases.
+    for name, body in case_bodies(test):
+        if not re.search(r"\bexpect\s*\(", body):
+            failures.append(f"row-key case asserts nothing: {name}")
     return failures
 
 

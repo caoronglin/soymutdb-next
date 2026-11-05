@@ -25,6 +25,24 @@ BAD_SOURCE = '''
 
 GOOD_TEST = '''
 describe("variant row keys", () => {
+  it("separates rows that share an identifier and differ in assembly", () => {
+    expect(keyOf(row("1", "v4"))).not.toBe(keyOf(row("1", "v5")));
+  });
+  it("separates an absent assembly from an empty one under a shared identifier", () => {
+    expect(keyOf(row("1", null))).not.toBe(keyOf(row("1", "")));
+  });
+  it("keeps rows that agree on identifier and assembly in one bucket", () => {
+    expect(keyOf(row("1", "v4"))).toBe(keyOf(row("1", "v4")));
+  });
+  it("renders duplicate identifiers without a React duplicate-key warning", () => {
+    expect(seenKeys.size).toBe(rows.length);
+  });
+});
+'''
+
+# Emptied bodies keep four green cases while asserting nothing.
+HOLLOW_TEST = '''
+describe("variant row keys", () => {
   it("separates rows that share an identifier and differ in assembly", () => {});
   it("separates an absent assembly from an empty one under a shared identifier", () => {});
   it("keeps rows that agree on identifier and assembly in one bucket", () => {});
@@ -34,8 +52,12 @@ describe("variant row keys", () => {
 
 SHORT_TEST = '''
 describe("variant row keys", () => {
-  it("gives every rendered row its own key across assemblies", () => {});
-  it("renders duplicate identifiers without a React duplicate-key warning", () => {});
+  it("gives every rendered row its own key across assemblies", () => {
+    expect(keyOf(row("1", "v4"))).toBeTruthy();
+  });
+  it("renders duplicate identifiers without a React duplicate-key warning", () => {
+    expect(seenKeys.size).toBe(rows.length);
+  });
 });
 '''
 
@@ -87,3 +109,10 @@ def test_missing_test_file_is_rejected(tree, capsys):
         "--test-path", str(tree / "absent.test.tsx"),
     ]) == 1
     assert "missing" in capsys.readouterr().err
+
+
+def test_hollowed_case_bodies_are_rejected(tree, capsys):
+    """Keeping the four names while emptying the bodies must not pass."""
+    assert run(tree, GOOD_SOURCE, HOLLOW_TEST) == 1
+    out = capsys.readouterr().err
+    assert out.count("asserts nothing") == 4
