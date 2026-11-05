@@ -2,14 +2,15 @@
 """Keep the published error-code guards wired into a gate that actually runs.
 
 ``check_api_error_code_vocabulary.py`` (#179) and ``check_error_code_catalog.py``
-(#136) were both wired into ``check-contract.sh``, which the frontend gate runs
-behind ``SOYMUTDB_CI_SKIP_CONTRACT``. That gate re-exports the backend with the
-API venv and never ran in the affected CI window (the runner died at ``Prepare``
-on quota). The contracts smoke layer -- the layer that *does* run on a clean
-checkout -- did not invoke either guard, and no assertion named them. So a
-coordinated rename of a public ``error.code`` in the source plus both generated
-artifacts left the whole collected layer green while the vocabulary guard went
-red on its own.
+(#136) were both wired into ``check-contract.sh``, reached through the frontend
+gate's ``check:contract``. No CI caller may set ``SOYMUTDB_CI_SKIP_CONTRACT``
+(``test_ci_job_contracts.py`` forbids the name outright), so that gate is not
+skipped in CI -- but it re-exports the backend with the API 3.15 venv, and every
+verify stage is skipped while the org CPU-quota pre-freeze fails. The contracts
+smoke layer -- the layer that runs on a clean checkout with no venv -- invoked
+neither guard, and no assertion named them. So a coordinated rename of a public
+``error.code`` in the source plus both generated artifacts left the whole
+collected layer green while the vocabulary guard went red on its own.
 
 This guard pins the other half of the contract: both error-code checks must be
 invoked as standalone ``|| rc=$?`` calls in ``smoke_contracts()``, and the
@@ -17,6 +18,13 @@ vocabulary check must still fail on the decisive co-rename. It reads committed
 bytes only; ``--self-test`` plants each ablation on a copy of the tree and
 asserts the check reports it by name, so weakening the guard cannot make it
 pass vacuously.
+
+The decisive negative is a *differential* probe, not a bare exit status: a
+clean copy must print ``OK`` and exit 0, and only then may the co-renamed copy
+be judged red -- with named ``FAIL:`` diagnostics and no traceback. A copied
+tree that omits a file the vocabulary guard reads (``export_contract.py`` was
+the first one) would otherwise crash on the clean copy too and be mistaken for
+a caught co-rename.
 
 Usage:
     python3 scripts/check_error_code_gate_wiring.py [--self-test]
@@ -41,6 +49,7 @@ CATALOG_JSON = Path("packages/api-client/error-codes.json")
 OPENAPI = Path("packages/api-client/openapi.json")
 GOLDEN = Path("packages/api-client/error-codes.golden.json")
 GENERATOR = Path("packages/api-client/scripts/generate-api-client.sh")
+EXPORT = Path("packages/api-client/scripts/export_contract.py")
 CONTRACT_SH = Path("packages/api-client/scripts/check-contract.sh")
 
 # A standalone call must be a bare statement ending in `|| rc=$?`: a piped,
@@ -66,6 +75,7 @@ COPY_FILES = (
     str(OPENAPI),
     str(GOLDEN),
     str(GENERATOR),
+    str(EXPORT),
     str(CONTRACT_SH),
 )
 
@@ -141,29 +151,48 @@ def _self_test() -> int:
             else:
                 print(f"  ok: planted {label!r} -> caught ({len(problems)} problem(s))")
 
-    # The decisive negative: on a clean-but-co-renamed tree, the vocabulary
-    # guard must be RED. Prove the wired gate has a real signal to consume.
-    with tempfile.TemporaryDirectory() as tmp:
-        tree = Path(tmp) / "repo"
-        _copy_tree(tree)
-        _plant_co_rename(tree)
-        result = subprocess.run(
-            [sys.executable, str(tree / VOCAB)], capture_output=True, text=True,
-        )
-        if result.returncode == 0:
-            print(
-                "SELF-TEST FAIL: a co-rename of source + both artifacts did not "
-                "redden the vocabulary guard; the wired gate has no real signal",
-                file=sys.stderr,
+    # The decisive negative is differential: a clean copy must be green, and a
+    # co-renamed copy must be red with NAMED contract diagnostics. Judging only
+    # the mutated copy's exit status lets a broken harness pass -- an incomplete
+    # COPY_FILES makes the clean copy crash too (rc=1, bare traceback, zero
+    # FAIL lines), which used to read as "the co-rename was caught".
+    for label, plant in (("clean control", None), ("co-rename", _plant_co_rename)):
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp) / "repo"
+            _copy_tree(tree)
+            if plant is not None:
+                plant(tree)
+            result = subprocess.run(
+                [sys.executable, str(tree / VOCAB)], capture_output=True, text=True,
             )
-            failures += 1
+        if label == "clean control":
+            if result.returncode != 0 or "OK (" not in result.stdout:
+                print(
+                    "SELF-TEST FAIL: the clean control is not green; the copied "
+                    "tree is missing a file the vocabulary guard reads, so the "
+                    f"co-rename probe would be a false positive: {result.stderr.strip()[:300]}",
+                    file=sys.stderr,
+                )
+                failures += 1
+            else:
+                print(f"  ok: clean control -> {result.stdout.strip()}")
         else:
-            print(f"  ok: co-rename -> vocabulary guard rc={result.returncode} (red, gate has signal)")
+            named = result.stderr.count("FAIL:")
+            if result.returncode == 0 or named == 0 or "Traceback" in result.stderr:
+                print(
+                    "SELF-TEST FAIL: the co-rename did not produce named contract "
+                    f"FAILs (rc={result.returncode}, FAIL lines={named}); a crash "
+                    "or a silent pass is not a gate signal",
+                    file=sys.stderr,
+                )
+                failures += 1
+            else:
+                print(f"  ok: co-rename -> rc={result.returncode} / {named} named FAILs (gate has signal)")
 
     if failures:
         print(f"SELF-TEST FAIL: {failures} case(s) escaped", file=sys.stderr)
         return 1
-    print(f"SELF-TEST PASS: {len(ablations) + 1} wiring cases each failed the guard")
+    print(f"SELF-TEST PASS: {len(ablations) + 2} wiring cases each failed the guard")
     return 0
 
 
