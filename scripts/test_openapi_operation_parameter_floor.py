@@ -207,6 +207,140 @@ def test_the_co_revert_re_pin_pair_is_load_bearing() -> None:
     assert any("drifted" in problem for problem in stale), stale
 
 
+# --- published parameter descriptions (Doors 4 and 5) ---------------------
+
+_DESC_OID = "get_region_structure_api_v1_genes_region_structure_get"
+_DESC_FIELD = "include_parts"
+_DESC_ORIGINAL = "Include CDS/UTR segments. False returns gene bodies only."
+_DESC_DRIFTED = _DESC_ORIGINAL + " (planted drift)"
+
+
+def _description_co_revert() -> tuple[str, str]:
+    document = _document()
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    for parameter in document["paths"][TARGET_PATH]["get"]["parameters"]:
+        if parameter.get("name") == _DESC_FIELD:
+            assert parameter["description"] == _DESC_ORIGINAL
+            parameter["description"] = _DESC_DRIFTED
+            break
+    snapshot = json.dumps(document, indent=2)
+    drifted_gen = generated.replace(
+        f"/** @description {_DESC_ORIGINAL} */",
+        f"/** @description {_DESC_DRIFTED} */",
+        1,
+    )
+    assert drifted_gen != generated
+    return snapshot, drifted_gen
+
+
+def test_committed_tree_passes_after_description_pins() -> None:
+    document = _document()
+    rows = guard._parameter_description_rows(document)
+    assert len(rows) == guard._EXPECTED_PARAMETER_DESCRIPTIONS == 20
+    assert guard._PARAMETER_DESCRIPTION_DIGEST == (
+        guard._parameter_description_digest(rows)
+    )
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    client = guard._client_parameter_descriptions(generated)
+    assert len(client) == guard._EXPECTED_CLIENT_PARAMETER_DESCRIPTIONS == 20
+    assert guard._CLIENT_PARAMETER_DESCRIPTION_DIGEST == (
+        guard._client_parameter_description_digest(client)
+    )
+
+
+def test_a_coordinated_description_co_revert_is_rejected() -> None:
+    snapshot, generated = _description_co_revert()
+    found = guard.failures(snapshot=snapshot, generated=generated)
+    assert any("_PARAMETER_DESCRIPTION_DIGEST" in p for p in found), found
+    assert any("_CLIENT_PARAMETER_DESCRIPTION_DIGEST" in p for p in found), found
+
+
+def test_a_description_digest_repin_does_not_silence_the_client_door() -> None:
+    snapshot, generated = _description_co_revert()
+    repinned = guard._parameter_description_digest(
+        guard._parameter_description_rows(json.loads(snapshot))
+    )
+    assert repinned != guard._PARAMETER_DESCRIPTION_DIGEST
+    found = guard.failures(
+        snapshot=snapshot, generated=generated, description_digest=repinned
+    )
+    assert any("_CLIENT_PARAMETER_DESCRIPTION_DIGEST" in p for p in found), found
+
+
+def test_both_description_digests_must_move_together() -> None:
+    snapshot, generated = _description_co_revert()
+    found = guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        description_digest=guard._parameter_description_digest(
+            guard._parameter_description_rows(json.loads(snapshot))
+        ),
+        client_description_digest=guard._client_parameter_description_digest(
+            guard._client_parameter_descriptions(generated)
+        ),
+    )
+    assert not found, found
+
+
+def test_one_sided_description_edits_are_named() -> None:
+    snapshot, generated = _description_co_revert()
+    snap_only = guard.failures(snapshot=snapshot)
+    assert any("_PARAMETER_DESCRIPTION_DIGEST" in p for p in snap_only), snap_only
+    client_only = guard.failures(generated=generated)
+    assert any("_CLIENT_PARAMETER_DESCRIPTION_DIGEST" in p for p in client_only)
+    assert any(f"{_DESC_OID}.{_DESC_FIELD}" in p for p in client_only)
+
+
+def test_a_same_count_description_rotation_is_rejected() -> None:
+    document = _document()
+    described = [
+        parameter
+        for item in document["paths"].values()
+        for method, op in item.items()
+        if method in guard.METHODS and isinstance(op, dict)
+        for parameter in (op.get("parameters", []) or [])
+        if isinstance(parameter.get("description"), str)
+    ]
+    assert len(described) >= 2
+    first, second = described[0]["description"], described[1]["description"]
+    assert first != second
+    described[0]["description"], described[1]["description"] = second, first
+    found = guard.failures(snapshot=json.dumps(document, indent=2))
+    assert any("_PARAMETER_DESCRIPTION_DIGEST" in p for p in found), found
+
+
+def test_the_description_count_doors_are_load_bearing() -> None:
+    found = guard.failures(expected_descriptions=999)
+    assert any("description row count" in p for p in found), found
+    found = guard.failures(expected_client_descriptions=999)
+    assert any("description row count" in p for p in found), found
+
+
+def test_the_client_description_literal_is_independent() -> None:
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    assigned = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name)
+            and target.id == "_CLIENT_PARAMETER_DESCRIPTION_DIGEST"
+            for target in node.targets
+        )
+    ]
+    assert len(assigned) == 1
+    value = ast.literal_eval(assigned[0].value)
+    assert isinstance(value, str) and len(value) == 64
+
+
+def test_the_guard_source_still_carries_the_description_plants() -> None:
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "_PARAMETER_DESCRIPTION_DIGEST = (" in source
+    assert "a coordinated parameter description co-revert in both halves" in source
+    assert "a description digest re-pin without the client digest" in source
+
+
 def _run_all() -> int:
     cases = [
         value

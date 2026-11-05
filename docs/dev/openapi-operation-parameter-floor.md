@@ -68,3 +68,60 @@ ablations stay load-bearing under pytest collection.
 Both entry points are covered: `--self-test` runs before any suite is
 collected, and the collected suite asserts the wiring from a second file.
 Dropping either leaves a named red, not a green `SMOKE PASS`.
+
+## Phase 2 — published parameter `description` prose (Doors 4 and 5)
+
+`openapi.json` publishes **20** `description` strings on operation parameters.
+`openapi-typescript` renders each as an `@description` line inside the
+generated `operations[*].parameters` doc block — prose an IDE shows a caller.
+The parameter digest above walks `(method, path, name, in, required, schema)`
+and deliberately does **not** read `description`; the operation-annotation
+guard walks operation-level prose, not parameter prose; the behavior-contract
+suite checks `x-idempotent` / `x-pagination` / envelope facts. No landed fixed
+point reads this surface.
+
+**Decisive ablation on live bytes**: retype
+`GET /api/v1/genes/region-structure`'s `include_parts` description in the
+snapshot **and** the matching `@description` line in the generated client
+(both halves agree), honestly re-pin both `_PINNED_ARTIFACTS` blob ids:
+
+| check | reading |
+| --- | --- |
+| all 12 wired `check_openapi_*` guards | `rc=0` |
+| `bash scripts/smoke.sh --profile contracts` | `SMOKE PASS` |
+
+One client-visible prose line changes and nothing names it.
+
+### The two doors
+
+- `_PARAMETER_DESCRIPTION_DIGEST` — hand-written sha256 over canonical sorted
+  `(METHOD, path, operationId, index, name, in, description)` rows, read from
+  nowhere. A coordinated co-revert of both halves still moves it.
+  `_EXPECTED_PARAMETER_DESCRIPTIONS` is the exact count door; a same-count
+  rotation of two descriptions leaves it green and is caught by the digest.
+- `_CLIENT_PARAMETER_DESCRIPTION_DIGEST` — a **separate** hand-written literal
+  over the generated half's canonical `(operationId, field, first line)` rows,
+  plus `_EXPECTED_CLIENT_PARAMETER_DESCRIPTIONS`. Two independent fixed points
+  are the point: re-pinning only the snapshot digest does not silence the
+  client door, and a coordinated co-revert cannot pass by making both halves
+  agree. One-sided edits are named by operation and field.
+
+`_client_parameter_descriptions()` reads only each operation's
+`parameters: { ... }` section up to `responses: {`, so the many
+`@description` lines on response/body doc blocks cannot be mistaken for a
+parameter description.
+
+### Self-consistency ablation
+
+Re-deriving both pins from the artifacts under guard (`pinned = actual`) makes
+exactly two self-test cases `NOT caught`: the coordinated co-revert and the
+single-digest re-pin. `--self-test` rc=1, zero collateral; restore returns
+`18 cases, 0 failure(s)`.
+
+### Legitimate change
+
+Move both digests, both count doors, and both artifacts in the **same commit**,
+and say why. Re-deriving a digest from the artifact under guard makes the pin
+self-referential. Zero new wiring: `smoke.sh`,
+`check_contracts_registry_collection.py`, `check_contracts_self_test_teeth.py`
+and `_WIRED_SELF_TESTS` are untouched.

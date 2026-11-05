@@ -82,6 +82,29 @@ _PARAMETER_DIGEST = "e8b5b11d4a9a2ced2614d8d7939e6c31b9f5377cb7bfa7a2445e28d1b62
 _EXPECTED_PARAMETER_COUNT = 467
 _EXPECTED_OPERATION_COUNT = 268
 
+# Reviewed, hand-written fixed point on the published parameter descriptions.
+# 20 operations publish a `description` on a parameter; openapi-typescript
+# renders each as an `@description` line in the generated
+# `operations[*].parameters` doc block -- prose an IDE shows a caller. The
+# parameter digest above walks (method, path, name, in, required, schema) but
+# deliberately not the description, so a coordinated co-revert of the prose in
+# both halves (with the provenance blob ids honestly re-pinned) moves no landed
+# fixed point. Kept as its own literal for the same reason as the required /
+# tuple / title doors: a retyped description is not a renamed parameter.
+_PARAMETER_DESCRIPTION_DIGEST = (
+    "6a3110df52a5eaf109b72adab22be80d3a2ffd6a7c7f869599307d595e26c74d"
+)
+_EXPECTED_PARAMETER_DESCRIPTIONS = 20
+
+# The generated half is pinned by a *separate* literal, not derived from the
+# snapshot under guard. Two independent fixed points: a coordinated co-revert
+# cannot pass by making both halves agree, and re-pinning only the snapshot
+# digest does not silence the client door.
+_CLIENT_PARAMETER_DESCRIPTION_DIGEST = (
+    "992c0031115675a58c3a04c4dfc4b137a818e37d97285bc9465b66c252769d8e"
+)
+_EXPECTED_CLIENT_PARAMETER_DESCRIPTIONS = 20
+
 # ``operations[*].parameters`` group header: "            query?: {" or
 # "            query?: never;". The optional marker on the group is emitted
 # by the generator when the whole group may be absent; requiredness of an
@@ -196,6 +219,82 @@ def _digest(rows: list[tuple[str, ...]]) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+GEN_PARAM_DESCRIPTION = re.compile(
+    r"/\*\* @description (.+?) \*/\n\s+(?P<field>[\w\"-]+)\??:"
+)
+
+
+def _parameter_description_rows(
+    document: dict[str, Any],
+) -> list[tuple[str, ...]]:
+    """Canonical (METHOD, path, operationId, index, name, in, description)."""
+    rows: list[tuple[str, ...]] = []
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for method, operation in item.items():
+            if method not in METHODS or not isinstance(operation, dict):
+                continue
+            oid = operation.get("operationId")
+            for index, parameter in enumerate(operation.get("parameters", []) or []):
+                if not isinstance(parameter, dict):
+                    continue
+                description = parameter.get("description")
+                if not isinstance(description, str):
+                    continue
+                rows.append(
+                    (
+                        method.upper(),
+                        path,
+                        str(oid),
+                        str(index),
+                        str(parameter.get("name", "")),
+                        str(parameter.get("in", "")),
+                        description,
+                    )
+                )
+    return rows
+
+
+def _parameter_description_digest(rows: list[tuple[str, ...]]) -> str:
+    canonical = sorted("|".join(row) for row in rows)
+    blob = "\n".join(["soymutdb-parameter-descriptions/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _client_parameter_descriptions(generated: str) -> dict[tuple[str, str], str]:
+    """(operationId, field) -> first @description line, parameters blocks only.
+
+    Each operation's ``parameters: {`` section is read up to ``responses: {``,
+    so the many ``@description`` lines on response/body doc blocks cannot be
+    mistaken for a parameter description.
+    """
+    out: dict[tuple[str, str], str] = {}
+    for match in GEN_OP_KEY.finditer(generated):
+        oid = match.group(1)
+        start = match.start()
+        end = generated.find("\n    };\n", start)
+        segment = generated[start : end if end > 0 else start + 20000]
+        parameters = segment.find("        parameters: {")
+        if parameters < 0:
+            continue
+        responses = segment.find("        responses: {", parameters)
+        block = segment[parameters : responses if responses > 0 else len(segment)]
+        for prop in GEN_PARAM_DESCRIPTION.finditer(block):
+            out[(oid, prop.group("field"))] = prop.group(1)
+    return out
+
+
+def _client_parameter_description_digest(
+    rows: dict[tuple[str, str], str],
+) -> str:
+    canonical = sorted(f"{oid}|{field}|{value}" for (oid, field), value in rows.items())
+    blob = "\n".join(
+        ["soymutdb-client-parameter-descriptions/v1", *canonical]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def failures(
     *,
     snapshot: str | None = None,
@@ -204,6 +303,10 @@ def failures(
     digest: str | None = None,
     expected_count: int | None = None,
     expected_operations: int | None = None,
+    description_digest: str | None = None,
+    expected_descriptions: int | None = None,
+    client_description_digest: str | None = None,
+    expected_client_descriptions: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -216,6 +319,26 @@ def failures(
     pinned_digest = _PARAMETER_DIGEST if digest is None else digest
     pinned_count = _EXPECTED_PARAMETER_COUNT if expected_count is None else expected_count
     pinned_ops = _EXPECTED_OPERATION_COUNT if expected_operations is None else expected_operations
+    pinned_description_digest = (
+        _PARAMETER_DESCRIPTION_DIGEST
+        if description_digest is None
+        else description_digest
+    )
+    pinned_descriptions = (
+        _EXPECTED_PARAMETER_DESCRIPTIONS
+        if expected_descriptions is None
+        else expected_descriptions
+    )
+    pinned_client_description_digest = (
+        _CLIENT_PARAMETER_DESCRIPTION_DIGEST
+        if client_description_digest is None
+        else client_description_digest
+    )
+    pinned_client_descriptions = (
+        _EXPECTED_CLIENT_PARAMETER_DESCRIPTIONS
+        if expected_client_descriptions is None
+        else expected_client_descriptions
+    )
 
     try:
         document = json.loads(snapshot)
@@ -284,6 +407,76 @@ def failures(
 
     if f"scripts/{SELF}" not in smoke:
         found.append(f"contracts smoke layer does not invoke {SELF}")
+
+    # Door 4 -- independent fixed point on the published parameter
+    # descriptions. A coordinated co-revert of one parameter's prose in both
+    # halves, with the provenance blob ids honestly re-pinned, moves this
+    # digest even though every two-artifact comparison above agrees.
+    description_rows = _parameter_description_rows(document)
+    actual_description = _parameter_description_digest(description_rows)
+    if actual_description != pinned_description_digest:
+        found.append(
+            "published parameter descriptions drifted: "
+            f"_PARAMETER_DESCRIPTION_DIGEST pins {pinned_description_digest} "
+            f"but the snapshot derives {actual_description}. Re-pin the digest "
+            "in the same commit as both artifacts, with a reason."
+        )
+    if len(description_rows) != pinned_descriptions:
+        found.append(
+            f"published parameter description row count is {len(description_rows)}, "
+            f"_EXPECTED_PARAMETER_DESCRIPTIONS pins {pinned_descriptions}"
+        )
+
+    # Door 5 -- the generated half, pinned by its *own* independent literal.
+    # Re-pinning only the snapshot digest does not silence this door, and a
+    # coordinated co-revert cannot pass by making both halves agree.
+    try:
+        client_descriptions = _client_parameter_descriptions(generated)
+    except ValueError as exc:
+        found.append(f"cannot read generated parameter descriptions: {exc}")
+        return found
+    actual_client_description = _client_parameter_description_digest(
+        client_descriptions
+    )
+    if actual_client_description != pinned_client_description_digest:
+        found.append(
+            "generated parameter descriptions drifted: "
+            f"_CLIENT_PARAMETER_DESCRIPTION_DIGEST pins "
+            f"{pinned_client_description_digest} but the client derives "
+            f"{actual_client_description}. Re-pin the digest in the same "
+            "commit as both artifacts, with a reason."
+        )
+    if len(client_descriptions) != pinned_client_descriptions:
+        found.append(
+            "generated parameter description row count is "
+            f"{len(client_descriptions)}, "
+            f"_EXPECTED_CLIENT_PARAMETER_DESCRIPTIONS pins "
+            f"{pinned_client_descriptions}"
+        )
+
+    # One-sided edits are named by operation and field.
+    snapshot_first_lines = {
+        (oid, name): description.splitlines()[0]
+        for _, _, oid, _, name, _, description in description_rows
+    }
+    for key, expected in sorted(snapshot_first_lines.items()):
+        observed = client_descriptions.get(key)
+        if observed is None:
+            found.append(
+                f"generated client no longer renders the published description "
+                f"of {key[0]}.{key[1]}"
+            )
+        elif observed != expected:
+            found.append(
+                f"generated client renders {key[0]}.{key[1]} description as "
+                f"{observed!r}, the snapshot publishes {expected!r}"
+            )
+    for key in sorted(client_descriptions):
+        if key not in snapshot_first_lines:
+            found.append(
+                f"generated client renders a description at {key[0]}.{key[1]} "
+                "the snapshot does not publish"
+            )
     return found
 
 
@@ -401,6 +594,88 @@ def self_test() -> int:
                     "export interface operations {", "export interface renamed {", 1
                 )
             ),
+        )
+    )
+
+    # --- the published parameter description surface (Doors 4 and 5). ----
+    target_oid = "get_region_structure_api_v1_genes_region_structure_get"
+    target_field = "include_parts"
+    original = (
+        "Include CDS/UTR segments. False returns gene bodies only."
+    )
+    drifted = original + " (planted drift)"
+
+    def description_co_revert() -> tuple[str, str]:
+        doc = copy.deepcopy(document)
+        for parameter in doc["paths"][target_path]["get"]["parameters"]:
+            if parameter.get("name") == target_field:
+                assert parameter["description"] == original
+                parameter["description"] = drifted
+                break
+        snap = json.dumps(doc, indent=2)
+        gen = generated.replace(
+            f"/** @description {original} */",
+            f"/** @description {drifted} */",
+            1,
+        )
+        assert gen != generated
+        return snap, gen
+
+    co_snap, co_gen = description_co_revert()
+    cases.append(
+        (
+            "a coordinated parameter description co-revert in both halves",
+            dict(snapshot=co_snap, generated=co_gen),
+        )
+    )
+    cases.append(
+        (
+            "a one-sided snapshot parameter description retype",
+            dict(snapshot=co_snap),
+        )
+    )
+    cases.append(
+        (
+            "a one-sided client parameter description retype",
+            dict(generated=co_gen),
+        )
+    )
+    # Re-pinning only the snapshot digest must not silence the client door.
+    repinned = _parameter_description_digest(
+        _parameter_description_rows(json.loads(co_snap))
+    )
+    cases.append(
+        (
+            "a description digest re-pin without the client digest",
+            dict(
+                snapshot=co_snap,
+                generated=co_gen,
+                description_digest=repinned,
+            ),
+        )
+    )
+    # A same-count rotation of two descriptions leaves every count door green.
+    rotated = copy.deepcopy(document)
+    described = [
+        (op, parameter)
+        for path, item in rotated["paths"].items()
+        for method, op in item.items()
+        if method in METHODS and isinstance(op, dict)
+        for parameter in (op.get("parameters", []) or [])
+        if isinstance(parameter.get("description"), str)
+    ]
+    assert len(described) >= 2
+    first_value = described[0][1]["description"]
+    second_value = described[1][1]["description"]
+    assert first_value != second_value
+    described[0][1]["description"], described[1][1]["description"] = (
+        second_value,
+        first_value,
+    )
+    cases.append(
+        (
+            "a same-count parameter description rotation",
+            dict(snapshot=json.dumps(rotated, indent=2)),
         )
     )
 
