@@ -595,6 +595,15 @@ bash scripts/smoke.sh --list
 判定 / 工具链 / 制品 digest），并在 `endStages` 上传，所以失败的验收同样留下记录。
 细节见 [`cnb-startup-acceptance.md`](cnb-startup-acceptance.md)。
 
+`web_trigger_acceptance` 的 `Delivery contracts` stage 不声明 `image:`：
+`acceptance.sh --profile contracts` 直接委派给 `smoke.sh --profile contracts`，
+那一层会 shell 出 `node`（前端 i18n 守卫自测）且用例 import PyYAML，所以它必须和
+`main` 的 `Contract suites` 一样继承流水线级 `docker.build`（`.cnb/env/Dockerfile.frontend`，
+`python:3.15` + Node 26.13.0）。裸 `python:3.15` 没有 Node，验收会挂在
+`FileNotFoundError: node` 上。`.cnb/pipelines/acceptance.yml` 是同一条流水线的只读记录，
+两处必须一致；契约测试 `test_acceptance_contracts_stage_inherits_the_dual_toolchain_image`
+同时断言两处，并逐项反向验证（重新加回 stage `image`、或删掉流水线 `docker.build` 都要红）。
+
 ## 6. 工具链固定
 
 | 组件 | 版本 | 位置 |

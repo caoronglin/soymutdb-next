@@ -40,6 +40,14 @@ name: SoyMutDB acceptance
 docker:
   volumes:
     - /cache/pnpm-store
+  build:
+    dockerfile: .cnb/env/Dockerfile.frontend
+    by:
+    - .cnb/env/Dockerfile.frontend
+    - pnpm-lock.yaml
+    - package.json
+    - pnpm-workspace.yaml
+    - .npmrc
 
 env:
   # The acceptance layers must be able to tell the truth about a data-backed
@@ -50,8 +58,9 @@ env:
 services:
   - docker
 stages:
+  # No image override: the contracts layer inherits the pipeline's
+  # dual-toolchain docker.build, the same image as verify's Contract suites.
   - name: Delivery contracts
-    image: python:3.15
     script: bash scripts/acceptance.sh --profile contracts
 
   - name: API + Worker acceptance
