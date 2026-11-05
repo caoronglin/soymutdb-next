@@ -32,6 +32,16 @@ This guard reads both scanners' committed bytes and pins **two axes**:
 it is caught, so a weakened pin cannot pass vacuously. Stdlib only: no build,
 no node_modules, no API venv.
 
+Pinned bytes are not proof that the scanner *fires*. Adding
+``--exclude='*'`` to the decision grep keeps the token floor and the
+``--include`` corpus green (both are pinned independently) while matching no
+file at all: a published artifact baking ``jbrowse.example.com`` then passes
+the static layer. ``witness()`` runs the real ``--profile static`` layer on a
+temp tree with the committed ``smoke.sh`` -- a clean control must be green,
+then each shared marker planted into ``app.js`` must turn it red. A broken
+clean control aborts the witness, so a partial temp tree cannot read as
+"four drifts caught".
+
 Usage:
     python3 scripts/check_static_placeholder_scan.py
     python3 scripts/check_static_placeholder_scan.py --self-test
@@ -40,7 +50,9 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -126,10 +138,65 @@ def tokens(pattern: str) -> set[str]:
     return set(pattern.split("|"))
 
 
+def witness(smoke: str | None = None) -> list[str]:
+    """Prove the committed static layer actually rejects every shared marker.
+
+    ``check()`` reads tokens and corpora as bytes; this runs behaviour. Both
+    are needed: a scanner whose pinned bytes are intact but whose decision
+    branch never matches ships a placeholder origin in the artifact.
+    """
+    text = smoke if smoke is not None else SMOKE.read_text(encoding="utf-8")
+    problems: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        tree = Path(tmp) / "tree"
+        (tree / "scripts").mkdir(parents=True)
+        (tree / "scripts" / "smoke.sh").write_text(text, encoding="utf-8")
+        static_dir = Path(tmp) / "artifact"
+        static_dir.mkdir()
+        (static_dir / "index.html").write_text(
+            "<!doctype html><title>Smoke</title>", encoding="utf-8"
+        )
+        planted = static_dir / "app.js"
+        argv = [
+            "bash", str(tree / "scripts" / "smoke.sh"),
+            "--profile", "static", "--static-dir", str(static_dir),
+        ]
+
+        def run() -> tuple[int, str]:
+            try:
+                result = subprocess.run(
+                    argv, capture_output=True, text=True, cwd=tree,
+                    timeout=60, check=False,
+                )
+                return result.returncode, result.stdout + result.stderr
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                return 2, f"could not run the static layer: {exc}"
+
+        planted.write_text('const endpoint = "https://api.example.org/v1";\n',
+                           encoding="utf-8")
+        rc, output = run()
+        if rc != 0:
+            # A broken clean control proves nothing. Do not report planted
+            # markers as "uncaught" from a layer that never ran to completion.
+            return [f"clean control is not green (rc={rc}): {output[-300:]}"]
+        for marker in SHARED:
+            literal = marker.replace(r"\.", ".")
+            planted.write_text(f'const endpoint = "{literal}";\n', encoding="utf-8")
+            rc, _ = run()
+            if rc == 0:
+                problems.append(
+                    f"static layer stayed green on planted {literal!r} "
+                    "(placeholder origin would ship in a published artifact)"
+                )
+    return problems
+
+
 def check(
     smoke: str | None = None,
     production: str | None = None,
     behaviour: str | None = None,
+    *,
+    witness_scan: bool = True,
 ) -> list[str]:
     s = smoke if smoke is not None else SMOKE.read_text(encoding="utf-8")
     p = production if production is not None else PRODUCTION.read_text(encoding="utf-8")
@@ -252,6 +319,8 @@ def check(
         errors.append(
             f"test_production_artifact_scan.py no longer plants {literal!r}"
         )
+    if witness_scan:
+        errors.extend(witness(s))
     return errors
 
 
@@ -259,7 +328,7 @@ def self_test() -> int:
     s = SMOKE.read_text(encoding="utf-8")
     p = PRODUCTION.read_text(encoding="utf-8")
     b = BEHAVIOUR.read_text(encoding="utf-8")
-    clean = check(s, p, b)
+    clean = check(s, p, b, witness_scan=False)
     if clean:
         print(f"FAIL self-test: clean tree drifts: {clean}")
         return 1
@@ -364,16 +433,37 @@ def self_test() -> int:
         ),
     ]
 
+    # 12/13. Byte pins cannot prove the scanner fires. A decision grep with
+    # an added --exclude='*' keeps every pinned token and --include intact.
+    blind = s.replace(
+        " --include='*.json' >/dev/null 2>&1; then",
+        " --include='*.json' --exclude='*' >/dev/null 2>&1; then",
+        1,
+    )
+    assert blind != s, "blind plant changed nothing"
+    assert check(blind, p, b, witness_scan=False) == [], (
+        "the byte pin must be green for the witness plant to prove anything"
+    )
+    witness_cases: list[tuple[str, bool]] = [
+        ("clean tree fires on every marker", not witness(s)),
+        ("a byte-intact but blind scanner is caught",
+         any("stayed green" in e for e in witness(blind))),
+    ]
+    for label, ok in witness_cases:
+        print(f"{'PASS' if ok else 'FAIL'} self-test: {label}")
+        if not ok:
+            return 1
+
     results = 0
     for label, ms, mp, mb, expected in plants:
-        errors = check(ms, mp, mb)
+        errors = check(ms, mp, mb, witness_scan=False)
         caught = any(expected in e for e in errors)
         print(f"{'PASS' if caught else 'FAIL'} self-test: {label} -> {expected}")
         results += 1
         if not caught:
             print(f"FAIL self-test: {label} was NOT caught: {errors}", file=sys.stderr)
             return 1
-    print(f"self-test: {results} cases, 0 failure(s)")
+    print(f"self-test: {results + len(witness_cases)} cases, 0 failure(s)")
     return 0
 
 
@@ -390,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(
         "static placeholder scan: OK "
-        "(two scanners pinned: tokens + corpora, read back)"
+        "(two scanners pinned: tokens + corpora, 4 markers witnessed)"
     )
     return 0
 

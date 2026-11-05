@@ -54,6 +54,32 @@ class TestStaticPlaceholderScan(unittest.TestCase):
     def test_committed_bytes_are_clean(self) -> None:
         self.assertEqual(module.check(), [])
 
+    def test_witness_rejects_a_byte_intact_but_blind_scanner(self) -> None:
+        """Pinned tokens + corpora are bytes; a scanner can keep all of them
+        and still match nothing. Adding --exclude='*' to the decision grep
+        must be caught behaviourally, not by the byte floor."""
+        smoke = SMOKE.read_text(encoding="utf-8")
+        blind = smoke.replace(
+            " --include='*.json' >/dev/null 2>&1; then",
+            " --include='*.json' --exclude='*' >/dev/null 2>&1; then",
+            1,
+        )
+        self.assertNotEqual(blind, smoke, "the plant changed nothing")
+        self.assertEqual(module.check(blind, witness_scan=False), [],
+                         "the byte pin must be green for this plant to prove the witness")
+        problems = module.witness(blind)
+        self.assertTrue(any("stayed green" in e for e in problems), problems)
+        self.assertEqual(module.check(blind, witness_scan=True), problems)
+
+    def test_witness_requires_a_clean_control(self) -> None:
+        """A broken clean control must not read as 'four drifts caught'."""
+        smoke = SMOKE.read_text(encoding="utf-8").replace(
+            '  [[ -d "${dir}" ]] ||', "  false ||", 1,
+        )
+        self.assertNotEqual(smoke, SMOKE.read_text(encoding="utf-8"))
+        problems = module.witness(smoke)
+        self.assertTrue(any("clean control is not green" in e for e in problems), problems)
+
     def test_self_test_has_teeth(self) -> None:
         # Exercised in-process, like test_contracts_registry_collection.py:
         # wiring a second --self-test call here would need a row in the teeth

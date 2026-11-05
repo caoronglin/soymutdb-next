@@ -87,11 +87,23 @@ bytes and pins:
 - `PATTERNS=()` keeps `localhost:8000`, `LOOPBACK_PATTERNS=()` keeps its two
   loopback binds; any other extra on either side is a **divergence**;
 - the three corpora above;
-- `test_production_artifact_scan.py` still plants every shared token.
+- `test_production_artifact_scan.py` still plants every shared token;
+- **the static layer actually fires**: `witness()` runs the real
+  `--profile static` layer on a temp tree with the committed `smoke.sh` --
+  a clean control must be green, then each of the four markers planted into
+  `app.js` must turn it red. Pinned tokens and corpora are not enough:
+  adding `--exclude='*'` to the decision grep keeps every pinned byte
+  intact (the `--include` corpus is a separate literal) while matching no
+  file, so a published artifact baking `jbrowse.example.com` passes the
+  static layer. A broken clean control aborts the witness (no vacuous
+  "four drifts caught").
 
-`--self-test` plants eleven one-sided drifts on copies of the bytes and
-asserts each is caught (§4a ablation, token additions/drops, and three
-corpus drifts), so a weakened pin cannot pass vacuously.
+`--self-test` plants eleven one-sided drifts on copies of the bytes plus
+two behavioural plants (clean tree fires, byte-intact blind scanner caught),
+and asserts each is caught (§4a ablation, token additions/drops, three corpus
+drifts), so a weakened pin cannot pass vacuously. The byte plants pass
+`witness_scan=False` so they still exercise only the literal floors; the
+plain `check()` call always witnesses.
 `scripts/test_static_placeholder_scan.py` pins from a second file that the
 plain call is wired into `smoke_contracts()`, that it is listed in
 `REQUIRED_GUARD_CALLS`, that the companion suite itself is collected, that
