@@ -5498,6 +5498,21 @@ class ContractsRegistryWiringTests(unittest.TestCase):
             "green CI stage",
         )
 
+    @staticmethod
+    def _companion_row_is_gating(smoke: str) -> bool:
+        """Whether the companion is an active bare row in the gating array.
+
+        ``smoke_contracts()`` owns two arrays: ``tests=()`` (passed to the
+        gating pytest call) and ``environment_bound=()`` (reported, not
+        gating). Only a row in the first slice is collected evidence.
+        """
+        companion = "scripts/test_contracts_registry_collection.py"
+        body = smoke.split("smoke_contracts() {", 1)[1]
+        gating = body.split("environment_bound=(", 1)[0]
+        return re.search(
+            r"(?m)^    " + companion.replace(".", r"\.") + r"[ \t]*$", gating
+        ) is not None
+
     def test_registry_companion_suite_is_collected(self) -> None:
         """The guard's second-file assertions must actually run in the layer.
 
@@ -5509,15 +5524,46 @@ class ContractsRegistryWiringTests(unittest.TestCase):
         layer at SMOKE PASS. Pin the row from this independent, already-collected
         door: removing it (even together with its ``PINNED_SUITES`` entry) must
         fail here rather than silently retire the only second-file evidence.
+
+        Read the same slice the guard reads -- ``smoke_contracts()`` up to
+        ``environment_bound=(`` -- and require a bare, active row. A whole-file
+        substring search is satisfied by a row parked in the non-gating
+        ``environment_bound=()`` array, where the companion's red is reported
+        but cannot turn the layer red.
         """
         smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
-        body = smoke.split("smoke_contracts() {", 1)[1]
-        block = body.split("environment_bound=(", 1)[0]
-        self.assertIn(
-            "    scripts/test_contracts_registry_collection.py\n",
-            block,
-            "the registry guard's companion suite is no longer collected by "
-            "the contracts layer: its second-file assertions cannot gate CI",
+        self.assertTrue(
+            self._companion_row_is_gating(smoke),
+            "the registry guard's companion suite is no longer an active bare "
+            "row in the gating tests=() array: its second-file assertions "
+            "cannot gate CI",
+        )
+
+    def test_registry_companion_row_must_be_in_the_gating_array(self) -> None:
+        """A row in environment_bound=() is not collected evidence.
+
+        Regression for the shape measured on the #292 head (``67a91ec2``):
+        move the companion row out of ``tests=()`` into the non-gating
+        ``environment_bound=()`` array, drop its ``PINNED_SUITES`` entry so
+        the guard stays ``OK``, and a whole-file second door still passes --
+        while a weakened pin report ships on ``SMOKE PASS``. This test runs
+        the real reader against that planted shape, not a separate assertion.
+        """
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        companion = "scripts/test_contracts_registry_collection.py"
+        self.assertTrue(self._companion_row_is_gating(smoke))
+        planted = smoke.replace(
+            f"    {companion}\n", "", 1
+        ).replace(
+            "  local environment_bound=(\n",
+            f"  local environment_bound=(\n    {companion}\n",
+            1,
+        )
+        self.assertIn(f"    {companion}\n", planted)
+        self.assertFalse(
+            self._companion_row_is_gating(planted),
+            "a companion parked in environment_bound=() cannot gate the "
+            "layer, so the second door must reject it",
         )
 
     def test_driver_level_guard_failure_reaches_the_exit_status(self) -> None:
