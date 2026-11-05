@@ -45,6 +45,8 @@ RUNNERS = (
     "scripts/test_openapi_snapshot_contract.py",
     "scripts/test_locale_language_purity.py",
     "scripts/test_mcp_openapi_parity.py",
+    "scripts/test_openapi_operation_id_floor.py",
+    "scripts/test_openapi_operation_parameter_floor.py",
 )
 
 # Assertions whose right-hand side is an empty list/tuple MUST carry a message:
@@ -59,11 +61,24 @@ MESSAGED_ASSERT_FILES = (
     "scripts/test_openapi_snapshot_contract.py",
     "scripts/test_locale_language_purity.py",
     "scripts/test_mcp_openapi_parity.py",
+    "scripts/test_openapi_operation_id_floor.py",
+    "scripts/test_openapi_operation_parameter_floor.py",
+    # Not a test file: a *production* guard. `failures(...)[0]` was its only
+    # red signal, so a silent assert there loses the reason at the source.
+    "scripts/check_openapi_published_enums.py",
 )
 
 
 def _source(relative: str) -> str:
-    return (ROOT / relative).read_text(encoding="utf-8")
+    path = ROOT / relative
+    # A pinned but missing file must fail *this* suite, not crash it with a
+    # traceback: an uncaught OSError skips the renderer and the operator reads
+    # a stack instead of a cause.
+    if not path.is_file():
+        raise AssertionError(
+            f"{relative} is pinned in this suite but does not exist"
+        )
+    return path.read_text(encoding="utf-8")
 
 
 def _runner_uses_helper() -> list[str]:
@@ -185,6 +200,52 @@ def test_no_runner_asserts_against_an_empty_list_without_a_message() -> None:
     assert _empty_list_asserts_are_messaged() == []
 
 
+def test_the_pinned_runner_list_actually_covers_the_wired_runners() -> None:
+    """The pins must be an equality, not a floor.
+
+    ``_runner_uses_helper`` only inspects the names in ``RUNNERS``, so dropping
+    a row from that tuple makes the pin *smaller* and stays green -- exactly the
+    "green because it stopped looking" shape. This check derives the wired
+    runners from the committed bytes instead and compares sets.
+    """
+    discovered = set()
+    for path in sorted((ROOT / "scripts").glob("*.py")):
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=path.name)
+        # Detection is by construction: a handler that CATCHES an AssertionError
+        # and calls the helper in the same block. Matching on a literal
+        # ``except AssertionError as exc`` string misses
+        # ``except (AssertionError, StopIteration)``, which is exactly how a
+        # "stale pin" false positive reads.
+        for handler in ast.walk(tree):
+            if not isinstance(handler, ast.ExceptHandler) or handler.type is None:
+                continue
+            names = (
+                [handler.type]
+                if not isinstance(handler.type, ast.Tuple)
+                else list(handler.type.elts)
+            )
+            catches = any(
+                isinstance(node, ast.Name) and node.id == "AssertionError"
+                for node in names
+            )
+            if not catches:
+                continue
+            calls = any(
+                isinstance(node, ast.Call)
+                and isinstance(node.func, ast.Name)
+                and node.func.id == GUARD
+                for node in ast.walk(handler)
+            )
+            if calls:
+                discovered.add(f"scripts/{path.name}")
+                break
+    pinned = set(RUNNERS)
+    assert discovered == pinned, (
+        f"unpinned wired runner(s): {sorted(discovered - pinned)}; "
+        f"stale pin(s): {sorted(pinned - discovered)}"
+    )
+
+
 def test_the_regression_pins_are_load_bearing() -> None:
     """Both scanners must go red on the exact shapes they forbid."""
     # (1) drop the helper import + call from one runner's bytes: the AST
@@ -227,7 +288,22 @@ def test_the_regression_pins_are_load_bearing() -> None:
     ]
     assert len(offenders) == 1, "bare == [] assert was not detected"
 
-    # (3) the committed bytes pass both scanners -- the pins reject the
+    # (3) a pinned-but-missing runner must be *named*, not crash the suite.
+    # An uncaught OSError here would skip the renderer entirely and print a
+    # traceback instead of a cause -- the same silence, one layer down.
+    try:
+        (ROOT / "scripts" / "no_such_pinned_runner_probe.py").read_text(encoding="utf-8")
+    except OSError:
+        pass
+    try:
+        _source("scripts/no_such_pinned_runner_probe.py")
+    except AssertionError as exc:
+        assert "no_such_pinned_runner_probe.py" in str(exc), str(exc)
+        assert "does not exist" in str(exc), str(exc)
+    else:
+        raise AssertionError("a missing pinned runner was not rejected")
+
+    # (4) the committed bytes pass both scanners -- the pins reject the
     # regression, not the fix itself.
     assert _runner_uses_helper() == []
     assert _empty_list_asserts_are_messaged() == []

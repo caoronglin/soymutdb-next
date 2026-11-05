@@ -15,6 +15,7 @@ import json
 import sys
 from pathlib import Path
 
+from named_guard_diagnostics import describe_assertion
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -44,7 +45,8 @@ def _co_revert() -> tuple[str, str]:
 
 
 def test_committed_tree_passes() -> None:
-    assert guard.failures() == []
+    found = guard.failures()
+    assert not found, found
 
 
 def test_coordinated_co_revert_is_rejected() -> None:
@@ -172,7 +174,7 @@ def _run_all() -> int:
         try:
             case()
         except AssertionError as exc:
-            problems.append(f"{case.__name__}: {exc or 'assertion failed'}")
+            problems.append(f"{case.__name__}: {describe_assertion(exc, case)}")
     if problems:
         for problem in problems:
             print(f"openapi-operation-id-floor-tests: FAIL: {problem}", file=sys.stderr)
