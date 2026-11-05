@@ -292,3 +292,63 @@ than being double-counted. Combined read data on this branch: `--self-test`
 16 → 21 cases (19 for door 7 + 2 for door 8), companion suite 32 → 46 passed,
 `openapi.json` / `openapi.d.ts` byte-for-byte unchanged, and the three hot
 wiring files untouched.
+
+## Phase 4 — published `additionalProperties` shape
+
+`openapi.json` publishes **102** `additionalProperties` nodes across
+`components.schemas`: 49 `true`, 35 `false`, and 18 schema-valued (`$ref`,
+primitive `type`, or `anyOf`). `openapi-typescript` renders the 67 non-`false`
+nodes as `[key: string]: <type>;` index signatures inside the generated
+`components["schemas"]` block; a `false` node renders **no line at all**.
+This is client-visible: a caller compiles against whether an object is open
+or closed, and against the value type.
+
+No fixed point read it:
+
+* `_FIELD_CONSTRAINT_DIGEST` walks `_KEYS` (scalar constraints + `default`);
+  `additionalProperties` is a schema shape, not a scalar keyword;
+* `_REQUIRED_FIELD_DIGEST` / `_VALUE_DIGEST` walk `required` arrays and
+  positional/cardinality keywords;
+* the enum, example, description, title, parameter and response guards walk
+  their own columns;
+* `_PINNED_ARTIFACTS` is provenance blob ids — re-pinning both is the
+  documented "one reviewed action" beside a regenerate.
+
+**Decisive ablation (live `b651c259`)**: flip
+`AdminSiteBrandResponse.additionalProperties` `false -> true` in the snapshot
+and add its `[key: string]: unknown;` line to the generated client (both
+halves agree), honestly re-pin both blob ids:
+
+| gate | result |
+| --- | --- |
+| all 12 `scripts/check_openapi_*.py` guards (plain + `--self-test`) | `rc=0` |
+| all `scripts/test_openapi_*.py` companion suites | `299 passed` |
+| `bash scripts/smoke.sh --profile contracts` | `SMOKE PASS` |
+
+An object silently became open and nothing named it.
+
+### The fix (zero new wiring)
+
+Extend the already-wired guard; `smoke.sh` / registry / teeth untouched:
+
+* `_ADDITIONAL_PROPERTIES_DIGEST` — hand-written sha256 over canonical sorted
+  `(dotted path, canonical JSON value)` rows, read from nowhere.
+* `_CLIENT_ADDITIONAL_PROPERTIES_DIGEST` — a second hand-written sha256 over
+  the generated `(component, index-signature type)` rows. Checking the client
+  against the snapshot under guard would pass on exactly the co-revert above;
+  the client half is pinned to its own literal instead.
+* `_EXPECTED_ADDITIONAL_PROPERTIES = 102` /
+  `_EXPECTED_CLIENT_ADDITIONAL_PROPERTIES = 67` — exact count doors.
+* Door 10 — derive the client projection from the snapshot and compare
+  multisets; one-sided drops/retypes are named by component. A coordinated
+  co-revert is caught by the two digests, not by agreement.
+* `--self-test` → **27 cases**: the decisive co-revert, its same-commit
+  re-pin positive control, both one-sided rewrites, a coordinated type retype
+  and a dropped node. Gutting both digest doors to `actual = pinned` makes the
+  self-test `rc=1` — the floor is not vacuous.
+* Companion → **53 cases**, including the independent-literal AST
+  assertion, the co-revert / re-pin pair, count-door and client-door weight,
+  and a gutted-guard (`actual = pinned`) check from a second file.
+
+A legitimate change re-pins **both** literals (and the client count when the
+line count moves) in the same commit as both artifacts and says why.

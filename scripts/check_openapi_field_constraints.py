@@ -83,8 +83,20 @@ tag cannot pass by agreement. Unlike the strict ``@example`` marker, the
 tag rows are positional: a same-count relocation between two fields is
 caught only by the digest, with both count doors silent.
 
-A legitimate contract change must move the digest in the same commit as the
-snapshot and say why. Re-deriving the digest from the artifacts under guard
+``additionalProperties`` is a separate published shape: 102 component-schema
+nodes declare a boolean or a schema value, rendered as a ``[key: string]``
+index signature in the generated client (the 35 ``false`` nodes render no line
+at all). It is not in ``_KEYS``, and no two-artifact comparison can see a
+``false`` node. A coordinated regenerate that flips one node in both halves,
+honestly re-pins both provenance blob ids and leaves every other door green
+was measured on live bytes. Two more independent literals close it:
+``_ADDITIONAL_PROPERTIES_DIGEST`` over the canonical ``(path, value)`` rows,
+``_CLIENT_ADDITIONAL_PROPERTIES_DIGEST`` over the generated
+``(component, index-signature type)`` rows, plus exact count doors and a
+one-sided consistency door that names the component.
+
+A legitimate contract change must move the digests in the same commit as the
+snapshot and say why. Re-deriving a digest from the artifacts under guard
 would make the pin self-referential. ``--self-test`` injects one-sided and
 coordinated drifts into copies of the bytes and asserts each is caught; the
 clean tree must pass.
@@ -108,6 +120,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from collections import Counter
 import hashlib
 import json
 import re
@@ -211,6 +224,25 @@ _EXPECTED_DEFAULT_TAGS = 896
 _DEFAULT_TAG_VALUE_DIGEST = (
     "c7c1f7f5c31416c69b892107f8711f64ef629b8919619a7c9d614c1c7d013824"
 )
+
+# Independent fixed point on the published ``additionalProperties`` surface.
+# 102 component-schema nodes publish a boolean or a schema value; none is in
+# ``_KEYS`` (it is a schema *shape*, not a scalar constraint), and a ``false``
+# node renders no line at all in the generated client. sha256 of
+# "\n".join(["soymutdb-schema-additional-properties/v1"] + sorted rows), each
+# row "|".join((dotted path, canonical JSON value)). Read from nowhere.
+_ADDITIONAL_PROPERTIES_DIGEST = (
+    "4030dc8d56d82e3be31ea99cf2838fcbc6865384765f2df50530334e8ca23f4e"
+)
+_EXPECTED_ADDITIONAL_PROPERTIES = 102
+# sha256 over the generated client's (component, index-signature type) rows.
+# The 35 ``false`` nodes deliberately render nothing; the other 67 do. A
+# second literal is required: checking the client against the snapshot under
+# guard would pass on a coordinated regenerate that moves both halves.
+_CLIENT_ADDITIONAL_PROPERTIES_DIGEST = (
+    "380346075bd99ab0fd4e2a2481e8d63f64b05b32681eb94b6b877a65476e899d"
+)
+_EXPECTED_CLIENT_ADDITIONAL_PROPERTIES = 67
 
 
 def rows(document: dict[str, Any]) -> list[tuple[str, str, Any]]:
@@ -380,6 +412,94 @@ def _default_tag_value_digest(
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+_PRIMITIVE_TYPE = {
+    "string": "string",
+    "integer": "number",
+    "number": "number",
+    "boolean": "boolean",
+    "null": "null",
+}
+_CLIENT_INDEX_SIGNATURE = re.compile(
+    r"^\s*\[key: string\]: (?P<type>[^;]+);$"
+)
+
+
+def additional_property_rows(document: dict[str, Any]) -> list[tuple[str, str]]:
+    """Canonical (dotted path, canonical JSON value) rows."""
+    out: list[tuple[str, str]] = []
+
+    def walk(node: Any, path: str) -> None:
+        if isinstance(node, dict):
+            if "additionalProperties" in node:
+                out.append(
+                    (
+                        path,
+                        json.dumps(node["additionalProperties"], sort_keys=True),
+                    )
+                )
+            for name, value in node.items():
+                if isinstance(value, (dict, list)):
+                    walk(value, f"{path}/{name}" if path else name)
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, f"{path}/{index}" if path else str(index))
+
+    for name, schema in document.get("components", {}).get("schemas", {}).items():
+        walk(schema, name)
+    return out
+
+
+def _additional_properties_digest(rows_: list[tuple[str, str]]) -> str:
+    canonical = sorted(f"{path}|{value}" for path, value in rows_)
+    blob = "\n".join(["soymutdb-schema-additional-properties/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _client_type(value: Any) -> str | None:
+    """openapi-typescript's index-signature type for one published value."""
+    if value is True:
+        return "unknown"
+    if value is False:
+        return None  # a closed object renders no index signature at all
+    if not isinstance(value, dict):
+        return None
+    if "$ref" in value:
+        return f'components["schemas"]["{str(value["$ref"]).split("/")[-1]}"]'
+    for key in ("anyOf", "oneOf"):
+        if key in value:
+            return " | ".join(_client_type(part) or "unknown" for part in value[key])
+    if "type" in value:
+        declared = value["type"]
+        if isinstance(declared, list):
+            return " | ".join(_PRIMITIVE_TYPE.get(t, "unknown") for t in declared)
+        return _PRIMITIVE_TYPE.get(declared, "unknown")
+    return "unknown"
+
+
+def client_additional_properties(generated: str) -> list[tuple[str, str]]:
+    """(component, index-signature type) rows in components.schemas."""
+    block = _SCHEMAS_REGION.search(generated)
+    if block is None:
+        raise ValueError("generated client has no components.schemas block")
+    out: list[tuple[str, str]] = []
+    component: str | None = None
+    for line in block.group("body").splitlines():
+        opener = re.match(r"^        (?P<name>[A-Za-z_][A-Za-z0-9_]*): \{$", line)
+        if opener:
+            component = opener.group("name")
+            continue
+        index = _CLIENT_INDEX_SIGNATURE.match(line)
+        if index and component:
+            out.append((component, index.group("type")))
+    return out
+
+
+def _client_additional_properties_digest(rows_: list[tuple[str, str]]) -> str:
+    canonical = sorted(f"{component}|{type_}" for component, type_ in rows_)
+    blob = "\n".join(["soymutdb-client-additional-properties/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def failures(
     *,
     snapshot: str | None = None,
@@ -394,6 +514,10 @@ def failures(
     tag_digest: str | None = None,
     expected_tags: int | None = None,
     tag_value_digest: str | None = None,
+    additional_digest: str | None = None,
+    client_additional_digest: str | None = None,
+    expected_additional: int | None = None,
+    expected_client_additional: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -405,8 +529,13 @@ def failures(
         document = json.loads(snapshot)
         rows_ = rows(document)
         example_rows_ = example_rows(document)
+        additional_rows_ = additional_property_rows(document)
     except (ValueError, TypeError) as exc:
         return [f"cannot read published constraints from snapshot: {exc}"]
+    try:
+        client_additional_ = client_additional_properties(generated)
+    except ValueError as exc:
+        return [f"cannot read generated client index signatures: {exc}"]
 
     pinned_digest = _FIELD_CONSTRAINT_DIGEST if digest is None else digest
     pinned_rows = (
@@ -422,6 +551,26 @@ def failures(
         _DEFAULT_TAG_VALUE_DIGEST
         if tag_value_digest is None
         else tag_value_digest
+    )
+    pinned_additional = (
+        _ADDITIONAL_PROPERTIES_DIGEST
+        if additional_digest is None
+        else additional_digest
+    )
+    pinned_client_additional = (
+        _CLIENT_ADDITIONAL_PROPERTIES_DIGEST
+        if client_additional_digest is None
+        else client_additional_digest
+    )
+    pinned_additional_count = (
+        _EXPECTED_ADDITIONAL_PROPERTIES
+        if expected_additional is None
+        else expected_additional
+    )
+    pinned_client_additional_count = (
+        _EXPECTED_CLIENT_ADDITIONAL_PROPERTIES
+        if expected_client_additional is None
+        else expected_client_additional
     )
 
     # Door 1 -- independent fixed point over the whole surface. A single value
@@ -565,6 +714,61 @@ def failures(
             "snapshot projection. A one-sided rewrite of one @example value "
             "keeps all 7 tags and, once generated_blob is re-pinned, leaves "
             "every other door silent."
+        )
+    # Door 9 -- independent fixed point on the published
+    # ``additionalProperties`` surface. Both artifacts are exports of one
+    # source, so a regenerate that rewrites one node (or drops/retypes its
+    # index signature) moves both halves together; the two literals read from
+    # nowhere are the only doors that see it. A ``false`` node has no client
+    # counterpart, which is why the client side is pinned to its own digest
+    # instead of compared one-to-one against the snapshot.
+    actual_additional = _additional_properties_digest(additional_rows_)
+    if actual_additional != pinned_additional:
+        found.append(
+            "published additionalProperties drifted: "
+            f"_ADDITIONAL_PROPERTIES_DIGEST pins {pinned_additional} but the "
+            f"snapshot derives {actual_additional}. Re-pin the digest in the "
+            "same commit as both artifacts, with a reason."
+        )
+    if len(additional_rows_) != pinned_additional_count:
+        found.append(
+            f"published additionalProperties row count is "
+            f"{len(additional_rows_)}, _EXPECTED_ADDITIONAL_PROPERTIES pins "
+            f"{pinned_additional_count}: a node was added or dropped"
+        )
+    actual_client_additional = _client_additional_properties_digest(
+        client_additional_
+    )
+    if actual_client_additional != pinned_client_additional:
+        found.append(
+            "generated client index signatures drifted: "
+            f"_CLIENT_ADDITIONAL_PROPERTIES_DIGEST pins "
+            f"{pinned_client_additional} but the client derives "
+            f"{actual_client_additional}. Re-pin the digest in the same commit "
+            "as both artifacts, with a reason."
+        )
+    if len(client_additional_) != pinned_client_additional_count:
+        found.append(
+            f"generated client publishes {len(client_additional_)} index "
+            f"signatures, _EXPECTED_CLIENT_ADDITIONAL_PROPERTIES pins "
+            f"{pinned_client_additional_count}"
+        )
+
+    # Door 10 -- one-sided consistency. Derive the client projection from the
+    # snapshot; a coordinated co-revert is caught by the two digests above,
+    # this door names the component when only one half moves.
+    expected_client = Counter()
+    for path, value in additional_rows_:
+        type_ = _client_type(json.loads(value))
+        if type_ is not None:
+            expected_client[(path.split("/", 1)[0], type_)] += 1
+    observed_client = Counter(client_additional_)
+    if expected_client != observed_client:
+        missing = sorted((expected_client - observed_client).elements())
+        extra = sorted((observed_client - expected_client).elements())
+        found.append(
+            "generated client index signatures disagree with the published "
+            f"additionalProperties (missing={missing[:4]}, extra={extra[:4]})"
         )
     return found
 
@@ -890,12 +1094,99 @@ def self_test() -> int:
         else:
             print(f"PASS self-test: {name!r} is caught -> {len(found)} failure(s)")
 
+    # Door 9/10 plants: additionalProperties is a schema shape, not one of
+    # ``_KEYS``, and a ``false`` node renders no client line at all. Keep them
+    # in their own dict so the teeth guard's pinned case probes stay put.
+    additional_cases: dict[str, tuple[str, str]] = {}
+    target = "AdminSiteBrandResponse"
+    original = generated
+    ap_doc = copy.deepcopy(document)
+    assert ap_doc["components"]["schemas"][target]["additionalProperties"] is False
+    ap_doc["components"]["schemas"][target]["additionalProperties"] = True
+    ap_snap = json.dumps(ap_doc, indent=2)
+    block_start = original.find(f"        {target}: {{")
+    block_end = original.find("\n        };", block_start)
+    block = original[block_start:block_end]
+    assert "[key: string]" not in block
+    ap_gen = (
+        original[:block_start]
+        + block
+        + "\n            [key: string]: unknown;"
+        + original[block_end:]
+    )
+    assert ap_gen != original
+    additional_cases["coordinated additionalProperties false->true"] = (
+        ap_snap,
+        ap_gen,
+    )
+    additional_cases["one-sided snapshot additionalProperties retype"] = (
+        ap_snap,
+        snapshot_clean,
+    )
+    additional_cases["one-sided client index signature added"] = (
+        snapshot_clean,
+        ap_gen,
+    )
+    # A schema-valued node retyped to a different primitive: digest moves in
+    # both halves, counts hold.
+    ap_doc2 = copy.deepcopy(document)
+    node = ap_doc2["components"]["schemas"]["AnalysesUploadResponse"][
+        "properties"
+    ]["upload_fields"]
+    assert node["additionalProperties"] == {"type": "string"}
+    node["additionalProperties"] = {"type": "integer"}
+    ap_snap2 = json.dumps(ap_doc2, indent=2)
+    ap_gen2 = original.replace(
+        "            [key: string]: string;\n",
+        "            [key: string]: number;\n",
+        1,
+    )
+    assert ap_gen2 != original
+    additional_cases["coordinated additionalProperties type retype"] = (
+        ap_snap2,
+        ap_gen2,
+    )
+    # A node dropped from the snapshot only: count door names it.
+    ap_doc3 = copy.deepcopy(document)
+    del ap_doc3["components"]["schemas"][target]["additionalProperties"]
+    additional_cases["one-sided additionalProperties dropped"] = (
+        json.dumps(ap_doc3, indent=2),
+        snapshot_clean,
+    )
+    for name, (snap, gen) in additional_cases.items():
+        found = failures(snapshot=snap, generated=gen)
+        if not found:
+            print(f"SELF-TEST FAIL: {name!r} was NOT caught")
+            failures_count += 1
+        else:
+            print(f"PASS self-test: {name!r} is caught -> {len(found)} failure(s)")
+
+    # A reviewed regenerate re-pins both literals with both artifacts. The
+    # positive control proves the pair is not a dead pin.
+    re_pinned = failures(
+        snapshot=ap_snap,
+        generated=ap_gen,
+        additional_digest=_additional_properties_digest(
+            additional_property_rows(json.loads(ap_snap))
+        ),
+        client_additional_digest=_client_additional_properties_digest(
+            client_additional_properties(ap_gen)
+        ),
+        expected_client_additional=len(client_additional_properties(ap_gen)),
+    )
+    if re_pinned:
+        print(f"SELF-TEST FAIL: same-commit re-pin was rejected: {re_pinned}")
+        failures_count += 1
+    else:
+        print("PASS self-test: same-commit re-pin stays green")
     total = (
         len(cases)
         + len(example_cases)
         + len(default_tag_cases)
         + len(default_value_cases)
         + len(example_value_cases)
+        + len(additional_cases)
+        + 1  # the same-commit re-pin positive control prints its own line
     )
     print(f"self-test: {total} cases, {failures_count} failure(s)")
     return 1 if failures_count else 0
@@ -914,7 +1205,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(
         f"openapi-field-constraints: OK ({_EXPECTED_CONSTRAINT_ROWS} published "
-        f"constraint rows pinned across {_EXPECTED_SCHEMAS} schemas)"
+        f"constraint rows pinned across {_EXPECTED_SCHEMAS} schemas, "
+        f"{_EXPECTED_ADDITIONAL_PROPERTIES} additionalProperties nodes pinned)"
     )
     return 0
 
