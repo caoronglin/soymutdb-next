@@ -327,6 +327,38 @@ class RegistryCollectionGuardTests(unittest.TestCase):
         self.assertEqual(guard.check(smoke, files, renamed), [])
 
 
+    def test_a_flag_bearing_tests_row_is_rejected(self) -> None:
+        """A tests=() row is expanded verbatim into the pytest argv.
+
+        ``registry()`` ignores a row that carries ``--self-test`` (its regex
+        ends at ``.py``), yet that row is a real array element: pytest aborts
+        the whole layer with ``unrecognized arguments`` / exit 4 before any
+        suite is collected. The full-line check must name it.
+        """
+        files = _files()
+        files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
+        for bad in (
+            "    scripts/check_x.py --self-test\n",
+            "    scripts/test_example.py -q --maxfail=1\n",
+        ):
+            with self.subTest(bad=bad.strip()):
+                smoke = _smoke([], REQUIRED).replace(
+                    "  local tests=(\n",
+                    "  local tests=(\n" + bad + "    scripts/test_example.py\n",
+                    1,
+                )
+                failures = guard.check(smoke, files, CI_OK)
+                self.assertTrue(
+                    any("not a bare pytest path" in f for f in failures),
+                    failures,
+                )
+
+    def test_a_clean_bare_path_row_is_accepted(self) -> None:
+        files = _files()
+        files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
+        smoke = _smoke(["scripts/test_example.py"], REQUIRED)
+        self.assertEqual(guard.check(smoke, files, CI_OK), [])
+
     def test_ci_layer_call_must_stay_a_bare_statement(self) -> None:
         smoke = _smoke(["scripts/test_example.py"], REQUIRED)
         files = _files()
