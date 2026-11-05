@@ -222,6 +222,15 @@ smoke_contracts() {
   # mismatch produces a build that differs between two machines on the same
   # commit, which is exactly what a contract layer exists to catch.
   "${PYTHON_BIN}" scripts/check-toolchain-pins.py || rc=$?
+  # The MCP tool inventory is declared three times (manifest.py, the
+  # @mcp.tool bodies in server.py, the limiters in ratelimit.py) and nothing
+  # compared them: a keyword added to one function was undiscoverable, a
+  # deleted rate-limit guard left every limiter test green, and a limiter
+  # swapped to the process-local backend multiplied the advertised budget by
+  # the replica count. Reads committed bytes only -- no MCP package, no Redis.
+  # Self-test mode, like the guards above, so this is one line here instead of
+  # a row in the shared `tests[]` array.
+  "${PYTHON_BIN}" scripts/check_mcp_manifest_reconcile.py --self-test || rc=$?
   # Rust kernel: the crate pins + CI job + wheel-install gate must exist even
   # when this layer has no compiled extension available.
   "${PYTHON_BIN}" scripts/check_bio_core_wheel.py --static || rc=$?
