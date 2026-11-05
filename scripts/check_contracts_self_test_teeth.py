@@ -65,6 +65,7 @@ _WIRED_SELF_TESTS: frozenset[str] = frozenset(
         "scripts/check_openapi_operation_id_floor.py",
         "scripts/check_openapi_operation_parameter_floor.py",
         "scripts/check_openapi_response_surface.py",
+        "scripts/check_openapi_operation_annotations.py",
         "scripts/check_variant_summary_assembly_consistency.py",
         "scripts/check_openapi_published_enums.py",
         "scripts/check_visible_i18n.py",
@@ -117,6 +118,9 @@ _SIGNATURES: dict[str, re.Pattern[str]] = {
         r"self-test: \d+ cases, 0 failure\(s\)"
     ),
     "scripts/check_openapi_response_surface.py": re.compile(
+        r"self-test: \d+ cases, 0 failure\(s\)"
+    ),
+    "scripts/check_openapi_operation_annotations.py": re.compile(
         r"self-test: \d+ cases, 0 failure\(s\)"
     ),
     "scripts/check_variant_summary_assembly_consistency.py": re.compile(
@@ -213,6 +217,7 @@ _EVIDENCE_PER_CASE: frozenset[str] = frozenset(
         "scripts/check_openapi_operation_id_floor.py",
         "scripts/check_openapi_operation_parameter_floor.py",
         "scripts/check_openapi_response_surface.py",
+        "scripts/check_openapi_operation_annotations.py",
         "scripts/check_variant_summary_assembly_consistency.py",
     }
 )

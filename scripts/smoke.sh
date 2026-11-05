@@ -249,6 +249,7 @@ smoke_contracts() {
     # is client-visible but unread by every body digest for content-less
     # responses. This suite proves the independent literal pins it.
     scripts/test_openapi_response_surface.py
+    scripts/test_openapi_operation_annotations.py
     scripts/test_contracts_layer_self_containment.py
     # The error-code gate wiring guard judges its co-rename probe by the copied
     # tree's exit status. A clean control must be green first, or an incomplete
@@ -377,6 +378,11 @@ smoke_contracts() {
   # 204 -> 205 rename in both halves with re-pinned provenance blobs
   # kept every wired OpenAPI guard green. Pin the whole surface.
   "${PYTHON_BIN}" scripts/check_openapi_response_surface.py --self-test || rc=$?
+  # Every published operation carries summary/description prose that the
+  # generated TypeScript doc comments render verbatim. A coordinated
+  # regenerate that rewrites one on both halves, with re-pinned provenance
+  # blobs, kept every wired guard green. Pin the whole annotation surface.
+  "${PYTHON_BIN}" scripts/check_openapi_operation_annotations.py --self-test || rc=$?
   # The visible-text budget may fall but never rise; new hardcoded strings fail.
   "${PYTHON_BIN}" scripts/check_visible_i18n.py --self-test || rc=$?
   # nginx security-header fragments and the locations that must re-include
