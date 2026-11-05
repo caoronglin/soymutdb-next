@@ -227,6 +227,11 @@ smoke_contracts() {
     # copy (a missing export_contract.py used to do exactly that) reads as a
     # caught co-rename. This suite pins that differential from a second file.
     scripts/test_error_code_gate_wiring.py
+    # The 7-case companion for the OpenAPI auth-surface floor pins the
+    # literal itself and both failure directions. No CI stage runs a plain
+    # `pytest scripts/`, so without this entry only a local hand-run collects
+    # it: register it in the gating array so the layer consumes it.
+    scripts/test_openapi_auth_surface_floor.py
   )
   # Suites that need an interpreter or service this smoke layer does not own
   # (worker source analysis runs under the API virtualenv; tunnel/compose drift
