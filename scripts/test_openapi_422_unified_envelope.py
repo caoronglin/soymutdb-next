@@ -84,7 +84,12 @@ ENVELOPE_BODY = '"application/json": components["schemas"]["ErrorResponse"];'
 # both artifacts -- a dropped 500 or an invented 418 added on both sides -- so
 # the distribution itself is pinned. Update it in the same commit as an
 # intentional change to the error surface and say why.
-_ERROR_RESPONSE_BASELINE = {"409": 3, "422": 266, "429": 1, "500": 266}
+#
+# 266 -> 268 (PR #71, downloads provenance): `POST /api/v1/exports/query` and
+# `GET /api/v1/variants/export/{id}/manifest` each declare both a 422 and a
+# 500, and both now advertise the runtime `ValidationErrorResponse` envelope
+# rather than FastAPI's `HTTPValidationError`. 409 and 429 are unchanged.
+_ERROR_RESPONSE_BASELINE = {"409": 3, "422": 268, "429": 1, "500": 268}
 
 
 def _error_code_counts(document: dict) -> dict[str, int]:
