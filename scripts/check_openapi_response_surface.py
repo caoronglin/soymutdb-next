@@ -35,6 +35,14 @@ This guard reads committed bytes only (``json`` + ``re`` + stdlib): no Python
   co-revert of both halves still changes it;
 * ``_EXPECTED_RESPONSE_ENTRIES`` / ``_EXPECTED_OPERATION_COUNT`` -- exact
   count doors that a same-count permutation cannot satisfy alone;
+* ``_CLIENT_RESPONSE_SURFACE_DIGEST`` -- a SECOND hand-written sha256, over
+  the canonical sorted ``(symbol, status, has_content, description)`` rows of
+  the GENERATED ``operations`` interface, read from nowhere. Every literal
+  above walks the snapshot and every agreement door compares the two halves
+  to each other; a coordinated regenerate that retypes one response in both
+  halves and honestly re-pins ``_RESPONSE_SURFACE_DIGEST`` in the same commit
+  otherwise leaves nothing to object. One reviewed re-pin can no longer
+  silence both digest doors;
 * three-way agreement: snapshot per-operation response set == generated
   ``paths`` -> ``operations`` reference map == generated ``operations``
   interface response keys. A one-sided edit is named;
@@ -109,6 +117,23 @@ _RESPONSE_SURFACE_DIGEST = (
 )
 _EXPECTED_RESPONSE_ENTRIES = 808
 _EXPECTED_OPERATION_COUNT = 268
+
+# Second independent fixed point, on the GENERATED half. Every literal above
+# walks the snapshot; the three-way agreement below compares the two halves to
+# each other. A coordinated regenerate that retypes one response description
+# (or drops a content-bearing response) in BOTH halves and honestly re-pins
+# _RESPONSE_SURFACE_DIGEST in the same commit leaves nothing to object: the
+# snapshot digest agrees by construction and the agreement doors agree with
+# themselves. This sha256 is read from nowhere -- it is over the canonical
+# sorted (symbol, status, has_content, description) rows of the generated
+# operations interface, so no single reviewed re-pin can silence both doors.
+# Regenerate with _client_response_surface_digest() after an intentional
+# reviewed regenerate, in the same commit as both artifacts and both literals,
+# with a reason.
+_CLIENT_RESPONSE_SURFACE_DIGEST = (
+    "43c67d75eb298e9d42401738c12c856726aaacaa376755fd1a53cfedfe3408bc"
+)
+_EXPECTED_CLIENT_RESPONSE_ENTRIES = 808
 
 # Independent fixed point for the operation-level ``summary`` prose. sha256 of
 # "\n".join(["soymutdb-operation-summary/v1"] +
@@ -199,6 +224,25 @@ def _digest(rows: list[tuple[str, str, str, str, str]]) -> str:
         ["soymutdb-response-surface/v2"]
         + ["|".join(row) for row in canonical]
     )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def client_response_surface_rows(
+    operations: dict[str, dict[str, tuple[bool, str]]]
+) -> list[tuple[str, str, str, str]]:
+    """Canonical (symbol, status, has_content, description) rows of the client half."""
+    return [
+        (symbol, status, str(has_content), description)
+        for symbol, surface in operations.items()
+        for status, (has_content, description) in surface.items()
+    ]
+
+
+def _client_response_surface_digest(
+    rows: list[tuple[str, str, str, str]],
+) -> str:
+    canonical = sorted("|".join(row) for row in rows)
+    blob = "\n".join(["soymutdb-client-response-surface/v1", *canonical])
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
@@ -555,6 +599,8 @@ def failures(
     expected_request_body_operations: int | None = None,
     response_header_digest: str | None = None,
     expected_response_headers: int | None = None,
+    client_response_surface_digest: str | None = None,
+    expected_client_response_entries: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -601,6 +647,16 @@ def failures(
         if expected_response_headers is None
         else expected_response_headers
     )
+    pinned_client_response_surface_digest = (
+        _CLIENT_RESPONSE_SURFACE_DIGEST
+        if client_response_surface_digest is None
+        else client_response_surface_digest
+    )
+    pinned_client_response_entries = (
+        _EXPECTED_CLIENT_RESPONSE_ENTRIES
+        if expected_client_response_entries is None
+        else expected_client_response_entries
+    )
 
     try:
         document = json.loads(snapshot)
@@ -643,6 +699,30 @@ def failures(
             f"published operation count is {len(snap)}, "
             f"_EXPECTED_OPERATION_COUNT pins {pinned_ops}: an operation was "
             "added or dropped"
+        )
+
+    # Door 1b -- a second independent fixed point, over the generated half.
+    # Door 1 pins the snapshot; Doors 2/3 compare the halves to each other. A
+    # coordinated regenerate with one honest re-pin of _RESPONSE_SURFACE_DIGEST
+    # silences Door 1 and still agrees across Doors 2/3. This literal is read
+    # from nowhere, so a reviewed change must re-pin BOTH digests.
+    client_rows = client_response_surface_rows(gen_ops)
+    actual_client_digest = _client_response_surface_digest(client_rows)
+    if actual_client_digest != pinned_client_response_surface_digest:
+        found.append(
+            "generated client response surface drifted: "
+            f"_CLIENT_RESPONSE_SURFACE_DIGEST pins "
+            f"{pinned_client_response_surface_digest} but the client derives "
+            f"{actual_client_digest}. A client-visible response description, "
+            "content presence or code moved; re-pin BOTH digest literals in "
+            "the same commit as both artifacts, with a reason."
+        )
+    if len(client_rows) != pinned_client_response_entries:
+        found.append(
+            f"generated client response entry count is {len(client_rows)}, "
+            f"_EXPECTED_CLIENT_RESPONSE_ENTRIES pins "
+            f"{pinned_client_response_entries}: a response was added or "
+            "dropped without moving the client fixed point"
         )
 
     # Door 2 -- the two surfaces must name the same response identities. A
@@ -1044,14 +1124,76 @@ def self_test() -> int:
         generated,
     )
 
+    # The generated client half has its own fixed point. These three plants
+    # prove it is load-bearing and not merely a duplicate of Door 1.
+    client_doc = copy.deepcopy(document)
+    client_live = client_doc["paths"]["/api/v1/health/live"]["get"]["responses"]["200"]
+    client_live["description"] = "OK"
+    start4b = generated.find("    liveness_api_v1_health_live_get: {")
+    block4b = generated[start4b : start4b + 1600]
+    changed4b = block4b.replace(
+        "/** @description Successful Response */", "/** @description OK */", 1
+    )
+    assert changed4b != block4b
+    co_reverted_generated = (
+        generated[:start4b] + changed4b + generated[start4b + 1600 :]
+    )
+    honest_snapshot_digest = _digest(_snapshot_rows(client_doc))
+
+    # Decisive: both halves move together AND the snapshot digest is honestly
+    # re-pinned to the new rows. Door 1 goes silent, Doors 2/3 agree with
+    # themselves; only the independent generated-client literal remains.
+    cases["coordinated description co-revert with an honest snapshot re-pin"] = (
+        json.dumps(client_doc, indent=2),
+        co_reverted_generated,
+    )
+    overrides: dict[str, dict[str, Any]] = {
+        "coordinated description co-revert with an honest snapshot re-pin": {
+            "digest": honest_snapshot_digest,
+        },
+        "generated client response count door": {
+            "expected_client_response_entries": _EXPECTED_CLIENT_RESPONSE_ENTRIES + 1,
+        },
+    }
+
+    # One-sided generated-only retype: named by the client digest AND the
+    # cross-artifact agreement (Door 2), never by the snapshot digest.
+    cases["one-sided generated response description retype"] = (
+        snapshot,
+        co_reverted_generated,
+    )
+    # Exact count door on the generated half.
+    cases["generated client response count door"] = (snapshot, generated)
+
     failures_count = 0
     for name, (snap_text, gen_text) in cases.items():
-        found = failures(snapshot=snap_text, generated=gen_text, smoke=smoke)
+        found = failures(
+            snapshot=snap_text,
+            generated=gen_text,
+            smoke=smoke,
+            **overrides.get(name, {}),
+        )
         if not found:
             print(f"SELF-TEST FAIL: {name!r} was NOT caught")
             failures_count += 1
         else:
             print(f"PASS self-test: {name!r} is caught -> {len(found)} failure(s)")
+    # Positive control: a legitimate reviewed regenerate moves both halves
+    # and BOTH digest literals. No door may object to that action.
+    honest_client_digest = _client_response_surface_digest(
+        client_response_surface_rows(_generated_operations(co_reverted_generated))
+    )
+    both_repinned = failures(
+        snapshot=json.dumps(client_doc, indent=2),
+        generated=co_reverted_generated,
+        smoke=smoke,
+        digest=honest_snapshot_digest,
+        client_response_surface_digest=honest_client_digest,
+    )
+    if both_repinned:
+        print(f"FAIL self-test: honest double re-pin was rejected: {both_repinned}")
+        return 1
+    print("PASS positive control: honest double re-pin is the reviewed regenerate")
     if failures_count:
         return 1
     print(f"self-test: {len(cases)} cases, 0 failure(s)")
@@ -1074,8 +1216,9 @@ def main(argv: list[str] | None = None) -> int:
         f"({_EXPECTED_RESPONSE_ENTRIES} declared responses and "
         f"{_EXPECTED_SUMMARY_OPERATIONS} operation summaries and "
         f"{_EXPECTED_REQUEST_BODY_BEARING_OPERATIONS} request bodies and "
-        f"{_EXPECTED_RESPONSE_HEADERS} declared response header(s) pinned across "
-        f"{_EXPECTED_OPERATION_COUNT} operations)"
+        f"{_EXPECTED_RESPONSE_HEADERS} declared response header(s) and "
+        f"{_EXPECTED_CLIENT_RESPONSE_ENTRIES} generated response entries pinned "
+        f"across {_EXPECTED_OPERATION_COUNT} operations)"
     )
     return 0
 
