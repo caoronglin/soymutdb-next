@@ -254,6 +254,11 @@ smoke_contracts() {
     # properties are optional. A coordinated regenerate of both halves with
     # re-pinned provenance blob ids kept every wired OpenAPI guard green.
     scripts/test_openapi_required_fields.py
+    # Component-schema property descriptions are published as generated
+    # JSDoc @description lines. A byte-preserving co-revert of one line in
+    # both artifacts (with provenance blob ids re-pinned) kept all eleven
+    # wired OpenAPI guards green; no fixed point read the prose. Pin it.
+    scripts/test_openapi_schema_descriptions.py
     # The per-operation response surface (status codes + content presence)
     # is client-visible but unread by every body digest for content-less
     # responses. This suite proves the independent literal pins it.
