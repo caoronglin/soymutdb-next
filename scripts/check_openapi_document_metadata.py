@@ -207,8 +207,8 @@ def _kw_expr(kwargs: dict[str, ast.expr], name: str) -> str | None:
     return ast.unparse(value) if value is not None else None
 
 
-# The three keyword values whose *spelling* ``_kw_expr`` pins. A local
-# rebinding of any root of these expressions inside ``create_app`` would make
+# The three keyword values whose *spelling* ``_kw_expr`` pins. An in-scope
+# binding of any root of these expressions inside ``create_app`` would make
 # the running app export different metadata while leaving the call-site text
 # (and therefore the byte lock and the parsed-call check) unchanged.
 _WATCHED_KWARGS = ("title", "description", "openapi_tags")
@@ -229,15 +229,23 @@ def _watched_names(main: str) -> set[str]:
 
 
 def _shadowed_wiring_names(main: str) -> list[str]:
-    """Names rebound in ``create_app``'s own scope before ``FastAPI(...)``.
+    """Watched names bound by a statement inside ``create_app``'s own scope.
 
-    ``_kw_expr`` proves the keyword still *reads* ``OPENAPI_DESCRIPTION``; it
-    cannot prove that name still resolves to the module-level constant. A local
-    assignment, parameter, import, ``global`` declaration or augmented assign
-    in ``create_app`` rebinds it, so the running app publishes different bytes
-    than the locked snapshot while every existing check stays green. Use the
-    standard library symbol table (real scope resolution), not a textual walk,
-    so a same-name local in a nested helper is not a false positive.
+    ``_kw_expr`` only proves the keyword still *reads* ``OPENAPI_DESCRIPTION``.
+    A binding statement in ``create_app`` (assignment, parameter, import,
+    augmented assign, ``del``, loop/``with``/``except`` target, walrus) makes
+    that name resolve elsewhere, so the running app publishes different bytes
+    while every other check stays green. This is an in-scope binding, not
+    necessarily a *local* one: ``global NAME`` + ``NAME = ...`` also binds here
+    (``is_assigned()`` is true) and is caught. A bare ``global NAME`` declares
+    an intent but binds nothing, so it is deliberately not flagged. The check
+    is scope-wide, not positional -- a binding after ``FastAPI(...)`` is caught
+    too. Use the standard library symbol table, not a textual walk, so a
+    same-name local in a nested helper is not a false positive.
+
+    In-place mutation (``OPENAPI_TAGS.clear()``) is not a binding; it is
+    outside what a symbol-table read of one scope can prove. See
+    ``docs/dev/openapi-document-metadata.md``.
     """
     watched = _watched_names(main)
     if not watched:
@@ -387,7 +395,7 @@ def failures(
     else:
         if shadowed:
             found.append(
-                "create_app() rebinds metadata names in its local scope ("
+                "create_app() binds metadata names inside its own scope ("
                 + ", ".join(shadowed)
                 + "): the FastAPI(...) call would read a different value than "
                 "the locked module-level constant"
@@ -613,13 +621,16 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
         )
         return snapshot, generated, golden, main, config, smoke
 
-    def source_wiring_shadowed_by_local_rebinding(snapshot, generated, golden, main, config, smoke):
-        # Keep every FastAPI(...) keyword byte-for-byte as committed; rebind the
+    def source_wiring_shadowed_by_in_scope_binding(
+        snapshot, generated, golden, main, config, smoke
+    ):
+        # Keep every FastAPI(...) keyword byte-for-byte as committed; bind the
         # names it references in create_app's own scope, BEFORE the call. The
         # running app then exports "(rewritten)" / a hollow tag list, while the
         # module-level literals (and the golden/snapshot) are untouched. A
         # parsed-call / substring guard cannot see this: the expression text is
         # still OPENAPI_DESCRIPTION / OPENAPI_TAGS, it just resolves elsewhere.
+        # A ``global`` declaration + assignment is the same class of binding.
         main = main.replace(
             '    """Create and configure the FastAPI application."""\n    app = FastAPI(',
             '    """Create and configure the FastAPI application."""\n'
@@ -674,9 +685,9 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
             "OPENAPI_DESCRIPTION as description",
         ),
         (
-            "description/tags shadowed by local rebinding",
-            source_wiring_shadowed_by_local_rebinding,
-            "rebinds metadata names in its local scope",
+            "description/tags shadowed by in-scope binding",
+            source_wiring_shadowed_by_in_scope_binding,
+            "binds metadata names inside its own scope",
         ),
         (
             "create_app does not compile under symtable",

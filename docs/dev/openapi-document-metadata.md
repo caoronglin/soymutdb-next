@@ -61,13 +61,21 @@ committed bytes:
    cannot keep this check green after the real kwargs are unwired. Reading the
    keyword *expression* proves its spelling, not what the name resolves to, so
    the guard also resolves the referenced root names with the stdlib symbol
-   table: a local rebinding of `OPENAPI_DESCRIPTION` / `OPENAPI_TAGS` /
-   `settings` inside `create_app` (before `FastAPI(...)`) is rejected, because
-   the running app would then export different bytes while the call-site text,
-   the module-level literal, the snapshot and the golden all stay put. A
-   same-name local in a nested helper is a different scope and is not flagged.
-   A shape `ast.parse` accepts but `symtable` rejects (e.g. duplicate
-   parameters) yields a clean FAIL rather than an escaping traceback.
+   table: any **in-scope binding** of `OPENAPI_DESCRIPTION` / `OPENAPI_TAGS` /
+   `settings` inside `create_app` is rejected, because the running app would
+   then export different bytes while the call-site text, the module-level
+   literal, the snapshot and the golden all stay put. The watched set is
+   derived from the parsed `FastAPI(...)` keyword expressions (`settings` comes
+   from `title=settings.app_name`), not from whether `create_app` exists.
+   "In-scope binding" is literal, not shorthand for "local": a
+   `global NAME` + `NAME = ...` also binds here and is caught; a bare
+   `global NAME` binds nothing and is deliberately green. The check is
+   scope-wide, not positional -- a binding after `FastAPI(...)` is caught too.
+   A same-name local in a nested helper is a different scope and is not
+   flagged; in-place mutation (`OPENAPI_TAGS.clear()`) is not a binding and is
+   outside what a symbol-table read of one scope can prove. A shape
+   `ast.parse` accepts but `symtable` rejects (e.g. duplicate parameters)
+   yields a clean FAIL rather than an escaping traceback.
 
 It also rejects a hollow / duplicate-key golden, checks the tag catalog is
 non-empty and each tag has a name and description, and stays honest about its
@@ -101,20 +109,23 @@ old value. `self_test()` returns the registered case labels alongside the
 counts, `test_every_ablation_is_caught` asserts the exact count (`== 25` at
 this cut) and that all three wiring rows are present and driven by their
 mutators — `description/tags unwired with decoy comment` (parsed call vs
-whole-file substring), `description/tags shadowed by local rebinding`
+whole-file substring), `description/tags shadowed by in-scope binding`
 (name resolution, not spelling), and `create_app does not compile under
 symtable` (clean FAIL, no traceback). `test_ablation_count_pin_is_not_vacuous`
 materializes the exact revert-and-delete regression to prove the pin itself
-would go red, and `test_local_rebinding_of_wiring_names_is_rejected` rebuilds a
+would go red, `test_in_scope_binding_of_wiring_names_is_rejected` rebuilds a
 spelling-only guard on in-memory bytes to prove the name-resolution check is
-load-bearing. A count written into an assert grows its own tree; the pin must
+load-bearing, and `test_binding_contract_is_pinned` fixes exactly which
+binding shapes are red (local / `global`+assignment / after-call / `settings`)
+and which are green by design (bare `global`, nested helper, in-place
+mutation). A count written into an assert grows its own tree; the pin must
 name what it guards, and the table must have a row for each shape the guard
 claims to reject.
 
 ## Verification / not claimed
 
 Stdlib guard + 25 self-test ablations (including the coordinated co-revert,
-the decoy-comment wiring case, the local-rebinding name-resolution case and the
+the decoy-comment wiring case, the in-scope-binding name-resolution case and the
 symtable-reject clean-FAIL case) run on CPython 3.11 without the API venv. The
 real 3.15 export lane, full API/worker pytest, turbo, Playwright E2E and OCI
 are CI's authority; they are not signed here. A new golden file is committed,

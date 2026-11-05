@@ -14,14 +14,16 @@ protects, because the count merely returns to the old value. Pin the exact
 count, the named regression cases, AND prove the pin itself would go red when
 a case disappears (``test_ablation_count_pin_is_not_vacuous``).
 
-Two wiring rows are pinned by name. The decoy-comment row proves the guard
+Three wiring rows are pinned by name. The decoy-comment row proves the guard
 reads the parsed ``FastAPI(...)`` call rather than whole-file text. The
-local-rebinding row proves it goes one step further: ``_kw_expr`` pins only the
-*spelling* of the keyword, so a local rebinding of ``OPENAPI_DESCRIPTION`` /
+in-scope-binding row proves it goes one step further: ``_kw_expr`` pins only
+the *spelling* of the keyword, so binding ``OPENAPI_DESCRIPTION`` /
 ``OPENAPI_TAGS`` inside ``create_app`` would make the running app publish
 different bytes while the call-site text, the module-level literal, the
-snapshot and the golden all stay put. The guard resolves names with the stdlib
-symbol table; this face proves that resolution is load-bearing.
+snapshot and the golden all stay put. The symtable-reject row proves a compile
+error becomes a clean FAIL. The guard resolves names with the stdlib symbol
+table; ``test_binding_contract_is_pinned`` fixes what that resolution actually
+accepts and rejects so the prose cannot drift into a false map again.
 """
 
 from __future__ import annotations
@@ -40,8 +42,8 @@ GUARD = Path(__file__).with_name("check_openapi_document_metadata.py")
 # that reads the parsed call from one that greps the whole file.
 DECOY_LABEL = "description/tags unwired with decoy comment"
 DECOY_MUTATOR = "source_wiring_unwired_with_decoy_comment"
-SHADOW_LABEL = "description/tags shadowed by local rebinding"
-SHADOW_MUTATOR = "source_wiring_shadowed_by_local_rebinding"
+SHADOW_LABEL = "description/tags shadowed by in-scope binding"
+SHADOW_MUTATOR = "source_wiring_shadowed_by_in_scope_binding"
 UNCOMPILABLE_LABEL = "create_app does not compile under symtable"
 REQUIRED_ABLATIONS = frozenset((DECOY_LABEL, SHADOW_LABEL, UNCOMPILABLE_LABEL))
 EXPECTED_ABLATIONS = 25
@@ -113,12 +115,12 @@ def test_decoy_wiring_ablation_really_rejects_a_substring_guard() -> None:
     assert any("OPENAPI_TAGS as openapi_tags" in item for item in found), found
 
 
-def test_local_rebinding_of_wiring_names_is_rejected() -> None:
+def test_in_scope_binding_of_wiring_names_is_rejected() -> None:
     """A row the old table lacked: pin what the keyword name *resolves to*.
 
     ``_kw_expr`` proves the FastAPI(...) keyword still reads
     ``OPENAPI_DESCRIPTION`` / ``OPENAPI_TAGS``. It does not prove those names
-    still resolve to the locked module-level constants: a local rebinding in
+    still resolve to the locked module-level constants: an in-scope binding in
     ``create_app`` shadows them, so the running app exports different metadata
     while the call-site text, the 1209-char module literal, the snapshot and
     the golden are all untouched. Prove the committed guard (a) rejects that
@@ -164,7 +166,7 @@ def test_local_rebinding_of_wiring_names_is_rejected() -> None:
         "    else:\n"
         "        if shadowed:\n"
         "            found.append(\n"
-        '                "create_app() rebinds metadata names in its local scope ("\n'
+        '                "create_app() binds metadata names inside its own scope ("\n'
         "                + \", \".join(shadowed)\n"
         '                + "): the FastAPI(...) call would read a different value than "\n'
         '                "the locked module-level constant"\n'
@@ -189,7 +191,7 @@ def test_local_rebinding_of_wiring_names_is_rejected() -> None:
 
     # The committed guard is RED, and self_test() exercises this exact class.
     found = guard.failures(snapshot, generated, golden, mutant, config, smoke, routers)
-    assert any("rebinds metadata names in its local scope" in item for item in found), found
+    assert any("binds metadata names inside its own scope" in item for item in found), found
     problems, ablations, _, labels = guard.self_test()
     assert problems == [], problems
     assert SHADOW_LABEL in labels
@@ -236,9 +238,9 @@ def _regressed_guard_source() -> str:
     source = source.replace(block, "", 1)
     shadow_block = (
         "        (\n"
-        '            "description/tags shadowed by local rebinding",\n'
-        "            source_wiring_shadowed_by_local_rebinding,\n"
-        '            "rebinds metadata names in its local scope",\n'
+        '            "description/tags shadowed by in-scope binding",\n'
+        "            source_wiring_shadowed_by_in_scope_binding,\n"
+        '            "binds metadata names inside its own scope",\n'
         "        ),\n"
     )
     assert shadow_block in source, "shadow ablation tuple not found in guard source"
@@ -321,3 +323,91 @@ def test_invented_tag_blessed_in_all_three_artifacts_is_rejected() -> None:
     found = guard.failures(snapshot, generated, golden, main, config, smoke, routers)
     assert any("phantom entries" in item and "made-up" in item for item in found), found
     assert not any("golden lock" in item for item in found), found
+
+
+def _inject(main: str, lines: str) -> str:
+    """Insert ``lines`` just after ``create_app``'s docstring, before FastAPI()."""
+    anchor = '    """Create and configure the FastAPI application."""\n    app = FastAPI('
+    injected = (
+        '    """Create and configure the FastAPI application."""\n'
+        + lines
+        + "    app = FastAPI("
+    )
+    mutant = main.replace(anchor, injected, 1)
+    assert mutant != main, "create_app injection anchor changed"
+    return mutant
+
+
+def test_binding_contract_is_pinned() -> None:
+    """Pin what the symtable check actually accepts and rejects.
+
+    Prior prose called this "a local rebinding ... before ``FastAPI(...)``" and
+    claimed a ``global`` declaration alone is rejected. Neither is true. This
+    test is the executable contract, so the wording cannot drift into a false
+    map of the guard again. All mutants are built on in-memory bytes.
+    """
+    guard = _guard()
+    snapshot, generated, golden, main, config, smoke, routers = guard._load()
+
+    def fails(src: str) -> list[str]:
+        return guard.failures(snapshot, generated, golden, src, config, smoke, routers)
+
+    def is_red(src: str) -> bool:
+        return any("binds metadata names inside its own scope" in f for f in fails(src))
+
+    # The watched set is derived from the parsed call, independent of
+    # create_app's existence, and includes ``settings`` via title.
+    assert guard._watched_names(main) == {
+        "OPENAPI_DESCRIPTION",
+        "OPENAPI_TAGS",
+        "settings",
+    }
+    assert "settings" in guard._watched_names(
+        main.replace("def create_app() -> FastAPI:", "def _retired() -> FastAPI:", 1)
+    )
+
+    # RED: a plain local assignment is an in-scope binding.
+    assert is_red(_inject(main, '    OPENAPI_DESCRIPTION = "(rewritten)"\n'))
+    # RED: ``global`` declaration + assignment binds in this scope too
+    # (``is_assigned()`` is true); it is NOT a "local" rebinding.
+    assert is_red(
+        _inject(
+            main,
+            "    global OPENAPI_DESCRIPTION\n"
+            '    OPENAPI_DESCRIPTION = "(rewritten)"\n',
+        )
+    )
+    # RED: the check is scope-wide, not positional -- even after the call.
+    assert is_red(
+        main.replace(
+            "    return app\n",
+            '    OPENAPI_DESCRIPTION = "(rewritten)"\n    return app\n',
+            1,
+        )
+    )
+    # RED: ``settings`` is watched via title=settings.app_name.
+    assert is_red(
+        _inject(main, '    settings = type("S", (), {"app_name": "evil"})()\n')
+    )
+
+    # GREEN by design (a bare ``global`` declares an intent but binds nothing).
+    assert fails(_inject(main, "    global OPENAPI_DESCRIPTION\n")) == []
+    # GREEN: a same-name local in a nested helper is a different scope.
+    assert fails(
+        _inject(
+            main,
+            "    def _helper():\n"
+            '        OPENAPI_DESCRIPTION = "(helper-local)"\n'
+            "        return OPENAPI_DESCRIPTION\n"
+            "    _helper()\n",
+        )
+    ) == []
+    # GREEN: in-place mutation is not a binding; this is the documented limit
+    # of a symbol-table read of one scope, not a silently claimed coverage.
+    assert fails(
+        _inject(
+            main,
+            "    OPENAPI_TAGS.clear()\n"
+            '    OPENAPI_TAGS.append({"name": "x"})\n',
+        )
+    ) == []
