@@ -166,6 +166,9 @@ smoke_contracts() {
     # first, so the 404 test could never reach its own assertion without a
     # wheel. This suite proves each ordering ablation is caught.
     scripts/test_interval_visibility_order.py
+    # A clean checkout must be able to run this layer without a sibling stage's
+    # node_modules; the guard's own ablations prove the wiring stays in place.
+    scripts/test_contracts_layer_self_containment.py
   )
   # Suites that need an interpreter or service this smoke layer does not own
   # (worker source analysis runs under the API virtualenv; tunnel/compose drift
@@ -207,7 +210,6 @@ smoke_contracts() {
   "${PYTHON_BIN}" scripts/check_app_shell_assets.py --self-test || rc=$?
   # The visible-text budget may fall but never rise; new hardcoded strings fail.
   "${PYTHON_BIN}" scripts/check_visible_i18n.py --self-test || rc=$?
-  node scripts/check_visible_i18n_react.mjs --self-test || rc=$?
   # nginx security-header fragments and the locations that must re-include
   # them. Not part of the frontend gate: the configs cover the API and data
   # planes too, so a backend-only change can break them.
