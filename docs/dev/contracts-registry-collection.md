@@ -205,15 +205,26 @@ synthetic unit-test fixtures keep calling the extraction-only `check()`:
 
 - `PINNED_SUITES`: a literal frozenset of the committed set, compared against
   what was extracted. A fixed point must not be derived from the bytes it
-  audits. It is a **floor, not an allowlist** -- adding a suite needs no edit;
-  retiring one requires updating the pin.
+  audits. It is an **allowlist, not a floor**: adding a suite pins it in the
+  same change, retiring one removes its entry.
+
+  The distinction is not cosmetic. `REQUIRED_GUARD_CALLS` is a floor because
+  `check()` independently fails closed on a wired call it does not name, so an
+  addition is caught by the other half. Rows have no such second half:
+  `tests=()` is exactly the bytes under audit. Measured on live `main` on
+  2026-11-05, three rows had landed after the literal was written -- `#228`'s
+  fallback-declaration suite, and `#231`'s error-code contract suite and
+  operationId floor suite. Deleting any one of them left
+  `OK (48 gating suites, 22 guard calls, CI --self-test wired)` with exit
+  status 0, while the control row `test_error_code_doc_counts.py` was named.
+  A floor protects the set it measured and nothing that arrives later.
 - `GATING_PYTEST`: the gating pytest invocation must be exactly one bare
   statement. This is the `CI_LAYER_BARE` shape brought one layer down; pinning
   the reviewed form catches `-k`, `--deselect`, `--ignore`, redirection,
   `|| true` and deletion without enumerating pytest flags.
 
-`--self-test` adds 8 mutations for these shapes; its summary stays measured
-from emitted result lines.
+`--self-test` adds the mutations for these shapes (including an unpinned row);
+its summary stays measured from emitted result lines.
 
 ## Running
 
@@ -235,7 +246,8 @@ is kept for direct runs and editor integration.
 ## Changing the layer
 
 - Adding a suite: put the path in `tests=()`, keep at least one `test_*`
-  name. No edit to this guard (the pin is a floor).
+  name, **and** add it to `PINNED_SUITES` in the same change. The guard
+  rejects an unpinned addition; `--self-test` plants one and proves it.
 - Adding a standalone guard: add the `|| rc=$?` call **and** its path to
   `REQUIRED_GUARD_CALLS` in the same change. The guard rejects an unpinned
   addition; `--self-test` proves it.
