@@ -210,8 +210,23 @@ documented "one deliberate reviewed action") leaves **nothing** to object:
 - Doors 2/3 agree because both halves moved together;
 - the four other digest literals (summary / request body / response header /
   inline body) never read response `description` or `content` presence;
-- all twelve wired `check_openapi_*` guards and the whole contracts layer
-  stay `rc=0` / `SMOKE PASS / 1103 + 41 + 10 / 0`.
+- all **twelve wired `check_openapi_*` guards** report `rc=0` on the drifted
+  worktree (measured with the digest and both `_PINNED_ARTIFACTS` blob ids
+  honestly re-pinned).
+
+Read the layer number from the ref, not from the clean tree: the drifted
+clean-main worktree reports **`SMOKE FAIL / 2 failed, 1101 passed, 41 subtests,
+10 environment-bound`**, not `SMOKE PASS / 1103`. `1103` is the *clean*
+`9a7c3e52` reading. Both of the two failures are in the existing companion
+(`test_coordinated_description_co_revert_is_rejected` and
+`test_the_digest_covers_the_description_column`) and are plant artifacts, not
+detection: each hardcodes `/** @description Successful Response */` and
+rewrites it to `OK`, so against an already-drifted committed tree the first
+lands on a neighbouring operation (a spurious disagreement) and the second
+sees no change at all (its assertion cannot fire). Neither is an independent
+fixed point over the generated half. The guard-level gap is real and the A/B
+is decisive; the whole-layer claim was a clean-tree number pasted onto a
+drifted-tree sentence.
 
 A client-visible `@description Successful Response` line changed to `OK` with
 one reviewed edit and no independent fixed point left to name it. This is the
