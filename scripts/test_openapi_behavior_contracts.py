@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import ast
 import copy
+import hashlib
 import json
 import re
 import sys
@@ -74,6 +75,23 @@ VALID_429 = {
     },
     "content": {"application/json": {"schema": {"$ref": ERROR_RESPONSE_REF}}},
 }
+
+# Reviewed, hand-written fixed point on the published ``x-*`` extension
+# key-set. ``main.py`` injects extensions into ``paths.*.*`` and at the
+# document root; the generator drops every one of them, so the client half
+# cannot disagree. The landed guards each read *one* extension's values or
+# presence (x-idempotent flags, x-pagination values, x-error-codes contents,
+# x-error-status bindings) -- none pins the complete set of extension keys.
+# Adding or dropping a key with both provenance blob ids honestly re-pinned
+# leaves the whole contracts layer green. This literal is read from nowhere:
+# sha256 of "\n".join(["soymutdb-openapi-extensions/v1"] +
+# sorted("METHOD|path|key") operation rows + sorted("TOP|key") root rows).
+_EXTENSION_SURFACE_DIGEST = (
+    "05f5ca1d7276272f409b034260f6e2e24200e31b1b34cf957541c9dd4e9189dd"
+)
+_EXPECTED_OPERATION_EXTENSION_ROWS = 183
+_EXPECTED_EXTENSION_KEYS = {"x-idempotent": 182, "x-pagination": 1}
+_EXPECTED_TOP_EXTENSION_KEYS = ("x-error-codes", "x-error-status")
 
 # Exact published x-pagination values, an independent fixed point.  The
 # snapshot's copy is derived from PAGINATION_CONTRACTS in main.py, so comparing
@@ -171,11 +189,76 @@ def _json_ref(response: dict) -> str | None:
     return schema.get("$ref") if isinstance(schema, dict) else None
 
 
+def _extension_rows(document: dict) -> tuple[list[tuple[str, str, str]], tuple[str, ...]]:
+    """Canonical (METHOD, path, key) rows and root-level ``x-*`` key set."""
+    rows: list[tuple[str, str, str]] = []
+    for path, ops in document.get("paths", {}).items():
+        for method, op in ops.items():
+            if method not in METHODS or not isinstance(op, dict):
+                continue
+            for key in op:
+                if isinstance(key, str) and key.startswith("x-"):
+                    rows.append((method.upper(), path, key))
+    top = tuple(
+        sorted(k for k in document if isinstance(k, str) and k.startswith("x-"))
+    )
+    return sorted(rows), top
+
+
+def _extension_digest(
+    rows: list[tuple[str, str, str]], top: tuple[str, ...]
+) -> str:
+    blob = "\n".join(
+        ["soymutdb-openapi-extensions/v1"]
+        + [f"{method}|{path}|{key}" for method, path, key in rows]
+        + [f"TOP|{key}" for key in top]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _extension_key_errors(document: dict) -> list[str]:
+    """Independent fixed point over the whole published ``x-*`` key-set."""
+    found: list[str] = []
+    rows, top = _extension_rows(document)
+    actual = _extension_digest(rows, top)
+    if actual != _EXTENSION_SURFACE_DIGEST:
+        found.append(
+            "published OpenAPI extension key-set drifted: "
+            f"_EXTENSION_SURFACE_DIGEST pins {_EXTENSION_SURFACE_DIGEST} but "
+            f"the snapshot derives {actual}. A reviewed key-set is a fixed "
+            "point, not a place to make a guard agree with itself -- re-pin "
+            "the literal in the same commit as the injection, with a reason."
+        )
+    if len(rows) != _EXPECTED_OPERATION_EXTENSION_ROWS:
+        found.append(
+            f"published {len(rows)} operation extension rows, "
+            f"_EXPECTED_OPERATION_EXTENSION_ROWS pins "
+            f"{_EXPECTED_OPERATION_EXTENSION_ROWS}: an extension was added or "
+            "dropped without moving the fixed point"
+        )
+    by_key: dict[str, int] = {}
+    for _, _, key in rows:
+        by_key[key] = by_key.get(key, 0) + 1
+    if by_key != _EXPECTED_EXTENSION_KEYS:
+        found.append(
+            f"published operation extension counts {dict(sorted(by_key.items()))}, "
+            f"_EXPECTED_EXTENSION_KEYS pins {_EXPECTED_EXTENSION_KEYS}"
+        )
+    if top != _EXPECTED_TOP_EXTENSION_KEYS:
+        found.append(
+            f"published document-level extension keys {list(top)}, "
+            f"_EXPECTED_TOP_EXTENSION_KEYS pins "
+            f"{list(_EXPECTED_TOP_EXTENSION_KEYS)}"
+        )
+    return found
+
+
 def failures(document: dict, generated: str, main: str, smoke: str) -> list[str]:
     found: list[str] = []
     operations = _operations(document)
     if not operations:
         return ["openapi.json declares no operations at all"]
+    found.extend(_extension_key_errors(document))
 
     # 1. x-idempotent: derived from the method, not from a hardcoded path list.
     for path, method in sorted(operations):
@@ -629,13 +712,97 @@ def test_a_genuinely_new_pagination_contract_stays_green_with_a_repin() -> None:
     assert augmented != main
     document["paths"][key[0]][key[1]]["x-pagination"] = {"mode": "keyset"}
 
-    saved = globals()["_PAGINATION_BASELINE"]
-    globals()["_PAGINATION_BASELINE"] = dict(saved)
+    saved = {name: globals()[name] for name in ("_PAGINATION_BASELINE", "_EXTENSION_SURFACE_DIGEST", "_EXPECTED_OPERATION_EXTENSION_ROWS", "_EXPECTED_EXTENSION_KEYS")}
+    globals()["_PAGINATION_BASELINE"] = dict(saved["_PAGINATION_BASELINE"])
     globals()["_PAGINATION_BASELINE"][key] = {"mode": "keyset"}
+    rows, top = _extension_rows(document)
+    globals()["_EXTENSION_SURFACE_DIGEST"] = _extension_digest(rows, top)
+    globals()["_EXPECTED_OPERATION_EXTENSION_ROWS"] = len(rows)
+    counts: dict[str, int] = {}
+    for _, _, ext_key in rows:
+        counts[ext_key] = counts.get(ext_key, 0) + 1
+    globals()["_EXPECTED_EXTENSION_KEYS"] = counts
     try:
         assert not (found := failures(document, generated, augmented, smoke)), found
     finally:
-        globals()["_PAGINATION_BASELINE"] = saved
+        globals().update(saved)
+
+
+def test_committed_extension_key_set_matches_the_independent_literal() -> None:
+    document, generated, main, smoke = _load()
+    rows, top = _extension_rows(document)
+    assert len(rows) == _EXPECTED_OPERATION_EXTENSION_ROWS
+    assert top == _EXPECTED_TOP_EXTENSION_KEYS
+    assert _extension_digest(rows, top) == _EXTENSION_SURFACE_DIGEST
+    assert not _extension_key_errors(document)
+
+
+def test_a_phantom_operation_extension_is_named_by_the_digest() -> None:
+    document, generated, main, smoke = _load()
+    key = next(k for k in sorted(_operations(document)))
+    document["paths"][key[0]][key[1]]["x-audit-anchor"] = "reviewed"
+    found = failures(document, generated, main, smoke)
+    assert _any(found, "_EXTENSION_SURFACE_DIGEST"), found
+    assert _any(found, "_EXPECTED_OPERATION_EXTENSION_ROWS"), found
+
+
+def test_a_dropped_extension_is_named_by_the_count_doors() -> None:
+    document, generated, main, smoke = _load()
+    key = next(
+        k for k in sorted(_operations(document)) if "x-idempotent" in document["paths"][k[0]][k[1]]
+    )
+    del document["paths"][key[0]][key[1]]["x-idempotent"]
+    found = failures(document, generated, main, smoke)
+    assert _any(found, "_EXPECTED_OPERATION_EXTENSION_ROWS"), found
+    assert _any(found, "_EXPECTED_EXTENSION_KEYS"), found
+
+
+def test_a_phantom_document_extension_is_named() -> None:
+    document, generated, main, smoke = _load()
+    document["x-audit-anchor"] = "reviewed"
+    found = failures(document, generated, main, smoke)
+    assert _any(found, "_EXTENSION_SURFACE_DIGEST"), found
+    assert _any(found, "_EXPECTED_TOP_EXTENSION_KEYS"), found
+
+
+def test_a_dropped_document_extension_is_named() -> None:
+    document, generated, main, smoke = _load()
+    del document["x-error-status"]
+    found = failures(document, generated, main, smoke)
+    assert _any(found, "_EXTENSION_SURFACE_DIGEST"), found
+    assert _any(found, "_EXPECTED_TOP_EXTENSION_KEYS"), found
+
+
+def test_a_same_count_extension_swap_is_named_only_by_the_digest() -> None:
+    """Move one flag to a different operation: every count door stays green."""
+    document, generated, main, smoke = _load()
+    keys = sorted(_operations(document))
+    donor = next(k for k in keys if "x-idempotent" in document["paths"][k[0]][k[1]])
+    recipient = next(k for k in keys if "x-idempotent" not in document["paths"][k[0]][k[1]])
+    assert donor != recipient
+    del document["paths"][donor[0]][donor[1]]["x-idempotent"]
+    document["paths"][recipient[0]][recipient[1]]["x-idempotent"] = True
+    rows_before, _ = _extension_rows(json.loads(SNAPSHOT.read_text()))
+    rows_after, _ = _extension_rows(document)
+    assert len(rows_before) == len(rows_after)
+    found = failures(document, generated, main, smoke)
+    assert _any(found, "_EXTENSION_SURFACE_DIGEST"), found
+    assert not _any(found, "_EXPECTED_OPERATION_EXTENSION_ROWS"), found
+
+
+def test_the_extension_literal_is_not_derived_from_the_snapshot() -> None:
+    """A self-agreeing pin must fail the committed tree; the real one does not."""
+    document, generated, main, smoke = _load()
+    rows, top = _extension_rows(document)
+    saved = globals()["_EXTENSION_SURFACE_DIGEST"]
+    globals()["_EXTENSION_SURFACE_DIGEST"] = _extension_digest(rows, top)
+    try:
+        assert not _extension_key_errors(document)
+    finally:
+        globals()["_EXTENSION_SURFACE_DIGEST"] = saved
+    source = Path(__file__).read_text(encoding="utf-8")
+    assert '_EXTENSION_SURFACE_DIGEST = (' in source
+    assert 'actual != _EXTENSION_SURFACE_DIGEST' in source
 
 
 def _whole_set_co_revert() -> bool:
