@@ -200,6 +200,12 @@ def router_tag_names(sources: dict[str, str]) -> set[str]:
     return names
 
 
+def _kw_expr(kwargs: dict[str, ast.expr], name: str) -> str | None:
+    """Unparsed value of a ``FastAPI(...)`` keyword, or None if absent."""
+    value = kwargs.get(name)
+    return ast.unparse(value) if value is not None else None
+
+
 def source_facts(main: str, config: str) -> dict[str, Any]:
     """Derive the metadata the backend *intends* to publish from source bytes."""
     main_tree = ast.parse(main)
@@ -217,8 +223,8 @@ def source_facts(main: str, config: str) -> dict[str, Any]:
             isinstance(n, ast.FunctionDef) and n.name == "create_app"
             for n in main_tree.body
         ),
-        "passes_description": "description=OPENAPI_DESCRIPTION" in main,
-        "passes_tags": "openapi_tags=OPENAPI_TAGS" in main,
+        "description_expr": _kw_expr(kwargs, "description"),
+        "tags_expr": _kw_expr(kwargs, "openapi_tags"),
     }
 
 
@@ -317,9 +323,9 @@ def failures(
         found.append("main.py no longer defines create_app()")
     if facts["title_expr"] != "settings.app_name":
         found.append("create_app() no longer sets the title from settings.app_name")
-    if not facts["passes_description"]:
+    if facts["description_expr"] != "OPENAPI_DESCRIPTION":
         found.append("create_app() no longer passes OPENAPI_DESCRIPTION as description")
-    if not facts["passes_tags"]:
+    if facts["tags_expr"] != "OPENAPI_TAGS":
         found.append("create_app() no longer passes OPENAPI_TAGS as openapi_tags")
 
     # 4. The generated client must NOT start encoding this metadata. Its
@@ -525,6 +531,23 @@ def self_test() -> tuple[list[str], int, int]:
         main = main.replace("description=OPENAPI_DESCRIPTION,", 'description="x",', 1)
         return snapshot, generated, golden, main, config, smoke
 
+    def source_wiring_unwired_with_decoy_comment(snapshot, generated, golden, main, config, smoke):
+        # Unwire the real FastAPI kwargs but keep the wiring literals present as
+        # an inert comment. A whole-file substring check stays green; the AST
+        # keyword check must not.
+        main = main.replace(
+            "description=OPENAPI_DESCRIPTION,", 'description="A rewritten description",', 1
+        ).replace(
+            "openapi_tags=OPENAPI_TAGS,", 'openapi_tags=[{"name": "x", "description": "y"}],', 1
+        )
+        main = main.replace(
+            "    app = FastAPI(",
+            "    # description=OPENAPI_DESCRIPTION, openapi_tags=OPENAPI_TAGS,\n"
+            "    app = FastAPI(",
+            1,
+        )
+        return snapshot, generated, golden, main, config, smoke
+
     def source_config_renamed(snapshot, generated, golden, main, config, smoke):
         config = config.replace('app_name: str = "SoyMutDB"', 'app_name: str = "OtherDB"', 1)
         return snapshot, generated, golden, main, config, smoke
@@ -554,6 +577,11 @@ def self_test() -> tuple[list[str], int, int]:
         ("source version drift", source_constant_drift, "no longer matches the golden lock"),
         ("title unwired from settings", source_title_unwired, "settings.app_name"),
         ("description unwired", source_description_unwired, "OPENAPI_DESCRIPTION"),
+        (
+            "description/tags unwired with decoy comment",
+            source_wiring_unwired_with_decoy_comment,
+            "OPENAPI_DESCRIPTION as description",
+        ),
         ("config app_name renamed", source_config_renamed, "no longer matches the golden lock"),
         ("create_app deleted", delete_create_app, "no longer defines create_app"),
         ("generated client leaks metadata", generated_leaks_metadata, "single-artifact premise"),
