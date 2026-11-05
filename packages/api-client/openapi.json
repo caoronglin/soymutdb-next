@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "SoyMutDB",
-    "description": "\nSoyMutDB API \u2014 high-performance multi-species genomic variant platform\n(soybean currently the default species).\n\n## Error contract\n\nEvery error response uses the unified envelope (see `ErrorResponse`):\n\n```json\n{\n  \"error\": {\"code\": \"not_found\", \"message\": \"...\", \"details\": {}},\n  \"request_id\": \"\u2026\",\n  \"status_code\": 404\n}\n```\n\n- `request_id` is always present and echoed in the `X-Request-ID` header.\n- Validation failures (422) additionally return a field-level `errors` array\n  (`ValidationErrorResponse`); internal framework structures are never\n  exposed.\n- 500 responses never include stack traces, SQL, paths, or exception text.\n\n## Authentication\n\n- **Bearer**: JWT access tokens via `Authorization: Bearer <token>`\n  (obtained from `POST /api/v1/auth/login`).\n- **Cookie**: refresh sessions use the HttpOnly `soymutdb_refresh` cookie\n  (path-scoped to `/api/v1/auth`) for `POST /api/v1/auth/refresh` and\n  `POST /api/v1/auth/logout`.\n",
+    "description": "\nSoyMutDB API \u2014 high-performance multi-species genomic variant platform\n(soybean currently the default species).\n\n## Error contract\n\nEvery error response uses the unified envelope (see `ErrorResponse`):\n\n```json\n{\n  \"error\": {\"code\": \"not_found\", \"message\": \"...\", \"details\": {}},\n  \"request_id\": \"\u2026\",\n  \"status_code\": 404\n}\n```\n\n- `request_id` is always present and echoed in the `X-Request-ID` header.\n- `x-error-codes` lists every stable `error.code`, and `x-error-status` binds\n  each code to the HTTP status that emits it. A generic `HTTPException` without\n  a dedicated domain code uses the `http_error` fallback (400/413/500/503 and\n  other unmapped statuses).\n- Validation failures (422) additionally return a field-level `errors` array\n  (`ValidationErrorResponse`); internal framework structures are never\n  exposed.\n- 500 responses never include stack traces, SQL, paths, or exception text.\n\n## Authentication\n\n- **Bearer**: JWT access tokens via `Authorization: Bearer <token>`\n  (obtained from `POST /api/v1/auth/login`).\n- **Cookie**: refresh sessions use the HttpOnly `soymutdb_refresh` cookie\n  (path-scoped to `/api/v1/auth`) for `POST /api/v1/auth/refresh` and\n  `POST /api/v1/auth/logout`.\n",
     "version": "2.0.0"
   },
   "paths": {
@@ -39360,6 +39360,7 @@
     "authentication_failed": "",
     "conflict": "",
     "forbidden": "",
+    "http_error": "Generic HTTPException fallback; see x-error-status for the statuses that use it.",
     "internal_error": "Base class for all SoyMutDB domain errors.",
     "not_found": "",
     "plugin_disabled": "A deployed plugin exists but is intentionally hidden/disabled.",
@@ -39369,5 +39370,28 @@
     "settings_version_conflict": "An optimistic settings mutation used a stale section version.",
     "task_dispatch_failed": "A background task could not be handed to the Celery broker.",
     "validation_error": ""
+  },
+  "x-error-status": {
+    "by_code": {
+      "authentication_failed": 401,
+      "conflict": 409,
+      "forbidden": 403,
+      "http_error": null,
+      "internal_error": 500,
+      "not_found": 404,
+      "plugin_disabled": 404,
+      "plugin_unavailable": 503,
+      "rate_limit_exceeded": 429,
+      "service_unavailable": 503,
+      "settings_version_conflict": 409,
+      "task_dispatch_failed": 503,
+      "validation_error": 422
+    },
+    "http_exception": {
+      "401": "authentication_failed",
+      "403": "forbidden",
+      "404": "not_found",
+      "fallback": "http_error"
+    }
   }
 }

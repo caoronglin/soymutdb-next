@@ -27,6 +27,7 @@ from .core.database import close_db
 from .core.exceptions import (
     SoyMutDBError,
     error_code_catalog,
+    error_status_contract,
     http_exception_handler,
     soy_mut_db_exception_handler,
     unhandled_exception_handler,
@@ -62,6 +63,10 @@ Every error response uses the unified envelope (see `ErrorResponse`):
 ```
 
 - `request_id` is always present and echoed in the `X-Request-ID` header.
+- `x-error-codes` lists every stable `error.code`, and `x-error-status` binds
+  each code to the HTTP status that emits it. A generic `HTTPException` without
+  a dedicated domain code uses the `http_error` fallback (400/413/500/503 and
+  other unmapped statuses).
 - Validation failures (422) additionally return a field-level `errors` array
   (`ValidationErrorResponse`); internal framework structures are never
   exposed.
@@ -170,7 +175,11 @@ def _build_openapi_schema(app: FastAPI) -> dict[str, Any]:
     )
 
     # Publish behavior contracts alongside the existing unified error schema.
+    # x-error-codes lists the stable codes; x-error-status binds each code to
+    # the HTTP status that emits it, including the generic HTTPException
+    # fallback that has no dedicated domain exception class.
     schema["x-error-codes"] = error_code_catalog()
+    schema["x-error-status"] = error_status_contract()
 
     # Document the unified error responses on every path operation.
     for path, path_item in schema.get("paths", {}).items():

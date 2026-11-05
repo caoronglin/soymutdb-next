@@ -11,6 +11,16 @@ PKG_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_ROOT="$(cd "$PKG_DIR/../.." && pwd)"
 API_DIR="$REPO_ROOT/apps/api"
 API_PYTHON="${SOYMUTDB_API_PYTHON:-$API_DIR/.venv/bin/python}"
+
+# The unified error envelope is "returned by every API error", but a catalog
+# built only from SoyMutDBError subclasses omits http_error -- the code
+# http_exception_handler actually emits for 400/413/500/503. This guard reads
+# committed bytes (snapshot, error-codes.json, source), so reverting backend +
+# snapshot + client together cannot co-revert the check. It runs before the
+# export: it needs neither the API venv nor a regenerated document.
+echo ">> checking error-code contract against committed bytes..."
+python3 "$REPO_ROOT/scripts/check_error_code_contract.py"
+python3 "$REPO_ROOT/scripts/test_check_error_code_contract.py"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 

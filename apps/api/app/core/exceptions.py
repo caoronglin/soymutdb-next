@@ -20,6 +20,20 @@ logger = get_logger(__name__)
 # Starlette >= 0.46 renamed the 422 constant (the old name was deprecated).
 UNPROCESSABLE_STATUS = status.HTTP_422_UNPROCESSABLE_CONTENT
 
+#: Fallback code emitted by ``http_exception_handler`` for a generic
+#: ``HTTPException`` whose status has no dedicated domain code. It is part of
+#: the public error contract even though no ``SoyMutDBError`` subclass carries
+#: it: the handler emits it for 400/413/500/503 (and any unmapped status).
+HTTP_ERROR_CODE = "http_error"
+
+#: Status -> stable error code for the generic ``HTTPException`` handler.
+#: Kept beside the handler that consumes it so the two cannot drift.
+HTTP_STATUS_ERROR_CODES: dict[int, str] = {
+    status.HTTP_401_UNAUTHORIZED: "authentication_failed",
+    status.HTTP_403_FORBIDDEN: "forbidden",
+    status.HTTP_404_NOT_FOUND: "not_found",
+}
+
 
 # ---------------------------------------------------------------------------
 # Domain exceptions
@@ -120,10 +134,51 @@ def _iter_error_types(error_type: type[SoyMutDBError]) -> list[type[SoyMutDBErro
 
 
 def error_code_catalog() -> dict[str, str]:
-    """Return the deterministic public catalog of domain error codes."""
-    return {
+    """Return the deterministic public catalog of *every* emitted error code.
+
+    ``http_error`` has no ``SoyMutDBError`` subclass, but the generic HTTP
+    exception handler emits it, so omitting it leaves a code that a client can
+    receive yet cannot discover from the published contract.
+    """
+    catalog = {
         error_type.error_code: (error_type.__doc__ or "").strip()
         for error_type in sorted(_iter_error_types(SoyMutDBError), key=lambda item: item.error_code)
+    }
+    catalog[HTTP_ERROR_CODE] = (
+        "Generic HTTPException fallback; see x-error-status for the statuses that use it."
+    )
+    return dict(sorted(catalog.items()))
+
+
+def error_status_map() -> dict[str, int | None]:
+    """Return the published binding from stable error code to HTTP status.
+
+    Derived from the exception hierarchy, never hand-kept. ``http_error`` maps
+    to ``None`` because it is the multi-status fallback, not a single status.
+    """
+    binding = {
+        error_type.error_code: error_type.status_code
+        for error_type in _iter_error_types(SoyMutDBError)
+    }
+    binding[HTTP_ERROR_CODE] = None
+    return dict(sorted(binding.items()))
+
+
+def error_status_contract() -> dict[str, Any]:
+    """Return the full machine-readable status/error-code contract.
+
+    ``by_code`` binds each published code to the status that emits it;
+    ``http_exception`` publishes the status -> code mapping the generic
+    ``HTTPException`` handler actually consumes, including its fallback. A
+    client can now resolve both directions without guessing from prose.
+    """
+    mapped = {
+        str(status_code): code
+        for status_code, code in sorted(HTTP_STATUS_ERROR_CODES.items())
+    }
+    return {
+        "by_code": error_status_map(),
+        "http_exception": {**mapped, "fallback": HTTP_ERROR_CODE},
     }
 
 
@@ -191,13 +246,7 @@ async def http_exception_handler(
     request: Request, exc: HTTPException
 ) -> JSONResponse:
     """Handle generic :class:`HTTPException`."""
-    code = "http_error"
-    if exc.status_code == 401:
-        code = "authentication_failed"
-    elif exc.status_code == 403:
-        code = "forbidden"
-    elif exc.status_code == 404:
-        code = "not_found"
+    code = HTTP_STATUS_ERROR_CODES.get(exc.status_code, HTTP_ERROR_CODE)
     headers: dict[str, str] | None = None
     if exc.status_code in (401, 403):
         # Auth failures occur on internal routes; they must never enter
