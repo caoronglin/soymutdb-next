@@ -468,13 +468,17 @@ Extend the same already-registered guard; `smoke.sh` / registry / teeth /
   door. What is left is the coordinated shape: both halves publish the same
   *new* value, all counts hold, and the snapshot digest has been honestly
   re-pinned — every two-artifact door is silent and only this literal names it.
+  **Sound for a single cause, deferred for concurrent ones**: a one-sided drift
+  in the same commit is named first, so door 12 stands down and the coordinated
+  value goes unnamed. Resolve the decoy and door 12 re-arms; revert the commit
+  and nothing ships. Delayed, not permanent — a resolution-order effect.
 * A reviewed regenerate now re-pins **two** literals in the same commit as
   both artifacts, with a reason. Re-pinning only `_EXAMPLE_DIGEST` (the shape
   the topology used to bless) no longer agrees; that off-control is planted.
 
 `openapi.json` / `openapi.d.ts` byte-for-byte unchanged — this adds a reader
 and one literal, it touches neither artifact. `--self-test` **32 → 35 cases**,
-companion **60 → 70 passed** (+10). The contracts layer's wiring line count
+companion **60 → 71 passed** (+11). The contracts layer's wiring line count
 is unchanged.
 
 ### Division of labour (positive controls)
