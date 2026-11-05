@@ -125,3 +125,48 @@ and say why. Re-deriving a digest from the artifact under guard makes the pin
 self-referential. Zero new wiring: `smoke.sh`,
 `check_contracts_registry_collection.py`, `check_contracts_self_test_teeth.py`
 and `_WIRED_SELF_TESTS` are untouched.
+
+## Door 6: the generated parameter *type strings* (Phase 8)
+
+`_PARAMETER_DIGEST` already pins the snapshot's full `schema` JSON, and the
+identity doors pin `(in, name, requiredness)` on both halves. **Nothing read the
+TypeScript the generator prints from that schema.** A byte-preserving
+`number -> string` retype of one generated `operations[*].parameters` property
+(with `_PINNED_ARTIFACTS.generated_blob` honestly re-pinned) leaves all 12 wired
+`check_openapi_*` guards `rc=0` and the whole contracts layer `SMOKE PASS` on
+live `c7f41448`: the snapshot still publishes `integer`, the identity set is
+unchanged, and the provenance blob follows the artifact by design.
+
+Two independent hand-written literals close it:
+
+- `_PARAMETER_TYPE_DIGEST` — sha256 over canonical
+  `(operationId, in, name, TS type)` rows **projected from the published
+  schema** by `_typescript_type()` (`$ref`, `enum`, `anyOf`, scalar and array
+  shapes). Derived from the snapshot, never from the generated client. All 467
+  rows match the generated column on the clean tree, so a coordinated co-revert
+  still moves it.
+- `_CLIENT_PARAMETER_TYPE_DIGEST` — a second sha256 over the same rows read
+  from the committed generated `parameters: { ... }` blocks. Re-pinning one
+  cannot silence the other.
+- `_EXPECTED_PARAMETER_TYPES` / `_EXPECTED_CLIENT_PARAMETER_TYPES` (467 each) —
+  exact count doors.
+- A named per-field comparison reports `renders ... as 'string', the snapshot
+  publishes 'number'`. Re-pinning both digests on a one-sided drift leaves this
+  named door red: a literal is a fixed point, not a whitelist.
+
+`--self-test` gains six plants (one-sided retype, both-digest re-pin still red,
+coordinated co-revert, honest co-revert re-pin stays green, snapshot-only
+retype, hand-bumped count door): **18 -> 24 cases, 0 failures**. The companion
+gains 8 module-level regressions (22 -> 30) pinning literal independence, the
+named door, re-pin resistance, the co-revert and the weakening control.
+
+Zero new wiring: `smoke.sh`, `check_contracts_registry_collection.py`,
+`check_contracts_self_test_teeth.py`, `REQUIRED_GUARD_CALLS` and
+`_WIRED_SELF_TESTS` are untouched — the guard and its companion were already
+collected. Zero generated-artifact or snapshot bytes changed.
+
+Decisive A/B on identical drift bytes: live tree `0 failures` / this branch
+`rc=1` naming `_CLIENT_PARAMETER_TYPE_DIGEST` and the exact `(operationId, in,
+name)` that moved; the other 11 guards stay `rc=0`. Full layer `SMOKE PASS /
+1198 passed + 41 subtests + 10 env-bound / 0 failed` (+8 = the eight companion
+cases).

@@ -201,7 +201,17 @@ def test_the_co_revert_re_pin_pair_is_load_bearing() -> None:
         if hasattr(guard, "_snapshot_map")
         else guard._snapshot_parameters(document)
     )
-    fresh = guard.failures(snapshot=snapshot, generated=generated, digest=guard._digest(rows))
+    fresh = guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        digest=guard._digest(rows),
+        parameter_type_digest=guard._parameter_type_digest(
+            guard._parameter_type_rows(document)
+        ),
+        client_parameter_type_digest=guard._client_parameter_type_digest(
+            guard._client_parameter_types(generated)
+        ),
+    )
     assert not fresh, fresh
     stale = guard.failures(snapshot=snapshot, generated=generated)
     assert any("drifted" in problem for problem in stale), stale
@@ -339,6 +349,120 @@ def test_the_guard_source_still_carries_the_description_plants() -> None:
     assert "_PARAMETER_DESCRIPTION_DIGEST = (" in source
     assert "a coordinated parameter description co-revert in both halves" in source
     assert "a description digest re-pin without the client digest" in source
+
+
+def _type_drift() -> tuple[str, str]:
+    """Byte-preserving retype of one generated parameter, both halves honest."""
+    document = _document()
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    position = generated.index("export interface operations {")
+    needle = "            assembly_id: number;"
+    at = generated.index(needle, position)
+    drifted = (
+        generated[:at] + "            assembly_id: string;" + generated[at + len(needle) :]
+    )
+    assert drifted != generated
+    return json.dumps(document, indent=2), drifted
+
+
+def test_committed_tree_passes_with_the_type_doors() -> None:
+    assert guard.failures() == [], "clean committed tree must stay pinned"
+
+
+def test_the_type_literals_are_hand_written_module_constants() -> None:
+    tree = ast.parse(Path(guard.__file__).read_text(encoding="utf-8"))
+    assigned = {
+        target.id
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+    for name in (
+        "_PARAMETER_TYPE_DIGEST",
+        "_CLIENT_PARAMETER_TYPE_DIGEST",
+        "_EXPECTED_PARAMETER_TYPES",
+        "_EXPECTED_CLIENT_PARAMETER_TYPES",
+    ):
+        assert name in assigned, name
+    source = Path(guard.__file__).read_text(encoding="utf-8")
+    assert "_typescript_type(parameter.get(\"schema\", {}))" in source
+    assert "_client_parameter_types(generated)" in source
+
+
+def test_the_two_type_digests_are_independent() -> None:
+    document = _document()
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    snapshot = guard._parameter_type_digest(guard._parameter_type_rows(document))
+    client = guard._client_parameter_type_digest(guard._client_parameter_types(generated))
+    assert snapshot == guard._PARAMETER_TYPE_DIGEST
+    assert client == guard._CLIENT_PARAMETER_TYPE_DIGEST
+    assert snapshot != client, "the two halves must not be one literal"
+
+
+def test_a_generated_type_retype_is_named() -> None:
+    snapshot, generated = _type_drift()
+    found = guard.failures(snapshot=snapshot, generated=generated)
+    assert any("_CLIENT_PARAMETER_TYPE_DIGEST" in problem for problem in found), found
+    assert any("renders" in problem and "string" in problem for problem in found), found
+
+
+def test_repinning_both_type_digests_does_not_silence_the_named_door() -> None:
+    snapshot, generated = _type_drift()
+    document = json.loads(snapshot)
+    found = guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        parameter_type_digest=guard._parameter_type_digest(
+            guard._parameter_type_rows(document)
+        ),
+        client_parameter_type_digest=guard._client_parameter_type_digest(
+            guard._client_parameter_types(generated)
+        ),
+    )
+    assert any("renders" in problem for problem in found), found
+
+
+def test_a_coordinated_type_co_revert_is_rejected() -> None:
+    document = _document()
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    for parameter in document["paths"][TARGET_PATH]["get"]["parameters"]:
+        if parameter.get("name") == "include_parts":
+            parameter["schema"] = {"type": "string", "title": "Include Parts"}
+            break
+    drifted_client = generated.replace(
+        "            include_parts?: boolean;",
+        "            include_parts?: string;",
+        1,
+    )
+    assert drifted_client != generated
+    found = guard.failures(
+        snapshot=json.dumps(document, indent=2), generated=drifted_client
+    )
+    assert any("_PARAMETER_TYPE_DIGEST" in problem for problem in found), found
+    assert any("_CLIENT_PARAMETER_TYPE_DIGEST" in problem for problem in found), found
+
+
+def test_the_type_count_doors_are_load_bearing() -> None:
+    found = guard.failures(expected_client_parameter_types=999)
+    assert any("_EXPECTED_CLIENT_PARAMETER_TYPES" in problem for problem in found), found
+
+
+def test_weakening_the_type_comparison_makes_the_retype_green() -> None:
+    """A door that never compares is not a door."""
+    source = Path(guard.__file__).read_text(encoding="utf-8")
+    needle = "    if actual_client_type_digest != pinned_client_type_digest:"
+    assert needle in source
+    weakened = source.replace(
+        needle, "    if False and actual_client_type_digest != pinned_client_type_digest:", 1
+    )
+    namespace: dict = {"__name__": "weakened_guard", "__file__": str(guard.__file__)}
+    exec(compile(weakened, str(guard.__file__), "exec"), namespace)
+    snapshot, generated = _type_drift()
+    found = namespace["failures"](snapshot=snapshot, generated=generated)
+    # The named per-field door still fires: the client digest is not the only
+    # fixed point. Weakening just one digest cannot buy a green drift.
+    assert any("renders" in problem for problem in found), found
 
 
 def _run_all() -> int:
