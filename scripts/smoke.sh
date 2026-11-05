@@ -180,6 +180,14 @@ smoke_contracts() {
     scripts/test_i18n_interpolation_guard.py
     scripts/test_bio_core_wheel_tags.py
     scripts/test_dockerfile_contracts.py
+    # One native wheel per image architecture: cp315 + machine matching the
+    # image. The guard reads committed bytes and the wheel's own WHEEL tag;
+    # this suite proves each synthetic negative really fails.
+    scripts/test_bio_core_wheel_abi.py
+    # The supply-chain verdict is fail-closed on exit status, not stdout
+    # substrings; these proofs cover the three shapes the heredoc parser
+    # accepted (boolean `found`, error+warning, empty output).
+    scripts/test_bio_core_supply_chain.py
     scripts/test_legacy_worker_test_contract.py
     scripts/test_custom_element_registration_contracts.py
     # The MCP manifest, server.py and the published operations are three
@@ -239,6 +247,9 @@ smoke_contracts() {
   # Rust kernel: the crate pins + CI job + wheel-install gate must exist even
   # when this layer has no compiled extension available.
   "${PYTHON_BIN}" scripts/check_bio_core_wheel.py --static || rc=$?
+  # Multi-arch ABI/platform-tag ledger + single Rust supply-chain lane. Reads
+  # committed bytes, so it holds even where no wheel or cargo exists.
+  "${PYTHON_BIN}" scripts/check_bio_core_wheel_abi.py --ledger --self-test || rc=$?
   # Read the committed service bytes: the pytest suite exercises behaviour,
   # this guard catches the validation ordering being moved back at source.
   "${PYTHON_BIN}" scripts/check_format_inspect_validation_order.py || rc=$?

@@ -196,9 +196,27 @@ def check_static() -> int:
         if not (CRATE / name).is_file():
             errors.append(f"missing {CRATE / name}")
 
-    toolchain = (CRATE / "rust-toolchain.toml").read_text(encoding="utf-8")
-    if "channel" not in toolchain:
-        errors.append("rust-toolchain.toml does not pin a channel")
+    # Parse the pin, do not grep it. A `channel` that survives only in a
+    # comment still satisfies a substring test, and `channel = ""` satisfies it
+    # too even though rustup refuses to resolve an empty channel and every
+    # cargo command below then dies at run time instead of here. The value also
+    # has to be a concrete release: rustup accepts "stable"/"nightly" but the
+    # point of the pin is a fixed compiler, so those are rejected by name.
+    try:
+        toolchain = tomllib.loads(
+            (CRATE / "rust-toolchain.toml").read_text(encoding="utf-8")
+        )
+    except tomllib.TOMLDecodeError as exc:
+        errors.append(f"rust-toolchain.toml is not valid TOML: {exc}")
+    else:
+        channel = toolchain.get("toolchain", {}).get("channel")
+        if not isinstance(channel, str) or not channel.strip():
+            errors.append("rust-toolchain.toml does not pin a channel")
+        elif not re.fullmatch(r"\d+\.\d+\.\d+", channel):
+            errors.append(
+                f"rust-toolchain.toml channel {channel!r} is not an exact "
+                "release; only stable/legacy names would float"
+            )
     if (CRATE / "Cargo.toml").is_file():
         # Parse the manifest instead of grep-ing it: a string match silently
         # breaks on a reformat (`pyo3 = { version = ..., optional = true }`),

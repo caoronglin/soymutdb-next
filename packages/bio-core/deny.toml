@@ -1,0 +1,114 @@
+# cargo-deny policy for packages/bio-core (Rust bio-core supply chain).
+#
+# This file is REQUIRED: without it cargo-deny falls back to a default config
+# whose license allowlist is empty, so every dependency is rejected as "not
+# explicitly allowed" (the shape seen in cnb-jtq-1k6kcv5ja: 129 rejected
+# licenses, 7 duplicate versions, 3 unmaintained advisories -- all true
+# statements about an unconfigured tool, none of them findings). It is
+# committed next to Cargo.lock so the policy is reviewed and versioned with the
+# dependency graph it governs.
+#
+# `verify-bio-core-supply-chain.sh` runs `cargo deny check` against this file
+# and never passes `--deny warnings`: the lint levels live here, and escalating
+# maintenance warnings would fail a clean graph for reasons that are not
+# findings. The verdict (exit status) is turned into the signed report by
+# scripts/check_bio_core_supply_chain.py.
+
+[advisories]
+# `paste@1.0.15` (RUSTSEC-2024-0436), `custom_derive@0.1.7`
+# (RUSTSEC-2025-0058) and `fxhash@0.2.1` (RUSTSEC-2025-0057) are flagged
+# unmaintained with NO patched version. The dependency chains in the locked
+# graph are not uniform: `custom_derive` and `fxhash` are direct children of
+# `bio@4.2.2`, while `paste` hangs off `simba@0.9.1 <- nalgebra@0.33.3 <-
+# statrs <- bio`. So replacing the pinned `bio = "=4.2.2"` stack only reaches
+# the first two; `paste` would survive it. There is no `cargo update` that
+# resolves any of them.
+#
+# They are ignored BY ID, not by scope. The scope spellings are blankets:
+# 0.18.9 reads the scope against the DIRECT DEPENDENT, so "transitive" still
+# fails these three (their direct dependents are `bio`/`simba`, not this
+# crate -- measured), and "workspace" suppresses every unmaintained advisory
+# reached through any direct dependency. An ID list is finite and
+# self-expiring: drop one of those crates and the entry stops matching (a
+# visible `advisory-ignored` note), add a new unmaintained crate and it is
+# still an error.
+unmaintained = "all"
+# A yanked crate is a real supply-chain risk and must fail.
+yanked = "deny"
+ignore = [
+    { id = "RUSTSEC-2025-0058", reason = "custom_derive: no safe upgrade; reached only through the pinned bio 4.2.2" },
+    { id = "RUSTSEC-2025-0057", reason = "fxhash: no safe upgrade; reached only through the pinned bio 4.2.2" },
+    { id = "RUSTSEC-2024-0436", reason = "paste: no safe upgrade; reached only through bio 4.2.2 -> statrs -> nalgebra -> simba" },
+]
+
+[licenses]
+# Measured against packages/bio-core/Cargo.lock: 148 [[package]] entries, of
+# which 147 have a `source` and are checked here (the local crate
+# `soymutdb-bio-core` has none). The slash form (MIT/Apache-2.0) is parsed by
+# cargo-deny as an OR expression, so listing the individual SPDX identifiers
+# covers both the modern and legacy declarations. Any new license not in this
+# list is rejected.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "Unlicense",
+    "Zlib",
+]
+confidence-threshold = 0.8
+# An allow-list entry that no crate uses is worth reviewing but is not a
+# security failure; keep it as a warning (cargo-deny's default), not an error.
+unused-allowed-license = "warn"
+
+[licenses.private]
+# The crate itself sets publish = false; cargo-deny still checks its declared
+# license (Apache-2.0, listed above). Do not silently skip workspace crates.
+ignore = false
+
+[[licenses.exceptions]]
+# Only crate in the graph under Unicode-3.0 (reached via proc-macro2 / syn).
+crate = "unicode-ident"
+allow = ["Unicode-3.0"]
+
+[[licenses.exceptions]]
+# bio -> csv -> ryu. This exact version declares "Apache-2.0 OR BSL-1.0";
+# version-constrained so a different ryu that carries only the Boost license
+# still needs its own review.
+crate = "ryu@1.0.23"
+allow = ["BSL-1.0"]
+
+[bans]
+# Duplicates: the lock carries syn 1/2/3, hashbrown, thiserror, proc-macro2,
+# quote and strum_macros twice, all transitive through the pinned bio stack.
+# Policy: allowed, but NAMED. `skip` lists the exact versions that exist today,
+# so a new duplicate from a new dependency still fails the check instead of
+# slipping in behind a blanket "allow" -- verified by dropping any single
+# entry, which turns bans red.
+multiple-versions = "deny"
+skip = [
+    { crate = "hashbrown@0.15.5" },
+    { crate = "hashbrown@0.17.1" },
+    { crate = "proc-macro2@0.4.30" },
+    { crate = "proc-macro2@1.0.107" },
+    { crate = "quote@0.6.13" },
+    { crate = "quote@1.0.47" },
+    { crate = "strum_macros@0.26.4" },
+    { crate = "strum_macros@0.28.0" },
+    { crate = "syn@0.15.44" },
+    { crate = "syn@2.0.119" },
+    { crate = "syn@3.0.9" },
+    { crate = "thiserror@1.0.69" },
+    { crate = "thiserror@2.0.17" },
+    { crate = "thiserror-impl@1.0.69" },
+    { crate = "thiserror-impl@2.0.17" },
+]
+wildcards = "deny"
+
+[sources]
+# Only crates.io is trusted; anything else is a hard failure. There is no git
+# dependency today, so one appearing should go red before it ships.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

@@ -1425,8 +1425,13 @@ class DeliveryArchitectureTests(unittest.TestCase):
             (root / "packages" / "bio-core").mkdir(parents=True)
             for name in ("Cargo.toml", "Cargo.lock", "rust-toolchain.toml",
                          "pyproject.toml"):
+                # rust-toolchain.toml pins under a [toolchain] table; a bare
+                # `channel` key is the wrong TOML shape and --static (correctly)
+                # rejects it, so the "clean" baseline stopped being clean.
                 (root / "packages" / "bio-core" / name).write_text(
-                    "" if name != "rust-toolchain.toml" else 'channel = "1.99.1"\n',
+                    '[toolchain]\nchannel = "1.99.1"\n'
+                    if name == "rust-toolchain.toml"
+                    else "",
                     encoding="utf-8",
                 )
             (root / "packages" / "bio-core" / "src").mkdir()
@@ -1812,6 +1817,210 @@ class DeliveryArchitectureTests(unittest.TestCase):
                     f"$/{event}: stages {bodies} carry no `type: npc:go`, so the "
                     "mention is acknowledged and then nothing happens",
                 )
+
+
+    def test_bio_core_wheel_abi_ledger_is_enforced_by_the_contracts_layer(self) -> None:
+        """The per-arch wheel tag guard must be wired, not merely committed.
+
+        A guard that no gate calls is decoration: an arm64 image shipping an
+        x86_64 wheel would still pass every existing check. Both the static
+        ledger validator and the synthetic-negative suite have to be reachable
+        from `smoke.sh --profile contracts`, and the Rust supply-chain scan has
+        to run in the single bio-core job (one finding set, not two).
+        """
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        self.assertIn("scripts/check_bio_core_wheel_abi.py --ledger --self-test", smoke)
+        self.assertIn("scripts/test_bio_core_wheel_abi.py", smoke)
+
+        steps = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        self.assertIn("verify-bio-core-supply-chain.sh", steps)
+        scanner = (ROOT / "scripts/verify-bio-core-supply-chain.sh").read_text(encoding="utf-8")
+        self.assertIn("cargo audit", scanner)
+        self.assertIn("cargo deny", scanner)
+        self.assertIn("cargo-supply-chain.json", scanner)
+        # ci-job-steps.sh runs each script as a separate `bash` child, so the
+        # wheel builder's exported toolchain PATH does not reach the scanner.
+        # Both must resolve the same bootstrapped rustup storage; see the
+        # byte-identical-default guard in check_bio_core_wheel_abi.py.
+        self.assertIn('export PATH="${CARGO_HOME}/bin:${PATH}"', scanner)
+        # rustup is bootstrapped with `--default-toolchain none`: cargo only
+        # resolves a channel from CRATE_DIR's rust-toolchain.toml. A bare
+        # `cargo install` at the repo root fails with "no default is configured"
+        # (cnb-h85-1k6kahbov). Every cargo command must run inside CRATE_DIR.
+        for line in scanner.splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith("#") or "command -v cargo" in line:
+                continue
+            if any(stripped.startswith(f"cargo {cmd}") or f"&& cargo {cmd}" in line
+                   for cmd in ("install", "audit", "deny")):
+                self.assertIn('(cd "${CRATE_DIR}" && cargo ', line, line)
+
+        # A scanner that cannot read the advisory database aborts before it
+        # reports anything, so its version pin is part of the gate. 0.21.2 is
+        # the measured CVSS 4.0 red gate (cnb-k4a-1k6kbhl3c, runner L4405 --
+        # that run installed 0.21.2). 0.22.1 also died (cnb-7qb-1k6kbvp1e)
+        # with its reason redirected out of the stage log. 0.22.2 is the
+        # first runner log showing the audit scan completing clean.
+        audit_pin = re.search(r"SOYMUTDB_BIO_CORE_CARGO_AUDIT:-(\d+(?:\.\d+)*)", scanner)
+        self.assertIsNotNone(audit_pin, "cargo-audit version pin is gone")
+        self.assertEqual(
+            audit_pin.group(1),
+            "0.22.2",
+            "cargo-audit must stay pinned to the exact 0.22.2 resolution; "
+            "a floor-only guard lets a later release drift the finding set",
+        )
+
+        # cargo-deny hits the same parse wall and needs the same floor:
+        # 0.18.4 links rustsec 0.30.x -> cvss 2.1.0, so the run dies on the
+        # first CVSS 4.0 advisory (cnb-qf2-1k6kc4hoo). 0.18.9 is the first
+        # release whose published Cargo.lock carries rustsec 0.31.0 -> cvss
+        # 2.2.0.
+        deny_pin = re.search(r"SOYMUTDB_BIO_CORE_CARGO_DENY:-(\d+(?:\.\d+)*)", scanner)
+        self.assertIsNotNone(deny_pin, "cargo-deny version pin is gone")
+        self.assertEqual(
+            deny_pin.group(1),
+            "0.18.9",
+            "cargo-deny must stay pinned to the exact 0.18.9 resolution; "
+            "a floor-only guard lets a later release drift the finding set",
+        )
+
+        # The pin compares the committed DECLARATION. A bare
+        # `--version "0.22.2"` is a caret requirement (^0.22.2), so cargo
+        # could install 0.22.99 at run time. The "=" operator makes it an
+        # exact requirement; the source guard in check_bio_core_wheel_abi.py
+        # owns the general form, this is the second reader.
+        self.assertIn('--version "=${AUDIT_VERSION}"', scanner)
+        self.assertIn('--version "=${DENY_VERSION}"', scanner)
+
+        # The loop above catches a command that was left at the repo root; this
+        # pins the other escape hatch, an explicit channel pin, so a future
+        # rewrite has to keep at least one of the two. The source guard in
+        # check_bio_core_wheel_abi.py owns the general form.
+        self.assertTrue(
+            "export RUSTUP_TOOLCHAIN=" in scanner or 'cd "${CRATE_DIR}" && cargo ' in scanner,
+            "the supply-chain scanner must resolve a rustup channel",
+        )
+
+        # cargo deny without a config falls back to an empty license allowlist
+        # and rejects every crate. The policy is committed next to Cargo.lock
+        # and auto-discovered because the scanner runs inside the crate dir.
+        deny_cfg = ROOT / "packages" / "bio-core" / "deny.toml"
+        self.assertTrue(deny_cfg.is_file(), "packages/bio-core/deny.toml is missing")
+        text = deny_cfg.read_text(encoding="utf-8")
+        self.assertIn("allow = [", text)
+        # Lint levels are parsed VALUES, not byte substrings. A substring
+        # survives in a comment while the real key flips to a fail-open level;
+        # measured on 11c3971d, all seven such assertions passed GREEN on that
+        # mutation. This mirrors check_bio_core_wheel_abi.source_failures().
+        import tomllib
+        from collections import defaultdict
+        policy = tomllib.loads(text)
+        sources = policy.get("sources", {})
+        self.assertEqual(sources.get("unknown-registry"), "deny")
+        self.assertEqual(sources.get("unknown-git"), "deny")
+        # The three unfixable advisories are ignored by ID: a scope spelling is
+        # a blanket (measured: "transitive" fails them anyway because their
+        # direct dependent is `bio`; "workspace" hides every unmaintained crate
+        # behind a direct dependency).
+        advisories = policy.get("advisories", {})
+        self.assertEqual(advisories.get("unmaintained"), "all")
+        self.assertIn("RUSTSEC-2024-0436", text)
+        self.assertEqual(advisories.get("yanked"), "deny")
+        # Existing duplicates are named in `skip`; a new one must still fail.
+        bans = policy.get("bans", {})
+        self.assertEqual(bans.get("multiple-versions"), "deny")
+        self.assertEqual(bans.get("wildcards"), "deny")
+        exceptions = policy.get("licenses", {}).get("exceptions")
+        bsl = [
+            entry for entry in (exceptions if isinstance(exceptions, list) else [])
+            if isinstance(entry, dict) and "BSL-1.0" in (entry.get("allow") or [])
+        ]
+        self.assertEqual(len(bsl), 1, "deny.toml must grant BSL-1.0 to one crate")
+        self.assertEqual(bsl[0].get("crate"), "ryu@1.0.23")
+        # The same substring class survives in four more keys that the seven
+        # parsed levels above do not cover. Each one is a fail-open in the
+        # direction that matters: an unused allow-list entry stops being
+        # reported, a private workspace crate starts being skipped from the
+        # license check, and a 0.0 confidence threshold accepts a license match
+        # on any evidence at all. All four stayed GREEN before this block.
+        licenses = policy.get("licenses", {})
+        self.assertEqual(licenses.get("unused-allowed-license"), "warn")
+        private = licenses.get("private", {})
+        self.assertEqual(private.get("ignore"), False)
+        self.assertEqual(licenses.get("confidence-threshold"), 0.8)
+        # The one license outside the allow-list is granted to exactly one
+        # crate; a wholesale swap to an allow-listed SPDX id is invisible to
+        # the crate/allow pair check above if the pair itself is edited.
+        self.assertEqual(
+            sorted(
+                entry.get("crate") for entry in (exceptions or [])
+                if isinstance(entry, dict)
+            ),
+            ["ryu@1.0.23", "unicode-ident"],
+        )
+        self.assertEqual(
+            sorted(
+                tuple(entry.get("allow") or []) for entry in (exceptions or [])
+                if isinstance(entry, dict)
+            ),
+            [("BSL-1.0",), ("Unicode-3.0",)],
+        )
+        self.assertIn("skip = [", text)
+        # The skip list names exactly the duplicate versions in Cargo.lock;
+        # a bare "skip = [" substring let one entry be deleted.
+        lock = tomllib.loads((ROOT / "packages/bio-core/Cargo.lock").read_text(encoding="utf-8"))
+        seen: dict[str, list[str]] = defaultdict(list)
+        for pkg in lock["package"]:
+            seen[pkg["name"]].append(pkg["version"])
+        expected = {
+            f"{name}@{version}"
+            for name, versions in seen.items()
+            if len(versions) > 1
+            for version in versions
+        }
+        named = {entry["crate"] for entry in policy["bans"]["skip"]}
+        self.assertEqual(named, expected, "deny.toml skip list drifted from Cargo.lock")
+
+        # The verdict is exit-status based and lives in a real module. A
+        # heredoc that read `found` as a count or matched "error" in stdout
+        # was fail-open on three shapes and no gate could import it to check.
+        verdict = ROOT / "scripts" / "check_bio_core_supply_chain.py"
+        self.assertTrue(verdict.is_file(), "check_bio_core_supply_chain.py is missing")
+        module = verdict.read_text(encoding="utf-8")
+        for token in ("audit_rc", "deny_rc", "count", "audit_findings"):
+            self.assertIn(token, module)
+        self.assertNotIn('vulnerabilities.get("found"', scanner)
+        self.assertNotIn('"error" in deny_text', scanner)
+        self.assertIn("check_bio_core_supply_chain.py", scanner)
+        for arg in ('"${AUDIT_RC}"', '"${DENY_RC}"'):
+            self.assertIn(arg, scanner)
+        # The signed report must name the binaries that ran, not a hardcoded
+        # "pinned" placeholder. `=` is an install contract; only each tool's
+        # own --version proves which release produced the clean verdict.
+        for token in ("def read_observations(", "def validate_observations(",
+                      "def parse_scanner_version(", "executed as"):
+            self.assertIn(token, module, f"the verdict lost {token!r}")
+        import ast  # local: this module uses ast in several disjoint checks
+        verdict_ast = ast.parse(module)
+        constants = {
+            node.value for node in ast.walk(verdict_ast)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        self.assertNotIn("pinned", constants, "the verdict re-hardcoded a placeholder version")
+        for probe in ("cargo audit --version", "cargo deny --version"):
+            self.assertIn(probe, scanner, f"the scanner stopped observing {probe!r}")
+        for arg in ("--audit-version-file", "--deny-version-file",
+                    "--expect-audit", "--expect-deny"):
+            self.assertIn(arg, scanner, f"the scanner stopped passing {arg!r} to the verdict")
+        self.assertIn(
+            "scripts/test_bio_core_supply_chain.py",
+            (ROOT / "scripts" / "smoke.sh").read_text(encoding="utf-8"),
+        )
+
+        # Exactly one Rust finding set: no second cargo-* analyzer in the
+        # governance policy, which would produce a contradictory report.
+        policy = (ROOT / "dependency-governance.json").read_text(encoding="utf-8")
+        self.assertNotIn("cargo audit", policy)
 
     def test_contracts_job_provisions_every_import_it_needs(self) -> None:
         """The contracts stage must provision the layer's whole dependency set.

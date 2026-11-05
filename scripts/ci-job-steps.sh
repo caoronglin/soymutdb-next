@@ -466,6 +466,10 @@ dependency_governance_env() {
 # on GitHub the bio-core job uploads an artifact that api-tests downloads.
 bio_core_run() {
   bash "${REPO_ROOT}/scripts/verify-bio-core.sh"
+  # The same job owns the Rust dependency scanners. Running them here (and
+  # only here) keeps one consolidated finding set for the release lane instead
+  # of a second, potentially contradictory report from the governance gate.
+  bash "${REPO_ROOT}/scripts/verify-bio-core-supply-chain.sh"
 }
 
 smoke_contracts_run() {

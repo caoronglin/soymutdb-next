@@ -152,3 +152,31 @@ never a pass.
 - Fuzz / property / benchmark gates; `cargo audit` / `cargo deny` in the release lane.
 
 Do not describe any of the above as complete until a PR links a passing test.
+
+
+### R6 — bio-core 供应链与多架构证据（独立 PR）
+
+`cargo audit` / `cargo deny` 与多架构 ABI/platform tag 台账不再挂在
+"Still not implemented" 里：它们落在唯一带 Rust 工具链的 bio-core job 和
+`docs/dev/bio-core-wheel-abi-tags.md`，由 `smoke.sh --profile contracts` 的
+源码守卫 + 合成负例套件钉住。两个架构的 OCI 真编译与镜像 smoke 仍归 CI，
+本仓库不代签。
+
+R6 首轮 CI 起连续挂在供应链 lane 上，接线缺陷已在同一源分支逐层收掉：
+`2a4fcfcc`…`e444eaf6` 修掉「兄弟进程不继承 `CARGO_HOME`/PATH」、把
+cargo-audit 抬到 0.22.2、并让失败路径打印证据；`2649f71f` 把 cargo-deny 抬到
+0.18.9 —— `cnb-qf2-1k6kc4hoo` 那次静默 exit 1 的真因是它自己的 CVSS 4.0
+解析墙，不是缺配置。本轮补上解析器修好之后的下一层：新增
+`packages/bio-core/deny.toml`，把 cargo-deny 从「空 license allowlist + 维护
+告警被 `--deny warnings` 升级成错误」变成一份逐项写死、随 `Cargo.lock` 评审
+的策略。真漏洞仍 fail-closed；三个无修复版本的传递 unmaintained crate 用
+`unmaintained = "transitive"` 显式限定范围，不假装修好。
+
+第三层是判定本身：原 heredoc 把 `vulnerabilities.found`（布尔）当漏洞数、
+用 stdout 子串判 deny、且无视两个扫描器的退出码，三种形状都能在绿套件下
+签发 `passed` 报告，而 heredoc 不可 import 所以没有任何守卫能验证它。现收
+成 `scripts/check_bio_core_supply_chain.py`（读 `count`/`list`、以退出码为
+判据、空输出/畸形 JSON 一律 fail-closed）+ 15 条行为用例，脚本捕获
+`AUDIT_RC`/`DENY_RC` 后调用；`deny.toml` 是 lint level 的唯一真相源，不再
+加 `--deny warnings`。源码守卫与 contracts 层双重钉住，六组变异各自咬一层。
+行为回归 + 变异验证见 `docs/dev/bio-core-wheel-abi-tags.md`。
