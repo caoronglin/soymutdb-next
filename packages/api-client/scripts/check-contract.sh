@@ -48,6 +48,13 @@ else
   echo "OK: client schema in sync with backend OpenAPI."
 fi
 
+# The published error-code catalog and x-error-codes are generated from the
+# exception hierarchy. A coordinated source + artifact co-revert stays green
+# under every consistency check, so their VALUES are frozen against a
+# hand-written lock that is not part of the generation chain.
+python3 "$REPO_ROOT/scripts/check_api_error_code_vocabulary.py"
+python3 -m unittest discover -s "$PKG_DIR/python_tests" -p "test_*.py"
+
 echo ">> checking handwritten route visibility..."
 python3 "$REPO_ROOT/scripts/contract_visibility.py" \
   --schema "$TMP_DIR/openapi.json" \
