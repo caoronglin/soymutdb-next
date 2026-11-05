@@ -1,17 +1,18 @@
 #!/usr/bin/env python3
-"""Pin per-operation annotation prose to an independent literal fixed point.
+"""Pin operation description prose and deprecated flags to a literal fixed point.
 
 Both ``openapi.json`` and ``src/generated/openapi.d.ts`` are exports of
 ``app.main:app``. Guards that compare them to each other prove
-self-consistency, not truth. Every published operation carries ``summary``
-and (optionally) ``description`` prose; ``openapi-typescript`` renders both
-into the doc comment above each method in the generated ``paths`` interface.
-A coordinated regenerate that rewrites one summary/description on *both*
-halves moves both artifacts together, so none of the existing fixed points
-can see it:
+self-consistency, not truth. ``#269`` pinned the operation ``summary`` in
+``check_openapi_response_surface.py``; the operation ``description`` prose
+(209 operations) and ``deprecated`` flags (2 operations) are still unread.
+``openapi-typescript`` renders them into the doc comment above each method in
+the generated ``paths`` interface. A coordinated regenerate that rewrites
+one on *both* halves moves both artifacts together, so no fixed point sees it:
 
 * ``_OPERATION_ID_DIGEST`` / ``_PARAMETER_DIGEST`` / ``_RESPONSE_SURFACE_DIGEST``
-  pin identities and structural facts, not prose.
+  / ``_OPERATION_SUMMARY_DIGEST`` pin identities, structure and summaries, not
+  operation description prose or deprecation flags.
 * ``openapi-document-metadata.golden.json`` freezes document-level ``info``
   and the tag catalog, not per-operation ``summary``/``description``.
 * ``_BODY_PAIR_DIGEST`` / ``_INLINE_BODY_BASELINE`` see bodies only.
@@ -19,20 +20,20 @@ can see it:
   guard's own documented "one deliberate reviewed action" alongside a
   regenerate, so a co-revert that re-pins them stays green.
 
-Decisive ablation on live bytes: rename one ``summary`` in the snapshot and
-in the generated TS doc comment (byte-preserving, both halves agree), re-pin
-the two blob ids as that guard instructs, and every wired OpenAPI guard stays
-``rc=0`` with the whole contracts layer ``SMOKE PASS``. The generated
-TypeScript doc comment silently changes -- a client-visible contract break
-that nothing in the layer pins.
+Decisive ablation on live bytes (after #269 landed): rewrite one operation
+``description`` in the snapshot and in the generated TS ``@description`` line
+(byte-preserving, both halves agree), re-pin the two blob ids as that guard
+instructs, and every wired OpenAPI guard stays ``rc=0`` with the whole
+contracts layer ``SMOKE PASS``. The generated TypeScript doc comment silently
+changes -- a client-visible contract break that nothing in the layer pins.
 
 This guard reads committed bytes only (``json`` + ``re`` + stdlib): no Python
 3.15, no API import, no wheel, no database, no workspace install. It pins:
 
 * ``_ANNOTATION_DIGEST`` -- a hand-written sha256 over the canonical sorted
-  ``(METHOD, path, operationId, summary, description, deprecated)`` tuple
-  set, read from nowhere. Exported from both artifacts independently, so a
-  co-revert of both halves still changes it;
+  ``(METHOD, path, operationId, description, deprecated)`` tuple set, read
+  from nowhere. Exported from both artifacts independently, so a co-revert of
+  both halves still changes it;
 * ``_EXPECTED_OPERATION_COUNT`` / ``_EXPECTED_DESCRIPTION_COUNT`` /
   ``_EXPECTED_DEPRECATED_COUNT`` -- exact count doors;
 * three-way agreement: snapshot per-operation annotations == generated
@@ -81,7 +82,7 @@ METHODS = frozenset(
 # Regenerate with _digest() after an intentional contract change and update in
 # the same commit, with a reason.
 _ANNOTATION_DIGEST = (
-    "db3cde4b0e275102840fc957e10ef1cab61f14d992875ed96974a141132aacaf"
+    "08d71c3640063cb455764b6bd0238a666b74779de4d3fd0e784aac453be10ad7"
 )
 _EXPECTED_OPERATION_COUNT = 268
 _EXPECTED_DESCRIPTION_COUNT = 209
@@ -96,9 +97,9 @@ OP_DEF = re.compile(r"^    ([A-Za-z_][A-Za-z0-9_]*): \{$", re.MULTILINE)
 INLINE_DOC = re.compile(r"^/\*\*\s*(.*?)\s*\*/$")
 
 
-def _snapshot_rows(document: dict[str, Any]) -> list[tuple[str, str, str, str, str, str]]:
-    """Canonical (METHOD, path, operationId, summary, description, deprecated)."""
-    rows: list[tuple[str, str, str, str, str, str]] = []
+def _snapshot_rows(document: dict[str, Any]) -> list[tuple[str, str, str, str, str]]:
+    """Canonical (METHOD, path, operationId, description, deprecated)."""
+    rows: list[tuple[str, str, str, str, str]] = []
     for path, item in document.get("paths", {}).items():
         if not isinstance(item, dict):
             continue
@@ -110,7 +111,6 @@ def _snapshot_rows(document: dict[str, Any]) -> list[tuple[str, str, str, str, s
                     method.upper(),
                     path,
                     str(operation.get("operationId", "")),
-                    str(operation.get("summary", "")),
                     str(operation.get("description", "")),
                     str(bool(operation.get("deprecated", False))),
                 )
@@ -118,7 +118,7 @@ def _snapshot_rows(document: dict[str, Any]) -> list[tuple[str, str, str, str, s
     return rows
 
 
-def _digest(rows: list[tuple[str, str, str, str, str, str]]) -> str:
+def _digest(rows: list[tuple[str, str, str, str, str]]) -> str:
     canonical = sorted(rows)
     blob = "\n".join(
         ["soymutdb-operation-annotations/v1"]
@@ -238,13 +238,13 @@ def failures(
         found.append(
             f"operation count drifted: expected {_EXPECTED_OPERATION_COUNT}, got {len(rows)}"
         )
-    described = sum(1 for row in rows if row[4])
+    described = sum(1 for row in rows if row[3])
     if described != _EXPECTED_DESCRIPTION_COUNT:
         found.append(
             f"description count drifted: expected {_EXPECTED_DESCRIPTION_COUNT}, "
             f"got {described}"
         )
-    deprecated = sum(1 for row in rows if row[5] == "True")
+    deprecated = sum(1 for row in rows if row[4] == "True")
     if deprecated != _EXPECTED_DEPRECATED_COUNT:
         found.append(
             f"deprecated count drifted: expected {_EXPECTED_DEPRECATED_COUNT}, "
@@ -276,15 +276,18 @@ def failures(
 
     rendered = _generated_annotations(document, generated)
     for row in sorted(rows):
-        method, path, operation_id, summary, description, is_deprecated = row
+        method, path, operation_id, description, is_deprecated = row
         key = (method, path)
         if key not in rendered:
             continue
         got_summary, got_description, got_deprecated = rendered[key]
-        if got_summary != summary:
+        snapshot_summary = str(
+            document["paths"][path][method.lower()].get("summary", "")
+        )
+        if got_summary != snapshot_summary:
             found.append(
-                f"{method} {path} summary disagrees: snapshot {summary!r}, "
-                f"generated doc comment {got_summary!r}"
+                f"{method} {path} summary disagrees: snapshot "
+                f"{snapshot_summary!r}, generated doc comment {got_summary!r}"
             )
         if _description_first_line(description) != _description_first_line(got_description):
             found.append(
@@ -361,18 +364,28 @@ def self_test() -> int:
             f"         * {summary}\n", f"         * {value}\n", 1
         ), smoke
 
-    def plant_both(value: str) -> tuple[dict[str, Any], str, str]:
+    def plant_both_descriptions(value: str) -> tuple[dict[str, Any], str, str]:
+        """Coordinated description co-revert: #269 cannot see this."""
         copy_doc = copy.deepcopy(document)
-        copy_doc["paths"][target]["get"]["summary"] = value
+        copy_doc["paths"][target]["get"]["description"] = value
         return (
             copy_doc,
-            generated.replace(f"         * {summary}\n", f"         * {value}\n", 1),
+            generated.replace(
+                f"@description {_description_first_line(description)}",
+                f"@description {value}",
+                1,
+            ),
             smoke,
         )
 
     cases.append(("one-sided snapshot summary drift", *plant_snapshot_summary("Liveness v2")))
     cases.append(("one-sided generated summary drift", *plant_generated_summary("Liveness v2")))
-    cases.append(("coordinated summary drift", *plant_both("Liveness v2")))
+    cases.append(
+        (
+            "coordinated description co-revert",
+            *plant_both_descriptions("Liveness probe (DRIFTED)"),
+        )
+    )
 
     desc_copy = copy.deepcopy(document)
     desc_copy["paths"][target]["get"]["description"] = description + " (changed)"
@@ -416,7 +429,8 @@ def main() -> int:
         return 1
     print(
         "openapi-operation-annotations: OK "
-        f"({_EXPECTED_OPERATION_COUNT} published operation annotations pinned)"
+        f"({_EXPECTED_DESCRIPTION_COUNT} descriptions + "
+        f"{_EXPECTED_DEPRECATED_COUNT} deprecated flags pinned)"
     )
     return 0
 

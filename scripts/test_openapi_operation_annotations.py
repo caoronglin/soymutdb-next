@@ -44,14 +44,19 @@ def _run(document: dict, generated: str | None = None, smoke: str | None = None)
     )
 
 
-def _co_revert_summary(value: str = "Liveness v2") -> tuple[dict, str]:
-    """Rename one summary in both halves -- the decisive drift."""
+def _co_revert_description(value: str = "Liveness probe (DRIFTED)") -> tuple[dict, str]:
+    """Rewrite one operation description in both halves -- the decisive drift.
+
+    #269 pins summaries; a coordinated DESCRIPTION co-revert is the residual
+    hole this guard closes. Both halves agree and the provenance blobs would
+    be re-pinned in the same reviewed regenerate.
+    """
     document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
     generated = guard.GENERATED.read_text(encoding="utf-8")
-    document["paths"]["/api/v1/health/live"]["get"]["summary"] = value
-    changed = generated.replace(
-        "         * Liveness\n", f"         * {value}\n", 1
-    )
+    operation = document["paths"]["/api/v1/health/live"]["get"]
+    first = operation["description"].splitlines()[0]
+    operation["description"] = value
+    changed = generated.replace(f"@description {first}", f"@description {value}", 1)
     assert changed != generated
     return document, changed
 
@@ -62,9 +67,9 @@ def test_committed_tree_passes() -> None:
     assert not found, found
 
 
-def test_coordinated_summary_co_revert_is_rejected() -> None:
+def test_coordinated_description_co_revert_is_rejected() -> None:
     """Both halves agree; only the independent literal can catch it."""
-    document, generated = _co_revert_summary()
+    document, generated = _co_revert_description()
     found = guard.failures(document, generated, SMOKE)
     assert any("_ANNOTATION_DIGEST" in problem for problem in found), found
 
@@ -88,7 +93,7 @@ def test_one_sided_generated_summary_rename_is_rejected() -> None:
     assert any("summary disagrees" in problem for problem in found), found
 
 
-def test_coordinated_description_co_revert_is_rejected() -> None:
+def test_second_operation_description_co_revert_is_rejected() -> None:
     document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
     generated = guard.GENERATED.read_text(encoding="utf-8")
     description = document["paths"]["/api/v1/health/ready"]["get"]["description"]
@@ -102,6 +107,14 @@ def test_coordinated_description_co_revert_is_rejected() -> None:
     assert changed != generated
     found = guard.failures(document, changed, SMOKE)
     assert any("_ANNOTATION_DIGEST" in problem for problem in found), found
+
+
+def test_the_digest_does_not_duplicate_the_summary_pin() -> None:
+    """#269 owns summaries; this literal covers the residual dimensions only."""
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    original = guard._digest(guard._snapshot_rows(document))
+    document["paths"]["/api/v1/health/live"]["get"]["summary"] = "Liveness v2"
+    assert guard._digest(guard._snapshot_rows(document)) == original
 
 
 def test_description_only_change_moves_the_digest() -> None:
