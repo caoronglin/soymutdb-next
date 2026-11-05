@@ -218,7 +218,7 @@ class TeethGuardContract(unittest.TestCase):
         lines it does not print are the only thing a stub cannot fake.
         """
         target = "scripts/check_openapi_response_surface.py"
-        self.assertIn(target, guard._EVIDENCE_PER_CASE, "setup is not a control")
+        self.assertIn(target, guard.EVIDENCE_MEMBERS, "setup is not a control")
         forged = (0, "self-test: 10 cases, 0 failure(s)\n")
         self.assertEqual(guard.evidence_lines(forged[1]), (10, 0))
         found = guard.evidence_errors({target: forged})
@@ -233,17 +233,17 @@ class TeethGuardContract(unittest.TestCase):
     def test_every_evidence_row_states_its_declared_count(self) -> None:
         """A row whose success line declares nothing enforces nothing."""
         for path, (rc, output) in sorted(_results().items()):
-            if path not in guard._EVIDENCE_PER_CASE or rc != 0:
+            if path not in guard.EVIDENCE_MEMBERS or rc != 0:
                 continue
             self.assertIsNotNone(
                 guard._declared_case_count(output),
-                f"{path} is in _EVIDENCE_PER_CASE but declares no case count",
+                f"{path} is in EVIDENCE_MEMBERS but declares no case count",
             )
 
     def test_evidence_for_guards_outside_the_floor_is_not_audited(self) -> None:
         """Otherwise this becomes a format audit of every wired self-test."""
         thin = "scripts/check_app_shell_assets.py"
-        self.assertNotIn(thin, guard._EVIDENCE_PER_CASE, "setup is not a control")
+        self.assertNotIn(thin, guard.EVIDENCE_MEMBERS, "setup is not a control")
         self.assertEqual(guard.evidence_errors({thin: (0, "self-test: 9 cases\n")}), [])
         self.assertNotIn("check_app_shell_assets.py", str(guard.evidence_errors(_results())))
 
@@ -268,6 +268,48 @@ class TeethGuardContract(unittest.TestCase):
         self.assertEqual(guard._declared_case_count("self-test: 5 cases\n"), 5)
         self.assertEqual(guard._declared_case_count("self-test: 12 negative cases + clean\n"), 12)
         self.assertEqual(guard._declared_case_count("SELF-TEST PASS: 9 mutations\n"), 9)
+
+    def test_every_wire_carries_both_plants(self) -> None:
+        # A guard whose plain run can be gutted while its self-test replays
+        # PASS lines is the shape the signature floor cannot see. Nothing is
+        # exempt: the two sets are checked against each other and the wire set.
+        wired = guard.wired_self_tests(_smoke())
+        for path in sorted(wired):
+            self.assertIn(path, guard._DRIFT_COVERED, f"{path} has no detection plant")
+            self.assertIn(path, guard._GUT_COVERED, f"{path} has no self-test plant")
+        self.assertEqual(guard.drift_floor_errors(), [])
+
+    def test_a_gutted_entry_point_keeps_the_self_test_green(self) -> None:
+        # Two limbs, or the case tests the detection plant twice: the replayed
+        # self-test must still satisfy the signature floor, and the plain run
+        # must be the thing that catches it.
+        wired = guard.wired_self_tests(_smoke())
+        gutted = "scripts/check_error_code_catalog.py"
+        replayed = (
+            0,
+            "  ok: planted 'extra code' -> caught (1 problem(s))\n"
+            "error-code catalog self-test passed (12 negative cases + clean tree)\n",
+        )
+        self.assertEqual(guard.teeth_errors(wired, {**_results(), gutted: replayed}), [])
+        planted = {(gutted, "self-test"): replayed, (gutted, "plain"): (1, "")}
+        caught = guard.gut_errors(wired, planted)
+        self.assertTrue(any(gutted in f for f in caught), caught)
+
+    def test_an_unplanted_entry_point_gut_is_reported(self) -> None:
+        # One cause, one owner: the plain run staying green after the plant is
+        # the failure this leg exists for.
+        self.assertIn(
+            "still failed its plain run",
+            " ".join(
+                guard.gut_errors(
+                    guard.wired_self_tests(_smoke()),
+                    {
+                        ("scripts/check_error_code_catalog.py", "self-test"): (0, ""),
+                        ("scripts/check_error_code_catalog.py", "plain"): (1, ""),
+                    },
+                )
+            ),
+        )
 
     def test_the_guards_own_self_test_has_teeth(self) -> None:
         # The --self-test must actually plant a no-op and catch it. A body that
