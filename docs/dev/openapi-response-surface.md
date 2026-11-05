@@ -234,3 +234,43 @@ both-digests-must-move, one-sided client retype, independence from a second
 file, count door, weakening control, source plant); the in-file `--self-test`
 grows 19 -> 22 cases plus a positive control proving an honest double re-pin
 is the reviewed regenerate and stays green.
+
+## Response-status declaration order
+
+`openapi-typescript` prints each operation's response codes in the snapshot's
+**insertion order** inside `export interface operations`, so that sequence is a
+published shape (IDE completion order on the response union, object key
+enumeration). Every landed fixed point above is a `sorted()` row set:
+`_RESPONSE_SURFACE_DIGEST`, `_CLIENT_RESPONSE_SURFACE_DIGEST`, the summary /
+request-body / header / inline-body digests, all count doors and the three-way
+cross-artifact agreement. A coherent swap of two adjacent status blocks —
+each keeping its own `@description` and content — leaves every one of them
+unchanged. Re-pinning both `_PINNED_ARTIFACTS` blob ids beside that regenerate
+keeps the whole contracts layer green while the client-visible declaration
+sequence silently changes.
+
+Decisive two-tree A/B on live `e3b4b33f` bytes: the same drifted artifacts
+(byte-identical between runs, both provenance blobs honestly re-pinned) give
+`rc=0` on the pre-fix guard and `rc=1` on the fixed one, naming both literals.
+
+Two independent hand-written literals close it:
+
+- `_RESPONSE_STATUS_ORDER_DIGEST` — sha256 over canonical
+  `(METHOD, path, operationId, index, status)` rows of the snapshot, in
+  declaration order, read from nowhere;
+- `_CLIENT_RESPONSE_STATUS_ORDER_DIGEST` — the same positional rows parsed
+  from the generated `operations` blocks, a second independent literal;
+- `_EXPECTED_RESPONSE_STATUS_ORDER_ROWS` (808) — exact count door on both halves.
+
+A one-sided reorder re-pins one literal and stays red on the other. A
+coordinated co-revert of both halves moves both. Deriving either expected
+value from the artifact under guard would make the pin self-referential, which
+is the shape this file refuses. Both must be re-pinned in the same commit as
+both artifacts, with a reason.
+
+Zero new wiring: the guard, its companion and its standalone `--self-test`
+call are already registered. The in-file `--self-test` grows 22 -> 28 cases
+(decisive both-halves swap, two one-sided swaps, two one-sided re-pins, honest
+double re-pin positive control); the companion grows 36 -> 42 cases, pinning
+the literals, the count door, the ablation plants and the door's source shape
+from a second file so a single-file edit cannot hide it.

@@ -619,3 +619,155 @@ def test_client_doors_and_cases_are_pinned_from_a_second_file() -> None:
         "generated client response count door",
     ):
         assert f'cases["{label}"]' in source, f"{label} ablation is missing"
+
+
+# ---------------------------------------------------------------------------
+# Door 5 -- response-status declaration order (positional literals)
+# ---------------------------------------------------------------------------
+def _co_revert_status_order() -> tuple[str, str]:
+    """Swap two adjacent status blocks in BOTH halves, coherently."""
+    import re
+
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    responses = document["paths"]["/api/v1/health/live"]["get"]["responses"]
+    first, second = list(responses)[:2]
+    reordered: dict[str, object] = {}
+    for status in responses:
+        if status == first:
+            reordered[second] = responses[second]
+        elif status == second:
+            reordered[first] = responses[first]
+        else:
+            reordered[status] = responses[status]
+    document["paths"]["/api/v1/health/live"]["get"]["responses"] = reordered
+
+    symbol = "liveness_api_v1_health_live_get"
+    start = generated.find(f"    {symbol}: {{")
+    assert start >= 0
+    following = guard.OP_DEF.search(generated, start + 10)
+    end = following.start() if following else len(generated)
+    block = generated[start:end]
+    rstart = block.find("        responses: {")
+    closer = re.search(r"^        \};$", block[rstart:], re.M)
+    assert closer is not None
+    rend = rstart + closer.start()
+    matches = list(guard.STATUS_KEY.finditer(block, rstart))
+    assert len(matches) >= 2
+    segments: list[str] = []
+    for i, m in enumerate(matches):
+        nxt = matches[i + 1] if i + 1 < len(matches) else None
+        begin = m.start()
+        desc = block.rfind("/** @description ", rstart, begin)
+        if desc >= 0:
+            begin = desc
+        segments.append(block[begin : nxt.start() if nxt else rend])
+    segments[0], segments[1] = segments[1], segments[0]
+    prefix = block[: rstart + len("        responses: {\n")]
+    swapped = prefix + "".join(segments) + block[rend:]
+    return json.dumps(document, indent=2), generated[:start] + swapped + generated[end:]
+
+
+def test_coordinated_status_order_swap_is_rejected() -> None:
+    """Both halves agree; only the two positional literals can see it."""
+    snapshot, generated = _co_revert_status_order()
+    found = guard.failures(snapshot=snapshot, generated=generated)
+    assert any("_RESPONSE_STATUS_ORDER_DIGEST" in p for p in found), found
+    assert any("_CLIENT_RESPONSE_STATUS_ORDER_DIGEST" in p for p in found), found
+
+
+def test_one_sided_status_order_swaps_are_rejected() -> None:
+    snapshot, generated = _co_revert_status_order()
+    clean = guard.GENERATED.read_text(encoding="utf-8")
+    snap_only = guard.failures(snapshot=snapshot)
+    gen_only = guard.failures(generated=generated)
+    assert snap_only, "snapshot-only reorder was not named"
+    assert gen_only, "generated-only reorder was not named"
+
+
+def test_both_status_order_literals_must_move_together() -> None:
+    """Re-pinning only one literal leaves the other door red."""
+    snapshot, generated = _co_revert_status_order()
+    document = json.loads(snapshot)
+    honest_snapshot = guard._status_order_digest(
+        guard.snapshot_status_order_rows(document)
+    )
+    honest_client = guard._client_status_order_digest(
+        guard.generated_status_order_rows(generated)
+    )
+    assert guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        response_status_order_digest=honest_snapshot,
+    ), "snapshot-only re-pin silenced both doors"
+    assert guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        client_response_status_order_digest=honest_client,
+    ), "client-only re-pin silenced both doors"
+    # Both honestly re-pinned in the same reviewed act: the only green shape.
+    assert not guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        response_status_order_digest=honest_snapshot,
+        client_response_status_order_digest=honest_client,
+    )
+
+
+def test_status_order_literals_are_independent_and_hand_written() -> None:
+    """Re-deriving either from the artifact under guard would be vacuous."""
+    tree = ast.parse(Path(guard.__file__).read_text(encoding="utf-8"))
+    assigned = {
+        t.id
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        for t in node.targets
+        if isinstance(t, ast.Name)
+    }
+    for name in (
+        "_RESPONSE_STATUS_ORDER_DIGEST",
+        "_CLIENT_RESPONSE_STATUS_ORDER_DIGEST",
+        "_EXPECTED_RESPONSE_STATUS_ORDER_ROWS",
+    ):
+        assert name in assigned, name
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    assert (
+        guard._status_order_digest(guard.snapshot_status_order_rows(document))
+        == guard._RESPONSE_STATUS_ORDER_DIGEST
+    )
+    assert (
+        guard._client_status_order_digest(
+            guard.generated_status_order_rows(generated)
+        )
+        == guard._CLIENT_RESPONSE_STATUS_ORDER_DIGEST
+    )
+    assert (
+        len(guard.snapshot_status_order_rows(document))
+        == guard._EXPECTED_RESPONSE_STATUS_ORDER_ROWS
+    )
+
+
+def test_status_order_doors_and_cases_are_pinned_from_a_second_file() -> None:
+    """A single-file edit cannot gut a door and its own ablation together."""
+    source = Path(guard.__file__).read_text(encoding="utf-8")
+    assert "if actual_status_order != pinned_status_order:" in source
+    assert "if actual_client_status_order != pinned_client_status_order:" in source
+    assert "published response status order drifted:" in source
+    assert "generated client response status order drifted:" in source
+    for label in (
+        "coordinated response status order swap in both halves",
+        "one-sided snapshot response status order swap",
+        "one-sided generated response status order swap",
+        "coordinated status swap with only the snapshot literal re-pinned",
+        "coordinated status swap with only the client literal re-pinned",
+        "coordinated status order swap with both literals re-pinned",
+    ):
+        assert f'cases["{label}"]' in source, f"{label} ablation is missing"
+
+
+def test_status_order_row_count_door_is_load_bearing() -> None:
+    assert any(
+        "status order row count" in p
+        for p in guard.failures(expected_response_status_order_rows=999)
+    )

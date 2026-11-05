@@ -81,6 +81,30 @@ guards, 212 pytest cases and ``SMOKE PASS`` green. ``_RESPONSE_HEADER_SURFACE_DI
 is a fourth hand-written sha256 over the canonical sorted header rows, read
 from nowhere, with a count door and a per-header cross-artifact agreement door.
 
+The declared response **status order** is the same genus one level up.
+``openapi-typescript`` prints each operation's response codes in the
+snapshot's insertion order inside the generated ``operations`` interface, so
+the sequence is a published fact (IDE completion order on the response union,
+object key enumeration). Every landed digest above is a ``sorted()`` row set:
+swapping two adjacent status blocks -- each keeping its own description and
+content -- leaves ``_RESPONSE_SURFACE_DIGEST``, the client literal, all four
+count doors and the three-way agreement unchanged. Both provenance blob ids
+honestly re-pinned beside that regenerate keep the whole layer green.
+
+Two independent hand-written literals close it, one per artifact half:
+
+* ``_RESPONSE_STATUS_ORDER_DIGEST`` -- sha256 over canonical
+  ``(METHOD, path, operationId, index, status)`` rows of the snapshot, in
+  declaration order, read from nowhere;
+* ``_CLIENT_RESPONSE_STATUS_ORDER_DIGEST`` -- the same positional rows parsed
+  from the generated ``operations`` blocks, a second literal. A one-sided
+  reorder re-pins one and stays red on the other; a coordinated co-revert of
+  both halves moves both. Exact row-count doors plus a named positional door
+  report the moved status by operation, index and code.
+
+Re-deriving either literal from the artifact under guard would make the pin
+self-referential -- the exact shape this file exists to refuse.
+
 Usage:
     python3 scripts/check_openapi_response_surface.py
     python3 scripts/check_openapi_response_surface.py --self-test
@@ -182,6 +206,19 @@ _RESPONSE_HEADER_SURFACE_DIGEST = (
     "5685ec6bcfa376ed9dcdc38c322371b21d35ff18cde1d41e9b2c7bc935fc369b"
 )
 _EXPECTED_RESPONSE_HEADERS = 1
+
+# Independent fixed points on the *declaration order* of response statuses.
+# sha256 of "\n".join([label, *sorted("METHOD|path|operationId|index|status")])
+# over the snapshot, and over the generated operations blocks respectively.
+# Hand-written, NOT derived from either artifact under guard. A regenerate
+# that reorders two statuses must re-pin BOTH in the same commit, with a reason.
+_RESPONSE_STATUS_ORDER_DIGEST = (
+    "6d5c2259fbe9376d06844192d795ddb692f09a7007efb9d2959a24ac4418e8a8"
+)
+_CLIENT_RESPONSE_STATUS_ORDER_DIGEST = (
+    "7fc1f83a09b61f3e417f7420f56261c45b23c6b306e37055c2f3592418f60725"
+)
+_EXPECTED_RESPONSE_STATUS_ORDER_ROWS = 808
 
 # The generated ``paths`` interface maps (METHOD, path) -> operations["symbol"].
 PATH_LINE = re.compile(r'^    "(/[^"]*)": \{$')
@@ -585,6 +622,54 @@ def _generated_response_headers(
     return out
 
 
+def snapshot_status_order_rows(
+    document: dict[str, Any],
+) -> list[tuple[str, str, str, str, str]]:
+    """Canonical (METHOD, path, operationId, index, status) rows, in order."""
+    rows: list[tuple[str, str, str, str, str]] = []
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for method, operation in item.items():
+            if method not in METHODS or not isinstance(operation, dict):
+                continue
+            oid = operation.get("operationId", "")
+            for index, status in enumerate(operation.get("responses") or {}):
+                rows.append((method.upper(), path, str(oid), str(index), str(status)))
+    return rows
+
+
+def generated_status_order_rows(generated: str) -> list[tuple[str, str, str]]:
+    """Canonical (symbol, index, status) rows from generated operations blocks."""
+    marker = "export interface operations {"
+    if marker not in generated:
+        raise ValueError("generated client declares no operations interface")
+    block = generated.split(marker, 1)[1]
+    starts = [(m.start(), m.group(1)) for m in OP_DEF.finditer(block)]
+    rows: list[tuple[str, str, str]] = []
+    for i, (position, name) in enumerate(starts):
+        end = starts[i + 1][0] if i + 1 < len(starts) else len(block)
+        body = block[position:end]
+        rstart = body.find("        responses: {")
+        if rstart < 0:
+            continue
+        for index, status in enumerate(STATUS_KEY.findall(body[rstart:])):
+            rows.append((name, str(index), status))
+    return rows
+
+
+def _status_order_digest(rows: list[tuple[str, ...]]) -> str:
+    canonical = sorted("|".join(row) for row in rows)
+    blob = "\n".join(["soymutdb-response-status-order/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _client_status_order_digest(rows: list[tuple[str, ...]]) -> str:
+    canonical = sorted("|".join(row) for row in rows)
+    blob = "\n".join(["soymutdb-client-response-status-order/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def failures(
     *,
     snapshot: str | None = None,
@@ -601,6 +686,9 @@ def failures(
     expected_response_headers: int | None = None,
     client_response_surface_digest: str | None = None,
     expected_client_response_entries: int | None = None,
+    response_status_order_digest: str | None = None,
+    client_response_status_order_digest: str | None = None,
+    expected_response_status_order_rows: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -657,6 +745,21 @@ def failures(
         if expected_client_response_entries is None
         else expected_client_response_entries
     )
+    pinned_status_order = (
+        _RESPONSE_STATUS_ORDER_DIGEST
+        if response_status_order_digest is None
+        else response_status_order_digest
+    )
+    pinned_client_status_order = (
+        _CLIENT_RESPONSE_STATUS_ORDER_DIGEST
+        if client_response_status_order_digest is None
+        else client_response_status_order_digest
+    )
+    pinned_status_order_rows = (
+        _EXPECTED_RESPONSE_STATUS_ORDER_ROWS
+        if expected_response_status_order_rows is None
+        else expected_response_status_order_rows
+    )
 
     try:
         document = json.loads(snapshot)
@@ -665,6 +768,7 @@ def failures(
         summaries = _snapshot_summaries(document)
         request_bodies = _snapshot_request_bodies(document)
         header_rows = _snapshot_response_headers(document)
+        status_order = snapshot_status_order_rows(document)
     except (ValueError, TypeError) as exc:
         return [f"cannot read published responses from snapshot: {exc}"]
     try:
@@ -673,6 +777,7 @@ def failures(
         gen_summaries = _generated_summaries(generated)
         gen_request_bodies = _generated_request_bodies(generated)
         gen_headers = _generated_response_headers(generated)
+        client_status_order = generated_status_order_rows(generated)
     except ValueError as exc:
         return [f"cannot read generated client responses: {exc}"]
 
@@ -878,6 +983,40 @@ def failures(
         found.append(
             f"generated client declares response header {entry[2]!r} on "
             f"{entry[0]} {entry[1]} the snapshot does not publish"
+        )
+
+    # Door 5 -- response-status *declaration order*. Every digest above is a
+    # sorted row set; only positional literals can see two adjacent status
+    # blocks swap places while each keeps its own description and content.
+    actual_status_order = _status_order_digest(status_order)
+    if actual_status_order != pinned_status_order:
+        found.append(
+            "published response status order drifted: "
+            f"_RESPONSE_STATUS_ORDER_DIGEST pins {pinned_status_order} but the "
+            f"snapshot derives {actual_status_order}. Re-pin BOTH status-order "
+            "literals in the same commit as both artifacts, with a reason."
+        )
+    if len(status_order) != pinned_status_order_rows:
+        found.append(
+            f"published response status order row count is {len(status_order)}, "
+            f"_EXPECTED_RESPONSE_STATUS_ORDER_ROWS pins "
+            f"{pinned_status_order_rows}: a status was added or dropped without "
+            "moving the fixed point"
+        )
+    actual_client_status_order = _client_status_order_digest(client_status_order)
+    if actual_client_status_order != pinned_client_status_order:
+        found.append(
+            "generated client response status order drifted: "
+            f"_CLIENT_RESPONSE_STATUS_ORDER_DIGEST pins "
+            f"{pinned_client_status_order} but the client derives "
+            f"{actual_client_status_order}. A one-sided reorder or a coordinated "
+            "co-revert of both halves must not ship silently."
+        )
+    if len(client_status_order) != pinned_status_order_rows:
+        found.append(
+            f"generated client status order row count is {len(client_status_order)}, "
+            f"_EXPECTED_RESPONSE_STATUS_ORDER_ROWS pins "
+            f"{pinned_status_order_rows}"
         )
 
     if f"scripts/{SELF}" not in smoke:
@@ -1147,12 +1286,99 @@ def self_test() -> int:
         json.dumps(client_doc, indent=2),
         co_reverted_generated,
     )
+    # ---- Door 5: response-status declaration order --------------------
+    # Coherent swap of two adjacent status blocks in BOTH halves. Each status
+    # keeps its own description and content, so every sorted digest, every
+    # count door and the three-way agreement stay silent; only the positional
+    # literals can see it. This is the decisive fail-open the door closes.
+    order_doc = copy.deepcopy(document)
+    order_path = "/api/v1/health/live"
+    order_op = order_doc["paths"][order_path]["get"]
+    order_responses = order_op["responses"]
+    first, second = list(order_responses)[:2]
+    reordered: dict[str, Any] = {}
+    for status in order_responses:
+        if status == first:
+            reordered[second] = order_responses[second]
+        elif status == second:
+            reordered[first] = order_responses[first]
+        else:
+            reordered[status] = order_responses[status]
+    order_op["responses"] = reordered
+    order_snapshot = json.dumps(order_doc, indent=2)
+
+    order_symbol = "liveness_api_v1_health_live_get"
+    order_start = generated.find(f"    {order_symbol}: {{")
+    assert order_start >= 0
+    order_following = OP_DEF.search(generated, order_start + 10)
+    order_end = order_following.start() if order_following else len(generated)
+    order_block = generated[order_start:order_end]
+    status_matches = list(STATUS_KEY.finditer(order_block))
+    assert len(status_matches) >= 2
+    # Each block: the optional preceding @description line + the status body
+    # up to the next status key. Moving them together keeps each description
+    # beside its own code -- exactly what a regenerate emits.
+    rstart = order_block.find("        responses: {")
+    closer = re.search(r"^        \};$", order_block[rstart:], re.M)
+    assert closer is not None
+    rend = rstart + closer.start()
+    prefix = order_block[: rstart + len("        responses: {\n")]
+    suffix = order_block[rend:]
+    segments: list[str] = []
+    for i, m in enumerate(status_matches):
+        nxt = status_matches[i + 1] if i + 1 < len(status_matches) else None
+        begin = m.start()
+        desc = order_block.rfind("/** @description ", rstart, begin)
+        if desc >= 0:
+            begin = desc
+        end = nxt.start() if nxt else rend
+        segments.append(order_block[begin:end])
+    # Move the first two whole segments (description + status body) together.
+    segments[0], segments[1] = segments[1], segments[0]
+    swapped_block = prefix + "".join(segments) + suffix
+    order_generated = generated[:order_start] + swapped_block + generated[order_end:]
+
+    cases["coordinated response status order swap in both halves"] = (
+        order_snapshot,
+        order_generated,
+    )
+    # One-sided: snapshot only, and generated only. Both halves' literals are
+    # independent, so each reorder is named by exactly one door.
+    cases["one-sided snapshot response status order swap"] = (
+        order_snapshot,
+        generated,
+    )
+    cases["one-sided generated response status order swap"] = (
+        snapshot,
+        order_generated,
+    )
+    # Independence controls: re-pinning ONLY ONE of the two positional
+    # literals beside a coordinated swap must leave the OTHER door red. A
+    # single literal, or two literals derived from one artifact half, would
+    # let the co-revert walk through. These are the load-bearing shape.
+    honest_status_order = _status_order_digest(
+        snapshot_status_order_rows(order_doc)
+    )
+    honest_client_status_order = _client_status_order_digest(
+        generated_status_order_rows(order_generated)
+    )
+
     overrides: dict[str, dict[str, Any]] = {
         "coordinated description co-revert with an honest snapshot re-pin": {
             "digest": honest_snapshot_digest,
         },
         "generated client response count door": {
             "expected_client_response_entries": _EXPECTED_CLIENT_RESPONSE_ENTRIES + 1,
+        },
+        "coordinated status swap with only the snapshot literal re-pinned": {
+            "response_status_order_digest": honest_status_order,
+        },
+        "coordinated status swap with only the client literal re-pinned": {
+            "client_response_status_order_digest": honest_client_status_order,
+        },
+        "coordinated status order swap with both literals re-pinned": {
+            "response_status_order_digest": honest_status_order,
+            "client_response_status_order_digest": honest_client_status_order,
         },
     }
 
@@ -1165,7 +1391,24 @@ def self_test() -> int:
     # Exact count door on the generated half.
     cases["generated client response count door"] = (snapshot, generated)
 
+    # One-sided re-pins: each must still be caught by the other door.
+    cases["coordinated status swap with only the snapshot literal re-pinned"] = (
+        order_snapshot,
+        order_generated,
+    )
+    cases["coordinated status swap with only the client literal re-pinned"] = (
+        order_snapshot,
+        order_generated,
+    )
+    # Honest double re-pin of BOTH positional literals beside a reviewed
+    # regenerate: the only green shape among the coordinated drifts.
+    cases["coordinated status order swap with both literals re-pinned"] = (
+        order_snapshot,
+        order_generated,
+    )
+
     failures_count = 0
+    expect_clean = {"coordinated status order swap with both literals re-pinned"}
     for name, (snap_text, gen_text) in cases.items():
         found = failures(
             snapshot=snap_text,
@@ -1173,7 +1416,13 @@ def self_test() -> int:
             smoke=smoke,
             **overrides.get(name, {}),
         )
-        if not found:
+        if name in expect_clean:
+            if found:
+                print(f"SELF-TEST FAIL: {name!r} was rejected: {found}")
+                failures_count += 1
+            else:
+                print(f"PASS self-test: {name!r} stays green")
+        elif not found:
             print(f"SELF-TEST FAIL: {name!r} was NOT caught")
             failures_count += 1
         else:
@@ -1213,7 +1462,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(
         f"openapi-response-surface: OK "
-        f"({_EXPECTED_RESPONSE_ENTRIES} declared responses and "
+        f"({_EXPECTED_RESPONSE_STATUS_ORDER_ROWS} response status order rows and "
+        f"{_EXPECTED_RESPONSE_ENTRIES} declared responses and "
         f"{_EXPECTED_SUMMARY_OPERATIONS} operation summaries and "
         f"{_EXPECTED_REQUEST_BODY_BEARING_OPERATIONS} request bodies and "
         f"{_EXPECTED_RESPONSE_HEADERS} declared response header(s) and "
