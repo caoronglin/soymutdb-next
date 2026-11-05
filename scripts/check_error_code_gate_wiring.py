@@ -3,19 +3,25 @@
 
 ``check_api_error_code_vocabulary.py`` (#179) and ``check_error_code_catalog.py``
 (#136) were both wired into ``check-contract.sh``, reached through the frontend
-gate's ``check:contract``. No CI caller may set ``SOYMUTDB_CI_SKIP_CONTRACT``
+gate's ``check:contract``. The catalog guard's own ``--self-test`` must also be
+consumed by the contracts layer: its plain call reads committed bytes but never
+proves the planted drifts still land, so a no-op ``_mutate_source`` plant leaves
+every assertion green. No CI caller may set ``SOYMUTDB_CI_SKIP_CONTRACT``
 (``test_ci_job_contracts.py`` forbids the name outright), so that gate is not
 skipped in CI -- but it re-exports the backend with the API 3.15 venv, and every
 verify stage is skipped while the org CPU-quota pre-freeze fails. The contracts
 smoke layer -- the layer that runs on a clean checkout with no venv -- invoked
-neither guard, and no assertion named them. So a coordinated rename of a public
-``error.code`` in the source plus both generated artifacts left the whole
-collected layer green while the vocabulary guard went red on its own.
+neither guard, and no assertion named them. The catalog guard's own
+``--self-test`` was never wired at all: ``check-contract.sh`` runs only its
+plain form. So a coordinated rename of a public ``error.code`` in the source
+plus both generated artifacts left the whole collected layer green while the
+vocabulary guard went red on its own, and a plant that landed no bytes left the
+catalog guard's self-test red on its own but the layer still green.
 
 This guard pins the other half of the contract: both error-code checks must be
-invoked as standalone ``|| rc=$?`` calls in ``smoke_contracts()``, and the
-vocabulary guard's ``--self-test`` must be wired too -- a plain call alone can
-be green while its decisive ablation plants never run. It reads committed bytes
+invoked as standalone ``|| rc=$?`` calls in ``smoke_contracts()``, and both
+guards' ``--self-test`` calls must be wired too -- a plain call alone can be
+green while its decisive ablation plants never run. It reads committed bytes
 only; ``--self-test`` plants each ablation on a copy of the tree and asserts
 the check reports it by name, so weakening the guard cannot make it pass
 vacuously.
@@ -64,14 +70,17 @@ WIRE_RE = {
     )
     for rel in WIRES
 }
-# The guard's own `--self-test` plants the decisive ablations. The plain wire
-# alone can be green while a weakening of `source_codes()` goes unnoticed, so
-# this second call is a required wire too.
-SELF_TEST_RE = re.compile(
-    r'^[ \t]*"\$\{PYTHON_BIN\}"[ \t]+' + re.escape(VOCAB)
-    + r'[ \t]+--self-test[ \t]*\|\|[ \t]*rc=\$\?[ \t]*$',
-    re.MULTILINE,
-)
+# Both guards' `--self-test` plants decide whether the plain wires still have a
+# signal. Dropping either lets a weakened guard go green; the catalog one is
+# also the only consumer of its no-op-plant tripwire.
+SELF_TEST_RE = {
+    rel: re.compile(
+        r'^[ \t]*"\$\{PYTHON_BIN\}"[ \t]+' + re.escape(rel)
+        + r'[ \t]+--self-test[ \t]*\|\|[ \t]*rc=\$\?[ \t]*$',
+        re.MULTILINE,
+    )
+    for rel in WIRES
+}
 
 OLD, NEW = "settings_version_conflict", "settings_version_conflictx"
 
@@ -108,11 +117,12 @@ def check(root: Path) -> list[str]:
                 f"{rel} is not wired as a standalone `|| rc=$?` call in "
                 "smoke_contracts(); the contracts layer would stop consuming it"
             )
-    if not SELF_TEST_RE.search(body):
-        problems.append(
-            f"{VOCAB} --self-test is not wired as a standalone `|| rc=$?` call "
-            "in smoke_contracts(); the decisive ablation plants would stop running"
-        )
+    for rel, pattern in SELF_TEST_RE.items():
+        if not pattern.search(body):
+            problems.append(
+                f"{rel} --self-test is not wired as a standalone `|| rc=$?` call "
+                "in smoke_contracts(); the decisive ablation plants would stop running"
+            )
     return problems
 
 
@@ -152,6 +162,11 @@ def _self_test() -> int:
         "comment out the vocabulary wire": lambda t: _comment_wire(t, VOCAB),
         "chain the catalog wire behind `|| true`": lambda t: _neutralise(t, CATALOG),
         "drop the vocabulary self-test wire": lambda t: _drop_wire(t, VOCAB, "--self-test"),
+        "drop the catalog self-test wire": lambda t: _drop_wire(t, CATALOG, "--self-test"),
+        "comment out the catalog self-test wire": lambda t: (
+            _comment_wire(t, CATALOG, "--self-test")
+        ),
+        "neutralise the catalog self-test wire": lambda t: _neutralise(t, CATALOG, "--self-test"),
     }
     failures = 0
     for label, plant in ablations.items():
@@ -220,19 +235,21 @@ def _drop_wire(tree: Path, rel: str, flag: str = "") -> None:
     p.write_text(text.replace(line, "", 1), encoding="utf-8")
 
 
-def _comment_wire(tree: Path, rel: str) -> None:
+def _comment_wire(tree: Path, rel: str, flag: str = "") -> None:
     p = tree / "scripts/smoke.sh"
     text = p.read_text(encoding="utf-8")
-    line = f'  "${{PYTHON_BIN}}" {rel} || rc=$?'
-    assert line in text, rel
+    suffix = f" {flag}" if flag else ""
+    line = f'  "${{PYTHON_BIN}}" {rel}{suffix} || rc=$?'
+    assert line in text, (rel, flag)
     p.write_text(text.replace(line, "  # " + line.strip(), 1), encoding="utf-8")
 
 
-def _neutralise(tree: Path, rel: str) -> None:
+def _neutralise(tree: Path, rel: str, flag: str = "") -> None:
     p = tree / "scripts/smoke.sh"
     text = p.read_text(encoding="utf-8")
-    line = f'  "${{PYTHON_BIN}}" {rel} || rc=$?'
-    assert line in text, rel
+    suffix = f" {flag}" if flag else ""
+    line = f'  "${{PYTHON_BIN}}" {rel}{suffix} || rc=$?'
+    assert line in text, (rel, flag)
     p.write_text(text.replace(line, line + " || true", 1), encoding="utf-8")
 
 

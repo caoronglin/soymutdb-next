@@ -45,15 +45,13 @@ Consequences before this guard:
 It is wired into `packages/api-client/scripts/check-contract.sh` (run on the
 `$API_PYTHON` venv interpreter the gate already provisions), which both CNB
 and GitHub reach through `verify-frontend-artifacts.sh` (`check:contract`).
-`scripts/test_error_code_catalog_contract.py` is the regression suite: 14
-pytest cases including synthetic drift trees and `--self-test` (11 planted
+`scripts/test_error_code_catalog_contract.py` is the regression suite: 17
+pytest cases including synthetic drift trees and `--self-test` (12 planted
 negative cases). Removing the loop/call, or weakening any single assertion,
-turns a case red.
-
-The suite is deliberately **not** registered in `smoke.sh`: that file's
-`smoke_contracts()` test list is a shared hotspot (7+ in-flight PRs insert at
-the same location), and the guard is already a hard gate via `check-contract.sh`.
-A later phase can register it once those PRs land, without a conflict.
+turns a case red. `--self-test` is also consumed by `scripts/smoke.sh
+--profile contracts`; the plain call alone cannot see a plant that landed no
+bytes. The coordinated source + artifact prune is pinned by an independent
+literal floor, because every consistency comparison agrees on that shape.
 
 ## Reproducing
 

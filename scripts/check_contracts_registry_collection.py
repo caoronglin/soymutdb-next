@@ -192,6 +192,7 @@ PINNED_SUITES: frozenset[str] = frozenset(
         'scripts/test_deployment_workflows.py',
         'scripts/test_development_compose_contract.py',
         'scripts/test_dockerfile_contracts.py',
+        'scripts/test_error_code_catalog_contract.py',
         'scripts/test_error_code_doc_counts.py',
         'scripts/test_error_code_gate_wiring.py',
         'scripts/test_format_inspect_validation_order.py',

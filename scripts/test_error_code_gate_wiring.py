@@ -96,3 +96,30 @@ def test_dropping_export_from_the_copied_tree_is_detected() -> None:
 def test_committed_wiring_is_sound() -> None:
     assert guard.check(ROOT) == []
     assert guard._self_test() == 0
+
+
+def test_both_self_test_wires_are_pinned_by_name() -> None:
+    """Dropping either --self-test call must be reported, not just counted.
+
+    The catalog wire is a separate standalone call; a pin that only checks the
+    vocabulary one lets a gutted catalog self_test keep the layer green.
+    """
+    body = guard.contracts_body(ROOT)
+    for rel in guard.WIRES:
+        assert guard.SELF_TEST_RE[rel].search(body), f"{rel} --self-test wire missing"
+    for rel in guard.WIRES:
+        line = f'  "${{PYTHON_BIN}}" {rel} --self-test || rc=$?\n'
+        assert line in body
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        assert smoke.replace(line, "", 1) != smoke
+        # check() re-reads the committed smoke.sh, so exercise the pure form
+        # through a temporary tree that carries the edited bytes.
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            tree = Path(tmp.name) / "repo"
+            (tree / "scripts").mkdir(parents=True)
+            (tree / "scripts/smoke.sh").write_text(smoke.replace(line, "", 1), encoding="utf-8")
+            problems = guard.check(tree)
+            assert any(rel in p and "--self-test" in p for p in problems), problems
+        finally:
+            tmp.cleanup()

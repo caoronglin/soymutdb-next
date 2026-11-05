@@ -102,11 +102,12 @@ class TestErrorCodeDocCounts(unittest.TestCase):
 
             doc = tree / DOCS[1].relative_to(ROOT)
             original = doc.read_text(encoding="utf-8")
-            real = "regression suite: 14\npytest cases"
+            count = module.measured(tree)["catalog_pytest"]
+            real = f"regression suite: {count}\npytest cases"
             self.assertIn(real, original)
 
-            decoy = "regression suite: 14 pytest cases"
-            broken_real = "regression suite: 15\npytest cases"
+            decoy = f"regression suite: {count} pytest cases"
+            broken_real = f"regression suite: {count + 1}\npytest cases"
             shadowed = original.replace(real, decoy + "\n\n" + broken_real, 1)
             doc.write_text(shadowed, encoding="utf-8")
 
@@ -124,12 +125,14 @@ class TestErrorCodeDocCounts(unittest.TestCase):
         that documents the suite says 15.
         """
         pattern = next(pat for _, pat, key in module.CLAIMS if key == "catalog_pytest")
+        count = module.measured(ROOT)["catalog_pytest"]
         shadowed = (
-            "regression suite: 14 pytest cases\n\nregression suite: 15\npytest cases"
+            f"regression suite: {count} pytest cases\n\n"
+            f"regression suite: {count + 1}\npytest cases"
         )
         first = pattern.search(shadowed)
         self.assertIsNotNone(first)
-        self.assertEqual(first.group("num"), "14")
+        self.assertEqual(first.group("num"), str(count))
         self.assertEqual(len(pattern.findall(shadowed)), 2)
 
     def test_stale_number_in_a_doc_is_rejected(self) -> None:
