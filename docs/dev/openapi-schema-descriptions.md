@@ -160,10 +160,9 @@ second-file source plant.
 ## Boundaries
 
 Guard reads committed bytes only (`json` + `re` + stdlib): no Python 3.15, no
-API import, no wheel, no database, no workspace install. It does not parse
-multi-line JSDoc continuation text — the generator's rendering of those is a
-second, brittle ledger. First lines carry the identity; the digest carries the
-full value.
+API import, no wheel, no database, no workspace install. Multi-line JSDoc
+continuation text is now pinned by Door 3c (below); the earlier note that the
+guard "does not parse" it is superseded by that phase.
 
 ## Door 9 — component-property declaration order
 
@@ -201,3 +200,43 @@ contracts layer) adds eight cases: row equality across halves, literal
 independence, the decisive coordinated co-revert, both one-sided halves,
 single-digest re-pin staying red, count doors, and the module-level literal
 check. Zero new wiring, zero generated-artifact changes.
+
+
+## Description continuation prose (Door 3c)
+
+The generated client renders **204** indented `*     ...` continuation lines
+across **50** component-schema description nodes, and no landed fixed point
+read them. `_SCHEMA_DESCRIPTION_DIGEST` pins the snapshot's full description
+string; `_CLIENT_DESCRIPTION_SEQUENCE_DIGEST` and the first-line multiset read
+only `@description` first lines. On the landed tree a coordinated reword of
+one continuation line in both the snapshot and `openapi.d.ts`, with both
+provenance blob ids honestly re-pinned and both description literals
+re-derived, kept the guard and every other wired OpenAPI guard green. The
+client-visible IDE hover text changed and nothing pinned it.
+
+Door 3c adds a **third** hand-written literal in this guard:
+
+- `_CLIENT_DESCRIPTION_CONTINUATION_DIGEST` — sha256 over canonical sorted
+  `(component|description|index|prose)` rows read from the committed generated
+  bytes, not from the snapshot under guard. Only JSDoc blocks carrying an
+  `@description` first line own continuation rows; a `@default` block that
+  renders a multi-line array is excluded (its indented lines are a value, not
+  published prose).
+- `_EXPECTED_CLIENT_CONTINUATION_ROWS` (204) / `_EXPECTED_CLIENT_CONTINUATION_NODES`
+  (50) — exact count doors.
+
+The row is keyed by `(component, description, index)`, so a one-sided rewrite,
+a dropped line, a same-count relocation between two description nodes, and the
+coordinated co-revert all move the digest. This is the component-schema share
+of the same continuation projection as the operation `paths` door in
+`check_openapi_operation_annotations.py` (#314), split across two generated
+interfaces. Both are folded into already-wired guards with **zero wiring
+churn** — no `smoke.sh`, `PINNED_SUITES`, teeth, or registry edit. Eight
+companion cases cover the clean tree, the literal's independence, the count
+doors, the one-sided rewrite, the drop, the same-count relocation, the
+decisive honest co-revert, and the guard docstring naming the three Door 3c
+literals.
+
+A legitimate prose change must recompute `_CLIENT_DESCRIPTION_CONTINUATION_DIGEST`
+in the same commit as both artifacts and say why. Re-deriving it from the
+artifact under guard would make the pin self-referential.
