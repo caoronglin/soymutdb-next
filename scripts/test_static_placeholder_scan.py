@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 """Wiring + non-vacuity pin for the static placeholder-scan guard.
 
-``check_static_placeholder_scan.py`` pins both copies of the placeholder-origin
-regex against a reviewed floor. It only helps if (a) the contracts layer
-actually runs it, (b) its call is pinned in ``REQUIRED_GUARD_CALLS``, and (c)
-its own ``--self-test`` still fails on a one-sided drift. Each is asserted here
-from a second file, so deleting a pin, dropping the wire, or gutting the
-self-test fails the contracts layer instead of shipping a green layer with an
-unguarded scanner (§4a, PR #206).
+``check_static_placeholder_scan.py`` pins both scanners' token floors and
+their corpora against reviewed literals. It only helps if (a) the contracts
+layer actually runs it, (b) its call is pinned in ``REQUIRED_GUARD_CALLS``,
+(c) its own ``--self-test`` still fails on a one-sided drift, and (d) the
+pinned corpora are not silently mutable. Each is asserted here from a second
+file, so deleting a pin, dropping the wire, gutting the self-test or drifting
+an ``--include`` set fails the contracts layer instead of shipping a green
+layer with an unguarded scanner (§4a, PR #206).
 
 Stdlib only. Run directly or collect with pytest.
 """
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import io
-import contextlib
 import unittest
 from pathlib import Path
 
@@ -56,7 +57,7 @@ class TestStaticPlaceholderScan(unittest.TestCase):
     def test_self_test_has_teeth(self) -> None:
         # Exercised in-process, like test_contracts_registry_collection.py:
         # wiring a second --self-test call here would need a row in the teeth
-        # guard's _WIRED_SELF_TESTS floor, which three in-flight PRs own.
+        # guard's _WIRED_SELF_TESTS floor, which other in-flight PRs owned.
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             rc = module.self_test()
@@ -77,6 +78,58 @@ class TestStaticPlaceholderScan(unittest.TestCase):
         finally:
             module.check = original
         self.assertNotEqual(rc, 0, "a vacuous self-test passed")
+
+    def test_corpora_are_pinned_and_not_equal(self) -> None:
+        """The two scanners' corpora are reviewed, different, and non-empty."""
+        smoke = SMOKE.read_text(encoding="utf-8")
+        corpus = module.smoke_greps(smoke)
+        self.assertEqual(len(corpus), 2)
+        for _, includes in corpus:
+            self.assertEqual(includes, module.SMOKE_CORPUS)
+        self.assertNotIn("_headers", includes)
+        self.assertEqual(module.PRODUCTION_CORPUS, frozenset())
+        self.assertEqual(
+            module.PRODUCTION_SCAN_EXCLUDES,
+            frozenset({"manifest.json", "SHA256SUMS"}),
+        )
+        self.assertEqual(len(module.PRODUCTION_LOOPBACK_EXCLUDES), 5)
+        # The pin must not bless an equality the bytes do not have.
+        self.assertNotEqual(set(module.SMOKE_CORPUS), module.PRODUCTION_CORPUS)
+
+    def test_smoke_include_drift_is_detected(self) -> None:
+        """A widened --include set must be reported as a divergence."""
+        smoke = SMOKE.read_text(encoding="utf-8")
+        widened = smoke.replace(
+            "--include='*.json'", "--include='*.json' --include='_headers'",
+        )
+        errors = module.check(smoke=widened)
+        self.assertTrue(
+            any("corpus drifted" in e for e in errors), errors,
+        )
+
+    def test_production_loopback_corpus_is_read_back(self) -> None:
+        """Dropping a scan_loopback() --exclude must be a divergence too."""
+        production = (ROOT / "scripts" / "check-production-artifact.sh").read_text(
+            encoding="utf-8",
+        )
+        narrowed = production.replace("      --exclude='*.map' \\\n", "", 1)
+        errors = module.check(production=narrowed)
+        self.assertTrue(
+            any("corpus drifted" in e for e in errors), errors,
+        )
+
+    def test_self_test_plants_each_corpus_drift(self) -> None:
+        """Each of the three corpus drifts must produce its own PASS line."""
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = module.self_test()
+        self.assertEqual(rc, 0, buf.getvalue())
+        corpus_passes = [
+            line for line in buf.getvalue().splitlines()
+            if line.startswith("PASS self-test:")
+            and ("corpus" in line or "_headers" in line)
+        ]
+        self.assertGreaterEqual(len(corpus_passes), 3, buf.getvalue())
 
     def test_companion_suite_is_collected(self) -> None:
         smoke = SMOKE.read_text(encoding="utf-8")
