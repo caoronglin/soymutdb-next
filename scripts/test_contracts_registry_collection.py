@@ -10,7 +10,9 @@ that drops the ``--self-test`` line is caught here too.
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import unittest
 from pathlib import Path
 
@@ -231,6 +233,37 @@ class RegistryCollectionGuardTests(unittest.TestCase):
         )
         failures = guard.check(smoke, files, ci)
         self.assertTrue(any("2 times" in f for f in failures), failures)
+
+    def test_self_test_reports_every_emitted_case(self) -> None:
+        """The reported count must be measured, never a drifting constant.
+
+        A hardcoded ``+ N`` summary stays green while over- or under-counting
+        the probes that actually ran -- the same "registered but not collected"
+        shape this guard exists to kill. Run the real ``--self-test`` against
+        the committed tree and pin reported == emitted result lines.
+        """
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = guard.self_test()
+        out = buf.getvalue()
+        self.assertEqual(rc, 0, out)
+        emitted = [
+            line
+            for line in out.splitlines()
+            if line.startswith("PASS self-test:")
+            or line.startswith("FAIL self-test:")
+        ]
+        self.assertTrue(emitted, out)
+        reported = [
+            int(line.split()[1])
+            for line in out.splitlines()
+            if line.startswith("self-test: ")
+            and line.split()[1].isdigit()
+            and "cases" in line
+        ]
+        self.assertEqual(len(reported), 1, out)
+        self.assertEqual(reported[0], len(emitted),
+                         f"reported {reported[0]} but emitted {len(emitted)}: {out}")
 
     def test_committed_ci_wiring_is_gated(self) -> None:
         """The real script must satisfy every property, not just the tests."""

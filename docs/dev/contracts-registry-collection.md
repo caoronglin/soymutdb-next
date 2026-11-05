@@ -104,6 +104,11 @@ needs no edit here (verified by `--self-test`), removing one fails. The list
 must be updated only when a guard call is intentionally retired from this
 layer.
 
+The `--self-test` summary is counted from the result lines it actually emits,
+not from a hardcoded `len(cases) + N`: that constant drifts the moment a probe
+is added and would report a case count nothing ran. A regression pins reported
+== emitted against the committed tree.
+
 Every wiring match starts at the command itself, never at a `#`: a
 commented-out line still contains the right text and passes `bash -n`, but
 executes nothing. The standalone `${PYTHON_BIN}` guard calls and the

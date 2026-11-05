@@ -323,12 +323,28 @@ def load_sources() -> tuple[str, str, dict[str, str]]:
 
 
 def self_test() -> int:
-    """Every one-sided drift must be caught; the clean tree must pass."""
+    """Every one-sided drift must be caught; the clean tree must pass.
+
+    The reported case count is measured from the results actually emitted,
+    never typed as a constant: a hardcoded count drifts the moment a probe is
+    added, which is the very failure shape this guard exists to eliminate.
+    """
     smoke, ci_steps, files = load_sources()
     clean = check(smoke, files, ci_steps)
     if clean:
         print(f"FAIL self-test: clean tree drifts: {clean}")
         return 1
+
+    results = 0
+    failures = 0
+
+    def report(passed: bool, ok_msg: str, fail_msg: str) -> None:
+        """Emit one result and count it; the summary is measured, not guessed."""
+        nonlocal results, failures
+        results += 1
+        print(ok_msg if passed else fail_msg)
+        if not passed:
+            failures += 1
 
     cases: list[tuple[str, str, dict[str, str], str]] = []
 
@@ -441,20 +457,19 @@ def self_test() -> int:
     mutant7 = dict(files)
     mutant7[extra] = "# a real guard\n"
 
-    failures = 0
     for label, mutated_smoke, mutated_files, mutated_ci in cases:
         found = check(mutated_smoke, mutated_files, mutated_ci)
-        if found:
-            print(f"PASS self-test: {label} -> {len(found)} failure(s)")
-        else:
-            print(f"FAIL self-test: {label} was NOT caught")
-            failures += 1
+        report(
+            bool(found),
+            f"PASS self-test: {label} -> {len(found)} failure(s)",
+            f"FAIL self-test: {label} was NOT caught",
+        )
     fresh = check(smoke7, mutant7, ci_steps)
-    if fresh:
-        print(f"FAIL self-test: adding a new guard call was rejected: {fresh}")
-        failures += 1
-    else:
-        print("PASS self-test: adding a new guard call needs no allowlist edit")
+    report(
+        not fresh,
+        "PASS self-test: adding a new guard call needs no allowlist edit",
+        f"FAIL self-test: adding a new guard call was rejected: {fresh}",
+    )
 
     # Indentation was previously *accepted* for any width, on the reading that
     # bash runs the line either way. That reading is what let `dead() { ...; }`
@@ -470,11 +485,11 @@ def self_test() -> int:
         mutated_ci = ci_steps.replace(ci_line, f"{lead}{ci_line.strip()}\n", 1)
         assert mutated_ci != ci_steps, label
         found = check(smoke, files, mutated_ci)
-        if found:
-            print(f"PASS self-test: {label} is caught")
-        else:
-            print(f"FAIL self-test: {label} was accepted")
-            failures += 1
+        report(
+            bool(found),
+            f"PASS self-test: {label} is caught",
+            f"FAIL self-test: {label} was accepted",
+        )
 
     # Positive control for the nesting probe: re-indent the whole body by one
     # space. Nothing moved relative to anything, so the clean tree must stay
@@ -486,11 +501,11 @@ def self_test() -> int:
         ci_contracts_function(ci_steps), shifted, 1
     )
     found = check(smoke, files, shifted_ci)
-    if found:
-        print(f"FAIL self-test: a uniform re-indent was rejected: {found}")
-        failures += 1
-    else:
-        print("PASS self-test: a uniform body re-indent is accepted")
+    report(
+        not found,
+        "PASS self-test: a uniform body re-indent is accepted",
+        f"FAIL self-test: a uniform re-indent was rejected: {found}",
+    )
 
     # Operand blind spot: `--self-test` present but unable to gate. Each of
     # these kept a substring pin green while the exit status was discarded.
@@ -507,11 +522,11 @@ def self_test() -> int:
         )
         assert mutated_ci != ci_steps, label
         found = check(smoke, files, mutated_ci)
-        if found:
-            print(f"PASS self-test: a --self-test line with {label} is caught")
-        else:
-            print(f"FAIL self-test: a --self-test line with {label} was accepted")
-            failures += 1
+        report(
+            bool(found),
+            f"PASS self-test: a --self-test line with {label} is caught",
+            f"FAIL self-test: a --self-test line with {label} was accepted",
+        )
 
     wrapped = {
         "an if-false wrapper": f"  if false; then {ci_line.strip()}; fi\n",
@@ -523,21 +538,21 @@ def self_test() -> int:
         mutated_ci = ci_steps.replace(ci_line, replacement, 1)
         assert mutated_ci != ci_steps, label
         found = check(smoke, files, mutated_ci)
-        if found:
-            print(f"PASS self-test: {label} around --self-test is caught")
-        else:
-            print(f"FAIL self-test: {label} around --self-test was accepted")
-            failures += 1
+        report(
+            bool(found),
+            f"PASS self-test: {label} around --self-test is caught",
+            f"FAIL self-test: {label} around --self-test was accepted",
+        )
 
     duplicated = ci_steps.replace(ci_line, ci_line + ci_line, 1)
     found = check(smoke, files, duplicated)
-    if found:
-        print("PASS self-test: a duplicated --self-test line is caught")
-    else:
-        print("FAIL self-test: a duplicated --self-test line was accepted")
-        failures += 1
+    report(
+        bool(found),
+        "PASS self-test: a duplicated --self-test line is caught",
+        "FAIL self-test: a duplicated --self-test line was accepted",
+    )
 
-    print(f"self-test: {len(cases) + 15} cases, {failures} failure(s)")
+    print(f"self-test: {results} cases, {failures} failure(s)")
     return 1 if failures else 0
 
 
