@@ -45,6 +45,7 @@ SNAPSHOT_PATH = guard.ARTIFACT_PATHS["snapshot"]
 GENERATED_PATH = guard.ARTIFACT_PATHS["generated"]
 ENVELOPE_PATH = str(guard.ENVELOPE_GUARD.relative_to(ROOT))
 BODY_PATH = str(guard.BODY_GUARD.relative_to(ROOT))
+INLINE_PATH = str(guard.INLINE_GUARD.relative_to(ROOT))
 SMOKE_PATH = str(guard.SMOKE.relative_to(ROOT))
 
 BODY_LINE = '"application/json": components["schemas"]["%s"];'
@@ -57,6 +58,7 @@ def _tree() -> dict[str, str]:
         GENERATED_PATH: (ROOT / GENERATED_PATH).read_text(encoding="utf-8"),
         ENVELOPE_PATH: (ROOT / ENVELOPE_PATH).read_text(encoding="utf-8"),
         BODY_PATH: (ROOT / BODY_PATH).read_text(encoding="utf-8"),
+        INLINE_PATH: (ROOT / INLINE_PATH).read_text(encoding="utf-8"),
         SMOKE_PATH: (ROOT / SMOKE_PATH).read_text(encoding="utf-8"),
     }
 
@@ -132,6 +134,174 @@ def test_rewiring_the_guard_out_of_the_contracts_layer_is_rejected() -> None:
     assert _any(found, "does not invoke"), found
 
 
+# ---------------------------------------------------------------------------
+# The inline (non-$ref) bodies -- the hole the gate set did not cover
+# ---------------------------------------------------------------------------
+
+
+def _set_inline_snapshot_pin(tree: dict[str, str], key: str, value: str) -> None:
+    """Retype one pinned inline body, leaving both artifacts alone."""
+    source = tree[INLINE_PATH]
+    old = f"{key!r}: {guard.pinned_literal(guard.INLINE_GUARD, '_INLINE_BODY_BASELINE')[key]!r}"
+    assert old in source, old
+    tree[INLINE_PATH] = source.replace(f"{key!r}: ", f"{key!r}: ", 1)
+    tree[INLINE_PATH] = tree[INLINE_PATH].replace(
+        f"{key!r}: {guard.pinned_literal(guard.INLINE_GUARD, '_INLINE_BODY_BASELINE')[key]!r}",
+        f"{key!r}: {value!r}",
+        1,
+    )
+    assert tree[INLINE_PATH] != source
+
+
+def _drift_one_inline_body(tree: dict[str, str]) -> str:
+    """Retype ONE inline body in BOTH artifacts: the coordinated edit.
+
+    Returns the operation key so the caller can name what moved. Nothing else
+    in the tree changes: no component body, no path, no schema floor, no byte
+    fixed point, no blob pin. Every landed OpenAPI guard stays green by design.
+    """
+    key = "GET /api/v1/health/live 200"
+    document = json.loads(tree[SNAPSHOT_PATH])
+    schema = document["paths"]["/api/v1/health/live"]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    assert schema.get("type") == "object", schema
+    schema.clear()
+    schema["type"] = "number"
+    tree[SNAPSHOT_PATH] = json.dumps(document)
+
+    needle = "                        [key: string]: string;"
+    assert tree[GENERATED_PATH].count(needle) >= 1
+    tree[GENERATED_PATH] = tree[GENERATED_PATH].replace(
+        needle, "                        [key: string]: number;", 1
+    )
+    return key
+
+
+def test_a_coordinated_inline_body_retype_is_rejected() -> None:
+    """The hole: both artifacts move together and no component pin sees it.
+
+    This is the case the inline guard's own docstring names as the reason its
+    literal exists: "re-pinning both blob ids alongside a regenerate is one
+    deliberate act". If that act is enough, the literal is not a fixed point
+    for the *contract* -- only for the provenance note. The gate set has to
+    catch it, so it is asserted here, on the exact bytes.
+    """
+    tree = _tree()
+    key = _drift_one_inline_body(tree)
+    found = guard.failures(tree=tree)
+    assert _any(found, "_INLINE_BODY_BASELINE"), found
+    assert _any(found, key), found
+    assert _any(found, "committed artifacts"), found
+    assert _any(found, "_CLIENT_INLINE_BASELINE"), found
+
+
+def test_the_two_landed_gates_alone_are_blind_to_that_retype() -> None:
+    """Negative control for the case above.
+
+    If the retype were already caught by ``_ERROR_RESPONSE_BASELINE`` or
+    ``_CLIENT_BODY_TOTAL``, the new gates would be decoration. Run the same
+    drifted tree against the pre-extension gate set and require silence.
+    """
+    tree = _tree()
+    _drift_one_inline_body(tree)
+    landed = (
+        guard.Gate(
+            "_ERROR_RESPONSE_BASELINE", guard.ENVELOPE_GUARD, "error_status", ("snapshot",)
+        ),
+        guard.Gate(
+            "_CLIENT_BODY_TOTAL", guard.BODY_GUARD, "client_total", ("snapshot", "generated")
+        ),
+    )
+    saved = guard.GATES
+    guard.GATES = landed
+    try:
+        # Named, not bare: a silent ``== []`` here reads as an empty assertion
+        # in a runner log, and the whole point of this case is the *absence* of
+        # a named cause. The message carries the found list when it fires.
+        silent = guard.failures(tree=tree)
+        assert not silent, silent
+    finally:
+        guard.GATES = saved
+
+
+def test_a_bumped_inline_pin_with_untouched_artifacts_is_rejected() -> None:
+    """The classic hole, per literal: hand-edit the pin, leave the bytes."""
+    tree = _tree()
+    _set_inline_snapshot_pin(
+        tree, "GET /api/v1/health/live 200", "application/json object<number>"
+    )
+    found = guard.failures(tree=tree)
+    assert _any(found, "_INLINE_BODY_BASELINE"), found
+
+
+def test_a_bumped_client_inline_pin_with_untouched_artifacts_is_rejected() -> None:
+    tree = _tree()
+    pinned = guard.pinned_literal(guard.INLINE_GUARD, "_CLIENT_INLINE_BASELINE")
+    key = "liveness_api_v1_health_live_get"
+    assert pinned[key] == ["[key:string]:string;"], pinned[key]
+    source = tree[INLINE_PATH]
+    tree[INLINE_PATH] = source.replace(
+        f"{key!r}: ['[key:string]:string;']", f"{key!r}: ['[key:string]:number;']", 1
+    )
+    assert tree[INLINE_PATH] != source
+    found = guard.failures(tree=tree)
+    assert _any(found, "_CLIENT_INLINE_BASELINE"), found
+
+
+def test_an_inline_pin_that_disappears_is_rejected() -> None:
+    """Delete the *assignment block*, keep the module parseable.
+
+    Landing the ablation on the first mention would only edit the docstring
+    (the pin is named ~10 lines above it) and the guard would still find the
+    literal -- a vacuous ablation. Renaming the target is the honest form: the
+    source still parses, and the name the gate pins is gone.
+    """
+    tree = _tree()
+    source = tree[INLINE_PATH]
+    renamed = source.replace("_INLINE_BODY_BASELINE = {", "_INLINE_BODY_BASELINE_OLD = {", 1)
+    assert renamed != source
+    tree[INLINE_PATH] = renamed
+    found = guard.failures(tree=tree)
+    assert _any(found, "no longer pins _INLINE_BODY_BASELINE"), found
+
+
+def test_the_inline_gate_reads_the_same_reader_as_the_pin() -> None:
+    """A second, independent reader would drift from the one that decides.
+
+    ``recomputed`` must agree with the pin's own ``failures()`` verdict on the
+    committed tree -- if the two ever disagree, one of them is auditing bytes
+    the other is not.
+    """
+    document = json.loads(_tree()[SNAPSHOT_PATH])
+    generated = _tree()[GENERATED_PATH]
+    inline = guard.inline_guard()
+    assert guard.recomputed(guard.INLINE_SNAPSHOT_GATE, document, generated) == (
+        inline._snapshot_inline(document)
+    )
+    assert guard.recomputed(guard.INLINE_CLIENT_GATE, document, generated) == (
+        inline._client_inline_bodies(generated)
+    )
+    found = inline.failures(document, generated, _tree()[SMOKE_PATH])
+    assert not found, found
+
+
+def test_each_inline_gate_is_a_single_explicit_pairing() -> None:
+    """Pin the pairing, so flipping the wiring goes red.
+
+    ``test_a_coordinated_inline_body_retype_is_rejected`` shows the gate set
+    catches the retype, but it cannot show *why*: swapping which artifact a
+    gate names, or pointing it at one pin twice, keeps the semantic door green
+    here (both artifacts really did move) and would silently disable half the
+    history door -- the "the artifacts never got committed" case. So the pairing itself
+    is asserted, exactly, by name.
+    """
+    pairs = [(gate.name, gate.kind, gate.artifacts) for gate in guard.GATES]
+    assert pairs.count(("_INLINE_BODY_BASELINE", "inline_snapshot", ("snapshot",))) == 1
+    assert pairs.count(("_CLIENT_INLINE_BASELINE", "inline_client", ("generated",))) == 1
+    assert len(pairs) == len(set(pairs)), pairs
+
+
 def test_client_total_reader_is_anchored_to_the_body_line() -> None:
     """A reader that matched bare ``components["schemas"][`` skews by a third.
 
@@ -157,7 +327,7 @@ def test_the_suite_has_teeth() -> None:
     deleting the whole history door leaves this suite green.
     """
     cases = [name for name in globals() if name.startswith("test_")]
-    assert len(cases) >= 14, cases
+    assert len(cases) >= 20, cases
     found = guard.failures(tree=_tree())
     assert not found, found
 
