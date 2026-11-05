@@ -5,6 +5,7 @@ PEP 427 filenames, so these ablations need no Rust, no wheel and no Docker.
 """
 from __future__ import annotations
 
+import json
 import re
 import zipfile
 from pathlib import Path
@@ -379,17 +380,102 @@ def test_source_contract_rejects_overriding_the_deny_policy(
     assert any("overrides the committed deny.toml" in f for f in guard.source_failures())
 
 
+@pytest.mark.parametrize(
+    "check",
+    [
+        {"name": "cargo-deny", "category": "cargo-deny",
+         "command": ["cargo", "deny", "check"]},
+        {"name": "rust-audit", "category": "rust-audit",
+         "command": ["cargo", "audit", "--json"]},
+        {"name": "cargo-udeps", "category": "cargo-udeps",
+         "command": ["cargo", "udeps"]},
+        {"name": "cargo_geiger", "category": "cargo_geiger"},
+        {"name": "deny check", "category": "vulnerabilities",
+         "command": ["sh", "-c", "cargo deny check"]},
+    ],
+)
 def test_source_contract_rejects_duplicate_governance_analyzer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, check: dict
+) -> None:
+    """Registering a SECOND real cargo analyzer must turn the guard red.
+
+    The old guard matched only the literal ``"cargo audit"`` bytes in the raw
+    policy file, so a check named ``cargo-deny`` (one of the two tools this
+    lane actually runs) registered cleanly and produced a second finding set
+    for the same Cargo.lock while every local gate stayed green.
+    """
+    fake = _synthetic_tree(tmp_path)
+    policy_file = fake / "dependency-governance.json"
+    config = json.loads(policy_file.read_text(encoding="utf-8"))
+    config["checks"].append(check)
+    policy_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    monkeypatch.setattr(guard, "ROOT", fake)
+    failures = guard.source_failures()
+    assert any("exactly one Rust finding set" in f for f in failures), failures
+    assert check["name"] in " ".join(failures), failures
+
+
+def test_source_contract_accepts_the_committed_governance_policy(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The negatives above are only meaningful if the committed policy is clean."""
     fake = _synthetic_tree(tmp_path)
-    config = (fake / "dependency-governance.json").read_text(encoding="utf-8")
-    (fake / "dependency-governance.json").write_text(
-        config.replace('"schema_version": 1,', '"schema_version": 1, "cargo audit": true,'),
-        encoding="utf-8",
-    )
+    monkeypatch.setattr(guard, "ROOT", fake)
+    assert guard.foreign_cargo_analyzers(fake / "dependency-governance.json") == []
+    assert not any("exactly one Rust finding set" in f for f in guard.source_failures())
+
+
+@pytest.mark.parametrize(
+    "broken",
+    ["", "not json", '{"schema_version": 1}', '{"checks": "oops"}'],
+)
+def test_source_contract_fails_closed_on_malformed_governance_policy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, broken: str
+) -> None:
+    """A policy the guard cannot parse must never read as "no analyzers"."""
+    fake = _synthetic_tree(tmp_path)
+    (fake / "dependency-governance.json").write_text(broken, encoding="utf-8")
     monkeypatch.setattr(guard, "ROOT", fake)
     assert any("exactly one Rust finding set" in f for f in guard.source_failures())
+
+
+def test_contracts_layer_rejects_duplicate_governance_analyzer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The independent unittest door must catch the same registration.
+
+    It reads committed bytes rather than the guard's own self-test, so it has
+    to stay red even if someone edits the guard to lie. Both doors share the
+    structural parser so their verdicts cannot drift apart.
+    """
+    import unittest
+
+    from scripts import test_ci_job_contracts as contracts
+
+    fake = _synthetic_tree(tmp_path)
+    policy_file = fake / "dependency-governance.json"
+    original = policy_file.read_text(encoding="utf-8")
+    config = json.loads(original)
+    config["checks"].append(
+        {"name": "cargo-deny", "category": "cargo-deny",
+         "command": ["cargo", "deny", "check"]}
+    )
+    policy_file.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+    monkeypatch.setattr(guard, "ROOT", fake)
+    monkeypatch.setattr(contracts, "ROOT", fake)
+
+    method = "test_bio_core_wheel_abi_ledger_is_enforced_by_the_contracts_layer"
+    case = contracts.DeliveryArchitectureTests(method)
+    result = unittest.TestResult()
+    case.run(result)
+    assert result.failures or result.errors, "contracts door stayed green"
+
+    # Restore the exact captured bytes and prove the same door is green again.
+    policy_file.write_text(original, encoding="utf-8")
+    result = unittest.TestResult()
+    case = contracts.DeliveryArchitectureTests(method)
+    case.run(result)
+    assert not (result.failures or result.errors), "restored policy must be green"
 
 
 def test_source_contract_rejects_unwired_smoke_layer(

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 import re
 import sys
 import tomllib
@@ -248,6 +249,52 @@ def cargo_outside_crate(command_line: str) -> bool:
     return False
 
 
+# Only the single bio-core job owns a Rust toolchain, so only it may emit a
+# Rust finding set. ANY governance check that names a cargo tool (cargo audit,
+# cargo deny, cargo-udeps, ...) would read the same Cargo.lock and produce a
+# second, contradictory report. Detection is structural over the parsed checks,
+# not a substring of the raw file: a check registered as `cargo-deny` or as an
+# argv of ["cargo", "deny", "check"] must not slip past on spelling.
+def _names_cargo(text: str) -> bool:
+    """True when a field names the `cargo` tool as a standalone token."""
+    return "cargo" in re.sub(r"[^a-z0-9]+", " ", str(text).lower()).split()
+
+
+def foreign_cargo_analyzers(policy: Path) -> list[str]:
+    """Names of governance checks that register a Rust cargo analyzer.
+
+    Reads the policy as JSON and inspects each check's ``name``, ``category``,
+    ``command`` and report/accept paths. An unreadable/malformed policy returns
+    a sentinel so the caller fails closed instead of treating it as clean.
+    """
+    try:
+        document = json.loads(policy.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ["<policy unreadable>"]
+    if not isinstance(document, dict) or "checks" not in document:
+        return ["<policy has no checks key>"]
+    checks = document["checks"]
+    if not isinstance(checks, list):
+        return ["<checks not a list>"]
+    registered: list[str] = []
+    for check in checks:
+        if not isinstance(check, dict):
+            continue
+        fields = [check.get("name"), check.get("category"), check.get("accept_file")]
+        command = check.get("command")
+        if isinstance(command, list):
+            fields.extend(command)
+        elif command is not None:
+            fields.append(command)
+        report = check.get("report")
+        if isinstance(report, dict):
+            fields.append(report.get("path"))
+            fields.append(report.get("mode"))
+        if any(_names_cargo(f) for f in fields if f is not None):
+            registered.append(str(check.get("name", "<unnamed>")))
+    return registered
+
+
 def source_failures() -> list[str]:
     """The producer/consumer glob and the single Rust supply-chain lane."""
     failures: list[str] = []
@@ -281,11 +328,16 @@ def source_failures() -> list[str]:
             if tool not in text:
                 failures.append(f"supply-chain script no longer runs {tool!r}")
     policy = ROOT / "dependency-governance.json"
-    if policy.is_file() and "cargo audit" in policy.read_text(encoding="utf-8"):
-        failures.append(
-            "a cargo-* analyzer was added to dependency-governance.json; "
-            "the release lane must have exactly one Rust finding set"
-        )
+    if not policy.is_file():
+        failures.append("dependency-governance.json is missing")
+    else:
+        registered = foreign_cargo_analyzers(policy)
+        if registered:
+            failures.append(
+                "a cargo-* analyzer was registered in dependency-governance.json "
+                f"(checks: {', '.join(registered)}); "
+                "the release lane must have exactly one Rust finding set"
+            )
 
     # The supply-chain scanner is a separate `bash` process from the wheel
     # builder; verify-bio-core.sh's `export PATH=...` does not propagate to it.
