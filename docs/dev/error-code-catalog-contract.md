@@ -4,8 +4,9 @@
 (listed in `package.json` `files`). Its source of truth is the
 `SoyMutDBError` hierarchy in `apps/api/app/core/exceptions.py`:
 `error_code_catalog()` walks every subclass, takes its `error_code` attribute
-and its class docstring, and `export_contract.py --error-codes` writes the
-result. The same catalog is embedded in `openapi.json` as `x-error-codes`
+and its class docstring, then adds the `HTTP_ERROR_CODE` (`http_error`) fallback
+that has no exception subclass, and `export_contract.py --error-codes` writes
+the result. The same catalog is embedded in `openapi.json` as `x-error-codes`
 (`main.py` injects it into the schema).
 
 ## The gap this guard closes
@@ -29,9 +30,11 @@ Consequences before this guard:
 `scripts/check_error_code_catalog.py` reads only committed bytes (stdlib
 `ast` / `json`, no API import, no 3.15 interpreter, no pydantic, no PG):
 
-1. `error-codes.json` equals the catalog derived from the exception hierarchy.
-   Descriptions are compared too -- they are derived with `inspect.cleandoc`,
-   matching how Python stores `__doc__`, so multi-line docstrings (e.g. #103's
+1. `error-codes.json` equals the catalog derived from the exception hierarchy
+   plus the `HTTP_ERROR_CODE` fallback (read from the constant and the
+   `catalog[HTTP_ERROR_CODE] = ...` entry, not hard-coded). Descriptions are
+   compared too -- they are derived with `inspect.cleandoc`, matching how
+   Python stores `__doc__`, so multi-line docstrings (e.g. #103's
    `StatisticsInvariantError`) reproduce exactly.
 2. `openapi.json` `x-error-codes` equals the same derived catalog.
 3. Every code is a lowercase `snake_case` token; the catalog is non-empty.

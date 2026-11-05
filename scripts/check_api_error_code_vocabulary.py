@@ -79,6 +79,12 @@ def source_codes(root: Path) -> set[str]:
     bare interpreter with no API dependencies installed. It is only used to
     check the lock against the source, never as the source of truth for the
     lock's contents.
+
+    ``error_code_catalog()`` also publishes one code with no ``SoyMutDBError``
+    subclass: the generic HTTPException fallback bound by the module-level
+    ``HTTP_ERROR_CODE`` constant and added via ``catalog[HTTP_ERROR_CODE] = ...``.
+    Both parts must be present for the fallback to count as declared, so a
+    dropped catalog entry cannot lean on a leftover constant.
     """
     import ast
 
@@ -101,6 +107,33 @@ def source_codes(root: Path) -> set[str]:
                 value = stmt.value
             if isinstance(value, ast.Constant) and isinstance(value.value, str):
                 codes.add(value.value)
+
+    const_value: str | None = None
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if (
+                isinstance(target, ast.Name)
+                and target.id == "HTTP_ERROR_CODE"
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                const_value = node.value.value
+    if const_value is not None:
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+                continue
+            target = node.targets[0]
+            if (
+                isinstance(target, ast.Subscript)
+                and isinstance(target.value, ast.Name)
+                and target.value.id == "catalog"
+                and isinstance(target.slice, ast.Name)
+                and target.slice.id == "HTTP_ERROR_CODE"
+            ):
+                codes.add(const_value)
+                break
     return codes
 
 
