@@ -210,6 +210,7 @@ PINNED_SUITES: frozenset[str] = frozenset(
         'scripts/test_openapi_behavior_contracts.py',
         'scripts/test_openapi_document_metadata_guard.py',
         'scripts/test_openapi_operation_id_floor.py',
+        'scripts/test_openapi_operation_parameter_floor.py',
         'scripts/test_openapi_snapshot_body_integrity.py',
         'scripts/test_openapi_snapshot_contract.py',
         'scripts/test_platform_delivery_contracts.py',
@@ -219,6 +220,7 @@ PINNED_SUITES: frozenset[str] = frozenset(
         'scripts/test_site_artifact_isolation.py',
         'scripts/test_supply_chain_contracts.py',
         'scripts/test_variant_row_key_contract.py',
+        'scripts/test_variant_summary_assembly_consistency.py',
     }
 )
 
