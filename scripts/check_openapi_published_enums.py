@@ -14,8 +14,12 @@ The authoritative side is the Python source, read here with :mod:`ast`; the
 published side is the committed snapshot. Both directions fail: a member the
 source declares and the snapshot omits (a regenerated client narrows to a value
 the API really sends), and a member the snapshot invents (a client branch for a
-value that never arrives). Nothing here restates a member list, so adding a
-member to source and snapshot together stays green.
+value that never arrives). Those comparisons are two half-views of one tree, so
+a coordinated edit to source and snapshot (add, drop, retype, or a ``True -> 1``
+type weakening) stays green. ``_PUBLISHED_ENUM_BASELINE`` is an independent
+literal pin of every published domain, compared with type identity, so the pin
+means "publishes exactly this"; a legitimate change must move the literal in
+the same commit and say why.
 
 The snapshot has three spellings for one declared ``Literal``, and a guard that
 knows only one of them is a guard that mostly passes:
@@ -103,6 +107,238 @@ INLINED_ENUM_CLASSES = frozenset(
         "_SectionState",
     }
 )
+# Exact published value domains, an independent fixed point.  Read the
+# committed snapshot on both sides of the comparisons below and every
+# coordinated edit is invisible: add, drop or retype a member in the source and
+# the snapshot together, and the two halves still agree.  ``True == 1`` in
+# Python, so a bare ``!=`` is also blind to a boolean leaf silently republished
+# as an integer.  This literal is NOT derived from either half -- update it in
+# the same commit as an intentional change and say why, exactly like
+# ``_ERROR_RESPONSE_BASELINE`` / ``_SNAPSHOT_FLOOR`` / ``_PAGINATION_BASELINE``.
+#
+# Keys are the schema path to the ``enum`` / ``const`` holder; values are the
+# ordered domain lists.  ``_same`` compares types recursively as well as values.
+_PUBLISHED_ENUM_BASELINE: dict[str, list[list[Any]]] = {
+    'AdminSiteBrandResponse.properties.variant': [['external', 'internal']],
+    'AnalysesSubmitResponse.properties.status': [['queued']],
+    'AnalysesUploadResponse.properties.upload_method': [['POST']],
+    'AnalysisJobStatus': [
+        ['pending', 'queued', 'running', 'succeeded', 'failed', 'cancel_requested', 'cancelled'],
+    ],
+    'AnalysisType': [['fastp', 'scanpy']],
+    'AnnotationTerm.properties.kind': [
+        ['experimental', 'curated', 'predicted', 'transferred', 'imported', 'unknown'],
+    ],
+    'AnnotationTerm.properties.ontology': [['go', 'kegg']],
+    'ArtifactRequest.properties.artifact_type': [['msa', 'tree']],
+    'ArtifactResponse.properties.artifact_type': [['msa', 'tree']],
+    'ArtifactResponse.properties.state': [['pending', 'running', 'succeeded', 'failed']],
+    'BlastDatabaseResponse.properties.build_status': [
+        ['pending', 'building', 'validating', 'publishing', 'published', 'failed', 'ready'],
+    ],
+    'BlastDatabaseResponse.properties.engine': [['diamond', 'ncbi_blast']],
+    'BlastDatabaseResponse.properties.sequence_type.anyOf': [
+        [
+           'genome', 'cds', 'transcript', 'protein', 'repeat_masked', 'pan_genome',
+           'family_consensus', 'custom',
+        ],
+    ],
+    'BlastGenomeTargetResponse.properties.reason.anyOf': [
+        [
+           'job_not_completed', 'authorization_failed', 'unsupported_program',
+           'subject_not_found', 'ambiguous_subject', 'assembly_mismatch',
+           'no_genomic_coordinates', 'invalid_subject_id',
+        ],
+    ],
+    'BlastGenomeTargetResponse.properties.resolution.anyOf': [
+        ['gene_accession', 'gene_alias', 'transcript_id'],
+    ],
+    'BlastGenomeTargetResponse.properties.status': [['resolved', 'unresolved']],
+    'BlastIndexBuildRequest.properties.db_type': [['nucl', 'prot']],
+    'BlastIndexBuildRequest.properties.sequence_type': [
+        [
+           'genome', 'cds', 'transcript', 'protein', 'repeat_masked', 'pan_genome',
+           'family_consensus', 'custom',
+        ],
+    ],
+    'BlastIndexBuildResponse.properties.db_type': [['nucl', 'prot']],
+    'BlastIndexBuildResponse.properties.state': [
+        ['pending', 'building', 'validating', 'publishing', 'published', 'failed', 'ready'],
+    ],
+    'BlastJobResponse.properties.engine': [['ncbi_blast', 'diamond']],
+    'BlastJobStatus': [['pending', 'running', 'completed', 'failed', 'cancelled', 'expired']],
+    'BlastProgram': [['blastn', 'blastp', 'blastx', 'tblastn', 'tblastx']],
+    'BlastSubmitProgram': [['blastn', 'blastp', 'blastx', 'tblastn', 'tblastx']],
+    'BlastSubmitRequest.properties.engine': [['ncbi_blast', 'diamond']],
+    'ConsequenceType': [
+        [
+           'missense_variant', 'stop_gained', 'synonymous_variant', 'frameshift_variant',
+           'inframe_insertion', 'inframe_deletion', 'splice_donor_variant',
+           'splice_acceptor_variant', 'intron_variant', '5_prime_UTR_variant',
+           '3_prime_UTR_variant', 'upstream_gene_variant', 'downstream_gene_variant',
+           'intergenic_variant', 'start_lost', 'stop_lost',
+        ],
+    ],
+    'DataPatchItem.properties.patch_type': [['set', 'clear', 'format']],
+    'DatabaseCapabilitiesResponse.properties.analytics.anyOf': [['postgresql']],
+    'DatabaseCapabilitiesResponse.properties.authoritative': [['postgresql']],
+    'EnrichmentGseaResponse.properties.mode': [['gsea']],
+    'EnrichmentGseaResponse.properties.ontology': [['go', 'kegg']],
+    'EnrichmentRequest.properties.mode': [['ora', 'gsea']],
+    'EnrichmentRequest.properties.ontology': [['go', 'kegg']],
+    'EnrichmentResponse.properties.mode': [['ora']],
+    'EnrichmentResponse.properties.ontology': [['go', 'kegg']],
+    'EvidenceTag.properties.kind': [
+        ['experimental', 'curated', 'predicted', 'transferred', 'imported', 'unknown'],
+    ],
+    'ExpPatternRequest.properties.scale': [['zscore', 'none']],
+    'ExpPatternResponse.properties.clustering': [['input', 'hierarchical', 'mean_sort', 'none']],
+    'ExpPatternResponse.properties.scale': [['zscore', 'none']],
+    'ExternalArticlePlatform': [['wechat', 'xmol']],
+    'FamilyDetailResponse.properties.level': [['gene_family', 'gene_subfamily']],
+    'FamilyMemberResponse.properties.relationship_type': [
+        ['one_to_one', 'one_to_many', 'many_to_many'],
+    ],
+    'FamilyResponse.properties.level': [['gene_family', 'gene_subfamily']],
+    'FooterNavigationLink.properties.target': [['internal', 'external']],
+    'FormatInspectRequest.properties.fmt': [['fasta', 'fastq', 'bed']],
+    'FormatInspectResponse.properties.fmt': [['fasta', 'fastq', 'bed']],
+    'GwasFileType': [['snp', 'other']],
+    'GwasJobStatus': [['pending', 'running', 'completed', 'failed', 'cancelled']],
+    'GwasMethod': [['emmax', 'gemma']],
+    'HomologRecord.properties.homolog_type': [['ortholog', 'paralog']],
+    'HomologRecord.properties.kind': [
+        ['experimental', 'curated', 'predicted', 'transferred', 'imported', 'unknown'],
+    ],
+    'ImpactLevel': [['HIGH', 'MODERATE', 'LOW', 'MODIFIER']],
+    'ImportCommitRequest.properties.confirm': [[True]],
+    'ImportCreateRequest.properties.type': [
+        [
+           'vcf', 'gff3', 'fasta', 'blast_db', 'seed_data', 'expression_csv', 'homolog_csv',
+           'module_tsv',
+        ],
+    ],
+    'ImportInspectionResponse.properties.schema_version': [[1]],
+    'InlineTarget.properties.kind': [['inline']],
+    'KmerRequest.properties.ambiguity_policy': [['skip', 'reject']],
+    'LocalTestPreviewMeta.properties.annotation_version': [['Wm82.a6.v1']],
+    'LocalTestPreviewMeta.properties.coordinate_system': [['1-based-inclusive']],
+    'LocalTestPreviewMeta.properties.preview': [[True]],
+    'LocalTestPreviewMeta.properties.publication_status': [['unpublished']],
+    'MatchHit.properties.strand': [['+', '-']],
+    'MatchType': [['exact', 'alias', 'cross-version', 'text']],
+    'MediaAssetStatus': [['pending', 'ready', 'archived']],
+    'MultipartStartRequest.properties.type': [
+        [
+           'vcf', 'gff3', 'fasta', 'blast_db', 'seed_data', 'expression_csv', 'homolog_csv',
+           'module_tsv',
+        ],
+    ],
+    'NewsStatus': [['draft', 'published', 'archived']],
+    'OrfCandidate.properties.strand': [['+', '-']],
+    'OrthologRecord.properties.homolog_type': [['ortholog', 'paralog']],
+    'OrthologRecord.properties.relationship_type': [['one_to_one', 'one_to_many', 'many_to_many']],
+    'OrthologResponse.properties.state': [['available', 'no_data', 'not_imported']],
+    'OverlapRequest.properties.annotation_type': [['gene']],
+    'OverlapRequest.properties.coordinate_system': [['1-based-inclusive']],
+    'OverlapRequest.properties.mode': [['hits', 'count']],
+    'OverlapResponse.properties.coordinate_system': [['1-based-inclusive']],
+    'PageDefinitionStatusEnum': [['draft', 'preview', 'requested', 'published']],
+    'PageStatus': [['draft', 'published', 'archived']],
+    'PluginRoute.properties.method': [['GET', 'POST', 'PUT', 'PATCH', 'DELETE']],
+    'PreviewAssembly.properties.name': [['Gmax_880_v6.0']],
+    'PreviewAssembly.properties.species': [['Glycine max']],
+    'PreviewAssembly.properties.status': [['unpublished']],
+    'PreviewAssembly.properties.version': [['v6.0']],
+    'PreviewDatasetSource.properties.key': [['03_soymut-a6-test']],
+    'PreviewGeneItem.properties.strand': [['+', '-']],
+    'PreviewGeneSearchResponse.properties.annotation_version': [['Wm82.a6.v1']],
+    'PreviewGeneSearchResponse.properties.preview': [[True]],
+    'PreviewGeneSearchResponse.properties.publication_status': [['unpublished']],
+    'PreviewMutationSiteItem.properties.confidence': [['H', 'L']],
+    'PreviewMutationSiteSearchResponse.properties.annotation_version': [['Wm82.a6.v1']],
+    'PreviewMutationSiteSearchResponse.properties.coordinate_system': [['1-based-inclusive']],
+    'PreviewMutationSiteSearchResponse.properties.preview': [[True]],
+    'PreviewMutationSiteSearchResponse.properties.publication_status': [['unpublished']],
+    'PublicationStatus': [
+        [
+           'requested', 'building', 'validating', 'deploying', 'published', 'failed',
+           'rolled_back', 'superseded',
+        ],
+    ],
+    'PublicationTarget': [['local', 'github_pages', 'cloudflare_pages']],
+    'ReleaseActionRequest.properties.confirm': [[True]],
+    'ReleaseStatus': [
+        [
+           'draft', 'validated', 'ready', 'published', 'rolled_back', 'validated', 'published',
+           'rolled_back',
+        ],
+    ],
+    'ResolvedTableView.properties.site_variant': [['external', 'internal']],
+    'ReverseComplementRequest.properties.alphabet': [['dna', 'rna', 'protein']],
+    'ReverseComplementResponse.properties.alphabet': [['dna', 'rna', 'protein']],
+    'SearchResultType': [['gene', 'variant', 'mutant_line', 'phenotype', 'publication']],
+    'SectionStatus.properties.section': [
+        ['annotation', 'homolog', 'expression', 'variants', 'phenotype', 'literature'],
+    ],
+    'SectionStatus.properties.state': [['available', 'empty', 'not_imported']],
+    'SequenceAlignRequest.properties.alphabet': [['dna', 'rna', 'protein']],
+    'SequenceAlignRequest.properties.mode': [['local', 'global', 'semiglobal']],
+    'SequenceAlignResponse.properties.coordinate_system': [['1-based-inclusive']],
+    'SequenceAlignResponse.properties.mode': [['local', 'global', 'semiglobal']],
+    'SequenceAvailability.properties.availability': [['available', 'unavailable']],
+    'SequenceAvailability.properties.molecule': [['genomic', 'cds', 'transcript', 'protein']],
+    'SequenceMatchRequest.properties.alphabet': [['dna', 'rna', 'protein']],
+    'SequenceMatchRequest.properties.iupac_mode': [['literal']],
+    'SequenceMatchRequest.properties.mode': [['exact', 'approximate']],
+    'SequenceMatchResponse.properties.coordinate_system': [['1-based-inclusive']],
+    'SequenceMatchResponse.properties.method': [['exact', 'approximate']],
+    'SequenceStatsRequest.properties.alphabet': [['dna', 'rna', 'protein']],
+    'SequenceStatsRequest.properties.ambiguous_gc_policy': [['exclude', 'include']],
+    'SettingFieldSchema.properties.kind': [
+        ['string', 'color', 'integer', 'boolean', 'enum', 'email', 'url', 'uuid'],
+    ],
+    'SettingFieldSchema.properties.permission': [['administrator']],
+    'SettingFieldSchema.properties.redaction': [['none', 'omit']],
+    'SettingFieldSchema.properties.scope': [['global']],
+    'SettingsHistoryItem.properties.action': [['patch', 'put_compat', 'rollback']],
+    'SettingsSchemaResponse.properties.version': [[1]],
+    'SettingsValidateResponse.properties.valid': [[True]],
+    'SiteBrandResponse.properties.variant': [['external', 'internal']],
+    'SiteVariant': [['external', 'internal']],
+    'SpeciesCoverageResponse.properties.state': [['available', 'no_data', 'not_imported']],
+    'SpeciesInstanceHealthResponse.properties.connection_state': [
+        ['unknown', 'healthy', 'unhealthy', 'disabled', 'unconfigured'],
+    ],
+    'SpeciesInstanceHealthResponse.properties.remote_management': [['local', 'registration_only']],
+    'SpeciesInstanceResponse.properties.connection_state': [
+        ['unknown', 'healthy', 'unhealthy', 'disabled', 'unconfigured'],
+    ],
+    'SpeciesInstanceResponse.properties.remote_management': [['local', 'registration_only']],
+    'Strand': [['+', '-']],
+    'TableViewTemplateCreate.properties.kind': [
+        ['mutation_sites', 'variants', 'genes', 'mutant_lines'],
+    ],
+    'TableViewTemplateCreate.properties.site_variant': [['external', 'internal']],
+    'TableViewTemplateResponse.properties.site_variant': [['external', 'internal']],
+    'TranscriptPartResponse.properties.kind': [['cds', 'utr5', 'utr3']],
+    'UploadPresignResponse.properties.upload_method': [['POST']],
+    'UserCreate.properties.role_name': [['viewer']],
+    'VariantType': [['SNP', 'INS', 'DEL', 'MNV', 'SV']],
+    'WidgetCategoryEnum': [
+        [
+           'hero', 'navigation', 'search', 'data_table', 'detail', 'visualization', 'stats',
+           'external', 'layout', 'custom',
+        ],
+    ],
+    'WidgetPermissionEnum': [['public', 'authenticated', 'admin']],
+    'app__models__seed_request__SeedRequestStatus': [
+        ['pending', 'approved', 'rejected', 'fulfilled'],
+    ],
+    'app__schemas__seed__SeedRequestStatus': [
+        ['pending', 'approved', 'shipped', 'completed', 'rejected'],
+    ],
+}
 
 
 class _Unresolvable:
@@ -404,6 +640,50 @@ def field_domain_nodes(
     return out
 
 
+def _same(a: Any, b: Any) -> bool:
+    """Structural equality that also requires identical types.
+
+    ``True == 1`` and ``1 == 1.0`` in Python, so a plain ``!=`` between a
+    published domain and its pin accepts a boolean quietly rewritten as an
+    integer.  Compare types as well as values, recursively.
+    """
+    if type(a) is not type(b):
+        return False
+    if isinstance(a, dict):
+        return set(a) == set(b) and all(_same(a[k], b[k]) for k in a)
+    if isinstance(a, (list, tuple)):
+        return len(a) == len(b) and all(_same(x, y) for x, y in zip(a, b))
+    return a == b
+
+
+def _published_domains(document: dict[str, Any]) -> dict[str, list[list[Any]]]:
+    """Every published ``enum`` / ``const`` domain, keyed by its schema path.
+
+    Derived from the snapshot alone, so a domain the source-driven comparisons
+    skip (an inlined model, a ``$defs`` copy, a field whose ``Literal`` the AST
+    reader cannot resolve) is still pinned by the independent baseline.
+    """
+    found: dict[str, list[list[Any]]] = {}
+
+    def walk(node: Any, label: str) -> None:
+        if isinstance(node, dict):
+            if isinstance(node.get("enum"), list):
+                found.setdefault(label, []).append(list(node["enum"]))
+            if "const" in node:
+                found.setdefault(label, []).append([node["const"]])
+            for key, value in node.items():
+                if key in ("enum", "const"):
+                    continue
+                walk(value, f"{label}.{key}")
+        elif isinstance(node, list):
+            for value in node:
+                walk(value, label)
+
+    for name, schema in sorted(document.get("components", {}).get("schemas", {}).items()):
+        walk(schema, name)
+    return {label: sorted(domains, key=repr) for label, domains in sorted(found.items())}
+
+
 def _compare(label: str, spec: EnumSpec, published: list[Any]) -> list[str]:
     if isinstance(spec, _Unresolvable):
         return [f"{label}: {spec.why}; widen the guard instead of letting this pass unseen"]
@@ -490,6 +770,17 @@ def failures(
     if compared == 0:
         found.append(
             "nothing was compared: no published value domain matched a declared one"
+        )
+
+    # Every comparison above is two half-views of one tree.  Compare the whole
+    # published surface to an independent literal instead, so a coordinated
+    # edit cannot satisfy them all by agreeing with itself.
+    published_all = _published_domains(document)
+    if not _same(published_all, _PUBLISHED_ENUM_BASELINE):
+        found.append(
+            "openapi.json publishes value domains that no longer match the "
+            "independent baseline: a coordinated edit to the source and the "
+            "snapshot cannot be seen by comparing them to each other"
         )
     return found, compared
 
@@ -600,6 +891,78 @@ def _self_test(document: dict[str, Any], constraints: dict[str, dict[str, EnumSp
         mutated[model][field] = _Unresolvable("synthetic unresolvable spelling")
         return failures(doc, mutated)[0]
 
+    def _co_domain(doc: dict[str, Any]) -> list[Any]:
+        node = holder(doc)
+        return node["enum"] if "enum" in node else [node["const"]]
+
+    def _co_set(doc: dict[str, Any], values: list[Any]) -> None:
+        node = holder(doc)
+        if "const" in node and len(values) == 1:
+            node["const"] = values[0]
+        else:
+            node.pop("const", None)
+            node["enum"] = values
+
+    def coord_add(doc: dict[str, Any]) -> list[str]:
+        # Source and snapshot gain the same member: the source-driven equality
+        # checks stay green, only the independent literal can see the change.
+        _co_set(doc, _co_domain(doc) + ["__co_added__"])
+        mutated = copy.deepcopy(constraints)
+        mutated[model][field] = _without_none(mutated[model][field]) + ["__co_added__"]
+        return failures(doc, mutated)[0]
+
+    def coord_drop(doc: dict[str, Any]) -> list[str]:
+        _co_set(doc, _co_domain(doc)[:-1])
+        mutated = copy.deepcopy(constraints)
+        mutated[model][field] = mutated[model][field][:-1]
+        return failures(doc, mutated)[0]
+
+    def coord_retype(doc: dict[str, Any]) -> list[str]:
+        _co_set(doc, ["__co_retyped__"] + _co_domain(doc)[1:])
+        mutated = copy.deepcopy(constraints)
+        mutated[model][field] = ["__co_retyped__"] + list(mutated[model][field])[1:]
+        return failures(doc, mutated)[0]
+
+    def coord_bool_to_int(doc: dict[str, Any]) -> list[str]:
+        # ``True == 1``: a value-only pin accepts a boolean leaf republished as
+        # an integer in both halves.  The pin must compare types recursively.
+        for name, fields in sorted(constraints.items()):
+            schema = doc["components"]["schemas"].get(name)
+            if schema is None or "__enum__" in fields:
+                continue
+            for other, spec in sorted(fields.items()):
+                if not isinstance(spec, list) or True not in _without_none(spec):
+                    continue
+                nodes = field_domain_nodes(schema, other, name)
+                if not nodes or "const" not in nodes[0][1]:
+                    continue
+                nodes[0][1]["const"] = 1
+                mutated = copy.deepcopy(constraints)
+                mutated[name][other] = [1 if v is True else v for v in mutated[name][other]]
+                return failures(doc, mutated)[0]
+        return []
+
+    def coord_wholesale_drop(doc: dict[str, Any]) -> list[str]:
+        # Remove every constrained field from the source view and its published
+        # domain from the snapshot together.  Enum classes still compare, so
+        # ``compared == 0`` does not fire; only the literal inventory can.
+        mutated = copy.deepcopy(constraints)
+        for name, fields in list(mutated.items()):
+            if "__enum__" in fields:
+                continue
+            schema = doc["components"]["schemas"].get(name)
+            if schema is None:
+                continue
+            for other in list(fields):
+                if not isinstance(fields[other], list):
+                    continue
+                for _, node in field_domain_nodes(schema, other, name):
+                    node.pop("enum", None)
+                    node.pop("const", None)
+                del mutated[name][other]
+        return failures(doc, mutated)[0]
+
+
     def inline_model_still_checked(doc: dict[str, Any]) -> list[str]:
         # Dropping an INLINED_MODELS exemption must be loud, not silent: an
         # exempted model that vanishes from the snapshot without a note is
@@ -629,6 +992,11 @@ def _self_test(document: dict[str, Any], constraints: dict[str, dict[str, EnumSp
         ("source spelling the guard cannot resolve", source_unresolvable),
         ("model missing from the snapshot is named", inline_model_still_checked),
         ("a real enum component disappearing is named", enum_component_dropped),
+        ("coordinated ADD of a member in both halves", coord_add),
+        ("coordinated DROP of a member in both halves", coord_drop),
+        ("coordinated RETYPE of a member in both halves", coord_retype),
+        ("coordinated bool -> int type weakening in both halves", coord_bool_to_int),
+        ("wholesale coordinated drop of all constrained domains", coord_wholesale_drop),
     ]
 
     result = 0
@@ -643,6 +1011,58 @@ def _self_test(document: dict[str, Any], constraints: dict[str, dict[str, EnumSp
         for problem in clean:
             print(f"  {problem}")
         result = 1
+    # Positive control: a legitimate change that moves both halves AND the
+    # literal in the same commit must stay green (an exact pin is not a
+    # whitelist).  This is checked directly, not through the ablation loop,
+    # because a healthy tree produces no problems.
+    saved = globals()["_PUBLISHED_ENUM_BASELINE"]
+    legit = copy.deepcopy(document)
+    legit_constraints = copy.deepcopy(constraints)
+    legit_node = field_domain_nodes(
+        legit["components"]["schemas"][model], field, model
+    )[0][1]
+    if "const" in legit_node:
+        legit_node.pop("const")
+        legit_node["enum"] = _without_none(legit_constraints[model][field]) + [
+            "__legitimate__"
+        ]
+    else:
+        legit_node["enum"] = legit_node["enum"] + ["__legitimate__"]
+    legit_constraints[model][field] = (
+        _without_none(legit_constraints[model][field]) + ["__legitimate__"]
+    )
+    globals()["_PUBLISHED_ENUM_BASELINE"] = _published_domains(legit)
+    try:
+        repin_problems = failures(legit, legit_constraints)[0]
+    finally:
+        globals()["_PUBLISHED_ENUM_BASELINE"] = saved
+    if repin_problems:
+        print(f"FAIL: same-commit repin was rejected: {repin_problems}")
+        result = 1
+
+    # Invariants that are not document mutations: assert them directly, so a
+    # broken comparator or a runtime-derived pin fails the wired self-test.
+    for a, b in ((True, 1), (1, 1.0), ({"flag": True}, {"flag": 1}), ([True, 1], [1, 1])):
+        if _same(a, b):
+            print(f"FAIL: _same({a!r}, {b!r}) must be False")
+            result = 1
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    literal_ok = False
+    for node in tree.body:
+        targets = (
+            [node.target]
+            if isinstance(node, ast.AnnAssign)
+            else node.targets if isinstance(node, ast.Assign) else []
+        )
+        for target in targets:
+            if isinstance(target, ast.Name) and target.id == "_PUBLISHED_ENUM_BASELINE":
+                if isinstance(node.value, (ast.Dict, ast.List, ast.Tuple)):
+                    ast.literal_eval(node.value)
+                    literal_ok = True
+    if not literal_ok:
+        print("FAIL: _PUBLISHED_ENUM_BASELINE is not a module-level literal")
+        result = 1
+
     if result == 0:
         print(f"OK ({len(cases)} ablations)")
     return result
@@ -677,6 +1097,102 @@ def main(argv: list[str] | None = None) -> int:
         f"{len(constraints)} model(s))"
     )
     return 0
+
+
+def test_committed_tree_matches_the_independent_enum_pin() -> None:
+    """The literal must be an exact, type-exact description of the snapshot."""
+    document, constraints = _load(REPO_ROOT)
+    assert failures(document, constraints)[0] == []
+
+
+def test_a_coordinated_add_is_rejected() -> None:
+    """Source + snapshot gaining one member together must not stay green."""
+    document, constraints = _load(REPO_ROOT)
+    document = copy.deepcopy(document)
+    constraints = copy.deepcopy(constraints)
+    target = "AnnotationTerm"
+    field = "kind"
+    node = field_domain_nodes(
+        document["components"]["schemas"][target], field, target
+    )[0][1]
+    node["enum"] = node["enum"] + ["__co_added__"]
+    constraints[target][field] = list(constraints[target][field]) + ["__co_added__"]
+    assert any("independent baseline" in p for p in failures(document, constraints)[0])
+
+
+def test_a_coordinated_drop_is_rejected() -> None:
+    document, constraints = _load(REPO_ROOT)
+    document = copy.deepcopy(document)
+    constraints = copy.deepcopy(constraints)
+    target, field = "AnnotationTerm", "kind"
+    node = field_domain_nodes(
+        document["components"]["schemas"][target], field, target
+    )[0][1]
+    node["enum"] = node["enum"][:-1]
+    constraints[target][field] = list(constraints[target][field])[:-1]
+    assert any("independent baseline" in p for p in failures(document, constraints)[0])
+
+
+def test_a_coordinated_bool_to_int_type_drift_is_rejected() -> None:
+    """``True == 1``: a value-only pin would republish a boolean as an int."""
+    document, constraints = _load(REPO_ROOT)
+    document = copy.deepcopy(document)
+    constraints = copy.deepcopy(constraints)
+    target, field = "ReleaseActionRequest", "confirm"
+    node = field_domain_nodes(
+        document["components"]["schemas"][target], field, target
+    )[0][1]
+    assert node["const"] is True
+    node["const"] = 1
+    constraints[target][field] = [1]
+    assert any("independent baseline" in p for p in failures(document, constraints)[0])
+
+
+def test_the_pin_distinguishes_a_bool_from_an_int() -> None:
+    assert not _same(True, 1)
+    assert not _same(1, 1.0)
+    assert not _same({"a": True}, {"a": 1})
+    assert not _same([True], [1])
+    assert not _same({"a": 1}, {"a": 1, "b": 2})
+    assert _same({"a": [True, 1]}, {"a": [True, 1]})
+    assert not _same({"a": [True, 1]}, {"a": [1, 1]})
+
+
+def test_the_pin_is_a_source_literal_not_a_runtime_derivation() -> None:
+    """Re-deriving the pin from the snapshot would reopen the co-revert hole."""
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            if node.target.id == "_PUBLISHED_ENUM_BASELINE":
+                assert isinstance(node.value, (ast.Dict, ast.List, ast.Tuple))
+                ast.literal_eval(node.value)
+                return
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "_PUBLISHED_ENUM_BASELINE":
+                    assert isinstance(node.value, (ast.Dict, ast.List, ast.Tuple))
+                    ast.literal_eval(node.value)
+                    return
+    raise AssertionError("_PUBLISHED_ENUM_BASELINE is not a module-level literal")
+
+
+def test_a_repin_in_the_same_commit_stays_green() -> None:
+    """An exact pin is deliberate, not a whitelist: move it with the artifact."""
+    document, constraints = _load(REPO_ROOT)
+    document = copy.deepcopy(document)
+    saved = globals()["_PUBLISHED_ENUM_BASELINE"]
+    target, field = "AnnotationTerm", "kind"
+    node = field_domain_nodes(
+        document["components"]["schemas"][target], field, target
+    )[0][1]
+    node["enum"] = node["enum"] + ["__legitimate__"]
+    constraints = copy.deepcopy(constraints)
+    constraints[target][field] = list(constraints[target][field]) + ["__legitimate__"]
+    globals()["_PUBLISHED_ENUM_BASELINE"] = _published_domains(document)
+    try:
+        assert failures(document, constraints)[0] == []
+    finally:
+        globals()["_PUBLISHED_ENUM_BASELINE"] = saved
 
 
 if __name__ == "__main__":
