@@ -123,6 +123,12 @@ smoke_contracts() {
     scripts/test_production_compose_contract.py
     scripts/test_development_compose_contract.py
     scripts/test_kubernetes_delivery_contracts.py
+    # The MCP manifest, server.py _api_request calls and the published
+    # OpenAPI operations are three declarations of the same endpoints. The
+    # generated-client contract gate never reads apps/mcp-server/**, so a
+    # renamed backend path can ship self-consistent artifacts while the MCP
+    # tools 404. This guard reconciles them from committed bytes.
+    scripts/test_mcp_openapi_parity.py
     scripts/test_backup_restore_contracts.py
     scripts/test_native_backup_runtime.py
     # One code = one sentence across the FFI boundary; guards read committed
