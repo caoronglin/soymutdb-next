@@ -171,3 +171,105 @@ def test_the_wiring_is_pinned_in_all_three_places() -> None:
 def test_a_gutted_self_test_would_be_named() -> None:
     """The teeth guard pins the shape of the evidence this guard emits."""
     assert "scripts/check_openapi_response_surface.py" in TEETH
+
+
+def _co_revert_summary() -> tuple[str, str]:
+    """Retype one operation ``summary`` in both halves -- the decisive drift."""
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    document["paths"]["/api/v1/health/live"]["get"]["summary"] = (
+        "Liveness probe (edited)"
+    )
+    changed = generated.replace(
+        "         * Liveness\n", "         * Liveness probe (edited)\n", 1
+    )
+    assert changed != generated
+    return json.dumps(document, indent=2), changed
+
+
+def test_coordinated_summary_co_revert_is_rejected() -> None:
+    """Both halves agree; only the independent summary literal can catch it."""
+    snapshot, generated = _co_revert_summary()
+    found = guard.failures(snapshot=snapshot, generated=generated)
+    assert any("summaries drifted" in problem for problem in found), found
+
+
+def test_one_sided_snapshot_summary_retype_is_rejected() -> None:
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    document["paths"]["/api/v1/health/live"]["get"]["summary"] = "Only snapshot"
+    found = guard.failures(snapshot=json.dumps(document, indent=2))
+    assert any(
+        "GET /api/v1/health/live" in problem and "disagrees" in problem
+        for problem in found
+    ), found
+
+
+def test_one_sided_generated_summary_retype_is_rejected() -> None:
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    changed = generated.replace(
+        "         * Liveness\n", "         * Only client changed\n", 1
+    )
+    assert changed != generated
+    found = guard.failures(generated=changed)
+    assert any(
+        "GET /api/v1/health/live" in problem and "disagrees" in problem
+        for problem in found
+    ), found
+
+
+def test_the_summary_digest_is_an_independent_literal() -> None:
+    """The literal must not be re-derived from the artifacts under guard."""
+    source = (ROOT / "scripts" / "check_openapi_response_surface.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    assigned = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name)
+            and target.id == "_OPERATION_SUMMARY_DIGEST"
+            for target in node.targets
+        )
+    ]
+    assert len(assigned) == 1
+    value = ast.literal_eval(assigned[0].value)
+    assert isinstance(value, str) and len(value) == 64
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    assert value == guard._summary_digest(guard._snapshot_summaries(document))
+
+
+def test_the_summary_count_door_is_load_bearing() -> None:
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    found = guard.failures(
+        snapshot=json.dumps(document, indent=2),
+        expected_summary_operations=guard._EXPECTED_SUMMARY_OPERATIONS + 1,
+    )
+    assert any("summary-bearing operation count is" in problem for problem in found), found
+
+
+def test_the_summary_plant_is_load_bearing() -> None:
+    """Both summary doors must stay in the guard source, not just the digest.
+
+    Removing the independent digest comparison or the generated-JSDoc
+    agreement makes a coordinated retype silently green. This assertion lives
+    in a second file so a single-file edit cannot delete the evidence.
+    """
+    source = (ROOT / "scripts" / "check_openapi_response_surface.py").read_text(
+        encoding="utf-8"
+    )
+    assert "_OPERATION_SUMMARY_DIGEST" in source
+    assert "published operation summaries drifted" in source
+    assert "generated JSDoc" in source
+    # The comparison must be against the literal, not against a derived value
+    # (which would make the pin self-referential and the drift invisible).
+    assert "if actual_summary_digest != pinned_summary_digest:" in source
+    assert "rendered = gen_summaries[key]" in source
+    # Proof by ablation on real bytes: with the doors intact the coordinated
+    # retype is named; with both comparisons replaced by self-agreement it is
+    # not. We assert the intact behaviour here; the companion self-test in the
+    # guard reproduces the negative control.
+    snapshot, generated = _co_revert_summary()
+    found = guard.failures(snapshot=snapshot, generated=generated)
+    assert any("summaries drifted" in problem for problem in found), found

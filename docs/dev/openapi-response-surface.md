@@ -50,11 +50,14 @@ pins:
 * the response `description` in both halves, so a coordinated docstring
   regenerate is named by the digest and by the two-surface agreement.
 
-`--self-test` plants five drifts (one-sided snapshot rename, one-sided
-generated rename, coordinated rename, coordinated content-less drop,
-coordinated content drop) and asserts each is caught; the clean tree must pass
-first. `scripts/test_openapi_response_surface.py` (9 cases) pins the literal's
-independence, the count doors, and the wiring from a second file.
+`--self-test` plants ten drifts (one-sided snapshot/client status renames,
+coordinated status rename, coordinated content-less drop, coordinated content
+drop, coordinated response-description retype, coordinated operation-summary
+retype, one-sided snapshot/client summary retypes, published summary dropped)
+and asserts each is caught; the clean tree must pass first.
+`scripts/test_openapi_response_surface.py` (17 cases) pins both literals'
+independence, the count doors, the wiring, and the summary plant from a second
+file.
 
 ## Wiring
 
@@ -87,3 +90,36 @@ agreement compares `(has_content, description)` per status, `--self-test`
 plants the coordinated retype (6 cases), and the companion suite has two
 second-file checks for it (11 cases). A same-commit re-pin of a legitimate
 docstring change still stays green.
+
+## Follow-up: the operation ``summary`` column
+
+The description follow-up still left one client-visible field unguarded.
+``openapi-typescript`` prints each operation's ``summary`` as the first
+``* text`` line of the JSDoc block in the ``paths`` interface (a one-line
+``/** text */`` for some routers, a multi-line ``/**`` for others). No landed
+guard reads it: ``_RESPONSE_SURFACE_DIGEST`` walks ``responses`` only, and
+``_PINNED_ARTIFACTS`` is a provenance blob id that a regenerate re-pins in the
+same deliberate act.
+
+Measured on the shipped tree, a coordinated retype of one ``summary`` in
+**both** halves (snapshot ``summary`` and generated JSDoc), with the two
+provenance blob ids re-pinned, left **every wired OpenAPI guard ``rc=0``**.
+``/** Liveness */`` silently became ``/** Liveness probe (edited) */`` and
+nothing named it.
+
+The guard now adds a second independent literal:
+
+* ``_OPERATION_SUMMARY_DIGEST`` — a hand-written sha256 over the canonical
+  sorted ``(METHOD, path, operationId, summary)`` tuple set, read from
+  nowhere. A co-revert of both halves still changes it.
+* ``_EXPECTED_SUMMARY_OPERATIONS`` (268) — an exact count door.
+* generated JSDoc summary == published summary for every operation, so a
+  one-sided edit is named by ``(METHOD, path)``.
+
+Decisive ablation: replacing the digest comparison with self-agreement and
+the JSDoc comparison with the snapshot value makes the coordinated retype
+``rc=0`` again; restoring both names it. ``test_the_summary_plant_is_load_bearing``
+pins those two comparisons in a second file, so a single-file edit cannot
+delete the evidence. No ``smoke.sh`` / ``PINNED_SUITES`` /
+``REQUIRED_GUARD_CALLS`` change was needed — the extension lives inside an
+already-wired guard.
