@@ -2,9 +2,10 @@
 """Wiring tests for the error-code contract guard.
 
 The guard only helps if a gate actually runs it and if the published contract
-it pins is the exact one the runtime emits. Deleting the gate invocation, or
-quietly shrinking the published code set, must fail here rather than pass a
-green CI by co-reverting the snapshot and the generated client together.
+it pins is the exact one the runtime emits. Deleting the gate invocation,
+quietly shrinking the published code set, or flipping a published status away
+from the hierarchy must fail here rather than pass a green CI by co-reverting
+the snapshot and the generated client together.
 """
 from __future__ import annotations
 
@@ -98,11 +99,34 @@ class TestErrorCodeContract(unittest.TestCase):
             self.assertTrue(module.check(SNAPSHOT, CODES, source_path))
 
     def test_executed_catalog_matches_the_published_one(self) -> None:
-        executed, why = module._executed_catalog(SOURCE)
+        executed, why = module._executed_contract(SOURCE)
         self.assertIsNone(why)
         self.assertIsNotNone(executed)
         document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
-        self.assertEqual(sorted(executed), sorted(document["x-error-codes"]))
+        self.assertEqual(sorted(executed["catalog"]), sorted(document["x-error-codes"]))
+
+    def test_executed_status_binding_matches_the_published_one(self) -> None:
+        executed, why = module._executed_contract(SOURCE)
+        self.assertIsNone(why)
+        document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+        status = document["x-error-status"]
+        self.assertEqual(executed["by_code"], status["by_code"])
+        self.assertEqual(executed["http_exception"], status["http_exception"])
+
+    def test_guard_rejects_a_status_drift_from_the_hierarchy(self) -> None:
+        """A status flipped in the snapshot must fail even if the source is intact.
+
+        The executed contract functions are the only stdlib oracle for the
+        code -> status values; a key-only comparison would let this drift pass.
+        """
+        document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+        document["x-error-status"]["by_code"]["not_found"] = 409
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            snap = Path(tmp) / "openapi.json"
+            snap.write_text(json.dumps(document, indent=2), encoding="utf-8")
+            self.assertTrue(module.check(snap, CODES, SOURCE))
 
     def test_self_test_passes(self) -> None:
         self.assertEqual(module.self_test(), 0)

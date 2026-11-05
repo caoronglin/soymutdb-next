@@ -44,16 +44,28 @@ drift.
 - the catalog omits a code that the source emits (including `http_error`);
 - `x-error-status` is missing, or `by_code` keys disagree with the catalog;
 - the `http_error` fallback is pinned to a single status, or the
-  status→code map / fallback is altered.
+  status→code map / fallback is altered;
+- the published `by_code` / `http_exception` values disagree with what
+  `error_status_map()` / `error_status_contract()` actually return from the
+  exception hierarchy.
 
-It is wired into `packages/api-client/scripts/check-contract.sh` **before** the
-export, so it needs neither the 3.15 venv nor a regenerated document. This is
-the complement of `check-contract.sh`'s document diff: reverting backend,
-snapshot and generated client together cannot co-revert a guard that reads the
-source hierarchy itself. `scripts/test_check_error_code_contract.py` pins the
-wiring and the exact published code set from a second file.
+The guard runs the contract functions themselves in isolation (imports
+stubbed, no API venv): a leftover `HTTP_ERROR_CODE` constant or a status
+flipped in the source and snapshot together no longer passes on vocabulary
+alone. It is wired into `packages/api-client/scripts/check-contract.sh`
+**before** the export, so it needs neither the 3.15 venv nor a regenerated
+document. This is the complement of `check-contract.sh`'s document diff:
+reverting backend, snapshot and generated client together cannot co-revert a
+guard that reads the source hierarchy itself.
+`scripts/test_check_error_code_contract.py` pins the wiring and the exact
+published code set and status binding from a second file.
 
-`--self-test` proves eight negative shapes are rejected.
+`--self-test` proves eleven negative shapes are rejected.
+
+A coordinate change that updates the hierarchy *and* every dependent published
+value would also agree with a fresh export; no byte-reading guard can detect
+that. Such a semantic change needs a reviewed contract update, which is what
+the hand-pinned `PUBLISHED_CODES` in the wiring test is for.
 
 ## Runtime evidence
 

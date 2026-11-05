@@ -60,8 +60,8 @@ def _source_error_codes(source: str) -> set[str]:
     assignment leaves the constant in place, so ``http_error`` still appears in
     the literal set and the *only* gate that notices is the 3.15 export diff.
     ``check`` therefore additionally evaluates the source tree and compares the
-    real ``error_code_catalog()`` output, which is the function the published
-    snapshot is actually generated from.
+    real ``error_code_catalog()`` / ``error_status_contract()`` output, the two
+    functions the published snapshot is actually generated from.
     """
     tree = ast.parse(source)
     found: set[str] = set()
@@ -82,38 +82,60 @@ def _source_error_codes(source: str) -> set[str]:
     return found
 
 
-def _executed_catalog(source: Path) -> tuple[dict[str, str] | None, str | None]:
-    """Import the module and return the catalog it really builds.
+_KEEP_FUNCTIONS = frozenset({
+    "_iter_error_types",
+    "error_code_catalog",
+    "error_status_map",
+    "error_status_contract",
+})
+_KEEP_ASSIGNS = frozenset({
+    "HTTP_ERROR_CODE",
+    "UNPROCESSABLE_STATUS",
+    "HTTP_STATUS_ERROR_CODES",
+})
+_STATUS_STUBS = {
+    "HTTP_401_UNAUTHORIZED": 401,
+    "HTTP_403_FORBIDDEN": 403,
+    "HTTP_404_NOT_FOUND": 404,
+    "HTTP_409_CONFLICT": 409,
+    "HTTP_422_UNPROCESSABLE_CONTENT": 422,
+    "HTTP_429_TOO_MANY_REQUESTS": 429,
+    "HTTP_500_INTERNAL_SERVER_ERROR": 500,
+    "HTTP_503_SERVICE_UNAVAILABLE": 503,
+}
+
+
+def _executed_contract(source: Path) -> tuple[dict[str, object] | None, str | None]:
+    """Run the contract functions on the real exception hierarchy, in isolation.
 
     The literal scan in :func:`_source_error_codes` answers "is this string
     mentioned anywhere?", which a leftover ``HTTP_ERROR_CODE = "http_error"``
-    keeps answering yes to after the catalog entry itself was deleted. This
-    runs ``error_code_catalog()`` -- the function the published ``x-error-codes``
-    is generated from -- so the guard pins behaviour, not vocabulary.
+    keeps answering yes to after the catalog entry itself was deleted. The
+    published ``x-error-status`` has the same weakness: its values are never
+    compared with the statuses the hierarchy actually declares, so a status
+    flipped in the source and the snapshot together passes every stdlib gate.
 
     ``app.core.exceptions`` imports FastAPI/Starlette, which the guard must not
-    require (it runs before the export, on hosts with no API venv). The module
-    is therefore executed in isolation: its imports are stubbed and only the
-    catalog function is called.
+    require (it runs before the export, on hosts with no API venv). Only the
+    contract functions, the exception hierarchy and their module-level inputs
+    are executed, with ``status`` constants stubbed. Both ``error_code_catalog()``
+    and ``error_status_contract()`` -- the two functions the published snapshot
+    is generated from -- are called, so the guard pins behaviour, not just the
+    vocabulary of strings that happen to appear in the file.
     """
     import types
 
     tree = ast.parse(source.read_text(encoding="utf-8"))
-
-    # Collect the module-level names the catalog function closes over: the
-    # exception hierarchy, ``_iter_error_types`` and the fallback constant.
-    keep_functions = {"_iter_error_types", "error_code_catalog"}
-    keep_assigns = {"HTTP_ERROR_CODE", "UNPROCESSABLE_STATUS"}
     body: list[ast.stmt] = []
     for node in tree.body:
-        if isinstance(node, ast.FunctionDef) and node.name in keep_functions:
+        if isinstance(node, ast.FunctionDef) and node.name in _KEEP_FUNCTIONS:
             body.append(node)
         elif isinstance(node, ast.ClassDef):
             body.append(node)
         elif isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             names = {t.id for t in targets if isinstance(t, ast.Name)}
-            if names & keep_assigns:
+            if names & _KEEP_ASSIGNS:
                 if names & {"UNPROCESSABLE_STATUS"}:
                     node = ast.Assign(
                         targets=list(targets),
@@ -122,31 +144,32 @@ def _executed_catalog(source: Path) -> tuple[dict[str, str] | None, str | None]:
                     ast.fix_missing_locations(node)
                 body.append(node)
         elif isinstance(node, ast.ImportFrom):
-            module = node.module or ""
-            if module.startswith("__future__"):
+            if (node.module or "").startswith("__future__"):
                 body.append(node)
 
-    if not any(isinstance(n, ast.FunctionDef) and n.name == "error_code_catalog" for n in body):
-        return None, "source has no error_code_catalog() to verify"
+    missing = {"error_code_catalog", "error_status_contract"} - {
+        n.name for n in body if isinstance(n, ast.FunctionDef)
+    }
+    if missing:
+        return None, f"source has no {sorted(missing)[0]}() to verify"
 
     module = ast.Module(body=body, type_ignores=[])
-    namespace: dict[str, object] = {"status": types.SimpleNamespace(**{
-        "HTTP_500_INTERNAL_SERVER_ERROR": 500,
-        "HTTP_401_UNAUTHORIZED": 401,
-        "HTTP_403_FORBIDDEN": 403,
-        "HTTP_404_NOT_FOUND": 404,
-        "HTTP_409_CONFLICT": 409,
-        "HTTP_429_TOO_MANY_REQUESTS": 429,
-        "HTTP_503_SERVICE_UNAVAILABLE": 503,
-    })}
+    namespace: dict[str, object] = {
+        "status": types.SimpleNamespace(**_STATUS_STUBS),
+    }
     try:
         exec(compile(module, str(source), "exec"), namespace)  # noqa: S102
         catalog = namespace["error_code_catalog"]()
+        status_contract = namespace["error_status_contract"]()
     except Exception as exc:  # pragma: no cover - reported, not raised
-        return None, f"could not evaluate error_code_catalog(): {exc}"
-    if not isinstance(catalog, dict):
-        return None, "error_code_catalog() did not return a dict"
-    return {str(k): str(v) for k, v in catalog.items()}, None
+        return None, f"could not evaluate the error contract: {exc}"
+    if not isinstance(catalog, dict) or not isinstance(status_contract, dict):
+        return None, "contract functions did not return dicts"
+    return {
+        "catalog": {str(k): str(v) for k, v in catalog.items()},
+        "by_code": status_contract.get("by_code"),
+        "http_exception": status_contract.get("http_exception"),
+    }, None
 
 
 def check(snapshot: Path, codes: Path, source: Path) -> list[str]:
@@ -185,24 +208,42 @@ def check(snapshot: Path, codes: Path, source: Path) -> list[str]:
 
     # The literal scan above is satisfied by the bare ``HTTP_ERROR_CODE``
     # constant even when ``error_code_catalog()`` stops publishing it, so pin
-    # the executed function too. Without this, deleting the one
-    # ``catalog[HTTP_ERROR_CODE] = ...`` assignment leaves every stdlib gate
-    # green and only the 3.15 export diff (which needs an API venv) notices.
-    executed, why = _executed_catalog(source)
+    # the executed functions too. Without this, deleting the one
+    # ``catalog[HTTP_ERROR_CODE] = ...`` assignment, or flipping a status in
+    # the hierarchy and the snapshot together, leaves every stdlib gate green
+    # and only the 3.15 export diff (which needs an API venv) notices.
+    executed, why = _executed_contract(source)
     if executed is None:
-        failures.append(f"cannot verify the emitted catalog: {why}")
+        failures.append(f"cannot verify the emitted contract: {why}")
     else:
-        unpublished = sorted(set(executed) - set(catalog))
+        emitted_codes = executed["catalog"]
+        unpublished = sorted(set(emitted_codes) - set(catalog))
         if unpublished:
             failures.append(
                 "x-error-codes omits codes emitted by error_code_catalog(): "
                 f"{unpublished}"
             )
-        phantom = sorted(set(catalog) - set(executed))
+        phantom = sorted(set(catalog) - set(emitted_codes))
         if phantom:
             failures.append(
                 "x-error-codes publishes codes error_code_catalog() never emits: "
                 f"{phantom}"
+            )
+        live_by_code = executed["by_code"]
+        if not isinstance(live_by_code, dict):
+            failures.append("error_status_map() did not return a dict")
+        elif status.get("by_code") != live_by_code:
+            failures.append(
+                "x-error-status.by_code does not match error_status_map() "
+                "(the hierarchy's real code -> status binding)"
+            )
+        live_http_exception = executed["http_exception"]
+        if not isinstance(live_http_exception, dict):
+            failures.append("error_status_contract() returned no http_exception map")
+        elif status.get("http_exception") != live_http_exception:
+            failures.append(
+                "x-error-status.http_exception does not match "
+                "error_status_contract() (the map the generic handler consumes)"
             )
 
     by_code = status.get("by_code")
@@ -289,6 +330,29 @@ def self_test() -> int:
             json.loads(json.dumps(base)),
             dict(codes),
             dropped_catalog_entry,
+        )
+    )
+    # A published-only status flip: the hierarchy still says 404. Before the
+    # executed status binding, every stdlib gate reported this tree as clean.
+    doc = json.loads(json.dumps(base))
+    doc["x-error-status"]["by_code"]["not_found"] = 409
+    cases.append(("published status flipped away from the hierarchy", doc, dict(codes), src))
+    # Co-revert: source and snapshot agree with each other but not with the
+    # statuses a fresh export would publish from the rest of the hierarchy.
+    doc = json.loads(json.dumps(base))
+    doc["x-error-status"]["by_code"]["not_found"] = 409
+    flipped_source = src.replace(
+        "    status_code = status.HTTP_404_NOT_FOUND\n",
+        "    status_code = status.HTTP_409_CONFLICT\n",
+        1,
+    )
+    assert flipped_source != src, "self-test fixture no longer matches the source"
+    cases.append(
+        (
+            "status co-revert in source and snapshot",
+            doc,
+            dict(codes),
+            flipped_source,
         )
     )
 
