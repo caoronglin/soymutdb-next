@@ -44,6 +44,17 @@ collectible" cell: registered, collectible, invoked — and vacuous.
   (`ok: planted 'x' -> caught`) cannot be faked by a summary line and are
   listed in `_EVIDENCE_PER_CASE` instead. Every wired guard must be in exactly
   one of the two sets or `drift_floor_errors()` fails closed.
+- `_EVIDENCE_PER_CASE` is checked, not just declared. Each row's success line
+  states a case count (`N mutations`, `N cases`, `N negative cases`,
+  `N ablations`), and the same output must carry at least that many
+  distinguished per-case lines (`PASS self-test: <case> -> caught`,
+  `ok: <plant> -> caught`, `self-test OK   <label>`). `N` cases from zero lines
+  is the stub shape. Measured on live main before this row existed: nine of the
+  ten members printed a count a `print(<pinned summary>); return 0` stub can
+  echo while emitting no evidence, and the whole contracts layer stayed green.
+  The floor is one-sided — extra lines stay green — so a legitimate phrasing
+  change or a wider plant cannot turn it into a format audit, and a count that
+  moves with the ablations still passes because the count is not pinned.
 - `probe()` runs each wired guard as a real subprocess with `cwd=ROOT` and
   requires `rc == 0` plus a signature match. A gutted self-test, a failing
   self-test and an empty-output self-test are each named.
@@ -68,17 +79,24 @@ partial temp tree made all 17 probes fail to open, so the case passed
 vacuously — the first-hit trap this repo keeps paying for. The control
 assertion is what keeps it honest.
 
-Its own `--self-test` runs six cases. The sixth pins the gap one layer below
+Its own `--self-test` runs seven cases. The sixth pins the gap one layer below
 the signature floor: a body gutted to `print(<pinned signature>); return 0`
 still satisfies `_SIGNATURES` — the marker is a string a mutator can write —
 so the case asserts **both** that the signature check stays green (or the case
-proves nothing) and that the drift probe catches the same body.
+proves nothing) and that the drift probe catches the same body. The seventh
+pins the same gap for the half of the floor a drift plant cannot reach: a
+drift plant needs a detection entry point to disable, and a per-case guard's
+evidence is a print, so the assertion is that `N cases` with zero per-case
+lines is rejected while the unlisted thin guard with the same output stays
+green.
 
-`scripts/test_contracts_self_test_teeth.py` (14 cases) is the second file:
+`scripts/test_contracts_self_test_teeth.py` (21 cases) is the second file:
 it pins the wiring into `smoke.sh`, the `REQUIRED_GUARD_CALLS` floor, status
-propagation, the literal (non-derived) nature of the two floors, and each
-negative direction under pytest collection. A single-file edit cannot drop
-both the behaviour and its own self-test plant.
+propagation, the literal (non-derived) nature of the two floors, the
+`_EVIDENCE_PER_CASE` direction (summary-only output rejected, unlisted guards
+not audited, a legitimate count increase green, an ambiguous count refused),
+and each negative direction under pytest collection. A single-file edit
+cannot drop both the behaviour and its own self-test plant.
 
 ## Wiring discipline
 
@@ -90,7 +108,8 @@ change (a fifth when it also needs a `_CASE_FLOOR` row), per #223's set-equality
 3. an entry in `_WIRED_SELF_TESTS` **and** a signature in `_SIGNATURES`;
    a guard that prints only a summary line also needs an entry in
    `_DRIFT_PLANTS`; one that prints per-case evidence goes in
-   `_EVIDENCE_PER_CASE`;
+   `_EVIDENCE_PER_CASE`, whose success line must then state a case count the
+   output also evidences line by line;
 4. the doc line below.
 
    A pinned self-test that prints a count also needs an entry in `_CASE_FLOOR`.

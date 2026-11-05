@@ -208,8 +208,13 @@ _DRIFT_PLANTS: tuple[tuple[str, str, str, str], ...] = (
     ),
 )
 
-# Guards whose self-test prints per-case evidence, so a summary line cannot
-# fake the signature. Listed explicitly so a new thin guard is a reviewed edit.
+# Guards whose self-test prints one line per caught case. The evidence is the
+# N distinguished ``PASS``/``ok`` lines in the real output, matched against the
+# count the same run claims: ``N cases`` / ``N mutations`` / ``N ... cases``.
+# A body gutted to ``print(<pinned summary>); return 0`` keeps the signature and
+# repeats the count -- both are strings a mutator copies -- while printing no
+# per-case line at all. Measured on live main before this row was checked: nine
+# of the ten members kept the whole contracts layer green that way.
 _EVIDENCE_PER_CASE: frozenset[str] = frozenset(
     {
         "scripts/check_api_error_code_vocabulary.py",
@@ -225,6 +230,23 @@ _EVIDENCE_PER_CASE: frozenset[str] = frozenset(
         "scripts/check_openapi_operation_annotations.py",
         "scripts/check_variant_summary_assembly_consistency.py",
     }
+)
+
+# A per-case line for one caught mutation: ``PASS self-test: <case> -> caught``,
+# ``ok: <plant> -> caught``, ``self-test OK   <label>``. Anchored at line start
+# so prose and tracebacks cannot pay for missing evidence, and the payload must
+# be non-empty: ``PASS self-test: -> caught`` names nothing.
+_EVIDENCE_LINE = re.compile(
+    r"^[ \t]*(?:PASS self-test: \S.*|ok: \S.*|self-test OK\s+\S.*)$",
+    re.MULTILINE,
+)
+
+# The count the same run claims its cases number. The guards spell it
+# "9 mutations", "10 cases", "12 negative cases", "11 wiring cases",
+# "6 plants", "6 ablations": an optional modifier word sits before the noun.
+_DECLARED_CASES = re.compile(
+    r"(?<!\d)(\d+)\s+(?:[a-z][a-z-]*\s+)?(?:cases|mutations|plants|ablations)\b",
+    re.IGNORECASE,
 )
 
 _DRIFT_COVERED: frozenset[str] = frozenset(p for p, _, _, _ in _DRIFT_PLANTS)
@@ -386,6 +408,49 @@ def declared_case_errors(root: Path = ROOT) -> list[str]:
     return problems
 
 
+def _declared_case_count(output: str) -> int | None:
+    """The single N the run claims in its success line; None if ambiguous."""
+    counts = {int(n) for n in _DECLARED_CASES.findall(output)}
+    return counts.pop() if len(counts) == 1 else None
+
+
+def evidence_lines(output: str) -> tuple[int | None, int]:
+    """(declared cases, distinguished per-case lines) for one guard's output."""
+    return _declared_case_count(output), sum(
+        1 for line in output.splitlines() if _EVIDENCE_LINE.match(line)
+    )
+
+
+def evidence_errors(results: dict[str, tuple[int, str]]) -> list[str]:
+    """A declared case count with fewer per-case lines than it claims.
+
+    The row is a claim about the *output*, so it is checked against the output:
+    N cases need N distinguished lines naming what was caught. Deliberately
+    one-sided -- extra lines stay green -- so a legitimate rephrasing, a
+    subtest or a wider plant cannot turn this into a format audit, and the
+    count itself is never pinned, so an added ablation passes. The other
+    direction is already covered one layer up: a guard that stops printing the
+    count at all loses its ``_SIGNATURES`` marker.
+    """
+    problems: list[str] = []
+    for path in sorted(_EVIDENCE_PER_CASE):
+        rc, output = results.get(path, (1, "guard was not probed"))
+        if rc != 0:
+            continue  # an unreachable self-test is reported by teeth_errors
+        declared, emitted = evidence_lines(output)
+        if declared is None:
+            problems.append(
+                f"{path} is listed in _EVIDENCE_PER_CASE but its success line "
+                "declares no single case count to measure the evidence against"
+            )
+        elif emitted < declared:
+            problems.append(
+                f"{path} claims {declared} case(s) but printed {emitted} per-case "
+                "line(s): the summary is written, the evidence is not"
+            )
+    return problems
+
+
 def teeth_errors(
     wired: dict[str, list[str]], results: dict[str, tuple[int, str]]
 ) -> list[str]:
@@ -425,6 +490,7 @@ def check(
     return (
         problems
         + teeth_errors(wired, results)
+        + evidence_errors(results)
         + drift_errors(wired, drift_results)
     )
 
@@ -652,6 +718,27 @@ def self_test() -> int:
             "check_app_shell_assets.py",
             signature_blind
             and any("check_app_shell_assets.py" in f for f in drift_caught),
+        )
+    )
+
+    # 7. The cell the evidence row exists to close, stated in output form: a
+    # self-test gutted to ``print(<pinned summary>); return 0`` keeps both the
+    # signature and the declared count, because both are strings the mutator
+    # copies. What it cannot copy is the evidence. Asserted directly against a
+    # member -- the thin guard used above has no count to compare -- and the
+    # negative half is asserted too, or this case would pass on any wiring.
+    member = sorted(_EVIDENCE_PER_CASE)[0]
+    forged = "self-test: 12 cases, 0 failure(s)\n"
+    caught = evidence_errors({member: (0, forged)})
+    cases.append(
+        (
+            "a summary-only self_test() is caught by the per-case evidence floor",
+            member,
+            evidence_lines(forged) == (12, 0)
+            and len(caught) == 1
+            and "printed 0 per-case line(s)" in caught[0]
+            and evidence_errors({target: (0, forged)}) == []
+            and not evidence_errors(control),
         )
     )
 

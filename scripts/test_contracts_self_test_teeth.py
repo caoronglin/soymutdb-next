@@ -210,6 +210,65 @@ class TeethGuardContract(unittest.TestCase):
     def test_the_committed_tree_declares_its_ablations(self) -> None:
         self.assertEqual(guard.declared_case_errors(), [])
 
+    def test_a_summary_only_self_test_is_rejected(self) -> None:
+        """The evidence floor: N declared cases need N per-case lines.
+
+        A body gutted to ``print(<pinned summary>); return 0`` keeps both the
+        signature and the count, because both are strings a mutator copies. The
+        lines it does not print are the only thing a stub cannot fake.
+        """
+        target = "scripts/check_openapi_response_surface.py"
+        self.assertIn(target, guard._EVIDENCE_PER_CASE, "setup is not a control")
+        forged = (0, "self-test: 10 cases, 0 failure(s)\n")
+        self.assertEqual(guard.evidence_lines(forged[1]), (10, 0))
+        found = guard.evidence_errors({target: forged})
+        self.assertTrue(
+            any("printed 0 per-case line(s)" in f for f in found),
+            f"a summary-only self-test must be rejected, got {found}",
+        )
+
+    def test_the_evidence_floor_is_clean_on_the_committed_tree(self) -> None:
+        self.assertEqual(guard.evidence_errors(_results()), [])
+
+    def test_every_evidence_row_states_its_declared_count(self) -> None:
+        """A row whose success line declares nothing enforces nothing."""
+        for path, (rc, output) in sorted(_results().items()):
+            if path not in guard._EVIDENCE_PER_CASE or rc != 0:
+                continue
+            self.assertIsNotNone(
+                guard._declared_case_count(output),
+                f"{path} is in _EVIDENCE_PER_CASE but declares no case count",
+            )
+
+    def test_evidence_for_guards_outside_the_floor_is_not_audited(self) -> None:
+        """Otherwise this becomes a format audit of every wired self-test."""
+        thin = "scripts/check_app_shell_assets.py"
+        self.assertNotIn(thin, guard._EVIDENCE_PER_CASE, "setup is not a control")
+        self.assertEqual(guard.evidence_errors({thin: (0, "self-test: 9 cases\n")}), [])
+        self.assertNotIn("check_app_shell_assets.py", str(guard.evidence_errors(_results())))
+
+    def test_a_legitimate_count_increase_stays_green(self) -> None:
+        """An added ablation moves both numbers; neither is pinned."""
+        target = "scripts/check_openapi_response_surface.py"
+        declared, emitted = guard.evidence_lines(_results()[target][1])
+        self.assertGreaterEqual(emitted, declared or 0, "setup is not a control")
+        widened = f"self-test: {emitted + 5} cases, 0 failure(s)\n" + "\n".join(
+            f"PASS self-test: case {i} is caught -> 1 failure(s)" for i in range(emitted + 5)
+        )
+        self.assertEqual(guard.evidence_errors({target: (0, widened)}), [])
+
+    def test_a_failing_evidence_row_is_reported_by_teeth_not_here(self) -> None:
+        """One cause, one owner: an unreachable self-test is teeth_errors'."""
+        target = "scripts/check_openapi_response_surface.py"
+        self.assertEqual(guard.evidence_errors({target: (1, "boom")}), [])
+
+    def test_an_ambiguous_count_is_rejected(self) -> None:
+        """``5 cases`` next to ``7 cases`` is not one answer to "how many"."""
+        self.assertIsNone(guard._declared_case_count("self-test: 5 cases, 7 cases\n"))
+        self.assertEqual(guard._declared_case_count("self-test: 5 cases\n"), 5)
+        self.assertEqual(guard._declared_case_count("self-test: 12 negative cases + clean\n"), 12)
+        self.assertEqual(guard._declared_case_count("SELF-TEST PASS: 9 mutations\n"), 9)
+
     def test_the_guards_own_self_test_has_teeth(self) -> None:
         # The --self-test must actually plant a no-op and catch it. A body that
         # only prints PASS lines without asserting would still exit 0.
