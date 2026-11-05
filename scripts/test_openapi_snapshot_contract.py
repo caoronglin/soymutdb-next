@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -951,3 +952,45 @@ def test_snapshot_does_not_lose_paths_or_schemas() -> None:
         "Regenerate: `pnpm --filter @soymutdb/api-client generate:api-client` "
         "under Python 3.15."
     )
+
+
+def test_snapshot_contract_is_runnable_without_pytest() -> None:
+    """A direct run must execute the suite, not silently exit 0.
+
+    ``python3 scripts/test_openapi_snapshot_contract.py`` used to print
+    nothing and exit 0: with no ``__main__`` block, the module simply defined
+    the tests. An empty stdout plus rc=0 reads as a pass to anything that only
+    checks the exit code -- worse than a visible FAIL. Keep the runner and its
+    success/failure output pinned here.
+    """
+    source = Path(__file__).read_text(encoding="utf-8")
+    assert 'if __name__ == "__main__":\n    raise SystemExit(_run())' in source
+    assert "print(" + "_SUCCESS_LINE)" in source
+    assert 'print(f"openapi-snapshot-contract: FAIL' in source
+    assert "file=sys.stderr" in source
+
+
+def _run() -> int:
+    """Run every ``test_*`` function directly, without pytest."""
+    tests = [
+        value
+        for name, value in sorted(globals().items())
+        if name.startswith("test_") and callable(value)
+    ]
+    problems: list[str] = []
+    for test in tests:
+        try:
+            test()
+        except AssertionError as exc:
+            problems.append(f"{test.__name__}: {exc or 'assertion failed'}")
+    if problems:
+        for problem in problems:
+            print(f"openapi-snapshot-contract: FAIL: {problem}", file=sys.stderr)
+        return 1
+    _SUCCESS_LINE = f"openapi-snapshot-contract: OK ({len(tests)} checks)"
+    print(_SUCCESS_LINE)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(_run())

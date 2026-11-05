@@ -1,26 +1,54 @@
-"""Every documented 422 must describe the body the runtime actually sends.
+"""Every documented error response must describe the body the runtime sends.
 
-``app.main`` registers ``validation_exception_handler`` for every
-``RequestValidationError`` and never uses FastAPI's default handler.  That
-handler always returns the unified error envelope -- ``ValidationErrorResponse``
--- with the sanitised, field-level ``errors`` array.  ``HTTPValidationError``
-(the flat ``detail`` list) is a shape this server does not emit for 422.
+``app.main`` registers four exception handlers. Every one emits the same
+unified envelope (``ErrorResponse``), except the 422 handler, which emits
+``ValidationErrorResponse`` (the same envelope plus a field-level ``errors``
+array). FastAPI's default ``HTTPValidationError`` (a flat ``detail`` list) is
+never emitted for 422.
 
 ``_build_openapi_schema`` used ``responses.setdefault("422", ...)`` for the
-unified schema.  ``get_openapi`` populates the auto 422 first, so setdefault
+unified schema. ``get_openapi`` populates the auto 422 first, so setdefault
 was a no-op on 235 of 266 operations: ``openapi.json`` and the generated
 ``openapi.d.ts`` typed 422 as ``HTTPValidationError`` for those operations.
-A consumer writing error handling against the generated client wrote a branch
-for a shape that never arrives and no branch for ``errors``.  The two committed
-artifacts agreed with each other perfectly -- which is exactly why a byte-diff
-gate cannot see this class of defect.  This guard reads the committed bytes and
-asserts the *source* contract: the declared 422 schema matches the handler.
+PR #154 fixed that and added this guard -- but the guard only looked for the
+*framework* shape by name in the generated client. Three regressions stayed
+green against it (all reproduced on the live tree before this change):
 
-Also pins the knob itself: the builder must override (not ``setdefault``) the
-auto 422, and the exception handler must still be registered.  Both are
-mutation-tested so a guard that passes vacuously fails.
+1. retyping one 422 body in ``openapi.d.ts`` as ``ErrorResponse`` (a shape the
+   server never sends for 422, but not the one name the guard banned);
+2. deleting a single operation's ``500`` response from the snapshot;
+3. retyping one ``500`` response as ``HTTPValidationError``.
 
-Run directly (stdlib only) or collect with pytest:
+In every case the two committed artifacts agreed with each other, so a byte
+diff gate could not see it either. Equality of two generated products is
+not evidence that either one declares the truth.
+
+This guard closes the class instead of the one spelling. It reads committed
+bytes only (stdlib, no API venv, no 3.15, no PostgreSQL) and asserts:
+
+* every operation declares a 422 and a 500, each with the exact runtime schema;
+* every other declared 4xx/5xx response uses ``ErrorResponse``;
+* the generated client contains exactly as many ``ErrorResponse`` and
+  ``ValidationErrorResponse`` response bodies as the snapshot declares, so a
+  client that drops, retypes or one-sidedly adds one cannot hide behind the
+  JSON half;
+* the declared error-response distribution is pinned to an exact baseline, so
+  a *coordinated* edit to both artifacts (drop OR add) is also caught;
+* the builder overrides rather than ``setdefault``s the 422, still registers
+  all four handlers, and still declares both schemas;
+* the guard is wired into ``smoke.sh --profile contracts``.
+
+The equality check is self-referential: ``expected`` is recomputed from
+whichever JSON is supplied, so a snapshot and client edited together still
+agree. ``_ERROR_RESPONSE_BASELINE`` is independent of both halves and is the
+fixed point that closes that blind spot -- the same idiom as the snapshot
+guard's ``_SNAPSHOT_FLOOR``, but exact in both directions because an error
+status the runtime never sends is as wrong as a dropped one. It pins the
+*declared surface*, not the set of operations: adding an endpoint legitimately
+adds its 422/500, so the baseline must be updated in that same commit with a
+reason.
+
+Each branch is mutation-tested in-file. Run directly or collect with pytest:
     python3 scripts/test_openapi_422_unified_envelope.py
     pytest scripts/test_openapi_422_unified_envelope.py -q
 """
@@ -34,96 +62,177 @@ ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOT = ROOT / "packages/api-client/openapi.json"
 GENERATED = ROOT / "packages/api-client/src/generated/openapi.d.ts"
 MAIN = ROOT / "apps/api/app/main.py"
-
-UNIFIED = "#/components/schemas/ValidationErrorResponse"
-FRAMEWORK = "#/components/schemas/HTTPValidationError"
 SMOKE = ROOT / "scripts/smoke.sh"
 SELF = Path(__file__).name
 
+VALIDATION = "#/components/schemas/ValidationErrorResponse"
+ENVELOPE = "#/components/schemas/ErrorResponse"
+FRAMEWORK = "#/components/schemas/HTTPValidationError"
+METHODS = {"get", "put", "post", "patch", "delete", "options", "head", "trace"}
 
-def _declared_422_refs(document: dict) -> dict[tuple[str, str], str]:
-    """Map (path, method) -> the 422 response's JSON schema $ref, if any."""
-    out: dict[tuple[str, str], str] = {}
+# Exact response-body spellings the pinned openapi-typescript emits. Counting
+# these (rather than looking for a banned string) is what makes a dropped or
+# retyped body visible even when the JSON half was reverted with it. A body
+# ADDED to both halves keeps expected == actual; the baseline below catches it.
+VALIDATION_BODY = '"application/json": components["schemas"]["ValidationErrorResponse"];'
+ENVELOPE_BODY = '"application/json": components["schemas"]["ErrorResponse"];'
+
+# Exact declared error-response surface (code -> number of operations declaring
+# it), measured on the live snapshot: 266 operations x {422, 500}, plus 3 x 409
+# and 1 x 429. This is an independent fixed point, NOT derived from the supplied
+# document. Equality of expected-vs-actual cannot see a coordinated edit to
+# both artifacts -- a dropped 500 or an invented 418 added on both sides -- so
+# the distribution itself is pinned. Update it in the same commit as an
+# intentional change to the error surface and say why.
+_ERROR_RESPONSE_BASELINE = {"409": 3, "422": 266, "429": 1, "500": 266}
+
+
+def _error_code_counts(document: dict) -> dict[str, int]:
+    """How many operations declare each 4xx/5xx status."""
+    counts: dict[str, int] = {}
     for path, ops in document.get("paths", {}).items():
         for method, op in ops.items():
-            if not isinstance(op, dict):
+            if method not in METHODS or not isinstance(op, dict):
                 continue
-            resp = op.get("responses", {}).get("422")
-            if not isinstance(resp, dict):
-                continue
-            schema = (
-                resp.get("content", {})
-                .get("application/json", {})
-                .get("schema", {})
-            )
-            ref = schema.get("$ref") if isinstance(schema, dict) else None
-            if ref is not None:
-                out[(path, method)] = ref
-    return out
+            for code in op.get("responses", {}):
+                if code.startswith("4") or code.startswith("5"):
+                    counts[code] = counts.get(code, 0) + 1
+    return counts
 
 
 def _operations(document: dict) -> set[tuple[str, str]]:
-    """Every operation that carries a responses object must declare a 422."""
+    """Every operation that carries a responses object."""
     out: set[tuple[str, str]] = set()
-    methods = {"get", "put", "post", "patch", "delete", "options", "head", "trace"}
     for path, ops in document.get("paths", {}).items():
         for method, op in ops.items():
-            if method in methods and isinstance(op, dict) and "responses" in op:
+            if method in METHODS and isinstance(op, dict) and "responses" in op:
                 out.add((path, method))
     return out
 
 
+def _response_ref(response: object) -> str | None:
+    if not isinstance(response, dict):
+        return None
+    schema = (
+        response.get("content", {})
+        .get("application/json", {})
+        .get("schema", {})
+    )
+    return schema.get("$ref") if isinstance(schema, dict) else None
+
+
+def _expected_bodies(document: dict) -> dict[str, int]:
+    """How many response bodies of each runtime shape the snapshot declares."""
+    expected = {ENVELOPE: 0, VALIDATION: 0}
+    for path, ops in document.get("paths", {}).items():
+        for method, op in ops.items():
+            if method not in METHODS or not isinstance(op, dict):
+                continue
+            for code, response in op.get("responses", {}).items():
+                if not (code.startswith("4") or code.startswith("5")):
+                    continue
+                ref = _response_ref(response)
+                if ref in expected:
+                    expected[ref] += 1
+    return expected
+
+
 def failures(document: dict, generated: str, main: str, smoke: str) -> list[str]:
     found: list[str] = []
-    refs = _declared_422_refs(document)
+    operations = _operations(document)
 
-    if not refs:
-        found.append("no operation declares a 422 response schema at all")
+    if not operations:
+        found.append("no operation declares a responses object at all")
 
-    missing = _operations(document) - set(refs)
-    for path, method in sorted(missing):
-        found.append(f"{method.upper()} {path} declares no 422 response schema")
+    for path, method in sorted(operations):
+        responses = document["paths"][path][method]["responses"]
+        label = f"{method.upper()} {path}"
 
-    for key, ref in refs.items():
-        if ref != UNIFIED:
+        declared_422 = responses.get("422")
+        if declared_422 is None:
+            found.append(f"{label} declares no 422 response")
+        elif _response_ref(declared_422) != VALIDATION:
             found.append(
-                f"{key[1].upper()} {key[0]} declares 422 as {ref}, not the "
-                "runtime's ValidationErrorResponse envelope"
+                f"{label} declares 422 as {_response_ref(declared_422)!r}, not "
+                "the runtime's ValidationErrorResponse envelope"
             )
 
-    # The generated TypeScript client must name the same schema, so a
-    # co-reverted snapshot + client pair cannot hide behind each other.
-    if 'components["schemas"]["HTTPValidationError"]' in generated:
-        # Only the schema *definition* may still carry the name; every 422
-        # response body must reference the unified envelope.  Count references
-        # inside response bodies by structural position is what the json side
-        # already proves; here we require the framework name is not used as a
-        # response content type anywhere it used to be.
-        body_refs = generated.count(
-            '"application/json": components["schemas"]["HTTPValidationError"];'
+        declared_500 = responses.get("500")
+        if declared_500 is None:
+            found.append(f"{label} declares no 500 response")
+        elif _response_ref(declared_500) != ENVELOPE:
+            found.append(
+                f"{label} declares 500 as {_response_ref(declared_500)!r}, not "
+                "the runtime's ErrorResponse envelope"
+            )
+
+        for code, response in responses.items():
+            if code in ("422", "500") or not (
+                code.startswith("4") or code.startswith("5")
+            ):
+                continue
+            ref = _response_ref(response)
+            if ref != ENVELOPE:
+                found.append(
+                    f"{label} declares {code} as {ref!r}, not the runtime's "
+                    "ErrorResponse envelope"
+                )
+
+    # The generated TypeScript client must contain exactly as many bodies of
+    # each shape as the snapshot declares. A retyped or dropped body breaks the
+    # equality even when both artifacts were reverted together. A body ADDED to
+    # both keeps the equality, so the independent baseline is checked too.
+    expected = _expected_bodies(document)
+    actual = {
+        ENVELOPE: generated.count(ENVELOPE_BODY),
+        VALIDATION: generated.count(VALIDATION_BODY),
+    }
+    for ref, want in expected.items():
+        if actual[ref] != want:
+            found.append(
+                f"generated client declares {actual[ref]} "
+                f"{ref.split('/')[-1]} response body(s); snapshot declares {want}"
+            )
+
+    declared = _error_code_counts(document)
+    if declared != _ERROR_RESPONSE_BASELINE:
+        found.append(
+            f"snapshot declares error responses {dict(sorted(declared.items()))}, "
+            f"not the pinned {dict(sorted(_ERROR_RESPONSE_BASELINE.items()))}: a "
+            "coordinated edit to both artifacts cannot be seen by comparing "
+            "them to each other"
         )
-        if body_refs:
-            found.append(
-                f"generated client still types {body_refs} 422 response(s) as "
-                "HTTPValidationError"
-            )
-    if 'components["schemas"]["ValidationErrorResponse"]' not in generated:
-        found.append("generated client no longer names ValidationErrorResponse")
+    framework_body = (
+        '"application/json": components["schemas"]["HTTPValidationError"];'
+    )
+    if framework_body in generated:
+        found.append("generated client still types a response body as HTTPValidationError")
+    for ref in (VALIDATION, ENVELOPE):
+        if f'components["schemas"]["{ref.split("/")[-1]}"]' not in generated:
+            found.append(f"generated client no longer names {ref.split('/')[-1]}")
 
-    # The builder must override the auto 422, not defer to it.
-    if 'setdefault(\n                "422"' in main or 'setdefault("422"' in main:
+    # Source-side pins: the builder must override (not defer to) the auto 422,
+    # all four handlers must stay registered, and both declared schemas must
+    # actually be defined in the document.
+    if 'setdefault("422"' in main:
         found.append("main.py still uses setdefault for the 422 response")
-    if "add_exception_handler(RequestValidationError, validation_exception_handler)" not in main:
-        found.append("main.py no longer registers validation_exception_handler")
-    if "ValidationErrorResponse" not in main:
-        found.append("main.py no longer references ValidationErrorResponse")
-    # The declared schema must actually be defined in the document, or the
-    # generated client names a component that does not exist.
-    if UNIFIED.split("/")[-1] not in document.get("components", {}).get("schemas", {}):
-        found.append("openapi.json no longer defines ValidationErrorResponse")
+    for handler in (
+        "SoyMutDBError, soy_mut_db_exception_handler",
+        "HTTPException, http_exception_handler",
+        "RequestValidationError, validation_exception_handler",
+        "Exception, unhandled_exception_handler",
+    ):
+        if f"add_exception_handler({handler})" not in main:
+            found.append(f"main.py no longer registers {handler}")
+    if "ValidationErrorResponse" not in main or "ErrorResponse" not in main:
+        found.append("main.py no longer references both error schemas")
+    schemas = document.get("components", {}).get("schemas", {})
+    for ref in (VALIDATION, ENVELOPE):
+        if ref.split("/")[-1] not in schemas:
+            found.append(f"openapi.json no longer defines {ref.split('/')[-1]}")
 
     if f"scripts/{SELF}" not in smoke:
-        found.append("contracts smoke layer no longer invokes the 422 guard")
+        found.append("contracts smoke layer no longer invokes the error-envelope guard")
 
     return found
 
@@ -137,15 +246,13 @@ def _load() -> tuple[dict, str, str, str]:
     )
 
 
-def test_committed_tree_advertises_the_runtime_422_envelope() -> None:
+def test_committed_tree_advertises_the_runtime_error_envelopes() -> None:
     assert failures(*_load()) == []
 
 
 def test_a_framework_422_is_rejected() -> None:
     document, generated, main, smoke = _load()
-    # Plant one real regression: revert a single operation's 422 to the
-    # framework shape the runtime never sends.
-    key = next(iter(_declared_422_refs(document)))
+    key = next(iter(_operations(document)))
     document["paths"][key[0]][key[1]]["responses"]["422"]["content"][
         "application/json"
     ]["schema"]["$ref"] = FRAMEWORK
@@ -153,16 +260,57 @@ def test_a_framework_422_is_rejected() -> None:
                for f in failures(document, generated, main, smoke))
 
 
+def test_a_wrong_422_shape_is_rejected() -> None:
+    """The guard must ban *any* non-runtime shape, not one banned name."""
+    document, generated, main, smoke = _load()
+    key = next(iter(_operations(document)))
+    document["paths"][key[0]][key[1]]["responses"]["422"]["content"][
+        "application/json"
+    ]["schema"]["$ref"] = ENVELOPE
+    assert any("not the runtime's ValidationErrorResponse" in f
+               for f in failures(document, generated, main, smoke))
+
+
 def test_a_stale_generated_client_is_rejected() -> None:
     document, generated, main, smoke = _load()
-    stale = generated.replace(
-        '"application/json": components["schemas"]["ValidationErrorResponse"];',
-        '"application/json": components["schemas"]["HTTPValidationError"];',
-        1,
-    )
+    stale = generated.replace(VALIDATION_BODY, ENVELOPE_BODY, 1)
     assert stale != generated
-    assert any("generated client still types" in f
+    assert any("response body(s); snapshot declares" in f
                for f in failures(document, stale, main, smoke))
+
+
+def test_a_dropped_500_response_is_rejected() -> None:
+    """A single dropped 500 among 266 must be caught by the JSON half alone."""
+    document, generated, main, smoke = _load()
+    key = next(iter(_operations(document)))
+    del document["paths"][key[0]][key[1]]["responses"]["500"]
+    assert any("declares no 500 response" in f
+               for f in failures(document, generated, main, smoke))
+
+
+def test_a_retyped_500_response_is_rejected() -> None:
+    document, generated, main, smoke = _load()
+    key = next(iter(_operations(document)))
+    document["paths"][key[0]][key[1]]["responses"]["500"]["content"][
+        "application/json"
+    ]["schema"]["$ref"] = FRAMEWORK
+    assert any("not the runtime's ErrorResponse envelope" in f
+               for f in failures(document, generated, main, smoke))
+
+
+def test_a_nonunified_409_response_is_rejected() -> None:
+    document, generated, main, smoke = _load()
+    key = next(
+        (p, m)
+        for p, ops in document["paths"].items()
+        for m, op in ops.items()
+        if isinstance(op, dict) and "409" in op.get("responses", {})
+    )
+    document["paths"][key[0]][key[1]]["responses"]["409"]["content"][
+        "application/json"
+    ]["schema"]["$ref"] = FRAMEWORK
+    assert any("declares 409 as" in f
+               for f in failures(document, generated, main, smoke))
 
 
 def test_setdefault_regression_is_rejected() -> None:
@@ -177,22 +325,22 @@ def test_setdefault_regression_is_rejected() -> None:
                for f in failures(document, generated, regressed, smoke))
 
 
-def test_dropping_the_handler_registration_is_rejected() -> None:
+def test_dropping_any_handler_registration_is_rejected() -> None:
     document, generated, main, smoke = _load()
     dropped = main.replace(
-        "app.add_exception_handler(RequestValidationError, validation_exception_handler)",
+        "app.add_exception_handler(HTTPException, http_exception_handler)",
         "",
         1,
     )
     assert dropped != main
-    assert any("no longer registers validation_exception_handler" in f
+    assert any("no longer registers HTTPException" in f
                for f in failures(document, generated, dropped, smoke))
 
 
-def test_deleting_the_unified_schema_is_rejected() -> None:
+def test_deleting_either_schema_is_rejected() -> None:
     document, generated, main, smoke = _load()
-    document["components"]["schemas"].pop("ValidationErrorResponse", None)
-    assert any("no longer defines ValidationErrorResponse" in f
+    document["components"]["schemas"].pop("ErrorResponse", None)
+    assert any("no longer defines ErrorResponse" in f
                for f in failures(document, generated, main, smoke))
 
 
@@ -200,18 +348,62 @@ def test_dropping_smoke_wiring_is_rejected() -> None:
     document, generated, main, smoke = _load()
     unwired = smoke.replace(f"    scripts/{SELF}\n", "", 1)
     assert unwired != smoke
-    assert any("no longer invokes the 422 guard" in f
+    assert any("no longer invokes the error-envelope guard" in f
                for f in failures(document, generated, main, unwired))
 
 
 def test_missing_422_response_is_rejected() -> None:
     document, generated, main, smoke = _load()
-    key = next(iter(_declared_422_refs(document)))
+    key = next(iter(_operations(document)))
     del document["paths"][key[0]][key[1]]["responses"]["422"]
-    # A single dropped 422 among hundreds must be caught; a guard that only
-    # checks "at least one ref exists" would stay green.
-    assert any(f"{key[1].upper()} {key[0]} declares no 422" in f
+    assert any("declares no 422" in f
                for f in failures(document, generated, main, smoke))
+
+
+def test_a_client_with_an_extra_error_body_is_rejected() -> None:
+    document, generated, main, smoke = _load()
+    injected = generated.replace(
+        ENVELOPE_BODY, ENVELOPE_BODY + "\n" + ENVELOPE_BODY, 1
+    )
+    assert injected != generated
+    assert any("response body(s); snapshot declares" in f
+               for f in failures(document, injected, main, smoke))
+
+
+def test_a_coordinated_added_error_response_is_rejected() -> None:
+    """The blind spot: adding a 418 to BOTH halves keeps expected == actual."""
+    document, generated, main_src, smoke = _load()
+    key = next(iter(_operations(document)))
+    responses = document["paths"][key[0]][key[1]]["responses"]
+    responses["418"] = json.loads(json.dumps(responses["500"]))
+    injected = generated.replace(
+        ENVELOPE_BODY, ENVELOPE_BODY + "\n" + ENVELOPE_BODY, 1
+    )
+    assert injected != generated
+    found = failures(document, injected, main_src, smoke)
+    assert any("not the pinned" in f for f in found), found
+
+
+def test_a_coordinated_dropped_error_response_is_rejected() -> None:
+    """Dropping a 500 from BOTH halves is caught by the baseline too."""
+    document, generated, main_src, smoke = _load()
+    key = next(iter(_operations(document)))
+    del document["paths"][key[0]][key[1]]["responses"]["500"]
+    stripped = generated.replace(ENVELOPE_BODY, "", 1)
+    assert stripped != generated
+    found = failures(document, stripped, main_src, smoke)
+    assert any("not the pinned" in f for f in found), found
+
+
+def test_a_one_sided_added_error_response_is_rejected() -> None:
+    """A 418 declared in JSON only breaks both the equality and the baseline."""
+    document, generated, main_src, smoke = _load()
+    key = next(iter(_operations(document)))
+    responses = document["paths"][key[0]][key[1]]["responses"]
+    responses["418"] = json.loads(json.dumps(responses["500"]))
+    found = failures(document, generated, main_src, smoke)
+    assert any("response body(s); snapshot declares" in f for f in found), found
+    assert any("not the pinned" in f for f in found), found
 
 
 def main() -> int:
@@ -228,9 +420,9 @@ def main() -> int:
             problems.append(f"{test.__name__}: {str(exc) or 'assertion failed'}")
     if problems:
         for problem in problems:
-            print(f"openapi-422-unified-envelope: FAIL: {problem}", file=sys.stderr)
+            print(f"openapi-error-envelope: FAIL: {problem}", file=sys.stderr)
         return 1
-    print(f"openapi-422-unified-envelope: OK ({len(tests)} checks)")
+    print(f"openapi-error-envelope: OK ({len(tests)} checks)")
     return 0
 
 
