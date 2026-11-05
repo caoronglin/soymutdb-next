@@ -16,7 +16,9 @@ committed `smoke.sh` bytes and asserts:
 - every array entry exists, parses, and defines at least one collectible test;
 - no array entry is duplicated;
 - the known floor of standalone guard calls is still present;
-- every called guard still exists on disk.
+- every called guard still exists on disk;
+- the driver-level invocation registers its failure in `FAILED`, so a failing
+  guard cannot print `SMOKE PASS` (see below).
 
 ## Why
 
@@ -32,6 +34,16 @@ can be dropped without any conflict marker.
 Demonstrated on the tree that would actually land (`main + #150`): adding a
 registry entry whose module defines no `test_*` leaves
 `SMOKE PASS / 427 passed / 0 failed`. The guard reports it by name.
+
+## The driver must not swallow the guard
+
+`smoke.sh` sets `set -uo pipefail` and decides its exit status from the
+`FAILED` array, not from a top-level `rc`. A driver-level call ending in
+`|| rc=$?` therefore prints the guard's diagnostics but still exits 0 with
+`SMOKE PASS` -- the exact silent no-op this guard exists to prevent. The
+driver registers the failure in `FAILED` instead, and the guard's
+`--self-test` includes a mutation that restores `|| rc=$?` and asserts it is
+caught.
 
 ## Boundary
 
@@ -75,3 +87,5 @@ is kept for direct runs and editor integration.
 - Retiring a suite or a called guard: remove the entry/call **and** update
   `REQUIRED_GUARD_CALLS` if it was in the floor. A green `SMOKE PASS` after
   deleting a guard file must not be possible.
+- Never change the driver's guard call back to `|| rc=$?`; `--self-test`
+  fails on that mutation.

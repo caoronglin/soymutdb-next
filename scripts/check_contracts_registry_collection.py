@@ -64,6 +64,26 @@ REQUIRED_GUARD_CALLS: frozenset[str] = frozenset(
 )
 
 
+DRIVER_MARKER = "if should_run contracts; then"
+
+
+def driver_propagates(smoke: str) -> bool | None:
+    """Whether the driver-level registry guard's failure reaches the exit.
+
+    ``None`` means there is no driver to check (synthetic ``smoke.sh`` text
+    passed by the unit tests). At top-level scope ``rc`` is never read --
+    only the ``FAILED`` array decides the final exit status -- so a bare
+    ``|| rc=$?`` prints the guard's diagnostics but still yields SMOKE PASS.
+    """
+    if DRIVER_MARKER not in smoke:
+        return None
+    block = smoke.split(DRIVER_MARKER, 1)[1].split("\nfi", 1)[0]
+    for line in block.splitlines():
+        if "check_contracts_registry_collection.py" in line and "||" in line:
+            return "FAILED" in line and "rc=$?" not in line
+    return False
+
+
 def contracts_function(smoke: str) -> str:
     """Return just the body of smoke_contracts(), up to its closing brace."""
     marker = "smoke_contracts() {"
@@ -137,6 +157,12 @@ def check(smoke: str, files: dict[str, str]) -> list[str]:
         if relative not in files:
             errors.append(f"standalone guard call {relative!r} does not exist")
 
+    if driver_propagates(smoke) is False:
+        errors.append(
+            "the driver-level registry guard's failure is not propagated "
+            "(a bare '|| rc=$?' at top-level scope never reaches the exit status)"
+        )
+
     return errors
 
 
@@ -203,6 +229,16 @@ def self_test() -> int:
     mutant6 = dict(files)
     mutant6.pop("scripts/check_nginx_security_headers.py", None)
     cases.append(("a called guard disappears from disk", smoke, mutant6))
+
+    smoke8 = smoke.replace(
+        '|| FAILED+=("contracts registry")',
+        "|| rc=$?",
+        1,
+    )
+    assert smoke8 != smoke, "self-test could not locate the driver registry guard call"
+    cases.append(
+        ("the driver swallows the registry guard's failure", smoke8, dict(files))
+    )
 
     # Positive control: adding a NEW guard call must not require an edit here.
     extra = "scripts/check_extra_wiring_probe.py"

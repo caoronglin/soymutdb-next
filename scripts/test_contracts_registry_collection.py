@@ -88,6 +88,23 @@ class RegistryCollectionGuardTests(unittest.TestCase):
         failures = guard.check(smoke, files)
         self.assertTrue(any("does not exist" in f for f in failures), failures)
 
+    def test_driver_registry_failure_must_propagate(self) -> None:
+        files = _files()
+        files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
+        body = _smoke(["scripts/test_example.py"], REQUIRED)
+        prefix = (
+            guard.DRIVER_MARKER
+            + "\n"
+            + '  "${PYTHON_BIN}" scripts/check_contracts_registry_collection.py '
+        )
+        suffix = "\n  run_layer contracts smoke_contracts\nfi\n\n"
+        swallowed = guard.check(prefix + "|| rc=$?" + suffix + body, files)
+        self.assertTrue(any("not propagated" in f for f in swallowed), swallowed)
+        propagated = guard.check(
+            prefix + '|| FAILED+=("contracts registry")' + suffix + body, files
+        )
+        self.assertEqual(propagated, [])
+
     def test_unittest_style_suite_counts_as_collectible(self) -> None:
         smoke = _smoke(["scripts/test_example.py"], REQUIRED)
         files = _files()
