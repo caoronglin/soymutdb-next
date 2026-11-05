@@ -11,10 +11,14 @@ here instead of being reported as debt:
   ``$defs`` entries are not part of ``components.schemas``, so a client reading
   the components table cannot resolve them.
 * pydantic decides where in a property's JSON object ``title`` goes, and the
-  committed snapshot was printed by one pydantic version. Mixing dialects
-  inside one schema is not a contract change either, but it *is* the reason the
-  snapshot's spelling has to be restated rather than inherited — see
-  ``_title_last``.
+  committed snapshot was assembled from two pydantic versions, so some schemas
+  print ``title`` first and others last. Key order is not a contract change
+  (``openapi-typescript`` reads keywords, not positions), so ``_title_last``
+  restates it instead of inheriting it: one spelling, ``title`` last, for
+  every property in every schema.
+  One thing that *is* inherited from the export: a nested
+  ``model_json_schema()`` reaches the components table with its own ``$defs``
+  block, which ``_normalize_nested_subschemas`` re-emits and prunes.
 
 Restating ``default: null`` is deliberately *not* on that list. Its absence is
 a client-visible change: ``openapi-typescript`` renders an optional field as
@@ -40,7 +44,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 API_DIR = REPO_ROOT / "apps" / "api"
@@ -75,28 +79,27 @@ def _clone(value: dict[str, Any]) -> dict[str, Any]:
 
 
 #: Property keys that keep their printed order. Everything else -- ``title``
-#: above all -- is re-emitted in the snapshot's spelling by ``_title_last``.
+#: above all -- is re-emitted in the order below, ``title`` last.
 _ORDERED_KEYS = ("anyOf", "oneOf", "allOf", "$ref", "type", "items", "enum")
 
 
 def _title_last(prop: dict[str, Any]) -> dict[str, Any]:
-    """Re-emit one property in the committed snapshot's key order.
+    """Re-emit one property in the snapshot's key order, ``title`` last.
 
-    The snapshot was printed by a pydantic that writes the value keywords
-    first and ``title`` last, and that omits ``title`` beside a lone ``$ref``.
-    ``openapi-typescript`` only reads the keywords, so this is a re-ordering,
-    not a contract change -- but a *different* pydantic prints ``title`` first,
-    and a document holding both spellings inside one schema can never match a
-    fresh export again. That is what kept the frontend contract gate red with
-    "CONTRACT DEBT" for a schema nobody edited.
+    ``openapi-typescript`` only reads the keywords, so key order is not a
+    contract change and is normalized instead of inherited. "Always ``title``
+    last" is the one spelling the snapshot can hold: whichever dialect a given
+    export printed, it normalizes to this shape, and a snapshot already in it
+    is a fixed point because this function is.
+
+    Re-running this on already-normalized output must change nothing, or the
+    snapshot stops being a fixed point of its own normalizer.
     """
 
     ordered: dict[str, Any] = {key: prop[key] for key in _ORDERED_KEYS if key in prop}
     for key, value in prop.items():
         if key not in ordered and key != "title":
             ordered[key] = value
-    # A ``$ref`` already names the definition; a sibling ``title`` is what
-    # pydantic prints for an inline value, not for a reference.
     if "title" in prop and "$ref" not in prop:
         ordered["title"] = prop["title"]
     return ordered
@@ -184,6 +187,64 @@ def _normalize_properties(document: dict[str, Any]) -> None:
     visit(document)
 
 
+#: How a nested pydantic subschema names its own definitions. pydantic 2 keys
+#: them under ``$defs`` locally, then FastAPI re-bases the references onto the
+#: components table while leaving the ``$defs`` block in place.
+_DEFS_PREFIXES = ("#/$defs/", "#/components/schemas/")
+
+
+def _defs_refs(node: Any) -> Iterator[str]:
+    if isinstance(node, dict):
+        target = node.get("$ref")
+        if isinstance(target, str):
+            for prefix in _DEFS_PREFIXES:
+                if target.startswith(prefix):
+                    yield target[len(prefix):]
+                    break
+        for key, value in node.items():
+            if key != "$defs":
+                yield from _defs_refs(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _defs_refs(value)
+
+
+def _normalize_nested_subschemas(node: Any) -> None:
+    """Restate nested pydantic ``$defs`` before they reach the snapshot.
+
+    ``_normalize_properties`` walks the document but not a property's *schema*:
+    a nested ``model_json_schema()`` -- what FastAPI puts in
+    ``components.schemas`` -- carries its own ``$defs`` inside the same object,
+    deeper than the ``properties`` table, so a definition there would keep
+    whatever key order its export printed. Re-emit each one in the snapshot's
+    order and keep only the ones the subschema still ``$ref``s: FastAPI copies
+    the nested schema whole, ``$defs`` included, and an unreferenced definition
+    is not part of the contract a client can resolve.
+    """
+
+    def visit(node: Any) -> None:
+        if isinstance(node, dict):
+            definitions = node.get("$defs")
+            if isinstance(definitions, dict):
+                for definition in definitions.values():
+                    if isinstance(definition, dict):
+                        _normalize_properties(definition)
+                        visit(definition)
+                referenced = set(_defs_refs(node))
+                node["$defs"] = {
+                    name: definition
+                    for name, definition in definitions.items()
+                    if name in referenced
+                }
+            for value in node.values():
+                visit(value)
+        elif isinstance(node, list):
+            for value in node:
+                visit(value)
+
+    visit(node)
+
+
 def normalize(document: dict[str, Any]) -> dict[str, Any]:
     schemas = document["components"]["schemas"]
 
@@ -199,6 +260,7 @@ def normalize(document: dict[str, Any]) -> dict[str, Any]:
     schemas.pop("SettingValue", None)
 
     _normalize_properties(document)
+    _normalize_nested_subschemas(document)
 
     return document
 

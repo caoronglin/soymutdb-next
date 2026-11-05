@@ -164,60 +164,163 @@ def test_generated_client_keeps_snapshot_path_order() -> None:
 
 
 # ---------------------------------------------------------------------------
-# A snapshot entry may not mix pydantic serialization dialects
+# `title` is last in the `properties` table; the exemptions are named
 # ---------------------------------------------------------------------------
-# The committed snapshot is an export, so every object in it was printed by the
-# pydantic that produced it. Those dialect differences are not contract
-# changes, and a normalizer that restates *some* fields by hand ends up with
-# both dialects inside one schema.
+# ``normalize()`` emits one spelling: every property object it rewrites prints
+# ``title`` last. The snapshot is an export of that function, so ``title``
+# follows ``description`` in every one of them.
 #
-# That is the state #35 left behind and the reason the frontend contract gate
-# stayed red: `GeneDetail` carried pydantic 2.13 spelling (``title`` first) on
-# the nine fields a hand-kept list named and pydantic 2.14 spelling
-# (``title`` last, no ``title`` beside a lone ``$ref``) on the other nineteen,
-# while `SequenceAvailability` carried ``default: null`` on four of its fields
-# and not on the same four. Every real export therefore disagreed with the
-# snapshot, and regenerating the snapshot "fixed" the diff only until the next
-# export.
+# The hand edit this replaced is #35: `GeneDetail` carried pydantic 2.13
+# spelling (``title`` first) on the nine fields a hand-kept list named and
+# pydantic 2.14 spelling (``title`` last, no ``title`` beside a lone ``$ref``)
+# on the other nineteen, while `SequenceAvailability` carried ``default: null``
+# on four of its fields and not on the same four. Every real export therefore
+# disagreed with the snapshot, and regenerating the snapshot "fixed" the diff
+# only until the next export.
 
-#: Keys whose presence means "this object describes a value", which is when
-#: pydantic decides where ``title`` goes.
-_VALUE_KEYS = ("anyOf", "oneOf", "allOf", "$ref", "type", "items", "enum")
+# What the rule below can hold is narrower than "the document speaks one
+# dialect". ``_title_last`` owns the objects in a ``properties`` table; it
+# never runs over a schema *root*, and it cannot reorder an object with no
+# value keyword in it -- ``old_value: Any`` exports as the bare
+# ``{"title": ...}``, which ``normalize()`` passes through. So the guard
+# measures the properties table and names the bare-``title`` objects it has to
+# leave alone, instead of comparing first keys of everything it can walk.
 
+def _property_objects(
+    node: Any, path: str = ""
+) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Every object held in a ``properties`` table, schema roots excluded.
 
-def _value_objects(node: Any, path: str = "") -> Iterator[tuple[str, dict[str, Any]]]:
-    if isinstance(node, dict):
-        if any(key in node for key in _VALUE_KEYS):
-            yield path, node
-        for key, value in node.items():
-            yield from _value_objects(value, f"{path}/{key}")
-    elif isinstance(node, list):
-        for index, value in enumerate(node):
-            yield from _value_objects(value, f"{path}[{index}]")
-
-
-def test_snapshot_speaks_one_pydantic_dialect() -> None:
-    """No schema may carry both ``title``-first and ``title``-last spelling.
-
-    A document that mixes them cannot have come from one export, so the gate
-    will report CONTRACT DEBT for a schema nobody edited.
+    This is the domain ``_title_last`` actually owns: ``_normalize_properties``
+    rewrites ``node["properties"]`` and nothing else, so a schema *root* is not
+    a property object no matter where it prints ``title``. FastAPI's
+    ``get_definitions`` rebuilds every root as ``{field_name: json_schema}``,
+    which is why ``properties`` leads all of them -- that is a fact about the
+    exporter, not a spelling this file can hold an export to.
     """
 
-    schemas = _document().get("components", {}).get("schemas", {})
-    mixed: list[str] = []
+    if isinstance(node, dict):
+        properties = node.get("properties")
+        if isinstance(properties, dict):
+            for name, prop in properties.items():
+                if isinstance(prop, dict):
+                    yield f"{path}.{name}", prop
+        for key, value in node.items():
+            yield from _property_objects(value, f"{path}/{key}" if path else key)
+    elif isinstance(node, list):
+        for index, value in enumerate(node):
+            yield from _property_objects(value, f"{path}[{index}]")
+
+
+#: Property objects that legitimately print ``title`` first, keyed by their
+#: ``Schema.field`` name and mapped to the declaration responsible. Every one is
+#: ``Any``, whose JSON schema is the bare ``{"title": ...}``: no value keyword
+#: for ``_title_last`` to order in front of ``title``, no ``default`` for
+#: ``_normalize_properties`` to restate, so ``normalize()`` carries it through
+#: unchanged. That is not a dialect, it is outside the normalizer's reach -- and
+#: the guard below says so by name instead of by omission, which is how a bare
+#: ``{"title": ...}`` used to stay invisible to it.
+_TITLE_FIRST_WITHOUT_A_VALUE = {
+    "DataPatchItem.old_value": "apps/api/app/schemas/import_studio.py `old_value: Any`",
+    "DataPatchItem.new_value": "apps/api/app/schemas/import_studio.py `new_value: Any`",
+    "ValidationError.input": "fastapi.exception_handlers.ValidationError `input: Any`",
+}
+
+
+def _title_first_properties(document: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """``Schema.field`` -> property object, for objects printing ``title`` first."""
+
+    schemas = document.get("components", {}).get("schemas", {})
+    return {
+        path.lstrip("."): prop
+        for path, prop in _property_objects(schemas)
+        if "title" in prop and next(iter(prop)) == "title"
+    }
+
+
+def test_snapshot_prints_title_last_in_every_property_object() -> None:
+    """``title`` comes last in every object of a ``properties`` table.
+
+    ``normalize()`` restates one spelling for the properties it rewrites, and
+    the snapshot is an export of it, so ``title`` follows ``description``. The
+    assertion is aimed at the declaration side -- the field objects a hand edit
+    touches -- because that is where a pasted-in pydantic spelling lands. Schema
+    roots are outside it: no export here has ever ordered one.
+    """
+
+    found = _title_first_properties(_document())
+    unexpected = sorted(set(found) - set(_TITLE_FIRST_WITHOUT_A_VALUE))
+    assert unexpected == [], (
+        "these properties print `title` first, which no pass of the normalizer "
+        f"emits: {unexpected}. Either the snapshot was edited by hand "
+        "(`pnpm --filter @soymutdb/api-client generate:api-client` under Python "
+        "3.15), or a field that used to be `Any` grew a value keyword and "
+        "`_title_last` can now order it."
+    )
+
+
+def test_title_first_exemptions_are_still_bare_titles() -> None:
+    """Each exemption is still present, and still a lone ``title``.
+
+    An exemption that silently covers a property whose shape changed is how
+    this guard goes blind: once one of these grows ``type``, the exclusion
+    would still excuse the new object, and once one disappears the exclusion
+    would excuse whatever is declared in its place. Both directions are
+    asserted so the stale exemption fails here, by name, before it can hide a
+    real drift.
+    """
+
+    found = _title_first_properties(_document())
+    assert sorted(found) == sorted(_TITLE_FIRST_WITHOUT_A_VALUE), (
+        "the `title`-first exemption list no longer matches the snapshot; "
+        f"missing: {sorted(set(_TITLE_FIRST_WITHOUT_A_VALUE) - set(found))}, "
+        f"unexpected: {sorted(set(found) - set(_TITLE_FIRST_WITHOUT_A_VALUE))}. "
+        "Drop or replace the stale entry in `_TITLE_FIRST_WITHOUT_A_VALUE`."
+    )
+    for name in sorted(found):
+        assert list(found[name]) == ["title"], (
+            f"`{name}` ({_TITLE_FIRST_WITHOUT_A_VALUE[name]}) is exempt from "
+            "the `title`-last rule only because it is `Any`, i.e. its schema "
+            f"is a bare `title`. It now prints {sorted(found[name])}, so "
+            "`_title_last` can order it and the exemption is hiding a drift."
+        )
+
+
+def test_dialect_guard_notices_a_property_edited_in_place() -> None:
+    """Writing a field back in pydantic spelling is named, not tolerated."""
+
+    document = _document()
+    properties = document["components"]["schemas"]["GeneDetail"]["properties"]
+    original = properties["gene_id"]
+    properties["gene_id"] = {"title": original["title"], **original}
+
+    assert "GeneDetail.gene_id" in _title_first_properties(document), (
+        "the guard did not notice a property object rewritten with `title` "
+        "first -- this is the hand edit #35 left behind on nine `GeneDetail` "
+        "fields, and the reason this test exists"
+    )
+
+
+def test_dialect_guard_ignores_schema_roots() -> None:
+    """Ordering the schema roots is not a property-object spelling.
+
+    Every export here leads each root with ``properties``, but that comes from
+    FastAPI rebuilding the definitions table, so a document whose roots lead
+    with ``title`` is not evidence of a hand edit and must not turn the guard
+    red. A guard that reports those instead is comparing the wrong domain.
+    """
+
+    document = _document()
+    schemas = document["components"]["schemas"]
+    rotated: dict[str, Any] = {}
     for name, schema in schemas.items():
-        spellings = set()
-        for _, node in _value_objects(schema):
-            if "title" not in node:
-                continue
-            spellings.add(next(iter(node)) == "title")
-        if len(spellings) > 1:
-            mixed.append(name)
-    assert mixed == [], (
-        "these schemas mix pydantic serialization dialects (some fields print "
-        f"`title` first, others last): {sorted(mixed)}\n"
-        "The snapshot was regenerated by hand. Run "
-        "`pnpm --filter @soymutdb/api-client generate:api-client` under Python 3.15."
+        head = {"title": schema["title"]} if "title" in schema else {}
+        rotated[name] = {**head, **{k: v for k, v in schema.items() if k != "title"}}
+    document["components"]["schemas"] = rotated
+
+    assert _title_first_properties(document) == _title_first_properties(_document()), (
+        "rotating the schema roots changed what the guard reports: it is "
+        "still measuring schema roots, a domain `_title_last` never touches"
     )
 
 
@@ -303,26 +406,68 @@ def _document_with_optional_fields() -> dict[str, Any]:
     return {"components": {"schemas": schemas}, "paths": {}}
 
 
-def test_snapshot_is_a_fixed_point_of_the_export_normalizer() -> None:
-    """Re-normalizing the committed snapshot must change nothing.
+def _export_bytes(document: dict[str, Any]) -> str:
+    """Serialize exactly as ``export_contract.py:main`` writes the snapshot.
 
-    The snapshot is an export, so it has to be what the export produces. A
-    snapshot carrying a spelling the normalizer would rewrite is exactly the
-    drift ``check:contract`` reports as CONTRACT DEBT against a backend that
-    did not move.
+    ``check-contract.sh`` compares a fresh export against the committed file
+    with ``diff -q``, i.e. as text, so key order is part of what it checks.
+    ``json.dumps(..., sort_keys=True)`` calls two documents equal when only
+    key order moved -- the ``_ORDERED_KEYS`` ``description`` incident drifted
+    87 lines that way while every semantic guard stayed green. Fixed point
+    and idempotence therefore compare these bytes, not a sorted reserialize.
+    """
+
+    return json.dumps(document, indent=2)
+
+
+def test_snapshot_is_a_fixed_point_of_the_export_normalizer() -> None:
+    """Re-normalizing the committed snapshot must be a byte-level no-op.
+
+    The snapshot is an export, so it has to be the bytes the export produces.
+    A snapshot carrying a spelling the normalizer would rewrite -- including
+    a *key order* it would restate -- is exactly the drift ``check:contract``
+    reports as CONTRACT DEBT against a backend that did not move. Comparing
+    ``sort_keys=True`` here used to hide that whole class of drift.
+
+    Mutation that must redden this test: re-adding ``description`` to
+    ``_ORDERED_KEYS`` (the pre-rebase hybrid) moves 87 lines and leaves the
+    parsed document semantically identical.
     """
 
     module = _export_module()
     document = _document()
     normalized = module.normalize(json.loads(json.dumps(document)))
 
-    assert json.dumps(normalized, sort_keys=True) == json.dumps(
-        document, sort_keys=True
-    ), (
+    assert _export_bytes(normalized) == SNAPSHOT.read_text(encoding="utf-8"), (
         "packages/api-client/openapi.json is not what "
-        "scripts/export_contract.py:normalize emits -- `check:contract` will "
-        "report drift on a backend nobody changed. Run "
+        "scripts/export_contract.py:normalize emits, byte for byte -- "
+        "`check:contract` will report drift on a backend nobody changed. Run "
         "`pnpm --filter @soymutdb/api-client generate:api-client`."
+    )
+
+
+def test_export_byte_helper_sees_key_order() -> None:
+    """The fixed point's byte helper must not collapse into a semantic compare.
+
+    Pins ``_export_bytes`` itself: ``check-contract.sh`` diffs export files as
+    text, so a helper that reserialized with ``sort_keys=True`` would blind the
+    byte-level fixed-point check exactly as the original ``sort_keys=True``
+    assertion did. A key-only reordering must therefore change these bytes.
+
+    Mutation that must redden this test: give ``_export_bytes`` a
+    ``sort_keys=True``. It does *not* police how the fixed-point test calls
+    the helper -- that behaviour is pinned by re-adding ``description`` to
+    ``_ORDERED_KEYS``, which reddens the fixed-point test itself (87 lines).
+    """
+
+    ordered = {"type": "string", "description": "kept"}
+    moved = {"description": "kept", "type": "string"}
+    assert json.dumps(ordered, sort_keys=True) == json.dumps(moved, sort_keys=True), (
+        "premise: a key-only reordering is invisible under sort_keys=True"
+    )
+    assert _export_bytes(ordered) != _export_bytes(moved), (
+        "_export_bytes collapsed key order: the fixed-point check is now "
+        "semantic and `diff -q` will keep finding drift the unit tests cannot"
     )
 
 
@@ -345,7 +490,7 @@ def test_normalizer_is_idempotent() -> None:
 
     once = module.normalize(json.loads(json.dumps(document)))
     twice = module.normalize(json.loads(json.dumps(once)))
-    assert json.dumps(once, sort_keys=True) == json.dumps(twice, sort_keys=True)
+    assert _export_bytes(once) == _export_bytes(twice)
 
 
 def test_normalizer_owns_one_spelling_of_an_optional_nullable_field() -> None:
@@ -386,6 +531,83 @@ def test_normalizer_owns_one_spelling_of_an_optional_nullable_field() -> None:
     assert properties["with_default"] == properties["without_default"], (
         "an optional nullable field keeps `default: null` depending on which "
         "export produced it -- the drift reported as CONTRACT DEBT"
+    )
+
+
+def test_normalizer_flattens_both_title_dialects_to_one_spelling() -> None:
+    """``title`` last, whichever position the export printed it in.
+
+    Restating "where this property's own export put ``title``" is not a
+    contract, so it is not carried into the snapshot either: an export that
+    prints ``title`` first and one that prints it last have to normalize to
+    the same bytes, or the document records a dialect instead of a schema and
+    every real export disagrees with half of it. The marker that used to ride
+    in ``description`` for this never reached a snapshot -- nothing wrote it,
+    so both directions collapsed into ``title``-last anyway; this states that
+    outcome as the contract rather than leaving it to chance.
+    """
+
+    module = _export_module()
+    title_first = {"title": "Extra", "type": "string", "description": "A new field."}
+    title_last = {"type": "string", "description": "A new field.", "title": "Extra"}
+
+    # ``==`` ignores key order, which is the only thing this check is about.
+    def spelling(prop: dict[str, Any]) -> str:
+        return json.dumps(module._title_last(dict(prop)))
+
+    assert spelling(title_first) == spelling(title_last), (
+        "the normalizer keeps the dialect each property was exported with, so "
+        "two exports of one schema never agree -- the drift reported as "
+        "CONTRACT DEBT"
+    )
+    assert spelling(title_first) == json.dumps(title_last)
+
+
+def test_normalizer_prunes_unreferenced_nested_definitions() -> None:
+    """A nested ``$defs`` block keeps only what the subschema ``$ref``s.
+
+    FastAPI copies a nested ``model_json_schema()`` into the components table
+    whole, ``$defs`` included, and ``_normalize_properties`` cannot reach
+    inside it -- the definitions live below the ``properties`` table, and that
+    walker only rewrites ``node["properties"]``. Left alone, a definition the
+    schema no longer references survives into the snapshot as if it were part
+    of the contract, and its key order is whatever its own export printed.
+    """
+
+    module = _export_module()
+    document = _document_with_optional_fields()
+    document["components"]["schemas"]["Sample"] = {
+        "properties": {
+            "detail": {
+                "allOf": [{"$ref": "#/$defs/ErrorDetail"}],
+                "title": "Detail",
+            }
+        },
+        "$defs": {
+            "ErrorDetail": {
+                "properties": {
+                    "message": {"title": "Message", "type": "string"},
+                },
+                "type": "object",
+            },
+            "Unreferenced": {
+                "properties": {},
+                "type": "object",
+            },
+        },
+        "type": "object",
+    }
+
+    schema = module.normalize(document)["components"]["schemas"]["Sample"]
+
+    assert sorted(schema["$defs"]) == ["ErrorDetail"], (
+        "an unreferenced nested definition survived into the snapshot: it is "
+        "not resolvable contract, and each one keeps its own pydantic dialect"
+    )
+    property_ = schema["$defs"]["ErrorDetail"]["properties"]["message"]
+    assert next(reversed(property_)) == "title", (
+        "a definition inside a nested `$defs` kept its exported key order -- "
+        "the `properties` walker does not descend into `$defs`"
     )
 
 
@@ -449,11 +671,12 @@ def test_snapshot_has_no_frozen_null_defaults() -> None:
 def test_every_schema_object_carries_the_snapshot_key_order() -> None:
     """No schema may print its object keys in pydantic's order.
 
-    Every check above compares documents with ``sort_keys=True``, so a schema
-    whose *keys* are in the wrong order but whose *content* is identical is
-    invisible to all of them -- while ``check-contract.sh`` compares the two
-    export files as text with ``diff -q``, so it does see it and reports
-    CONTRACT DEBT for a schema nobody edited.
+    Most checks above compare documents with ``sort_keys=True`` or by value,
+    so a schema whose *keys* are in the wrong order but whose *content* is
+    identical is invisible to them -- while ``check-contract.sh`` compares the
+    two export files as text with ``diff -q``, so it does see it and reports
+    CONTRACT DEBT for a schema nobody edited. The fixed-point check above is
+    byte-level; this one guards the order the normalizer emits per schema.
 
     That is the fifth shape of the same failure. pydantic emits ``required``
     before ``title``/``type``; the snapshot carries ``type`` before
@@ -637,4 +860,64 @@ def test_every_schema_object_carries_the_snapshot_key_order() -> None:
         f"`diff -q` in check-contract.sh reports them as CONTRACT DEBT: {sorted(misplaced)}\n"
         "Regenerate rather than patch: "
         "`pnpm --filter @soymutdb/api-client generate:api-client` under Python 3.15."
+    )
+
+
+# ---------------------------------------------------------------------------
+# The snapshot may gain paths and schemas, never lose them
+# ---------------------------------------------------------------------------
+# Every check above asks whether the snapshot is *well formed*: refs resolve,
+# properties print one spelling, the normalizer is a fixed point. None of them
+# asks how much of the API is still in it, and `check-contract.sh` cannot: it
+# diffs the snapshot against an export of whatever the backend currently
+# declares, so a snapshot that lost paths **together with** the backend code
+# that used to serve them agrees with itself byte for byte and the gate stays
+# green while the client quietly drops endpoints.
+#
+# That is not hypothetical here. A rebase took `packages/api-client/openapi.json`
+# from 236 paths / 359 schemas back to an older 226 / 331, the whole 16-test
+# guard suite above passed on it, and the loss was only visible by recounting
+# the document by hand. So the counts get a floor: the snapshot may not shrink
+# below what it last declared, and the floor below is raised by the same commit
+# that adds API surface, never lowered to match a shrink.
+#
+# Numbers only, on purpose. Naming a path or a schema would make this a list to
+# keep in sync with every backend change; a count floor catches the shape of the
+# accident -- many entries leaving at once, which is what a bad merge looks
+# like -- and cannot silently "fix" itself the way a name list can.
+
+#: `(paths, schemas)` the snapshot must keep at least. Raise when the API grows.
+#: A change that legitimately removes API surface has to edit this line, which
+#: is the point: removing an endpoint becomes a decision someone writes down.
+_SNAPSHOT_FLOOR = (236, 359)
+
+
+def test_snapshot_does_not_lose_paths_or_schemas() -> None:
+    """The snapshot may not shrink below the last declared floor.
+
+    Reads the committed snapshot, not an export, so it fires on the artifact
+    itself rather than on the difference between the artifact and a backend
+    that moved with it.
+    """
+
+    document = _document()
+    paths = len(document.get("paths", {}))
+    schemas = len(document.get("components", {}).get("schemas", {}))
+    floor_paths, floor_schemas = _SNAPSHOT_FLOOR
+
+    assert paths >= floor_paths, (
+        f"packages/api-client/openapi.json declares {paths} paths, below the "
+        f"{floor_paths} it is known to have. {floor_paths - paths} endpoints "
+        "left the contract. This is what a bad merge of the snapshot looks "
+        "like, and `check:contract` cannot see it when the backend moved with "
+        "it. Regenerate: `pnpm --filter @soymutdb/api-client "
+        "generate:api-client` under Python 3.15 -- if the removal is "
+        "intentional, lower `_SNAPSHOT_FLOOR` in the same commit and say why."
+    )
+    assert schemas >= floor_schemas, (
+        f"packages/api-client/openapi.json declares {schemas} schemas, below "
+        f"the {floor_schemas} it is known to have. "
+        f"{floor_schemas - schemas} component types left the contract. "
+        "Regenerate: `pnpm --filter @soymutdb/api-client generate:api-client` "
+        "under Python 3.15."
     )
