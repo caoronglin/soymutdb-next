@@ -34,6 +34,17 @@ both blob ids re-pinned — both leave all wired OpenAPI guards, their
 a published value changed. The `default` case is why that column joined this
 pin (schema `v2`) rather than getting a second two-artifact comparison.
 
+**#282 folded `default` into `_FIELD_CONSTRAINT_DIGEST` but did not carry
+a floor on the generated half.** #284 had one (`_EXPECTED_JSDOC_DEFAULTS`,
+896 tags) yet was superseded by #282 under the one-ledger rule, so the
+increment was dropped. Measured on live `ebfa4c5f`: delete one `@default`
+JSDoc line from `openapi.d.ts` and honestly re-pin both provenance blob ids
+→ 12 wired OpenAPI guards `rc=0`, `SMOKE PASS / 922 passed + 5 subtests +
+10 env-bound / 0 failed`. A published default tag could vanish with no
+report. This is the sharp version of the same handoff: the merged PR and
+the superseded one were each right, and the only non-duplicate thing in
+the superseded one nearly sank with it. See Phase 3.
+
 ## The pin
 
 `scripts/check_openapi_field_constraints.py` reads committed bytes only
@@ -54,11 +65,9 @@ pin (schema `v2`) rather than getting a second two-artifact comparison.
   the map entry is a name → schema, while the property's own schema node may
   legitimately carry those keywords. A naive flat-key walk overcounts; both
   readers in this guard agree on 1712 rows / 263 schemas.
-- `--self-test` plants eight drifts (coordinated `maxItems` retype, one-sided
-  drop, one-sided add, keyword rename, a mutation on a keyword-named property,
-  coordinated `default` retype, one-sided `default` drop, a mutation on the
-  `default`-named property) and asserts each is caught; the clean tree must
-  pass first.
+- `--self-test` plants eight constraint/default drifts, six `examples` drifts
+  (Phase 2) and two generated `@default` tag drifts (Phase 3) — 16 cases,
+  each asserted caught; the clean tree must pass first.
 
 `scripts/test_openapi_field_constraints.py` is the companion suite: it proves
 the digest is a source literal, that a same-count permutation still moves it,
@@ -67,11 +76,13 @@ three floors.
 
 ## Changing the contract
 
-A legitimate change moves the snapshot **and** re-pins the digest in the same
-commit, with a reason — exactly like `_ERROR_RESPONSE_BASELINE` /
-`_BODY_PAIR_DIGEST`. The guard's plain run compares the committed artifact to
-the literal, so an edited number with untouched bytes is rejected on a bare
-clone, in a squash and on a shallow checkout.
+A legitimate change moves the snapshot **and** the generated client, re-pins
+`_FIELD_CONSTRAINT_DIGEST`, `_EXAMPLE_DIGEST`, `_DEFAULT_TAG_DIGEST` and their
+count doors in the same commit, with a reason — exactly like
+`_ERROR_RESPONSE_BASELINE` / `_BODY_PAIR_DIGEST`. The guard's plain run
+compares both committed artifacts to the literals, so an edited value or a
+dropped tag with untouched pins is rejected on a bare clone, in a squash
+and on a shallow checkout.
 
 ## Wiring
 
@@ -151,3 +162,44 @@ suite, not an ablation.
 
 Read data: `--self-test` 8 → 14 cases; companion suite 15 → 25 passed;
 `openapi.json` / `openapi.d.ts` byte-for-byte unchanged.
+
+## Phase 3 — the generated `@default` tag projection (door 6)
+
+The 897 `default` values have a second published half the snapshot digest does
+not read: `openapi-typescript` renders 896 of them as `@default` JSDoc tags on
+component property doc blocks in `openapi.d.ts`. (The one exception,
+`InlineTarget.kind`, is a `const` discriminator rendered as a literal type, so
+the generator emits no tag; 897 snapshot values → 896 generated tags is a
+legitimate shape, not a drift.)
+
+Decisive ablation on live `ebfa4c5f`: delete one `@default null` line and
+honestly re-pin both provenance blob ids → all 12 wired OpenAPI guards `rc=0`,
+`SMOKE PASS / 922 + 5 + 10 / 0`. `_FIELD_CONSTRAINT_DIGEST` reads only the
+snapshot, `_EXAMPLE_DIGEST` reads only `examples`, `_PINNED_ARTIFACTS` is
+provenance, and `test_openapi_snapshot_contract.py` compares field sets —
+none asks "is this tag still here".
+
+### The pin
+
+- `_DEFAULT_TAG_DIGEST` — a hand-written sha256 over canonical sorted
+  `(component, field)` rows of the 896 `@default` tags, read from the committed
+  `openapi.d.ts` only, not derived from the snapshot under guard.
+  `_EXPECTED_DEFAULT_TAGS = 896` is the exact count door.
+- The generated half is checked against the *pinned* literal, not against the
+  snapshot, so a co-revert of both halves cannot agree on a dropped tag.
+- A same-count relocation (a tag moved between two fields in one component)
+  fires **only** `_DEFAULT_TAG_DIGEST`; both count doors stay silent. That
+  positive control is what makes this a positional fixed point rather than a
+  second tally.
+- The parser restricts itself to the `components.schemas` region (component
+  blocks at 8-space indent, property doc blocks at 12), so same-indent
+  `parameters` / `responses` blocks cannot be mistaken for components. Both a
+  one-line `/** @default x */` and a multi-line doc block are read.
+
+### Changing the contract
+
+A reviewed regenerate that legitimately drops or moves a `@default` tag must
+re-pin `_DEFAULT_TAG_DIGEST` and `_EXPECTED_DEFAULT_TAGS` in the same commit as
+`openapi.d.ts`. The companion suite pins the literal from a second file, proves
+the two generated JSDoc projections (`@default` and `@example`) are distinct,
+and asserts both ablation shapes are named.
