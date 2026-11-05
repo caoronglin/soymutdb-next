@@ -21,11 +21,21 @@ covers only 422; the snapshot guard covers key order and nested ``$defs``; the
 error-code guards cover the catalog's contents.  None of them cover these
 extensions or the 500/429 response shapes.
 
-The expected sets are parsed from ``main.py`` with ``ast.literal_eval`` rather
-than hardcoded, so a genuine new rate-limited or paginated operation stays
-green when source and snapshot move together (positive controls below).  A
-co-reverted "drop the injection" fails because the source declaration vanishes
-or the snapshot's set stops matching it.
+The 429 and 500 sets are parsed from ``main.py`` with ``ast.literal_eval``
+rather than hardcoded, so a genuine new rate-limited operation stays green
+when source and snapshot move together (positive control below).  A co-reverted
+"drop the injection" fails because the source declaration vanishes or the
+snapshot's set stops matching it.
+
+``x-pagination`` is different: it is the one injected behavior whose *values*
+live in ``main.py`` and are re-published into the snapshot, with no independent
+fixed point.  Emptying ``PAGINATION_CONTRACTS`` and dropping ``x-pagination``
+from the snapshot together leaves every set comparison vacuously true; so does
+weakening both halves to the same wrong values, or moving the contract to
+another operation.  ``_PAGINATION_BASELINE`` is a literal pin of the published
+values, independent of both halves, so those coordinated drifts fail rather
+than agree with themselves.  A legitimate new or changed pagination contract
+must update the literal in the same commit and say why.
 
 Run directly (stdlib only) or collect with pytest:
     python3 scripts/test_openapi_behavior_contracts.py
@@ -63,6 +73,24 @@ VALID_429 = {
         }
     },
     "content": {"application/json": {"schema": {"$ref": ERROR_RESPONSE_REF}}},
+}
+
+# Exact published x-pagination values, an independent fixed point.  The
+# snapshot's copy is derived from PAGINATION_CONTRACTS in main.py, so comparing
+# the two halves cannot see a coordinated edit: empty both, weaken both to the
+# same wrong values, or move the contract to another operation and every
+# set-equality check stays vacuously green.  This literal is NOT derived from
+# either artifact -- update it in the same commit as an intentional change and
+# say why, exactly like _ERROR_RESPONSE_BASELINE / _SNAPSHOT_FLOOR.
+_PAGINATION_BASELINE: dict[tuple[str, str], dict[str, str | bool]] = {
+    ("/api/v1/homologs/search", "get"): {
+        "mode": "keyset-optional",
+        "cursor_parameter": "cursor",
+        "next_cursor_field": "next_cursor",
+        "has_more_field": "has_more",
+        "cursor_is_exclusive": True,
+        "fallback": "offset",
+    },
 }
 
 
@@ -133,17 +161,20 @@ def failures(document: dict, generated: str, main: str, smoke: str) -> list[str]
         found.append("main.py no longer derives x-idempotent from the method set")
 
     # 2. x-pagination: the published map must equal PAGINATION_CONTRACTS.
+    # `declared` is computed from the snapshot alone, so it stays defined even
+    # when the source constant is gone -- that case must be a clean FAIL, not a
+    # NameError escaping the guard.
+    declared = {
+        key: document["paths"][key[0]][key[1]]["x-pagination"]
+        for key in operations
+        if "x-pagination" in document["paths"][key[0]][key[1]]
+    }
     try:
         pagination = _source_constant(main, "PAGINATION_CONTRACTS")
     except (ValueError, SyntaxError) as exc:
         found.append(str(exc))
         pagination = None
     if pagination is not None:
-        declared = {
-            key: document["paths"][key[0]][key[1]]["x-pagination"]
-            for key in operations
-            if "x-pagination" in document["paths"][key[0]][key[1]]
-        }
         for key, value in sorted(pagination.items()):
             if declared.get(key) != value:
                 found.append(
@@ -155,6 +186,20 @@ def failures(document: dict, generated: str, main: str, smoke: str) -> list[str]
                 f"{key[1].upper()} {key[0]} publishes x-pagination with no "
                 "PAGINATION_CONTRACTS entry"
             )
+    # The comparisons above are self-referential: `declared` and `pagination`
+    # are two copies of one source constant.  Compare the published values to
+    # an independent literal instead, so a co-revert cannot satisfy them all
+    # by emptying or agreeing on a weakened contract.
+    if declared != _PAGINATION_BASELINE:
+        found.append(
+            "openapi.json publishes x-pagination "
+            f"{dict(sorted(declared.items()))}, not the pinned "
+            f"{dict(sorted(_PAGINATION_BASELINE.items()))}: a coordinated edit "
+            "to the source and the snapshot cannot be seen by comparing them "
+            "to each other"
+        )
+    if not re.search(r'operation\["x-pagination"\]\s*=\s*pagination', main):
+        found.append("main.py no longer injects x-pagination from PAGINATION_CONTRACTS")
 
     # 3. Uniform 500: declared on every operation, with the runtime envelope.
     five_hundreds = _declared(document, "500")
@@ -426,8 +471,99 @@ def test_a_genuinely_new_rate_limited_operation_stays_green() -> None:
     )
 
 
-def test_a_genuinely_new_pagination_contract_stays_green() -> None:
-    """No hardcoded pagination whitelist: a real new contract stays green."""
+def test_a_whole_set_pagination_co_revert_is_rejected() -> None:
+    """Source constant and snapshot emptied together must not be vacuously green."""
+    document, generated, main, smoke = _load()
+    committed = {
+        key: document["paths"][key[0]][key[1]]["x-pagination"]
+        for key in _operations(document)
+        if "x-pagination" in document["paths"][key[0]][key[1]]
+    }
+    assert committed, "committed tree already publishes no x-pagination"
+    for key in committed:
+        del document["paths"][key[0]][key[1]]["x-pagination"]
+    emptied = re.sub(
+        r"PAGINATION_CONTRACTS[^\n]*=\s*\{.*?\n\}",
+        "PAGINATION_CONTRACTS: dict = {}",
+        main,
+        count=1,
+        flags=re.S,
+    )
+    assert emptied != main, "whole-set co-revert already applied to the source"
+    assert _any(
+        failures(document, generated, emptied, smoke),
+        "not the pinned",
+    )
+
+
+def test_a_weakened_pagination_co_revert_is_rejected() -> None:
+    """Both halves agreeing on wrong values is not evidence of the truth."""
+    document, generated, main, smoke = _load()
+    changed = main.replace(
+        '"mode": "keyset-optional"', '"mode": "offset-only"', 1
+    ).replace('"cursor_is_exclusive": True', '"cursor_is_exclusive": False', 1)
+    assert changed != main
+    contract = document["paths"]["/api/v1/homologs/search"]["get"]["x-pagination"]
+    contract["mode"] = "offset-only"
+    contract["cursor_is_exclusive"] = False
+    assert _any(failures(document, generated, changed, smoke), "not the pinned")
+
+
+def test_a_moved_pagination_co_revert_is_rejected() -> None:
+    """Moving the contract to another operation with both halves still fails."""
+    document, generated, main, smoke = _load()
+    key = next(
+        k for k in sorted(_operations(document)) if k != ("/api/v1/homologs/search", "get")
+    )
+    moved = document["paths"]["/api/v1/homologs/search"]["get"].pop("x-pagination")
+    document["paths"][key[0]][key[1]]["x-pagination"] = moved
+    changed = main.replace(
+        '("/api/v1/homologs/search", "get"):', f'("{key[0]}", "{key[1]}"):', 1
+    )
+    assert changed != main
+    assert _any(failures(document, generated, changed, smoke), "not the pinned")
+
+
+def test_dropping_the_pagination_injection_is_rejected() -> None:
+    """Deleting the assignment leaves the snapshot looking authoritative."""
+    document, generated, main, smoke = _load()
+    dropped = main.replace(
+        '            pagination = PAGINATION_CONTRACTS.get((path, method))\n'
+        '            if pagination is not None:\n'
+        '                operation["x-pagination"] = pagination\n',
+        "",
+        1,
+    )
+    assert dropped != main
+    assert _any(
+        failures(document, generated, dropped, smoke),
+        "no longer injects x-pagination",
+    )
+
+
+def test_deleting_the_pagination_constant_is_a_clean_failure() -> None:
+    """A gone constant must report a FAIL, not escape as NameError."""
+    document, generated, main, smoke = _load()
+    deleted = re.sub(
+        r"PAGINATION_CONTRACTS[^\n]*=\s*\{.*?\n\}",
+        "",
+        main,
+        count=1,
+        flags=re.S,
+    )
+    assert deleted != main
+    found = failures(document, generated, deleted, smoke)
+    assert _any(found, "no longer declares PAGINATION_CONTRACTS"), found
+
+
+def test_a_genuinely_new_pagination_contract_stays_green_with_a_repin() -> None:
+    """A real new contract stays green when the literal is re-pinned with it.
+
+    The exact baseline is deliberate, not a whitelist: like
+    ``_ERROR_RESPONSE_BASELINE``, a legitimate change updates the literal in the
+    same commit.  Re-pinning both the source and the pin keeps every check green;
+    changing only the two artifacts (the co-revert shape above) does not.
+    """
     document, generated, main, smoke = _load()
     key = next(
         k for k in sorted(_operations(document)) if k != ("/api/v1/homologs/search", "get")
@@ -438,11 +574,14 @@ def test_a_genuinely_new_pagination_contract_stays_green() -> None:
     )
     assert augmented != main
     document["paths"][key[0]][key[1]]["x-pagination"] = {"mode": "keyset"}
-    # Only the pagination contract is under test here (see the 429 control).
-    assert not _any(
-        failures(document, generated, augmented, smoke),
-        "no PAGINATION_CONTRACTS entry",
-    )
+
+    saved = globals()["_PAGINATION_BASELINE"]
+    globals()["_PAGINATION_BASELINE"] = dict(saved)
+    globals()["_PAGINATION_BASELINE"][key] = {"mode": "keyset"}
+    try:
+        assert failures(document, generated, augmented, smoke) == []
+    finally:
+        globals()["_PAGINATION_BASELINE"] = saved
 
 
 def _whole_set_co_revert() -> bool:
