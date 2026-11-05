@@ -19,6 +19,12 @@ build. ``--self-test`` plants stale-number drifts on copies of the docs and
 asserts each is caught, so weakening a regex cannot make the guard pass
 vacuously.
 
+Each claim must also match exactly one sentence. Taking the first hit would let
+a decoy paragraph carrying the right number satisfy the claim while the
+sentence that actually documents the suite went stale, and a value comparison
+alone cannot see that; ambiguity is reported instead of read. The self-test
+plants such a decoy as its last case.
+
 Usage:
     python3 scripts/check_error_code_doc_counts.py
     python3 scripts/check_error_code_doc_counts.py --self-test
@@ -142,7 +148,11 @@ CLAIMS = (
         "vocab_mutations",
     ),
     (VOCAB_DOC, re.compile(r"provides\s+(?P<num>\w+) `unittest` regressions"), "vocab_unittests"),
-    (CATALOG_DOC, re.compile(r"regression suite:\s*(?P<num>\w+)\s+pytest cases"), "catalog_pytest"),
+    (
+        CATALOG_DOC,
+        re.compile(r"regression suite:\s*(?P<num>\w+)\s+pytest cases"),
+        "catalog_pytest",
+    ),
     (CATALOG_DOC, re.compile(r"\((?P<num>\w+) planted\s+negative cases\)"), "catalog_planted"),
     (
         CONTRACT_DOC,
@@ -174,16 +184,30 @@ def check(root: Path) -> list[str]:
     for doc, pattern, key in CLAIMS:
         text = (root / doc.relative_to(ROOT)).read_text(encoding="utf-8")
         want = counts[key]
-        match = pattern.search(text)
-        if not match:
+        matches = list(pattern.finditer(text))
+        if not matches:
             problems.append(f"{doc.name}: missing claim sentence for {key}")
             continue
+        if len(matches) > 1:
+            # ``search`` would take the first hit, so a second sentence with the
+            # same shape could satisfy the claim while the real one went stale.
+            # Refuse the ambiguity instead of guessing which sentence is real.
+            problems.append(
+                f"{doc.name}: {key} claim is ambiguous, matches {len(matches)} sentences"
+            )
+            continue
+        match = matches[0]
         got = _number_value(match.group("num"))
         if got != want:
             problems.append(
                 f"{doc.name}: {key} is {want}, but prose states {match.group('num')!r}"
             )
     return problems
+
+
+def duplicate_sentence(shape: str) -> str:
+    """A second paragraph carrying the claim's shape and its number verbatim."""
+    return "A decoy paragraph repeats: " + shape.replace("\n", " ") + ".\n\n"
 
 
 def self_test() -> int:
@@ -228,13 +252,42 @@ def self_test() -> int:
             cases += 1
             doc_path.write_text(original, encoding="utf-8")
 
+        # A second sentence with the same shape would let ``search`` read the
+        # decoy while the real sentence went stale. Planting one decoy carrying
+        # the *correct* number must still be refused, and so must a broken real
+        # sentence hidden behind it.
+        cases += 1
+        doc_path = tree / CATALOG_DOC.relative_to(ROOT)
+        original = doc_path.read_text(encoding="utf-8")
+        match = next(pat for doc, pat, key in CLAIMS if key == "catalog_pytest").search(original)
+        if match is None:
+            print("SELF-TEST FAIL: catalog_pytest claim missing from catalog doc", file=sys.stderr)
+            failures += 1
+        else:
+            # Second sentence, a separate paragraph, carrying the *correct*
+            # number. It must be refused as ambiguous, not accepted as the
+            # reading of the sentence that actually documents the suite.
+            decoy_line = duplicate_sentence(match.group(0))
+            shadowed = original.replace(match.group(0), decoy_line + match.group(0), 1)
+            doc_path.write_text(shadowed, encoding="utf-8")
+            problems = check(tree)
+            if not any("catalog_pytest" in p and "ambiguous" in p for p in problems):
+                print("SELF-TEST FAIL: duplicate claim sentence was NOT refused", file=sys.stderr)
+                failures += 1
+            else:
+                print("  ok: duplicate claim sentence -> refused")
+            doc_path.write_text(original, encoding="utf-8")
+
         clean = check(tree)
         if clean:
             print("SELF-TEST FAIL: clean copy did not pass:", clean, file=sys.stderr)
             failures += 1
         if failures:
             return 1
-        print(f"error-code doc counts self-test passed ({cases} stale numbers + clean copy)")
+        print(
+            f"error-code doc counts self-test passed "
+            f"({cases} plants incl. one duplicate-sentence decoy + clean copy)"
+        )
         return 0
 
 
