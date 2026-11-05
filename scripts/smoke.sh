@@ -154,6 +154,11 @@ smoke_contracts() {
     # the kernel; this suite proves each ordering ablation is caught.
     scripts/test_format_inspect_validation_order.py
     infra/clickhouse/test_schema_contract.py
+    # An unpublished assembly / unknown chromosome must answer 404 (release
+    # boundary), not 503 (engine unavailable). bridge.require() used to run
+    # first, so the 404 test could never reach its own assertion without a
+    # wheel. This suite proves each ordering ablation is caught.
+    scripts/test_interval_visibility_order.py
   )
   # Suites that need an interpreter or service this smoke layer does not own
   # (worker source analysis runs under the API virtualenv; tunnel/compose drift
@@ -200,6 +205,9 @@ smoke_contracts() {
   # them. Not part of the frontend gate: the configs cover the API and data
   # planes too, so a backend-only change can break them.
   "${PYTHON_BIN}" scripts/check_nginx_security_headers.py || rc=$?
+  # Read the committed service bytes: the pytest suite exercises behaviour,
+  # this guard catches the ordering being moved back at the source level.
+  "${PYTHON_BIN}" scripts/check_interval_visibility_order.py || rc=$?
   "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?
   echo
   echo "-- environment-bound contract suites (reported, not gating here) --"

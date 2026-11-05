@@ -8,7 +8,14 @@ The Python layer is the sole owner of visibility decisions:
   ``GeneCrosswalk`` do);
 * only genes of that (assembly, chromosome) are read from PostgreSQL;
 * only public accessions are returned — never the private ``gene_pk``;
-* an unresolved assembly / unpublished release fails closed with 404/503.
+* an assembly not published in the active release or an unknown
+  chromosome fails closed with 404; a missing Rust kernel fails closed
+  with 503, and only after both visibility decisions above have passed.
+
+Visibility is decided *before* the engine is required: a 404 for an
+unpublished assembly or an unknown chromosome is a release-boundary fact and
+must not be masked by a 503 from a missing kernel. Requiring the extension
+first made the 404 path unreachable whenever the wheel was absent.
 
 Nothing the client sends (a table name, a file path, a dataset id) can widen
 the query.  The Rust kernel receives only validated half-open integer tuples.
@@ -40,8 +47,6 @@ async def overlap(
     payload: s.OverlapRequest,
     release_context: ReleaseContext,
 ) -> s.OverlapResponse:
-    core = bridge.require()
-
     assembly = (
         await db.execute(
             select(Assembly).where(
@@ -67,6 +72,11 @@ async def overlap(
         raise NotFoundError(
             f"Reference {payload.reference_name!r} not found in assembly {payload.assembly!r}"
         )
+
+    # Only now is the kernel needed. Both visibility decisions above come from
+    # PostgreSQL against the published ReleaseContext; a missing wheel must not
+    # replace them with a 503.
+    core = bridge.require()
 
     # All regions share one chromosome; query the smallest bounding span once.
     lo = min(r.start for r in payload.regions)

@@ -15,6 +15,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.api.v1.tools_sequence import router as sequence_router
 from app.core.exceptions import (
+    ServiceUnavailableError,
     SoyMutDBError,
     soy_mut_db_exception_handler,
 )
@@ -118,16 +119,29 @@ async def test_private_gene_pk_never_leaks() -> None:
     assert "999" not in body
 
 
+class _Empty:
+    """A DB stand-in whose first N lookups return rows, then None (404)."""
+
+    def __init__(self, rows: list) -> None:
+        self.rows = rows
+        self.calls = 0
+
+    async def execute(self, stmt):
+        value = self.rows[self.calls] if self.calls < len(self.rows) else None
+        self.calls += 1
+        return _Result(value)
+
+
+class _Assembly:
+    id = 7
+    name = "GmWm82.a2.v1"
+    version = "a2.v1"
+    release_id = 11
+
+
 @pytest.mark.asyncio
 async def test_unpublished_assembly_fails_closed() -> None:
-    class _Empty:
-        def __init__(self) -> None:
-            self.calls = 0
-
-        async def execute(self, stmt):
-            self.calls += 1
-            return _Result(None)
-
+    """No kernel needed to decide an assembly is not published (404)."""
     payload = s.OverlapRequest(
         assembly="not-published",
         reference_name="chr1",
@@ -135,8 +149,60 @@ async def test_unpublished_assembly_fails_closed() -> None:
     )
     ctx = ReleaseContext(release_id=11, assembly_id=7, assembly="GmWm82.a2.v1")
     with pytest.raises(SoyMutDBError) as exc:
-        await interval_overlap_service.overlap(_Empty(), payload, ctx)
+        await interval_overlap_service.overlap(_Empty([]), payload, ctx)
     assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_unpublished_assembly_404_wins_over_missing_engine(
+    monkeypatch,
+) -> None:
+    """A 404 is a release-boundary fact, not an engine-availability symptom.
+
+    Regression: ``overlap()`` used to call ``bridge.require()`` as its first
+    statement. With the wheel absent that raised 503 before any DB lookup, so
+    an unpublished assembly was indistinguishable from a broken kernel. The
+    old test asserted 404 but could only reach it by stubbing ``require()``.
+    """
+    import app.services.bio_core_bridge as bridge
+
+    def _unavailable():
+        raise ServiceUnavailableError("engine down")
+
+    monkeypatch.setattr(bridge, "require", _unavailable)
+    payload = s.OverlapRequest(
+        assembly="not-published",
+        reference_name="chr1",
+        regions=[s.IntervalRegion(start=1, end=10)],
+    )
+    ctx = ReleaseContext(release_id=11, assembly_id=7, assembly="GmWm82.a2.v1")
+    db = _Empty([])
+    with pytest.raises(SoyMutDBError) as exc:
+        await interval_overlap_service.overlap(db, payload, ctx)
+    assert exc.value.status_code == 404
+    assert db.calls == 1, "the assembly lookup must precede any engine check"
+
+
+@pytest.mark.asyncio
+async def test_unknown_chromosome_404_wins_over_missing_engine(monkeypatch) -> None:
+    """The chromosome check is also a visibility decision, made before 503."""
+    import app.services.bio_core_bridge as bridge
+
+    def _unavailable():
+        raise ServiceUnavailableError("engine down")
+
+    monkeypatch.setattr(bridge, "require", _unavailable)
+    payload = s.OverlapRequest(
+        assembly="GmWm82.a2.v1",
+        reference_name="not-a-chromosome",
+        regions=[s.IntervalRegion(start=1, end=10)],
+    )
+    ctx = ReleaseContext(release_id=11, assembly_id=7, assembly="GmWm82.a2.v1")
+    db = _Empty([_Assembly()])
+    with pytest.raises(SoyMutDBError) as exc:
+        await interval_overlap_service.overlap(db, payload, ctx)
+    assert exc.value.status_code == 404
+    assert db.calls == 2, "both visibility lookups must precede any engine check"
 
 
 def _app() -> FastAPI:
