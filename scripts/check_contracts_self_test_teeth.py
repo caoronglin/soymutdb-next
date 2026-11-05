@@ -85,7 +85,7 @@ _SIGNATURES: dict[str, re.Pattern[str]] = {
         r"self-test / ledger \+ source contract\]: PASS"
     ),
     "scripts/check_error_code_catalog.py": re.compile(
-        r"error-code catalog self-test passed"
+        r"error-code catalog self-test passed \([1-9]\d* negative cases \+ clean tree\)"
     ),
     "scripts/check_error_code_doc_counts.py": re.compile(
         r"error-code doc counts self-test passed"

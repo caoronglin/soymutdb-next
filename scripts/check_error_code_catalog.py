@@ -342,6 +342,7 @@ def self_test() -> int:
     }
 
     failures = 0
+    ran = 0
     for name, plant in cases.items():
         with tempfile.TemporaryDirectory() as tmp:
             tree = Path(tmp) / "repo"
@@ -365,6 +366,7 @@ def self_test() -> int:
                 failures += 1
                 continue
             problems = check_tree(tree)
+            ran += 1
             if not problems:
                 print(f"SELF-TEST FAIL: planted {name!r} was NOT caught", file=sys.stderr)
                 failures += 1
@@ -372,7 +374,7 @@ def self_test() -> int:
                 print(f"  ok: planted {name!r} -> caught ({len(problems)} problem(s))")
     if failures:
         return 1
-    print(f"error-code catalog self-test passed ({len(cases)} negative cases + clean tree)")
+    print(f"error-code catalog self-test passed ({ran} negative cases + clean tree)")
     return 0
 
 
