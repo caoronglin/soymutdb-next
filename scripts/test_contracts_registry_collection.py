@@ -327,5 +327,19 @@ class RegistryCollectionGuardTests(unittest.TestCase):
         self.assertEqual(guard.check(smoke, files, renamed), [])
 
 
+    def test_ci_layer_call_must_stay_a_bare_statement(self) -> None:
+        smoke = _smoke(["scripts/test_example.py"], REQUIRED)
+        files = _files()
+        files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
+        bare = '  bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts\n'
+        for suffix in (" || true", " || :", " 2>/dev/null", " | tail -1", "  # ignored"):
+            ci = CI_OK.replace(bare, bare.rstrip() + suffix + "\n", 1)
+            with self.subTest(suffix=suffix):
+                failures = guard.check(smoke, files, ci)
+                self.assertTrue(
+                    any("standalone statement" in f for f in failures), failures
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

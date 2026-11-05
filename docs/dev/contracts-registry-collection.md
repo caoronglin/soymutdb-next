@@ -87,6 +87,26 @@ tabs and spaces in this repository is why width alone cannot decide.
 operators, four dead-command wrappers and one duplicate, plus four indentation
 variants that must be reported and the uniform re-indent that must stay green.
 
+The **layer call** is pinned the same way. `ci_wiring_errors()` uses the
+`bash .../smoke.sh` line as the ordering reference, but a reference is not a
+gate: appending `|| true`, `2>/dev/null`, `| tail -1` or a trailing comment
+keeps the line present and its position unchanged while `set -e` sees success
+even when the layer prints `SMOKE FAIL`. `CI_LAYER_BARE` requires that line to
+be a standalone statement too; `--self-test` injects five such neutralisations
+and asserts each is reported by name. Without it the only signal was an
+`AssertionError` from the self-test's own literal-line lookup -- a crash, not a
+named failure.
+
+An independent second door lives in `scripts/test_ci_job_contracts.py`:
+`ContractsRegistryWiringTests` reads the committed bytes of both entry points
+directly. Deleting the CI-side `--self-test` line used to leave the whole
+collected contracts suite green (95 passed), because no assertion in that file
+named the guard. Those three checks stay red even if this guard is edited to
+lie about itself. The regression suite itself is deliberately **not** added to
+`smoke.sh`'s `tests[]`: that array is a shared insertion slot (four live PR
+heads collide with a one-line addition there), so the guard's own
+`--self-test` and the independent file are the collected coverage instead.
+
 ## Boundary
 
 The guard is a **static** proxy, not a pytest subprocess. It recognises
