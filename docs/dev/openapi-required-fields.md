@@ -233,7 +233,7 @@ Files changed in this phase: `scripts/check_openapi_required_fields.py`,
 
 ## Door 9 — published scalar `type` assignment
 
-`openapi.json` publishes **3044** scalar `type` values on schema nodes
+`openapi.json` publishes **3050** scalar `type` values on schema nodes
 (component roots, properties, `anyOf`/`oneOf` branches, `items`, nested
 `$defs` copies). `openapi-typescript` turns each property's type into the
 TypeScript declaration a consumer compiles against, so `integer` → `number`
@@ -267,7 +267,20 @@ the generated client silently retyped a numeric metric.
   `_EXPECTED_CLIENT_PROPERTY_ROWS` — exact count and distribution doors; a
   same-count rotation between two sibling properties is caught positionally.
 
-`--self-test` adds five Door 9 cases (coordinated co-revert, both one-sided
-halves, single-digest re-pin stays red, same-count rotation) and the companion
-suite pins each literal's independence and each failure direction on committed
-bytes.
+`--self-test` adds six Door 9 cases (coordinated co-revert, both one-sided
+halves, single-digest re-pin stays red, same-count rotation, and a coordinated
+retype of a property literally named `type`) and the companion suite pins each
+literal's independence and each failure direction on committed bytes.
+
+Five component schemas publish a property literally named `type` —
+`FieldError`, `ImportCreateRequest`, `MultipartStartRequest`,
+`NotificationResponse`, `ValidationError` — plus a sixth row from the nested
+`ValidationErrorResponse/$defs/FieldError` copy. An earlier walker skipped any
+child key named `type` after consuming the scalar keyword, so those six rows
+never entered `_SCHEMA_TYPE_DIGEST`: a byte-preserving retype of one such row
+in **both** artifacts, with the generated client's independent literal also
+re-pinned, left every door green. The walker now tests the child's **value**,
+not its key name — a `type` keyword is a scalar and is consumed, while a
+`type`-named property is a dict and is walked into. The census is 3050 and the
+companion pins all six by path. #316 fixed the same bug genus on the `title`
+column; this is the `type` column's turn.
