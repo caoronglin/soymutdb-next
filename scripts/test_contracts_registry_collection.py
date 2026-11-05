@@ -508,6 +508,45 @@ class RegistryCollectionGuardTests(unittest.TestCase):
                 any("not pinned in PINNED_SUITES" in f for f in failures), failures
             )
 
+    def test_the_unpinned_probe_isolated_from_missing_file_failures(self) -> None:
+        """The self-test's unpinned case must exercise only the equality half.
+
+        If the case adds a row but leaves its file out of ``files``, ``check()``
+        already reports "suite has no collectible test" and the case still
+        prints PASS after ``pinned_suite_errors()`` loses its ``unpinned``
+        comprehension. Planting the file makes that ablation go red, so the
+        probe is load-bearing rather than vacuous.
+        """
+        smoke, ci, files = guard.load_sources()
+        self.assertEqual(guard.wiring_errors(smoke, files, ci), [])
+
+        source = GUARD_PATH.read_text()
+        planted = (
+            '    unpinned_files = dict(files)\n'
+            '    unpinned_files["scripts/test_unpinned_new_suite.py"] = (\n'
+            '        "def test_unpinned():\\n    assert True\\n"\n'
+            '    )\n'
+        )
+        self.assertIn(planted, source, "the probe is no longer planted on disk")
+
+        ablation = ('    unpinned = registered - PINNED_SUITES\n',
+                    '    unpinned = set()\n')
+        self.assertIn(ablation[0], source, "ablation anchor missing")
+        ablated = source.replace(*ablation, 1)
+
+        import types
+        for label, body in {"planted": source, "ablated": ablated}.items():
+            with self.subTest(shape=label):
+                module = types.ModuleType("guard_" + label)
+                module.__file__ = str(GUARD_PATH)
+                exec(compile(body, str(GUARD_PATH), "exec"), module.__dict__)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    rc = module.self_test()
+                if label == "planted":
+                    self.assertEqual(rc, 0, "clean planted tree regressed")
+                else:
+                    self.assertEqual(rc, 1, "ablation stayed green: probe is vacuous")
+
     def test_the_gating_pytest_call_must_stay_a_bare_statement(self) -> None:
         smoke, ci, files = guard.load_sources()
         line = '  "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?\n'

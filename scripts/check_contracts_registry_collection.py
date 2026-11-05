@@ -726,13 +726,20 @@ def self_test() -> int:
     # invisible again, so an addition must be rejected too.
     extra_row = "    scripts/test_bio_core_wheel_tags.py\n"
     assert extra_row in smoke, "self-test could not locate a second suite row"
+    # planting the suite on disk isolates the ``unpinned`` half: without it,
+    # ``check()`` already fails on the missing file and the probe passes even
+    # when ``pinned_suite_errors()`` has been reduced to the ``missing`` half.
+    unpinned_files = dict(files)
+    unpinned_files["scripts/test_unpinned_new_suite.py"] = (
+        "def test_unpinned():\n    assert True\n"
+    )
     cases.append(("an unpinned gating suite is added to tests=()",
                   smoke.replace(
                       extra_row,
                       "    scripts/test_unpinned_new_suite.py\n" + extra_row,
                       1,
                   ),
-                  dict(files), ci_steps))
+                  unpinned_files, ci_steps))
 
     pytest_line = '  "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?\n'
     assert pytest_line in smoke, "self-test could not locate the gating pytest line"
