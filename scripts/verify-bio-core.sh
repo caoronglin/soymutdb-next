@@ -72,6 +72,14 @@ step "Rust toolchain"
   cargo --version
 )
 
+step "Rust kernel ↔ advertised capability surface"
+# The numeric parity guard only compares values that exist on BOTH sides, so
+# dropping a program/format from `capabilities` reads as "no difference" while
+# the route and kernel binding stay live. Derive the surface from the routes
+# and the /inspect dispatch table, then prove the guard is load-bearing.
+"${PY}" scripts/check_bio_core_capability_surface.py --self-test
+"${PY}" scripts/check_bio_core_capability_surface.py
+
 step "Rust kernel ↔ advertised capability parity"
 # GET /tools/sequence/capabilities advertises input limits that the Rust
 # kernel enforces. Both sides are committed sources; a one-sided edit would
@@ -167,5 +175,8 @@ step "capability-parity guard regression (the guard itself must be load-bearing)
 # The isolated venv above has pytest; the guard's own suite proves a weakened
 # comparison is caught, rather than leaving an unexercised file in the repo.
 "${SMOKE_PY}" -m pytest scripts/test_bio_core_capability_parity.py -q
+
+step "capability-surface guard regression (the guard itself must be load-bearing)"
+"${SMOKE_PY}" -m pytest scripts/test_bio_core_capability_surface.py scripts/test_bio_core_capability_surface_wiring.py -q
 
 echo "==> bio-core verification: PASS"
