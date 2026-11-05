@@ -28,6 +28,15 @@ This guard reads both scanners' committed bytes and pins **two axes**:
   That is the documented division of labour, not parity; the corpora are
   pinned as reviewed literals so a silent corpus change is a divergence.
 
+The read-back half pins **signal, not just literals**: beside requiring every
+shared token to appear in the behavioural suite, it parses the parametrised
+plant test with ``ast`` and requires a real ``assert result.returncode == 1``.
+On merged ``#270``, deleting that one assertion -- leaving every marker and the
+``scan()`` call in place -- kept the guard, its 7 vacuously-green tests and the
+whole contracts layer ``SMOKE PASS`` (filed as the read-back hole on PR #206).
+A text pin would inherit the same hole one layer down, since a comment quoting
+the assertion satisfies it verbatim.
+
 ``--self-test`` plants each one-sided drift on copies of the bytes and asserts
 it is caught, so a weakened pin cannot pass vacuously. Stdlib only: no build,
 no node_modules, no API venv.
@@ -49,6 +58,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ast
 import re
 import subprocess
 import sys
@@ -191,6 +201,47 @@ def witness(smoke: str | None = None) -> list[str]:
     return problems
 
 
+def rejection_is_asserted(behaviour: str) -> bool:
+    """The parametrised plant test must still assert the scanner exits 1.
+
+    Read back signal, not literals: a mutator can leave every marker string in
+    place -- or move the assertion into a comment -- while deleting the one
+    line that makes the behavioural suite fail a broken scanner. Pin it by
+    syntax so a comment cannot stand in for the assertion. Follows
+    ``check_interval_visibility_order.py``'s "pin the assertion" precedent,
+    one step stronger: AST, not a substring. Fail closed on any shape change.
+    """
+    for fn in ast.parse(behaviour).body:
+        if not isinstance(fn, ast.FunctionDef) or not fn.name.startswith("test_"):
+            continue
+        if not any(
+            isinstance(d, ast.Call)
+            and isinstance(d.func, ast.Attribute)
+            and d.func.attr == "parametrize"
+            for d in fn.decorator_list
+        ):
+            continue
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.Assert):
+                continue
+            for cmp in ast.walk(node.test):
+                if not (
+                    isinstance(cmp, ast.Compare)
+                    and isinstance(cmp.left, ast.Attribute)
+                    and cmp.left.attr == "returncode"
+                ):
+                    continue
+                if any(
+                    isinstance(op, ast.Eq)
+                    and isinstance(right, ast.Constant)
+                    and right.value == 1
+                    for op, right in zip(cmp.ops, cmp.comparators)
+                ):
+                    return True
+        return False
+    return False
+
+
 def check(
     smoke: str | None = None,
     production: str | None = None,
@@ -310,14 +361,22 @@ def check(
             f"{list(PRODUCTION_LOOPBACK_EXCLUDES)} (divergence)"
         )
 
-    # Read-back floor: the behavioural suite must plant every shared token as a
-    # literal (the .example.com ones without their regex escaping), so a token
-    # cannot be dropped from the scanner's signal silently.
+    # Read-back floor, two halves. (a) The behavioural suite must plant every
+    # shared token as a literal (the .example.com ones without their regex
+    # escaping), so a token cannot be dropped from the scanner's signal
+    # silently. (b) It must still assert the scanner rejects a planted marker:
+    # literal presence alone is not signal, since a mutator can leave all the
+    # markers (and the scan() call) in place while deleting the assertion.
     planted = set(re.findall(r'"([a-zA-Z0-9_.:-]+)"', b))
     literals = {t.replace(r"\.", ".") for t in SHARED}
     for literal in sorted(literals - planted):
         errors.append(
             f"test_production_artifact_scan.py no longer plants {literal!r}"
+        )
+    if not rejection_is_asserted(b):
+        errors.append(
+            "test_production_artifact_scan.py no longer asserts that the "
+            "scanner rejects a planted marker (returncode == 1)"
         )
     if witness_scan:
         errors.extend(witness(s))
@@ -340,6 +399,11 @@ def self_test() -> int:
     assert s.count(jbrowse) == 2
     assert f"  '{jbrowse}'\n" in p, "production array spelling changed"
     assert '"jbrowse.example.com"' in b
+    rejection = (
+        "    assert result.returncode == 1, "
+        "(marker, result.stdout, result.stderr)\n"
+    )
+    assert rejection in b, "behavioural suite assertion spelling changed"
     includes = "--include='*.html' --include='*.js' --include='*.json'"
     assert s.count(includes) == 2, "smoke.sh --include spelling changed"
     assert "  'localhost'\n  '127\\.0\\.0\\.1'\n" in p, (
@@ -431,10 +495,19 @@ def self_test() -> int:
             ),
             b, "narrowed its corpus",
         ),
+        # 12. The read-back floor pins signal, not just literal presence:
+        # delete the rejection assertion while leaving every marker and the
+        # scan() call in place. Every literal-presence floor stays green; only
+        # the assertion floor can see this (PR #206 read-back hole).
+        (
+            "the behavioural suite deletes its rejection assertion",
+            s, p, b.replace(rejection, "", 1), "no longer asserts",
+        ),
     ]
 
-    # 12/13. Byte pins cannot prove the scanner fires. A decision grep with
-    # an added --exclude='*' keeps every pinned token and --include intact.
+    # Witness cases, in addition to the byte plants above: a decision grep
+    # with an added --exclude='*' keeps every pinned token and --include
+    # intact, yet matches no file at all.
     blind = s.replace(
         " --include='*.json' >/dev/null 2>&1; then",
         " --include='*.json' --exclude='*' >/dev/null 2>&1; then",
