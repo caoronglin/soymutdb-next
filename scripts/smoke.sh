@@ -286,6 +286,10 @@ smoke_contracts() {
   # of main.py + openapi.json keeps check-contract.sh green. Pin it against
   # committed bytes; stdlib-only, no API import needed.
   "${PYTHON_BIN}" scripts/check_openapi_auth_surface.py --self-test || rc=$?
+  # The three component-body guards pin only $ref bodies. The 75 inline
+  # (non-$ref) bodies and the non-JSON media have their own literal pin,
+  # so a regenerate that drifts both halves together still fails.
+  "${PYTHON_BIN}" scripts/check_openapi_inline_body_integrity.py --self-test || rc=$?
   # The app shells must declare a favicon that resolves in source and in the
   # built tree; the admin console shipped without one and 404'd every load.
   "${PYTHON_BIN}" scripts/check_app_shell_assets.py --self-test || rc=$?
