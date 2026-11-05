@@ -61,13 +61,21 @@ committed bytes:
    cannot keep this check green after the real kwargs are unwired. Reading the
    keyword *expression* proves its spelling, not what the name resolves to, so
    the guard also resolves the referenced root names with the stdlib symbol
-   table: a local rebinding of `OPENAPI_DESCRIPTION` / `OPENAPI_TAGS` /
-   `settings` inside `create_app` (before `FastAPI(...)`) is rejected, because
-   the running app would then export different bytes while the call-site text,
-   the module-level literal, the snapshot and the golden all stay put. A
-   same-name local in a nested helper is a different scope and is not flagged.
-   A shape `ast.parse` accepts but `symtable` rejects (e.g. duplicate
-   parameters) yields a clean FAIL rather than an escaping traceback.
+   table: a rebinding of `OPENAPI_DESCRIPTION` / `OPENAPI_TAGS` / `settings`
+   inside `create_app` (before `FastAPI(...)`) is rejected, because the running
+   app would then export different bytes while the call-site text, the
+   module-level literal, the snapshot and the golden all stay put. A bare
+   `global` declaration is **not** rejected: it binds to the module scope the
+   constant already lives in, so the value `FastAPI(...)` reads is unchanged;
+   a `global` plus a rebind is rejected. A same-name local in a nested helper
+   is a different scope and is not flagged. Scope resolution sees bindings, not
+   contents, so the guard separately rejects in-place mutation of a watched
+   constant (`OPENAPI_TAGS.clear()`, `.append(...)`, item/attribute assignment):
+   the name still resolves to the module-level object, but the object itself
+   has been hollowed. Any method call on a watched root must be in a reviewed
+   read-only allowlist, so an unknown shape fails closed. A shape `ast.parse`
+   accepts but `symtable` rejects (e.g. duplicate parameters) yields a clean
+   FAIL rather than an escaping traceback.
 
 It also rejects a hollow / duplicate-key golden, checks the tag catalog is
 non-empty and each tag has a name and description, and stays honest about its
@@ -98,26 +106,30 @@ a `>=` floor: an older-world floor (`ablations >= 22`) stays green when the
 one case that catches the AST-vs-substring wiring regression is deleted
 together with the guard it protects, because the count merely returns to the
 old value. `self_test()` returns the registered case labels alongside the
-counts, `test_every_ablation_is_caught` asserts the exact count (`== 25` at
-this cut) and that all three wiring rows are present and driven by their
+counts, `test_every_ablation_is_caught` asserts the exact count (`== 26` at
+this cut) and that all four wiring rows are present and driven by their
 mutators — `description/tags unwired with decoy comment` (parsed call vs
 whole-file substring), `description/tags shadowed by local rebinding`
-(name resolution, not spelling), and `create_app does not compile under
+(name resolution, not spelling), `description/tags mutated in place`
+(in-place mutation, not binding), and `create_app does not compile under
 symtable` (clean FAIL, no traceback). `test_ablation_count_pin_is_not_vacuous`
 materializes the exact revert-and-delete regression to prove the pin itself
-would go red, and `test_local_rebinding_of_wiring_names_is_rejected` rebuilds a
+would go red. `test_local_rebinding_of_wiring_names_is_rejected` rebuilds a
 spelling-only guard on in-memory bytes to prove the name-resolution check is
-load-bearing. A count written into an assert grows its own tree; the pin must
+load-bearing; `test_in_place_mutation_of_wiring_names_is_rejected` rebuilds a
+resolution-only guard to prove the mutation check is load-bearing.
+A count written into an assert grows its own tree; the pin must
 name what it guards, and the table must have a row for each shape the guard
 claims to reject.
 
 ## Verification / not claimed
 
-Stdlib guard + 25 self-test ablations (including the coordinated co-revert,
-the decoy-comment wiring case, the local-rebinding name-resolution case and the
-symtable-reject clean-FAIL case) run on CPython 3.11 without the API venv. The
-real 3.15 export lane, full API/worker pytest, turbo, Playwright E2E and OCI
-are CI's authority; they are not signed here. A new golden file is committed,
+Stdlib guard + 26 self-test ablations (including the coordinated co-revert,
+the decoy-comment wiring case, the local-rebinding name-resolution case, the
+in-place-mutation case and the symtable-reject clean-FAIL case) run on
+CPython 3.11 without the API venv. The real 3.15 export lane, full API/worker
+pytest, turbo, Playwright E2E and OCI are CI's authority; they are not signed
+here. A new golden file is committed,
 so `generate:api-client` must not overwrite it (it is not an output of the
 generator).
 

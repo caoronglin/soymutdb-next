@@ -14,14 +14,13 @@ protects, because the count merely returns to the old value. Pin the exact
 count, the named regression cases, AND prove the pin itself would go red when
 a case disappears (``test_ablation_count_pin_is_not_vacuous``).
 
-Two wiring rows are pinned by name. The decoy-comment row proves the guard
+Four wiring rows are pinned by name. The decoy-comment row proves the guard
 reads the parsed ``FastAPI(...)`` call rather than whole-file text. The
-local-rebinding row proves it goes one step further: ``_kw_expr`` pins only the
-*spelling* of the keyword, so a local rebinding of ``OPENAPI_DESCRIPTION`` /
-``OPENAPI_TAGS`` inside ``create_app`` would make the running app publish
-different bytes while the call-site text, the module-level literal, the
-snapshot and the golden all stay put. The guard resolves names with the stdlib
-symbol table; this face proves that resolution is load-bearing.
+local-rebinding row proves ``_kw_expr`` pins only the *spelling* of the
+keyword; the guard resolves names with the stdlib symbol table. The in-place
+mutation row pins the complementary class: mutating the module-level object
+without rebinding makes ``FastAPI(...)`` publish a hollow catalog while every
+byte stays put. Both faces prove their respective checks are load-bearing.
 """
 
 from __future__ import annotations
@@ -42,9 +41,13 @@ DECOY_LABEL = "description/tags unwired with decoy comment"
 DECOY_MUTATOR = "source_wiring_unwired_with_decoy_comment"
 SHADOW_LABEL = "description/tags shadowed by local rebinding"
 SHADOW_MUTATOR = "source_wiring_shadowed_by_local_rebinding"
+MUTATION_LABEL = "description/tags mutated in place"
+MUTATION_MUTATOR = "source_wiring_mutated_in_place"
 UNCOMPILABLE_LABEL = "create_app does not compile under symtable"
-REQUIRED_ABLATIONS = frozenset((DECOY_LABEL, SHADOW_LABEL, UNCOMPILABLE_LABEL))
-EXPECTED_ABLATIONS = 25
+REQUIRED_ABLATIONS = frozenset(
+    (DECOY_LABEL, SHADOW_LABEL, MUTATION_LABEL, UNCOMPILABLE_LABEL)
+)
+EXPECTED_ABLATIONS = 26
 
 
 def _guard(path: Path = GUARD):
@@ -73,6 +76,7 @@ def test_every_ablation_is_caught() -> None:
     source = GUARD.read_text(encoding="utf-8")
     assert DECOY_MUTATOR in source
     assert SHADOW_MUTATOR in source
+    assert MUTATION_MUTATOR in source
 
 
 def test_decoy_wiring_ablation_really_rejects_a_substring_guard() -> None:
@@ -206,6 +210,79 @@ def test_local_rebinding_of_wiring_names_is_rejected() -> None:
     assert any("does not compile as a metadata source" in item for item in found), found
 
 
+def test_in_place_mutation_of_wiring_names_is_rejected() -> None:
+    """The complementary hole to rebinding: mutate the constant, keep the name.
+
+    ``_shadowed_wiring_names`` reads the symbol table, which sees only
+    *bindings*. ``OPENAPI_TAGS.clear()`` / ``.append(...)`` leaves the binding
+    intact but changes the object ``FastAPI(...)`` receives, so the running app
+    publishes a hollow catalog while the spelling, the module-level literal,
+    the snapshot and the golden are all untouched. Prove (a) the committed
+    guard rejects it, (b) a guard with the in-place check stripped stays green,
+    and (c) the row is driven by its mutator.
+    """
+    guard = _guard()
+    snapshot, generated, golden, main, config, smoke, routers = guard._load()
+    injected = (
+        '    """Create and configure the FastAPI application."""\n'
+        '    OPENAPI_TAGS.clear()\n'
+        '    OPENAPI_TAGS.append({"name": "x", "description": "y"})\n'
+        '    app = FastAPI('
+    )
+    original = '    """Create and configure the FastAPI application."""\n    app = FastAPI('
+    mutant = main.replace(original, injected, 1)
+    assert mutant != main, "create_app injection anchor changed"
+
+    # (a) The keyword spelling is unchanged and the module literal is intact.
+    kwargs = guard._fastapi_kwargs(ast.parse(mutant))
+    assert guard._kw_expr(kwargs, "description") == "OPENAPI_DESCRIPTION"
+    assert guard._kw_expr(kwargs, "openapi_tags") == "OPENAPI_TAGS"
+    assert len(guard._assignments(ast.parse(mutant))["OPENAPI_TAGS"].elts) > 1
+    # Scope resolution alone is blind to this shape.
+    assert guard._shadowed_wiring_names(mutant) == []
+    assert guard._mutated_wiring_names(mutant) == [
+        "OPENAPI_TAGS.append()",
+        "OPENAPI_TAGS.clear()",
+    ]
+
+    # (b) A guard without the in-place check stays GREEN on this mutant.
+    source = GUARD.read_text(encoding="utf-8")
+    block = (
+        '        mutated = _mutated_wiring_names(main)\n'
+        '        if mutated:\n'
+        '            found.append(\n'
+        '                "create_app() mutates metadata constants in place ("\n'
+        '                + ", ".join(mutated)\n'
+        '                + "): the FastAPI(...) call would read a different value than "\n'
+        '                "the locked module-level constant"\n'
+        '            )\n'
+    )
+    assert block in source, "in-place check block not found"
+    resolution_only = source.replace(block, "", 1)
+    assert resolution_only != source
+    with tempfile.TemporaryDirectory() as tmp:
+        regressed_path = Path(tmp) / "check_openapi_document_metadata.py"
+        regressed_path.write_text(
+            resolution_only.replace(
+                "ROOT = Path(__file__).resolve().parents[1]",
+                f"ROOT = Path({str(Path(__file__).resolve().parents[1])!r})",
+            ),
+            encoding="utf-8",
+        )
+        regressed_guard = _guard(regressed_path)
+        assert regressed_guard.failures(
+            snapshot, generated, golden, mutant, config, smoke, routers
+        ) == [], "resolution-only guard unexpectedly caught the mutation mutant"
+
+    # (c) The committed guard is RED and the row is pinned by name.
+    found = guard.failures(snapshot, generated, golden, mutant, config, smoke, routers)
+    assert any("mutates metadata constants in place" in item for item in found), found
+    problems, ablations, _, labels = guard.self_test()
+    assert problems == [], problems
+    assert MUTATION_LABEL in labels
+    assert ablations == EXPECTED_ABLATIONS
+
+
 def _regressed_guard_source() -> str:
     """Revert the AST wiring judgement to the old substring check and delete
     every wiring ablation added on top of it, on an IN-MEMORY COPY of the
@@ -243,6 +320,15 @@ def _regressed_guard_source() -> str:
     )
     assert shadow_block in source, "shadow ablation tuple not found in guard source"
     source = source.replace(shadow_block, "", 1)
+    mutation_block = (
+        "        (\n"
+        '            "description/tags mutated in place",\n'
+        "            source_wiring_mutated_in_place,\n"
+        '            "mutates metadata constants in place",\n'
+        "        ),\n"
+    )
+    assert mutation_block in source, "mutation ablation tuple not found"
+    source = source.replace(mutation_block, "", 1)
     uncompilable_block = (
         "        (\n"
         '            "create_app does not compile under symtable",\n'
@@ -289,6 +375,7 @@ def test_ablation_count_pin_is_not_vacuous() -> None:
     assert ablations == 22, ablations
     assert DECOY_LABEL not in labels
     assert SHADOW_LABEL not in labels
+    assert MUTATION_LABEL not in labels
     assert UNCOMPILABLE_LABEL not in labels
     # The fossil floor would have stayed green:
     assert ablations >= 22
