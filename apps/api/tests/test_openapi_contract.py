@@ -85,6 +85,10 @@ def error_app():
     async def not_found() -> None:
         raise HTTPException(status_code=404, detail="No such resource")
 
+    @test_app.get("/bad-request")
+    async def bad_request() -> None:
+        raise HTTPException(status_code=400, detail="Bad input")
+
     @test_app.get("/need-int")
     async def need_int(x: int) -> dict[str, int]:
         return {"x": x}
@@ -160,6 +164,29 @@ class TestOpenApiContract:
         assert "plugin_disabled" in catalog
         assert "settings_version_conflict" in catalog
         assert list(catalog) == sorted(catalog)
+
+    def test_error_code_catalog_includes_http_exception_fallback(self):
+        # http_exception_handler emits ``http_error`` for generic HTTPException
+        # statuses (400/413/500/503/...). It has no SoyMutDBError subclass, so
+        # a hierarchy-only catalog silently omits a code clients can receive.
+        from app.core.exceptions import HTTP_ERROR_CODE, error_code_catalog
+
+        assert HTTP_ERROR_CODE == "http_error"
+        assert HTTP_ERROR_CODE in SCHEMA["x-error-codes"]
+        assert SCHEMA["x-error-codes"] == error_code_catalog()
+
+    def test_error_status_contract_matches_runtime(self):
+        from app.core.exceptions import error_status_map
+
+        status = SCHEMA["x-error-status"]
+        assert status["by_code"] == error_status_map()
+        # Derived from the hierarchy: every published code maps to the status
+        # its exception emits, except the multi-status fallback.
+        assert status["by_code"]["not_found"] == 404
+        assert status["by_code"]["service_unavailable"] == 503
+        assert status["by_code"]["http_error"] is None
+        assert status["http_exception"]["fallback"] == "http_error"
+        assert status["http_exception"]["404"] == "not_found"
 
     def test_safe_methods_are_declared_idempotent(self):
         for path, path_item in SCHEMA["paths"].items():
@@ -287,6 +314,18 @@ class TestErrorEnvelope:
         assert body["error"]["code"] == "not_found"
         assert body["error"]["message"] == "No such resource"
         assert body["request_id"]
+
+    async def test_http_exception_fallback_code_is_published(self, error_client):
+        # A generic 400 has no dedicated domain code; the handler falls back to
+        # ``http_error``. That code must be in the published catalog exactly
+        # because a client can receive it from this path.
+        from app.core.exceptions import HTTP_ERROR_CODE, error_code_catalog
+
+        response = await error_client.get("/bad-request")
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == HTTP_ERROR_CODE
+        assert HTTP_ERROR_CODE in error_code_catalog()
+        assert HTTP_ERROR_CODE in SCHEMA["x-error-codes"]
 
     async def test_request_id_echoed_in_header(self, error_client):
         response = await error_client.get("/not-found", headers={"X-Request-ID": "req-123"})
