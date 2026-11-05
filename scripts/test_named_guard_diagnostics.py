@@ -17,9 +17,17 @@ in the report line. The existing pins only see that the helper is imported and
 called somewhere in the file (or, for the inline-``str`` shape, that a reviewed
 substring is present), so such a runner stays green while its red line prints
 nothing after the colon. This suite also pins that every wired runner renders
-the cause it computes, from the real ``FAIL:`` f-string inside its
+the cause it computes, from the real report f-string inside its
 ``except AssertionError`` handler -- a quoted spelling in a docstring or an
 ablation fixture cannot stand in for the report line.
+
+The report line is identified by its sink, not by "any f-string in the
+handler": only a ``print(f"FAIL ...")`` or a ``collector.append(f"...")``
+reaches the operator. A debug ``print(f"debug: raw={exc}")`` beside a correct
+report is legitimate context; reading it as the report rejects correct bytes
+with a message that is false about them. Requiring a leading ``FAIL`` label
+instead would be wrong for the nine inline runners, whose report f-string has
+no label at all and relies on the append sink.
 
 It reads committed sources (AST, stdlib only) and does not need pytest's
 fixtures, a 3.15 venv, an API import or a workspace install.
@@ -300,12 +308,46 @@ def test_the_pinned_runner_list_actually_covers_the_wired_runners() -> None:
     )
 
 
-def _rendered_exceptions(source: str, filename: str) -> list[tuple[int, ast.expr]]:
-    """The expressions a runner actually formats into its ``FAIL:`` line.
+def _is_report_sink(call: ast.Call) -> bool:
+    """Whether this call's first f-string is the handler's failure *report*.
 
-    Only f-strings inside a handler that catches ``AssertionError`` count --
-    a quoted fallback spelling in a docstring or an ablation fixture is not a
-    report line. ``_runner_uses_helper`` sees a *call* anywhere in the file and
+    Two reviewed sinks carry the cause to the operator on this tree:
+
+    * ``print(f"FAIL ...: {cause}")`` -- emitted directly by the runner;
+    * ``problems.append(f"...: {cause}")`` -- collected, then emitted by the
+      driver as ``print(f"FAIL: {problem}")``.
+
+    Any other f-string in the handler (``print(f"debug: raw={exc}")``, a log
+    call, a temporary) is context. It may legitimately render the bare
+    exception object: ``AssertionError`` being truthy only makes a *dead
+    fallback* dead, and a debug line carries no fallback at all. Requiring the
+    leading ``FAIL`` label would instead be wrong for the nine inline runners,
+    whose report f-string has no label and relies on the append sink.
+
+    Admission rule: a new emit shape is added here as a reviewed edit. An
+    unrecognised sink makes the report f-string invisible, and the runner is
+    then named for rendering no cause -- fail closed, not silently green.
+    """
+    if not call.args or not isinstance(call.args[0], ast.JoinedStr):
+        return False
+    joined = call.args[0]
+    if isinstance(call.func, ast.Name) and call.func.id == "print":
+        first = joined.values[0] if joined.values else None
+        return (
+            isinstance(first, ast.Constant)
+            and isinstance(first.value, str)
+            and first.value.lstrip().upper().startswith("FAIL")
+        )
+    return isinstance(call.func, ast.Attribute) and call.func.attr == "append"
+
+
+def _rendered_exceptions(source: str, filename: str) -> list[tuple[int, ast.expr]]:
+    """The cause expressions a runner formats into its failure report line.
+
+    Only f-strings handed to a report sink inside a handler that catches
+    ``AssertionError`` count -- a quoted fallback spelling in a docstring, an
+    ablation fixture, or a debug line beside the report is not the report.
+    ``_runner_uses_helper`` sees a *call* anywhere in the file and
     ``inline_str_fallback`` sees a *substring* anywhere in the file, so a runner
     that calls the helper but discards its result (or keeps the old spelling in
     a comment while reverting to a dead fallback) stays green while its red
@@ -326,11 +368,13 @@ def _rendered_exceptions(source: str, filename: str) -> list[tuple[int, ast.expr
             for node in names
         ):
             continue
-        for node in ast.walk(handler):
-            if isinstance(node, ast.JoinedStr):
-                for value in node.values:
-                    if isinstance(value, ast.FormattedValue):
-                        rendered.append((node.lineno, value.value))
+        for call in ast.walk(handler):
+            if not isinstance(call, ast.Call) or not _is_report_sink(call):
+                continue
+            joined = call.args[0]
+            for value in joined.values:
+                if isinstance(value, ast.FormattedValue):
+                    rendered.append((joined.lineno, value.value))
     return rendered
 
 
@@ -379,8 +423,8 @@ def _scanner_problems(relative: str, source: str) -> list[str]:
     for lineno, expr in rendered:
         if _renders_the_exception_object(expr):
             problems.append(
-                f"{relative}:{lineno} renders the exception object directly; "
-                "the fallback is dead and the cause is empty"
+                f"{relative}:{lineno} renders the exception object directly "
+                "in its report line; the fallback is dead and the cause is empty"
             )
     return problems
 
@@ -396,6 +440,129 @@ def test_every_runner_renders_the_cause_it_computes() -> None:
     """A red gate must print the named cause, not just compute it."""
     found = rendered_cause_errors()
     assert not found, found
+
+
+def test_a_debug_line_is_not_the_failure_report_line() -> None:
+    """A correct runner may log the raw exception next to its report line.
+
+    #265's first scanner collected every ``FormattedValue`` in every f-string
+    inside the handler, so a ``print(f"debug: raw={exc}")`` beside a report
+    that renders ``describe_assertion(...)`` was rejected as "renders the
+    exception object directly; the fallback is dead". Both halves of that
+    message are false about a debug line: it is not the report, and no
+    fallback lives there.
+
+    Two-way control: the probe must be *clean*, and the bare exception it
+    carries must really be outside a report sink with a second, independent
+    ``ast.walk``. A clean result from a probe with no bare exception would be
+    vacuous rather than earned by the narrowing.
+    """
+    host = "scripts/test_mcp_openapi_parity.py"
+    source = '''
+import sys
+def run(fn, problems):
+    try:
+        fn()
+    except AssertionError as exc:
+        print(f"debug: raw={exc}", file=sys.stderr)
+        problems.append(f"{fn.__name__}: {describe_assertion(exc, fn)}")
+'''
+    rendered = _rendered_exceptions(source, host)
+    # The two formatted values of the report f-string, and no third from the
+    # debug line. Widening the scope back to "every f-string" makes this 3.
+    assert len(rendered) == 2, rendered
+    assert any(
+        _renders_the_helper_result(expr) for _, expr in rendered
+    ), "the report line's helper result was missed"
+    assert not any(
+        _renders_the_exception_object(expr) for _, expr in rendered
+    ), "a debug line leaked into the report"
+    assert _scanner_problems(host, source) == [], (
+        "a correct runner was rejected for its debug line"
+    )
+
+    tree = ast.parse(source, filename=host)
+    debug_joined = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.JoinedStr)
+        and any(
+            isinstance(value, ast.FormattedValue)
+            and _renders_the_exception_object(value.value)
+            for value in node.values
+        )
+    ]
+    assert len(debug_joined) == 1, "the probe lost its debug f-string"
+    enclosing = [
+        call
+        for call in ast.walk(tree)
+        if isinstance(call, ast.Call)
+        and call.args
+        and call.args[0] is debug_joined[0]
+    ]
+    assert len(enclosing) == 1
+    assert not _is_report_sink(enclosing[0]), (
+        "the debug f-string was classified as a report sink"
+    )
+    assert debug_joined[0].lineno not in {lineno for lineno, _ in rendered}
+
+    # Control, not reading: re-implement #265's "every f-string in the
+    # handler" scope here and require that it *would* reject these correct
+    # bytes. Without this, a widened scanner could pass by simply seeing no
+    # exception object anywhere, rather than because the report is narrow.
+    wide_rendered = [
+        (node.lineno, value.value)
+        for handler in ast.walk(tree)
+        if isinstance(handler, ast.ExceptHandler) and handler.type is not None
+        for node in ast.walk(handler)
+        if isinstance(node, ast.JoinedStr)
+        for value in node.values
+        if isinstance(value, ast.FormattedValue)
+    ]
+    assert len(wide_rendered) == 3, wide_rendered
+    assert any(
+        _renders_the_exception_object(expr) for _, expr in wide_rendered
+    ), "the widened scope lost the false positive it is meant to reproduce"
+    assert not any(
+        _renders_the_exception_object(expr) for _, expr in rendered
+    ), "the narrowed scope let the debug exception through"
+
+
+def test_a_dead_report_is_still_named_when_a_debug_line_is_present() -> None:
+    """Narrowing must not become under-reach: a dead *report* stays red."""
+    host = "scripts/test_openapi_snapshot_body_integrity.py"
+    source = '''
+import sys
+def run(test, problems):
+    try:
+        test()
+    except AssertionError as exc:
+        print(f"debug: raw={exc}", file=sys.stderr)
+        problems.append(f"{test.__name__}: {exc or 'assertion failed'}")
+'''
+    problems = _scanner_problems(host, source)
+    assert any(
+        "renders the exception object directly" in problem for problem in problems
+    ), problems
+
+
+def test_a_cause_rendered_only_in_debug_does_not_save_a_dead_report() -> None:
+    """The helper result must be in the report, not merely somewhere."""
+    host = "scripts/test_mcp_openapi_parity.py"
+    source = '''
+import sys
+def run(fn, problems):
+    try:
+        fn()
+    except AssertionError as exc:
+        problems.append(f"{fn.__name__}: {exc or 'assertion failed'}")
+        print(f"debug: {describe_assertion(exc, fn)}", file=sys.stderr)
+'''
+    problems = _scanner_problems(host, source)
+    assert any("never renders its return value" in p for p in problems), problems
+    assert any(
+        "renders the exception object directly" in p for p in problems
+    ), problems
 
 
 def test_the_regression_pins_are_load_bearing() -> None:
