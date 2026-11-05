@@ -125,6 +125,14 @@ WHEEL="$(ls -1 "${WHEEL_DIR}"/soymutdb_bio_core-*-cp315-*.whl 2>/dev/null | head
 [[ -n "${WHEEL}" ]] || { echo "no cp315 wheel produced in ${WHEEL_DIR}" >&2; exit 1; }
 echo "wheel: ${WHEEL}"
 
+step "wheel ABI / platform-tag evidence"
+# The *-cp315-*.whl glob alone accepts a py3-none-any lookalike, an abi3
+# build, or a wheel tagged for the other CPU. Record the PEP 427 tags plus the
+# wheel digest as a per-architecture ledger so the two image pipelines (and
+# the release publisher) can prove both wheels are native and agree on ABI.
+"${PY}" scripts/check_bio_core_wheel_tags.py \
+  --wheel-dir "${WHEEL_DIR}" --arch auto --out "${WHEEL_DIR}"
+
 step "wheel import + real scientific smoke"
 # Build an isolated venv: the CI image's system Python 3.15 has NO pytest
 # (real build cnb-6e3-1k6jsptrg died with "No module named pytest").  Creating

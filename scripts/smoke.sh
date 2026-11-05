@@ -146,6 +146,7 @@ smoke_contracts() {
     # The interpolation guard fails closed on the `conds` vs {{conditions}} class
     # of bug; its self-test proves each synthetic negative case is caught.
     scripts/test_i18n_interpolation_guard.py
+    scripts/test_bio_core_wheel_tags.py
     scripts/test_dockerfile_contracts.py
     scripts/test_legacy_worker_test_contract.py
     scripts/test_custom_element_registration_contracts.py
