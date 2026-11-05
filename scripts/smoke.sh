@@ -250,6 +250,10 @@ smoke_contracts() {
     # the generated client, so no two-artifact check can see one drift.
     # This suite proves an independent literal pins all 815 of them.
     scripts/test_openapi_field_constraints.py
+    # Schema-level `required` arrays decide which generated TypeScript
+    # properties are optional. A coordinated regenerate of both halves with
+    # re-pinned provenance blob ids kept every wired OpenAPI guard green.
+    scripts/test_openapi_required_fields.py
     # The per-operation response surface (status codes + content presence)
     # is client-visible but unread by every body digest for content-less
     # responses. This suite proves the independent literal pins it.
@@ -392,6 +396,11 @@ smoke_contracts() {
   # body/$ref footprint. A byte-preserving maxItems retype with re-pinned
   # provenance blob ids kept every wired OpenAPI guard green. Pin them.
   "${PYTHON_BIN}" scripts/check_openapi_field_constraints.py --self-test || rc=$?
+  # The published schema `required` arrays have no independent fixed point:
+  # the field-constraint digest walks constraint keywords, the body digests
+  # read bodies, and the snapshot contract compares field sets only. Pin
+  # all 1076 declarations and check the generated optional markers.
+  "${PYTHON_BIN}" scripts/check_openapi_required_fields.py --self-test || rc=$?
   # The visible-text budget may fall but never rise; new hardcoded strings fail.
   "${PYTHON_BIN}" scripts/check_visible_i18n.py --self-test || rc=$?
   # nginx security-header fragments and the locations that must re-include
