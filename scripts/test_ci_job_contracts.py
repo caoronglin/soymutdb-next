@@ -5572,3 +5572,50 @@ def test_pr_artifact_browser_acceptance_covers_frontend_changes() -> None:
     )
     assert workflow["jobs"]["pr-artifact"]["if"] == "github.event_name == 'pull_request'"
     assert "github.event_name != 'pull_request'" in workflow["jobs"]["e2e"]["if"]
+
+
+def _pipeline_declarations(config: dict):
+    """Yield every stage name in the CNB config, whichever branch declares it."""
+    for event_branch in config.values():
+        if not isinstance(event_branch, list):
+            continue
+        for pipeline in event_branch:
+            yield from pipeline.get("stages", [])
+
+
+def test_cnb_stages_declare_their_runner_honestly() -> None:
+    """A runner is a charge, not a preference: declare it or inherit nothing.
+
+    PR #184's only red reading was ``Prepare``:
+    ``Root Group's events CPU core-hours are insufficient for pre-freezing``.
+    Nothing in the changed files caused it -- CNB freezes a reservation for
+    ``cpus x freeze_window`` before the first stage runs, so a PR that declares
+    an oversized runner dies before any script is reachable and reports it as a
+    pipeline ``error`` rendered next to the commit. The cost is paid during
+    review, on somebody else's PR, attributed to their diff.
+
+    The gate is deliberately shallow: it checks that every explicit runner is
+    one of the sizes this repo actually schedules, so a typo (``cpus: 160``) or
+    a copy-pasted 16-core stage cannot quietly multiply the reservation. It
+    does not try to predict the org balance -- that number is invisible here.
+    """
+    config = yaml.safe_load((ROOT / ".cnb.yml").read_text(encoding="utf-8"))
+    allowed = {4, 8, 16}
+    oversized = []
+    for stage in _pipeline_declarations(config):
+        runner = stage.get("runner") or {}
+        cpus = runner.get("cpus")
+        if cpus is None:
+            continue
+        assert int(cpus) in allowed, f"{stage.get('name')} declares an unexpected runner size: {cpus}"
+        if int(cpus) == 16:
+            oversized.append(stage.get("name"))
+
+    # 16 cores are reserved for the stages that genuinely fan out (pnpm install
+    # + turbo build + three vitest projects + Python). If that list grows much
+    # further, the per-PR reservation grows with it and Prepare starts failing
+    # before the diff is ever read -- which is what made #184 look broken.
+    assert len(oversized) <= 10, (
+        f"{len(oversized)} stages reserve 16 cores; each one pays a freeze "
+        f"reservation on every pull request: {oversized}"
+    )
