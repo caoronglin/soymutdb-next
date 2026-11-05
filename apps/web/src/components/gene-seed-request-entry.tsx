@@ -73,7 +73,7 @@ export function GeneSeedRequestEntry({
         <Space size={token.marginXS} wrap>
           <Link to="/seed-request" search={{ genes: geneId }}>
             <Button type="primary" icon={<SendOutlined />}>
-              {t("genes.seedRequest.action", { defaultValue: "申请种子" })}
+              {t("genes.seedRequest.action")}
             </Button>
           </Link>
           <Tooltip
@@ -89,12 +89,12 @@ export function GeneSeedRequestEntry({
 
         <Space size={token.marginLG} wrap>
           <Statistic
-            title={t("genes.seedRequest.ownCount", { defaultValue: "本基因申请次数" })}
+            title={t("genes.seedRequest.ownCount")}
             value={own ?? UNKNOWN}
             styles={{ content: { fontSize: token.fontSizeLG, color: token.colorPrimary } }}
           />
           <Statistic
-            title={t("genes.seedRequest.totalCount", { defaultValue: "全站申请总数" })}
+            title={t("genes.seedRequest.totalCount")}
             value={overall ?? UNKNOWN}
             styles={{ content: { fontSize: token.fontSize, color: token.colorTextSecondary } }}
           />
@@ -103,9 +103,7 @@ export function GeneSeedRequestEntry({
 
       {statsQuery.isError ? (
         <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
-          {t("genes.seedRequest.statsUnavailable", {
-            defaultValue: "申请次数暂时无法获取，不影响提交申请。",
-          })}
+          {t("genes.seedRequest.statsUnavailable")}
         </Typography.Text>
       ) : null}
     </Card>

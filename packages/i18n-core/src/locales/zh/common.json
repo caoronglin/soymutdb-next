@@ -352,6 +352,11 @@
         "year": "年份",
         "identifier": "标识"
       }
+    },
+    "confidence": {
+      "high": "高",
+      "medium": "中",
+      "low": "低"
     }
   },
   "variants": {
@@ -3355,7 +3360,8 @@
       "all": "全部",
       "genes": "基因",
       "markers": "标记"
-    }
+    },
+    "pointer": "指针"
   },
   "dataTable": {
     "title": "数据表",

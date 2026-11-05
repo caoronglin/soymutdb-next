@@ -203,7 +203,7 @@ function LocationSearchComponent() {
       width: 90,
       render: (_, row) => (
         <Tag color={row.confidence === "H" ? "green" : "default"}>
-          {row.confidence === "H" ? "高" : "低"}
+          {row.confidence === "H" ? t("genes.confidence.high") : t("genes.confidence.low")}
         </Tag>
       ),
     },
@@ -235,7 +235,7 @@ function LocationSearchComponent() {
       key: "available",
       width: 100,
       render: (_, row) => (
-        <Tag color={row.available ? "green" : "default"}>{row.available ? "是" : "否"}</Tag>
+        <Tag color={row.available ? "green" : "default"}>{row.available ? t("common.yes") : t("common.no")}</Tag>
       ),
     },
     {

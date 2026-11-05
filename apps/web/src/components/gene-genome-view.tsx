@@ -12,6 +12,7 @@
  * components here rather than from bare HTML inside the package.
  */
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import {
   CompressOutlined,
   LeftOutlined,
@@ -96,6 +97,7 @@ export function GeneGenomeView({
   onViewportChange,
   className,
 }: GeneGenomeViewProps) {
+  const { t } = useTranslation();
   const { token } = antdTheme.useToken();
   const [choice, setChoice] = React.useState<TrackChoice>("both");
   // Local state only: the readout follows the pointer without touching routing,
@@ -223,43 +225,43 @@ export function GeneGenomeView({
         style={{ marginTop: token.marginXS }}
       >
         <Space size={token.marginXS}>
-          <Tooltip title="左移">
+          <Tooltip title={t("genomeView.controls.panLeft")}>
             <Button
               size="small"
               icon={<LeftOutlined />}
-              aria-label="左移"
+              aria-label={t("genomeView.controls.panLeft")}
               onClick={() => api.pan(-api.panStepBp)}
             />
           </Tooltip>
-          <Tooltip title="右移">
+          <Tooltip title={t("genomeView.controls.panRight")}>
             <Button
               size="small"
               icon={<RightOutlined />}
-              aria-label="右移"
+              aria-label={t("genomeView.controls.panRight")}
               onClick={() => api.pan(api.panStepBp)}
             />
           </Tooltip>
-          <Tooltip title="放大">
+          <Tooltip title={t("genomeView.controls.zoomIn")}>
             <Button
               size="small"
               icon={<ZoomInOutlined />}
-              aria-label="放大"
+              aria-label={t("genomeView.controls.zoomIn")}
               onClick={() => api.zoom(0.5)}
             />
           </Tooltip>
-          <Tooltip title="缩小">
+          <Tooltip title={t("genomeView.controls.zoomOut")}>
             <Button
               size="small"
               icon={<ZoomOutOutlined />}
-              aria-label="缩小"
+              aria-label={t("genomeView.controls.zoomOut")}
               onClick={() => api.zoom(2)}
             />
           </Tooltip>
-          <Tooltip title="复位到基因区间">
+          <Tooltip title={t("genomeView.controls.reset")}>
             <Button
               size="small"
               icon={<CompressOutlined />}
-              aria-label="复位"
+              aria-label={t("genomeView.controls.reset")}
               onClick={api.reset}
             />
           </Tooltip>
@@ -268,7 +270,7 @@ export function GeneGenomeView({
         <Space size={token.marginXS} wrap>
           {hoverBp !== null ? (
             <Tag color="processing" style={{ marginInlineEnd: 0 }}>
-              指针 {hoverBp.toLocaleString()}
+              {t("genomeView.pointer")} {hoverBp.toLocaleString()}
             </Tag>
           ) : null}
           <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
@@ -278,7 +280,7 @@ export function GeneGenomeView({
         </Space>
       </Flex>
     ),
-    [hoverBp, token],
+    [hoverBp, t, token],
   );
 
   return (
@@ -287,7 +289,7 @@ export function GeneGenomeView({
       data-testid="gene-genome-view"
       title={
         <Space size={token.marginXS} wrap>
-          <span>基因组视图</span>
+          <span>{t("genomeView.eyebrow")}</span>
           {assemblyLabel ? <Tag color="blue">{assemblyLabel}</Tag> : null}
           <Typography.Text type="secondary" style={{ fontSize: token.fontSizeSM }}>
             {gene.chromosome}:{gene.start_pos.toLocaleString()}–

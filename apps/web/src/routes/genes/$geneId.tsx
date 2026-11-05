@@ -202,7 +202,7 @@ function GeneDetailComponent() {
         const grade = String(row.confidence);
         return (
           <Tag color={grade === "H" ? "green" : grade === "M" ? "gold" : "default"}>
-            {grade === "H" ? "高" : grade === "M" ? "中" : "低"}
+            {grade === "H" ? t("genes.confidence.high") : grade === "M" ? t("genes.confidence.medium") : t("genes.confidence.low")}
           </Tag>
         );
       },
@@ -224,7 +224,7 @@ function GeneDetailComponent() {
       dataIndex: "available",
       key: "available",
       render: (_, row) => (
-        <Tag color={row.available ? "green" : "default"}>{row.available ? "是" : "否"}</Tag>
+        <Tag color={row.available ? "green" : "default"}>{row.available ? t("common.yes") : t("common.no")}</Tag>
       ),
     },
     // The W82_V2 / W82_V4 / DN53_V1 homolog accessions are deliberately NOT
@@ -400,10 +400,10 @@ function GeneDetailComponent() {
                       <Card
                         className="mt-4"
                         data-testid="gene-mutation-sites"
-                        title={t("genes.mutationSitesTitle", { defaultValue: "突变位点" })}
+                        title={t("genes.mutationSitesTitle")}
                         extra={
                           <Tag color="orange">
-                            {t("genes.unpublishedPreview", { defaultValue: "未发布预览" })}
+                            {t("genes.unpublishedPreview")}
                           </Tag>
                         }
                       >
