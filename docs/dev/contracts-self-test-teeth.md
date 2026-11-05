@@ -125,25 +125,31 @@ partial temp tree made all probes fail to open, so the case passed
 vacuously — the first-hit trap this repo keeps paying for. The control
 assertion is what keeps it honest.
 
-Its own `--self-test` plants one case per gap and runs ten cases.
-The sixth pins the gap one layer below the signature floor: a body
- gutted to `print(<pinned signature>); return 0`
-still satisfies `_SIGNATURES` — the marker is a string a mutator can write —
-so the case asserts **both** that the signature check stays green (or the case
-proves nothing) and that the drift probe catches the same body. The seventh
-pins the same gap for the half of the floor a drift plant cannot reach: a
-drift plant needs a detection entry point to disable, and a per-case guard's
-evidence is a print, so the assertion is that `N cases` with zero per-case
-lines is rejected while the unlisted thin guard with the same output stays
-green. The eighth pins the cell the signature, count and evidence floors all
-miss: an entry point gutted so the plain run stops reading the committed tree
-keeps every self-test PASS line. Measured on 999a39b3 —
+Its own `--self-test` plants one case per gap. Ordinals are deliberately not
+used here: an ordinal in prose goes stale exactly like a cardinal in a comment,
+and a new case inserted in the middle used to leave "the sixth" describing the
+wrong gap. The signature-floor case pins a body gutted to
+`print(<pinned signature>); return 0` — the marker is a string a mutator can
+write — by asserting **both** that the signature check stays green (or the
+case proves nothing) and that the drift probe catches the same body. The
+per-case-evidence case covers the half a drift plant cannot reach: `N cases`
+with zero per-case lines is rejected while an unlisted thin guard with the
+same output stays green. The entry-point case pins the cell the signature,
+count and evidence floors all miss: a plain run gutted to stop reading the
+committed tree keeps every self-test PASS line. Measured on 999a39b3 —
 `check_error_code_catalog.self_test` with `problems = []` before each
 `check_tree(tree)` kept all twelve `ok: planted ... -> caught` lines and the
 whole contracts layer at `SMOKE PASS`. Both limbs are asserted again.
-The ninth pins the loop-counter forgery above: a coherent short run passes the
-one-sided `emitted < declared` check (or the case proves nothing) and is named
-by the reviewed floor. Both limbs are asserted again.
+The loop-counter-forgery case pins the reviewed floor: a coherent short run
+passes the one-sided `emitted < declared` check (or the case proves nothing)
+and is named by the floor. Both limbs are asserted again.
+
+The both-calls case deletes a pinned plain run and asserts the floor names it.
+The final case closes one turn of the same genus: dropping a `BOTH_CALLS` row
+**and** that guard's plain run in one edit leaves every membership rule silent
+(no row is left to complain about), so `BOTH_CALLS_SIZE` is asserted as a
+reviewed cardinality. Both limbs are asserted: membership is blind to the
+coordinated edit, and the counted floor is what names it.
 
 `scripts/test_contracts_self_test_teeth.py` is the second file:
 it pins the wiring into `smoke.sh`, the `REQUIRED_GUARD_CALLS` floor, status
@@ -176,7 +182,10 @@ A guard that must also read the committed tree needs a **second** plain call in
 a guard's path, not how many times it is invoked: deleting the plain run keeps
 its path pinned, keeps the `--self-test` green and keeps `SMOKE PASS`. Do not
 "remove the duplicate call" without removing its `BOTH_CALLS` row in the same
-reviewed change -- that row is the only net under the plain half.
+reviewed change -- that row is the only net under the plain half. Membership
+alone is data, not mechanism: the same one-commit edit can drop the row and the
+call together, so `BOTH_CALLS_SIZE` pins the reviewed cardinality next to the
+literal and fails closed when the floor shrinks.
 
 The companion suite is a normal `tests=()` row; `PINNED_SUITES` is a floor,
 not an allowlist, so adding a suite needs no edit there (see

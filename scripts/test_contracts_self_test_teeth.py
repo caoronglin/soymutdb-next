@@ -486,6 +486,42 @@ class TeethGuardContract(unittest.TestCase):
         self.assertIn("dropped_plain != smoke", source)
         self.assertIn("both_call_errors(dropped_plain, wired)", source)
 
+    def test_both_calls_cardinality_is_a_reviewed_literal(self) -> None:
+        """Membership alone is data: a row and its plain call can drop together."""
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("BOTH_CALLS_SIZE = 3", source)
+        self.assertIn("len(BOTH_CALLS) != BOTH_CALLS_SIZE", source)
+        self.assertEqual(len(guard.BOTH_CALLS), guard.BOTH_CALLS_SIZE)
+        self.assertEqual(guard.BOTH_CALLS_SIZE, 3)
+        self.assertEqual(guard.both_call_errors(_smoke(), guard.wired_self_tests(_smoke())), [])
+
+    def test_shrinking_the_both_calls_floor_is_named(self) -> None:
+        """The coordinated edit is invisible to every membership rule."""
+        victim = "scripts/check_api_error_code_vocabulary.py"
+        smoke = _smoke()
+        dropped = "\n".join(
+            line for line in smoke.splitlines()
+            if line.strip() != f'"${{PYTHON_BIN}}" {victim} || rc=$?'
+        ) + "\n"
+        self.assertNotEqual(dropped, smoke, "setup is not a control")
+        original = guard.BOTH_CALLS
+        guard.BOTH_CALLS = frozenset(p for p in original if p != victim)
+        try:
+            found = guard.both_call_errors(dropped, guard.wired_self_tests(dropped))
+            self.assertFalse(
+                any("lost its plain run" in f or "not in BOTH_CALLS" in f for f in found),
+                found,
+            )
+            self.assertTrue(any("BOTH_CALLS has" in f for f in found), found)
+        finally:
+            guard.BOTH_CALLS = original
+        self.assertEqual(guard.both_call_errors(smoke, guard.wired_self_tests(smoke)), [])
+
+    def test_the_cardinality_ablation_reaches_the_guards_own_self_test(self) -> None:
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("BOTH_CALLS has", source)
+        self.assertIn("membership_blind", source)
+
 
 if __name__ == "__main__":
     unittest.main()
