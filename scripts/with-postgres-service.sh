@@ -52,6 +52,11 @@
 #
 # Environment
 #   SOYMUTDB_TEST_DATABASE_URL  caller-provided database; skips the bootstrap
+#   SOYMUTDB_NATIVE_TEST_DATABASE_URL   caller-provided database for the worker's
+#                               native PostgreSQL suites (sync driver); derived
+#                               from SOYMUTDB_TEST_DATABASE_URL when unset
+#   SOYMUTDB_STATIC_TEST_DATABASE_URL   same, for the static-page suite
+#   SOYMUTDB_WORKER_TEST_DATABASE_URL   same, for the BLAST build/pipeline suites
 #   SOYMUTDB_PG_DOCKER_IMAGE    postgres image (default postgres:18.6-alpine)
 #   SOYMUTDB_PG_PORT            loopback port (default 5432)
 #   SOYMUTDB_PG_CONTAINER       container name (default soymutdb-pg-test)
@@ -91,6 +96,26 @@ async_url() {
 sync_url() {
   printf 'postgresql://%s:%s@127.0.0.1:%s/%s' \
     "${PG_USER}" "${PG_PASSWORD}" "${PG_PORT}" "${PG_DB}"
+}
+
+# The worker's native/static PostgreSQL suites build a *sync* engine
+# (``create_engine``) and pass the URL straight through to SQLAlchemy, so they
+# need the same database over a driver that exists in the worker environment.
+# asyncpg-only URLs silently fail there, which is how the entire suite ended up
+# skipped instead of executed.
+derive_sync_url() {
+  # SOYMUTDB_TEST_DATABASE_URL is caller-provided (or produced above) and may
+  # already be sync. Normalise any scheme to psycopg2 without parsing it: the
+  # only unsupported part is the driver suffix this script itself may have added.
+  local raw="${1:-}"
+  [[ -n "${raw}" ]] || return 1
+  case "${raw}" in
+    postgresql+psycopg2://*) printf '%s' "${raw}" ;;
+    postgresql+asyncpg://*)  printf 'postgresql+psycopg2://%s' "${raw#postgresql+asyncpg://}" ;;
+    postgresql://*)          printf 'postgresql+psycopg2://%s' "${raw#postgresql://}" ;;
+    postgres://*)            printf 'postgresql+psycopg2://%s' "${raw#postgres://}" ;;
+    *)                       return 1 ;;
+  esac
 }
 
 container_is_running() {
@@ -171,6 +196,42 @@ wait_for_ready() {
 }
 
 # -----------------------------------------------------------------------------
+# Worker native/static PostgreSQL suites
+# -----------------------------------------------------------------------------
+# `apps/worker/tests/test_postgres_variant_store.py`,
+# `test_export_claim_postgres.py` and `test_static_page_postgres.py` read
+# dedicated variables that no script ever exported. The gate exports
+# `SOYMUTDB_RUN_POSTGRES_INTEGRATION=1`, so the *precondition* for those suites
+# is claimed to be satisfied while their own URL is absent -- and their
+# fixtures answered that with a skip, which reads as green.
+#
+# Outcome on a real build: 25 identity / atomicity / export-claim assertions
+# never executed. Measured, not inferred: `pytest apps/worker/tests -q` reported
+# them as `skipped`, never as `passed`.
+#
+# This closes that hole at the producer, not in `.cnb.yml`: the resolver is the
+# shared script both CI providers call, and `scripts/test_ci_job_contracts.py`
+# rejects pipeline-local logic.
+export_worker_suite_urls() {
+  local derived
+  if derived="$(derive_sync_url "${SOYMUTDB_TEST_DATABASE_URL:-}")"; then
+    # Honour an explicit caller value; only fill what is missing.
+    if [[ -z "${SOYMUTDB_NATIVE_TEST_DATABASE_URL:-}" ]]; then
+      export SOYMUTDB_NATIVE_TEST_DATABASE_URL="${derived}"
+    fi
+    if [[ -z "${SOYMUTDB_STATIC_TEST_DATABASE_URL:-}" ]]; then
+      export SOYMUTDB_STATIC_TEST_DATABASE_URL="${derived}"
+    fi
+    if [[ -z "${SOYMUTDB_WORKER_TEST_DATABASE_URL:-}" ]]; then
+      export SOYMUTDB_WORKER_TEST_DATABASE_URL="${derived}"
+    fi
+    return 0
+  fi
+  log "could not derive a synchronous URL for the worker suites from SOYMUTDB_TEST_DATABASE_URL"
+  return 1
+}
+
+# -----------------------------------------------------------------------------
 # Body
 # -----------------------------------------------------------------------------
 start_service() {
@@ -184,6 +245,7 @@ start_service() {
     if [[ -z "${SOYMUTDB_DATABASE_URL:-}" ]]; then
       export SOYMUTDB_DATABASE_URL="${SOYMUTDB_TEST_DATABASE_URL}"
     fi
+    export_worker_suite_urls
     return 0
   fi
 
@@ -223,6 +285,7 @@ start_service() {
   # The worker fixture runs the API's Alembic chain through the sync driver.
   export SOYMUTDB_DATABASE_URL
   SOYMUTDB_DATABASE_URL="$(sync_url)"
+  export_worker_suite_urls
   # Printed without the password: this line lands in the build log.
   log "ready: postgresql+asyncpg://127.0.0.1:${PG_PORT}/${PG_DB} (user ${PG_USER})"
 }
@@ -261,6 +324,35 @@ self_test() {
     log "self-test: an explicit SOYMUTDB_TEST_DATABASE_URL was not honoured"
     log "self-test: expected ${explicit}"
     log "self-test: got      ${observed}"
+    failures=$((failures + 1))
+  fi
+
+  # Every derived suite variable must be produced and must be synchronous. A
+  # blank here is not a cosmetic defect: an empty value is exactly what the
+  # fixtures used to turn back into a skip.
+  local derived_probe
+  derived_probe="$(
+    SOYMUTDB_TEST_DATABASE_URL="postgresql+asyncpg://tester@db.example.internal:6000/probe" \
+      bash -c '
+        eval "${1}"
+        start_service >/dev/null 2>&1
+        printf "%s|%s|%s" \
+          "${SOYMUTDB_NATIVE_TEST_DATABASE_URL}" \
+          "${SOYMUTDB_STATIC_TEST_DATABASE_URL}" \
+          "${SOYMUTDB_WORKER_TEST_DATABASE_URL}"
+      ' _ "${definitions}"
+  )"
+  local expected_derived="postgresql+psycopg2://tester@db.example.internal:6000/probe"
+  local first="${derived_probe%%|*}"
+  local second="${derived_probe#*|}"
+  second="${second%%|*}"
+  local third="${derived_probe##*|}"
+  if [[ "${first}" != "${expected_derived}" ]] \
+    || [[ "${second}" != "${expected_derived}" ]] \
+    || [[ "${third}" != "${expected_derived}" ]]; then
+    log "self-test: derived suite URLs are wrong or empty"
+    log "self-test: expected ${expected_derived} (x3)"
+    log "self-test: got      ${derived_probe}"
     failures=$((failures + 1))
   fi
 
@@ -305,6 +397,12 @@ main() {
       exports="$(
         printf 'SOYMUTDB_TEST_DATABASE_URL=%s\n' "${SOYMUTDB_TEST_DATABASE_URL}"
         printf 'SOYMUTDB_DATABASE_URL=%s\n' "${SOYMUTDB_DATABASE_URL}"
+        printf 'SOYMUTDB_NATIVE_TEST_DATABASE_URL=%s\n' \
+          "${SOYMUTDB_NATIVE_TEST_DATABASE_URL}"
+        printf 'SOYMUTDB_STATIC_TEST_DATABASE_URL=%s\n' \
+          "${SOYMUTDB_STATIC_TEST_DATABASE_URL}"
+        printf 'SOYMUTDB_WORKER_TEST_DATABASE_URL=%s\n' \
+          "${SOYMUTDB_WORKER_TEST_DATABASE_URL}"
         printf 'SOYMUTDB_RUN_POSTGRES_INTEGRATION=1\n'
       )"
       printf '%s\n' "${exports}"

@@ -5017,6 +5017,87 @@ if __name__ == "__main__":  # pragma: no cover - unittest entry point
     unittest.main()
 
 
+def test_worker_native_suite_urls_are_exported_by_the_resolver() -> None:
+    """The worker's PostgreSQL suites must be given a URL, not a skip.
+
+    Regression for ISSUE #51: three worker suites read
+    ``SOYMUTDB_NATIVE_TEST_DATABASE_URL`` / ``SOYMUTDB_STATIC_TEST_DATABASE_URL``
+    and answered a missing value with ``pytest.skip``. Nothing in the repository
+    produced those variables, so 25 identity, atomicity and export-claim
+    assertions were reported as ``skipped`` on every build while the gate
+    exported ``SOYMUTDB_RUN_POSTGRES_INTEGRATION=1`` to assert a real database
+    was present. A skip is indistinguishable from a pass in the pytest summary;
+    that is the hole this pins shut from both ends.
+
+    Both ends matter and neither is sufficient alone:
+      * the resolver must produce the variables (otherwise them being required
+        below is a guaranteed failure), and
+      * the suites must fail closed (otherwise a future producer regression
+        silently returns to skipping).
+    """
+    root = Path(__file__).resolve().parents[1]
+    resolver = (root / "scripts/with-postgres-service.sh").read_text(encoding="utf-8")
+
+    for variable in (
+        "SOYMUTDB_NATIVE_TEST_DATABASE_URL",
+        "SOYMUTDB_STATIC_TEST_DATABASE_URL",
+        "SOYMUTDB_WORKER_TEST_DATABASE_URL",
+    ):
+        # Exported through the shared print/ensure path, so both consumption
+        # styles the gate supports (`--print-exports` and `--ensure`) carry it.
+        assert f"printf '{variable}=%s\\n'" in resolver, (
+            f"{variable} must be part of the resolver's exported KEY=VALUE lines"
+        )
+        assert f"export {variable}" in resolver, (
+            f"{variable} must be exported by the resolver, not only printed"
+        )
+
+    # The suites must fail closed. A skip here is a merge-gate hole, so the
+    # contract forbids the construct outright rather than trusting review.
+    for suite in (
+        "apps/worker/tests/test_postgres_variant_store.py",
+        "apps/worker/tests/test_export_claim_postgres.py",
+        "apps/worker/tests/test_static_page_postgres.py",
+    ):
+        source = (root / suite).read_text(encoding="utf-8")
+        assert "pytest.skip" not in source, f"{suite} must not skip on a missing URL"
+        assert "pytest.fail" in source, f"{suite} must fail closed on a missing URL"
+
+    # The two BLAST suites carry a second, genuinely optional precondition next
+    # to the database one: real NCBI binaries, which CI does not have and should
+    # not pretend to have. Skipping on that is correct. Skipping on the database
+    # URL is the same hole as the three suites above, only latent behind the
+    # binary skip -- so the assertion here is narrower on purpose: the binary
+    # skip may stay, the URL skip may not.
+    for suite in (
+        "apps/worker/tests/test_blast_index_build_real.py",
+        "apps/worker/tests/test_blast_ncbi_pipeline.py",
+    ):
+        source = (root / suite).read_text(encoding="utf-8")
+        assert "SOYMUTDB_WORKER_TEST_DATABASE_URL" in source, (
+            f"{suite} must still read the database variable"
+        )
+        url_blocks = [
+            block
+            for block in source.split("pytest.skip(")[1:]
+            if "SOYMUTDB_WORKER_TEST_DATABASE_URL" in block.split(")", 1)[0]
+        ]
+        assert not url_blocks, (
+            f"{suite} must not skip when SOYMUTDB_WORKER_TEST_DATABASE_URL is missing"
+        )
+        assert (
+            'SOYMUTDB_WORKER_TEST_DATABASE_URL is required' in source
+            and "pytest.fail(" in source
+        ), f"{suite} must fail closed on a missing database URL"
+
+    # The derived URL has to be usable by the worker environment: those suites
+    # build a synchronous engine, so an asyncpg URL would fail at connect time
+    # instead of at collection time.
+    assert "postgresql+psycopg2://" in resolver, (
+        "the worker suite URL must use the synchronous psycopg2 driver"
+    )
+
+
 def test_postgres_service_script_remains_executable() -> None:
     """CI runs this resolver directly, so a Git mode change must fail contracts."""
     import stat

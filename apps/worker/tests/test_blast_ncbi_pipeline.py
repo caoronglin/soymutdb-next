@@ -60,7 +60,10 @@ def real_indexes(tmp_path_factory):
 def database():
     url = os.getenv("SOYMUTDB_WORKER_TEST_DATABASE_URL")
     if not url:
-        pytest.skip("SOYMUTDB_WORKER_TEST_DATABASE_URL is required")
+        pytest.fail(
+            "SOYMUTDB_WORKER_TEST_DATABASE_URL is required; the gate exports "
+            "SOYMUTDB_RUN_POSTGRES_INTEGRATION=1, so a missing URL here must not read green"
+        )
     engine = create_engine(url)
     schema = "ncbi_pipeline_" + uuid.uuid4().hex
     with engine.begin() as connection:

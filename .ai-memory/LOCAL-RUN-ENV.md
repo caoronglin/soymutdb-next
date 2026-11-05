@@ -347,9 +347,18 @@ Python 3.15 已完成 API / Worker / MCP 本机运行验证；默认 Worker 不�
   每次验收新建专用库（例 `soymutdb_test_round1`），并设
   `SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://postgres@127.0.0.1:55432/<db>'`、
   `SOYMUTDB_RUN_POSTGRES_INTEGRATION=1`、`PYTHONPATH="<repo root>"`（`tests/a0` 需要 repo 根）。
-- **Worker 测试**的可选 PG 环境变量：`SOYMUTDB_NATIVE_TEST_DATABASE_URL` 与
-  `SOYMUTDB_STATIC_TEST_DATABASE_URL`；缺省时 20 项原生/静态 PG 用例会 skip（不是失败）。
-  DIAMOND 与 2M 性能档同样是显式 opt-in。
+- **Worker 测试**的 PG 环境变量：`SOYMUTDB_NATIVE_TEST_DATABASE_URL`、
+  `SOYMUTDB_STATIC_TEST_DATABASE_URL` 与 `SOYMUTDB_WORKER_TEST_DATABASE_URL`。
+  **它们不再是「可选」，缺省即失败**（ISSUE #51）：前两者指向 25 项原生/静态 PG 用例，
+  第三者是 BLAST 的 build/pipeline 两个 suite。之前缺省走 `pytest.skip`，在 pytest 汇总里
+  和「跑过并且通过」长得一样，于是从未真正执行过。
+  正式入口是 `bash scripts/with-postgres-service.sh --print-exports`，它会从
+  `SOYMUTDB_TEST_DATABASE_URL` 派生出 **psycopg2 同步 URL**（那几个 suite 用 `create_engine`，
+  asyncpg 的 URL 在 worker 环境里连不上）：
+  `env $(bash scripts/with-postgres-service.sh --print-exports) pytest apps/worker/tests -q`
+  DIAMOND 与 2M 性能档仍然是显式 opt-in。BLAST 的 `SOYMUTDB_TEST_NCBI_BIN_DIR`
+  也是显式 opt-in（CI 没有 `makeblastdb`），那一条 skip 是合法的：
+  同一次运行里数据库变量必须 fail-closed，二进制可以 skip。
 - **MCP `test_transport_auth.py` 的 3 项**会 spawn 真实 `127.0.0.1` HTTP 服务；在 DSH 沙箱内
   子进程起不来（`FastMCP HTTP server did not start`）。这是环境限制，环境外/CI 66 passed。
 - **字体子集化**：`scripts/subset-portal-fonts.py` 需要 fontTools + brotli；本机只有

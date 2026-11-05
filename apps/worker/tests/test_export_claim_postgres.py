@@ -39,12 +39,33 @@ MIGRATION = (
 )
 
 
+def _native_url_or_fail() -> str:
+    """The native PostgreSQL URL, or a hard failure.
+
+    Fail-closed on purpose. The backend gate exports
+    ``SOYMUTDB_RUN_POSTGRES_INTEGRATION=1`` to say "a real database is
+    available"; a suite that then *skips* because its own URL is missing
+    reports the same pytest verdict as a suite that ran and passed. These tests
+    cover variant identity, atomic publication and assembly scoping -- skipping
+    them is a merge-gate hole, not an opt-out.
+
+    ``scripts/with-postgres-service.sh`` exports this variable, so an absent
+    value means the resolver or the caller dropped it, never "no database".
+    """
+    url = os.environ.get("SOYMUTDB_NATIVE_TEST_DATABASE_URL")
+    if not url:
+        pytest.fail(
+            "SOYMUTDB_NATIVE_TEST_DATABASE_URL is required: scripts/with-postgres-service.sh "
+            "derives it from SOYMUTDB_TEST_DATABASE_URL. This suite is a merge gate; it "
+            "must fail rather than skip."
+        )
+    return url
+
+
 @pytest.fixture
 def export_database():
     """A throwaway schema with a real ``variant_exports`` table."""
-    url = os.environ.get("SOYMUTDB_NATIVE_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("SOYMUTDB_NATIVE_TEST_DATABASE_URL is required")
+    url = _native_url_or_fail()
     schema = "export_claim_" + uuid.uuid4().hex[:12]
     admin = create_engine(url)
     options = {"options": f"-csearch_path={schema},public"}
