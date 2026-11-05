@@ -45,8 +45,8 @@ Consequences before this guard:
 It is wired into `packages/api-client/scripts/check-contract.sh` (run on the
 `$API_PYTHON` venv interpreter the gate already provisions), which both CNB
 and GitHub reach through `verify-frontend-artifacts.sh` (`check:contract`).
-`scripts/test_error_code_catalog_contract.py` is the regression suite: 12
-pytest cases including synthetic drift trees and `--self-test` (9 planted
+`scripts/test_error_code_catalog_contract.py` is the regression suite: 14
+pytest cases including synthetic drift trees and `--self-test` (10 planted
 negative cases). Removing the loop/call, or weakening any single assertion,
 turns a case red.
 
@@ -68,3 +68,24 @@ Regenerate the artifacts (requires the API 3.15 venv + pnpm):
 ```bash
 pnpm --filter @soymutdb/api-client generate:api-client
 ```
+
+## Three guards, three jobs
+
+After the `http_error` fallback landed, three guards in
+`packages/api-client/scripts/check-contract.sh` all read the error-code
+catalog. This is deliberate redundancy, not a disagreement: they pin
+different properties and read `catalog[HTTP_ERROR_CODE] = ...` differently.
+
+| Guard (line) | Job | How it reads the fallback |
+| --- | --- | --- |
+| `check_error_code_contract.py` (L22, #152) | Consistency: published `x-error-codes` / `x-error-status` equal what the hierarchy actually emits | `exec` a whitelist of module AST nodes (whole `error_code_catalog` FunctionDef, so the assignment is carried) and compare the returned dict |
+| `check_error_code_catalog.py` (L58, #136) | Consistency: `error-codes.json` / `x-error-codes` equal the catalog derived from committed source | AST full scan: `_fallback_from_source()` requires the `HTTP_ERROR_CODE` constant **and** a `catalog[HTTP_ERROR_CODE] = ...` subscript assignment |
+| `check_api_error_code_vocabulary.py` + `python_tests` (L78–79, #179) | Frozen values: the published code set equals a hand-written, reviewed lock | AST full scan: `source_codes()` requires the same constant + subscript pair; the lock itself is not generated |
+
+The first guard executes the real function; the other two read its shape.
+That is why a leftover constant cannot fake a published code in L58/L78, and
+why rewriting `catalog[HTTP_ERROR_CODE]` into another shape (e.g. a literal
+key) can make L58/L78 report the fallback as undeclared while L22 still sees
+13 codes. Keep the three readings in mind before editing `exceptions.py`:
+the fallback must stay in the exact constant + `catalog[CONST]` shape, and
+`docs/dev/api-error-code-vocabulary.md` must be updated if it ever changes.
