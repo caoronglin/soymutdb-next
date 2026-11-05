@@ -82,6 +82,13 @@ VALID_429 = {
 # set-equality check stays vacuously green.  This literal is NOT derived from
 # either artifact -- update it in the same commit as an intentional change and
 # say why, exactly like _ERROR_RESPONSE_BASELINE / _SNAPSHOT_FLOOR.
+#
+# ``cursor_is_exclusive`` is the first boolean leaf any baseline in this guard
+# family pins, and in Python ``True == 1``.  A plain ``!=`` is therefore
+# type-blind on it: co-editing both halves to ``1`` keeps every value equal and
+# republishes a non-boolean flag with the suite green.  ``_same`` compares with
+# type identity so a value pin cannot silently widen into "asserts equal under
+# Python's numeric tower".
 _PAGINATION_BASELINE: dict[tuple[str, str], dict[str, str | bool]] = {
     ("/api/v1/homologs/search", "get"): {
         "mode": "keyset-optional",
@@ -92,6 +99,27 @@ _PAGINATION_BASELINE: dict[tuple[str, str], dict[str, str | bool]] = {
         "fallback": "offset",
     },
 }
+
+
+def _same(published, pinned) -> bool:
+    """Structural equality that also requires identical types.
+
+    ``True == 1`` and ``1 == 1.0`` in Python, so a bare ``!=`` between the
+    published map and the literal pin would accept a boolean quietly replaced by
+    an integer.  Compare types as well as values, recursively, so the pin keeps
+    meaning "publishes exactly this" rather than "compares equal to this".
+    """
+    if type(published) is not type(pinned):
+        return False
+    if isinstance(pinned, dict):
+        return set(published) == set(pinned) and all(
+            _same(published[key], pinned[key]) for key in pinned
+        )
+    if isinstance(pinned, (list, tuple)):
+        return len(published) == len(pinned) and all(
+            _same(a, b) for a, b in zip(published, pinned)
+        )
+    return published == pinned
 
 
 def _operations(document: dict) -> set[tuple[str, str]]:
@@ -190,13 +218,13 @@ def failures(document: dict, generated: str, main: str, smoke: str) -> list[str]
     # are two copies of one source constant.  Compare the published values to
     # an independent literal instead, so a co-revert cannot satisfy them all
     # by emptying or agreeing on a weakened contract.
-    if declared != _PAGINATION_BASELINE:
+    if not _same(declared, _PAGINATION_BASELINE):
         found.append(
             "openapi.json publishes x-pagination "
             f"{dict(sorted(declared.items()))}, not the pinned "
             f"{dict(sorted(_PAGINATION_BASELINE.items()))}: a coordinated edit "
             "to the source and the snapshot cannot be seen by comparing them "
-            "to each other"
+            "to each other, and a value pin is blind to a type change"
         )
     if not re.search(r'operation\["x-pagination"\]\s*=\s*pagination', main):
         found.append("main.py no longer injects x-pagination from PAGINATION_CONTRACTS")
@@ -554,6 +582,32 @@ def test_deleting_the_pagination_constant_is_a_clean_failure() -> None:
     assert deleted != main
     found = failures(document, generated, deleted, smoke)
     assert _any(found, "no longer declares PAGINATION_CONTRACTS"), found
+
+
+def test_a_boolean_leaf_weakened_to_an_int_co_revert_is_rejected() -> None:
+    """`True == 1`, so a value pin alone cannot see the type change."""
+    document, generated, main, smoke = _load()
+    changed = main.replace(
+        '"cursor_is_exclusive": True', '"cursor_is_exclusive": 1', 1
+    )
+    assert changed != main, "source already publishes a non-boolean flag"
+    contract = document["paths"]["/api/v1/homologs/search"]["get"]["x-pagination"]
+    assert contract["cursor_is_exclusive"] is True
+    contract["cursor_is_exclusive"] = 1
+    assert _any(
+        failures(document, generated, changed, smoke), "not the pinned"
+    )
+
+
+def test_the_pin_distinguishes_a_bool_from_an_int() -> None:
+    """The comparison is by identity of type, not by Python's numeric equality."""
+    assert _same({"flag": True}, {"flag": True})
+    assert not _same({"flag": 1}, {"flag": True})
+    assert not _same({"flag": True}, {"flag": 1})
+    assert not _same({("a", "b"): {"n": 1}}, {("a", "b"): {"n": 1.0}})
+    assert not _same({"a": 1}, {"a": 1, "b": 1})
+    assert _same({"a": [1, "x"]}, {"a": [1, "x"]})
+    assert not _same({"a": [1, "x"]}, {"a": [1, True]})
 
 
 def test_a_genuinely_new_pagination_contract_stays_green_with_a_repin() -> None:
