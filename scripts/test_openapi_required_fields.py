@@ -176,3 +176,147 @@ def test_the_wiring_is_pinned_in_all_three_places() -> None:
     assert "scripts/test_openapi_required_fields.py" in SMOKE
     assert "scripts/test_openapi_required_fields.py" in REGISTRY
     assert f"scripts/{guard.SELF}" in TEETH
+
+
+# --- the tuple/map surface (Doors 4 and 5) ---------------------------------
+
+_TUPLE_TARGET = "SequenceAlignResponse"
+_TUPLE_FIELD = "query_range"
+_TUPLE_BLOCK = (
+    "            query_range: [\n"
+    "                number,\n"
+    "                number\n"
+    "            ];"
+)
+
+
+def _retype_client_tuple() -> str:
+    old_tail = "                number\n            ];"
+    new_tail = "                string\n            ];"
+    replaced = _GENERATED.replace(_TUPLE_BLOCK, _TUPLE_BLOCK.replace(
+        old_tail, new_tail
+    ), 1)
+    assert replaced != _GENERATED
+    return replaced
+
+
+def test_the_tuple_keywords_have_their_own_literal() -> None:
+    """Not folded into the required digest: the two surfaces stay separable."""
+    assert guard._VALUE_DIGEST != guard._REQUIRED_FIELD_DIGEST
+    assert guard._EXPECTED_VALUE_ROWS == len(
+        guard.value_rows(json.loads(_SNAPSHOT))
+    )
+    assert sum(guard._EXPECTED_VALUE_BY_KEYWORD.values()) == (
+        guard._EXPECTED_VALUE_ROWS
+    )
+
+
+def test_a_coordinated_tuple_retype_is_rejected() -> None:
+    """Both halves move together; only the independent literal sees it."""
+
+    def change(schemas: dict) -> None:
+        slots = schemas[_TUPLE_TARGET]["properties"][_TUPLE_FIELD]["prefixItems"]
+        assert slots == [{"type": "integer"}, {"type": "integer"}]
+        slots[1] = {"type": "string"}
+
+    found = guard.failures(
+        snapshot=_mutate(change), generated=_retype_client_tuple()
+    )
+    assert any("_VALUE_DIGEST" in problem for problem in found), found
+
+
+def test_the_digest_alone_catches_it_and_the_agreement_door_is_silent() -> None:
+    """A positive control: with the digest re-pinned, Door 5 must still be quiet.
+
+    Without this, Door 5 could be catching the coordinated case by accident and
+    the digest would look load-bearing when it is not (or the reverse).
+    """
+
+    def change(schemas: dict) -> None:
+        schemas[_TUPLE_TARGET]["properties"][_TUPLE_FIELD]["prefixItems"][1] = {
+            "type": "string"
+        }
+
+    snapshot = _mutate(change)
+    new_digest = guard._value_digest(
+        guard.value_rows(json.loads(snapshot))
+    )
+    assert new_digest != guard._VALUE_DIGEST
+    found = guard.failures(
+        snapshot=snapshot,
+        generated=_retype_client_tuple(),
+        value_digest=new_digest,
+    )
+    assert not found, found
+
+
+def test_a_client_only_tuple_retype_is_named_with_both_shapes() -> None:
+    found = guard.failures(
+        snapshot=_SNAPSHOT, generated=_retype_client_tuple()
+    )
+    assert any(
+        f"{_TUPLE_TARGET}.{_TUPLE_FIELD}" in problem and "string" in problem
+        for problem in found
+    ), found
+
+
+def test_a_client_tuple_replaced_by_an_array_is_rejected() -> None:
+    """Arity alone is not the contract; losing the tuple shape is a break."""
+    found = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=_GENERATED.replace(
+            _TUPLE_BLOCK, "            query_range: number[];", 1
+        ),
+    )
+    assert any("positional tuple" in problem for problem in found), found
+
+
+def test_an_unmodelled_slot_never_compares_equal() -> None:
+    """A future slot type must fail loudly, not pass by being unknown."""
+    assert guard._ts_slot({"type": "integer"}) == "number"
+    assert guard._ts_slot({"anyOf": [{"type": "number"}, {"type": "null"}]}) == (
+        "number | null"
+    )
+    assert guard._ts_slot({"type": "object"}).startswith("UNMODELLED(")
+
+
+def test_the_map_bounds_are_pinned() -> None:
+    def change(schemas: dict) -> None:
+        schemas["ImportCommitRequest"]["properties"]["config"][
+            "maxProperties"
+        ] = 33
+
+    found = guard.failures(snapshot=_mutate(change), generated=_GENERATED)
+    assert any("_VALUE_DIGEST" in problem for problem in found), found
+
+
+def test_a_same_count_map_bound_rotation_is_rejected() -> None:
+    """Every count and the row set are unchanged; only the digest moves."""
+
+    def change(schemas: dict) -> None:
+        a = schemas["ImportCommitRequest"]["properties"]["config"]
+        b = schemas["SettingsPatchRequest"]["properties"]["values"]
+        a["maxProperties"], b["minProperties"] = 1, 32
+
+    found = guard.failures(snapshot=_mutate(change), generated=_GENERATED)
+    assert any("_VALUE_DIGEST" in problem for problem in found), found
+
+
+def test_the_discriminator_is_pinned() -> None:
+    def change(schemas: dict) -> None:
+        del schemas["SequenceMatchRequest"]["properties"]["target"][
+            "discriminator"
+        ]
+
+    found = guard.failures(snapshot=_mutate(change), generated=_GENERATED)
+    assert any("_VALUE_DIGEST" in problem for problem in found), found
+
+
+def test_the_guard_source_still_carries_both_plants() -> None:
+    """A second file asserts the source plant, so a single-file edit cannot
+    remove the self-test case and stay green."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "_VALUE_DIGEST = (" in source
+    assert "_VALUE_KEYWORDS: tuple[str, ...] = (" in source
+    assert "coordinated tuple slot retype (both halves)" in source
+    assert "one-sided client tuple slot retype" in source

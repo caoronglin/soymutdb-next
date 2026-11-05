@@ -48,6 +48,66 @@ The generated TypeScript silently changes a guaranteed field into an optional
 one. With this guard wired, the same drift is caught by the digest and by the
 client-optional check.
 
+## The tuple/map surface (Phase 2)
+
+The same guard file now also pins the **positional and cardinality** keywords,
+which no fixed point named before: `prefixItems`, `minProperties`,
+`maxProperties`, `discriminator` — **9 rows** across the component schemas.
+
+None of the guards in the table above reads them, and none *can*:
+
+| Keyword | Why no two-artifact check sees it | Client-visible how |
+| --- | --- | --- |
+| `prefixItems` | not a scalar in `_FIELD_CONSTRAINT_DIGEST`'s `_KEYS` vocabulary | rendered as a **positional tuple**: `query_range: [number, number];` |
+| `minProperties` / `maxProperties` | bounds a free-form map the generator prints as an index signature | the bound simply cannot be expressed in TypeScript, so the runtime is the only other reader |
+| `discriminator` | the generator drops it entirely and prints a `@constant` note | names the property a client must switch on |
+
+Four published tuples carry `prefixItems` (`ExpPatternResponse.value_range`,
+`SequenceAlignResponse.query_range` / `.target_range`,
+`SequenceCapabilitiesResponse.k_range`). Retyping one slot changes the
+argument the caller may pass.
+
+**Decisive ablation (live `ebfa4c5f`)** — byte-preserving
+`query_range` second slot `integer → string` in the snapshot, the matching
+`number, number` → `number, string` in the generated tuple, both
+`_PINNED_ARTIFACTS` blob ids honestly re-pinned:
+
+| Guard | Drifted bytes |
+| --- | --- |
+| all eleven other `check_openapi_*` | `rc=0` |
+| `check_openapi_required_fields.py` **before** this change | `rc=0` `OK (...)` |
+| `check_openapi_required_fields.py` **after** this change | `rc=1`, names `_VALUE_DIGEST` |
+| `bash scripts/smoke.sh --profile contracts` before | **SMOKE PASS / 922 passed** |
+| `bash scripts/smoke.sh --profile contracts` after | **SMOKE PASS / 932 passed** |
+
+The new literals are deliberately **separate** from `_REQUIRED_FIELD_DIGEST`:
+requiredness is a set of field names, these are ordered slots and integer
+bounds. Folding them together would make "the tuple's second slot is now a
+string" report as "a required field moved", and the failure reason would lose
+its resolution.
+
+Two doors, with distinct jobs, each proven by its own positive control:
+
+- **Door 4** (`_VALUE_DIGEST` + count door + per-keyword counts) catches a
+  **coordinated** regenerate of both halves, because the literal is
+  independent of both. A same-count rotation of two map bounds moves it while
+  every count and the row set stay put.
+- **Door 5** compares every published tuple's **slot types in order** against
+  the generated tuple, so a **one-sided** edit is named by field with both
+  shapes quoted. It compares types, not just arity: an arity-only door would
+  let a client-side retype pass, which the `--self-test` case
+  `one-sided client tuple slot retype` exists to prevent.
+
+`_ts_slot()` maps a published slot to the TypeScript type; anything it does
+not model renders as `UNMODELLED(...)`, which is distinct from every modelled
+type, so a future slot type fails loudly instead of passing by being unknown.
+
+**Self-agreeing ablation** (`pinned_value_digest = actual_value`): the
+`--self-test` reports exactly three `NOT caught` — `coordinated tuple slot
+retype (both halves)`, `coordinated maxProperties retype`, `same-count map
+bound rotation` — `rc=1`, with the six required-field cases and the two
+one-sided cases still caught. Restore → `13 cases, 0 failure(s)`.
+
 ## Adding a required field
 
 1. Make the intentional source/artifact change.
@@ -56,6 +116,10 @@ client-optional check.
    commit**.
 3. Say why in the PR. Re-deriving the digest from the artifact under guard
    would make the pin self-referential.
+For a tuple/map keyword, do the same with `_VALUE_DIGEST` /
+`_EXPECTED_VALUE_ROWS` / `_EXPECTED_VALUE_BY_KEYWORD`. A `prefixItems` change
+must also move the generated tuple, since Door 5 compares slot types.
+
 4. `check_openapi_baseline_sync.py` is deliberately not extended: the digest
    literal here is a same-commit reviewed edit of one guard file, and the
    companion suite's `test_the_digest_is_an_independent_literal` pins that it
