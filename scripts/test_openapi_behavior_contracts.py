@@ -418,7 +418,9 @@ def main() -> int:
     for test in tests:
         try:
             test()
-        except AssertionError as exc:
+        except (AssertionError, StopIteration) as exc:
+            # A whole-set co-revert empties the setup data some checks sample;
+            # report it as a failed check instead of escaping as a traceback.
             problems.append(f"{test.__name__}: {exc or 'assertion failed'}")
     if problems:
         for problem in problems:
