@@ -146,9 +146,13 @@ function VariantsComponent() {
       title: get("variants.variantId", t("variants.variantId")),
       dataIndex: "variant_id",
       key: "variant_id",
-      // The full identifier is the row's public identity: an A/B consensus id
-      // is 20+ characters and a truncated one can no longer be searched,
-      // copied or pasted anywhere. It wraps instead of being cut.
+      // The full identifier is the row's public identity *on this page*: the
+      // page resolves one assembly and pins one release, so within the
+      // rendered table the id alone names the row. It is not an identity
+      // across releases or assemblies — `variant_facts` keys on
+      // `(release_id, assembly_id, variant_id)`. An A/B consensus id is 20+
+      // characters and a truncated one can no longer be searched, copied or
+      // pasted anywhere, so it wraps instead of being cut.
       render: (_, row) => (
         <span className="inline-flex items-start gap-1">
           <span className="font-mono text-xs break-all" data-testid="variant-id">
