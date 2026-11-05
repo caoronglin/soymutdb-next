@@ -1,12 +1,12 @@
 """Regression coverage for ``scripts/check_openapi_schema_descriptions.py``.
 
-The guard pins 257 published component-schema ``description`` strings to a
-hand-written literal and checks the generated client's ``@description`` lines
-against them. These cases prove each failure direction on real committed
-bytes: the decisive byte-preserving co-revert of both halves (with provenance
-blob ids re-pinned) still fails via the digest, a one-sided client edit is
-named, the digest is independent of the artifact it audits, the count doors
-are load-bearing, and the generated half cannot be silently dropped.
+The guard pins 257 published component-schema ``description`` strings and 2320
+``title`` strings to hand-written literals and checks the generated client's
+JSDoc lines against them. These cases prove each failure direction on real
+committed bytes: the decisive byte-preserving co-revert of both halves (with
+provenance blob ids re-pinned) still fails via the digests, a one-sided client
+edit is named, each digest is independent of the artifact it audits, the count
+doors are load-bearing, and the generated half cannot be silently dropped.
 
 Collected by the contracts layer's ``tests=()`` array; stdlib-only, no Python
 3.15 needed. Plants are built from the *current* committed value, so a tree
@@ -181,3 +181,146 @@ def test_synthetic_client_line_is_reviewed() -> None:
     """Exactly one generator-synthesized description is allowed."""
     lines = guard.client_descriptions(_GENERATED)
     assert lines.count(guard._SYNTHETIC_CLIENT_DESCRIPTION) == 1
+
+
+_TITLE_SCHEMA = "AdminDashboardStats"
+_TITLE_FIELD = "totalUsers"
+
+
+def _committed_title() -> str:
+    document = json.loads(_SNAPSHOT)
+    return document["components"]["schemas"][_TITLE_SCHEMA]["properties"][
+        _TITLE_FIELD
+    ]["title"]
+
+
+def _drifted_title() -> str:
+    return _committed_title() + " (planted drift)"
+
+
+def _snapshot_with_title(value: str) -> str:
+    """Byte-preserving single-string rewrite of one published title."""
+    needle = f'"title": "{_committed_title()}"'
+    changed = f'"title": "{value}"'
+    anchor_line = f'"{_TITLE_FIELD}": {{'
+    start = _SNAPSHOT.index(anchor_line)
+    segment = _SNAPSHOT[start : start + 600]
+    assert needle in segment, (needle, segment[:200])
+    rewritten = segment.replace(needle, changed, 1)
+    return _SNAPSHOT[:start] + rewritten + _SNAPSHOT[start + 600 :]
+
+
+def _generated_with_title(value: str) -> str:
+    needle = f"* {_committed_title()}\n"
+    return _GENERATED.replace(needle, f"* {value}\n", 1)
+
+
+def test_title_co_revert_is_rejected() -> None:
+    """Both halves move together; only the independent title digest can see it."""
+    snapshot = _snapshot_with_title(_drifted_title())
+    generated = _generated_with_title(_drifted_title())
+    assert snapshot != _SNAPSHOT and generated != _GENERATED
+    found = guard.failures(snapshot=snapshot, generated=generated)
+    assert any("_SCHEMA_TITLE_DIGEST" in f for f in found), found
+    assert any("_CLIENT_TITLE_DIGEST" in f for f in found), found
+
+
+def test_title_digest_is_an_independent_literal() -> None:
+    assert guard._SCHEMA_TITLE_DIGEST == guard._digest_title(
+        guard.title_rows(json.loads(_SNAPSHOT))
+    )
+    snapshot = _snapshot_with_title(_drifted_title())
+    drifted = guard._digest_title(guard.title_rows(json.loads(snapshot)))
+    assert drifted != guard._SCHEMA_TITLE_DIGEST
+    # Re-pinning BOTH digests is the coordinated escape hatch. It must still
+    # fail on a door that is not derived from either artifact under guard:
+    # the exact row/lines counts stay pinned, and a same-value retype is not
+    # a count change -- so this case instead proves each digest is truly
+    # independent (re-pinning one leaves the other red).
+    found = guard.failures(
+        snapshot=snapshot,
+        generated=_generated_with_title(_drifted_title()),
+        title_digest=drifted,
+    )
+    assert any("_CLIENT_TITLE_DIGEST" in f for f in found), found
+    found2 = guard.failures(
+        snapshot=snapshot,
+        generated=_generated_with_title(_drifted_title()),
+        client_title_digest=guard._digest_client_title(
+            guard.client_titles(_generated_with_title(_drifted_title()))
+        ),
+    )
+    assert any("_SCHEMA_TITLE_DIGEST" in f for f in found2), found2
+
+
+def test_title_count_doors_are_load_bearing() -> None:
+    document = json.loads(_SNAPSHOT)
+    node = document["components"]["schemas"][_TITLE_SCHEMA]["properties"][
+        _TITLE_FIELD
+    ]
+    del node["title"]
+    snapshot = json.dumps(document, indent=2, ensure_ascii=False)
+    digest = guard._digest_title(guard.title_rows(document))
+    found = guard.failures(snapshot=snapshot, title_digest=digest)
+    assert any("_EXPECTED_TITLE_ROWS pins" in f for f in found), found
+
+
+def test_same_count_title_rotation_is_rejected() -> None:
+    """Three distinct title values rotated leave every count door green."""
+    document = json.loads(_SNAPSHOT)
+    picked: list[dict] = []
+    seen: set[str] = set()
+    for schema in document["components"]["schemas"].values():
+        for node in (schema.get("properties") or {}).values():
+            value = node.get("title")
+            if isinstance(value, str) and "\n" not in value and value not in seen:
+                seen.add(value)
+                picked.append(node)
+            if len(picked) == 3:
+                break
+        if len(picked) == 3:
+            break
+    assert len(picked) == 3
+    values = [node["title"] for node in picked]
+    for index, node in enumerate(picked):
+        node["title"] = values[(index + 1) % 3]
+    rotated = guard.title_rows(document)
+    assert len(rotated) == guard._EXPECTED_TITLE_ROWS
+    assert Counter(v for _, v in rotated) == Counter(
+        v for _, v in guard.title_rows(json.loads(_SNAPSHOT))
+    )
+    snapshot = json.dumps(document, indent=2, ensure_ascii=False)
+    found = guard.failures(snapshot=snapshot, generated=_GENERATED)
+    assert any("_SCHEMA_TITLE_DIGEST" in f for f in found), found
+
+
+def test_one_sided_title_client_rewrite_is_rejected() -> None:
+    found = guard.failures(
+        snapshot=_SNAPSHOT, generated=_generated_with_title(_drifted_title())
+    )
+    assert any("_CLIENT_TITLE_DIGEST" in f for f in found), found
+
+
+def test_synthetic_client_title_is_reviewed() -> None:
+    lines = guard.client_titles(_GENERATED)
+    assert lines.count(guard._SYNTHETIC_CLIENT_TITLE) == 1
+    assert guard._SYNTHETIC_CLIENT_TITLE not in {
+        value for _, value in guard.title_rows(json.loads(_SNAPSHOT))
+    }
+
+
+def test_guard_source_pins_both_title_doors() -> None:
+    """A one-file edit that deletes the title evidence cannot pass this suite.
+
+    The companion is the second door: it asserts the guard *still contains*
+    the independent literal and the comparison that consumes it, not merely
+    that a run happened to be green on this tree.
+    """
+    source = Path(guard.__file__).read_text(encoding="utf-8")
+    assert "_SCHEMA_TITLE_DIGEST" in source
+    assert "actual_title_digest != pinned_title_digest" in source
+    assert "_CLIENT_TITLE_DIGEST" in source
+    assert "actual_client_digest != pinned_client_digest" in source
+    assert "_EXPECTED_TITLE_ROWS" in source
+    assert "_EXPECTED_CLIENT_TITLE_LINES" in source
+    assert "_SYNTHETIC_CLIENT_TITLE" in source
