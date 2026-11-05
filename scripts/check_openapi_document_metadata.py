@@ -37,7 +37,10 @@ venv, no FastAPI import, no service, no pydantic inference to copy):
    (catches a source-only drift that would mislead a regeneration);
 3. ``create_app()`` still feeds those constants into ``FastAPI(...)``
    (catches a rewiring that would make the snapshot's metadata diverge from
-   what the running app exports).
+   what the running app exports). It also rejects a rebinding of those names
+   in ``create_app``'s scope and an in-place mutation of the watched
+   constants: both leave the call-site text and the module literal intact
+   while changing what ``FastAPI(...)`` actually receives.
 
 Unlike the error envelope's ``required`` rules, these facts are plain literals
 (a triple-quoted string, a list of dicts, a version string, a config default),
@@ -233,11 +236,15 @@ def _shadowed_wiring_names(main: str) -> list[str]:
 
     ``_kw_expr`` proves the keyword still *reads* ``OPENAPI_DESCRIPTION``; it
     cannot prove that name still resolves to the module-level constant. A local
-    assignment, parameter, import, ``global`` declaration or augmented assign
-    in ``create_app`` rebinds it, so the running app publishes different bytes
-    than the locked snapshot while every existing check stays green. Use the
-    standard library symbol table (real scope resolution), not a textual walk,
-    so a same-name local in a nested helper is not a false positive.
+    assignment, parameter, import or augmented assign in ``create_app``
+    rebinds it, so the running app publishes different bytes than the locked
+    snapshot while every existing check stays green. A bare ``global``
+    declaration is deliberately NOT flagged: it binds to the module scope the
+    constant already lives in, so the value read by ``FastAPI(...)`` is
+    unchanged. A ``global`` plus a rebind IS flagged -- the rebind sets
+    ``is_assigned()``. Use the standard library symbol table (real scope
+    resolution), not a textual walk, so a same-name local in a nested helper
+    is not a false positive.
     """
     watched = _watched_names(main)
     if not watched:
@@ -254,6 +261,52 @@ def _shadowed_wiring_names(main: str) -> list[str]:
         for symbol in create_app.get_symbols()
         if symbol.get_name() in watched and (symbol.is_local() or symbol.is_assigned())
     )
+
+
+# A watched constant can drift without any rebinding: ``OPENAPI_TAGS.clear()``
+# or ``OPENAPI_TAGS[0] = {...}`` mutates the same object the module-level
+# literal points at, so ``FastAPI(...)`` publishes a hollow catalog while the
+# spelling, the module literal, the snapshot and the golden all stay put.
+# Scope resolution cannot see this. Fail closed: any method call on a watched
+# root must be in this reviewed read-only allowlist, and any subscript or
+# attribute store rooted at a watched name is rejected. The committed
+# ``create_app`` uses none of these, so a new unknown shape reddens the guard
+# instead of silently passing.
+_READONLY_METHODS = frozenset(
+    ("copy", "count", "index", "get", "items", "keys", "values")
+)
+
+
+def _root_name(node: ast.expr) -> str | None:
+    """Innermost Name at the base of an attribute/subscript chain, if any."""
+    while isinstance(node, (ast.Subscript, ast.Attribute)):
+        node = node.value
+    return node.id if isinstance(node, ast.Name) else None
+
+
+def _mutated_wiring_names(main: str) -> list[str]:
+    """Watched names mutated in place anywhere inside ``create_app``."""
+    tree = ast.parse(main)
+    create_app = next(
+        (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "create_app"),
+        None,
+    )
+    if create_app is None:
+        return []
+    watched = _watched_names(main)
+    found: set[str] = set()
+    for node in ast.walk(create_app):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            root = _root_name(node.func.value)
+            if root in watched and node.func.attr not in _READONLY_METHODS:
+                found.add(f"{root}.{node.func.attr}()")
+        if isinstance(node, (ast.Subscript, ast.Attribute)) and isinstance(
+            node.ctx, (ast.Store, ast.Del)
+        ):
+            root = _root_name(node.value)
+            if root in watched:
+                found.add(f"assignment via {root}")
+    return sorted(found)
 
 
 def source_facts(main: str, config: str) -> dict[str, Any]:
@@ -389,6 +442,14 @@ def failures(
             found.append(
                 "create_app() rebinds metadata names in its local scope ("
                 + ", ".join(shadowed)
+                + "): the FastAPI(...) call would read a different value than "
+                "the locked module-level constant"
+            )
+        mutated = _mutated_wiring_names(main)
+        if mutated:
+            found.append(
+                "create_app() mutates metadata constants in place ("
+                + ", ".join(mutated)
                 + "): the FastAPI(...) call would read a different value than "
                 "the locked module-level constant"
             )
@@ -630,6 +691,22 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
         )
         return snapshot, generated, golden, main, config, smoke
 
+    def source_wiring_mutated_in_place(snapshot, generated, golden, main, config, smoke):
+        # No rebinding at all: mutate the same object the module-level literal
+        # points at, before FastAPI(...). The keyword spelling, the module
+        # literal, the snapshot and the golden are all byte-for-byte unchanged;
+        # only the running app's published catalog is hollow. A scope-resolution
+        # guard cannot see this, so this row pins the in-place check.
+        main = main.replace(
+            '    """Create and configure the FastAPI application."""\n    app = FastAPI(',
+            '    """Create and configure the FastAPI application."""\n'
+            '    OPENAPI_TAGS.clear()\n'
+            '    OPENAPI_TAGS.append({"name": "x", "description": "y"})\n'
+            '    app = FastAPI(',
+            1,
+        )
+        return snapshot, generated, golden, main, config, smoke
+
     def source_wiring_uncompilable(snapshot, generated, golden, main, config, smoke):
         # ast.parse accepts duplicate parameters; symtable (which compiles)
         # rejects them. A guard that called symtable without guarding would let
@@ -677,6 +754,11 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
             "description/tags shadowed by local rebinding",
             source_wiring_shadowed_by_local_rebinding,
             "rebinds metadata names in its local scope",
+        ),
+        (
+            "description/tags mutated in place",
+            source_wiring_mutated_in_place,
+            "mutates metadata constants in place",
         ),
         (
             "create_app does not compile under symtable",

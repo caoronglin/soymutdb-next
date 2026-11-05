@@ -240,6 +240,7 @@ smoke_contracts() {
     # guard read them. This suite proves the independent digest pin
     # reports that co-revert and every one-sided drift.
     scripts/test_openapi_operation_id_floor.py
+    scripts/test_openapi_operation_parameter_floor.py
     scripts/test_contracts_layer_self_containment.py
     # The error-code gate wiring guard judges its co-rename probe by the copied
     # tree's exit status. A clean control must be green first, or an incomplete
@@ -258,6 +259,12 @@ smoke_contracts() {
     # Registering it here is the point: unregistered, it only ever ran by hand
     # and its red could neither block nor be noticed.
     scripts/test_locale_language_purity.py
+    # `variant_summaries` has no constraint tying `gene_id` to `assembly_id`
+    # (issue #86): a v5 summary can point at a v4 gene and the release-wide
+    # `variant_type` aggregate counted it. The behavioural test needs
+    # PostgreSQL, so this suite is the only net in a clean checkout. Registering
+    # it is the point -- unregistered, it never runs and its red cannot block.
+    scripts/test_variant_summary_assembly_consistency.py
   )
   # Suites that need an interpreter or service this smoke layer does not own
   # (worker source analysis runs under the API virtualenv; tunnel/compose drift
@@ -339,6 +346,11 @@ smoke_contracts() {
   # generated `operations` interface. --self-test plants the co-revert
   # that every artifact-vs-artifact check is blind to.
   "${PYTHON_BIN}" scripts/check_openapi_operation_id_floor.py --self-test || rc=$?
+  # Every published operation parameter (name, location, requiredness,
+  # schema) is a client-visible property of the generated operations
+  # interface. A coordinated rename in both artifacts, with re-pinned
+  # provenance blob ids, kept every wired guard and SMOKE PASS green.
+  "${PYTHON_BIN}" scripts/check_openapi_operation_parameter_floor.py --self-test || rc=$?
   # The visible-text budget may fall but never rise; new hardcoded strings fail.
   "${PYTHON_BIN}" scripts/check_visible_i18n.py --self-test || rc=$?
   # nginx security-header fragments and the locations that must re-include
@@ -377,6 +389,17 @@ smoke_contracts() {
   # sentence ships a green layer with a stale number. Derive the counts from
   # the committed sources and pin the sentences; --self-test plants drifts.
   "${PYTHON_BIN}" scripts/check_error_code_doc_counts.py --self-test || rc=$?
+  # `variant_summaries` has no constraint tying `gene_id` to `assembly_id`
+  # (issue #86), so a v5 summary can point at a v4 gene. The gene page excludes
+  # such a row; the release-wide `variant_type` aggregate never joined `genes`
+  # and counted it. The API test for this needs PostgreSQL, so the contracts
+  # layer had no net at all. Reads committed source; --self-test plants both
+  # the dropped predicate and the FILTER-to-WHERE regression.
+  # Both calls: --self-test proves the guard still has a signal, the plain run
+  # is the one that reads the committed tree. Wiring only the self-test would
+  # make this a dead guard -- it would pass while the real source regressed.
+  "${PYTHON_BIN}" scripts/check_variant_summary_assembly_consistency.py --self-test || rc=$?
+  "${PYTHON_BIN}" scripts/check_variant_summary_assembly_consistency.py || rc=$?
   "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?
   echo
   echo "-- environment-bound contract suites (reported, not gating here) --"

@@ -12,6 +12,7 @@ from sqlalchemy import Table, and_, column, exists, literal, or_, select, table
 from sqlalchemy.sql import ColumnElement
 
 from ..models.content import Release, ReleaseStatus
+from ..models.genomic import Gene
 from ..models.variant import MutantLine, VariantSummary
 from ..models.variant_facts import variant_facts
 
@@ -98,3 +99,32 @@ def public_summary_visibility():
         public_mutant_visibility(),
     ).correlate(VariantSummary).exists()
     return and_(released, or_(VariantSummary.mutant_line_id.is_(None), public_mutant))
+
+
+def summary_assembly_consistency():
+    """Is this summary's ``gene_id`` in the summary's own assembly?
+
+    ``variant_summaries`` has no database-level constraint tying ``gene_id`` to
+    ``assembly_id`` (see issue #86), so a cross-assembly row -- a v4 gene on a
+    v5 summary -- is insertable. The gene page filters it out by construction
+    (it compares ``assembly_id`` to the gene's own). The site-wide total reads
+    ``variant_facts``, which carries its own denormalized ``assembly_id``, so
+    this gap is specific to the release-wide ``variant_type`` aggregate.
+
+    Use it as a ``count(...) FILTER (WHERE ...)`` rather than a ``WHERE`` clause
+    at those read points: the number must stop counting these rows without
+    changing which rows the statement scans. Callers that need a predicate can
+    use it directly; negating it finds the rows an import must reject.
+    """
+    gene_alias = Gene.__table__.alias("summary_assembly_gene")
+    return or_(
+        VariantSummary.gene_id.is_(None),
+        exists(
+            select(literal(1))
+            .select_from(gene_alias)
+            .where(
+                gene_alias.c.gene_pk == VariantSummary.gene_id,
+                gene_alias.c.assembly_id == VariantSummary.assembly_id,
+            )
+        ),
+    )
