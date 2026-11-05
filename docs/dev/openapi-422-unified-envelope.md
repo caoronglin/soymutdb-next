@@ -138,22 +138,94 @@ The envelope guard cannot see the first two because it only iterates
 The snapshot guard's `_SNAPSHOT_FLOOR` is a count of paths and schemas — a
 `200` that keeps its path is above the floor either way.
 
-`scripts/test_openapi_snapshot_body_integrity.py` closes it: for every
+`scripts/test_openapi_snapshot_body_integrity.py` addresses it: for every
 component a path operation references, the snapshot's declared count and the
 generated client's printed count must agree, and the client may not reference
-a component the snapshot does not define. Two independent fixed points —
-per-component equality and `_CLIENT_BODY_TOTAL` — so a coordinated edit to
-both halves is still caught, the same shape of pin as
-`_ERROR_RESPONSE_BASELINE` and `_SNAPSHOT_FLOOR`.
+a component the snapshot does not define. Its first version pinned
+`_CLIENT_BODY_TOTAL` (807) as an independent fixed point and used a one-sided
+per-component equality; it caught a body dropped or retyped in **one** half,
+and the three regressions in the table above, but — see the fourth defect
+below — not a coordinated drift of both halves.
 
-`_CLIENT_BODY_TOTAL` (800) is larger than the snapshot's 716 component response
-bodies because the pinned generator also prints request bodies (81 components,
-84 occurrences). The invariant is therefore one-sided — the client must not
-declare *fewer* of anything the snapshot declares — with the surplus pinned
-separately so a body appearing or vanishing on either side is a failure rather
-than an absorbed difference.
+`_CLIENT_BODY_TOTAL` (807) is larger than the snapshot's 722 component response
+bodies because the pinned generator also prints request bodies (82 components,
+85 occurrences).
 
-Verified on the committed tree: 9 checks, `OK`, rc=0, collected by pytest (9
-passed). Ablations each go red and restore green: client drops a body / client
-gains a body / client references an undeclared component / smoke wiring
-removed / a `200` retyped to another schema / snapshot loses a `200`'s content.
+## The fourth defect: the first body guard was still self-referential
+
+The first two independent fixed points above (`_ERROR_RESPONSE_BASELINE` and
+`_CLIENT_BODY_TOTAL`) closed the coordinated error-response edit. The body
+guard as first committed did **not** apply that idiom to its own per-component
+equality: it recomputed `expected` from whichever JSON it was given, kept a
+one-sided `have < want` check, and pinned only the aggregate client total.
+Three drifts stayed GREEN against all three guards, each reproduced on live
+bytes with byte-preserving edits:
+
+| Coordinated drift (both halves together) | 422 guard | Snapshot guard | Body guard v1 |
+| --- | --- | --- | --- |
+| Retype one request body (`UserCreate` → `NewsCreate`) | GREEN | GREEN | **GREEN** |
+| Shift one occurrence between doubled request components | GREEN | GREEN | **GREEN** |
+| Move one `200` between two existing success components | GREEN | GREEN | **GREEN** |
+
+In all three the total stays 807, both artifacts agree with each other, and no
+component is undeclared — `expected` moved with the supplied JSON, so equality
+held. The 85 request-body lines had **no per-component assertion at all**; they
+were the named gap. The success-response side had the same hole.
+
+The fix is two more independent fixed points, literals in the guard and not
+derived from either artifact:
+
+- `_RESPONSE_BODY_BASELINE` — the exact count of each component referenced from
+  a path operation's `responses` (136 components, 722 occurrences);
+- `_REQUEST_BODY_BASELINE` — the exact count of each component referenced from
+  a path operation's `requestBody` (82 components, 85 occurrences).
+
+The snapshot's response and request distributions must each equal their
+baseline exactly, and the generated client's per-component counts must equal
+the sum of the two baselines exactly — two-directional, nothing one-sided,
+nothing self-referential. A regenerate that drifts both halves together now
+fails on the baseline, not on a difference between the halves. `_CLIENT_BODY_TOTAL`
+stays as a loud aggregate first signal.
+
+A baseline is only a fixed point if the commit that turns it red cannot also
+re-pin it. `_PINNED_ARTIFACTS` records the git blob id of both artifacts the
+literals were counted from, and `_baseline_moved_with_the_artifacts()` recomputes
+those ids from the committed bytes on every run. So a regenerate that drifts both
+halves and bumps the counts in one commit also has to re-pin the blob ids in the
+same diff, and a re-pin that does not match the artifacts it claims to describe
+is rejected on its own message.
+
+### The residual: distribution is not topology
+
+Those two baselines pin **how many** of each component exist, not **which
+operation** declares each one. A permutation of two same-count bodies —
+`/api/v1/auth/register` and `/api/v1/auth/login` swapping `UserCreate` /
+`LoginRequest` in both artifacts together — preserves all 807 occurrences,
+keeps both halves agreeing and leaves no component undeclared, yet the client
+types the wrong request body on the login form. 105 of 136 response components
+and 79 of 82 request components sit at count 1, so nearly any two are
+swappable. The same holds on the response side. This is the coordinated-drift
+class one level down: both halves still move together, they just have to
+preserve the multiset rather than the total. It is **closed**, by a third fixed
+point added in the same PR:
+
+- `_BODY_PAIR_DIGEST` — `sha256` of the sorted
+  `(method, path, status|requestBody, component)` tuples, one literal covering
+  topology and distribution at once (807 pairs →
+  `f3382283236a34ddf96d10ce984a36bc6266f87d2c63de13aa066f54611a3ecc`). Regenerate
+  with the canonical form in the guard docstring: uppercase the method, sort by
+  the tuple itself, join fields with one space and records with `\n`, no trailing
+  newline. The two baselines stay as the readable diagnostic; the digest is the
+  strict pin.
+
+| Coordinated drift (both halves together) | Baselines only | With digest |
+| --- | --- | --- |
+| Permute two count-1 request bodies (register/login) | **GREEN** | **FAIL** |
+| Permute two count-1 success responses | **GREEN** | **FAIL** |
+| Pristine committed bytes | GREEN | GREEN |
+
+Verified on the committed tree: 18 checks, `OK`, rc=0, collected by pytest (18
+passed). In-file mutation cases cover all five drifts above, the two repin cases,
+the two permutations, plus client-only, snapshot-only, undeclared-component and
+smoke-wiring regressions; byte-preserving working-tree ablations of each drift
+go red and restore green.
