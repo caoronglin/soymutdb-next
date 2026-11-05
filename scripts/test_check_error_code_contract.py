@@ -185,6 +185,16 @@ class TestErrorCodeContract(unittest.TestCase):
         self.assertEqual(module._by_code_digest(by_code), module._BY_CODE_DIGEST)
         self.assertEqual(len(by_code), module._EXPECTED_BY_CODE_ROWS)
 
+    def test_http_exception_digest_is_an_independent_literal(self) -> None:
+        """The sibling half is pinned from a second file, not derived from itself."""
+        document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+        hx = document["x-error-status"]["http_exception"]
+        self.assertEqual(
+            module._status_digest("soymutdb-error-status-http-exception/v1", hx),
+            module._HTTP_EXCEPTION_DIGEST,
+        )
+        self.assertEqual(len(hx), module._EXPECTED_HTTP_EXCEPTION_ROWS)
+
     def _single_code_co_revert(self):
         import tempfile
 
@@ -271,6 +281,100 @@ class TestErrorCodeContract(unittest.TestCase):
         source = GUARD.read_text(encoding="utf-8")
         self.assertIn("_BY_CODE_DIGEST = ", source)
         self.assertIn("single-code status co-revert in source and snapshot", source)
+
+    def _extra_http_exception_co_revert(self):
+        """Source literal and snapshot gain the same fourth binding together."""
+        import tempfile
+
+        document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+        document["x-error-status"]["http_exception"]["429"] = "rate_limit_exceeded"
+        source = SOURCE.read_text(encoding="utf-8")
+        extra = source.replace(
+            '    status.HTTP_404_NOT_FOUND: "not_found",\n}',
+            '    status.HTTP_404_NOT_FOUND: "not_found",\n'
+            '    status.HTTP_429_TOO_MANY_REQUESTS: "rate_limit_exceeded",\n}',
+            1,
+        )
+        self.assertNotEqual(extra, source, "fixture no longer matches exceptions.py")
+        tmp = tempfile.TemporaryDirectory()
+        snap = Path(tmp.name) / "openapi.json"
+        src = Path(tmp.name) / "exceptions.py"
+        snap.write_text(json.dumps(document, indent=2), encoding="utf-8")
+        src.write_text(extra, encoding="utf-8")
+        return tmp, snap, src, document
+
+    def test_a_co_reverted_extra_http_exception_row_is_rejected(self) -> None:
+        """Decisive shape: both halves agree, every value pin stays satisfied."""
+        tmp, snap, src, document = self._extra_http_exception_co_revert()
+        with tmp:
+            executed, why = module._executed_contract(src)
+            self.assertIsNone(why)
+            self.assertEqual(
+                executed["http_exception"], document["x-error-status"]["http_exception"]
+            )
+            problems = module.check(snap, CODES, src)
+            self.assertTrue(
+                any("_HTTP_EXCEPTION_DIGEST" in p for p in problems), problems
+            )
+
+    def test_the_co_revert_silences_equality_but_not_the_digest(self) -> None:
+        """Positive control: both halves agree, yet the new doors still fire.
+
+        With the extra row co-reverted, ``error_status_contract()`` returns the
+        same map from the source as the snapshot publishes, so the executed
+        equality is silent. The independent digest and the row-count door are
+        the only witnesses -- exactly the resolution of failure reasons this
+        pair of literals exists to preserve.
+        """
+        tmp, snap, src, document = self._extra_http_exception_co_revert()
+        with tmp:
+            executed, why = module._executed_contract(src)
+            self.assertIsNone(why)
+            self.assertEqual(
+                executed["http_exception"], document["x-error-status"]["http_exception"]
+            )
+            problems = module.check(snap, CODES, src)
+            self.assertEqual(len(problems), 2, problems)
+            self.assertTrue(any("_HTTP_EXCEPTION_DIGEST" in p for p in problems), problems)
+            self.assertTrue(
+                any("_EXPECTED_HTTP_EXCEPTION_ROWS" in p for p in problems), problems
+            )
+
+    def test_a_same_count_http_exception_rotation_is_rejected(self) -> None:
+        """Value pins and key set unchanged; only the positional digest moves."""
+        import tempfile
+
+        document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+        hx = document["x-error-status"]["http_exception"]
+        hx["401"], hx["403"] = hx["403"], hx["401"]
+        with tempfile.TemporaryDirectory() as tmp:
+            snap = Path(tmp) / "openapi.json"
+            snap.write_text(json.dumps(document, indent=2), encoding="utf-8")
+            problems = module.check(snap, CODES, SOURCE)
+            self.assertTrue(
+                any("_HTTP_EXCEPTION_DIGEST" in p for p in problems), problems
+            )
+
+    def test_the_http_exception_count_door_is_load_bearing(self) -> None:
+        import tempfile
+
+        document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+        document["x-error-status"]["http_exception"]["418"] = "teapot"
+        with tempfile.TemporaryDirectory() as tmp:
+            snap = Path(tmp) / "openapi.json"
+            snap.write_text(json.dumps(document, indent=2), encoding="utf-8")
+            problems = module.check(snap, CODES, SOURCE)
+            self.assertTrue(
+                any("_EXPECTED_HTTP_EXCEPTION_ROWS" in p for p in problems), problems
+            )
+
+    def test_guard_source_still_carries_the_http_exception_plant(self) -> None:
+        """A second file pins the co-revert plant; a single-file edit cannot drop it."""
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("_HTTP_EXCEPTION_DIGEST = ", source)
+        self.assertIn(
+            "co-reverted extra http_exception row in source and snapshot", source
+        )
 
     def test_self_test_passes(self) -> None:
         self.assertEqual(module.self_test(), 0)

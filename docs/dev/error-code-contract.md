@@ -60,7 +60,7 @@ guard that reads the source hierarchy itself.
 `scripts/test_check_error_code_contract.py` pins the wiring and the exact
 published code set and status binding from a second file.
 
-`--self-test` proves fourteen negative shapes are rejected.
+`--self-test` proves fifteen negative shapes are rejected.
 
 A coordinate change that updates the hierarchy *and* every dependent published
 value would also agree with a fresh export; no byte-reading guard can detect
@@ -113,13 +113,41 @@ failure reason. `check_error_code_catalog.py` and
 `check_api_error_code_vocabulary.py` stay unchanged: they own the code catalog
 and its golden lock, not the status map.
 
-`--self-test` grows 11 → **14 cases**. The new plants are the decisive
-single-code co-revert, a one-sided published retype, and a same-count rotation.
-The companion grows 13 → **19** cases (second-file literal pin, both directions
-of the "equality stays true but the digest fires" positive control, count-door
-load-bearing proof, source-plant pin).
+`--self-test` grows 11 → **15 cases**. The new plants are the decisive
+single-code co-revert, a one-sided published retype, a same-count rotation, and
+the co-reverted extra `http_exception` row. The companion grows 13 → **25**
+cases (second-file literal pin, both directions of the "equality stays true but
+the digest fires" positive control, count-door load-bearing proof, source-plant
+pin, and the sibling-map witnesses).
 
 Zero wiring churn: this door lives inside an already-wired guard, so
 `smoke.sh` / `PINNED_SUITES` / `REQUIRED_GUARD_CALLS` / teeth floors are
 untouched. A legitimate status change must re-pin `_BY_CODE_DIGEST` in the
 same commit as the source and both artifacts, with a reason.
+
+## The generic-handler map has its own fixed point too
+
+`x-error-status.http_exception` is the other half of the same
+`error_status_contract()` return value, and it had the same hole. The
+`HTTP_STATUS_CODES` literal pins the three status → code **values** and the
+executed equality compares source against snapshot, but nothing pinned the
+exact key set. Adding a fourth binding to the `HTTP_STATUS_ERROR_CODES` source
+literal **and** to the snapshot together -- with the `snapshot_blob`
+provenance id honestly re-pinned -- leaves all twelve `check_openapi_*` guards,
+the three error-code guards and the whole contracts layer `SMOKE PASS` on live
+`9a7c3e52`. The executed map still equals the published one, every pinned
+value is intact, and the row count is free to grow.
+
+So it gets the same treatment, in the same guard, with a separate namespace so
+a failure names the right half:
+
+- `_HTTP_EXCEPTION_DIGEST` -- sha256 over the canonical sorted
+  `status|json(code)` rows, four entries including the `fallback`.
+- `_EXPECTED_HTTP_EXCEPTION_ROWS` (4) -- exact count door.
+
+This is not a second ledger over an already-pinned cell: the sibling map was
+unowned. It is the same reviewed edit as the `by_code` half, applied once, so a
+future reader sees one guard and two independent literals rather than two PRs
+chasing the same export. A legitimate new generic-handler binding must re-pin
+`_HTTP_EXCEPTION_DIGEST` in the same commit as the source and both artifacts,
+with a reason.

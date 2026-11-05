@@ -18,6 +18,14 @@ Two things can drift without any existing gate noticing:
   that equality true. The published code-to-status map is client-visible (it
   tells a caller which HTTP status a stable ``error.code`` arrives on), so it
   needs an independent fixed point of its own.
+* ``x-error-status.http_exception`` is the sibling half of the same
+  ``error_status_contract()`` output, and it has the same weakness. The
+  ``HTTP_STATUS_CODES`` literal pins the *values* of its three status keys and
+  the executed equality pins source-vs-snapshot, but nothing pins the exact
+  key set. Adding a fourth status binding to the ``HTTP_STATUS_ERROR_CODES``
+  source literal **and** to the snapshot together -- with the provenance blob
+  id honestly re-pinned -- leaves all twelve ``check_openapi_*`` guards, the
+  three error-code guards and the whole contracts layer green.
 
 This guard reads committed bytes only (no API venv, no export), so reverting
 the backend, the snapshot and the generated client together cannot co-revert
@@ -63,6 +71,13 @@ HTTP_STATUS_CODES = {
 # intentional, reviewed status change and update in the same commit.
 _BY_CODE_DIGEST = "78c053e73a41528fe16a33bc969154d12e892aecc512c384b36608a5dd1c7708"
 _EXPECTED_BY_CODE_ROWS = 13
+
+# The generic HTTPException handler's status -> code map, including its
+# fallback entry. Same construction, separate namespace: a co-revert that adds
+# or rotates a row here moves this digest even when the executed equality and
+# the HTTP_STATUS_CODES value pins both stay satisfied.
+_HTTP_EXCEPTION_DIGEST = "570fc4d2cc43ed1c4cc73a2d43138d9cfc100998c86521e9a4c53fddbae449b3"
+_EXPECTED_HTTP_EXCEPTION_ROWS = 4
 
 
 def _source_error_codes(source: str) -> set[str]:
@@ -188,12 +203,19 @@ def _executed_contract(source: Path) -> tuple[dict[str, object] | None, str | No
     }, None
 
 
-def _by_code_digest(by_code: dict[str, object]) -> str:
-    canonical = sorted(
-        f"{code}|{json.dumps(status)}" for code, status in by_code.items()
-    )
-    blob = "\n".join(["soymutdb-error-status-by-code/v1", *canonical])
+def _status_digest(namespace: str, rows: dict[str, object]) -> str:
+    """sha256 over canonical sorted ``key|json(value)`` rows of a published map.
+
+    Read from nowhere: neither half of ``error_status_contract()`` can derive
+    it, so a coordinated source + snapshot co-revert still moves it.
+    """
+    canonical = sorted(f"{key}|{json.dumps(value)}" for key, value in rows.items())
+    blob = "\n".join([namespace, *canonical])
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _by_code_digest(by_code: dict[str, object]) -> str:
+    return _status_digest("soymutdb-error-status-by-code/v1", by_code)
 
 
 def check(snapshot: Path, codes: Path, source: Path) -> list[str]:
@@ -312,6 +334,22 @@ def check(snapshot: Path, codes: Path, source: Path) -> list[str]:
             failures.append(
                 f"x-error-status.by_code row count is {len(by_code)}, "
                 f"_EXPECTED_BY_CODE_ROWS pins {_EXPECTED_BY_CODE_ROWS}"
+            )
+        actual_http_exception = _status_digest(
+            "soymutdb-error-status-http-exception/v1", http_exception
+        )
+        if actual_http_exception != _HTTP_EXCEPTION_DIGEST:
+            failures.append(
+                "x-error-status.http_exception drifted: _HTTP_EXCEPTION_DIGEST pins "
+                f"{_HTTP_EXCEPTION_DIGEST} but the snapshot derives "
+                f"{actual_http_exception}. A published HTTPException status binding "
+                "changed; re-pin the digest in the same commit as the source and "
+                "both artifacts, with a reason."
+            )
+        if len(http_exception) != _EXPECTED_HTTP_EXCEPTION_ROWS:
+            failures.append(
+                f"x-error-status.http_exception row count is {len(http_exception)}, "
+                f"_EXPECTED_HTTP_EXCEPTION_ROWS pins {_EXPECTED_HTTP_EXCEPTION_ROWS}"
             )
 
     return failures
@@ -432,6 +470,27 @@ def self_test() -> int:
     bc = doc["x-error-status"]["by_code"]
     bc["forbidden"], bc["conflict"] = bc["conflict"], bc["forbidden"]
     cases.append(("same-count by_code rotation", doc, dict(codes), src))
+
+    # The decisive sibling shape: a fourth status binding appears in the
+    # source literal and the snapshot together. error_status_contract() then
+    # returns the same map from both halves, so the equality check is silent.
+    doc = json.loads(json.dumps(base))
+    doc["x-error-status"]["http_exception"]["429"] = "rate_limit_exceeded"
+    extra_source = src.replace(
+        '    status.HTTP_404_NOT_FOUND: "not_found",\n}',
+        '    status.HTTP_404_NOT_FOUND: "not_found",\n'
+        '    status.HTTP_429_TOO_MANY_REQUESTS: "rate_limit_exceeded",\n}',
+        1,
+    )
+    assert extra_source != src, "self-test fixture no longer matches the source"
+    cases.append(
+        (
+            "co-reverted extra http_exception row in source and snapshot",
+            doc,
+            dict(codes),
+            extra_source,
+        )
+    )
 
     ok = 0
     with tempfile.TemporaryDirectory() as tmp:
