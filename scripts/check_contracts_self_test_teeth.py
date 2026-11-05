@@ -75,6 +75,7 @@ _WIRED_SELF_TESTS: frozenset[str] = frozenset(
         "scripts/check_openapi_required_fields.py",
         "scripts/check_variant_summary_assembly_consistency.py",
         "scripts/check_openapi_published_enums.py",
+        "scripts/check_guard_self_test_verdict.py",
         "scripts/check_visible_i18n.py",
     }
 )
@@ -157,6 +158,9 @@ _SIGNATURES: dict[str, re.Pattern[str]] = {
         r"OK \(\d+ ablations\)"
     ),
     "scripts/check_visible_i18n.py": re.compile(r"visible i18n self-test passed"),
+    "scripts/check_guard_self_test_verdict.py": re.compile(
+        r"self-test: \d+ cases, 0 failure\(s\)"
+    ),
 }
 
 # Per-wire drift plants. A success signature is a string a gutted body can
@@ -318,6 +322,13 @@ _DRIFT_PLANTS: tuple[tuple[str, str, str, str], ...] = (
         "    return []  # planted drift: detection disabled\n",
         "the cross-assembly exclusion is never reported",
     ),
+    (
+        "scripts/check_guard_self_test_verdict.py",
+        'def discarded_verdicts(source: str) -> list[str]:\n',
+        'def discarded_verdicts(source: str) -> list[str]:\n'
+        "    return []  # planted drift: detection disabled\n",
+        "a discarded verdict is never reported",
+    ),
 )
 
 # A second plant per wired guard, at the self-test entry point instead of at a
@@ -437,6 +448,11 @@ _SELF_TEST_GUTS: tuple[tuple[str, str, str], ...] = (
         '    counts = collect(ROOT)\n    if args.update_baseline:\n',
         '    counts = {}  # planted drift: the plain run reads nothing\n'
         '    if args.update_baseline:\n',
+    ),
+    (
+        "scripts/check_guard_self_test_verdict.py",
+        "    problems = check()\n",
+        "    problems = []  # planted drift: the plain run reads nothing\n",
     ),
 )
 

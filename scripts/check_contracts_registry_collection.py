@@ -149,6 +149,7 @@ REQUIRED_GUARD_CALLS: frozenset[str] = frozenset(
         "scripts/check_openapi_required_fields.py",
         "scripts/check_variant_summary_assembly_consistency.py",
         "scripts/check_contracts_self_test_teeth.py",
+        "scripts/check_guard_self_test_verdict.py",
         "scripts/check_static_placeholder_scan.py",
     }
 )
@@ -203,6 +204,7 @@ PINNED_SUITES: frozenset[str] = frozenset(
         'scripts/test_error_code_doc_counts.py',
         'scripts/test_error_code_gate_wiring.py',
         'scripts/test_format_inspect_validation_order.py',
+        'scripts/test_guard_self_test_verdict.py',
         'scripts/test_i18n_interpolation_guard.py',
         'scripts/test_import_capability_contracts.py',
         'scripts/test_install_python_workspace.py',

@@ -307,6 +307,11 @@ smoke_contracts() {
     # The registry guard pins that a call exists, not that the body it
     # reaches survived. A no-op self_test() kept the whole layer green.
     scripts/test_contracts_self_test_teeth.py
+    # A guard can keep its own --self-test green while throwing the verdict
+    # away: a pass-value reset after the last plant prints FAIL and exits 0.
+    # The teeth guard requires the self-test to stay green under a plant, so
+    # it cannot see that shape. This suite pins the guard that reads it.
+    scripts/test_guard_self_test_verdict.py
   )
   # Suites that need an interpreter or service this smoke layer does not own
   # (worker source analysis runs under the API virtualenv; tunnel/compose drift
@@ -476,6 +481,14 @@ smoke_contracts() {
   # this guard runs each one as a real process and requires its pinned
   # evidence of mutation cases.
   "${PYTHON_BIN}" scripts/check_contracts_self_test_teeth.py --self-test || rc=$?
+  # The teeth guard requires each wired --self-test to stay GREEN while a
+  # check is disabled, so it cannot see a guard that discards its own verdict:
+  # a reset of the status field *after* the last plant prints the FAIL line
+  # and then returns 0. That shape shipped in check_openapi_published_enums.py
+  # (three marker doors gutted -> `OK (17 ablations)` over three FAIL lines,
+  # rc=0). This reads the status function structurally, on committed bytes,
+  # and reports a pass-value reset that lands after a verdict was written.
+  "${PYTHON_BIN}" scripts/check_guard_self_test_verdict.py --self-test || rc=$?
   # §4a (PR #206): the placeholder-origin regex is committed twice. Only the
   # production scanner has a behavioural suite reading it back; the static
   # layer's copy can lose an origin with every gate still green. Pin both
