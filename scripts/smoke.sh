@@ -106,6 +106,10 @@ smoke_contracts() {
     # PR #135 shipped this wiring suite but no gate collected it: deleting
     # the parity guard's two invocations from verify-bio-core.sh stayed green.
     scripts/test_bio_core_capability_parity_wiring.py
+    # The error-code dev docs state suite counts in prose; no gate read them,
+    # so a merge adding a test shipped a stale number with a green layer. Pin
+    # each sentence to the count derived from the committed sources.
+    scripts/test_error_code_doc_counts.py
     scripts/test_deployment_workflows.py
     # Behavior contracts injected by app.main (x-idempotent / x-pagination /
     # x-error-codes / documented 429 / uniform 500) are client-visible, but
@@ -337,6 +341,11 @@ smoke_contracts() {
   # green while the guard's failure is swallowed. --self-test plants the
   # decisive co-rename and proves the wired guard still has a real signal.
   "${PYTHON_BIN}" scripts/check_error_code_gate_wiring.py --self-test || rc=$?
+  # The dev docs state error-code suite counts in prose, but every gate reads
+  # only source/artifact bytes: a merge that adds a test and forgets the
+  # sentence ships a green layer with a stale number. Derive the counts from
+  # the committed sources and pin the sentences; --self-test plants drifts.
+  "${PYTHON_BIN}" scripts/check_error_code_doc_counts.py --self-test || rc=$?
   "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?
   echo
   echo "-- environment-bound contract suites (reported, not gating here) --"
