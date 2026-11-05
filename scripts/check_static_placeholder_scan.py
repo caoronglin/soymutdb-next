@@ -17,12 +17,20 @@ teeth guard and ``smoke.sh --profile contracts`` all GREEN -- the static layer
 simply stops looking for that origin. Deepseek recorded this as §4a of PR #206
 (count 0 readers, two copies, one guarded); it still holds on live main.
 
-This guard reads both scanners' committed bytes, requires the reviewed shared
-floor to be present and byte-identical in each, requires both ``smoke.sh`` grep
-lines to carry the identical pattern, and requires the behavioural suite to
-still plant every shared token. ``--self-test`` plants each one-sided drift on
-copies of the bytes and asserts it is caught, so a weakened pin cannot pass
-vacuously. Stdlib only: no build, no node_modules, no API venv.
+This guard reads both scanners' committed bytes and pins **two axes**:
+
+* the reviewed token floors on each side -- ``SHARED`` in both scanners plus
+  the two production-only surfaces (``PATTERNS`` / ``LOOPBACK_PATTERNS``);
+* both scanners' **corpora** -- the two ``smoke.sh`` ``--include`` sets, the
+  production scanner's whole-tree ``scan_pattern()`` and its narrower
+  ``scan_loopback()`` excludes. The corpora are not equal: ``smoke_static()``
+  never reads ``_headers``, while ``scan_pattern()`` reads every file type.
+  That is the documented division of labour, not parity; the corpora are
+  pinned as reviewed literals so a silent corpus change is a divergence.
+
+``--self-test`` plants each one-sided drift on copies of the bytes and asserts
+it is caught, so a weakened pin cannot pass vacuously. Stdlib only: no build,
+no node_modules, no API venv.
 
 Usage:
     python3 scripts/check_static_placeholder_scan.py
@@ -50,34 +58,68 @@ SHARED: tuple[str, ...] = (
     "CHANGE_ME",
 )
 
-# The production scanner blocks one extra always-on surface that ``smoke.sh``
-# deliberately does not: a baked API loopback. It is guarded behaviourally by
-# ``test_production_artifact_scan.py``, so it is an allowed, reviewed difference
-# -- but dropping it is still a regression. Any OTHER extra on either side is a
-# divergence and fails closed until this file is reviewed in the same commit.
+# The one-sided token surfaces are TWO, not one. ``PATTERNS`` blocks a baked
+# API loopback (``localhost:8000``) that ``smoke.sh`` never had; the separate
+# ``LOOPBACK_PATTERNS`` array blocks the bare ``localhost`` / ``127.0.0.1``
+# binds via ``scan_loopback()``. Both are behaviourally guarded by
+# ``test_production_artifact_scan.py``, so they are reviewed differences, not
+# phantoms -- but dropping either is still a regression. "Identical pattern"
+# is true of the four SHARED tokens and of nothing else. Any OTHER extra on
+# either side is a divergence and fails closed until reviewed in the same commit.
 PRODUCTION_ONLY: frozenset[str] = frozenset({"localhost:8000"})
+LOOPBACK_ONLY: frozenset[str] = frozenset({r"localhost", r"127\.0\.0\.1"})
+
+# Reviewed corpora. ``smoke_static()`` restricts its grep to these suffixes;
+# ``check-production-artifact.sh`` instead scans the whole tree with
+# ``scan_pattern()`` (no --include) and a narrower ``scan_loopback()`` that
+# excludes emitted JS. These are DIFFERENT BY DESIGN: built ``_headers`` (the
+# CSP line rewritten with the configured API origin by finalize-csp.ts) is
+# read only by the production scanner. Pin each as a literal so a corpus flip
+# -- including adding ``--include='_headers'`` to smoke.sh -- needs a reviewed
+# edit here instead of blessing an equality that is already false on main.
+SMOKE_CORPUS: tuple[str, ...] = ("*.html", "*.js", "*.json")
+PRODUCTION_CORPUS: frozenset[str] = frozenset()  # scan_pattern(): no --include
+PRODUCTION_SCAN_EXCLUDES: frozenset[str] = frozenset({"manifest.json", "SHA256SUMS"})
+PRODUCTION_LOOPBACK_EXCLUDES: tuple[str, ...] = (
+    "manifest.json", "SHA256SUMS", "*.js", "*.mjs", "*.map",
+)
 
 # ``smoke.sh`` invokes the same grep twice: once to decide, once to print the
-# offending lines. Both must carry the identical pattern.
+# offending lines. Both must carry the identical pattern and identical includes.
 SMOKE_GREP = re.compile(
-    r"grep -RInE '([^']+)' \\\n\s+\"\$\{dir\}\" --include='\*\.html'",
+    r"grep -RInE '([^']+)' \\\n\s+\"\$\{dir\}\" ((?:--include='[^']+' ?)+)",
     re.MULTILINE,
 )
+INCLUDE = re.compile(r"--include='([^']+)'")
 PROD_ARRAY = re.compile(r"^PATTERNS=\(\n(.*?)^\)", re.MULTILINE | re.DOTALL)
+LOOPBACK_ARRAY = re.compile(
+    r"^LOOPBACK_PATTERNS=\(\n(.*?)^\)", re.MULTILINE | re.DOTALL,
+)
 PROD_ENTRY = re.compile(r"^\s*'([^']+)'", re.MULTILINE)
 
 
-def smoke_patterns(smoke: str) -> list[str]:
-    """The regex in each of the two static-layer grep calls, in order."""
-    return SMOKE_GREP.findall(smoke)
+def smoke_greps(smoke: str) -> list[tuple[str, tuple[str, ...]]]:
+    """(pattern, --include suffixes) of each static-layer grep, in order."""
+    return [(pat, tuple(INCLUDE.findall(tail))) for pat, tail in SMOKE_GREP.findall(smoke)]
 
 
-def production_patterns(production: str) -> list[str]:
-    """The always-blocked ``PATTERNS=()`` entries (demo/loopback excluded)."""
-    match = PROD_ARRAY.search(production)
+def array_entries(source: str, pattern: re.Pattern[str]) -> list[str]:
+    """Entries of a named bash array literal (``PATTERNS`` / ``LOOPBACK_PATTERNS``)."""
+    match = pattern.search(source)
     if not match:
         return []
     return PROD_ENTRY.findall(match.group(1))
+
+
+def excluded_suffixes(source: str, function: str) -> tuple[str, ...] | None:
+    """The ``--exclude`` suffixes of one scanner function, or None if unreadable."""
+    start = source.find(f"{function}() {{")
+    if start < 0:
+        return None
+    rest = source[start:]
+    end = rest.find("\n}\n")
+    body = rest[:end] if end >= 0 else rest
+    return tuple(re.findall(r"--exclude='([^']+)'", body))
 
 
 def tokens(pattern: str) -> set[str]:
@@ -95,16 +137,16 @@ def check(
     errors: list[str] = []
     expected = set(SHARED)
 
-    greps = smoke_patterns(s)
+    greps = smoke_greps(s)
     if len(greps) != 2:
         errors.append(
             f"smoke.sh static layer has {len(greps)} placeholder grep calls, "
             "expected exactly 2 (decide + report)"
         )
     else:
-        if greps[0] != greps[1]:
+        if greps[0][0] != greps[1][0]:
             errors.append("the two smoke.sh placeholder greps disagree")
-        for i, pattern in enumerate(greps, 1):
+        for i, (pattern, includes) in enumerate(greps, 1):
             found = tokens(pattern)
             missing = expected - found
             extra = found - expected
@@ -118,8 +160,14 @@ def check(
                     f"smoke.sh placeholder grep #{i} carries unreviewed extra "
                     f"patterns (divergence): {sorted(extra)}"
                 )
+            if includes != SMOKE_CORPUS:
+                errors.append(
+                    f"smoke.sh placeholder grep #{i} corpus drifted: "
+                    f"--include set is {list(includes)}, reviewed subset is "
+                    f"{list(SMOKE_CORPUS)} (divergence)"
+                )
 
-    prod = set(production_patterns(p))
+    prod = set(array_entries(p, PROD_ARRAY))
     if not prod:
         errors.append("could not read check-production-artifact.sh PATTERNS=()")
     else:
@@ -141,6 +189,59 @@ def check(
                 "check-production-artifact.sh dropped its documented extra "
                 f"patterns: {sorted(dropped)}"
             )
+
+    loopback = set(array_entries(p, LOOPBACK_ARRAY))
+    if not loopback:
+        errors.append(
+            "could not read check-production-artifact.sh LOOPBACK_PATTERNS=()"
+        )
+    else:
+        dropped = LOOPBACK_ONLY - loopback
+        if dropped:
+            errors.append(
+                "check-production-artifact.sh LOOPBACK_PATTERNS=() dropped "
+                f"documented patterns (divergence): {sorted(dropped)}"
+            )
+        unreviewed = loopback - LOOPBACK_ONLY
+        if unreviewed:
+            errors.append(
+                "check-production-artifact.sh LOOPBACK_PATTERNS=() carries "
+                f"unreviewed extra patterns (divergence): {sorted(unreviewed)}"
+            )
+
+    prod_excludes = excluded_suffixes(p, "scan_pattern")
+    loop_excludes = excluded_suffixes(p, "scan_loopback")
+    if prod_excludes is None:
+        errors.append("could not read check-production-artifact.sh scan_pattern()")
+    else:
+        if set(prod_excludes) != PRODUCTION_SCAN_EXCLUDES:
+            errors.append(
+                "check-production-artifact.sh scan_pattern() corpus drifted: "
+                f"--exclude set is {list(prod_excludes)}, reviewed is "
+                f"{list(PRODUCTION_SCAN_EXCLUDES)} (divergence)"
+            )
+        # The whole-tree scanner must stay unfiltered: an --include here would
+        # make it miss _headers, the file finalize-csp.ts rewrites with the API
+        # origin. Any --include is a divergence from PRODUCTION_CORPUS.
+        prod_includes = tuple(
+            INCLUDE.findall(
+                p[p.find("scan_pattern() {"):].split("\n}\n", 1)[0]
+            )
+        )
+        if set(prod_includes) != PRODUCTION_CORPUS:
+            errors.append(
+                "check-production-artifact.sh scan_pattern() narrowed its "
+                f"corpus with --include {list(prod_includes)} (divergence): "
+                "built _headers must stay readable"
+            )
+    if loop_excludes is None:
+        errors.append("could not read check-production-artifact.sh scan_loopback()")
+    elif loop_excludes != PRODUCTION_LOOPBACK_EXCLUDES:
+        errors.append(
+            "check-production-artifact.sh scan_loopback() corpus drifted: "
+            f"--exclude set is {list(loop_excludes)}, reviewed is "
+            f"{list(PRODUCTION_LOOPBACK_EXCLUDES)} (divergence)"
+        )
 
     # Read-back floor: the behavioural suite must plant every shared token as a
     # literal (the .example.com ones without their regex escaping), so a token
@@ -170,6 +271,11 @@ def self_test() -> int:
     assert s.count(jbrowse) == 2
     assert f"  '{jbrowse}'\n" in p, "production array spelling changed"
     assert '"jbrowse.example.com"' in b
+    includes = "--include='*.html' --include='*.js' --include='*.json'"
+    assert s.count(includes) == 2, "smoke.sh --include spelling changed"
+    assert "  'localhost'\n  '127\\.0\\.0\\.1'\n" in p, (
+        "production LOOPBACK_PATTERNS spelling changed"
+    )
 
     plants: list[tuple[str, str, str, str, str]] = [
         # 1. Drop one origin from BOTH smoke.sh greps (the §4a ablation).
@@ -224,6 +330,38 @@ def self_test() -> int:
             ),
             b, "documented extra",
         ),
+        # 8. The §4b corpus drift: widen smoke.sh's --include set with
+        # `_headers`. The pin must call this a divergence, not pass silently.
+        (
+            "smoke.sh widens its corpus to _headers without a reviewed edit",
+            s.replace(includes, includes + " --include='_headers'"),
+            p, b, "corpus drifted",
+        ),
+        # 9. Dropping the second one-sided token surface is caught too.
+        (
+            "the production scanner drops a LOOPBACK_PATTERNS entry",
+            s, p.replace("  '127\\.0\\.0\\.1'\n", "", 1), b,
+            "LOOPBACK_PATTERNS=() dropped",
+        ),
+        # 10. scan_loopback() narrowing its corpus is a divergence.
+        (
+            "scan_loopback() changes its --exclude corpus",
+            s,
+            p.replace("      --exclude='*.map' \\\n", "", 1),
+            b, "corpus drifted",
+        ),
+        # 11. scan_pattern() adding an --include would blind the production
+        # scanner to _headers -- the file the static layer cannot read.
+        (
+            "scan_pattern() narrows the whole-tree corpus with --include",
+            s,
+            p.replace(
+                "files=$(grep -rIl --exclude='manifest.json'",
+                "files=$(grep -rIl --include='*.js' --exclude='manifest.json'",
+                1,
+            ),
+            b, "narrowed its corpus",
+        ),
     ]
 
     results = 0
@@ -250,7 +388,10 @@ def main(argv: list[str] | None = None) -> int:
         for error in errors:
             print(f"FAIL: {error}", file=sys.stderr)
         return 1
-    print("static placeholder scan: OK (two scanners pinned, read back)")
+    print(
+        "static placeholder scan: OK "
+        "(two scanners pinned: tokens + corpora, read back)"
+    )
     return 0
 
 
