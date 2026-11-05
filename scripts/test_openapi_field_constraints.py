@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -137,6 +138,55 @@ def test_the_default_named_property_is_a_schema_not_a_keyword() -> None:
         if path.endswith("/properties/default") and key == "default"
     ]
     assert not offenders, offenders
+
+
+def _resolve(document: dict, path: str):
+    """Walk a ``rows()`` path. ``properties`` / ``$defs`` nest by name, not ``/``.
+
+    Component schema names carry dots (``Glycine.max``), so the path is split on
+    ``/`` only after the schema name, per the walker's own convention.
+    """
+    node = document["components"]["schemas"]
+    for part in path.strip("/").split("/"):
+        node = node[int(part)] if isinstance(node, list) else node[part]
+    return node
+
+
+def _rotate_distinct(document: dict, key: str) -> str:
+    """Rotate three distinct values of one keyword; leave the multiset intact.
+
+    Reassigning a value to *another row carrying a different value* keeps every
+    count door green: the by-key histogram is unchanged and so is the row count.
+    Only a positional fixed point sees it. Count doors alone would not.
+    """
+    buckets: dict[str, list[tuple[str, object]]] = {}
+    for path, row_key, value in guard.rows(document):
+        if row_key == key:
+            buckets.setdefault(json.dumps(value, sort_keys=True), []).append(
+                (path, value)
+            )
+    distinct = [bucket[0] for bucket in buckets.values() if bucket][:3]
+    assert len(distinct) == 3, f"need three distinct {key!r} values"
+    (path_a, value_a), (path_b, value_b), (path_c, value_c) = distinct
+    _resolve(document, path_a)[key] = value_b
+    _resolve(document, path_b)[key] = value_c
+    _resolve(document, path_c)[key] = value_a
+
+
+def test_a_same_count_value_rotation_is_rejected() -> None:
+    """Every value moves to another row, every count door still holds."""
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    before = guard.rows(document)
+    _rotate_distinct(document, "default")
+    after = guard.rows(document)
+    assert len(after) == len(before)
+    def histogram(rows_: list[tuple[str, str, object]]) -> Counter[str]:
+        return Counter(key for _, key, _ in rows_)
+
+    assert histogram(after) == histogram(before)
+    assert after != before
+    found = guard.failures(snapshot=json.dumps(document, indent=2))
+    assert any("drifted" in problem for problem in found), found
 
 
 def test_a_default_only_drift_moves_the_digest() -> None:

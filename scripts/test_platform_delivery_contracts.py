@@ -1259,3 +1259,101 @@ def test_upgrade_rollback_survives_a_stale_or_incomplete_environment() -> None:
             f"rollback() must run compose with {applied} set to the recorded "
             f"{recorded}; a restart on the new images is not a rollback"
         )
+
+
+# ---------------------------------------------------------------------------
+# NPC pipelines — platform stages the repository does not declare
+# ---------------------------------------------------------------------------
+
+# Stage names CNB injects into every `@npc` pipeline regardless of the config in
+# `.cnb.yml`. They appear in the build log the platform renders, so they are an
+# observation, not a guess -- see the docstring below for the build that proved
+# it. Anything NOT in this set must come from bytes this repository owns.
+_PLATFORM_INJECTED_STAGES = frozenset({"set model", "run with npc"})
+
+
+def _declared_stage_names(document: dict) -> set[str]:
+    """Every stage name the template itself declares, at any nesting depth."""
+    names: set[str] = set()
+
+    def walk(stages) -> None:
+        for stage in stages or []:
+            if not isinstance(stage, dict):
+                continue
+            if isinstance(stage.get("name"), str):
+                names.add(stage["name"])
+            walk(stage.get("stages"))
+
+    for branches in document.values():
+        if not isinstance(branches, dict):
+            continue
+        for pipelines in branches.values():
+            if not isinstance(pipelines, list):
+                continue
+            for pipeline in pipelines:
+                if isinstance(pipeline, dict):
+                    walk(pipeline.get("stages"))
+    return names
+
+
+def test_npc_pipelines_run_no_stage_the_repository_never_declared() -> None:
+    """A `@npc` build must not grow stages from anywhere but `.cnb.yml`.
+
+    The `verify` pipeline worked and the `@npc` pipelines did not, on the same
+    commit, with the same template:
+
+        verify        cnb-edd-1k6m89jkq-001  Prepare → error [5.4s]
+        @npc          cnb-i9t-1k6m89p3l-001  Prepare → success → set model
+                                             → run with npc → never finished
+                       6 stages, 18 minutes, zero forward progress
+
+    `Prepare` ending in ``Root Group's events CPU core-hours are insufficient
+    for pre-freezing`` is a real, observable state of this organisation, and it
+    is what ``verify`` reports. The `@npc` reading was not that: its `Prepare`
+    passed, so the runner started, and then the build sat in a stage
+    (``run with npc``) that no text in this repository contains. Every `@npc`
+    pipeline restarts a model session from scratch and holds the runner while it
+    does, which is the one cost an exhausted organisation cannot pay for.
+
+    The distinction matters because it decides who does what:
+      * ``verify`` red and `@npc` pending → an organisation quota. Only an
+        administrator can fix that, and rerunning changes nothing;
+      * an `@npc` pipeline red *with* a completed `Prepare` → an NPC invocation.
+        Nothing in the diff caused it, nothing in the diff can fix it, and the
+        cheapest correct answer is to stop asking.
+
+    So this gate pins the stage vocabulary. If a future revision of the platform
+    injects a different pair, this fails and somebody re-reads the log instead
+    of the summary line.
+    """
+    document = yaml.safe_load(_pipeline_source())
+    npc_events = {
+        event: pipelines
+        for branches in document.values()
+        if isinstance(branches, dict)
+        for event, pipelines in branches.items()
+        if isinstance(event, str) and event.endswith("@npc")
+    }
+    assert npc_events, "no `@npc` event left in .cnb.yml; the scan is broken"
+
+    declared = _declared_stage_names(document)
+    for event, pipelines in npc_events.items():
+        for pipeline in pipelines:
+            for stage in pipeline.get("stages") or []:
+                name = stage.get("name")
+                assert name in declared, (
+                    f"{event}/{pipeline.get('name')} runs a stage named {name!r} "
+                    "that .cnb.yml never declares"
+                )
+                # `npc:go` is the entry point the platform expands. It is the
+                # only stage type that can add work nobody wrote down.
+                if stage.get("type") == "npc:go":
+                    assert name in _PLATFORM_INJECTED_STAGES | {"npc go"}, name
+                    assert not stage.get("options"), (
+                        f"{event}/{name} carries options={stage['options']}; any "
+                        "option here is resolved before the container starts, so "
+                        "a wrong one turns every @npc build red at t=0"
+                    )
+                    assert not stage.get("stages"), (
+                        f"{event}/{name} nests stages under an NPC session"
+                    )
