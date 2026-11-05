@@ -204,19 +204,33 @@ def _build_openapi_schema(app: FastAPI) -> dict[str, Any]:
                         },
                     },
                 )
-            responses.setdefault(
-                "422",
-                {
-                    "description": "Validation Error",
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ValidationErrorResponse"
-                            }
+            # The app registers ``validation_exception_handler`` for every
+            # RequestValidationError, so a 422 always carries the unified
+            # envelope plus the field-level ``errors`` array -- never FastAPI's
+            # default ``HTTPValidationError`` (a flat ``detail`` list).  The
+            # auto-generated 422 would otherwise win because ``get_openapi``
+            # populates it first, and the generated TypeScript client would
+            # type a response shape the server does not send.  A route may
+            # still supply its own richer 422 description; only the schema is
+            # corrected, so that prose is preserved.
+            validation_response = {
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/ValidationErrorResponse"
                         }
-                    },
+                    }
                 },
-            )
+            }
+            current_422 = responses.get("422")
+            if current_422 is None:
+                responses["422"] = {
+                    "description": "Validation Error",
+                    **validation_response,
+                }
+            else:
+                current_422.setdefault("description", "Validation Error")
+                current_422.update(validation_response)
             responses.setdefault(
                 "500",
                 {
