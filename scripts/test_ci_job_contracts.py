@@ -65,6 +65,40 @@ SHARED_SCRIPTS = (
     "scripts/acceptance.sh",
 )
 
+# Independent floor for the tuple above. Every assertion keyed on SHARED_SCRIPTS
+# derives its expectation FROM that tuple, so deleting an entry deletes the
+# assertion with it and the whole suite stays green while a gate goes
+# unguarded. This list is written out by hand on purpose: it must not be
+# computed from SHARED_SCRIPTS, or it inherits the same blind spot. Entries are
+# the scripts whose disappearance would silently remove a gate, not merely a
+# convenience wrapper.
+REQUIRED_SHARED_SCRIPTS = (
+    "scripts/ci-job-steps.sh",
+    "scripts/setup-workspace.sh",
+    "scripts/install_python_workspace.py",
+    "scripts/stage-pages-publication.sh",
+    "scripts/verify-frontend-artifacts.sh",
+    "scripts/verify-backend-tests.sh",
+    "scripts/verify-bio-core.sh",
+    "scripts/check_bio_core_wheel.py",
+    "scripts/install-worker-science-build-deps.sh",
+    "scripts/with-postgres-service.sh",
+    "scripts/build-static-apps.sh",
+    "scripts/build-all-static-apps.sh",
+    "scripts/ci-nightly-artifact-gate.sh",
+    "scripts/build-release-image.sh",
+    "scripts/release-contract.golden.sh",
+    "scripts/build-pages-artifact.sh",
+    "scripts/verify-pages-artifact.sh",
+    "scripts/verify-site-variant-artifacts.sh",
+    "scripts/verify-artifact-e2e.sh",
+    "scripts/mcp-transport-smoke.sh",
+    "scripts/assert-clickhouse-migration.py",
+    "scripts/smoke.sh",
+    "scripts/start-cloud-dev.sh",
+    "scripts/acceptance.sh",
+)
+
 PIPELINE_FILES = (
     ".cnb/pipelines/verify.yml",
     ".cnb/pipelines/api.yml",
@@ -497,6 +531,46 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertIn("scripts/ci-job-steps.sh run dependency-governance", text)
         self.assertIn("scripts/ci-job-steps.sh run image-build", text)
         self.assertIn("scripts/ci-job-steps.sh run release", text)
+
+    def test_shared_script_catalog_cannot_shrink_without_a_failure(self) -> None:
+        """The derived tuple must never silently lose a gate.
+
+        `SHARED_SCRIPTS` drives ~a dozen assertions, each of which builds its
+        expectation by walking that same tuple. Deleting an entry therefore
+        deletes the assertion: on fb601eb3, dropping
+        `scripts/check_bio_core_wheel.py` kept the suite at 92 OK. The floor is
+        declared independently so a shrink has to be argued for in the diff.
+        """
+        self.assertEqual(
+            sorted(set(REQUIRED_SHARED_SCRIPTS) & set(SHARED_SCRIPTS)),
+            sorted(REQUIRED_SHARED_SCRIPTS),
+            "SHARED_SCRIPTS lost entries the delivery contract still requires",
+        )
+        self.assertEqual(
+            sorted(SHARED_SCRIPTS),
+            sorted(set(SHARED_SCRIPTS)),
+            "SHARED_SCRIPTS must not repeat an entry",
+        )
+        for script in REQUIRED_SHARED_SCRIPTS:
+            self.assertTrue((ROOT / script).is_file(), f"missing shared script: {script}")
+
+    def test_shared_script_catalog_ablation_is_detected(self) -> None:
+        """Prove the floor bites: remove one required entry and assert failure.
+
+        The ablation runs in a scratch copy of the module's own constants so it
+        needs no filesystem mutation and cannot disturb the real suite.
+        """
+        survivors = tuple(
+            script for script in SHARED_SCRIPTS
+            if script != "scripts/check_bio_core_wheel.py"
+        )
+        self.assertNotIn("scripts/check_bio_core_wheel.py", survivors)
+        lost = set(REQUIRED_SHARED_SCRIPTS) - set(survivors)
+        self.assertEqual(
+            lost,
+            {"scripts/check_bio_core_wheel.py"},
+            "the floor must name the ablated script, or the guard is toothless",
+        )
 
     def test_cnb_job_catalog_matches_the_scripts_on_disk(self) -> None:
         for script in SHARED_SCRIPTS:
