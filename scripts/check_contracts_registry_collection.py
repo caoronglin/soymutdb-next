@@ -190,6 +190,7 @@ PINNED_SUITES: frozenset[str] = frozenset(
         'scripts/test_check_error_code_contract.py',
         'scripts/test_ci_job_contracts.py',
         'scripts/test_clickhouse_migration_contracts.py',
+        'scripts/test_contracts_registry_collection.py',
         'scripts/test_contracts_layer_self_containment.py',
         'scripts/test_contracts_self_test_teeth.py',
         'scripts/test_static_placeholder_scan.py',
