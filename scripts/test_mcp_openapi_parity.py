@@ -37,7 +37,13 @@ install. It pins, per tool:
 A new tool needs no edit to an allowlist here: it passes as soon as all three
 declarations agree (positive control in ``--self-test``). A co-revert that
 changes the backend, the snapshot and the generated client together still
-cannot hide a stale MCP declaration.
+cannot hide a stale MCP declaration -- but that same agreement is exactly what
+lets a coordinated edit *delete* or *rename* one of the published tools from
+all three declarations at once, with zero failures. ``PINNED_MCP_TOOLS`` is a
+hand-written, reviewed lower bound on the inventory (name -> endpoint, type),
+read from nowhere else: a pinned tool that disappears, moves to another REST
+operation, or changes audience is named. It deliberately permits extra tools,
+so the "a new consistent tool needs no allowlist edit" property survives.
 
 Run directly (stdlib only) or collect with pytest::
 
@@ -49,6 +55,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import copy
 import json
 import re
 import sys
@@ -65,6 +72,27 @@ SELF = Path(__file__).name
 METHODS = {"get", "put", "post", "patch", "delete", "options", "head", "trace"}
 _TYPE_SECURITY = {"read": False, "write": True}
 _REQUIRED_KEYS = ("name", "type", "endpoint", "auth")
+
+# Reviewed lower bound on the published MCP tool inventory. Hand-written, NOT
+# derived from manifest.py / server.py / openapi.json: those three are exactly
+# the declarations a coordinated co-revert moves together. Deleting one of the
+# eight tools from all three, renaming its endpoint across all three, or
+# flipping its audience alongside the operation's `security` used to return
+# zero failures (only emptying the WHOLE manifest was caught). This floor is a
+# minimum, not an allowlist: a genuinely new consistent tool still passes
+# without an edit here (positive control), but a published tool cannot silently
+# leave or move. A deliberate retirement/rename is an explicit, reviewable edit
+# to this literal in the same commit as the three declarations.
+PINNED_MCP_TOOLS: dict[str, tuple[str, str]] = {
+    "gene_by_id": ("GET /api/v1/genes/{gene_id}", "read"),
+    "variant_by_region": ("GET /api/v1/variants/region", "read"),
+    "news_list": ("GET /api/v1/news", "read"),
+    "stats_summary": ("GET /api/v1/stats/dashboard", "read"),
+    "seqfetch": ("POST /api/v1/tools/seqfetch", "read"),
+    "blast_submit": ("POST /api/v1/blast/jobs", "write"),
+    "blast_job_status": ("GET /api/v1/blast/jobs/{job_id}", "write"),
+    "analyses_query": ("GET /api/v1/analyses/{job_id}", "write"),
+}
 
 
 def norm(path: str) -> str:
@@ -170,6 +198,28 @@ def check(
     operations = published_operations(document)
     if not operations:
         return ["openapi.json publishes no operations"]
+
+    # An independent fixed point: none of the three declarations may silently
+    # shed or move a published tool. Extras are allowed on purpose.
+    by_name = {str(tool.get("name")): tool for tool in tools}
+    for name, (endpoint, kind) in sorted(PINNED_MCP_TOOLS.items()):
+        tool = by_name.get(name)
+        if tool is None:
+            found.append(
+                f"reviewed MCP tool inventory is missing {name!r}: a coordinated "
+                "edit dropped it from the manifest, server and snapshot together"
+            )
+            continue
+        if str(tool.get("endpoint")) != endpoint:
+            found.append(
+                f"{name}: endpoint moved to {tool.get('endpoint')!r}, reviewed "
+                f"floor pins {endpoint!r}"
+            )
+        if str(tool.get("type")) != kind:
+            found.append(
+                f"{name}: audience changed to {tool.get('type')!r}, reviewed "
+                f"floor pins {kind!r}"
+            )
 
     manifest_names: set[str] = set()
     for tool in tools:
@@ -316,6 +366,63 @@ def test_dropping_the_smoke_wiring_is_rejected() -> None:
     assert check_wiring(smoke.replace(f"scripts/{SELF}", "", 1))
 
 
+def test_a_dropped_pinned_tool_is_rejected() -> None:
+    """Whole-set co-revert: delete one tool from all three declarations."""
+    tools, calls, document = _clean()
+    victim = "news_list"
+    tools = [t for t in tools if t["name"] != victim]
+    calls = {k: v for k, v in calls.items() if k != victim}
+    document = copy.deepcopy(document)
+    document["paths"].pop("/api/v1/news", None)
+    assert any("reviewed MCP tool inventory is missing" in f for f in check(tools, calls, document))
+
+
+def test_a_renamed_pinned_endpoint_is_rejected() -> None:
+    """Coordinated rename of one tool's REST operation across all three."""
+    tools, calls, document = _clean()
+    document = copy.deepcopy(document)
+    for tool in tools:
+        if tool["name"] == "news_list":
+            tool["endpoint"] = "GET /api/v1/news/archive"
+    calls = dict(calls)
+    calls["news_list"] = ("GET", "/api/v1/news/archive")
+    document["paths"]["/api/v1/news/archive"] = document["paths"].pop("/api/v1/news")
+    assert any("reviewed floor pins" in f for f in check(tools, calls, document))
+
+
+def test_a_flipped_pinned_audience_is_rejected() -> None:
+    """Coordinated audience flip (manifest type + operation security)."""
+    tools, calls, document = _clean()
+    document = copy.deepcopy(document)
+    for tool in tools:
+        if tool["name"] == "news_list":
+            tool["type"] = "write"
+    document["paths"]["/api/v1/news"]["get"]["security"] = [{"HTTPBearer": []}]
+    assert any("audience changed" in f for f in check(tools, calls, document))
+
+
+def test_the_floor_is_a_literal_not_an_export() -> None:
+    """The floor must be a source literal, not derived from an artifact.
+
+    Parse this file's own AST: the value bound to PINNED_MCP_TOOLS has to be an
+    ``ast.Dict`` with constant keys. A ``json.load`` / ``parse_manifest`` /
+    ``ast.literal_eval`` of the three declarations would be an ``ast.Call`` and
+    fail here, which is the property that keeps the floor independent.
+    """
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    bound = None
+    for node in tree.body:
+        if isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            if node.target.id == "PINNED_MCP_TOOLS":
+                bound = node.value
+        elif isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "PINNED_MCP_TOOLS" for t in node.targets
+        ):
+            bound = node.value
+    assert isinstance(bound, ast.Dict), "PINNED_MCP_TOOLS is not a literal dict"
+    assert bound.keys and all(isinstance(k, ast.Constant) for k in bound.keys)
+
+
 def test_a_new_consistent_tool_needs_no_allowlist_edit() -> None:
     """Positive control: agreement of the three declarations is sufficient."""
     tools, calls, document = _clean()
@@ -350,6 +457,10 @@ def self_test() -> int:
         test_a_read_tool_pointed_at_a_protected_operation_is_rejected,
         test_a_manifest_entry_missing_a_required_key_is_rejected,
         test_dropping_the_smoke_wiring_is_rejected,
+        test_a_dropped_pinned_tool_is_rejected,
+        test_a_renamed_pinned_endpoint_is_rejected,
+        test_a_flipped_pinned_audience_is_rejected,
+        test_the_floor_is_a_literal_not_an_export,
         test_a_new_consistent_tool_needs_no_allowlist_edit,
     ]
     failures = 0
