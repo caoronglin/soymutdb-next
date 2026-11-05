@@ -55,7 +55,10 @@ committed bytes:
    next regeneration into publishing a contract nobody reviewed.
 3. **`create_app()` still feeds the constants into `FastAPI(...)`.** Catches a
    rewiring (hardcoded title, dropped description/tags) that would make the
-   running app export metadata diverging from the snapshot.
+   running app export metadata diverging from the snapshot. All three keyword
+   values are read from the parsed `FastAPI(...)` call, not from a whole-file
+   substring: a decoy comment containing `description=OPENAPI_DESCRIPTION`
+   cannot keep this check green after the real kwargs are unwired.
 
 It also rejects a hollow / duplicate-key golden, checks the tag catalog is
 non-empty and each tag has a name and description, and stays honest about its
@@ -133,6 +136,23 @@ is **not** an existing taxonomy rule: nothing in committed bytes names it, and
 none of the `admin-*` operations also carried the declared `admin` rollup. So
 the invariant is plain `emitted == used == declared`, with no prefix exception
 invented for the sake of making today's tree pass.
+
+The `49` / `undeclared = 43` reading in the `#178` handoff is **not** a
+pre-cut version of the `50` above; it belongs to a different tree. Byte-counted
+across the four relevant commits:
+
+| tree | declared | used | undeclared | `exports` in snapshot `paths` |
+| --- | --- | --- | --- | --- |
+| `79de2bb6` (`#178` head) | 6 | **49** | 43 | no |
+| `05a1d4bb` (live `main`, parent of this cut) | 6 | **50** | 44 | yes |
+| `675543b0` (first cut) | 49 | 50 | 1 | yes |
+| `cec19db4` (this head) | 50 | 50 | 0 | yes |
+
+`export_query.py` landed on `main` between `#178` and this change, so `used`
+was already `50` on the tree this PR was cut from. The `49` belongs to the
+`#178` snapshot and must be read with `79de2bb6`; quoting both numbers without
+their tree makes them look contradictory. Readings here are always
+`(tree, declared, used)`, not a bare scalar.
 
 A live example arrived while this cut was being prepared: `export_query.py`
 landed on `main` with `tags=["exports"]` between `#178` and this change. The
