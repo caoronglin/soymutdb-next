@@ -48,6 +48,22 @@ would make the pin self-referential, which is the whole failure this file
 replaces. ``--self-test`` injects one-sided and coordinated drifts into copies
 of the bytes and asserts each is caught; the clean tree must pass.
 
+The operation-level ``summary`` is the same genus one step earlier in the
+document: ``openapi-typescript`` prints it as the first ``* text`` line of the
+JSDoc block in the ``paths`` interface, so it is client-visible prose. No
+landed guard reads it. ``_RESPONSE_SURFACE_DIGEST`` only walks ``responses``;
+``_PINNED_ARTIFACTS`` is a provenance blob id that a regenerate re-pins in the
+same deliberate act. A coordinated retype of one ``summary`` in BOTH halves,
+plus a re-pin of those two blob ids, left every wired OpenAPI guard ``rc=0``
+while ``/** Liveness */`` silently became something else.
+
+``_OPERATION_SUMMARY_DIGEST`` is a second hand-written sha256 over the
+canonical sorted ``(method, path, operationId, summary)`` tuples, read from
+nowhere. The guard also checks that every generated ``paths`` operation's JSDoc
+summary equals the snapshot's, so a one-sided edit is named by operation, and
+that the generated operation count matches. Both doors move on a coordinated
+retype only because the literal is independent of the artifacts.
+
 Usage:
     python3 scripts/check_openapi_response_surface.py
     python3 scripts/check_openapi_response_surface.py --self-test
@@ -84,6 +100,16 @@ _RESPONSE_SURFACE_DIGEST = (
 )
 _EXPECTED_RESPONSE_ENTRIES = 808
 _EXPECTED_OPERATION_COUNT = 268
+
+# Independent fixed point for the operation-level ``summary`` prose. sha256 of
+# "\n".join(["soymutdb-operation-summary/v1"] +
+#   sorted(f"{method}|{path}|{operationId}|{summary}")). Regenerate with
+# _summary_digest() after an intentional, reviewed contract change and update
+# in the same commit as the two artifacts, with a reason.
+_OPERATION_SUMMARY_DIGEST = (
+    "e0ae8e0a760b465ad280c5c462e914bebadb18a98f627970159f0ba559fd0ac6"
+)
+_EXPECTED_SUMMARY_OPERATIONS = 268
 
 # The generated ``paths`` interface maps (METHOD, path) -> operations["symbol"].
 PATH_LINE = re.compile(r'^    "(/[^"]*)": \{$')
@@ -208,6 +234,93 @@ def _generated_operations(
     return out
 
 
+def _snapshot_summaries(
+    document: dict[str, Any],
+) -> dict[tuple[str, str], tuple[str, str]]:
+    """(METHOD, path) -> (operationId, summary) from the published snapshot."""
+    out: dict[tuple[str, str], tuple[str, str]] = {}
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for method, operation in item.items():
+            if method not in METHODS or not isinstance(operation, dict):
+                continue
+            out[(method.upper(), path)] = (
+                str(operation.get("operationId", "")),
+                str(operation.get("summary", "")),
+            )
+    return out
+
+
+def _summary_digest(summaries: dict[tuple[str, str], tuple[str, str]]) -> str:
+    rows = [
+        (method, path, operation_id, summary)
+        for (method, path), (operation_id, summary) in summaries.items()
+    ]
+    blob = "\n".join(
+        ["soymutdb-operation-summary/v1"]
+        + ["|".join(row) for row in sorted(rows)]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+# ``openapi-typescript`` emits the operation summary as the JSDoc block that
+# immediately precedes the ``operations["symbol"]`` reference. Two spellings
+# occur in the committed artifact: a one-line ``/** text */`` on its own line,
+# and a multi-line ``/**`` whose first ``* text`` line is the summary (with
+# ``@description`` lines after it).
+_ONELINE_DOC = re.compile(r"^\s*/\*\* (.*) \*/\s*$")
+
+
+def _generated_summaries(generated: str) -> dict[tuple[str, str], str]:
+    """(METHOD, path) -> JSDoc summary, from the generated paths interface."""
+    start = generated.find("export interface paths {")
+    if start < 0:
+        raise ValueError("generated client has no paths interface")
+    end = generated.find("\nexport interface ", start + 10)
+    lines = generated[start : end if end >= 0 else len(generated)].splitlines()
+    path: str | None = None
+    out: dict[tuple[str, str], str] = {}
+    for index, line in enumerate(lines):
+        path_match = PATH_LINE.match(line)
+        if path_match:
+            path = path_match.group(1)
+            continue
+        ref = OP_REF.match(line)
+        if not ref or path is None:
+            continue
+        summary = ""
+        if index > 0:
+            one = _ONELINE_DOC.match(lines[index - 1])
+            if one:
+                summary = one.group(1).strip()
+            else:
+                doc: list[str] = []
+                j = index - 1
+                # Stop at the enclosing path object. Without this bound an
+                # operation with no JSDoc of its own could inherit a
+                # neighbouring path's summary instead of being named.
+                while (
+                    j >= 0
+                    and lines[j].strip() != "/**"
+                    and not PATH_LINE.match(lines[j])
+                ):
+                    doc.append(lines[j])
+                    j -= 1
+                if j >= 0 and lines[j].strip() == "/**":
+                    for doc_line in reversed(doc):
+                        stripped = doc_line.strip()
+                        if stripped.startswith("* @") or stripped in (
+                            "*", "*/", "/**"
+                        ):
+                            continue
+                        if stripped.startswith("* "):
+                            summary = stripped[2:].strip()
+                            break
+        out[(ref.group(1).upper(), path)] = summary
+    return out
+
+
 def failures(
     *,
     snapshot: str | None = None,
@@ -216,6 +329,8 @@ def failures(
     digest: str | None = None,
     expected_entries: int | None = None,
     expected_operations: int | None = None,
+    summary_digest: str | None = None,
+    expected_summary_operations: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -234,16 +349,26 @@ def failures(
         if expected_operations is None
         else expected_operations
     )
+    pinned_summary_digest = (
+        _OPERATION_SUMMARY_DIGEST if summary_digest is None else summary_digest
+    )
+    pinned_summary_ops = (
+        _EXPECTED_SUMMARY_OPERATIONS
+        if expected_summary_operations is None
+        else expected_summary_operations
+    )
 
     try:
         document = json.loads(snapshot)
         rows = _snapshot_rows(document)
         snap = _snapshot_surface(document)
+        summaries = _snapshot_summaries(document)
     except (ValueError, TypeError) as exc:
         return [f"cannot read published responses from snapshot: {exc}"]
     try:
         path_map = _generated_path_map(generated)
         gen_ops = _generated_operations(generated)
+        gen_summaries = _generated_summaries(generated)
     except ValueError as exc:
         return [f"cannot read generated client responses: {exc}"]
 
@@ -308,6 +433,43 @@ def failures(
     for key, surface in sorted(snap.items()):
         if not surface:
             found.append(f"{key[0]} {key[1]}: declares no responses")
+
+    # Door 4 -- independent fixed point on operation-level summaries. A
+    # coordinated retype of both halves moves both artifacts together, so the
+    # digest is the only door that can name it.
+    actual_summary_digest = _summary_digest(summaries)
+    if actual_summary_digest != pinned_summary_digest:
+        found.append(
+            f"published operation summaries drifted: _OPERATION_SUMMARY_DIGEST "
+            f"pins {pinned_summary_digest} but the snapshot derives "
+            f"{actual_summary_digest}. Re-pin the literal in the same commit "
+            "as the two artifacts, with a reason -- do not make the guard "
+            "agree with itself."
+        )
+    if len(summaries) != pinned_summary_ops:
+        found.append(
+            f"published summary-bearing operation count is {len(summaries)}, "
+            f"_EXPECTED_SUMMARY_OPERATIONS pins {pinned_summary_ops}: an "
+            "operation was added or dropped"
+        )
+
+    # Door 5 -- the generated JSDoc summary must equal the snapshot for every
+    # operation. A one-sided edit is named by (METHOD, path); a phantom or
+    # missing generated operation is named too.
+    if set(gen_summaries) != set(summaries):
+        found.append(
+            "generated paths JSDoc summaries do not match the published "
+            f"operation set (missing={sorted(set(summaries) - set(gen_summaries))[:3]}, "
+            f"phantom={sorted(set(gen_summaries) - set(summaries))[:3]})"
+        )
+    for key in sorted(set(summaries) & set(gen_summaries)):
+        published = summaries[key][1]
+        rendered = gen_summaries[key]
+        if published != rendered:
+            found.append(
+                f"{key[0]} {key[1]}: published summary {published!r} disagrees "
+                f"with generated JSDoc {rendered!r}"
+            )
 
     if f"scripts/{SELF}" not in smoke:
         found.append(f"contracts smoke layer does not invoke {SELF}")
@@ -404,6 +566,41 @@ def self_test() -> int:
         generated[:start4] + changed4 + generated[start4 + 1600 :],
     )
 
+    # A coordinated operation-summary retype in both halves. Both artifacts
+    # agree; the byte-provenance guards are re-pinned as their own documented
+    # action; every other wired guard stays green. Only the independent
+    # summary literal can catch it.
+    doc5 = copy.deepcopy(document)
+    doc5["paths"]["/api/v1/health/live"]["get"]["summary"] = "Liveness probe (edited)"
+    changed5 = generated.replace(
+        "         * Liveness\n", "         * Liveness probe (edited)\n", 1
+    )
+    assert changed5 != generated
+    cases["coordinated operation summary retype"] = (
+        json.dumps(doc5, indent=2),
+        changed5,
+    )
+
+    # One-sided summary retype: snapshot only. Named by (METHOD, path).
+    doc6 = copy.deepcopy(document)
+    doc6["paths"]["/api/v1/health/live"]["get"]["summary"] = "Only snapshot changed"
+    cases["one-sided snapshot summary retype"] = (
+        json.dumps(doc6, indent=2),
+        generated,
+    )
+
+    # One-sided summary retype: generated JSDoc only.
+    changed7 = generated.replace(
+        "         * Liveness\n", "         * Only client changed\n", 1
+    )
+    assert changed7 != generated
+    cases["one-sided generated summary retype"] = (snapshot, changed7)
+
+    # A summary dropped from the snapshot but kept in the client.
+    doc8 = copy.deepcopy(document)
+    del doc8["paths"]["/api/v1/health/live"]["get"]["summary"]
+    cases["published summary dropped"] = (json.dumps(doc8, indent=2), generated)
+
     failures_count = 0
     for name, (snap_text, gen_text) in cases.items():
         found = failures(snapshot=snap_text, generated=gen_text, smoke=smoke)
@@ -431,7 +628,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(
         f"openapi-response-surface: OK "
-        f"({_EXPECTED_RESPONSE_ENTRIES} declared responses pinned across "
+        f"({_EXPECTED_RESPONSE_ENTRIES} declared responses and "
+        f"{_EXPECTED_SUMMARY_OPERATIONS} operation summaries pinned across "
         f"{_EXPECTED_OPERATION_COUNT} operations)"
     )
     return 0
