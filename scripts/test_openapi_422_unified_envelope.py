@@ -225,7 +225,7 @@ def main() -> int:
         try:
             test()
         except AssertionError as exc:
-            problems.append(f"{test.__name__}: {exc or 'assertion failed'}")
+            problems.append(f"{test.__name__}: {str(exc) or 'assertion failed'}")
     if problems:
         for problem in problems:
             print(f"openapi-422-unified-envelope: FAIL: {problem}", file=sys.stderr)
