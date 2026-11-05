@@ -38,6 +38,11 @@ exactly, and the generated client's per-component counts must equal the sum of
 the two baselines exactly. Nothing is one-sided and nothing is self-referential,
 so a coordinated regenerate of both halves cannot pass by moving together.
 
+The three literals are the one place a human may edit to make a red guard
+green, so ``_PINNED_ARTIFACTS`` records which committed bytes they were counted
+from. Re-pinning the counts alone -- the regenerate that drifts both halves and
+then "fixes" the numbers it broke -- is reported as the artifact having moved.
+
 The generator prints response and request bodies as the same
 ``"application/json": components["schemas"][...];`` line, which is why the
 client total (807) exceeds the response-only count (722): the 85 request
@@ -51,6 +56,7 @@ Run directly or collect with pytest:
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sys
@@ -303,6 +309,17 @@ _REQUEST_BODY_BASELINE = {
 # "806 not 807" is a better first signal than a 218-component diff.
 _CLIENT_BODY_TOTAL = 807
 
+# What the three literals above are a distribution *of*: the committed artifact
+# blobs they were counted from, by object id. Without this a regenerate that
+# moves both halves and then re-pins the numbers passes -- the guard would be
+# asserting that a baseline equals itself. Recorded, not derived: recomputing
+# these from the artifacts would make the pin self-referential again, which is
+# the whole failure this file replaced.
+_PINNED_ARTIFACTS = {
+    "snapshot_blob": "3660886cabc443fe574ffff6c65ee84132262009",
+    "generated_blob": "5f2c4a407d96083abdac8ac67e44a40f3ed68a89",
+}
+
 
 def _operations(document: dict) -> list[tuple[str, str, dict]]:
     out: list[tuple[str, str, dict]] = []
@@ -357,6 +374,41 @@ def _expected_client_bodies() -> dict[str, int]:
     for name, count in _REQUEST_BODY_BASELINE.items():
         out[name] = out.get(name, 0) + count
     return out
+
+
+def _git_blob(path: Path) -> str:
+    """The object id git would store for these bytes (``hash-object``)."""
+    data = path.read_bytes()
+    return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+
+
+def _baseline_moved_with_the_artifacts() -> list[str]:
+    """A baseline edit is only legitimate alongside the artifact edit it pins.
+
+    The three literals above are the one place in this file a human may edit to
+    make a red guard green. Nothing so far tied that edit to the artifacts it
+    describes, so a regenerate that drifts both halves *and* re-pins the counts
+    passed every check -- the guard compared a baseline to itself.
+
+    ``_PINNED_ARTIFACTS`` records which bytes the numbers were counted from. It
+    is a literal too, so updating it is part of the same deliberate act: you
+    cannot re-pin the counts without also saying which artifacts produced them,
+    and a reviewer sees both in the diff.
+    """
+    found: list[str] = []
+    actual = {
+        "snapshot_blob": _git_blob(SNAPSHOT),
+        "generated_blob": _git_blob(GENERATED),
+    }
+    for name, pinned in _PINNED_ARTIFACTS.items():
+        if actual[name] != pinned:
+            found.append(
+                f"the baseline literals were recorded against a different "
+                f"artifact: {name} is {actual[name]}, _PINNED_ARTIFACTS pins "
+                f"{pinned}. Re-pin the counts and both blob ids together, and "
+                "say in the commit why the contract changed"
+            )
+    return found
 
 
 def _diff(pinned: dict[str, int], actual: dict[str, int]) -> str:
@@ -433,6 +485,10 @@ def failures(document: dict, generated: str, smoke: str) -> list[str]:
 
     if f"scripts/{SELF}" not in smoke:
         found.append("contracts smoke layer does not invoke the body-integrity guard")
+
+    # Last, so a baseline that merely drifted from its artifacts is reported
+    # after the distribution diff that says *what* drifted.
+    found.extend(_baseline_moved_with_the_artifacts())
 
     return found
 
@@ -617,6 +673,76 @@ def test_operation_without_a_success_response_is_rejected() -> None:
     for code in [code for code in responses if code.startswith("2")]:
         del responses[code]
     assert _any(failures(document, generated, smoke), "declares no 2xx response")
+
+
+def test_repinned_baseline_without_the_artifacts_is_rejected() -> None:
+    """The gap this guard had: fix the counts, leave the artifacts behind.
+
+    A regenerate that drifts both halves is caught by the baselines -- unless
+    the same commit also re-pins them, at which point the guard would be
+    comparing a baseline to itself. Reported as the artifact moving, not as a
+    distribution mismatch, because the distribution was just made to agree.
+    """
+    document, generated, smoke = _load()
+    saved = {
+        name: globals()[name]
+        for name in (
+            "_RESPONSE_BODY_BASELINE",
+            "_REQUEST_BODY_BASELINE",
+            "_CLIENT_BODY_TOTAL",
+            "_PINNED_ARTIFACTS",
+        )
+    }
+    # Re-pin every count to whatever the current snapshot / client say -- what
+    # a regenerate would do if it also "fixed" the red numbers.
+    globals()["_RESPONSE_BODY_BASELINE"] = _response_bodies(document)
+    globals()["_REQUEST_BODY_BASELINE"] = _request_bodies(document)
+    globals()["_CLIENT_BODY_TOTAL"] = sum(_client_bodies(generated).values())
+    # ...and say the numbers came from somewhere the artifacts no longer are.
+    globals()["_PINNED_ARTIFACTS"] = {
+        "snapshot_blob": "0" * 40,
+        "generated_blob": "0" * 40,
+    }
+    try:
+        found = failures(document, generated, smoke)
+    finally:
+        globals().update(saved)
+    # The distribution checks are all green now; only the artifact pin speaks.
+    assert not _any(found, "_RESPONSE_BODY_BASELINE"), found
+    assert not _any(found, "_REQUEST_BODY_BASELINE"), found
+    assert not _any(found, "pinned contract declares"), found
+    assert _any(found, "_PINNED_ARTIFACTS"), found
+
+
+def test_a_repin_that_matches_the_artifacts_passes() -> None:
+    """The pin must be satisfiable: it tracks the bytes, not one frozen pair.
+
+    A deliberate contract change re-pins the counts *and* both blob ids in the
+    same commit. This proves the second half is enough -- the check is not a
+    tripwire on any regenerate, only on one that skips the record.
+    """
+    document, generated, smoke = _load()
+    saved = {
+        name: globals()[name]
+        for name in (
+            "_RESPONSE_BODY_BASELINE",
+            "_REQUEST_BODY_BASELINE",
+            "_CLIENT_BODY_TOTAL",
+            "_PINNED_ARTIFACTS",
+        )
+    }
+    globals()["_RESPONSE_BODY_BASELINE"] = _response_bodies(document)
+    globals()["_REQUEST_BODY_BASELINE"] = _request_bodies(document)
+    globals()["_CLIENT_BODY_TOTAL"] = sum(_client_bodies(generated).values())
+    globals()["_PINNED_ARTIFACTS"] = {
+        "snapshot_blob": _git_blob(SNAPSHOT),
+        "generated_blob": _git_blob(GENERATED),
+    }
+    try:
+        found = failures(document, generated, smoke)
+    finally:
+        globals().update(saved)
+    assert found == [], found
 
 
 def test_dropping_smoke_wiring_is_rejected() -> None:
