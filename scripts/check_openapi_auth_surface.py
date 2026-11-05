@@ -10,7 +10,39 @@ test_openapi_contract.py``) only asserts two schemes are *present* and two
 hardcoded admin paths are secured; it needs a 3.15 venv and cannot run in the
 offline contracts layer.
 
-This guard reads committed bytes only -- the snapshot and the three source
+What neither pins: which operations carry ``security`` *at all*.
+
+``NON_ADMIN_PROTECTED`` covers 48 non-admin operations and checks 2 is a
+one-directional ``all(admin)`` sweep -- it names admin operations that *lost*
+the requirement and stays silent about admin operations missing from the
+document entirely. ``check_openapi_response_surface.py`` /
+``_OPERATION_ID_DIGEST`` / ``_PARAMETER_DIGEST`` walk every operation but never
+read ``security``; ``test_openapi_behavior_contracts.py`` reads
+``x-idempotent``, ``x-pagination``, the envelope and the 429/500 sets, not
+this. And ``openapi-typescript`` drops ``security`` from the generated client
+on purpose, so there is **no second half to compare**: the snapshot is the only
+artifact that publishes it.
+
+Decisive ablation on live bytes: delete ``security`` from all 170 operations in
+the snapshot, leave ``main.py``'s projection exactly as it is and re-pin the
+two provenance blob ids as ``test_openapi_snapshot_body_integrity.py``
+documents for one reviewed regenerate. Every operation count, operationId,
+parameter, response, summary, annotation, field-constraint and inline-body pin
+stays ``rc=0``; so does ``test_openapi_behavior_contracts.py`` (26 passed).
+Only this guard reddens, and only because of ``NON_ADMIN_PROTECTED`` -- its own
+``--self-test`` then dies in its *setup control*, which is how the hole was
+found: the one place with a signal cannot measure the surface it guards.
+
+``_SECURITY_PROJECTION_DIGEST`` is a hand-written sha256 over the canonical
+sorted ``(METHOD, path, operationId, protected)`` tuples for **all 268**
+operations, read from nowhere. It moves when an operation is added to or
+dropped from a protected set, when a protected operation loses ``security``,
+and when an operation is moved between protected and public -- the last one
+being invisible to every count-preserving check above. ``_EXPECTED_PROJECTED``
+/ ``_EXPECTED_HIDDEN_OPS`` are exact count doors so a same-count permutation
+cannot satisfy the doors alone.
+
+This guard reads committed bytes only -- the snapshot and the four source
 files that actually decide the surface. It needs no API import, no 3.15 venv,
 no wheel, and no database. Run directly or via ``--self-test``.
 """
@@ -18,6 +50,8 @@ no wheel, and no database. Run directly or via ``--self-test``.
 from __future__ import annotations
 
 import argparse
+import copy
+import hashlib
 import json
 import re
 import sys
@@ -106,6 +140,52 @@ NON_ADMIN_PROTECTED = frozenset({
 _LITERAL_FLOOR_LINE = re.compile(
     r"^NON_ADMIN_PROTECTED = frozenset\(\{$", re.MULTILINE
 )
+
+# Independent fixed point on *which* operations publish ``security`` at all.
+# sha256 of "\n".join(["soymutdb-security-projection/v1"] +
+#   sorted(f"{METHOD}|{path}|{operationId}|{protected}")). Read from nowhere:
+# regenerating it from the snapshot would make it self-referential, which is the
+# entire failure this pin replaces. Re-pin in the same commit as an intentional
+# contract change, with a reason.
+_SECURITY_PROJECTION_DIGEST = (
+    "4a94373fc9c8c4a658d89d492804bc0fe803f7a21128913c306e5f88ca932d60"
+)
+_EXPECTED_PROJECTED = 170
+_EXPECTED_HIDDEN_OPS = 98
+
+
+def _projection_rows(
+    document: dict,
+) -> list[tuple[str, str, str, str]]:
+    """Canonical (METHOD, path, operationId, protected) rows for every operation.
+
+    ``protected`` is the published *fact* -- does this operation declare a
+    ``security`` requirement -- deliberately not "does it name HTTPBearer", so
+    the pin also moves when the scheme changes, not only when presence does.
+    """
+    rows: list[tuple[str, str, str, str]] = []
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for method, operation in item.items():
+            if method not in METHODS or not isinstance(operation, dict):
+                continue
+            rows.append(
+                (
+                    method.upper(),
+                    path,
+                    str(operation.get("operationId", "")),
+                    str(bool(operation.get("security"))),
+                )
+            )
+    return rows
+
+
+def _projection_digest(rows: list[tuple[str, str, str, str]]) -> str:
+    blob = "\n".join(
+        ["soymutdb-security-projection/v1"] + ["|".join(row) for row in sorted(rows)]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
 def _literal_floor_errors(source: str) -> list[str]:
@@ -248,6 +328,39 @@ def failures(snapshot: str, main: str, deps: str, auth: str, config: str) -> lis
     if "request.cookies.get(settings.refresh_cookie_name)" not in auth:
         found.append("auth.py no longer reads the refresh token from the cookie")
 
+    # 6. Independent fixed point over the whole projection. Checks 2 and 3 name
+    #    operations that *lost* the requirement (3 only on the 48-row floor);
+    #    nothing above reads "which of the 268 operations publish `security`".
+    #    A snapshot-only deletion of a protected set keeps every count, every
+    #    operationId, every parameter and every response identical, and there is
+    #    no generated half to disagree with. Only an independent literal moves.
+    rows = _projection_rows(document)
+    actual = _projection_digest(rows)
+    if actual != _SECURITY_PROJECTION_DIGEST:
+        projected = sum(1 for row in rows if row[3] == "True")
+        found.append(
+            f"published security projection drifted: _SECURITY_PROJECTION_DIGEST "
+            f"pins {_SECURITY_PROJECTION_DIGEST} but the snapshot derives "
+            f"{actual} ({projected} protected of {len(rows)} operations). The "
+            "generated client drops `security` on purpose, so there is no "
+            "second half to compare: re-pin the literal in the same commit as "
+            "the re-export, with a reason."
+        )
+    projected = sum(1 for row in rows if row[3] == "True")
+    if projected != _EXPECTED_PROJECTED:
+        found.append(
+            f"{projected} operations publish a security requirement, "
+            f"_EXPECTED_PROJECTED pins {_EXPECTED_PROJECTED}: an operation "
+            "moved into or out of a protected set"
+        )
+    hidden = len(rows) - projected
+    if hidden != _EXPECTED_HIDDEN_OPS:
+        found.append(
+            f"{hidden} operations publish no security requirement, "
+            f"_EXPECTED_HIDDEN_OPS pins {_EXPECTED_HIDDEN_OPS}: the public "
+            "surface moved"
+        )
+
     return found
 
 
@@ -299,6 +412,33 @@ def _mutate(snapshot: str, main: str, deps: str, auth: str, config: str, *, kind
     elif kind == "drop_one_non_admin_security":
         target = sorted(NON_ADMIN_PROTECTED)[0]
         doc["paths"][target[0]][target[1]].pop("security", None)
+    elif kind == "drop_all_security":
+        # The published projection, deleted whole. Every operation count,
+        # operationId, parameter and response stays identical, the generated
+        # client has no `security` half at all, and main.py still projects the
+        # same set -- so only the independent literal can name it.
+        for item in doc["paths"].values():
+            if not isinstance(item, dict):
+                continue
+            for method, op in item.items():
+                if method in METHODS and isinstance(op, dict):
+                    op.pop("security", None)
+    elif kind == "move_one_protected_operation":
+        # Count-preserving: one operation leaves the protected set and another
+        # enters it, so the two count doors do not move and only the tuple
+        # digest can see the swap.
+        admin = sorted(
+            (p, m) for p, m, o in _operations(doc) if p.startswith("/api/v1/admin/")
+        )
+        public = sorted(
+            (p, m)
+            for p, m, o in _operations(doc)
+            if not _bearer(o) and (p, m) not in PUBLIC_AUTH and not p.startswith("/api/v1/")
+        )
+        if not admin or not public:
+            raise ValueError(kind)
+        doc["paths"][admin[0][0]][admin[0][1]].pop("security", None)
+        doc["paths"][public[0][0]][public[0][1]]["security"] = [{"HTTPBearer": []}]
     elif kind == "phantom_non_admin_security":
         # A genuinely public non-admin operation gains HTTPBearer without the
         # floor being reviewed. Pick one outside PUBLIC_AUTH so check 4 does not
@@ -330,6 +470,8 @@ def _self_test() -> int:
         "strip_non_admin_security",
         "drop_one_non_admin_security",
         "phantom_non_admin_security",
+        "drop_all_security",
+        "move_one_protected_operation",
         *sorted(source_cases),
     ]
     problems = [f"literal floor: {item}" for item in _literal_floor_errors(source)]

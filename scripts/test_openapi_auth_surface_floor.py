@@ -10,6 +10,14 @@ from EVERY non-admin protected operation keeps ``protected == len(admin)`` and
 the old ``protected < len(admin)`` bound green. The literal floor must turn
 that co-revert red, and must stay a hand-written lock (not re-derived from the
 snapshot it checks).
+
+The second half covers ``_SECURITY_PROJECTION_DIGEST``: the *whole* 268-row
+projection, not the 48-row floor. The generated client drops ``security`` by
+design, so no other guard can see a snapshot-only edit and no count-preserving
+move between protected and public moves any count at all. These tests pin the
+literal, the count doors, and the non-duplication with the neighbouring
+guards so a later change cannot quietly retarget this pin onto a surface
+``NON_ADMIN_PROTECTED`` or the response-surface guard already owns.
 """
 
 from __future__ import annotations
@@ -128,6 +136,126 @@ class NonAdminProtectedFloorTests(unittest.TestCase):
             "drop_one_non_admin_security",
             "phantom_non_admin_security",
         ):
+            self.assertIn(f'"{kind}"', src)
+
+
+class SecurityProjectionPinTests(unittest.TestCase):
+    """The 268-row projection pin, its count doors and its non-duplication."""
+
+    def test_clean_snapshot_passes(self):
+        self.assertEqual(guard.failures(*_base()), [])
+
+    def test_the_digest_is_an_independent_literal(self):
+        src = GUARD_PATH.read_text(encoding="utf-8")
+        self.assertIn("_SECURITY_PROJECTION_DIGEST = (", src)
+        block = src.split("_SECURITY_PROJECTION_DIGEST = (", 1)[1].split(")", 1)[0]
+        literal = block.strip().strip('"')
+        self.assertEqual(len(literal), 64)
+        # Not derived: the guard must not compute the pinned value from the
+        # snapshot it checks.
+        self.assertNotIn("_SECURITY_PROJECTION_DIGEST = _projection_digest", src)
+
+    def test_the_literal_matches_the_committed_bytes(self):
+        """A re-pin must move the literal, not the measurement."""
+        doc = json.loads(_base()[0])
+        self.assertEqual(
+            guard._projection_digest(guard._projection_rows(doc)),
+            guard._SECURITY_PROJECTION_DIGEST,
+        )
+
+    def test_dropping_the_whole_projection_is_named_by_the_digest(self):
+        """Every count, operationId and response survives; only the pin moves."""
+
+        def drop_all(doc):
+            for item in doc["paths"].values():
+                if not isinstance(item, dict):
+                    continue
+                for method, op in item.items():
+                    if method in guard.METHODS and isinstance(op, dict):
+                        op.pop("security", None)
+
+        before = len(json.loads(_base()[0])["paths"])
+        mutant = _mutate_snapshot(_base(), drop_all)
+        self.assertEqual(len(json.loads(mutant[0])["paths"]), before)
+        failures = guard.failures(*mutant)
+        self.assertTrue(
+            any("security projection drifted" in f for f in failures), failures
+        )
+        self.assertTrue(any("_EXPECTED_PROJECTED" in f for f in failures), failures)
+        self.assertTrue(any("_EXPECTED_HIDDEN_OPS" in f for f in failures), failures)
+
+    def test_a_count_preserving_move_is_caught_only_by_the_digest(self):
+        """One leaf leaves the protected set, another enters: counts do not move."""
+        doc = json.loads(_base()[0])
+        admin = sorted(
+            (p, m)
+            for p, m, o in guard._operations(doc)
+            if p.startswith("/api/v1/admin/")
+        )
+        public = sorted(
+            (p, m)
+            for p, m, o in guard._operations(doc)
+            if not guard._bearer(o)
+            and (p, m) not in guard.PUBLIC_AUTH
+            and not p.startswith("/api/v1/")
+        )
+        self.assertTrue(admin and public, "setup is not a control")
+        doc["paths"][admin[0][0]][admin[0][1]].pop("security", None)
+        doc["paths"][public[0][0]][public[0][1]]["security"] = [{"HTTPBearer": []}]
+        failures = guard.failures(json.dumps(doc), *_base()[1:])
+        self.assertTrue(
+            any("security projection drifted" in f for f in failures), failures
+        )
+        # The count doors must stay silent: this is a permutation, not a resized
+        # surface, and conflating the two would make the pin a count check.
+        self.assertFalse(any("_EXPECTED_PROJECTED" in f for f in failures), failures)
+        self.assertFalse(any("_EXPECTED_HIDDEN_OPS" in f for f in failures), failures)
+
+    def test_the_count_doors_hold_on_the_committed_bytes(self):
+        doc = json.loads(_base()[0])
+        rows = guard._projection_rows(doc)
+        projected = sum(1 for row in rows if row[3] == "True")
+        self.assertEqual(projected, guard._EXPECTED_PROJECTED)
+        self.assertEqual(len(rows) - projected, guard._EXPECTED_HIDDEN_OPS)
+        self.assertEqual(len(rows), guard._EXPECTED_PROJECTED + guard._EXPECTED_HIDDEN_OPS)
+
+    def test_the_floor_only_covers_non_admin_protected_operations(self):
+        """The two pins must not converge: the floor is 48 rows, the pin is 268."""
+        self.assertEqual(len(guard.NON_ADMIN_PROTECTED), 48)
+        self.assertEqual(guard._EXPECTED_PROJECTED, 170)
+        self.assertEqual(guard._EXPECTED_HIDDEN_OPS, 98)
+        doc = json.loads(_base()[0])
+        rows = guard._projection_rows(doc)
+        admin_rows = [row for row in rows if row[1].startswith("/api/v1/admin/")]
+        # 122 admin + 48 reviewed non-admin = the 170 published requirements.
+        self.assertEqual(len(admin_rows) + 48, guard._EXPECTED_PROJECTED)
+
+    def test_the_pin_does_not_duplicate_the_response_surface_guard(self):
+        """The response-surface guard walks operations and never reads security."""
+        src = (ROOT / "scripts" / "check_openapi_response_surface.py").read_text(
+            encoding="utf-8"
+        )
+        for field in ('"security"', "'security'", "get(\"security\")"):
+            self.assertNotIn(
+                field,
+                src,
+                "the response-surface guard now reads security: retarget this pin "
+                "or state why the two surfaces are still distinct",
+            )
+
+    def test_the_pin_does_not_duplicate_the_behavior_contracts_suite(self):
+        """That suite reads x-idempotent / x-pagination / 429 / 500, not this."""
+        src = (ROOT / "scripts" / "test_openapi_behavior_contracts.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("x-idempotent", src)
+        self.assertIn("_PAGINATION_BASELINE", src)
+        self.assertNotIn('operation["security"]', src)
+        self.assertNotIn("_bearer(", src)
+
+    def test_self_test_lists_the_projection_ablations(self):
+        src = GUARD_PATH.read_text(encoding="utf-8")
+        for kind in ("drop_all_security", "move_one_protected_operation"):
             self.assertIn(f'"{kind}"', src)
 
 

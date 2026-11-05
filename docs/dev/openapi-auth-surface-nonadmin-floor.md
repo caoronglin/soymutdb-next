@@ -1,4 +1,19 @@
-# OpenAPI auth surface: the non-admin protected floor
+# OpenAPI auth surface: the non-admin protected floor and the projection pin
+
+Two fixed points live in `scripts/check_openapi_auth_surface.py`, and they
+measure two different things:
+
+| literal | rows | what a change to it means |
+| --- | --- | --- |
+| `NON_ADMIN_PROTECTED` | 48 | a reviewed operation lost or gained the bearer requirement |
+| `_SECURITY_PROJECTION_DIGEST` | 268 | an operation moved between protected and public |
+
+They are deliberately not the same pin. The floor is a reviewed allowlist of
+operations a human chose to protect; the digest is the *whole* published
+projection, so it also covers the 122 admin operations (which check 2 only
+sweeps in one direction) and the 98 public ones. A count-preserving swap
+between protected and public moves neither the floor's size nor either count
+door -- only the digest.
 
 ## Phase (one phase, one PR)
 
@@ -84,10 +99,86 @@ a `json.load` of the artifact it checks. It is registered in `smoke.sh`'s
 gating array; the guard's `--self-test` carries the same pin for the stdlib-only
 entry point, so neither door depends on the other being collected.
 
+## Phase 2: the projection pin (why the floor was not enough)
+
+The floor above answers "did a reviewed operation lose the requirement". It
+does **not** answer "which operations publish `security` at all", and nothing
+else did either:
+
+- `openapi-typescript` drops `security` from the generated client on purpose,
+  so there is **no second half**. Every guard in this repository that compares
+  two artifacts is structurally blind here.
+- `_OPERATION_ID_DIGEST` / `_PARAMETER_DIGEST` / `_RESPONSE_SURFACE_DIGEST` /
+  `_OPERATION_SUMMARY_DIGEST` / `_ANNOTATION_DIGEST` walk the same operations
+  and never read the field.
+- `_FIELD_CONSTRAINT_DIGEST` walks component property schemas, not operations.
+- Check 2 (`/api/v1/admin/*` must bear) is one-directional: it names an admin
+  operation that *lost* the requirement and is silent about one that is not in
+  the document at all.
+
+Decisive ablation on live bytes (`bfb3919d`): delete `security` from all 170
+operations in the snapshot, leave `main.py`'s projection untouched, and re-pin
+the two provenance blob ids exactly as `test_openapi_snapshot_body_integrity.py`
+documents for one reviewed regenerate.
+
+| guard / suite | clean tree | after the ablation |
+| --- | --- | --- |
+| `check_openapi_response_surface.py` | `rc=0` | `rc=0` |
+| `check_openapi_operation_parameter_floor.py` | `rc=0` | `rc=0` |
+| `check_openapi_operation_id_floor.py` | `rc=0` | `rc=0` |
+| `check_openapi_operation_annotations.py` | `rc=0` | `rc=0` |
+| `check_openapi_field_constraints.py` | `rc=0` | `rc=0` |
+| `check_openapi_inline_body_integrity.py` | `rc=0` | `rc=0` |
+| `check_openapi_published_enums.py` | `rc=0` | `rc=0` |
+| `check_openapi_baseline_sync.py` | `rc=0` | `rc=0` |
+| `test_openapi_behavior_contracts.py` (26 cases) | 26 passed | 26 passed |
+| `check_openapi_auth_surface.py` | `rc=0` | `rc=1`, named by the digest |
+
+The last row is the point: **only the guard that already had a signal could
+see it** -- and on the pre-pin guard its own `--self-test` then died in its
+*setup control*, which is how the hole surfaced.
+
+`_SECURITY_PROJECTION_DIGEST` is sha256 over `"\n".join(header + rows)`,
+where `header` is `soymutdb-security-projection/v1` and each row is
+`METHOD|path|operationId|protected`, for all 268 operations. `protected` is
+the published fact (`bool(security)`), not "does it name HTTPBearer", so a
+scheme swap moves it too.
+`_EXPECTED_PROJECTED = 170` and `_EXPECTED_HIDDEN_OPS = 98` are exact count
+doors; a same-count permutation satisfies neither the digest nor them
+together.
+
+Re-pinning is a reviewed edit: update the literal in the same commit as the
+re-export and say why. Deriving it from the snapshot would make the pin agree
+with itself, which is the failure it exists to replace.
+
+### Non-duplication, as a test
+
+Two negative controls keep this pin from quietly retargeting a surface someone
+else owns:
+
+- `test_the_pin_does_not_duplicate_the_response_surface_guard` -- the sibling
+  guard that walks the same 268 operations must still read no `security`.
+- `test_the_pin_does_not_duplicate_the_behavior_contracts_suite` -- that suite
+  reads `x-idempotent`, `x-pagination`, the error envelope and the 429/500
+  sets; it must not start reading the bearer requirement either.
+
+And one positive control on the pin's own precision:
+`test_a_count_preserving_move_is_caught_only_by_the_digest` swaps one
+operation out of the protected set and another in, then asserts the digest
+fires while both count doors stay silent. A pin that fired on the counts would
+be a count check wearing a digest's name.
+
 ## Validation (this branch, CPython 3.11.2, Node 26.13.0)
 
-- `pytest scripts/test_openapi_auth_surface_floor.py -q` — 7 passed
+- `pytest scripts/test_openapi_auth_surface_floor.py -q` — 17 passed
 - `python3 scripts/check_openapi_auth_surface.py` — OK
+- `python3 scripts/check_openapi_auth_surface.py --self-test` — OK (14 ablations)
+- `bash scripts/smoke.sh --profile contracts` — `SMOKE PASS / 921 passed
+  + 5 subtests + 10 env-bound / 0 failed` (clean base: 911)
+  (the layer size is unchanged: this phase adds no wire, no registry row and
+  no teeth entry -- `smoke.sh`, `check_contracts_registry_collection.py` and
+  `check_contracts_self_test_teeth.py` are the three files #272/#273/#281
+  kept colliding in)
 - `python3 scripts/check_openapi_auth_surface.py --self-test` — OK (10 ablations)
 - `python3 -m unittest scripts.test_ci_job_contracts -q` — 103 OK
 - `python3 scripts/check_contracts_registry_collection.py` (plain mode) — OK (44 gating suites, 18 guard calls)
