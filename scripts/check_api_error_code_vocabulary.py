@@ -79,12 +79,30 @@ def source_codes(root: Path) -> set[str]:
     bare interpreter with no API dependencies installed. It is only used to
     check the lock against the source, never as the source of truth for the
     lock's contents.
+
+    Besides the ``error_code`` class attributes this includes the module-level
+    ``HTTP_ERROR_CODE`` fallback: ``error_code_catalog()`` publishes it for the
+    generic ``HTTPException`` handler even though no ``SoyMutDBError`` subclass
+    carries it (PR #152). Reading the constant keeps the guard aligned with the
+    runtime catalog without executing FastAPI-dependent source.
     """
     import ast
 
     tree = ast.parse((root / EXCEPTIONS).read_text(encoding="utf-8"))
     codes: set[str] = set()
     for node in tree.body:
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            value = node.value
+            if (
+                isinstance(value, ast.Constant)
+                and isinstance(value.value, str)
+                and any(
+                    isinstance(t, ast.Name) and t.id == "HTTP_ERROR_CODE"
+                    for t in targets
+                )
+            ):
+                codes.add(value.value)
         if not isinstance(node, ast.ClassDef):
             continue
         for stmt in node.body:
@@ -208,6 +226,14 @@ def _self_test() -> int:
                 '    error_code = "validation_error"\n\nclass _Phantom(SoyMutDBError):\n    error_code = "phantom_code"',
             )
             p.write_text(s)
+        elif kind == "rename the http fallback in the source":
+            p = tree / EXCEPTIONS
+            p.write_text(
+                p.read_text().replace(
+                    'HTTP_ERROR_CODE = "http_error"',
+                    'HTTP_ERROR_CODE = "http_error_renamed"',
+                )
+            )
         elif kind == "empty the lock":
             (tree / GOLDEN).write_text("{}\n")
         elif kind == "duplicate a key in the lock":
@@ -225,6 +251,7 @@ def _self_test() -> int:
         "change a frozen description",
         "turn the lock into a generated artifact",
         "invent a code in the source",
+        "rename the http fallback in the source",
         "empty the lock",
         "duplicate a key in the lock",
     )
