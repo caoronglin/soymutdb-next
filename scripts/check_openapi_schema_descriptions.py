@@ -102,6 +102,26 @@ Decisive ablation on live bytes: swapping two adjacent
 ``rc=0`` (the description and title multisets are unchanged, both counts
 unchanged, Door 8 still resolves every field); only Door 12 names it.
 
+The generated client's JSDoc title *lines* are the same genus on a
+positional axis, and Doors 6/7 do not cover them: Door 6 pins a sorted
+multiset, Door 7 pins sorted ``component|field|title`` rows, Door 8 looks a
+title up by ``(component, field)``, and Door 9 walks property declarations
+rather than the ``*`` prose lines above them. A declaration-only swap -- move
+two adjacent property lines, leave each ``/**`` block where it is -- keeps
+every count, every multiset and every pinned row intact while the label a
+reader sees above a field changes. Two positional literals close it, one per
+artifact half:
+
+* ``_CLIENT_TITLE_SEQUENCE_DIGEST`` -- sha256 over the generated JSDoc title
+  lines **in document order**;
+* ``_ORDER_SNAPSHOT_TITLE_SEQUENCE_DIGEST`` -- sha256 over the snapshot's own
+  ``title`` lines **in insertion order**;
+* ``_EXPECTED_CLIENT_TITLE_LINES`` -- count door on the same walk.
+
+They are separate ledgers: a declaration-only swap moves the client literal
+and leaves the snapshot literal untouched, so re-pinning one cannot silence
+the other.
+
 A legitimate prose change must move the digest in the same commit as both
 artifacts and say why. Re-deriving the digest from the artifact under guard
 would make the pin self-referential.
@@ -379,6 +399,25 @@ _PROPERTY_DECL = re.compile(
     r'^            (?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))\??:', re.M
 )
 
+# Reviewed, hand-written fixed point on the generated client's JSDoc title
+# *sequence*. Every door above is order-insensitive on this surface: Door 6
+# pins a sorted digest, Door 7 pins sorted ``component|field|title`` rows,
+# Door 8 looks a title up by ``(component, field)``, and Door 9 walks property
+# declarations, not the ``*`` prose lines above them. So a declaration-only
+# swap -- move two adjacent property lines, leave each ``/**`` block where it
+# is -- keeps every count, both multisets and every pinned row intact while the
+# label a reader sees above a field changes. sha256 over the titles in document
+# order; read from nowhere, regenerate with
+# _digest_client_title_sequence() after an intentional, reviewed reorder, in
+# the same commit as both artifacts, with a reason.
+_CLIENT_TITLE_SEQUENCE_DIGEST = (
+    "e5d5c74091be283cc1df3cb2b7f92a1a19f36a173c8a8fd997d3a4d4074c4a65"
+)
+_ORDER_SNAPSHOT_TITLE_SEQUENCE_DIGEST = (
+    "d28b247eb2bd4a5af47084792c39d297de8de2523241efb6c80ca59fd6ff74b8"
+)
+_EXPECTED_CLIENT_TITLE_LINES = 1232
+
 
 def _first_plain_line(doc: str) -> str | None:
     for line in doc.splitlines():
@@ -531,6 +570,45 @@ def _digest_client_continuations(
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+def _digest_client_title_sequence(lines: list[str]) -> str:
+    """Positional digest: the titles exactly as the generator printed them.
+
+    ``_digest_client_title`` sorts, so it cannot see a rotation. This one
+    keeps document order, which is the order a reader of the emitted
+    interface sees.
+    """
+    blob = "\n".join(["soymutdb-client-schema-title-sequence/v1", *lines])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def snapshot_title_sequence_rows(document: dict[str, Any]) -> list[tuple[str, str]]:
+    """(schema path, leading title line) in snapshot insertion order."""
+    out: list[tuple[str, str]] = []
+
+    def walk(node: Any, path: str) -> None:
+        if isinstance(node, dict):
+            title = node.get("title")
+            if isinstance(title, str):
+                out.append((path, title))
+            for name, child in node.items():
+                if name == "title" or not isinstance(child, (dict, list)):
+                    continue
+                walk(child, f"{path}/{name}")
+        elif isinstance(node, list):
+            for index, child in enumerate(node):
+                walk(child, f"{path}/{index}")
+
+    walk(document, "schema")
+    return out
+
+
+def _digest_snapshot_title_sequence(rows_: list[tuple[str, str]]) -> str:
+    """Positional digest over the snapshot's own title lines, in order."""
+    blob = "\n".join(
+        ["soymutdb-snapshot-title-sequence/v1", *(f"{p}|{v}" for p, v in rows_)]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
 
 def failures(
     *,
@@ -557,6 +635,9 @@ def failures(
     expected_client_property_order_rows: int | None = None,
     component_definition_order_digest: str | None = None,
     expected_component_definitions: int | None = None,
+    client_title_sequence_digest: str | None = None,
+    snapshot_title_sequence_digest: str | None = None,
+    expected_client_title_lines: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -948,6 +1029,58 @@ def failures(
             f"component definition count is {len(component_order)}, "
             f"_EXPECTED_COMPONENT_DEFINITIONS pins {pinned_component_count}: "
             "a schema was added or dropped without moving the fixed point"
+        )
+
+    # Door 10 -- positional title sequence. Doors 6/7 pin sorted shapes, Door
+    # 8 looks a title up by (component, field), and Door 9 walks property
+    # declarations rather than the ``*`` prose lines above them. A
+    # declaration-only swap therefore keeps every count, both multisets and
+    # every pinned row intact while two labels change place in the emitted
+    # interface. Two independent positional literals -- one per artifact half
+    # -- pin that order, so re-pinning either half alone cannot silence the
+    # other.
+    pinned_sequence = (
+        _CLIENT_TITLE_SEQUENCE_DIGEST
+        if client_title_sequence_digest is None
+        else client_title_sequence_digest
+    )
+    actual_sequence = _digest_client_title_sequence(client_title_lines)
+    if actual_sequence != pinned_sequence:
+        found.append(
+            "generated client JSDoc title sequence drifted: "
+            f"_CLIENT_TITLE_SEQUENCE_DIGEST pins {pinned_sequence} but the "
+            f"client derives {actual_sequence}. A client-visible field label "
+            "moved to another position; re-pin the literal in the same commit "
+            "as both artifacts, with a reason."
+        )
+    pinned_sequence_lines = (
+        _EXPECTED_CLIENT_TITLE_LINES
+        if expected_client_title_lines is None
+        else expected_client_title_lines
+    )
+    if len(client_title_lines) != pinned_sequence_lines:
+        found.append(
+            f"generated client JSDoc title line count is "
+            f"{len(client_title_lines)}, _EXPECTED_CLIENT_TITLE_LINES pins "
+            f"{pinned_sequence_lines}: a title line was added or dropped "
+            "without moving the positional literal"
+        )
+
+    pinned_snapshot_sequence = (
+        _ORDER_SNAPSHOT_TITLE_SEQUENCE_DIGEST
+        if snapshot_title_sequence_digest is None
+        else snapshot_title_sequence_digest
+    )
+    actual_snapshot_sequence = _digest_snapshot_title_sequence(
+        snapshot_title_sequence_rows(document)
+    )
+    if actual_snapshot_sequence != pinned_snapshot_sequence:
+        found.append(
+            "published schema title sequence drifted: "
+            f"_ORDER_SNAPSHOT_TITLE_SEQUENCE_DIGEST pins "
+            f"{pinned_snapshot_sequence} but the snapshot derives "
+            f"{actual_snapshot_sequence}. Re-pinning only the client half "
+            "leaves this door red."
         )
 
     return found

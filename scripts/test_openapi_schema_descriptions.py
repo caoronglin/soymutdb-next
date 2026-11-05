@@ -684,11 +684,18 @@ def test_component_definition_count_door_is_load_bearing() -> None:
 def test_a_honest_definition_order_repin_clears_door_twelve() -> None:
     """The reviewed re-pin path works: re-derive the literal for the new order."""
     rotated = _snapshot_with_rotated_definitions(3, 4)
+    document = json.loads(rotated)
     digest = guard._digest_component_definition_order(
-        guard.component_definition_order(json.loads(rotated))
+        guard.component_definition_order(document)
     )
+    # Door 10's snapshot half walks the same insertion order, so an honest
+    # rotation moves both snapshot literals and both must be re-pinned.
     assert guard.failures(
-        snapshot=rotated, component_definition_order_digest=digest
+        snapshot=rotated,
+        component_definition_order_digest=digest,
+        snapshot_title_sequence_digest=guard._digest_snapshot_title_sequence(
+            guard.snapshot_title_sequence_rows(document)
+        ),
     ) == []
 
 
@@ -876,6 +883,240 @@ def test_property_order_count_doors_are_load_bearing() -> None:
 
 def test_the_property_order_literals_are_module_level_literals() -> None:
     """A second file asserts the pins are hand-written source literals."""
+
+
+
+# --- positional title sequence (Door 10) ----------------------------------
+
+_SEQUENCE_COMPONENT = "AboutContentResponse"
+
+
+def _declaration_only_swap(generated: str) -> str:
+    """Swap two adjacent property *declaration lines*, leaving JSDoc in place.
+
+    This is the drift Doors 6/7/8 are blind to: the sorted title multiset,
+    the pinned ``component|field|title`` rows and the lookup by
+    ``(component, field)`` all survive, while the label printed above a field
+    changes. Only the line order moves.
+    """
+    block = guard._SCHEMA_BLOCK.search(
+        generated, generated.index(f"        {_SEQUENCE_COMPONENT}: {{")
+    )
+    assert block is not None
+    body = block.group("body")
+    fields = list(guard._FIELD_DOC.finditer(body))
+    assert len(fields) >= 2, _SEQUENCE_COMPONENT
+    first, second = fields[0], fields[1]
+
+    def decl_span(match: re.Match[str]) -> tuple[int, int]:
+        return match.start(), body.index("\n", match.end() - 1) + 1
+
+    a0, a1 = decl_span(first)
+    b0, b1 = decl_span(second)
+    assert a1 == b0, "the two declarations must be adjacent"
+    swapped = body[:a0] + body[b0:b1] + body[a1:b0] + body[a0:a1] + body[b1:]
+    assert swapped != body
+    return generated[: block.start("body")] + swapped + generated[block.end("body") :]
+
+
+def _doc_block_only_swap(generated: str) -> str:
+    """Swap two adjacent JSDoc blocks, leaving each declaration in place.
+
+    The drift only the positional sequence door can see: the *labels* move
+    between two fields while the declarations keep their order, so Door 9's
+    ``(component, index, field)`` rows are byte-identical and Door 10's title
+    lines are not.
+    """
+    block = guard._SCHEMA_BLOCK.search(
+        generated, generated.index(f"        {_SEQUENCE_COMPONENT}: {{")
+    )
+    assert block is not None
+    body = block.group("body")
+    docs = list(guard._FIELD_DOC.finditer(body))
+    assert len(docs) >= 2, _SEQUENCE_COMPONENT
+    first, second = docs[0], docs[1]
+
+    # A field's full span runs from its ``/**`` to the newline after the type
+    # annotation. Split each span into (JSDoc block, declaration line) so only
+    # the docs trade places and the declarations keep their positions.
+    def pair_span(start: int, colon: int) -> tuple[int, int, str, str]:
+        line_end = body.index("\n", colon) + 1
+        piece = body[start:line_end]
+        close = piece.index("*/") + len("*/")
+        return start, line_end, piece[:close], piece[close:]
+
+    a0, a1, first_doc, first_decl = pair_span(first.start(), first.end())
+    b0, b1, second_doc, second_decl = pair_span(second.start(), second.end())
+    assert a1 == b0, "the two fields must be adjacent"
+
+    swapped = body[:a0] + second_doc + first_decl + first_doc + second_decl + body[b1:]
+    assert swapped != body
+    return generated[: block.start("body")] + swapped + generated[block.end("body") :]
+
+
+def _snapshot_with_component_swap() -> str:
+    """Swap two adjacent component definitions; every byte of content stays."""
+    document = json.loads(_SNAPSHOT)
+    schemas = document["components"]["schemas"]
+    names = list(schemas)
+    left, right = names[0], names[1]
+    reordered = {}
+    for name in names:
+        reordered[right if name == left else left if name == right else name] = (
+            schemas[right if name == left else left if name == right else name]
+        )
+    document["components"]["schemas"] = reordered
+    return json.dumps(document, indent=2, ensure_ascii=False)
+
+
+def test_client_title_sequence_is_pinned() -> None:
+    """The committed client's positional title order matches the literal."""
+    assert guard._digest_client_title_sequence(
+        guard.client_titles(_GENERATED)
+    ) == guard._CLIENT_TITLE_SEQUENCE_DIGEST
+
+
+def test_snapshot_title_sequence_is_pinned() -> None:
+    document = json.loads(_SNAPSHOT)
+    assert guard._digest_snapshot_title_sequence(
+        guard.snapshot_title_sequence_rows(document)
+    ) == guard._ORDER_SNAPSHOT_TITLE_SEQUENCE_DIGEST
+
+
+def test_declaration_only_swap_is_invisible_to_the_sorted_doors() -> None:
+    """The whole point: every pre-existing door stays green on this drift."""
+    swapped = _declaration_only_swap(_GENERATED)
+    assert Counter(guard.client_titles(swapped)) == Counter(
+        guard.client_titles(_GENERATED)
+    )
+    assert sorted(guard.client_title_rows(swapped)) == sorted(
+        guard.client_title_rows(_GENERATED)
+    )
+    assert guard._digest_client_title(
+        guard.client_titles(swapped)
+    ) == guard._CLIENT_TITLE_DIGEST
+    assert guard._digest_client_title_rows(
+        guard.client_title_rows(swapped)
+    ) == guard._CLIENT_TITLE_ROWS_DIGEST
+    # Doors 1-8 do not see it. Door 9 (component-property declaration order)
+    # and Door 10 (positional title sequence) both do, and each names it
+    # separately: the swap moves the client's declaration rows *and* its title
+    # lines. Door 10 is not redundant with Door 9 -- a JSDoc-only rotation
+    # moves the sequence and leaves Door 9's declaration rows alone.
+    found = guard.failures(snapshot=_SNAPSHOT, generated=swapped)
+    assert any("_CLIENT_TITLE_SEQUENCE_DIGEST" in f for f in found), found
+    assert any("_CLIENT_PROPERTY_ORDER_DIGEST" in f for f in found), found
+    assert not any("_ORDER_SNAPSHOT_TITLE_SEQUENCE_DIGEST" in f for f in found), found
+
+
+def test_component_order_swap_is_invisible_to_the_sorted_digests() -> None:
+    """A pure reorder of component definitions keeps both multisets intact."""
+    reordered = _snapshot_with_component_swap()
+    original = json.loads(_SNAPSHOT)
+    rotated = json.loads(reordered)
+    assert Counter(guard.rows(rotated)) == Counter(guard.rows(original))
+    assert Counter(guard.title_rows(rotated)) == Counter(
+        guard.title_rows(original)
+    )
+    assert guard._digest(guard.rows(rotated)) == guard._SCHEMA_DESCRIPTION_DIGEST
+    assert guard._digest_title(
+        guard.title_rows(rotated)
+    ) == guard._SCHEMA_TITLE_DIGEST
+    found = guard.failures(snapshot=reordered, generated=_GENERATED)
+    assert any("_ORDER_SNAPSHOT_TITLE_SEQUENCE_DIGEST" in f for f in found), found
+    assert any("_COMPONENT_DEFINITION_ORDER_DIGEST" in f for f in found), found
+
+
+def test_the_two_sequence_literals_are_independent() -> None:
+    assert (
+        guard._CLIENT_TITLE_SEQUENCE_DIGEST
+        != guard._ORDER_SNAPSHOT_TITLE_SEQUENCE_DIGEST
+    )
+    swapped_client = _declaration_only_swap(_GENERATED)
+    found = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=swapped_client,
+        snapshot_title_sequence_digest=guard._ORDER_SNAPSHOT_TITLE_SEQUENCE_DIGEST,
+    )
+    assert any("_CLIENT_TITLE_SEQUENCE_DIGEST" in f for f in found), found
+    assert not any(
+        "_ORDER_SNAPSHOT_TITLE_SEQUENCE_DIGEST" in f for f in found
+    ), found
+
+
+def test_a_doc_only_rotation_is_already_named_by_doors_seven_and_eight() -> None:
+    """Door 10 earns nothing on the client half: Doors 7/8 already bind labels.
+
+    Rotating two adjacent JSDoc blocks leaves Door 9's declaration rows
+    byte-identical, so the honest question is whether the *positions* of the
+    labels are pinned. They are: Door 7 pins ``component|field|title`` triples
+    and Door 8 resolves a title by ``(component, field)``, so moving a label
+    between two fields moves both. Door 10's client literal moves too, but it
+    is not the door that catches this.
+    """
+    rotated = _doc_block_only_swap(_GENERATED)
+    assert guard.client_property_order_rows(rotated) == (
+        guard.client_property_order_rows(_GENERATED)
+    )
+    assert Counter(guard.client_titles(rotated)) == Counter(
+        guard.client_titles(_GENERATED)
+    )
+    # Door 10 sees it...
+    assert guard._digest_client_title_sequence(
+        guard.client_titles(rotated)
+    ) != guard._CLIENT_TITLE_SEQUENCE_DIGEST
+    # ...but so do Doors 7 and 8, which landed before it.
+    found = guard.failures(snapshot=_SNAPSHOT, generated=rotated)
+    assert any("_CLIENT_TITLE_ROWS_DIGEST" in f for f in found), found
+    assert any("@title" not in f and "publishes" in f for f in found), found
+
+
+def test_the_snapshot_sequence_literal_is_implied_by_door_twelve() -> None:
+    """Every snapshot rotation the sequence literal sees, Door 12 sees first.
+
+    Door 10's snapshot half walks the same ``components.schemas`` insertion
+    order as Door 12, at two levels (definition, then property). Rotating any
+    adjacent pair moves Door 12's literal as well, so re-pinning one alone
+    never silences the other -- but the sequence literal is not an independent
+    net on this artifact.
+    """
+    document = json.loads(_SNAPSHOT)
+    assert guard._digest_snapshot_title_sequence(
+        guard.snapshot_title_sequence_rows(document)
+    ) == guard._ORDER_SNAPSHOT_TITLE_SEQUENCE_DIGEST
+
+    rotated = json.loads(_snapshot_with_component_swap())
+    found = guard.failures(snapshot=json.dumps(rotated, indent=2))
+    assert any("_ORDER_SNAPSHOT_TITLE_SEQUENCE_DIGEST" in f for f in found), found
+    assert any("_COMPONENT_DEFINITION_ORDER_DIGEST" in f for f in found), found
+
+
+def test_an_honest_sequence_repin_clears_its_own_door() -> None:
+    """A reviewed reorder re-pins the literal and clears that door alone."""
+    rotated = _doc_block_only_swap(_GENERATED)
+    repinned = guard._digest_client_title_sequence(guard.client_titles(rotated))
+    assert repinned != guard._CLIENT_TITLE_SEQUENCE_DIGEST
+    found = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=rotated,
+        client_title_sequence_digest=repinned,
+    )
+    assert not any("_CLIENT_TITLE_SEQUENCE_DIGEST" in f for f in found), found
+    # Re-pinning the sequence literal does not silence Doors 7/8 on the same
+    # drift, so the literal is not a way to launder a label move.
+    assert any("_CLIENT_TITLE_ROWS_DIGEST" in f for f in found), found
+
+
+def test_the_sequence_count_door_is_load_bearing() -> None:
+    found = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=_GENERATED,
+        expected_client_title_lines=guard._EXPECTED_CLIENT_TITLE_LINES + 1,
+    )
+    assert any("_EXPECTED_CLIENT_TITLE_LINES" in f for f in found), found
+
+
+def test_the_sequence_literals_are_module_level_literals() -> None:
     tree = ast.parse(Path(guard.__file__).read_text(encoding="utf-8"))
     names = set()
     for node in tree.body:
