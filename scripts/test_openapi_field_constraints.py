@@ -749,3 +749,131 @@ def test_door_eight_adds_no_new_wiring() -> None:
         assert "example_value_cases" not in text, relative
         assert "door_eight" not in text, relative
         assert "check_openapi_published_examples" not in text, relative
+
+
+_AP_TARGET = "AdminSiteBrandResponse"
+
+
+def _ap_co_revert() -> tuple[str, str]:
+    """Flip one published ``false`` to ``true`` in both halves."""
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    node = document["components"]["schemas"][_AP_TARGET]
+    assert node["additionalProperties"] is False
+    node["additionalProperties"] = True
+    generated = _generated()
+    start = generated.find(f"        {_AP_TARGET}: {{")
+    end = generated.find("\n        };", start)
+    block = generated[start:end]
+    assert "[key: string]" not in block
+    drifted = (
+        generated[:start]
+        + block
+        + "\n            [key: string]: unknown;"
+        + generated[end:]
+    )
+    return json.dumps(document, indent=2), drifted
+
+
+def test_additional_properties_digests_are_independent_literals() -> None:
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assigned = {
+        target.id
+        for node in ast.parse(source).body
+        if isinstance(node, ast.Assign)
+        for target in node.targets
+        if isinstance(target, ast.Name)
+    }
+    assert "_ADDITIONAL_PROPERTIES_DIGEST" in assigned
+    assert "_CLIENT_ADDITIONAL_PROPERTIES_DIGEST" in assigned
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    rows = guard.additional_property_rows(document)
+    assert guard._additional_properties_digest(rows) == guard._ADDITIONAL_PROPERTIES_DIGEST
+    assert len(rows) == guard._EXPECTED_ADDITIONAL_PROPERTIES
+    client = guard.client_additional_properties(_generated())
+    assert (
+        guard._client_additional_properties_digest(client)
+        == guard._CLIENT_ADDITIONAL_PROPERTIES_DIGEST
+    )
+    assert len(client) == guard._EXPECTED_CLIENT_ADDITIONAL_PROPERTIES
+
+
+def test_coordinated_additional_properties_co_revert_is_rejected() -> None:
+    """Both halves agree; only the independent literals see the drift."""
+    snapshot, generated = _ap_co_revert()
+    found = guard.failures(snapshot=snapshot, generated=generated)
+    assert any("additionalProperties drifted" in f for f in found), found
+    assert any("index signatures drifted" in f for f in found), found
+
+
+def test_same_commit_additional_properties_re_pin_stays_green() -> None:
+    """A reviewed regenerate re-pins both literals with both artifacts."""
+    snapshot, generated = _ap_co_revert()
+    fresh = guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        additional_digest=guard._additional_properties_digest(
+            guard.additional_property_rows(json.loads(snapshot))
+        ),
+        client_additional_digest=guard._client_additional_properties_digest(
+            guard.client_additional_properties(generated)
+        ),
+        expected_client_additional=len(
+            guard.client_additional_properties(generated)
+        ),
+    )
+    assert not fresh, fresh
+
+
+def test_additional_properties_count_doors_are_load_bearing() -> None:
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    del document["components"]["schemas"][_AP_TARGET]["additionalProperties"]
+    found = guard.failures(snapshot=json.dumps(document, indent=2))
+    assert any("row count is" in f for f in found), found
+
+
+def test_generated_index_signature_door_is_load_bearing() -> None:
+    """Dropping one client line alone must be named, not just counted."""
+    generated = _generated()
+    line = "            [key: string]: string;\n"
+    assert generated.count(line) >= 1
+    found = guard.failures(generated=generated.replace(line, "", 1))
+    assert any("index signatures drifted" in f for f in found), found
+
+
+def test_additional_properties_digest_doors_are_not_self_agreeing() -> None:
+    """A single-file ``actual = pinned`` edit must fail the decisive case."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    gutted = source.replace(
+        "    actual_additional = _additional_properties_digest(additional_rows_)",
+        "    actual_additional = pinned_additional",
+        1,
+    ).replace(
+        "    actual_client_additional = _client_additional_properties_digest(\n"
+        "        client_additional_\n    )",
+        "    actual_client_additional = pinned_client_additional",
+        1,
+    )
+    assert gutted != source
+    namespace: dict = {
+        "__name__": "gutted_guard",
+        "__file__": str(ROOT / "scripts" / guard.SELF),
+    }
+    exec(compile(gutted, str(ROOT / "scripts" / guard.SELF), "exec"), namespace)  # noqa: S102
+    snapshot, generated = _ap_co_revert()
+    found = namespace["failures"](
+        snapshot=snapshot,
+        generated=generated,
+        expected_additional=len(
+            namespace["additional_property_rows"](json.loads(snapshot))
+        ),
+        expected_client_additional=len(
+            namespace["client_additional_properties"](generated)
+        ),
+    )
+    assert not any("drifted" in f for f in found), found
+
+
+def test_additional_properties_self_test_cases_are_registered() -> None:
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "coordinated additionalProperties false->true" in source
+    assert "same-commit re-pin stays green" in source
