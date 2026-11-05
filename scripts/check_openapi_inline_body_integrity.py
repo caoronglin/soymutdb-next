@@ -29,9 +29,14 @@ own normalizer.
 
 ``_INLINE_BODY_BASELINE`` is a literal in this file, keyed by operation, not
 derived from either artifact. The committed snapshot's inline distribution
-must equal it exactly, and the generated client's inline shapes and non-JSON
-media must equal their pins exactly. A coordinated regenerate that drifts an
-inline body in both halves now fails here.
+must equal it exactly. On the client side the first version pinned only the
+bag of inline shapes (``_CLIENT_INLINE_SHAPES``) and the non-JSON media counts
+(``_CLIENT_MEDIA``) -- a permutation that moves the same shapes between two
+operations, or retypes one of the four bare ``application/json: unknown``
+bodies, keeps that bag equal and every landed guard green. ``_CLIENT_INLINE_BASELINE``
+is a second literal, keyed by generated operation name, pinning each inline
+body to its own operation. Both halves now have an independent per-operation
+fixed point; the shape bag stays as a cheap cross-check.
 
 Reads committed bytes only: stdlib, no API venv, no Python 3.15, no wheel, no
 PostgreSQL, no ``node_modules``. Run directly, collect with pytest, or run the
@@ -162,6 +167,68 @@ _CLIENT_INLINE_SHAPES = {
 }
 _CLIENT_MEDIA = {'image/svg+xml': 1, 'text/html': 2}
 
+# Per-operation fixed point for the generated client half. Keyed by the
+# operation name in `export interface operations`, not derived from either
+# artifact. A same-distribution permutation between two operations, or a
+# retyped bare inline body, changes a value here while leaving the shape bag
+# above unchanged -- that is the drift this literal exists to name.
+_CLIENT_INLINE_BASELINE = {
+    'admin_preview_widget_api_v1_admin_widgets__name__preview_post': ['text/html:string'],
+    'audit_log_online_duration_api_v1_admin_audit_logs_online_duration_get':
+        ['[key:string]:unknown;[]'],
+    'audit_log_stats_api_v1_admin_audit_logs_stats_get': ['[key:string]:unknown;'],
+    'content_snapshot_api_v1_content_snapshot_get': ['[key:string]:unknown;'],
+    'create_import_api_v1_admin_imports_post': ['[key:string]:unknown;'],
+    'create_release_api_v1_admin_releases_post': ['[key:string]:unknown;'],
+    'download_module_template_api_v1_admin_modules__module_key__template_get': ['unknown'],
+    'export_audit_logs_api_v1_admin_audit_logs_export_get': ['unknown'],
+    'export_audit_logs_excel_api_v1_admin_audit_logs_export_excel_get': ['unknown'],
+    'finish_multipart_upload_api_v1_admin_imports_uploads_multipart__upload_id__complete_post':
+        ['[key:string]:unknown;'],
+    'get_admin_release_api_v1_admin_releases__release_id__get': ['[key:string]:unknown;'],
+    'get_build_status_api_v1_admin_build_static_status_get': ['[key:string]:unknown;'],
+    'get_gene_expression_api_v1_expression_genes__gene_id__expression_get':
+        ['[key:string]:unknown;'],
+    'get_gene_genome_view_api_v1_genes__gene_id__genome_view_svg_get': ['image/svg+xml:unknown'],
+    'get_gene_homologs_api_v1_homologs_genes__gene_id__homologs_get': ['[key:string]:unknown;'],
+    'get_import_api_v1_admin_imports__import_id__get': ['[key:string]:unknown;'],
+    'get_import_status_api_v1_admin_imports__import_id__status_get': ['[key:string]:unknown;'],
+    'get_jbrowse_config_api_v1_tracks_jbrowse_config_get': ['[key:string]:unknown;'],
+    'get_library_api_v1_expression_libraries__public_id__get': ['[key:string]:unknown;'],
+    'get_settings_api_v1_admin_settings__section__get': ['[key:string]:unknown;'],
+    'get_site_content_api_v1_site_content_get': ['[key:string]:string;'],
+    'get_sra_run_api_v1_sra_run__accession__get': ['[key:string]:unknown;'],
+    'get_timeout_config_api_v1_admin_timeout_config_get': ['[key:string]:number;'],
+    'get_track_api_v1_tracks__track_id__get': ['[key:string]:unknown;'],
+    'job_events_api_v1_jobs_events_get': ['unknown'],
+    'list_audit_logs_api_v1_admin_audit_logs_get': ['[key:string]:unknown;'],
+    'list_imports_api_v1_admin_imports_get': ['[key:string]:unknown;'],
+    'list_libraries_api_v1_expression_libraries_get': ['[key:string]:unknown;'],
+    'list_pages_api_v1_admin_content_pages_get': ['[key:string]:unknown;'],
+    'list_soybean_samples_api_v1_sra_samples_get': ['[key:string]:unknown;'],
+    'list_track_categories_api_v1_tracks_categories_get': ['[key:string]:unknown;[]'],
+    'list_tracks_api_v1_tracks_get': ['[key:string]:unknown;[]'],
+    'liveness_api_v1_health_live_get': ['[key:string]:string;'],
+    'publish_admin_release_api_v1_admin_releases__release_id__publish_post':
+        ['[key:string]:unknown;'],
+    'readiness_api_v1_health_ready_get': ['[key:string]:unknown;'],
+    'ready_admin_release_api_v1_admin_releases__release_id__ready_post': ['[key:string]:unknown;'],
+    'render_widget_api_v1_widget__name__get': ['text/html:string'],
+    'retry_import_api_v1_admin_imports__import_id__retry_post': ['[key:string]:unknown;'],
+    'rollback_admin_release_api_v1_admin_releases__release_id__rollback_post':
+        ['[key:string]:unknown;'],
+    'root_health_health_get': ['[key:string]:string;'],
+    'search_expression_api_v1_expression_search_get': ['[key:string]:unknown;'],
+    'search_homologs_api_v1_homologs_search_get': ['[key:string]:unknown;'],
+    'start_multipart_upload_api_v1_admin_imports_uploads_multipart_post': ['[key:string]:unknown;'],
+    'suggest_api_v1_search_suggest_get': ['[key:string]:unknown;[]'],
+    'trigger_build_api_v1_admin_build_static_post': ['[key:string]:unknown;'],
+    'update_settings_api_v1_admin_settings__section__put':
+        ['[key:string]:unknown;', '[key:string]:unknown;'],
+    'validate_admin_release_api_v1_admin_releases__release_id__validate_post':
+        ['[key:string]:unknown;'],
+}
+
 CLIENT_INLINE = re.compile(r'"application/json":\s*\{\n(.*?)\n\s*\}(\[\])?;', re.S)
 NON_JSON_MEDIA = ("image/svg+xml", "text/html")
 
@@ -232,6 +299,46 @@ def _client_inline(generated: str) -> dict[str, int]:
     return counts
 
 
+def _client_inline_bodies(generated: str) -> dict[str, list[str]]:
+    """Every inline body in the generated client, keyed by operation name.
+
+    Reads only the ``export interface operations`` block, so a component
+    schema's ``[key: string]: string`` cannot be mistaken for an inline body.
+    Each value is the ordered list of inline body labels declared by that
+    operation: anonymous object shapes, bare primitives, and non-JSON media.
+    """
+    start = generated.find("export interface operations {")
+    if start < 0:
+        return {}
+    block = generated[start:]
+    close = re.search(r"^}", block, re.M)
+    if close:
+        block = block[: close.start()]
+    ops = list(re.finditer(r"^    ([a-z0-9_]+): \{$", block, re.M))
+    found: dict[str, list[str]] = {}
+    for i, match in enumerate(ops):
+        end = ops[i + 1].start() if i + 1 < len(ops) else len(block)
+        body = block[match.start() : end]
+        shapes: list[str] = []
+        for item in re.finditer(
+            r'"application/json":\s*\{\n(.*?)\n\s*\}(\[\])?;', body, re.S
+        ):
+            label = re.sub(r"\s+", "", item.group(1))
+            if "components[" in label:
+                continue
+            shapes.append(label + ("[]" if item.group(2) else ""))
+        for item in re.finditer(r'"application/json":\s*([^;\n{]+);', body):
+            label = item.group(1).strip()
+            if label.startswith("components["):
+                continue
+            shapes.append(re.sub(r"\s+", "", label))
+        for item in re.finditer(r'"(image/svg\+xml|text/html)":\s*([^;\n]+);', body):
+            shapes.append(item.group(1) + ":" + re.sub(r"\s+", "", item.group(2)))
+        if shapes:
+            found[match.group(1)] = shapes
+    return found
+
+
 def _client_media(generated: str) -> dict[str, int]:
     return {media: generated.count(f'"{media}"') for media in NON_JSON_MEDIA}
 
@@ -242,9 +349,13 @@ def failures(
     smoke: str,
     *,
     baseline: dict[str, str] | None = None,
+    client_baseline: dict[str, list[str]] | None = None,
 ) -> list[str]:
     found: list[str] = []
     pinned = _INLINE_BODY_BASELINE if baseline is None else baseline
+    client_pinned = (
+        _CLIENT_INLINE_BASELINE if client_baseline is None else client_baseline
+    )
     actual = _snapshot_inline(document)
 
     missing = sorted(set(pinned) - set(actual))
@@ -268,6 +379,29 @@ def failures(
         found.append(
             f"the generated client's inline shapes are {client_shapes}, not the "
             f"pinned {_CLIENT_INLINE_SHAPES}"
+        )
+    client_bodies = _client_inline_bodies(generated)
+    if client_bodies != client_pinned:
+        missing = sorted(set(client_pinned) - set(client_bodies))
+        extra = sorted(set(client_bodies) - set(client_pinned))
+        changed = sorted(
+            key
+            for key in set(client_pinned) & set(client_bodies)
+            if client_pinned[key] != client_bodies[key]
+        )
+        for key in missing:
+            found.append(f"{key}: generated client no longer declares its inline body")
+        for key in extra:
+            found.append(f"{key}: generated client declares an unpinned inline body")
+        for key in changed:
+            found.append(
+                f"{key}: generated client inline body retyped "
+                f"{client_pinned[key]} -> {client_bodies[key]}"
+            )
+        found.append(
+            "the generated client's per-operation inline bodies differ from "
+            "_CLIENT_INLINE_BASELINE: a shape-preserving permutation cannot be "
+            "seen by comparing the two artifacts to each other"
         )
     client_media = _client_media(generated)
     if client_media != _CLIENT_MEDIA:
@@ -367,6 +501,40 @@ def test_dropping_smoke_wiring_is_rejected() -> None:
     unwired = smoke.replace(f"scripts/{SELF}", "", 1)
     assert unwired != smoke
     assert any("does not invoke" in failure for failure in failures(document, generated, unwired))
+
+
+def test_a_shape_preserving_client_permutation_is_rejected() -> None:
+    """Move two inline shapes between operations; the shape bag is unchanged."""
+    document, generated, smoke = _load()
+    before = _client_inline(generated)
+    naive = "                        [key: string]: string;"
+    other = "                        [key: string]: unknown;"
+    live = generated.find("    liveness_api_v1_health_live_get: {")
+    ready = generated.find("    readiness_api_v1_health_ready_get: {")
+    assert live >= 0 and ready >= 0
+    a = generated.find(naive, live)
+    b = generated.find(other, ready)
+    assert 0 < a - live < 900 and 0 < b - ready < 900
+    generated = generated[:b] + naive + generated[b + len(other) :]
+    generated = generated[:a] + other + generated[a + len(naive) :]
+    assert _client_inline(generated) == before, "ablation changed the wrong bytes"
+    assert any("per-operation" in failure for failure in failures(document, generated, smoke))
+
+
+def test_a_bare_inline_body_retyped_is_rejected() -> None:
+    document, generated, smoke = _load()
+    needle_line = '"application/json": unknown;'
+    assert generated.count(needle_line) == 4
+    generated = generated.replace(needle_line, '"application/json": never;', 1)
+    assert any("retyped" in failure for failure in failures(document, generated, smoke))
+
+
+def test_repinning_the_client_baseline_alone_is_rejected() -> None:
+    document, generated, smoke = _load()
+    bumped = dict(_CLIENT_INLINE_BASELINE)
+    bumped["liveness_api_v1_health_live_get"] = ["[key:string]:number;"]
+    found = failures(document, generated, smoke, client_baseline=bumped)
+    assert any("per-operation" in failure for failure in found)
 
 
 def _self_test() -> int:

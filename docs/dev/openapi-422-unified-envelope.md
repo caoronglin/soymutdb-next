@@ -294,3 +294,26 @@ artifact, plus exact pins for the client's inline shapes and non-JSON media.
 The snapshot distribution must equal the baseline exactly (missing / extra /
 retyped each named); the client shapes and media must equal their pins exactly.
 A coordinated drift in both halves now fails here.
+
+## The seventh defect: the client inline pin was a bag, not a topology
+
+The sixth section's snapshot half is keyed by operation, but its client half
+pinned only the **bag** of inline shapes (`_CLIENT_INLINE_SHAPES`) and the
+non-JSON media counts (`_CLIENT_MEDIA`). A permutation that moves two inline
+shapes between two operations leaves that bag unchanged, and retyping one of
+the four bare `application/json: unknown;` bodies changes no pinned count at
+all — both shapes keep every landed guard GREEN. Reproduced on live
+`04752bc5`: move `[key:string]:string;` from `liveness` to `readiness` and
+`[key:string]:unknown;` back, then re-pin the generated blob; the four landed
+guards report `OK (18)` / `OK (19)` / `OK (2)` / `OK (16)` and the old inline
+guard reports `OK (75 pinned bodies)`.
+
+`_CLIENT_INLINE_BASELINE` is a second literal, keyed by generated operation
+name and read from no artifact. `_client_inline_bodies()` reads only the
+`export interface operations` block, so a component schema's index signature
+cannot be mistaken for an inline body. Each operation's ordered inline bodies
+— anonymous object shapes, bare primitives, non-JSON media — must equal its
+pin exactly; missing, extra and retyped are each named. The shape bag stays as
+a cheap cross-check. Three new in-file ablations (shape-preserving permutation,
+bare-inline retype, re-pinning the literal alone) go red when the per-operation
+check is removed and green when restored. `--self-test`: 8 -> 11 checks.
