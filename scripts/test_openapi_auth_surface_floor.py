@@ -259,6 +259,99 @@ class SecurityProjectionPinTests(unittest.TestCase):
             self.assertIn(f'"{kind}"', src)
 
 
+class SecurityRequirementPinTests(unittest.TestCase):
+    """The published ``security`` requirement *content*, pinned independently.
+
+    The projection digest collapses each requirement to a boolean, ``_bearer()``
+    reads only the scheme name, and ``NON_ADMIN_PROTECTED`` pins a 48-row floor.
+    A scope injection, an OR-alternative, or a same-count scope rotation changes
+    the published contract while all of them stay silent. ``openapi-typescript``
+    drops ``security`` entirely, so there is no generated half to disagree.
+    """
+
+    def test_the_literals_are_module_level_and_pinned(self):
+        src = GUARD_PATH.read_text(encoding="utf-8")
+        for needle in (
+            "_SECURITY_REQUIREMENT_DIGEST = (",
+            "actual_requirement != _SECURITY_REQUIREMENT_DIGEST",
+            "_EXPECTED_SECURITY_REQUIREMENT_ROWS",
+            "_EXPECTED_PROTECTED_REQUIREMENTS",
+            "_requirement_digest(requirement_rows)",
+        ):
+            self.assertIn(needle, src)
+        self.assertEqual(guard._EXPECTED_SECURITY_REQUIREMENT_ROWS, 268)
+        self.assertEqual(guard._EXPECTED_PROTECTED_REQUIREMENTS, 170)
+
+    def test_the_digest_is_recomputed_from_committed_bytes(self):
+        document, _, _, _, _ = _base()
+        rows = guard._requirement_rows(json.loads(document))
+        self.assertEqual(len(rows), 268)
+        self.assertEqual(
+            guard._requirement_digest(rows), guard._SECURITY_REQUIREMENT_DIGEST
+        )
+
+    def test_a_scope_injection_is_named_by_the_content_door(self):
+        document, _, _, _, _ = _base()
+        doc = json.loads(document)
+        doc["paths"]["/api/v1/admin/seed-requests"]["get"]["security"] = [
+            {"HTTPBearer": ["release:read"]}
+        ]
+        found = guard.failures(json.dumps(doc), *_base()[1:])
+        self.assertTrue(
+            any("_SECURITY_REQUIREMENT_DIGEST" in f for f in found), found
+        )
+        self.assertFalse(
+            any("security projection drifted" in f for f in found), found
+        )
+
+    def test_an_or_alternative_is_named_by_the_content_door(self):
+        doc = json.loads(_base()[0])
+        doc["paths"]["/api/v1/admin/seed-requests"]["get"]["security"] = [
+            {"HTTPBearer": []},
+            {"refreshCookie": []},
+        ]
+        found = guard.failures(json.dumps(doc), *_base()[1:])
+        self.assertTrue(
+            any("_SECURITY_REQUIREMENT_DIGEST" in f for f in found), found
+        )
+
+    def test_the_boolean_projection_stays_silent_on_a_scope_change(self):
+        """Positive control: only the content door owns this drift."""
+        clean_rows = guard._projection_rows(json.loads(_base()[0]))
+        doc = json.loads(_base()[0])
+        doc["paths"]["/api/v1/admin/seed-requests"]["get"]["security"] = [
+            {"HTTPBearer": ["release:read"]}
+        ]
+        drifted_rows = guard._projection_rows(doc)
+        self.assertEqual(clean_rows, drifted_rows)
+
+    def test_a_same_count_scope_rotation_is_rejected(self):
+        doc = json.loads(_base()[0])
+        doc["paths"]["/api/v1/admin/seed-requests"]["get"]["security"] = [
+            {"HTTPBearer": ["release:read"]}
+        ]
+        doc["paths"]["/api/v1/admin/features"]["get"]["security"] = [
+            {"HTTPBearer": ["seed:read"]}
+        ]
+        found = guard.failures(json.dumps(doc), *_base()[1:])
+        self.assertTrue(
+            any("_SECURITY_REQUIREMENT_DIGEST" in f for f in found), found
+        )
+        self.assertFalse(
+            any("security-requirement row" in f for f in found), found
+        )
+
+    def test_the_self_test_lists_the_content_ablations(self):
+        src = GUARD_PATH.read_text(encoding="utf-8")
+        for kind in (
+            "inject_scope",
+            "or_alternative",
+            "same_count_scope_rotation",
+            "drop_one_requirement_content",
+        ):
+            self.assertIn(f'"{kind}"', src)
+
+
 class SecuritySchemeDescriptionPinTests(unittest.TestCase):
     """The two published securityScheme descriptions, pinned independently.
 
