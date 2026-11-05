@@ -142,6 +142,7 @@ REQUIRED_GUARD_CALLS: frozenset[str] = frozenset(
         "scripts/check_openapi_inline_body_integrity.py",
         "scripts/check_openapi_published_enums.py",
         "scripts/check_openapi_operation_id_floor.py",
+        "scripts/check_openapi_operation_parameter_floor.py",
         "scripts/check_variant_summary_assembly_consistency.py",
     }
 )
