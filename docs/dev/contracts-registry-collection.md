@@ -14,6 +14,8 @@ mechanisms, both inside `smoke_contracts()`:
 committed `smoke.sh` bytes and asserts:
 
 - every array entry exists, parses, and defines at least one collectible test;
+- every active array row is a **bare path** (no flags/arguments),
+  because the array is expanded verbatim into the ``pytest`` argv;
 - no array entry is duplicated;
 - the known floor of standalone guard calls is still present;
 - every called guard still exists on disk;
@@ -106,6 +108,31 @@ lie about itself. The regression suite itself is deliberately **not** added to
 `smoke.sh`'s `tests[]`: that array is a shared insertion slot (four live PR
 heads collide with a one-line addition there), so the guard's own
 `--self-test` and the independent file are the collected coverage instead.
+
+## A tests=() row must be a bare path
+
+``registry()`` matches a row with ``ARRAY_ENTRY``, which ends at ``.py``. A
+row such as ``scripts/check_x.py --self-test`` therefore does not match and is
+silently skipped -- but it is still a real element of the array, and
+``"${PYTHON_BIN}" -m pytest "${tests[@]}" -q`` passes it verbatim to pytest.
+pytest rejects the unknown flag with ``unrecognized arguments`` and **exit 4**,
+before collecting a single suite: the entire contracts layer is unrunnable,
+and the only diagnostic is a bare pytest usage error that names neither the
+array nor the row.
+
+This is not hypothetical. PR #175 planted exactly such a row
+(``scripts/check_mcp_release_binding.py --self-test``) in ``tests=()``; PR
+#184 moved it out to the standalone-guard floor. On the tree between those two
+landings, ``smoke.sh --profile contracts`` died at collection and the guard
+still reported ``OK (41 gating suites ... wired)`` -- the row was invisible to
+the very guard that exists to keep the array honest.
+
+``array_line_errors()`` re-reads the same array slice and full-matches every
+active, non-comment row against ``ARRAY_LINE`` (a lone path). ``--self-test``
+replays the #175 shape and a pytest-flag variant, asserting each is reported
+by name. A clean array stays green; a uniformly re-indented or commented row
+is still accepted. The regression file covers the same two directions with
+synthetic smoke text.
 
 ## Boundary
 

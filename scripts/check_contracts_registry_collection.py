@@ -87,6 +87,19 @@ CI_LAYER_BARE = re.compile(
 ARRAY_ENTRY = re.compile(
     r"^\s+((?:scripts|infra)/[A-Za-z0-9_./-]+\.py)\s*$", re.MULTILINE
 )
+
+# A ``tests=()`` row is expanded verbatim into ``pytest "${tests[@]}"``. It
+# must therefore be exactly one bare path: a guard invocation such as
+# ``scripts/check_x.py --self-test`` reaches pytest as a flag and aborts the
+# whole layer with ``unrecognized arguments`` (exit 4) before any suite runs.
+# ARRAY_ENTRY alone cannot see it, because that regex ends at ``.py``. This
+# full-line check reads the same array slice and rejects every active row that
+# is not a lone path, so the failure is named instead of surfacing as a bare
+# pytest usage error.
+ARRAY_LINE = re.compile(
+    r"^[ \t]+(?:scripts|infra)/[A-Za-z0-9_./-]+\.py[ \t]*$"
+)
+
 # Optional arguments (``--static``, ``--self-test``) sit between the path and
 # ``|| rc=$?``; the path alone is what must resolve to a committed file.
 # A commented-out call still matches its text but never runs, so the match
@@ -156,6 +169,34 @@ def registry(smoke: str) -> list[str]:
     body = contracts_function(smoke)
     head = body.split("environment_bound=(", 1)[0]
     return ARRAY_ENTRY.findall(head.split("(", 1)[1] if "(" in head else head)
+
+
+def array_line_errors(smoke: str) -> list[str]:
+    """Every active ``tests=()`` row must be a bare pytest path.
+
+    ``registry()`` deliberately ignores lines it cannot match (comments, blank
+    lines). A row carrying ``--self-test`` is one of those ignored lines, yet
+    it is a real array element handed to pytest. Read the same array slice and
+    assert the full line, so a flag/argument row is reported by name.
+    """
+    body = contracts_function(smoke)
+    marker = "  local tests=(\n"
+    if marker not in body:
+        return ["could not locate the contracts-layer tests=() array"]
+    rows = body.split(marker, 1)[1].splitlines()
+    errors: list[str] = []
+    for row in rows:
+        if re.fullmatch(r"\s*\)\s*", row):
+            break
+        stripped = row.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if not ARRAY_LINE.fullmatch(row):
+            errors.append(
+                f"tests=() row is not a bare pytest path: {stripped!r} "
+                "(arguments are passed verbatim to pytest and abort collection)"
+            )
+    return errors
 
 
 def guard_calls(smoke: str) -> list[str]:
@@ -286,6 +327,7 @@ def check(
         else:
             errors.extend(ci_wiring_errors(ci_body))
 
+    errors.extend(array_line_errors(smoke))
     entries = registry(smoke)
     if not entries:
         errors.append("could not read the contracts-layer tests=() array")
@@ -586,6 +628,26 @@ def self_test() -> int:
             bool(found),
             f"PASS self-test: {label} around --self-test is caught",
             f"FAIL self-test: {label} around --self-test was accepted",
+        )
+
+    # A ``tests=()`` row is handed to pytest verbatim. ``ARRAY_ENTRY`` ends at
+    # ``.py`` and cannot see a row that carries ``--self-test`` (or any other
+    # flag): pytest then aborts the entire layer with exit 4 before collecting
+    # a single suite. Each shape below must be named by ``check()``.
+    for label, bad_row in {
+        "a --self-test guard row is planted in tests=()":
+            "    scripts/check_mcp_release_binding.py --self-test\n",
+        "a pytest flag row is planted in tests=()":
+            "    scripts/test_openapi_snapshot_contract.py -q --maxfail=1\n",
+    }.items():
+        slot = "    scripts/test_mcp_release_binding_wiring.py\n"
+        assert slot in smoke, "self-test could not locate the array slot"
+        bad_smoke = smoke.replace(slot, bad_row + slot, 1)
+        found = check(bad_smoke, dict(files), ci_steps)
+        report(
+            bool(found) and any("not a bare pytest path" in f for f in found),
+            f"PASS self-test: {label} is caught",
+            f"FAIL self-test: {label} was NOT caught: {found}",
         )
 
     duplicated = ci_steps.replace(ci_line, ci_line + ci_line, 1)
