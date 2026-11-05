@@ -141,19 +141,53 @@ The snapshot guard's `_SNAPSHOT_FLOOR` is a count of paths and schemas — a
 `scripts/test_openapi_snapshot_body_integrity.py` closes it: for every
 component a path operation references, the snapshot's declared count and the
 generated client's printed count must agree, and the client may not reference
-a component the snapshot does not define. Two independent fixed points —
-per-component equality and `_CLIENT_BODY_TOTAL` — so a coordinated edit to
-both halves is still caught, the same shape of pin as
-`_ERROR_RESPONSE_BASELINE` and `_SNAPSHOT_FLOOR`.
+a component the snapshot does not define. The first version pinned
+`_CLIENT_BODY_TOTAL` (807) as an independent fixed point and used a one-sided
+per-component equality; it caught a body dropped or retyped in **one** half,
+and the three regressions in the table above, but — see the fourth defect
+below — not a coordinated drift of both halves.
 
-`_CLIENT_BODY_TOTAL` (800) is larger than the snapshot's 716 component response
-bodies because the pinned generator also prints request bodies (81 components,
-84 occurrences). The invariant is therefore one-sided — the client must not
-declare *fewer* of anything the snapshot declares — with the surplus pinned
-separately so a body appearing or vanishing on either side is a failure rather
-than an absorbed difference.
+`_CLIENT_BODY_TOTAL` (807) is larger than the snapshot's 722 component response
+bodies because the pinned generator also prints request bodies (82 components,
+85 occurrences).
 
-Verified on the committed tree: 9 checks, `OK`, rc=0, collected by pytest (9
-passed). Ablations each go red and restore green: client drops a body / client
-gains a body / client references an undeclared component / smoke wiring
-removed / a `200` retyped to another schema / snapshot loses a `200`'s content.
+## The fourth defect: the first body guard was still self-referential
+
+The first two independent fixed points above (`_ERROR_RESPONSE_BASELINE` and
+`_CLIENT_BODY_TOTAL`) closed the coordinated error-response edit. The body
+guard as first committed did **not** apply that idiom to its own per-component
+equality: it recomputed `expected` from whichever JSON it was given, kept a
+one-sided `have < want` check, and pinned only the aggregate client total.
+Three drifts stayed GREEN against all three guards, each reproduced on live
+bytes with byte-preserving edits:
+
+| Coordinated drift (both halves together) | 422 guard | Snapshot guard | Body guard v1 |
+| --- | --- | --- | --- |
+| Retype one request body (`UserCreate` → `NewsCreate`) | GREEN | GREEN | **GREEN** |
+| Shift one occurrence between doubled request components | GREEN | GREEN | **GREEN** |
+| Move one `200` between two existing success components | GREEN | GREEN | **GREEN** |
+
+In all three the total stays 807, both artifacts agree with each other, and no
+component is undeclared — `expected` moved with the supplied JSON, so equality
+held. The 85 request-body lines had **no per-component assertion at all**; they
+were the named gap. The success-response side had the same hole.
+
+The fix is two more independent fixed points, literals in the guard and not
+derived from either artifact:
+
+- `_RESPONSE_BODY_BASELINE` — the exact count of each component referenced from
+  a path operation's `responses` (136 components, 722 occurrences);
+- `_REQUEST_BODY_BASELINE` — the exact count of each component referenced from
+  a path operation's `requestBody` (82 components, 85 occurrences).
+
+The snapshot's response and request distributions must each equal their
+baseline exactly, and the generated client's per-component counts must equal
+the sum of the two baselines exactly — two-directional, nothing one-sided,
+nothing self-referential. A regenerate that drifts both halves together now
+fails on the baseline, not on a difference between the halves. `_CLIENT_BODY_TOTAL`
+stays as a loud aggregate first signal.
+
+Verified on the committed tree: 13 checks, `OK`, rc=0, collected by pytest (13
+passed). In-file mutation cases cover all five drifts above plus client-only,
+snapshot-only, undeclared-component and smoke-wiring regressions; byte-preserving
+working-tree ablations of each drift go red and restore green.

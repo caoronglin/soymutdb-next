@@ -165,11 +165,11 @@ smoke_contracts() {
     # typing a response the server never sends. This guard reads committed
     # bytes and pins the source contract; needs no Python 3.15.
     scripts/test_openapi_422_unified_envelope.py
-    # Pin every response body: the client must declare each snapshot response
-    # exactly as often as the snapshot does, and reference no undeclared
-    # component. The envelope guard pins 4xx/5xx shapes and the snapshot guard
-    # pins path/schema floors; neither counts 2xx bodies, so a success response
-    # dropped or retyped in one half stayed invisible. Needs no Python 3.15.
+    # Pin the per-component distribution of every $ref body in both committed
+    # artifacts with two independent baselines (responses + requests), so a
+    # regenerate that drifts both halves together cannot pass: the envelope
+    # guard pins 4xx/5xx shapes and the snapshot guard pins path/schema floors,
+    # neither counts success or request bodies. Needs no Python 3.15.
     scripts/test_openapi_snapshot_body_integrity.py
     # The offline browser-gate inventory (scripts/test_artifact_e2e_gate.py)
     # must fail a build when a gate is dropped from the sweep or the sweep stops
