@@ -53,3 +53,17 @@ python3 "$REPO_ROOT/scripts/contract_visibility.py" \
   --schema "$TMP_DIR/openapi.json" \
   --client-root "$PKG_DIR/src" \
   --baseline "$PKG_DIR/contract-visibility-baseline.json"
+
+# A stale-base branch once reverted BOTH the router and the generated
+# snapshot, so the document diff above compared a reverted backend with a
+# reverted document and stayed green. Pin the endpoint set in source; this
+# needs no API venv and cannot be co-reverted with the snapshot.
+# The export above runs first because it is the check that names the cause when
+# both moved; this one names the defect when only source moved.
+echo ">> checking sequence-tools endpoints against committed source..."
+python3 "$REPO_ROOT/scripts/check_sequence_tools_endpoints.py"
+
+# The pin is only as good as its own configuration: deleting one route from
+# REQUIRED_ENDPOINTS lets a stale-base rebase pass while the guard above and
+# every other assertion stay green. These tests pin the pin from a second file.
+python3 "$REPO_ROOT/scripts/test_check_sequence_tools_endpoints.py"
