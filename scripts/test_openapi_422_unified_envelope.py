@@ -55,6 +55,7 @@ Each branch is mutation-tested in-file. Run directly or collect with pytest:
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -409,6 +410,298 @@ def test_a_one_sided_added_error_response_is_rejected() -> None:
     found = failures(document, generated, main_src, smoke)
     assert any("response body(s); snapshot declares" in f for f in found), found
     assert any("not the pinned" in f for f in found), found
+
+# ---------------------------------------------------------------------------
+# Reachable-cause contract for the stdlib guard runners
+#
+# A guard that fails is only half a gate: it must also say *why*. Two byte
+# shapes used to silence every one of these OpenAPI guards on a real drift:
+#
+#   * ``assert failures(...) == []`` -- a bare assert raises
+#     ``AssertionError()`` whose ``args == ()`` and ``str`` is ``''``. The
+#     ``failures()`` result (the actual reason) is discarded completely; it is
+#     NOT recoverable from ``e.args[0]``.
+#   * ``f"...: {exc or 'assertion failed'}"`` -- ``bool(AssertionError())`` is
+#     True (exceptions define no ``__bool__``/``__len__``), so the fallback is
+#     dead and ``f"{exc}"`` prints ``str(exc) == ''``. The line ends in a colon
+#     and a space: ``FAIL: test_x:``.
+#
+# ``named_guard_diagnostics.describe_assertion`` is the shared renderer and
+# ``assert not (found := failures(...)), found`` is the shared attach shape.
+# Both are pinned tree-wide one layer up, by
+# ``scripts/test_named_guard_diagnostics.py``. What this file adds is the third
+# leg those scanners cannot see: when the guarded *artifact* really drifts, the
+# runner's own ``FAIL:`` line must carry the reason. The scan checks alone
+# would stay green on a runner whose message is always ``''``.
+# ---------------------------------------------------------------------------
+
+_DRIFT_HOST = "scripts/test_openapi_snapshot_body_integrity.py"
+_HARNESSED_CASE = "test_committed_tree_has_matching_response_bodies"
+_DRIFT_INPUTS = (
+    _DRIFT_HOST,
+    "packages/api-client/openapi.json",
+    "packages/api-client/src/generated/openapi.d.ts",
+    "scripts/named_guard_diagnostics.py",
+    "scripts/smoke.sh",
+)
+
+
+def _copy_drift_tree(tmp: str) -> Path:
+    """Copy the guard and its inputs into ``tmp``; never mutate the worktree."""
+    import shutil
+
+    tree = Path(tmp)
+    for rel in _DRIFT_INPUTS:
+        dest = tree / rel
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(ROOT / rel, dest)
+    return tree
+
+
+def _run_drift_tree(tree: Path) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [sys.executable, str(tree / _DRIFT_HOST)],
+        cwd=tree,
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+    )
+
+
+def _reason_of(line: str) -> str:
+    """Everything the runner printed after ``FAIL: <case>: ``."""
+    tail = line.split("FAIL:", 1)[-1]
+    case_name = tail.split(":", 1)[0]
+    if not case_name.startswith(" test_"):
+        return tail.strip()
+    return tail.split(":", 1)[-1].strip()
+
+
+def _repin_everything_the_drift_moves(tree: Path) -> None:
+    """Update every legitimately-moved literal in the copy's harnessed guard.
+
+    Two rounds: the first repin changes the host's own bytes, which the blob
+    pins cover; the second pins the blobs as they now are. After this the
+    artifact pin and the pair digest are both satisfied and the *pairing* check
+    is the only one left with something to say.
+    """
+    import hashlib
+    import importlib.util
+    import re
+
+    host = tree / _DRIFT_HOST
+
+    def load() -> object:
+        spec = importlib.util.spec_from_file_location("drifted_guard", host)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    for _ in range(2):
+        module = load()
+        document = module._load()[0]
+        digest = module._body_pair_digest(document)
+        source = host.read_text(encoding="utf-8")
+        source = re.sub(
+            r'_BODY_PAIR_DIGEST = "[0-9a-f]+"',
+            f'_BODY_PAIR_DIGEST = "{digest}"',
+            source,
+            count=1,
+        )
+        for name, relative in (
+            ("snapshot_blob", "packages/api-client/openapi.json"),
+            ("generated_blob", "packages/api-client/src/generated/openapi.d.ts"),
+        ):
+            data = (tree / relative).read_bytes()
+            blob = hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+            source = re.sub(
+                rf'"{name}": "[0-9a-f]+"',
+                f'"{name}": "{blob}"',
+                source,
+                count=1,
+            )
+        host.write_text(source, encoding="utf-8")
+
+
+def _drift_the_client_half(tree: Path) -> None:
+    """Retype one 200 in *both* halves, then re-pin what the drift moves.
+
+    Retyping only the client trips the pinned-artifact digests first, and that
+    failure is built by ``_baseline_moved_with_the_artifacts`` -- a function
+    that composes its own reason, so it stays readable even with the runner
+    silenced. Re-pinning leaves the *pairing* as the only thing wrong, which is
+    the case whose sole assertion is the bare ``assert not found, found``.
+    """
+    import json
+
+    snapshot = tree / "packages/api-client/openapi.json"
+    generated = tree / "packages/api-client/src/generated/openapi.d.ts"
+
+    document = json.loads(snapshot.read_text(encoding="utf-8"))
+    operation = document["paths"]["/api/v1/auth/login"]["post"]
+    operation["responses"]["200"]["content"]["application/json"]["schema"]["$ref"] = (
+        "#/components/schemas/ErrorResponse"
+    )
+    snapshot.write_text(
+        json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    client = generated.read_text(encoding="utf-8")
+    assert 'components["schemas"]["TokenResponse"]' in client, "client anchor is gone"
+    generated.write_text(
+        client.replace(
+            'components["schemas"]["TokenResponse"]',
+            'components["schemas"]["ErrorResponse"]',
+            1,
+        ),
+        encoding="utf-8",
+    )
+    _repin_everything_the_drift_moves(tree)
+
+
+def _drift_the_snapshot_half(tree: Path) -> None:
+    """Drop one ``GeneDetail`` declaration from the copy's snapshot."""
+    snapshot = tree / "packages/api-client/openapi.json"
+    source = snapshot.read_text(encoding="utf-8")
+    assert '"GeneDetail"' in source, "drift fixture anchor is gone"
+    snapshot.write_text(
+        source.replace('"GeneDetail"', '"GeneListResponse"', 1), encoding="utf-8"
+    )
+
+
+_DRIFTS: tuple[tuple[str, object], ...] = (
+    ("client-half retype", _drift_the_client_half),
+    ("snapshot-half declaration drop", _drift_the_snapshot_half),
+)
+
+
+def test_the_guard_runner_copies_cleanly_before_drift() -> None:
+    """The copy is a real control: unmodified bytes must still pass."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        clean = _run_drift_tree(_copy_drift_tree(tmp))
+    assert clean.returncode == 0, clean.stderr
+
+
+def test_a_drift_report_names_its_reason() -> None:
+    """A real drift must fail with a cause on *every* ``FAIL:`` line.
+
+    Not just the harnessed case: a runner that loses its renderer keeps the
+    cause of any case that attached one (``assert not found, found``) and
+    prints nothing for every case that did not. Both legs are real; the pin
+    covers the line that has nothing going for it. Verified against the
+    historical shape: swapping the runner to ``f"{exc}"`` leaves the harnessed
+    line named and two others empty.
+    """
+    import tempfile
+
+    for label, drift_the_tree in _DRIFTS:
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = _copy_drift_tree(tmp)
+            drift_the_tree(tree)
+            drift = _run_drift_tree(tree)
+
+        assert drift.returncode == 1, (label, drift.returncode, drift.stderr)
+        lines = [line for line in drift.stderr.splitlines() if "FAIL:" in line]
+        assert lines, f"{label} produced no FAIL line: {drift.stderr!r}"
+        unreachable = [line for line in lines if not _reason_of(line)]
+        assert not unreachable, (
+            f"{label}: {len(unreachable)} of {len(lines)} FAIL lines lost their "
+            f"cause: {unreachable!r}"
+        )
+
+
+def _silent_fixture(tree: Path) -> None:
+    """Point one harnessed case at a failure whose cause never reaches the line.
+
+    Two edits, both in the copy: the harnessed case is rebound to a bare
+    ``assert not found`` (the ``failures()`` reason is discarded, the set up
+    display below keeps the *contract* red), and the runner's final renderer is
+    stubbed to ``""`` so the ``describe_assertion`` fallback cannot name the
+    precondition either. The package is self-contained, and its own suite is
+    pinned by ``test_named_guard_diagnostics`` -- stubbing both is exactly what
+    a careless edit would do.
+    """
+    host = tree / _DRIFT_HOST
+    source = host.read_text(encoding="utf-8")
+    anchor = "def test_committed_tree_has_matching_response_bodies() -> None:\n"
+    assert anchor in source, "drift host lost the case this pin harnesses"
+    silent_case = (
+        anchor
+        + "    found = failures(*_load())\n"
+        + "    assert not found\n"
+        + "    del found\n"
+        + "\n\n"
+    )
+    source = source.replace(anchor, silent_case, 1)
+    # Spelled from parts on purpose: ``_report_line`` searches this very file
+    # for the literal reporting line, and a verbatim copy here would be the
+    # first match -- the scanner would then read this helper instead of the
+    # real runner and go green on the wrong bytes.
+    head = "problems.append("
+    label = 'f"{test.__name__}: '
+    renderer = head + label + "{str(exc) or 'assertion failed'}" + '")'
+    silent = head + label + "{exc}" + '")'
+
+    assert renderer in source, "drift host lost the runner this pin harnesses"
+    host.write_text(source.replace(renderer, silent, 1), encoding="utf-8")
+
+
+def test_the_drift_pin_can_go_red() -> None:
+    """The pin above must not be a tautology: a lost cause has to turn it red.
+
+    Drift the tree as usual, then flatten the harnessed case *and* the renderer
+    in the copy. The contract is still red, the ``FAIL:`` line is still
+    printed, and the part after the case name is empty. The pin's own judgement
+    over that line must therefore be falsey -- which is what its assertion
+    rejects. If it stayed green here it would be a gate with no teeth.
+
+    Deliberately not done by swapping the real runner to ``f"{exc}"``: the
+    harnessed case attaches its cause, so that mutant keeps this line named and
+    only silences the two permutation cases, which
+    ``test_a_drift_report_names_its_reason`` catches instead.
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tree = _copy_drift_tree(tmp)
+        _drift_the_client_half(tree)
+        _silent_fixture(tree)
+        silent = _run_drift_tree(tree)
+
+    assert silent.returncode == 1, (silent.returncode, silent.stderr)
+    harnessed = [
+        line
+        for line in silent.stderr.splitlines()
+        if "FAIL:" in line and _HARNESSED_CASE in line
+    ]
+    assert harnessed, f"the silent case never failed: {silent.stderr!r}"
+    reasons = [_reason_of(line) for line in harnessed]
+    assert any(not reason for reason in reasons), (
+        f"a case that dropped its cause still parsed as named: {harnessed!r}"
+    )
+    try:
+        for reason in reasons:
+            assert reason, "empty failure message"
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError(f"the pin stayed green on a lost cause: {harnessed!r}")
+
+
+def test_the_reason_parser_separates_the_case_name() -> None:
+    """The drift assertion above is only as good as this parse."""
+    named = (
+        "openapi-snapshot-bodies: FAIL: test_committed_tree: "
+        "['the baseline literals were recorded']"
+    )
+    assert _reason_of(named) == "['the baseline literals were recorded']"
+    silent = "openapi-snapshot-bodies: FAIL: test_committed_tree: "
+    assert not _reason_of(silent), "an empty cause parsed as a reason"
+    bare = "openapi-snapshot-bodies: FAIL: something else entirely"
+    assert _reason_of(bare) == "something else entirely"
 
 
 
