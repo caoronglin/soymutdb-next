@@ -119,6 +119,17 @@ GUARD_CALL = re.compile(
 # here leaves that guard removable with a green SMOKE PASS. `check()` rejects
 # wired-but-unpinned calls, so the floor must be kept in step with the layer;
 # the regression suite asserts the two sets agree on the committed bytes.
+
+# Reviewed lower bound on the mutation cases ``self_test()`` must run. The
+# summary counts emitted results, so a shortened case loop shrinks the declared
+# count and the evidence together and every other gate stays green: this
+# guard's plain run never reads the self-test output, and the teeth guard does
+# not audit it (its ``--self-test`` is wired in ci-job-steps.sh, not smoke.sh).
+# A second, independent copy of this number lives in the collected companion
+# scripts/test_contracts_registry_collection.py. Raise both in one reviewed
+# commit when a case is added, and say why.
+_REVIEWED_CASE_FLOOR = 46
+
 REQUIRED_GUARD_CALLS: frozenset[str] = frozenset(
     {
         "scripts/check-toolchain-pins.py",
@@ -941,6 +952,13 @@ def self_test() -> int:
         "FAIL self-test: a duplicated --self-test line was accepted",
     )
 
+    if results < _REVIEWED_CASE_FLOOR:
+        print(
+            f"FAIL self-test: only {results} mutation case(s) ran, below the "
+            f"reviewed floor of {_REVIEWED_CASE_FLOOR}: a shrunken case loop "
+            "would keep every other gate green"
+        )
+        failures += 1
     print(f"self-test: {results} cases, {failures} failure(s)")
     return 1 if failures else 0
 

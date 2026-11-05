@@ -222,6 +222,35 @@ not from a hardcoded `len(cases) + N`: that constant drifts the moment a probe
 is added and would report a case count nothing ran. A regression pins reported
 == emitted against the committed tree.
 
+Counting emitted results is honest but not sufficient. A `cases[:8]` edit
+shrinks the declared count *and* the per-case lines together, so
+`reported == emitted` still holds, the guard's own `OK` plain run never reads
+the self-test output, and the teeth guard does not audit this guard at all
+(its `--self-test` is wired in `ci-job-steps.sh`, not `smoke.sh`, and its
+success signature says `cases`, not `mutations`). Measured on live
+`9a7c3e52`: slicing the loop to 8 printed `33 cases, 0 failure(s)` while the
+plain guard, `check_contracts_self_test_teeth.py`, the companion suite and
+`smoke.sh --profile contracts` all stayed green.
+
+Two independent reviewed literals close it, both at **46**:
+
+- `_REVIEWED_CASE_FLOOR` in the guard holds its own emitted count before the
+  summary is printed, so the guard names a shrunken loop itself;
+- `_EXPECTED_SELF_TEST_CASES` in the collected companion
+  (`scripts/test_contracts_registry_collection.py`) runs the real
+  `self_test()`, asserts `reported == emitted >= floor`, and pins that the
+  guard's literal has not drifted. The companion is the second file, so a
+  one-file edit that weakens the guard cannot move the floor with it.
+
+A third companion test pins the loop shape (`for ... in cases:` with no
+slice) via AST, and a decisive A/B ablation proves both limbs: with the floor
+itself gutted the shrunken loop is a clean-looking `0 failure(s)` short run,
+and with the floor intact the same bytes go red naming the reviewed floor.
+Raise **both** literals in one reviewed commit when a case is added, and say
+why. This is the same genus as the per-case floor in
+`check_contracts_self_test_teeth.py`, applied to the one guard that floor
+deliberately excludes.
+
 Every wiring match starts at the command itself, never at a `#`: a
 commented-out line still contains the right text and passes `bash -n`, but
 executes nothing. The standalone `${PYTHON_BIN}` guard calls and the
