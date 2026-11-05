@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ...core.database import get_db
 from ...core.security import RoleName
 from ...models.auth import User
+from ...schemas.error import ValidationErrorResponse
 from ...schemas.export_query import ExportQueryRequest, ExportQueryResponse
 from ...schemas.variant import ExportRequest, VariantExportFilters
 from ...services.release_context import ReleaseContext, get_release_context
@@ -29,6 +30,12 @@ router = APIRouter(prefix="/exports", tags=["exports"])
     "/query",
     response_model=ExportQueryResponse,
     status_code=status.HTTP_202_ACCEPTED,
+    # Declaring the 422 here (rather than inheriting FastAPI's auto-generated
+    # ``HTTPValidationError``) is what lets ``_build_openapi_schema`` retype it
+    # to the unified ``ValidationErrorResponse`` envelope: that pass only
+    # rewrites a 422 the operation already declares, and a body that fails
+    # ``extra='forbid'`` is exactly the case a downloader must be able to read.
+    responses={422: {"model": ValidationErrorResponse}},
 )
 async def submit_export_query(
     request: ExportQueryRequest,
