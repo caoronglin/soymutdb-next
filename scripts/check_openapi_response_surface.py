@@ -111,6 +111,26 @@ _OPERATION_SUMMARY_DIGEST = (
 )
 _EXPECTED_SUMMARY_OPERATIONS = 268
 
+# Independent fixed point for the request-body surface. ``openapi-typescript``
+# renders ``requestBody.required: true`` as ``requestBody: {`` and a missing
+# body as ``requestBody?: never;`` in the generated ``operations`` interface;
+# a ``false``/absent required flag becomes ``requestBody?: {``. That optional
+# marker is client-visible (a caller may omit the body), and no landed guard
+# reads it: the body baselines count ``$ref`` bodies, ``_RESPONSE_SURFACE_DIGEST``
+# walks responses, and ``_PINNED_ARTIFACTS`` is a provenance blob id that a
+# regenerate re-pins in the same deliberate act. A coordinated co-revert that
+# flips one ``required`` flag in both halves and re-pins those two blob ids
+# left every wired OpenAPI guard ``rc=0`` on live bytes.
+#
+# sha256 of "\n".join(["soymutdb-request-body-surface/v1"] +
+#   sorted(f"{method}|{path}|{operationId}|{state}")), where ``state`` is
+# ``absent`` / ``true`` / ``false``. Read from nowhere; re-pin in the same
+# commit as an intentional contract change, with a reason.
+_REQUEST_BODY_SURFACE_DIGEST = (
+    "11042ffae3a33f2eaf5e9324e389fe83c587d61bd6977906c7bfa367ea8491c0"
+)
+_EXPECTED_REQUEST_BODY_BEARING_OPERATIONS = 86
+
 # The generated ``paths`` interface maps (METHOD, path) -> operations["symbol"].
 PATH_LINE = re.compile(r'^    "(/[^"]*)": \{$')
 OP_REF = re.compile(
@@ -321,6 +341,82 @@ def _generated_summaries(generated: str) -> dict[tuple[str, str], str]:
     return out
 
 
+
+# ``openapi-typescript`` emits one requestBody line per operation in the
+# generated ``operations`` interface. ``?: never`` means no body declared;
+# ``: {`` means required; ``?: {`` means optional.
+GEN_REQUEST_BODY = re.compile(
+    r"^        requestBody(\??): (\{|never;)$", re.MULTILINE
+)
+
+
+def _snapshot_request_bodies(
+    document: dict[str, Any],
+) -> dict[tuple[str, str], tuple[str, str]]:
+    """(METHOD, path) -> (operationId, required-state) from the snapshot."""
+    out: dict[tuple[str, str], tuple[str, str]] = {}
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for method, operation in item.items():
+            if method not in METHODS or not isinstance(operation, dict):
+                continue
+            body = operation.get("requestBody")
+            if body is None:
+                state = "absent"
+            elif isinstance(body, dict) and body.get("required"):
+                state = "true"
+            elif isinstance(body, dict):
+                state = "false"
+            else:
+                raise ValueError(f"{method.upper()} {path} has a malformed requestBody")
+            out[(method.upper(), path)] = (
+                str(operation.get("operationId", "")),
+                state,
+            )
+    return out
+
+
+def _request_body_digest(
+    bodies: dict[tuple[str, str], tuple[str, str]],
+) -> str:
+    rows = [
+        (method, path, operation_id, state)
+        for (method, path), (operation_id, state) in bodies.items()
+    ]
+    blob = "\n".join(
+        ["soymutdb-request-body-surface/v1"]
+        + ["|".join(row) for row in sorted(rows)]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _generated_request_bodies(generated: str) -> dict[str, str]:
+    """symbol -> required-state, from the generated operations interface."""
+    start = generated.find("export interface operations {")
+    if start < 0:
+        raise ValueError("generated client has no operations interface")
+    block = generated[start:]
+    matches = list(OP_DEF.finditer(block))
+    out: dict[str, str] = {}
+    for i, match in enumerate(matches):
+        body = block[
+            match.end() : matches[i + 1].start() if i + 1 < len(matches) else len(block)
+        ]
+        hit = GEN_REQUEST_BODY.search(body)
+        if hit is None:
+            raise ValueError(f"{match.group(1)} has no requestBody line")
+        optional, shape = hit.group(1), hit.group(2)
+        if shape == "never;":
+            state = "absent"
+        elif optional:
+            state = "false"
+        else:
+            state = "true"
+        out[match.group(1)] = state
+    return out
+
+
 def failures(
     *,
     snapshot: str | None = None,
@@ -331,6 +427,8 @@ def failures(
     expected_operations: int | None = None,
     summary_digest: str | None = None,
     expected_summary_operations: int | None = None,
+    request_body_digest: str | None = None,
+    expected_request_body_operations: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -357,18 +455,30 @@ def failures(
         if expected_summary_operations is None
         else expected_summary_operations
     )
+    pinned_request_body_digest = (
+        _REQUEST_BODY_SURFACE_DIGEST
+        if request_body_digest is None
+        else request_body_digest
+    )
+    pinned_request_body_ops = (
+        _EXPECTED_REQUEST_BODY_BEARING_OPERATIONS
+        if expected_request_body_operations is None
+        else expected_request_body_operations
+    )
 
     try:
         document = json.loads(snapshot)
         rows = _snapshot_rows(document)
         snap = _snapshot_surface(document)
         summaries = _snapshot_summaries(document)
+        request_bodies = _snapshot_request_bodies(document)
     except (ValueError, TypeError) as exc:
         return [f"cannot read published responses from snapshot: {exc}"]
     try:
         path_map = _generated_path_map(generated)
         gen_ops = _generated_operations(generated)
         gen_summaries = _generated_summaries(generated)
+        gen_request_bodies = _generated_request_bodies(generated)
     except ValueError as exc:
         return [f"cannot read generated client responses: {exc}"]
 
@@ -469,6 +579,41 @@ def failures(
             found.append(
                 f"{key[0]} {key[1]}: published summary {published!r} disagrees "
                 f"with generated JSDoc {rendered!r}"
+            )
+
+
+    # Door 6 -- independent fixed point on the request-body surface. A
+    # coordinated retype of both halves moves both artifacts together, so the
+    # literal is the only door that can name it; the provenance blob ids are
+    # re-pinned as part of that same reviewed regenerate.
+    actual_request_body_digest = _request_body_digest(request_bodies)
+    if actual_request_body_digest != pinned_request_body_digest:
+        found.append(
+            f"published request bodies drifted: _REQUEST_BODY_SURFACE_DIGEST "
+            f"pins {pinned_request_body_digest} but the snapshot derives "
+            f"{actual_request_body_digest}. Re-pin the literal in the same "
+            "commit as the two artifacts, with a reason -- do not make the "
+            "guard agree with itself."
+        )
+    bearing = sum(1 for _, state in request_bodies.values() if state != "absent")
+    if bearing != pinned_request_body_ops:
+        found.append(
+            f"published request-body-bearing operation count is {bearing}, "
+            f"_EXPECTED_REQUEST_BODY_BEARING_OPERATIONS pins "
+            f"{pinned_request_body_ops}: a request body was added or dropped"
+        )
+
+    # Door 7 -- the generated optional marker must equal the published
+    # ``required`` flag for every operation. A one-sided edit is named by
+    # (METHOD, path); a missing/phantom generated symbol is named too.
+    for key, (symbol, state) in sorted(request_bodies.items()):
+        rendered = gen_request_bodies.get(symbol)
+        if rendered is None:
+            found.append(f"{key[0]} {key[1]}: generated operations lack {symbol!r}")
+        elif rendered != state:
+            found.append(
+                f"{key[0]} {key[1]}: published requestBody state {state!r} "
+                f"disagrees with generated client {rendered!r}"
             )
 
     if f"scripts/{SELF}" not in smoke:
@@ -601,6 +746,65 @@ def self_test() -> int:
     del doc8["paths"]["/api/v1/health/live"]["get"]["summary"]
     cases["published summary dropped"] = (json.dumps(doc8, indent=2), generated)
 
+    # Request-body surface: ``requestBody.required`` is published in the
+    # snapshot and rendered as the optional marker on ``requestBody`` in the
+    # generated operations interface. Both halves must agree with the literal.
+    target = "/api/v1/auth/register"
+    symbol = "register_api_v1_auth_register_post"
+    op_key = f"    {symbol}: {{"
+    op_start = generated.find(op_key)
+    assert op_start >= 0
+    op_slice = generated[op_start : op_start + 1200]
+    assert "        requestBody: {" in op_slice
+
+    def gen_with_request_body(replacement: str) -> str:
+        changed = op_slice.replace("        requestBody: {", replacement, 1)
+        assert changed != op_slice
+        return generated[:op_start] + changed + generated[op_start + 1200 :]
+
+    # One-sided required flag flip: snapshot only.
+    doc9 = copy.deepcopy(document)
+    doc9["paths"][target]["post"]["requestBody"]["required"] = False
+    cases["one-sided snapshot requestBody required flip"] = (
+        json.dumps(doc9, indent=2),
+        generated,
+    )
+
+    # One-sided required flag flip: generated optional marker only.
+    cases["one-sided generated requestBody optional marker"] = (
+        snapshot,
+        gen_with_request_body("        requestBody?: {"),
+    )
+
+    # Coordinated co-revert of both halves. The digest is the only door that
+    # can see this: both artifacts still agree with each other, and the
+    # provenance blob ids are re-pinned as part of the same reviewed act.
+    cases["coordinated requestBody required co-revert"] = (
+        json.dumps(doc9, indent=2),
+        gen_with_request_body("        requestBody?: {"),
+    )
+
+    # A request body dropped from both halves (state absent -> never).
+    doc10 = copy.deepcopy(document)
+    del doc10["paths"][target]["post"]["requestBody"]
+    cases["coordinated requestBody dropped"] = (
+        json.dumps(doc10, indent=2),
+        gen_with_request_body("        requestBody?: never;"),
+    )
+
+    # A same-count permutation: move a required body to another operation
+    # while keeping 86 bearers. The digest must still move.
+    doc11 = copy.deepcopy(document)
+    donor = "/api/v1/auth/login"
+    doc11["paths"][donor]["post"]["requestBody"] = doc11["paths"][target]["post"][
+        "requestBody"
+    ]
+    del doc11["paths"][target]["post"]["requestBody"]
+    cases["same-count requestBody permutation"] = (
+        json.dumps(doc11, indent=2),
+        generated,
+    )
+
     failures_count = 0
     for name, (snap_text, gen_text) in cases.items():
         found = failures(snapshot=snap_text, generated=gen_text, smoke=smoke)
@@ -629,8 +833,9 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"openapi-response-surface: OK "
         f"({_EXPECTED_RESPONSE_ENTRIES} declared responses and "
-        f"{_EXPECTED_SUMMARY_OPERATIONS} operation summaries pinned across "
-        f"{_EXPECTED_OPERATION_COUNT} operations)"
+        f"{_EXPECTED_SUMMARY_OPERATIONS} operation summaries and "
+        f"{_EXPECTED_REQUEST_BODY_BEARING_OPERATIONS} request bodies pinned "
+        f"across {_EXPECTED_OPERATION_COUNT} operations)"
     )
     return 0
 
