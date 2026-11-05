@@ -67,17 +67,17 @@ _INLINE_BODY_BASELINE = {
     'GET /api/v1/admin/audit-logs/stats 200': 'application/json object<*>',
     'GET /api/v1/admin/build-static/status 200': 'application/json object<*>',
     'GET /api/v1/admin/content/pages 200': 'application/json object<*>',
-    'GET /api/v1/admin/content/pages/{page_id}/versions 200': 
+    'GET /api/v1/admin/content/pages/{page_id}/versions 200':
         'application/json array<ref:ContentVersionResponse>',
     'GET /api/v1/admin/imports 200': 'application/json object<*>',
-    'GET /api/v1/admin/imports/studio/dataset-versions 200': 
+    'GET /api/v1/admin/imports/studio/dataset-versions 200':
         'application/json array<ref:DatasetVersionResponse>',
-    'GET /api/v1/admin/imports/studio/drafts 200': 
+    'GET /api/v1/admin/imports/studio/drafts 200':
         'application/json array<ref:ImportDraftListItemResponse>',
     'GET /api/v1/admin/imports/{import_id} 200': 'application/json object<*>',
     'GET /api/v1/admin/imports/{import_id}/status 200': 'application/json object<*>',
     'GET /api/v1/admin/modules/{module_key}/template 200': 'application/json empty',
-    'GET /api/v1/admin/page-builder/pages/{page_id}/versions 200': 
+    'GET /api/v1/admin/page-builder/pages/{page_id}/versions 200':
         'application/json array<ref:PageDefinitionVersionResponse>',
     'GET /api/v1/admin/releases/{release_id} 200': 'application/json object<*>',
     'GET /api/v1/admin/settings/{section} 200': 'application/json object<*>',
@@ -87,7 +87,7 @@ _INLINE_BODY_BASELINE = {
     'GET /api/v1/content/downloads 200': 'application/json array<ref:DownloadFileResponse>',
     'GET /api/v1/content/news 200': 'application/json array<ref:NewsResponse>',
     'GET /api/v1/content/pages 200': 'application/json array<ref:StaticPageResponse>',
-    'GET /api/v1/content/publications 200': 
+    'GET /api/v1/content/publications 200':
         'application/json array<ref:app__schemas__content__PublicationResponse>',
     'GET /api/v1/content/snapshot 200': 'application/json object<*>',
     'GET /api/v1/expression/genes/{gene_id}/expression 200': 'application/json object<*>',
@@ -95,7 +95,7 @@ _INLINE_BODY_BASELINE = {
     'GET /api/v1/expression/libraries/{public_id} 200': 'application/json object<*>',
     'GET /api/v1/expression/search 200': 'application/json object<*>',
     'GET /api/v1/genes/assemblies 200': 'application/json array<ref:AssemblyResponse>',
-    'GET /api/v1/genes/assemblies/{assembly_id}/chromosomes 200': 
+    'GET /api/v1/genes/assemblies/{assembly_id}/chromosomes 200':
         'application/json array<ref:ChromosomeResponse>',
     'GET /api/v1/genes/{gene_id}/genome-view.svg 200': 'image/svg+xml empty',
     'GET /api/v1/health/live 200': 'application/json object<string>',
@@ -104,27 +104,27 @@ _INLINE_BODY_BASELINE = {
     'GET /api/v1/homologs/search 200': 'application/json object<*>',
     'GET /api/v1/jobs/events 200': 'application/json empty',
     'GET /api/v1/mutants 200': 'application/json array<ref:MutantLineResponse>',
-    'GET /api/v1/mutants/{public_id}/phenotypes 200': 
+    'GET /api/v1/mutants/{public_id}/phenotypes 200':
         'application/json array<ref:PhenotypeResponse>',
-    'GET /api/v1/page-definitions/published-routes 200': 
+    'GET /api/v1/page-definitions/published-routes 200':
         'application/json array<ref:PublishedPageDefinitionRoute>',
-    'GET /api/v1/preview/test-data/mutation-sites/by-gene 200': 
+    'GET /api/v1/preview/test-data/mutation-sites/by-gene 200':
         'application/json array<ref:PreviewMutationSiteItem>',
     'GET /api/v1/releases 200': 'application/json array<ref:ReleaseResponse>',
     'GET /api/v1/search/suggest 200': 'application/json array<object<*>>',
     'GET /api/v1/seeds/inventory 200': 'application/json array<ref:SeedInventoryResponse>',
-    'GET /api/v1/seeds/requests 200': 
+    'GET /api/v1/seeds/requests 200':
         'application/json array<ref:app__schemas__seed__SeedRequestResponse>',
     'GET /api/v1/site/content 200': 'application/json object<string>',
     'GET /api/v1/sra/run/{accession} 200': 'application/json object<*>',
     'GET /api/v1/sra/samples 200': 'application/json object<*>',
-    'GET /api/v1/stats/chromosome-density 200': 
+    'GET /api/v1/stats/chromosome-density 200':
         'application/json array<ref:ChromosomeDensitySummary>',
     'GET /api/v1/stats/discovery-trend 200': 'application/json array<ref:DiscoveryTrendPoint>',
     'GET /api/v1/stats/mutagens 200': 'application/json array<ref:MutagenCount>',
     'GET /api/v1/stats/releases 200': 'application/json array<ref:ReleaseSummary>',
     'GET /api/v1/stats/summary/impact 200': 'application/json array<ref:ImpactSummaryItem>',
-    'GET /api/v1/stats/summary/variant-types 200': 
+    'GET /api/v1/stats/summary/variant-types 200':
         'application/json array<ref:VariantTypeSummaryItem>',
     'GET /api/v1/tracks 200': 'application/json array<object<*>>',
     'GET /api/v1/tracks/categories 200': 'application/json array<object<*>>',
@@ -136,7 +136,7 @@ _INLINE_BODY_BASELINE = {
     'POST /api/v1/admin/build-static 201': 'application/json object<*>',
     'POST /api/v1/admin/imports 201': 'application/json object<*>',
     'POST /api/v1/admin/imports/uploads/multipart 201': 'application/json object<*>',
-    'POST /api/v1/admin/imports/uploads/multipart/{upload_id}/complete 200': 
+    'POST /api/v1/admin/imports/uploads/multipart/{upload_id}/complete 200':
         'application/json object<*>',
     'POST /api/v1/admin/imports/{import_id}/retry 200': 'application/json object<*>',
     'POST /api/v1/admin/releases 201': 'application/json object<*>',
