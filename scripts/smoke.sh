@@ -177,6 +177,14 @@ smoke_contracts() {
     scripts/test_dockerfile_contracts.py
     scripts/test_legacy_worker_test_contract.py
     scripts/test_custom_element_registration_contracts.py
+    # The MCP manifest, server.py and the published operations are three
+    # declarations of one REST surface, and no gate read apps/mcp-server/**: a
+    # renamed API path left snapshot, generated client and backend agreeing
+    # while the MCP tool 404s. It also pins the release scoping: the tools that
+    # can read a data release must forward X-SoyMutDB-Release, or MCP answers
+    # are computed against a different release than the caller asked for.
+    scripts/check_mcp_release_binding.py --self-test
+    scripts/test_mcp_release_binding_wiring.py
     # /tools/sequence/inspect must validate the client payload before requiring
     # the kernel; this suite proves each ordering ablation is caught.
     scripts/test_format_inspect_validation_order.py
