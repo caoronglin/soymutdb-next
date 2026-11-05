@@ -67,6 +67,7 @@ _WIRED_SELF_TESTS: frozenset[str] = frozenset(
         "scripts/check_openapi_response_surface.py",
         "scripts/check_openapi_operation_annotations.py",
         "scripts/check_openapi_field_constraints.py",
+        "scripts/check_openapi_required_fields.py",
         "scripts/check_variant_summary_assembly_consistency.py",
         "scripts/check_openapi_published_enums.py",
         "scripts/check_visible_i18n.py",
@@ -125,6 +126,9 @@ _SIGNATURES: dict[str, re.Pattern[str]] = {
         r"self-test: \d+ cases, 0 failure\(s\)"
     ),
     "scripts/check_openapi_field_constraints.py": re.compile(
+        r"self-test: \d+ cases, 0 failure\(s\)"
+    ),
+    "scripts/check_openapi_required_fields.py": re.compile(
         r"self-test: \d+ cases, 0 failure\(s\)"
     ),
     "scripts/check_variant_summary_assembly_consistency.py": re.compile(
@@ -255,6 +259,12 @@ _DRIFT_PLANTS: tuple[tuple[str, str, str, str], ...] = (
         "field constraint drift is never reported",
     ),
     (
+        "scripts/check_openapi_required_fields.py",
+        "def failures(\n",
+        "def failures(\n    return []  # planted drift: detection disabled\n",
+        "the required-field pin accepts every ablation",
+    ),
+    (
         "scripts/check_openapi_operation_annotations.py",
         "    rows = _snapshot_rows(document)\n    found: list[str] = []\n",
         "    rows = {}  # planted drift: the annotations are never read\n"
@@ -364,6 +374,11 @@ _SELF_TEST_GUTS: tuple[tuple[str, str, str], ...] = (
         "    found = []  # planted drift: the plain run reads nothing\n",
     ),
     (
+        "scripts/check_openapi_required_fields.py",
+        "    clean = failures()\n",
+        "    clean = []  # planted drift: the plain run reads nothing\n",
+    ),
+    (
         "scripts/check_openapi_inline_body_integrity.py",
         '    found = failures(*_load())\n',
         '    found = []  # planted drift: the plain run stops reading the real tree\n',
@@ -443,6 +458,7 @@ EVIDENCE_MEMBERS: frozenset[str] = frozenset(
         "scripts/check_mcp_manifest_reconcile.py",
         "scripts/check_mcp_release_binding.py",
         "scripts/check_openapi_field_constraints.py",
+        "scripts/check_openapi_required_fields.py",
         "scripts/check_openapi_operation_annotations.py",
         "scripts/check_openapi_operation_id_floor.py",
         "scripts/check_openapi_operation_parameter_floor.py",
