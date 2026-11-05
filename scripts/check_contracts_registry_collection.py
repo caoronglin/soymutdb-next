@@ -9,6 +9,12 @@ ships a green gate that verifies nothing -- the "registered but not collected"
 shape that has recurred in this repository (hardcoded counts, ``Ran 0 tests,
 OK``, and the two independent wiring slots of the interval-visibility guard).
 
+The guard is wired through two independent entry points: ``smoke.sh`` invokes
+it directly, and ``ci-job-steps.sh`` runs its ``--self-test`` before the
+contracts layer on both providers. A merge that drops the CI-side line leaves
+``--self-test`` unreachable while the local layer stays green, so the CI
+disappearance is silent. This guard reads both files' committed bytes.
+
 The same function invokes a floor of stdlib guards as separate
 ``${PYTHON_BIN} scripts/check_*.py ... || rc=$?`` calls. That is a second
 wiring mechanism: a merge can drop one without touching the array, and the
@@ -37,6 +43,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SMOKE = ROOT / "scripts" / "smoke.sh"
+CI_STEPS = ROOT / "scripts" / "ci-job-steps.sh"
+GUARD_NAME = "check_contracts_registry_collection.py"
+
+# The CI-side wiring: `python3 "${REPO_ROOT}/scripts/<guard>.py" --self-test`
+# inside smoke_contracts_run(). A path/flag change must fail loudly, not drift.
+CI_SELF_TEST = re.compile(
+    r'^\s*python3\s+"\$\{REPO_ROOT\}/scripts/'
+    + re.escape(GUARD_NAME)
+    + r'"\s+--self-test\s*$',
+    re.MULTILINE,
+)
 
 ARRAY_ENTRY = re.compile(
     r"^\s+((?:scripts|infra)/[A-Za-z0-9_./-]+\.py)\s*$", re.MULTILINE
@@ -92,6 +109,14 @@ def contracts_function(smoke: str) -> str:
     return smoke.split(marker, 1)[1].split("\n}\n", 1)[0]
 
 
+def ci_contracts_function(ci_steps: str) -> str:
+    """Return the body of smoke_contracts_run() from ci-job-steps.sh."""
+    marker = "smoke_contracts_run() {"
+    if marker not in ci_steps:
+        raise ValueError("ci-job-steps.sh no longer defines smoke_contracts_run()")
+    return ci_steps.split(marker, 1)[1].split("\n}\n", 1)[0]
+
+
 def registry(smoke: str) -> list[str]:
     """The gating ``tests=()`` array, not the environment-bound list."""
     body = contracts_function(smoke)
@@ -122,9 +147,23 @@ def collectible_tests(source: str, path: str) -> list[str]:
     return names
 
 
-def check(smoke: str, files: dict[str, str]) -> list[str]:
+def check(
+    smoke: str, files: dict[str, str], ci_steps: str | None = None
+) -> list[str]:
     """Return human-readable failures; empty means the wiring is sound."""
     errors: list[str] = []
+
+    if ci_steps is not None:
+        try:
+            ci_body = ci_contracts_function(ci_steps)
+        except ValueError as exc:
+            errors.append(str(exc))
+        else:
+            if not CI_SELF_TEST.search(ci_body):
+                errors.append(
+                    f"{GUARD_NAME} --self-test is not wired in "
+                    "scripts/ci-job-steps.sh (smoke_contracts_run)"
+                )
 
     entries = registry(smoke)
     if not entries:
@@ -166,34 +205,35 @@ def check(smoke: str, files: dict[str, str]) -> list[str]:
     return errors
 
 
-def load_sources() -> dict[str, str]:
-    """Read the committed bytes of every path the two wirings reference."""
+def load_sources() -> tuple[str, str, dict[str, str]]:
+    """Read the committed bytes of both wirings and their referenced files."""
     smoke = SMOKE.read_text(encoding="utf-8")
+    ci_steps = CI_STEPS.read_text(encoding="utf-8")
     referenced = set(registry(smoke)) | set(guard_calls(smoke)) | set(
         REQUIRED_GUARD_CALLS
     )
-    return {
+    files = {
         p: (ROOT / p).read_text(encoding="utf-8")
         for p in referenced
         if (ROOT / p).is_file()
     }
+    return smoke, ci_steps, files
 
 
 def self_test() -> int:
     """Every one-sided drift must be caught; the clean tree must pass."""
-    smoke = SMOKE.read_text(encoding="utf-8")
-    files = load_sources()
-    clean = check(smoke, files)
+    smoke, ci_steps, files = load_sources()
+    clean = check(smoke, files, ci_steps)
     if clean:
         print(f"FAIL self-test: clean tree drifts: {clean}")
         return 1
 
-    cases: list[tuple[str, str, dict[str, str]]] = []
+    cases: list[tuple[str, str, dict[str, str], str]] = []
 
     target = "scripts/test_ci_job_contracts.py"
     mutant = dict(files)
     mutant[target] = re.sub(r"\bdef test_", "def _hidden_", files[target])
-    cases.append(("a registered suite loses every collectible name", smoke, mutant))
+    cases.append(("a registered suite loses every collectible name", smoke, mutant, ci_steps))
 
     phantom = "scripts/test_phantom_wiring_probe.py"
     smoke2 = smoke.replace(
@@ -203,32 +243,36 @@ def self_test() -> int:
     )
     mutant2 = dict(files)
     mutant2[phantom] = "def check_not_a_test():\n    return 1\n"
-    cases.append(("a phantom registry entry collects nothing", smoke2, mutant2))
+    cases.append(("a phantom registry entry collects nothing", smoke2, mutant2, ci_steps))
 
     smoke3 = smoke.replace(
         "    infra/clickhouse/test_schema_contract.py\n",
         "    scripts/test_deleted_wiring_probe.py\n",
         1,
     )
-    cases.append(("a registry entry is dropped on disk", smoke3, dict(files)))
+    cases.append(("a registry entry is dropped on disk", smoke3, dict(files), ci_steps))
 
     smoke4 = smoke.replace(
         "    scripts/test_ci_job_contracts.py\n",
         "    scripts/test_ci_job_contracts.py\n    scripts/test_ci_job_contracts.py\n",
         1,
     )
-    cases.append(("a registry entry is duplicated", smoke4, dict(files)))
+    cases.append(("a registry entry is duplicated", smoke4, dict(files), ci_steps))
 
     smoke5 = smoke.replace(
         '  "${PYTHON_BIN}" scripts/check_nginx_security_headers.py || rc=$?\n',
         "",
         1,
     )
-    cases.append(("a standalone guard call is dropped", smoke5, dict(files)))
+    cases.append(("a standalone guard call is dropped", smoke5, dict(files), ci_steps))
 
     mutant6 = dict(files)
     mutant6.pop("scripts/check_nginx_security_headers.py", None)
-    cases.append(("a called guard disappears from disk", smoke, mutant6))
+    cases.append(("a called guard disappears from disk", smoke, mutant6, ci_steps))
+
+    ci_line = f'  python3 "${{REPO_ROOT}}/scripts/{GUARD_NAME}" --self-test\n'
+    ci_missing = ci_steps.replace(ci_line, "", 1)
+    cases.append(("the CI-side --self-test line is dropped", smoke, dict(files), ci_missing))
 
     smoke8 = smoke.replace(
         '|| FAILED+=("contracts registry")',
@@ -237,7 +281,12 @@ def self_test() -> int:
     )
     assert smoke8 != smoke, "self-test could not locate the driver registry guard call"
     cases.append(
-        ("the driver swallows the registry guard's failure", smoke8, dict(files))
+        (
+            "the driver swallows the registry guard's failure",
+            smoke8,
+            dict(files),
+            ci_steps,
+        )
     )
 
     # Positive control: adding a NEW guard call must not require an edit here.
@@ -252,14 +301,14 @@ def self_test() -> int:
     mutant7[extra] = "# a real guard\n"
 
     failures = 0
-    for label, mutated_smoke, mutated_files in cases:
-        found = check(mutated_smoke, mutated_files)
+    for label, mutated_smoke, mutated_files, mutated_ci in cases:
+        found = check(mutated_smoke, mutated_files, mutated_ci)
         if found:
             print(f"PASS self-test: {label} -> {len(found)} failure(s)")
         else:
             print(f"FAIL self-test: {label} was NOT caught")
             failures += 1
-    fresh = check(smoke7, mutant7)
+    fresh = check(smoke7, mutant7, ci_steps)
     if fresh:
         print(f"FAIL self-test: adding a new guard call was rejected: {fresh}")
         failures += 1
@@ -278,8 +327,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.self_test:
         return self_test()
-    text = SMOKE.read_text(encoding="utf-8")
-    errors = check(text, load_sources())
+    smoke, ci_steps, files = load_sources()
+    errors = check(smoke, files, ci_steps)
     if errors:
         for error in errors:
             print(f"FAIL: {error}", file=sys.stderr)
@@ -287,8 +336,9 @@ def main() -> int:
         return 1
     print(
         f"contracts registry collection: OK "
-        f"({len(registry(text))} gating suites, "
-        f"{len(guard_calls(text))} guard calls)"
+        f"({len(registry(smoke))} gating suites, "
+        f"{len(guard_calls(smoke))} guard calls, "
+        f"CI --self-test wired)"
     )
     return 0
 

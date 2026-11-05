@@ -3,7 +3,9 @@
 The guard itself is stdlib-only and runs before pytest is guaranteed. These
 tests are collected by the contracts layer (and by a plain pytest run over
 scripts/) and prove the guard's failure directions on synthetic input,
-without depending on the real tree's exact suite count.
+without depending on the real tree's exact suite count. The CI-side wiring
+is asserted against the committed ``ci-job-steps.sh`` bytes so a hand-merge
+that drops the ``--self-test`` line is caught here too.
 """
 
 from __future__ import annotations
@@ -23,6 +25,12 @@ guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
 
 REQUIRED = sorted(guard.REQUIRED_GUARD_CALLS)
+
+CI_OK = (
+    "smoke_contracts_run() {\n"
+    f'  python3 "${{REPO_ROOT}}/scripts/{guard.GUARD_NAME}" --self-test\n'
+    "}\n"
+)
 
 
 def _smoke(entries: list[str], calls: list[str]) -> str:
@@ -45,7 +53,7 @@ class RegistryCollectionGuardTests(unittest.TestCase):
         smoke = _smoke(["scripts/test_example.py"], REQUIRED)
         files = _files()
         files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
-        self.assertEqual(guard.check(smoke, files), [])
+        self.assertEqual(guard.check(smoke, files, CI_OK), [])
 
     def test_phantom_entry_is_caught(self) -> None:
         smoke = _smoke(
@@ -54,12 +62,12 @@ class RegistryCollectionGuardTests(unittest.TestCase):
         files = _files()
         files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
         files["scripts/test_phantom.py"] = "def helper():\n    return 1\n"
-        failures = guard.check(smoke, files)
+        failures = guard.check(smoke, files, CI_OK)
         self.assertTrue(any("no collectible test" in f for f in failures), failures)
 
     def test_missing_registry_file_is_caught(self) -> None:
         smoke = _smoke(["scripts/test_gone.py"], REQUIRED)
-        failures = guard.check(smoke, _files())
+        failures = guard.check(smoke, _files(), CI_OK)
         self.assertTrue(any("does not exist" in f for f in failures), failures)
 
     def test_duplicate_entry_is_caught(self) -> None:
@@ -68,7 +76,7 @@ class RegistryCollectionGuardTests(unittest.TestCase):
         )
         files = _files()
         files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
-        failures = guard.check(smoke, files)
+        failures = guard.check(smoke, files, CI_OK)
         self.assertTrue(any("duplicate" in f for f in failures), failures)
 
     def test_dropped_guard_call_is_caught(self) -> None:
@@ -77,7 +85,7 @@ class RegistryCollectionGuardTests(unittest.TestCase):
         )
         files = _files()
         files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
-        failures = guard.check(smoke, files)
+        failures = guard.check(smoke, files, CI_OK)
         self.assertTrue(any("was dropped" in f for f in failures), failures)
 
     def test_guard_call_without_file_is_caught(self) -> None:
@@ -85,7 +93,7 @@ class RegistryCollectionGuardTests(unittest.TestCase):
         files = _files()
         files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
         files.pop("scripts/check_nginx_security_headers.py")
-        failures = guard.check(smoke, files)
+        failures = guard.check(smoke, files, CI_OK)
         self.assertTrue(any("does not exist" in f for f in failures), failures)
 
     def test_driver_registry_failure_must_propagate(self) -> None:
@@ -112,10 +120,31 @@ class RegistryCollectionGuardTests(unittest.TestCase):
             "import unittest\n\nclass T(unittest.TestCase):\n"
             "    def test_case(self):\n        self.assertTrue(True)\n"
         )
-        failures = guard.check(smoke, files)
+        failures = guard.check(smoke, files, CI_OK)
         self.assertFalse(
             any("no collectible test" in f for f in failures), failures
         )
+
+    def test_ci_self_test_wiring_is_required(self) -> None:
+        smoke = _smoke(["scripts/test_example.py"], REQUIRED)
+        files = _files()
+        files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
+        self.assertEqual(guard.check(smoke, files, CI_OK), [])
+
+        for dropped in (
+            "smoke_contracts_run() {\n}\n",
+            "smoke_contracts_run() {\n"
+            f'  python3 "${{REPO_ROOT}}/scripts/{guard.GUARD_NAME}"\n'
+            "}\n",
+            "smoke_contracts_run() {\n"
+            f'  bash "${{REPO_ROOT}}/scripts/{guard.GUARD_NAME}" --self-test\n'
+            "}\n",
+        ):
+            with self.subTest(dropped=dropped.strip()):
+                failures = guard.check(smoke, files, dropped)
+                self.assertTrue(
+                    any("not wired in" in f for f in failures), failures
+                )
 
 
 if __name__ == "__main__":
