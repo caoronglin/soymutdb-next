@@ -259,5 +259,143 @@ class SecurityProjectionPinTests(unittest.TestCase):
             self.assertIn(f'"{kind}"', src)
 
 
+class SecuritySchemeDescriptionPinTests(unittest.TestCase):
+    """The two published securityScheme descriptions, pinned independently.
+
+    openapi-typescript drops ``securitySchemes`` entirely, so this surface has
+    no generated half. These tests pin the literal, the count door, the source
+    cross-check and the non-duplication with the scheme-shape check 1.
+    """
+
+    def test_clean_snapshot_passes(self):
+        self.assertEqual(guard.failures(*_base()), [])
+
+    def test_the_digest_is_an_independent_literal(self):
+        src = GUARD_PATH.read_text(encoding="utf-8")
+        self.assertIn("_SECURITY_SCHEME_DESCRIPTION_DIGEST = (", src)
+        block = src.split("_SECURITY_SCHEME_DESCRIPTION_DIGEST = (", 1)[1].split(
+            ")", 1
+        )[0]
+        literal = block.strip().strip('"')
+        self.assertEqual(len(literal), 64)
+        self.assertNotIn(
+            "_SECURITY_SCHEME_DESCRIPTION_DIGEST = _scheme_description_digest", src
+        )
+
+    def test_the_literal_matches_the_committed_bytes(self):
+        doc = json.loads(_base()[0])
+        self.assertEqual(
+            guard._scheme_description_digest(
+                guard._scheme_description_rows(doc)
+            ),
+            guard._SECURITY_SCHEME_DESCRIPTION_DIGEST,
+        )
+        self.assertEqual(
+            len(guard._scheme_description_rows(doc)),
+            guard._EXPECTED_SECURITY_SCHEME_DESCRIPTIONS,
+        )
+
+    def test_a_single_byte_rewrite_is_caught_and_names_the_digest(self):
+        def drift(doc):
+            schemes = doc["components"]["securitySchemes"]
+            schemes["HTTPBearer"]["description"] = schemes["HTTPBearer"][
+                "description"
+            ].replace("JWT access token", "JWT access tokeX")
+
+        failures = guard.failures(*_mutate_snapshot(_base(), drift))
+        self.assertTrue(
+            any("securityScheme descriptions drifted" in f for f in failures),
+            failures,
+        )
+        self.assertTrue(
+            any("_SECURITY_SCHEME_DESCRIPTION_DIGEST" in f for f in failures),
+            failures,
+        )
+
+    def test_a_same_count_rotation_is_caught_only_by_the_digest(self):
+        """Swapping the two prose values moves neither count nor shape check."""
+
+        def swap(doc):
+            schemes = doc["components"]["securitySchemes"]
+            bearer = schemes["HTTPBearer"]["description"]
+            schemes["HTTPBearer"]["description"] = schemes["refreshCookie"][
+                "description"
+            ]
+            schemes["refreshCookie"]["description"] = bearer
+
+        failures = guard.failures(*_mutate_snapshot(_base(), swap))
+        self.assertTrue(
+            any("securityScheme descriptions drifted" in f for f in failures),
+            failures,
+        )
+        self.assertFalse(
+            any("_EXPECTED_SECURITY_SCHEME_DESCRIPTIONS" in f for f in failures),
+            failures,
+        )
+
+    def test_dropping_a_description_is_named_by_the_count_door(self):
+        def drop(doc):
+            doc["components"]["securitySchemes"]["HTTPBearer"].pop("description")
+
+        failures = guard.failures(*_mutate_snapshot(_base(), drop))
+        self.assertTrue(
+            any("_EXPECTED_SECURITY_SCHEME_DESCRIPTIONS" in f for f in failures),
+            failures,
+        )
+
+    def test_the_source_literals_are_pinned(self):
+        base = _base()
+        src = base[1].replace(
+            '"JWT access token. Obtain one via POST /api/v1/auth/login "',
+            '"JWT access tokeX. Obtain one via POST /api/v1/auth/login "',
+        )
+        failures = guard.failures(base[0], src, *base[2:])
+        self.assertTrue(
+            any("reviewed securityScheme description literal" in f for f in failures),
+            failures,
+        )
+
+    def test_the_co_revert_is_caught_by_both_doors(self):
+        """Snapshot + source drift together, with no generated half to disagree."""
+        base = _base()
+        doc = json.loads(base[0])
+        doc["components"]["securitySchemes"]["HTTPBearer"]["description"] = doc[
+            "components"
+        ]["securitySchemes"]["HTTPBearer"]["description"].replace(
+            "JWT access token", "JWT access tokeX"
+        )
+        src = base[1].replace(
+            '"JWT access token. Obtain one via POST /api/v1/auth/login "',
+            '"JWT access tokeX. Obtain one via POST /api/v1/auth/login "',
+        )
+        failures = guard.failures(json.dumps(doc), src, *base[2:])
+        self.assertTrue(
+            any("securityScheme descriptions drifted" in f for f in failures),
+            failures,
+        )
+        self.assertTrue(
+            any("reviewed securityScheme description literal" in f for f in failures),
+            failures,
+        )
+
+    def test_the_shape_check_still_does_not_read_descriptions(self):
+        """Check 1 pins type/scheme/name; the new door owns the prose."""
+        src = GUARD_PATH.read_text(encoding="utf-8")
+        self.assertIn('_SCHEME_DESCRIPTION_LITERALS = (', src)
+        self.assertEqual(len(guard._SCHEME_DESCRIPTION_LITERALS), 2)
+        self.assertIn('bearer.get("scheme")', src)
+
+    def test_self_test_lists_the_scheme_description_ablations(self):
+        src = GUARD_PATH.read_text(encoding="utf-8")
+        for kind in (
+            "drift_bearer_description",
+            "drift_cookie_description",
+            "swap_scheme_descriptions",
+            "drop_scheme_description",
+            "co_revert_scheme_description_source",
+        ):
+            self.assertIn(f'"{kind}"', src)
+
+
 if __name__ == "__main__":
     unittest.main()

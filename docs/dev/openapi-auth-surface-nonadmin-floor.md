@@ -1,12 +1,14 @@
 # OpenAPI auth surface: the non-admin protected floor and the projection pin
 
-Two fixed points live in `scripts/check_openapi_auth_surface.py`, and they
-measure two different things:
+Three fixed points live in `scripts/check_openapi_auth_surface.py`, and they
+measure three different things:
+
 
 | literal | rows | what a change to it means |
 | --- | --- | --- |
 | `NON_ADMIN_PROTECTED` | 48 | a reviewed operation lost or gained the bearer requirement |
 | `_SECURITY_PROJECTION_DIGEST` | 268 | an operation moved between protected and public |
+| `_SECURITY_SCHEME_DESCRIPTION_DIGEST` | 2 | a published security scheme description prose changed |
 
 They are deliberately not the same pin. The floor is a reviewed allowlist of
 operations a human chose to protect; the digest is the *whole* published
@@ -199,3 +201,33 @@ The two guards that are red on live main (`check_api_error_code_vocabulary.py`
 and `check_error_code_catalog.py`, both `rc=1`, unconsumed by any `scripts/*.sh`
 gate) belong to the in-flight error-code phase (\#196 / \#201) and are **not**
 touched here.
+
+## Published securityScheme descriptions (follow-on phase)
+
+`components.securitySchemes` publishes two `description` strings: the
+`HTTPBearer` token hint and the `refreshCookie` session hint. Check 1 pins each
+scheme's *shape* (`http`/`bearer`, cookie `apiKey`, runtime cookie name) but
+never reads its prose. `openapi-typescript` drops `security` and
+`securitySchemes` from the generated client entirely, so there is **no second
+half** to compare, and no other wired digest walks `components.securitySchemes`.
+
+Decisive ablation on live bytes: a byte-preserving rewrite of one description
+in `openapi.json` **and** the matching literal in `apps/api/app/main.py`, with
+`_PINNED_ARTIFACTS`' `snapshot_blob` honestly re-pinned, leaves all 12
+`check_openapi_*.py` guards, the behaviour suite and the whole contracts layer
+`SMOKE PASS`. Two doors now close it:
+
+| door | shape it catches |
+| --- | --- |
+| `_SECURITY_SCHEME_DESCRIPTION_DIGEST` | any value change, including a same-count rotation between the two schemes |
+| `_EXPECTED_SECURITY_SCHEME_DESCRIPTIONS` | a description added or dropped |
+| `_SCHEME_DESCRIPTION_LITERALS` in `main.py` | source-only drift, so a co-revert cannot re-export unreviewed prose |
+
+The digest is a hand-written sha256 over canonical sorted
+`(scheme, description)` rows, read from nowhere — re-deriving it from the
+snapshot under guard would make it self-referential. A legitimate prose change
+must move the literal in the same commit as both artifacts and say why. Self-test
+plants 5 regressions (two single-value drifts, a swap, a drop, a coordinated
+co-revert); the companion suite pins the literal, the count door, the source
+cross-check and the non-duplication with check 1. Zero new guards, zero
+`smoke.sh` / registry / teeth wiring changes, zero published artifact bytes.

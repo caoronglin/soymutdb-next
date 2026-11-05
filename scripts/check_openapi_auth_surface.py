@@ -42,6 +42,20 @@ being invisible to every count-preserving check above. ``_EXPECTED_PROJECTED``
 / ``_EXPECTED_HIDDEN_OPS`` are exact count doors so a same-count permutation
 cannot satisfy the doors alone.
 
+The two ``securitySchemes`` descriptions are a separate, smaller surface.
+Check 1 pins each scheme's *shape* (http/bearer, cookie apiKey, runtime cookie
+name) but never reads its ``description`` prose. ``openapi-typescript`` drops
+``security`` and ``securitySchemes`` entirely, so there is no generated half
+to disagree, and no other digest walks ``components.securitySchemes``. A
+byte-preserving co-revert of a description in the snapshot and its source
+literal in ``main.py`` -- with both provenance blob ids honestly re-pinned --
+leaves every other wired guard and the whole contracts layer green.
+``_SECURITY_SCHEME_DESCRIPTION_DIGEST`` is a hand-written sha256 over the
+canonical sorted ``(scheme, description)`` rows, read from nowhere;
+``_EXPECTED_SECURITY_SCHEME_DESCRIPTIONS`` is the exact count door; and a
+source cross-check pins the two literals in ``main.py`` so the published prose
+cannot be re-exported from unreviewed source text.
+
 This guard reads committed bytes only -- the snapshot and the four source
 files that actually decide the surface. It needs no API import, no 3.15 venv,
 no wheel, and no database. Run directly or via ``--self-test``.
@@ -153,6 +167,24 @@ _SECURITY_PROJECTION_DIGEST = (
 _EXPECTED_PROJECTED = 170
 _EXPECTED_HIDDEN_OPS = 98
 
+# Reviewed, hand-written fixed point on the two securityScheme descriptions.
+# sha256 of "\n".join(["soymutdb-security-scheme-descriptions/v1"] +
+#   sorted(f"{scheme}|{description}")) over every component.securitySchemes
+# entry that publishes a description. Read from nowhere: re-deriving it from
+# the snapshot it checks would make the pin self-referential. Re-pin in the
+# same commit as an intentional prose change, with a reason.
+_SECURITY_SCHEME_DESCRIPTION_DIGEST = (
+    "6c85c60177c095afaa5f2e7980f184c567b48dc3cb52ed39a7189ecd8ee43358"
+)
+_EXPECTED_SECURITY_SCHEME_DESCRIPTIONS = 2
+
+# The two source halves in main.py. Pinning them keeps a co-revert honest: the
+# snapshot and the export source must carry the same reviewed prose.
+_SCHEME_DESCRIPTION_LITERALS = (
+    '"JWT access token. Obtain one via POST /api/v1/auth/login "',
+    '"HttpOnly refresh session cookie (path-scoped to /api/v1/auth); "',
+)
+
 
 def _projection_rows(
     document: dict,
@@ -238,6 +270,24 @@ def _operations(document: dict) -> list[tuple[str, str, dict]]:
     return out
 
 
+def _scheme_description_rows(document: dict) -> list[tuple[str, str]]:
+    """Canonical (scheme name, description) rows for components.securitySchemes."""
+    schemes = document.get("components", {}).get("securitySchemes", {})
+    return sorted(
+        (name, body["description"])
+        for name, body in schemes.items()
+        if isinstance(body, dict) and isinstance(body.get("description"), str)
+    )
+
+
+def _scheme_description_digest(rows: list[tuple[str, str]]) -> str:
+    blob = "\n".join(
+        ["soymutdb-security-scheme-descriptions/v1"]
+        + ["|".join(row) for row in sorted(rows)]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def _bearer(operation: dict) -> bool:
     """Whether the operation declares the HTTPBearer requirement."""
     return any("HTTPBearer" in req for req in operation.get("security", []))
@@ -265,6 +315,35 @@ def failures(snapshot: str, main: str, deps: str, auth: str, config: str) -> lis
             found.append(
                 f"refreshCookie declares {refresh.get('name')!r}; config.py declares "
                 f"{cookie_name.group(1)!r}"
+            )
+
+    # 1b. The published securityScheme description prose. Check 1 pins each
+    #     scheme's shape, not its client-facing prose; openapi-typescript drops
+    #     securitySchemes entirely, so no generated half can disagree. A
+    #     coordinated co-revert of snapshot + source + provenance re-pin moves
+    #     nothing above -- only this independent literal and the source pin.
+    scheme_rows = _scheme_description_rows(document)
+    actual = _scheme_description_digest(scheme_rows)
+    if actual != _SECURITY_SCHEME_DESCRIPTION_DIGEST:
+        found.append(
+            "published securityScheme descriptions drifted: "
+            f"_SECURITY_SCHEME_DESCRIPTION_DIGEST pins "
+            f"{_SECURITY_SCHEME_DESCRIPTION_DIGEST} but the snapshot derives "
+            f"{actual}. Re-pin the literal in the same commit as both "
+            "artifacts, with a reason."
+        )
+    if len(scheme_rows) != _EXPECTED_SECURITY_SCHEME_DESCRIPTIONS:
+        found.append(
+            f"{len(scheme_rows)} security schemes publish a description, "
+            "_EXPECTED_SECURITY_SCHEME_DESCRIPTIONS pins "
+            f"{_EXPECTED_SECURITY_SCHEME_DESCRIPTIONS}: a description was "
+            "added or dropped without moving the fixed point"
+        )
+    for literal in _SCHEME_DESCRIPTION_LITERALS:
+        if literal not in main:
+            found.append(
+                f"main.py no longer carries the reviewed securityScheme "
+                f"description literal {literal}"
             )
 
     # 2. Every /api/v1/admin/* operation must require HTTPBearer. Admin routers
@@ -439,6 +518,34 @@ def _mutate(snapshot: str, main: str, deps: str, auth: str, config: str, *, kind
             raise ValueError(kind)
         doc["paths"][admin[0][0]][admin[0][1]].pop("security", None)
         doc["paths"][public[0][0]][public[0][1]]["security"] = [{"HTTPBearer": []}]
+    elif kind == "drift_bearer_description":
+        doc["components"]["securitySchemes"]["HTTPBearer"]["description"] = (
+            doc["components"]["securitySchemes"]["HTTPBearer"]["description"]
+            .replace("JWT access token", "JWT access tokeX")
+        )
+    elif kind == "drift_cookie_description":
+        doc["components"]["securitySchemes"]["refreshCookie"]["description"] = (
+            doc["components"]["securitySchemes"]["refreshCookie"]["description"]
+            .replace("HttpOnly", "HttpOnlx")
+        )
+    elif kind == "swap_scheme_descriptions":
+        schemes = doc["components"]["securitySchemes"]
+        bearer = schemes["HTTPBearer"]["description"]
+        schemes["HTTPBearer"]["description"] = schemes["refreshCookie"][
+            "description"
+        ]
+        schemes["refreshCookie"]["description"] = bearer
+    elif kind == "drop_scheme_description":
+        doc["components"]["securitySchemes"]["HTTPBearer"].pop("description")
+    elif kind == "co_revert_scheme_description_source":
+        main = main.replace(
+            '"JWT access token. Obtain one via POST /api/v1/auth/login "',
+            '"JWT access tokeX. Obtain one via POST /api/v1/auth/login "',
+        )
+        doc["components"]["securitySchemes"]["HTTPBearer"]["description"] = (
+            doc["components"]["securitySchemes"]["HTTPBearer"]["description"]
+            .replace("JWT access token", "JWT access tokeX")
+        )
     elif kind == "phantom_non_admin_security":
         # A genuinely public non-admin operation gains HTTPBearer without the
         # floor being reviewed. Pick one outside PUBLIC_AUTH so check 4 does not
@@ -472,6 +579,11 @@ def _self_test() -> int:
         "phantom_non_admin_security",
         "drop_all_security",
         "move_one_protected_operation",
+        "drift_bearer_description",
+        "drift_cookie_description",
+        "swap_scheme_descriptions",
+        "drop_scheme_description",
+        "co_revert_scheme_description_source",
         *sorted(source_cases),
     ]
     problems = [f"literal floor: {item}" for item in _literal_floor_errors(source)]
