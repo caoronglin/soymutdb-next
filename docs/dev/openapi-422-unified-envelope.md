@@ -265,3 +265,32 @@ it moves on every API-growing commit — "the artifacts changed in an ancestor"
 is already true there and would be a vacuous check. Its equality cousin is
 `_RESPONSE_BODY_BASELINE`: gained paths must grow the response distribution,
 and that is what fires.
+
+## The sixth defect: inline bodies had no fixed point at all
+
+Every fixed point above pins `$ref` bodies — responses, requests, their
+aggregate and their per-operation topology (`_BODY_PAIR_DIGEST`). Live main
+`7468858a` also declares 75 bodies that are **not** `$ref` bodies: 71 inline
+`application/json` responses, 1 inline request, and 3 non-JSON media
+(`image/svg+xml`, 2 x `text/html`). They are anonymous schemas FastAPI emits
+for dict/array/primitive returns, and the generated client prints them as
+inline object types. None of the component baselines can see them,
+`_SNAPSHOT_FLOOR` counts paths and schemas, the digest reads only
+`_ref_bodies`, and the byte-level export fixed point only proves the snapshot
+equals its own normalizer.
+
+**Negative control (reproduced on live `7468858a`):** retype one inline schema
+in **both** artifacts (`object<string>` -> `object<number>`), touching no
+`$ref`, and re-pin both `_PINNED_ARTIFACTS` blob ids. All four landed guards
+stay GREEN — `openapi-snapshot-bodies: OK (18 checks)`,
+`openapi-baseline-sync: OK (2 baselines)`, snapshot contract 19, envelope 16.
+Re-pinning provenance is one deliberate act, not a description of the inline
+surface. A coordinated regenerate that drifts both halves together is exactly
+this shape.
+
+`scripts/check_openapi_inline_body_integrity.py` closes it with an independent
+literal `_INLINE_BODY_BASELINE`, keyed by operation and not derived from either
+artifact, plus exact pins for the client's inline shapes and non-JSON media.
+The snapshot distribution must equal the baseline exactly (missing / extra /
+retyped each named); the client shapes and media must equal their pins exactly.
+A coordinated drift in both halves now fails here.
