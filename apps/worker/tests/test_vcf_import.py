@@ -109,13 +109,20 @@ def pg() -> dict:
     sync_url = make_url(url).set(drivername="postgresql+psycopg2").render_as_string(
         hide_password=False
     )
-    subprocess.run(
+    upgrade = subprocess.run(
         [sys.executable, "-m", "alembic", "-c", "alembic.ini", "upgrade", "head"],
         cwd=API_ROOT,
         env={**os.environ, "SOYMUTDB_DATABASE_URL": url, "PYTHONPATH": str(API_ROOT)},
         check=False,
         capture_output=True,
         text=True,
+    )
+    # A failed migration used to be swallowed: the next statement then died on
+    # `relation "releases" does not exist`, which reads like a missing table
+    # rather than a migration that never ran. Surface the real cause.
+    assert upgrade.returncode == 0, (
+        "alembic upgrade head failed; the PostgreSQL schema is not ready\n"
+        f"stdout: {upgrade.stdout}\nstderr: {upgrade.stderr}"
     )
     # API tests seed releases/assemblies with explicit ids; realign the
     # sequences before this suite inserts through them.
