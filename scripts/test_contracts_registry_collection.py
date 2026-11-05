@@ -490,7 +490,7 @@ class RegistryCollectionGuardTests(unittest.TestCase):
         A row that lands after ``PINNED_SUITES`` gets no protection: its later
         deletion drops the extractor's input and output together and the layer
         still prints a smaller count over ``SMOKE PASS``. Measured on live
-        ``main`` on 2026-11-05 with three such rows (``#228``, ``#231`` twice):
+        ``main`` on 2026-11-05 with three such rows (``#228``, ``#231``, ``#232``):
         deleting any of them exited 0. The pin must therefore be an equality.
         """
         smoke, ci, files = guard.load_sources()

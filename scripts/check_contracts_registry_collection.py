@@ -166,7 +166,7 @@ REQUIRED_GUARD_CALLS: frozenset[str] = frozenset(
 # and malformed. So a pinned ``PINNED_SUITES`` alone answers "was a *known* row
 # deleted?" and answers nothing about a row that arrived after it was written.
 # Live main on 2026-11-05 carried three such rows (``#228``'s fallback
-# declaration suite, ``#231``'s error-code contract suite, ``#231``'s
+# declaration suite, ``#232``'s error-code contract suite, ``#231``'s
 # operationId floor suite): deleting any one of them left
 # ``OK (N-1 gating suites, ...)`` with exit status 0, i.e. the co-reversion hole
 # this whole section exists to close, reopened for every suite that landed after

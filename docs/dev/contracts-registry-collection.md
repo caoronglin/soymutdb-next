@@ -213,8 +213,8 @@ synthetic unit-test fixtures keep calling the extraction-only `check()`:
   addition is caught by the other half. Rows have no such second half:
   `tests=()` is exactly the bytes under audit. Measured on live `main` on
   2026-11-05, three rows had landed after the literal was written -- `#228`'s
-  fallback-declaration suite, and `#231`'s error-code contract suite and
-  operationId floor suite. Deleting any one of them left
+  fallback-declaration suite, `#232`'s error-code contract suite and
+  `#231`'s operationId floor suite. Deleting any one of them left
   `OK (48 gating suites, 22 guard calls, CI --self-test wired)` with exit
   status 0, while the control row `test_error_code_doc_counts.py` was named.
   A floor protects the set it measured and nothing that arrives later.
