@@ -17,6 +17,30 @@ GOOD_SOURCE = '''
 />
 '''
 
+# PR #99 moved the shipped table to a named `const` function and passes the
+# name as `rowKey={rowKey}`. The guard must read that definition, not the
+# reference: an attribute alone carries no JSON.stringify of its own.
+NAMED_GOOD_SOURCE = '''
+const rowKey = (row: VariantSummary) => JSON.stringify([row.variant_id, row.assembly ?? null]);
+<Table<VariantSummary> rowKey={rowKey} />
+'''
+
+NAMED_BAD_SOURCE = '''
+const rowKey = (row: VariantSummary) => `${row.assembly ?? ""}:${row.variant_id}`;
+<Table<VariantSummary> rowKey={rowKey} />
+'''
+
+MASKED_BAD_SOURCE = '''
+const rowKey = (row: VariantSummary) => JSON.stringify([row.variant_id, row.assembly ?? null]);
+<Table<VariantSummary> rowKey={(row) => `${row.assembly ?? ""}:${row.variant_id}`} />
+'''
+
+UNUSED_NAMED_SOURCE = '''
+const rowKey = (row: VariantSummary) => JSON.stringify([row.variant_id, row.assembly ?? null]);
+<Table<VariantSummary> dataSource={rows} />
+'''
+
+
 BAD_SOURCE = '''
 <Table<VariantSummary>
   rowKey={(row) => `${row.assembly ?? ""}:${row.variant_id}`}
@@ -116,3 +140,27 @@ def test_hollowed_case_bodies_are_rejected(tree, capsys):
     assert run(tree, GOOD_SOURCE, HOLLOW_TEST) == 1
     out = capsys.readouterr().err
     assert out.count("asserts nothing") == 4
+
+
+def test_named_const_row_key_is_accepted(tree):
+    """The shape shipped by PR #99 must pass; it reddened the gate on live main."""
+    assert run(tree, NAMED_GOOD_SOURCE, GOOD_TEST) == 0
+
+
+def test_regressed_named_const_row_key_is_rejected(tree, capsys):
+    assert run(tree, NAMED_BAD_SOURCE, GOOD_TEST) == 1
+    assert "JSON.stringify" in capsys.readouterr().err
+
+
+def test_guard_self_test_covers_both_shapes():
+    assert guard.self_test() == 0
+
+
+def test_good_named_const_cannot_mask_a_bad_inline_attribute(tree, capsys):
+    assert run(tree, MASKED_BAD_SOURCE, GOOD_TEST) == 1
+    assert "JSON.stringify" in capsys.readouterr().err
+
+
+def test_unused_named_const_is_not_a_row_key(tree, capsys):
+    assert run(tree, UNUSED_NAMED_SOURCE, GOOD_TEST) == 1
+    assert "no rowKey expression" in capsys.readouterr().err
