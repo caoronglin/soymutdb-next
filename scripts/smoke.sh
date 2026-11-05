@@ -104,6 +104,11 @@ smoke_contracts() {
   # fallback would silently skip exactly the isolation cases that matter.
   local tests=(
     scripts/test_deployment_workflows.py
+    # Behavior contracts injected by app.main (x-idempotent / x-pagination /
+    # x-error-codes / documented 429 / uniform 500) are client-visible, but
+    # a source+artifact co-reversion keeps check-contract.sh green. Pin them
+    # against the committed bytes; stdlib-only, no API import needed.
+    scripts/test_openapi_behavior_contracts.py
     scripts/test_platform_delivery_contracts.py
     scripts/test_dependency_governance_contracts.py
     scripts/test_install_python_workspace.py
