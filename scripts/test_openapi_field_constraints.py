@@ -1,7 +1,8 @@
 """Regression coverage for ``scripts/check_openapi_field_constraints.py``.
 
-The guard pins the 815 published field-level constraint values to a
-hand-written literal. These cases prove each failure direction on real
+The guard pins the 1712 published field-level values (815 constraints + 897
+``default`` values) to a hand-written literal. These cases prove each failure
+direction on real
 committed bytes, that the literal is independent of the artifact it audits,
 and that the wiring cannot quietly rot. Collected by the contracts layer's
 ``tests=()`` array; stdlib-only, no Python 3.15 needed.
@@ -86,6 +87,65 @@ def test_same_count_permutation_is_rejected() -> None:
     fourth = schemas["AlleleFreqRequest"]["properties"]["chromosome"]["anyOf"][0]
     assert third["maxLength"] == 64 == fourth["maxLength"]
     third["maxLength"], fourth["maxLength"] = 255, 64
+    found = guard.failures(snapshot=json.dumps(document, indent=2))
+    assert any("drifted" in problem for problem in found), found
+
+
+def test_coordinated_default_retype_is_rejected() -> None:
+    """The decisive shape: a default retyped in both halves + re-pinned blobs.
+
+    Only the independent literal sees it: the generated ``@default`` line
+    moves with the snapshot, and the provenance blob ids are a reviewed
+    re-pin. Without ``default`` in ``_KEYS`` every wired guard stayed green.
+    """
+
+    def change(document: dict) -> None:
+        node = document["components"]["schemas"]["AdminDashboardStats"][
+            "properties"
+        ]["totalUsers"]
+        assert node["default"] == 0
+        node["default"] = 999999
+
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    change(document)
+    found = guard.failures(snapshot=json.dumps(document, indent=2))
+    assert any("drifted" in problem for problem in found), found
+
+
+def test_default_values_are_pinned_by_the_literal() -> None:
+    """``default`` is in the pinned vocabulary, not a decorative keyword."""
+    assert "default" in guard._KEYS
+    assert guard._EXPECTED_BY_KEY["default"] == 897
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    defaults = [(path, key, value) for path, key, value in guard.rows(document)
+                if key == "default"]
+    assert len(defaults) == 897
+
+
+def test_the_default_named_property_is_a_schema_not_a_keyword() -> None:
+    """``SettingFieldSchema.properties.default`` is a field, not a row.
+
+    A flat-key walk would count the map entry itself as a ``default`` value;
+    the marker-based walker counts only keyword values on real schema nodes,
+    so the two properties literally named ``default`` are not phantom rows.
+    """
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    rows_ = guard.rows(document)
+    assert len(rows_) == guard._EXPECTED_CONSTRAINT_ROWS
+    offenders = [
+        (path, key) for path, key, _ in rows_
+        if path.endswith("/properties/default") and key == "default"
+    ]
+    assert not offenders, offenders
+
+
+def test_a_default_only_drift_moves_the_digest() -> None:
+    """A same-count default swap is invisible to every count door."""
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    props = document["components"]["schemas"]["BlastDatabaseResponse"]["properties"]
+    first, second = props["engine"], props["build_status"]
+    assert first["default"] != second["default"]
+    first["default"], second["default"] = second["default"], first["default"]
     found = guard.failures(snapshot=json.dumps(document, indent=2))
     assert any("drifted" in problem for problem in found), found
 
