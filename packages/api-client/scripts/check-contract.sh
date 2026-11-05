@@ -34,6 +34,13 @@ if ! diff -q "$TMP_DIR/openapi.json" "$PKG_DIR/openapi.json" >/dev/null; then
   exit 1
 fi
 
+# The error-code catalog is a published artifact (package.json `files`) and
+# is embedded in the OpenAPI snapshot as x-error-codes. check-contract.sh only
+# diffs the OpenAPI document and generated TS, so a stale or hand-edited
+# error-codes.json ships with no gate noticing. Pure-stdlib guard, run on the
+# venv interpreter the gate already provisions.
+"$API_PYTHON" "$REPO_ROOT/scripts/check_error_code_catalog.py" || exit 1
+
 echo ">> regenerating client types in temp dir..."
 (cd "$PKG_DIR" && pnpm exec openapi-typescript "$TMP_DIR/openapi.json" \
   -o "$TMP_DIR/openapi.d.ts"
