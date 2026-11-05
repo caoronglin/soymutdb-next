@@ -18,17 +18,16 @@ import { Tooltip } from "@/lib/antd";
 import { formatNumber } from "../lib/format";
 
 /**
- * Reasons this build can actually receive. The backend emits exactly these four
- * (`assembly_service.DOWNLOAD_COUNT_UNAVAILABLE` plus the `NO_*` codes); a code
- * listed here without a producer would silently make an unreachable branch look
- * supported, and a code listed here without a locale entry would print its key.
+ * Reasons this build can actually receive. The backend emits exactly these three
+ * (`AssemblyMetricReason`), so the set is exhaustive, not a subset: a code
+ * listed here without a producer would make an unreachable branch look
+ * supported, and one missing a locale entry would print its translation key.
+ *
+ * `no_transcripts` is deliberately absent. It was never a reason: an empty
+ * transcript set is a *counted* zero once the assembly has genes, and without
+ * genes the answer is `no_genes`. The backend no longer emits it.
  */
-const KNOWN_REASONS = new Set([
-  "no_chromosomes",
-  "no_genes",
-  "no_transcripts",
-  "no_linked_downloads",
-]);
+const KNOWN_REASONS = new Set(["no_chromosomes", "no_genes", "no_linked_downloads"]);
 
 /** Translation key for a metric's reason, or `null` for an unrecognised code. */
 export function metricReasonKey(reason: string | null): string | null {

@@ -3586,7 +3586,6 @@
       "reason": {
         "no_chromosomes": "No chromosome rows are recorded for this assembly.",
         "no_genes": "No annotation has been imported for this assembly.",
-        "no_transcripts": "No transcripts are recorded for this assembly.",
         "no_linked_downloads": "No download file is linked to this assembly."
       }
     }

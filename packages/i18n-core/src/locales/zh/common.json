@@ -3586,7 +3586,6 @@
       "reason": {
         "no_chromosomes": "该装配下没有染色体记录。",
         "no_genes": "该装配尚未导入注释。",
-        "no_transcripts": "该装配下没有转录本记录。",
         "no_linked_downloads": "该装配没有关联的下载文件。"
       }
     }

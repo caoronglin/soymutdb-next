@@ -23,18 +23,18 @@ from ..models.genomic import Assembly, Chromosome, Gene, Transcript
 from ..schemas.genomic import (
     AssemblyDetailResponse,
     AssemblyMetric,
+    AssemblyMetricReason,
     AssemblyStatistics,
     AssemblySummaryResponse,
     ChromosomeResponse,
 )
 
-#: Stated once, returned to the client, so a missing number is explained rather
-#: than read as a zero. These are machine-readable codes: the portal maps them to
-#: sentences, and an unrecognised code is still passed through rather than hidden.
-DOWNLOAD_COUNT_UNAVAILABLE = "no_linked_downloads"
-NO_GENES = "no_genes"
-NO_TRANSCRIPTS = "no_transcripts"
-NO_CHROMOSOMES = "no_chromosomes"
+#: The reasons are the schema's closed enum rather than local strings: the
+#: client renders them from a lookup table, so a sentence invented here would
+#: surface untranslated and nothing would catch it.
+DOWNLOAD_COUNT_UNAVAILABLE = AssemblyMetricReason.NO_LINKED_DOWNLOADS
+NO_GENES = AssemblyMetricReason.NO_GENES
+NO_CHROMOSOMES = AssemblyMetricReason.NO_CHROMOSOMES
 
 
 class AssemblyService:

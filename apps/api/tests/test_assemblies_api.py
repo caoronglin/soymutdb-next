@@ -492,3 +492,89 @@ def test_statistics_cannot_be_constructed_without_stating_each_count():
 
     with pytest.raises(ValidationError):
         AssemblySummaryResponse(id="1", name="a", species="s", version="v")  # noqa: B018
+
+
+def test_a_reason_is_a_closed_code_not_a_sentence():
+    """``AssemblyMetric.reason`` accepts only the codes the client can translate.
+
+    The field used to be ``str``, so ``"no protein residue store in this
+    schema"`` was a valid reason. The portal renders reasons from a lookup
+    table, so that sentence reached the reader untranslated, and nothing in the
+    backend objected. Typing it as an enum moves that failure to construction:
+    a reason nobody has a translation for cannot be built.
+    """
+    from pydantic import ValidationError
+
+    from app.schemas.genomic import AssemblyMetric, AssemblyMetricReason
+
+    assert {reason.value for reason in AssemblyMetricReason} == {
+        "no_genes",
+        "no_chromosomes",
+        "no_linked_downloads",
+    }
+    # ``no_transcripts`` is not a reason: an empty transcript set is a counted
+    # zero, and without genes the answer is ``no_genes``.
+    assert "no_transcripts" not in {reason.value for reason in AssemblyMetricReason}
+
+    assert AssemblyMetric(reason="no_genes").reason is AssemblyMetricReason.NO_GENES
+
+    for sentence in ("some sentence", "no_transcripts", "unknown_reason"):
+        with pytest.raises(ValidationError):
+            AssemblyMetric(reason=sentence)  # noqa: B018 - the constructor is the assertion
+
+
+async def test_listing_omits_an_unpublished_assembly_in_the_same_release(
+    assembly_fixture, db_session, client, app
+):
+    """The list endpoint must not answer for a draft assembly of the *same* release.
+
+    The 404 guard covers "fetch one by id". The list is the other half and was
+    left uncovered: ``list_assemblies`` selects every ``Assembly`` whose
+    ``release_id`` matches, with no status predicate of its own, so any assembly
+    an operator has staged into the resolved release but not published would
+    list itself -- name, version, statistics and a working detail link included.
+    The list is the disclosure surface here: a detail URL at least requires
+    guessing an id, a list hands out the ids.
+
+    ``release_context`` is overridden per test because the app-wide fixture pins
+    release 7, which this fixture's rows do not live in.
+    """
+    from app.services.release_context import ReleaseContext, get_release_context
+
+    release, v4, _v5 = assembly_fixture
+
+    async def override() -> ReleaseContext:
+        return ReleaseContext(release_id=release.id, assembly_id=v4.id, assembly=v4.name)
+
+    app.dependency_overrides[get_release_context] = override
+    try:
+        # Unpublished within the *published* release, not merely in a draft one:
+        # ``list_assemblies`` filters on ``release_id`` alone, so the draft
+        # release case is already invisible. The leak lives in this one.
+        leaked = Assembly(
+            name="Wm82.a9-draft",
+            species="Glycine max",
+            version="a9.v1-draft",
+            release_id=release.id,
+        )
+        db_session.add(leaked)
+        await db_session.flush()
+        db_session.add(
+            Chromosome(assembly_id=leaked.id, name="ChrDraft", length=777_777, order=0)
+        )
+        await db_session.flush()
+
+        response = await client.get(ASSEMBLIES)
+        assert response.status_code == 200
+        rows = response.json()
+        names = [row["name"] for row in rows]
+        # The published assemblies of the published release are there ...
+        assert v4.name in names
+        # ... and nothing of the unpublished one is, in body or anywhere else.
+        # Counted explicitly, so "the row is there but unnamed" cannot pass.
+        assert len(rows) == 2, names
+        assert "Wm82.a9-draft" not in names
+        for fragment in ("Wm82.a9-draft", "a9.v1-draft", "ChrDraft", "777777"):
+            assert fragment not in response.text, fragment
+    finally:
+        app.dependency_overrides.pop(get_release_context, None)

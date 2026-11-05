@@ -256,6 +256,24 @@ class GeneListResponse(BaseModel):
 GeneDetail.model_rebuild()
 
 
+class AssemblyMetricReason(StrEnum):
+    """Why an assembly statistic has no value.
+
+    A closed set. The reason reaches the reader as translated text, so it has to
+    be a code the client can look up; a sentence written by the service would be
+    shown untranslated and cannot be covered by a locale check. Keeping the set
+    closed on the server is also what stops a new free-text reason from being
+    introduced without a client-side translation.
+    """
+
+    #: No gene rows exist for this assembly: no annotation was ever imported.
+    NO_GENES = "no_genes"
+    #: No chromosome rows exist, so there is neither a count nor a size.
+    NO_CHROMOSOMES = "no_chromosomes"
+    #: ``download_files`` has no assembly dimension to aggregate over.
+    NO_LINKED_DOWNLOADS = "no_linked_downloads"
+
+
 class AssemblyMetric(BaseModel):
     """One assembly-level statistic, with the reason it is unknown.
 
@@ -269,7 +287,7 @@ class AssemblyMetric(BaseModel):
     """
 
     value: int | None = Field(default=None, ge=0)
-    reason: str | None = None
+    reason: AssemblyMetricReason | None = None
 
     @model_validator(mode="after")
     def _reason_matches_value(self):  # noqa: ANN201
