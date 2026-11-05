@@ -300,3 +300,34 @@ deleting a case cannot quietly restore an older count.
 Zero wiring churn: `smoke.sh`, `REQUIRED_GUARD_CALLS`, `_WIRED_SELF_TESTS`,
 `PINNED_SUITES` and `_CASE_FLOOR` are untouched. The guard and its companion
 are already collected by the contracts layer.
+
+## The `openapi` dialect string (added later)
+
+The top-level `openapi` field (`"3.1.0"`) declares the JSON Schema dialect the
+whole document speaks. It is client-visible: `3.0.3` vs `3.1.0` changes
+nullable/type semantics for every generated client. It is also the one
+document-level fact with **no source literal in this repo** — FastAPI owns the
+value as `app.openapi_version`, and `main.py` merely forwards it into
+`get_openapi(openapi_version=app.openapi_version, ...)`.
+
+Measured on live `9a7c3e52`: a byte-preserving `3.1.0 -> 3.0.3` in the snapshot
+left all 12 wired `check_openapi_*` guards `rc=0` and the whole contracts layer
+`SMOKE PASS / 1103 passed`. Even a coordinated co-revert that also blesses the
+new value in the golden lock stays green, because the published value has no
+independent anchor at all.
+
+The fix follows the same idiom as the securityScheme descriptions (`#315`):
+
+- the golden lock gains a reviewed `"openapi": "3.1.0"` entry, the only
+  authority on the published **value**;
+- `check_openapi_document_metadata.py` pins the **wiring** —
+  `get_openapi(openapi_version=app.openapi_version)` — from the parsed call,
+  so hardcoding a different dialect (or dropping the keyword and inheriting a
+  future FastAPI default) is named by `_build_openapi_schema()`;
+- `--self-test` plants the single-half drift, the three-way bless (snapshot +
+  golden + source), and the dropped wiring; the companion suite asserts the
+  literal and the decisive co-revert from a second file.
+
+`openapi` is deliberately excluded from the "source == golden" loop: there is
+no module-level constant to compare. Its source-side anchor is the wiring
+check, not a literal.
