@@ -72,6 +72,15 @@ step "Rust toolchain"
   cargo --version
 )
 
+step "OpenAPI response fields ↔ Pydantic ↔ kernel keys"
+# `programs` is derived from the router, so the surface guard inherits whatever
+# the router believes. This ledger compares the committed OpenAPI snapshot, the
+# Pydantic models and the kernel dict keys field by field, and pins `programs`
+# to the paths `openapi.json` actually serves. Read the bytes before the
+# expensive build so the failure is named early.
+"${PY}" scripts/check_bio_core_openapi_fields.py --self-test
+"${PY}" scripts/check_bio_core_openapi_fields.py
+
 step "Rust kernel ↔ advertised capability surface"
 # The numeric parity guard only compares values that exist on BOTH sides, so
 # dropping a program/format from `capabilities` reads as "no difference" while
@@ -194,5 +203,10 @@ step "capability-parity guard regression (the guard itself must be load-bearing)
 
 step "capability-surface guard regression (the guard itself must be load-bearing)"
 "${SMOKE_PY}" -m pytest scripts/test_bio_core_capability_surface.py scripts/test_bio_core_capability_surface_wiring.py -q
+
+step "OpenAPI field ledger regression (the ledger itself must be load-bearing)"
+# Both the comparison and its wiring are pinned here: a weakened check() or a
+# dropped call site must turn this red, not leave an unexercised file behind.
+"${SMOKE_PY}" -m pytest scripts/test_bio_core_openapi_fields.py scripts/test_bio_core_openapi_fields_wiring.py -q
 
 echo "==> bio-core verification: PASS"

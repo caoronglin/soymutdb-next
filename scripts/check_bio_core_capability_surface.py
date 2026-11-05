@@ -14,9 +14,18 @@ the Rust ``kmer_counts`` binding remain live is the concrete failure this guard
 closes. Adding a program with no route would be the opposite lie.
 
 The surface is DERIVED from committed bytes, not hardcoded: program labels come
-from the ``@router.post`` declarations, format labels and their validator names
-come from the ``/inspect`` dispatch table. That way another PR adding a genuine
-new route + advertised program stays green without editing this guard. On top of
+from the paths ``packages/api-client/openapi.json`` actually serves under the
+spec §7.1 roster prefixes (minus GET-only descriptions), format labels and their
+validator names come from the ``/inspect`` dispatch table. That way another PR
+adding a genuine new route + advertised program stays green without editing this
+guard.
+
+The program side is deliberately read from the OpenAPI snapshot and not from the
+``@router.post`` declarations. Deriving it from the router made this guard blind
+in exactly the way it exists to prevent: a route served by another module
+(``/tools/intervals/overlap``) never appears there, and ``/tools/sequence/inspect``
+was filtered out by request, so the advertised roster could omit both while every
+gate stayed green. The document is the surface a client actually sees. On top of
 that derivation, the known PyO3 compute/validator kernels are a lower bound
 that must remain exported, so a kernel-side deletion is caught too.
 
@@ -33,20 +42,28 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PY = ROOT / "apps/api/app/schemas/sequence_tools.py"
-ROUTES_PY = ROOT / "apps/api/app/api/v1/tools_sequence.py"
+OPENAPI = ROOT / "packages/api-client/openapi.json"
 INSPECT_PY = ROOT / "apps/api/app/services/format_inspect_service.py"
 BINDINGS_RS = ROOT / "packages/bio-core/src/bindings.rs"
+
+#: Path prefixes the ``programs`` roster is responsible for (spec §7.1). BLAST,
+#: seqfetch, ld, enrichment and the other pre-existing /tools routers are
+#: outside that table; folding them in would turn an honest roster into a false
+#: claim about routers it never described.
+ROSTER_PREFIXES: tuple[str, ...] = ("tools/sequence/", "tools/intervals/")
 
 # PyO3 functions that MUST stay exported. These are the kernel side of the
 # surface; a deletion here means a compute/validator path can no longer work.
 # The labels are only used for readable error messages -- the surface itself is
-# derived from the routes and the /inspect dispatch table, not from this map.
+# derived from the served document and the /inspect dispatch table, not from this
+# map.
 COMPUTE_KERNELS = {
     "reverse_complement",
     "find_matches",
@@ -72,7 +89,9 @@ def advertised_programs(schema: str) -> list[str]:
         schema,
         label="programs",
     )
-    return re.findall(r'"([a-z][a-z0-9-]*)"', body)
+    # Labels are path segments: hyphens and slashes both occur
+    # (``reverse-complement``, ``intervals/overlap``).
+    return re.findall(r'"([a-z][a-z0-9/-]*)"', body)
 
 
 def advertised_formats(schema: str) -> list[str]:
@@ -84,10 +103,30 @@ def advertised_formats(schema: str) -> list[str]:
     return re.findall(r'"([a-z][a-z0-9]*)"', body)
 
 
-def route_programs(routes: str) -> list[str]:
-    """POST paths under /tools/sequence; /inspect is a format endpoint."""
-    paths = re.findall(r'@router\.post\("([^"]+)"', routes)
-    return [p.lstrip("/") for p in paths if p.lstrip("/") != "inspect"]
+def served_programs(doc: str) -> list[str]:
+    """Compute paths the OpenAPI snapshot actually serves under the roster prefixes.
+
+    ``/tools/sequence/kmers`` -> ``kmers`` (what a client appends to the router
+    prefix); ``/tools/intervals/overlap`` keeps its namespace, because the
+    roster is flat and that path is not under ``/tools/sequence/``. GET-only
+    entries are descriptions, not compute programs.
+    """
+    paths = json.loads(doc)["paths"]
+    out: list[str] = []
+    for path, entry in paths.items():
+        if not path.startswith("/api/v1/"):
+            continue
+        relative = path[len("/api/v1/"):]
+        if not relative.startswith(ROSTER_PREFIXES):
+            continue
+        if set(entry) == {"get"}:
+            continue
+        out.append(
+            relative.removeprefix("tools/sequence/")
+            if relative.startswith("tools/sequence/")
+            else relative.removeprefix("tools/")
+        )
+    return out
 
 
 def kernel_functions(bindings: str) -> set[str]:
@@ -122,7 +161,7 @@ def check(sources: dict[str, str]) -> list[str]:
     try:
         programs = advertised_programs(sources[str(SCHEMA_PY)])
         formats = advertised_formats(sources[str(SCHEMA_PY)])
-        routes = route_programs(sources[str(ROUTES_PY)])
+        routes = served_programs(sources[str(OPENAPI)])
         exported = kernel_functions(sources[str(BINDINGS_RS)])
         dispatch = inspect_dispatch(sources[str(INSPECT_PY)])
     except ValueError as exc:
@@ -132,7 +171,7 @@ def check(sources: dict[str, str]) -> list[str]:
         errors.append("a capability source is empty; refusing a vacuous pass")
         return errors
 
-    # 1. Advertised programs == the POST routes actually served.
+    # 1. Advertised programs == the compute paths the document actually serves.
     errors.extend(_drift("program", programs, routes))
     # 2. Advertised formats == the /inspect dispatch keys actually routed.
     errors.extend(_drift("format", formats, list(dispatch)))
@@ -150,7 +189,7 @@ def check(sources: dict[str, str]) -> list[str]:
 def load_sources() -> dict[str, str]:
     return {
         str(path): path.read_text(encoding="utf-8")
-        for path in (SCHEMA_PY, ROUTES_PY, INSPECT_PY, BINDINGS_RS)
+        for path in (SCHEMA_PY, OPENAPI, INSPECT_PY, BINDINGS_RS)
     }
 
 
@@ -169,7 +208,12 @@ def self_test() -> int:
         ("advertise a phantom program", str(SCHEMA_PY), '            "kmers",\n', '            "kmers",\n            "phantom",\n'),
         ("advertise a phantom format", str(SCHEMA_PY), '"fasta", "fastq", "bed"', '"fasta", "fastq", "bed", "phantom"'),
         ("advertise a duplicate program", str(SCHEMA_PY), '            "kmers",\n', '            "kmers",\n            "kmers",\n'),
-        ("drop a route", str(ROUTES_PY), '@router.post("/kmers", response_model=s.KmerResponse)\nasync def sequence_kmers(payload: s.KmerRequest) -> s.KmerResponse:\n    return await service.kmers(payload)\n', ""),
+        (
+            "drop a route from the document",
+            str(OPENAPI),
+            '"/api/v1/tools/sequence/kmers"',
+            '"/api/v1/tools/sequence/kmers-gone"',
+        ),
         ("drop a kernel binding", str(BINDINGS_RS), "    m.add_function(wrap_pyfunction!(kmer_counts, m)?)?;\n", ""),
         ("drop a validator binding", str(BINDINGS_RS), "    m.add_function(wrap_pyfunction!(validate_bed, m)?)?;\n", ""),
         ("drop an inspect dispatch entry", str(INSPECT_PY), '        "bed": "validate_bed",\n', ""),
@@ -197,12 +241,11 @@ def self_test() -> int:
     grown[str(SCHEMA_PY)] = base[str(SCHEMA_PY)].replace(
         '            "kmers",\n', '            "kmers",\n            "newtool",\n'
     )
-    grown[str(ROUTES_PY)] = base[str(ROUTES_PY)].replace(
-        '@router.post("/inspect", response_model=s.FormatInspectResponse)',
-        '@router.post("/newtool", response_model=s.KmerResponse)\n'
-        'async def sequence_newtool(payload: s.KmerRequest) -> s.KmerResponse:\n'
-        '    return await service.kmers(payload)\n\n\n'
-        '@router.post("/inspect", response_model=s.FormatInspectResponse)',
+    grown[str(OPENAPI)] = base[str(OPENAPI)].replace(
+        '"/api/v1/tools/sequence/inspect"',
+        '"/api/v1/tools/sequence/newtool": {"post": {}},\n'
+        '    "/api/v1/tools/sequence/inspect"',
+        1,
     )
     if check(grown):
         print(f"FAIL legitimate extension was rejected: {check(grown)}")
