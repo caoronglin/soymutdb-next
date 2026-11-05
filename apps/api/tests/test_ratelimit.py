@@ -14,7 +14,11 @@ from app.core.exceptions import (
     ServiceUnavailableError,
     soy_mut_db_exception_handler,
 )
-from app.core.ratelimit import ExternalArticlePreviewRateLimiter, LoginRateLimiter
+from app.core.ratelimit import (
+    FALLBACK_MAX_KEYS,
+    ExternalArticlePreviewRateLimiter,
+    LoginRateLimiter,
+)
 
 
 @dataclass
@@ -155,6 +159,33 @@ async def test_dev_redis_failure_uses_process_local_fallback(caplog) -> None:
         await limiter.enforce(username="dev-user", client_ip="192.0.2.20")
 
     assert "redis" in caplog.text.lower() or "unavailable" in caplog.text.lower()
+
+
+@pytest.mark.asyncio
+async def test_dev_fallback_map_stays_bounded_for_distinct_identities() -> None:
+    """A Redis outage must not let distinct identities grow the heap.
+
+    All keys in this flood belong to one fixed window, so pruning previous
+    windows is not enough: only an unconditional cap bounds the map. The
+    login-family limiters used a hardcoded 2048 with no such cap.
+    """
+    limiter = LoginRateLimiter(
+        redis_getter=lambda: FailingRedis(),
+        settings_getter=lambda: _settings(
+            app_env="dev",
+            maximum=FALLBACK_MAX_KEYS + 500,
+            ip_maximum=FALLBACK_MAX_KEYS + 500,
+        ),
+        clock=lambda: 120.5,
+    )
+
+    for index in range(FALLBACK_MAX_KEYS + 500):
+        await limiter.enforce(
+            username=f"user-{index}",
+            client_ip=f"198.51.100.{index % 250}.{index // 250}",
+        )
+
+    assert len(limiter._fallback_counts) <= FALLBACK_MAX_KEYS
 
 
 @pytest.mark.asyncio

@@ -63,9 +63,9 @@ EXEMPT_PATH_PREFIXES = ("/health", "/metrics")
 #: Length of the fixed window used by the global request limiter.
 REQUEST_RATE_LIMIT_WINDOW_SECONDS = 60
 
-#: Upper bound for the process-local fallback counter.  Reuses the pruning
-#: pattern of :meth:`LoginRateLimiter._fallback_increment`; the map is hard
-#: capped so a burst of distinct peers cannot grow the process heap.
+#: Upper bound for every process-local fallback counter. Both limiter
+#: families go through :func:`_bound_fallback_counts`, which hard caps the
+#: map so a burst of distinct peers cannot grow the process heap.
 FALLBACK_MAX_KEYS = 2048
 
 
@@ -81,6 +81,25 @@ def _default_redis_getter() -> Any:
 def _default_settings_getter() -> Settings:
     """Return the shared settings (late bound, see :func:`_default_redis_getter`)."""
     return get_settings()
+
+
+def _bound_fallback_counts(
+    counts: dict[str, tuple[int, int]], window_number: int
+) -> dict[str, tuple[int, int]]:
+    """Prune stale windows and hard-cap the process-local fallback map.
+
+    Both the login-family limiters and the global request limiter share this
+    fallback. A Redis outage in dev creates one key per distinct identity or
+    peer *inside the same window*, so dropping previous windows alone cannot
+    bound the heap: an unconditional cap is required. Keeping the algorithm in
+    one place stops the two copies from drifting apart again.
+    """
+    if len(counts) <= FALLBACK_MAX_KEYS:
+        return counts
+    bounded = {key: value for key, value in counts.items() if value[0] >= window_number - 1}
+    if len(bounded) > FALLBACK_MAX_KEYS:
+        bounded = dict(list(bounded.items())[-FALLBACK_MAX_KEYS:])
+    return bounded
 
 
 def resolve_trusted_peer_ip(request: Request, trusted_proxies: Iterable[str]) -> str:
@@ -262,13 +281,9 @@ class LoginRateLimiter:
             count = previous_count + 1 if previous_window == window_number else 1
             self._fallback_counts[key] = (window_number, count)
 
-            # Bound memory if a development process receives many distinct keys.
-            if len(self._fallback_counts) > 2048:
-                self._fallback_counts = {
-                    stored_key: value
-                    for stored_key, value in self._fallback_counts.items()
-                    if value[0] >= window_number - 1
-                }
+            self._fallback_counts = _bound_fallback_counts(
+                self._fallback_counts, window_number
+            )
 
         retry_after = max(1, window - int(now % window))
         return count, retry_after
@@ -485,19 +500,9 @@ class RequestRateLimiter:
             count = previous_count + 1 if previous_window == window_number else 1
             self._fallback_counts[key] = (window_number, count)
 
-            if len(self._fallback_counts) > FALLBACK_MAX_KEYS:
-                # Drop counters from previous windows first ...
-                self._fallback_counts = {
-                    stored_key: value
-                    for stored_key, value in self._fallback_counts.items()
-                    if value[0] >= window_number - 1
-                }
-                if len(self._fallback_counts) > FALLBACK_MAX_KEYS:
-                    # ... then cap the map unconditionally: the remaining
-                    # keys belong to the current window and would otherwise
-                    # grow without bound.
-                    retained = list(self._fallback_counts.items())[-FALLBACK_MAX_KEYS:]
-                    self._fallback_counts = dict(retained)
+            self._fallback_counts = _bound_fallback_counts(
+                self._fallback_counts, window_number
+            )
 
         retry_after = max(1, window - int(now % window))
         return count, retry_after
