@@ -9,6 +9,14 @@ behavior guard (#166), the auth-surface guard (#169), the envelope-shape guard
 (#171) and the body-integrity guard (#168) pin per-operation or per-schema
 facts; none reads the top-level ``info``/``tags`` block.
 
+The top-level ``openapi`` dialect string (``"3.1.0"``) is the one fact in
+this block with no source literal in this repo: FastAPI owns it as
+``app.openapi_version`` and ``main.py`` only forwards it into
+``get_openapi(...)``. So the golden lock is its only value anchor, and the
+parsed ``get_openapi(openapi_version=app.openapi_version)`` wiring is its only
+source-side anchor. A coordinated snapshot+golden+source co-revert that blesses
+``3.0.3`` stays green on every equality door and is named by that wiring pin.
+
 That block is client-visible and lives in exactly one committed artifact:
 ``openapi-typescript`` drops ``info`` and top-level ``tags`` entirely, so
 ``openapi.d.ts`` carries neither. ``normalize()`` in ``export_contract.py``
@@ -107,7 +115,7 @@ SELF = Path(__file__).name
 WIRED_AS = "scripts/test_openapi_document_metadata_guard.py"
 
 # Keys the golden locks. ``_comment`` is documentation, not contract.
-LOCKED_KEYS = ("title", "version", "description", "tags")
+LOCKED_KEYS = ("openapi", "title", "version", "description", "tags")
 REQUIRED_TAG_KEYS = ("name", "description")
 
 # Independent, hand-written fixed point on the published ``info`` key set. The
@@ -184,6 +192,17 @@ def _fastapi_kwargs(tree: ast.Module) -> dict[str, ast.expr]:
         if isinstance(node, ast.Call) and (
             (isinstance(node.func, ast.Name) and node.func.id == "FastAPI")
             or (isinstance(node.func, ast.Attribute) and node.func.attr == "FastAPI")
+        ):
+            return {kw.arg: kw.value for kw in node.keywords if kw.arg}
+    return {}
+
+
+def _get_openapi_kwargs(tree: ast.Module) -> dict[str, ast.expr]:
+    """Keyword arguments of the ``get_openapi(...)`` call that builds the schema."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and (
+            (isinstance(node.func, ast.Name) and node.func.id == "get_openapi")
+            or (isinstance(node.func, ast.Attribute) and node.func.attr == "get_openapi")
         ):
             return {kw.arg: kw.value for kw in node.keywords if kw.arg}
     return {}
@@ -406,6 +425,9 @@ def source_facts(main: str, config: str) -> dict[str, Any]:
         ),
         "description_expr": _kw_expr(kwargs, "description"),
         "tags_expr": _kw_expr(kwargs, "openapi_tags"),
+        "openapi_version_expr": _kw_expr(
+            _get_openapi_kwargs(main_tree), "openapi_version"
+        ),
     }
 
 
@@ -414,6 +436,7 @@ def published_facts(document: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(info, dict):
         return {}
     return {
+        "openapi": document.get("openapi"),
         "title": info.get("title"),
         "version": info.get("version"),
         "description": info.get("description"),
@@ -466,8 +489,11 @@ def failures(
     for key in LOCKED_KEYS:
         if key not in locked:
             found.append(f"golden lock is missing the reviewed `{key}`")
-    if any(isinstance(locked.get(k), str) and not locked[k] for k in ("title", "version", "description")):
-        found.append("golden lock carries an empty title/version/description")
+    if any(
+        isinstance(locked.get(k), str) and not locked[k]
+        for k in ("openapi", "title", "version", "description")
+    ):
+        found.append("golden lock carries an empty openapi/title/version/description")
 
     published = published_facts(document)
     if not published:
@@ -505,7 +531,8 @@ def failures(
     #    each other, but not with the reviewed lock.
     for key in LOCKED_KEYS:
         if key in locked and published.get(key) != locked[key]:
-            found.append(f"published `info/{key}` no longer matches the golden lock")
+            location = key if key == "openapi" else f"info/{key}"
+            found.append(f"published `{location}` no longer matches the golden lock")
 
     # Tag catalog well-formedness (independent of the golden): an empty
     # catalog or a hollowed tag is a regression even if someone edited the lock.
@@ -522,6 +549,11 @@ def failures(
     # 2. Source == golden. A source-only drift would mislead the next
     #    regeneration into publishing a contract nobody reviewed.
     for key in LOCKED_KEYS:
+        # `openapi` is FastAPI's own dialect attribute, not a module-level
+        # constant in this repo; its source-side anchor is the get_openapi(...)
+        # wiring checked below, not a literal in main.py.
+        if key == "openapi":
+            continue
         if key in locked and facts.get(key) != locked[key]:
             found.append(f"source constant for `{key}` no longer matches the golden lock")
 
@@ -536,6 +568,16 @@ def failures(
         found.append("create_app() no longer passes OPENAPI_DESCRIPTION as description")
     if facts["tags_expr"] != "OPENAPI_TAGS":
         found.append("create_app() no longer passes OPENAPI_TAGS as openapi_tags")
+    # The dialect string is FastAPI's own ``app.openapi_version`` attribute,
+    # not a reviewed constant in this repo. Pin the wiring that carries it into
+    # the export, so a rewrite that hardcodes a different dialect (or drops
+    # the keyword and lets a future FastAPI default change it) is named. The
+    # golden lock remains the only anchor on the published *value*.
+    if facts["openapi_version_expr"] != "app.openapi_version":
+        found.append(
+            "_build_openapi_schema() no longer passes app.openapi_version into "
+            "get_openapi(openapi_version=...)"
+        )
     try:
         shadowed = _shadowed_wiring_names(main)
     except (SyntaxError, ValueError) as exc:
@@ -896,7 +938,55 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
     def smoke_unwired(snapshot, generated, golden, main, config, smoke):
         return snapshot, generated, golden, main, config, smoke.replace(WIRED_AS, "", 1)
 
+    def drop_openapi_version(document):
+        document["openapi"] = "3.0.3"
+
+    def source_openapi_version_unwired(
+        snapshot, generated, golden, main, config, smoke
+    ):
+        main = main.replace(
+            "openapi_version=app.openapi_version,",
+            'openapi_version="3.0.3",',
+            1,
+        )
+        return snapshot, generated, golden, main, config, smoke
+
+    def openapi_version_blessed_everywhere(
+        snapshot, generated, golden, main, config, smoke
+    ):
+        # The decisive shape: snapshot + golden + a source rewrite all agree on
+        # a different dialect. The three-way lock is green by construction;
+        # only the reviewed wiring pin on get_openapi(...) can name it.
+        document = json.loads(snapshot)
+        document["openapi"] = "3.0.3"
+        lock = json.loads(golden)
+        lock["openapi"] = "3.0.3"
+        main = main.replace(
+            "openapi_version=app.openapi_version,",
+            'openapi_version="3.0.3",',
+            1,
+        )
+        return (
+            json.dumps(document, ensure_ascii=False), generated,
+            json.dumps(lock, ensure_ascii=False), main, config, smoke,
+        )
+
     ablations = [
+        (
+            "openapi dialect drift",
+            edit_snapshot(drop_openapi_version),
+            "no longer matches the golden lock",
+        ),
+        (
+            "openapi dialect blessed in snapshot + golden + source",
+            openapi_version_blessed_everywhere,
+            "no longer passes app.openapi_version",
+        ),
+        (
+            "get_openapi dialect wiring dropped",
+            source_openapi_version_unwired,
+            "no longer passes app.openapi_version",
+        ),
         ("info.title drift", edit_snapshot(drop_title), "no longer matches the golden lock"),
         ("info.version drift", edit_snapshot(drop_version), "no longer matches the golden lock"),
         ("info.description drift", edit_snapshot(drop_description), "no longer matches the golden lock"),

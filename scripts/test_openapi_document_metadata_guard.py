@@ -53,11 +53,15 @@ UNCOMPILABLE_LABEL = "create_app does not compile under symtable"
 UNRUNNABLE_LABEL = "create_app would not run (compiler rejects it)"
 TAG_ASSIGNMENT_LABEL = "operation tag assignment permuted"
 INFO_SHAPE_LABEL = "phantom info key added"
+VERSION_DRIFT_LABEL = "openapi dialect drift"
+VERSION_BLESSED_LABEL = "openapi dialect blessed in snapshot + golden + source"
+VERSION_UNWIRED_LABEL = "get_openapi dialect wiring dropped"
 REQUIRED_ABLATIONS = frozenset(
     (DECOY_LABEL, SHADOW_LABEL, MUTATION_LABEL, UNCOMPILABLE_LABEL,
-     TAG_ASSIGNMENT_LABEL, INFO_SHAPE_LABEL)
+     TAG_ASSIGNMENT_LABEL, INFO_SHAPE_LABEL, VERSION_DRIFT_LABEL,
+     VERSION_BLESSED_LABEL, VERSION_UNWIRED_LABEL)
 )
-EXPECTED_ABLATIONS = 29
+EXPECTED_ABLATIONS = 32
 
 
 def _guard(path: Path = GUARD):
@@ -301,6 +305,43 @@ def _regressed_guard_source() -> str:
     substring + the decoy / shadow / uncompilable cases removed, so the count
     falls back to 22. Nothing is written to the committed file."""
     source = GUARD.read_text(encoding="utf-8")
+    # The three dialect ablations are later additions too; strip them so the
+    # reconstructed guard really is the historical 22-ablation world.
+    drift_block = (
+        "        (\n"
+        '            "openapi dialect drift",\n'
+        "            edit_snapshot(drop_openapi_version),\n"
+        '            "no longer matches the golden lock",\n'
+        "        ),\n"
+    )
+    assert drift_block in source, "dialect drift ablation not found"
+    source = source.replace(drift_block, "", 1)
+    for label, mutator, needle in (
+        ("openapi dialect blessed in snapshot + golden + source",
+         "openapi_version_blessed_everywhere",
+         '"no longer passes app.openapi_version"'),
+        ("get_openapi dialect wiring dropped", "source_openapi_version_unwired",
+         '"no longer passes app.openapi_version"'),
+    ):
+        block = (
+            "        (\n"
+            f'            "{label}",\n'
+            f"            {mutator},\n"
+            f"            {needle},\n"
+            "        ),\n"
+        )
+        assert block in source, f"dialect ablation tuple not found: {label}"
+        source = source.replace(block, "", 1)
+    # The dialect wiring check is not part of the old world either.
+    dialect_check = (
+        '    if facts["openapi_version_expr"] != "app.openapi_version":\n'
+        '        found.append(\n'
+        '            "_build_openapi_schema() no longer passes app.openapi_version into "\n'
+        '            "get_openapi(openapi_version=...)"\n'
+        '        )\n'
+    )
+    assert dialect_check in source, "dialect wiring check not found"
+    source = source.replace(dialect_check, "", 1)
     source = source.replace(
         '        "description_expr": _kw_expr(kwargs, "description"),\n'
         '        "tags_expr": _kw_expr(kwargs, "openapi_tags"),',
@@ -441,6 +482,51 @@ def test_ablation_count_pin_is_not_vacuous() -> None:
     assert not (
         ablations == EXPECTED_ABLATIONS and REQUIRED_ABLATIONS <= labels
     )
+
+
+def test_openapi_dialect_is_pinned_by_a_reviewed_literal() -> None:
+    """The published `openapi` dialect has no generated second half to compare.
+
+    A snapshot + golden + source co-revert that blesses ``3.0.3`` must still be
+    named by the reviewed wiring pin. The golden value is asserted from a second
+    file, so a one-file edit that deletes the literal cannot agree with itself.
+    """
+    guard = _guard()
+    golden = json.loads(guard.GOLDEN.read_text(encoding="utf-8"))
+    assert golden["openapi"] == "3.1.0"
+    # One-file edits cannot delete the literal or the wiring check and still
+    # have this second file agree: pin both spellings from here.
+    source = GUARD.read_text(encoding="utf-8")
+    assert '"openapi": "3.1.0"' in guard.GOLDEN.read_text(encoding="utf-8")
+    assert 'facts["openapi_version_expr"] != "app.openapi_version"' in source
+    assert '"openapi", "title", "version", "description", "tags"' in source
+    snapshot, generated, golden_text, main, config, smoke, routers = guard._load()
+    assert json.loads(snapshot)["openapi"] == "3.1.0"
+
+    # single-half drift
+    document = json.loads(snapshot)
+    document["openapi"] = "3.0.3"
+    found = guard.failures(
+        json.dumps(document, ensure_ascii=False), generated, golden_text,
+        main, config, smoke, routers,
+    )
+    assert any("published `openapi` no longer matches" in f for f in found), found
+
+    # coordinated co-revert: snapshot + golden + get_openapi(...) agree on 3.0.3
+    lock = json.loads(golden_text)
+    lock["openapi"] = "3.0.3"
+    main2 = main.replace(
+        "openapi_version=app.openapi_version,",
+        'openapi_version="3.0.3",',
+        1,
+    )
+    assert main2 != main
+    found = guard.failures(
+        json.dumps(document, ensure_ascii=False), generated,
+        json.dumps(lock, ensure_ascii=False), main2, config, smoke, routers,
+    )
+    assert any("no longer passes app.openapi_version" in f for f in found), found
+    assert not any("no longer matches the golden lock" in f for f in found), found
 
 
 def test_invented_tag_blessed_in_all_three_artifacts_is_rejected() -> None:
