@@ -260,3 +260,35 @@ change, and `openapi.json` / `openapi.d.ts` byte-for-byte unchanged. The teeth
 needs no floor edit. Two Phase-3 companion assertions were reconciled (not
 weakened): a tag relocation and a reviewed tag drop now legitimately move the
 value rows too, so they re-pin / expect both digests.
+
+## Phase 5 — the generated `@example` half is value-pinned, not just counted
+
+Door 5 pinned the generated half's **cardinality** (7 strict `@example` tags)
+and the snapshot half's **values** (the independent `_EXAMPLE_DIGEST`); the
+generated half's own values were pinned only *transitively* through that
+snapshot digest. Rewriting one `@example` value in `openapi.d.ts` alone
+(`Jane Doe` → `John Roe`) keeps all 7 tags, leaves the snapshot digest and
+both count doors silent, and — once `generated_blob` is honestly re-pinned —
+passes the whole contracts layer as SMOKE PASS. That is a
+hand-edit-of-generated-file shape rather than a regenerate shape, and the
+published contract value still cannot move silently because the snapshot
+digest covers the same 7 values, but door 5 must not be read as "the generated
+half is pinned". (Door 6 pins the *positions* of the 896 `@default` tags; it
+does not read `@example` values.)
+
+Phase 4 / door 7 pins the *values* of the 896 generated `@default` tags; it
+does not read `@example`. This phase is the orthogonal column on the other
+JSDoc projection, hence door 8 / Phase 5. The two land in the same commit on
+one branch, so the guard file has a single ledger for all five doors.
+
+Door 8 closes the asymmetry inside the same already-registered guard, with zero
+new wiring: once the snapshot digest matches its literal and the tag count is
+exact, the generated `@example` values are compared **in order** against the
+digest-pinned snapshot projection. Ordered comparison (not a multiset) also
+catches a same-count permutation that moves one tag's value onto another field.
+Door 8 deliberately stands down when the snapshot digest drifts, so a
+snapshot-side change is named by door 5 with full failure resolution rather
+than being double-counted. Combined read data on this branch: `--self-test`
+16 → 21 cases (19 for door 7 + 2 for door 8), companion suite 32 → 46 passed,
+`openapi.json` / `openapi.d.ts` byte-for-byte unchanged, and the three hot
+wiring files untouched.

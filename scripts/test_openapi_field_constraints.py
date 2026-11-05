@@ -646,3 +646,103 @@ def test_zero_new_wiring_for_door_seven() -> None:
     source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
     assert "def default_tag_values(" in source
     assert "_DEFAULT_TAG_VALUE_DIGEST" in source
+# ---------------------------------------------------------------------------
+# Door 8 -- the generated half's @example values, not just their cardinality.
+# ---------------------------------------------------------------------------
+
+
+def test_a_one_sided_generated_value_rewrite_is_named_only_by_door_eight() -> None:
+    """The residual: rewrite one @example value, keep all 7 tags."""
+    gen = _generated().replace("@example Jane Doe", "@example John Roe", 1)
+    assert len(guard.generated_examples(gen)) == guard._EXPECTED_GENERATED_EXAMPLES
+    found = guard.failures(
+        snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
+        generated=gen,
+    )
+    assert len(found) == 1, found
+    assert "generated @example values disagree" in found[0], found
+    assert "_EXAMPLE_DIGEST" not in found[0], found
+    assert "tag count" not in found[0].lower(), found
+
+
+def test_a_same_count_generated_value_permutation_is_named() -> None:
+    """Two distinct values swapped between tags: cardinality cannot see it."""
+    gen = (
+        _generated()
+        .replace("@example Jane Doe", "@example __SWAP__", 1)
+        .replace("@example viewer", "@example Jane Doe", 1)
+        .replace("@example __SWAP__", "@example viewer", 1)
+    )
+    assert sorted(guard.generated_examples(gen)) == sorted(
+        guard.generated_examples(_generated())
+    )
+    found = guard.failures(
+        snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
+        generated=gen,
+    )
+    assert len(found) == 1, found
+    assert "generated @example values disagree" in found[0], found
+
+
+def test_the_snapshot_side_drift_is_named_only_by_door_five() -> None:
+    """Door 8 stands down when the snapshot digest drifts: full resolution."""
+
+    def change(doc: dict) -> None:
+        for name in ("LoginRequest", "UserCreate"):
+            for prop in doc["components"]["schemas"][name]["properties"].values():
+                if isinstance(prop, dict) and isinstance(prop.get("examples"), list):
+                    prop["examples"] = [v + "X" for v in prop["examples"]]
+
+    found = guard.failures(snapshot=_example_doc(change))
+    assert len(found) == 1, found
+    assert "_EXAMPLE_DIGEST" in found[0], found
+    assert "@example values disagree" not in found[0], found
+
+
+def test_door_eight_self_test_plants_are_registered() -> None:
+    """From a second file: the two new ablations exist and are consumed."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    for name in (
+        "one-sided generated example value rewritten",
+        "same-count generated example value permutation",
+    ):
+        assert name in source, name
+    assert "generated @example values disagree" in source
+
+
+def test_door_eight_keeps_a_reviewed_repin_green() -> None:
+    """A reviewed regenerate moves the digest AND both halves' values."""
+
+    def change(doc: dict) -> None:
+        for name in ("LoginRequest", "UserCreate"):
+            for prop in doc["components"]["schemas"][name]["properties"].values():
+                if isinstance(prop, dict) and isinstance(prop.get("examples"), list):
+                    prop["examples"] = [v + "X" for v in prop["examples"]]
+
+    snapshot = _example_doc(change)
+    gen = _generated()
+    for value in ("researcher@univ.edu", "S3cureP@ss!", "Jane Doe", "viewer"):
+        gen = gen.replace("@example " + value, "@example " + value + "X")
+    new_digest = guard._example_digest(guard.example_rows(json.loads(snapshot)))
+    assert not guard.failures(
+        snapshot=snapshot, generated=gen, example_digest=new_digest
+    )
+
+
+def test_door_eight_adds_no_new_wiring() -> None:
+    """Zero smoke.sh / registry / teeth churn, exactly like door 5, 6 and 7."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "generated @example values disagree" in source
+    assert not (ROOT / "scripts" / "check_openapi_published_examples.py").exists()
+    import subprocess
+
+    for relative in (
+        "scripts/smoke.sh",
+        "scripts/check_contracts_registry_collection.py",
+        "scripts/check_contracts_self_test_teeth.py",
+    ):
+        ours = (ROOT / relative).read_bytes()
+        main = subprocess.check_output(
+            ["git", "show", f"origin/main:{relative}"], cwd=ROOT
+        )
+        assert ours == main, relative
