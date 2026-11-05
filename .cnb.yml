@@ -942,9 +942,20 @@ $:
       runner:
         cpus: 8
       # Pipeline-level volumes; see the note on the pull_request pipeline.
+      # `Delivery contracts` delegates to smoke.sh contracts, which shells out
+      # to node and reads PyYAML. It must inherit the same dual-toolchain image
+      # as `main` -> `Contract suites`, not override it with a bare python:3.15.
       docker:
         volumes:
           - /cache/pnpm-store
+        build:
+          dockerfile: .cnb/env/Dockerfile.frontend
+          by:
+            - .cnb/env/Dockerfile.frontend
+            - pnpm-lock.yaml
+            - package.json
+            - pnpm-workspace.yaml
+            - .npmrc
       env:
         SOYMUTDB_RUN_POSTGRES_INTEGRATION: "1"
         SOYMUTDB_ACCEPTANCE_DIR: artifacts/acceptance
@@ -952,8 +963,9 @@ $:
       services:
         - docker
       stages:
+        # No image override: the contracts layer needs both pinned interpreters
+        # (node + python:3.15), supplied by the pipeline-level docker.build.
         - name: Delivery contracts
-          image: python:3.15
           script: bash scripts/acceptance.sh --profile contracts
         - name: API + Worker acceptance
           image: python:3.15

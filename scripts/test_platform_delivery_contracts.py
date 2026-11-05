@@ -166,6 +166,79 @@ def test_node_and_pnpm_toolchain_is_exact_in_jobs_that_build_assets() -> None:
     assert "Upload GitHub Pages demo artifact" in ci_text
 
 
+
+def _acceptance_contracts_stage_image_error(document: dict) -> str | None:
+    """Why the acceptance contracts stage cannot run its own layer.
+
+    Returns None when the stage inherits the pipeline's dual-toolchain
+    `docker.build`. Otherwise returns the reason it is wrong. Kept as a pure
+    function over parsed YAML so the in-file mutations exercise the real
+    decision instead of a second copy of it in the test.
+    """
+    for pipeline in document["$"].get("web_trigger_acceptance", []):
+        stages = pipeline.get("stages") or []
+        contracts = [st for st in stages if st.get("name") == "Delivery contracts"]
+        if not contracts:
+            continue
+        stage = contracts[0]
+        if stage.get("image"):
+            return (
+                f"Delivery contracts declares image={stage['image']!r}; the "
+                "contracts layer shells out to node, so it must inherit the "
+                "pipeline-level docker.build instead"
+            )
+        build = (pipeline.get("docker") or {}).get("build")
+        if not isinstance(build, dict) or not build.get("dockerfile"):
+            return "acceptance pipeline has no pipeline-level docker.build to inherit"
+        return None
+    return "acceptance pipeline has no Delivery contracts stage"
+
+
+def test_acceptance_contracts_stage_inherits_the_dual_toolchain_image() -> None:
+    """The acceptance contracts layer must run in the same image as verify's.
+
+    `scripts/acceptance.sh --profile contracts` calls `scripts/smoke.sh
+    --profile contracts` directly, bypassing `ci-job-steps.sh`. That layer
+    shells out to `node` (the frontend i18n guard self-test and the locale
+    checker) and its suites import PyYAML. `main` -> `Contract suites` already
+    inherits the pipeline-level `.cnb/env/Dockerfile.frontend` for exactly this
+    reason, but `$` -> `web_trigger_acceptance` -> `Delivery contracts` was
+    declared with `image: python:3.15`, which has no Node: every acceptance
+    run either fails on `FileNotFoundError: node` or silently loses coverage.
+    Both copies of the pipeline must agree.
+    """
+    document = yaml.safe_load(_pipeline_source())
+    assert _acceptance_contracts_stage_image_error(document) is None
+
+    record = yaml.safe_load(
+        (ROOT / ".cnb/pipelines/acceptance.yml").read_text(encoding="utf-8")
+    )
+    # The standalone record is a flat pipeline, not wrapped in `$`/event.
+    wrapped = {"$": {"web_trigger_acceptance": [record]}}
+    assert _acceptance_contracts_stage_image_error(wrapped) is None
+
+    # Mutations: each must be rejected, or the guard is a tautology.
+    mutated_stage = yaml.safe_load(_pipeline_source())
+    pipeline = mutated_stage["$"]["web_trigger_acceptance"][0]
+    next(st for st in pipeline["stages"] if st["name"] == "Delivery contracts")[
+        "image"
+    ] = "python:3.15"
+    assert _acceptance_contracts_stage_image_error(mutated_stage) is not None
+
+    mutated_build = yaml.safe_load(_pipeline_source())
+    del mutated_build["$"]["web_trigger_acceptance"][0]["docker"]["build"]
+    assert _acceptance_contracts_stage_image_error(mutated_build) is not None
+
+    mutated_record = yaml.safe_load(
+        (ROOT / ".cnb/pipelines/acceptance.yml").read_text(encoding="utf-8")
+    )
+    next(st for st in mutated_record["stages"] if st["name"] == "Delivery contracts")[
+        "image"
+    ] = "node:26.13.0"
+    assert _acceptance_contracts_stage_image_error(
+        {"$": {"web_trigger_acceptance": [mutated_record]}}
+    ) is not None
+
 def workspace_catalog() -> dict:
     return yaml.safe_load((ROOT / "pnpm-workspace.yaml").read_text(encoding="utf-8"))["catalog"]
 
