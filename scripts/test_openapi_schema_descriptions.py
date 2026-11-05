@@ -324,3 +324,103 @@ def test_guard_source_pins_both_title_doors() -> None:
     assert "_EXPECTED_TITLE_ROWS" in source
     assert "_EXPECTED_CLIENT_TITLE_LINES" in source
     assert "_SYNTHETIC_CLIENT_TITLE" in source
+    assert "_CLIENT_TITLE_ROWS_DIGEST" in source
+    assert "actual_rows_digest != pinned_rows_digest" in source
+    assert "_EXPECTED_CLIENT_TITLE_ROWS" in source
+    assert "_SYNTHETIC_CLIENT_TITLE_COMPONENTS" in source
+
+
+_ROTATION_COMPONENT = "AboutContentResponse"
+
+
+def _rotated_client_block(block: str) -> str:
+    """Swap the leading title lines of two fields in one JSDoc block.
+
+    Both fields keep their multi-line shape, so the number of JSDoc lines,
+    the multiset of title lines and every count door are unchanged. Only the
+    position moves -- which is precisely the drift Door 7 exists to catch.
+    """
+    fields = [
+        match
+        for match in guard._FIELD_DOC.finditer(block)
+        if "\n" in match.group("doc").strip()
+        and guard._first_plain_line(match.group("doc")) is not None
+    ]
+    assert len(fields) >= 2, block
+    first, second = fields[0], fields[1]
+    first_title = guard._first_plain_line(first.group("doc"))
+    second_title = guard._first_plain_line(second.group("doc"))
+    assert first_title != second_title
+    rotated = block.replace(
+        first.group(0), first.group(0).replace(first_title, "\x00", 1)
+    )
+    rotated = rotated.replace(
+        second.group(0), second.group(0).replace(second_title, first_title, 1)
+    )
+    return rotated.replace("\x00", second_title, 1)
+
+
+def _generated_with_client_rotation() -> str:
+    """Rotate two title lines inside one component's generated JSDoc block."""
+    holder = {}
+    block = guard._COMPONENT_SCHEMAS.search(_GENERATED)
+    assert block is not None
+    for schema in guard._SCHEMA_BLOCK.finditer(block.group("body")):
+        if schema.group("name") == _ROTATION_COMPONENT:
+            holder["block"] = schema.group("body")
+            break
+    assert "block" in holder, _ROTATION_COMPONENT
+    original = holder["block"]
+    rotated_block = _rotated_client_block(original)
+    assert rotated_block != original
+    rotated = _GENERATED.replace(original, rotated_block, 1)
+    assert rotated != _GENERATED
+    return rotated
+
+
+def test_client_only_title_rotation_is_rejected() -> None:
+    """A same-count rotation confined to the generated half used to pass.
+
+    ``client_titles()`` and ``_digest_client_title()`` are order-insensitive,
+    so moving one field's label onto a sibling kept the multiset, the counts
+    and both digests intact: every door above stayed green while the IDE
+    showed a caller the wrong label. Door 7 carries the field name.
+    """
+    rotated = _generated_with_client_rotation()
+    original_rows = guard.client_title_rows(_GENERATED)
+    rotated_rows = guard.client_title_rows(rotated)
+    assert len(original_rows) == len(rotated_rows)
+    assert Counter(t for _, _, t in original_rows) == Counter(
+        t for _, _, t in rotated_rows
+    )
+    # The pre-existing doors stay blind to it; that is the whole point.
+    assert guard._digest_client_title(
+        guard.client_titles(rotated)
+    ) == guard._CLIENT_TITLE_DIGEST
+    found = guard.failures(snapshot=_SNAPSHOT, generated=rotated)
+    assert any("_CLIENT_TITLE_ROWS_DIGEST" in f for f in found), found
+    assert any(
+        f"generated client title for {_ROTATION_COMPONENT}." in f for f in found
+    ), found
+
+
+def test_client_title_row_count_door_is_load_bearing() -> None:
+    found = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=_GENERATED,
+        expected_client_title_rows=guard._EXPECTED_CLIENT_TITLE_ROWS + 1,
+    )
+    assert any(
+        "_EXPECTED_CLIENT_TITLE_ROWS" in f for f in found
+    ), found
+
+
+def test_synthetic_client_title_components_are_reviewed() -> None:
+    """The cross-artifact door exempts exactly the listed components."""
+    triples = guard.client_title_rows(_GENERATED)
+    observed = {
+        component
+        for component, field, title in triples
+        if field == "title" and title == guard._SYNTHETIC_CLIENT_TITLE
+    }
+    assert observed == set(guard._SYNTHETIC_CLIENT_TITLE_COMPONENTS)

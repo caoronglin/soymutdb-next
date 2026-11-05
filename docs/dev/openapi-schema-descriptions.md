@@ -74,6 +74,34 @@ independent digests close it:
 The companion asserts both digests remain independent literals in the guard
 source (second-file plant), so a one-file edit cannot retire the evidence.
 
+## The positional half
+
+`_CLIENT_TITLE_DIGEST` sorts its input, so it pins the *multiset* of generated
+title lines and nothing about *which field* carries which label. Two
+same-count lines swapping places keeps the multiset, both counts and every
+digest above intact.
+
+Third decisive ablation on live bytes: swap two leading JSDoc lines in the
+generated client only, leaving `openapi.json` untouched. Before this door the
+whole contracts layer stayed `SMOKE PASS` — the label an IDE shows for one
+field had moved to its sibling and nothing named it. Doors 7 and 8 close it:
+
+* `_CLIENT_TITLE_ROWS_DIGEST` — sha256 over canonical sorted
+  `component|field|title` triples of the 1952 generated title rows, read from
+  nowhere. The field name is in the key, so a rotation moves it;
+* `_EXPECTED_CLIENT_TITLE_ROWS` (1952) — exact count door;
+* positional cross-artifact door — every generated triple is compared with the
+  **pinned** snapshot row for that `(component, field)`, so a one-sided edit
+  is named by component and field rather than only moving a digest.
+
+One reviewed exception: seven components render their own schema name as the
+leading line of their `title` property (`AdminPublicationResponse`,
+`ExternalArticlePreviewResponse`, `LiteratureRecord`, `NotificationResponse`,
+`PublicationCreate`, `PublicationUpdate`,
+`app__schemas__content__PublicationResponse`). They are listed by name in
+`_SYNTHETIC_CLIENT_TITLE_COMPONENTS`; a new one cannot join silently, and the
+companion asserts the observed set equals the listed set exactly.
+
 ## Wiring
 
 `scripts/test_openapi_schema_descriptions.py` is listed in `smoke.sh`'s
