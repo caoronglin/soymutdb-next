@@ -1101,6 +1101,79 @@ def test_governance_failures_show_exact_packages_without_changing_verdict(tmp_pa
     assert "report unavailable" in module._audit_failure_evidence(row, tmp_path)[0]
 
 
+def test_deptry_array_report_prints_real_findings(tmp_path: Path) -> None:
+    """A red deptry must name the offending import, not complain about shape.
+
+    deptry 0.23.1's ``--json-output`` is a top-level array: ``[]`` on a pass,
+    one entry per finding on a failure. The availability check only parses the
+    JSON, so an array is "available" and never affects the verdict; but the
+    failure diagnostic used to require a dict and printed only
+    ``unexpected report shape``. That cost a debugging cycle on PR #107 (the
+    anyio DEP003 failure) and would cost the next one too.
+    """
+    governance = _governance_module()
+    report = tmp_path / "deptry-api.json"
+    report.write_text(json.dumps([
+        {
+            "error": {
+                "code": "DEP003",
+                "message": "'anyio' imported but it is a transitive dependency",
+            },
+            "module": "anyio",
+            "location": {"file": "app/services/sequence_tools_service.py", "line": 11, "column": 8},
+        },
+        {
+            "error": {
+                "code": "DEP003",
+                "message": "'anyio' imported but it is a transitive dependency",
+            },
+            "module": "anyio",
+            "location": {"file": "app/services/interval_overlap_service.py", "line": 19, "column": 8},
+        },
+    ]), encoding="utf-8")
+    row = {
+        "name": "deptry-api", "status": "failed",
+        "reason": "analyzer_exit_nonzero", "report": report.name,
+    }
+    lines = governance._audit_failure_evidence(row, tmp_path)
+    joined = " ".join(lines)
+    assert "DEP003" in joined, lines
+    assert "anyio" in joined, lines
+    assert "sequence_tools_service.py:11" in joined, lines
+    assert "interval_overlap_service.py:19" in joined, lines
+    assert "unexpected report shape" not in joined, lines
+    # Diagnostic only: the verdict is unchanged.
+    assert row["status"] == "failed"
+    assert row["reason"] == "analyzer_exit_nonzero"
+
+
+def test_deptry_empty_array_on_a_pass_is_not_a_failure_diagnostic(tmp_path: Path) -> None:
+    """The array branch must stay unreachable on a passing check."""
+    governance = _governance_module()
+    report = tmp_path / "deptry-api.json"
+    report.write_text("[]", encoding="utf-8")
+    row = {
+        "name": "deptry-api", "status": "passed",
+        "reason": "passed", "report": report.name,
+    }
+    assert governance._audit_failure_evidence(row, tmp_path) == []
+    assert governance._report_is_available(report, "json") is True
+
+
+def test_non_deptry_array_report_still_reports_shape(tmp_path: Path) -> None:
+    """Only deptry promises an array; other analyzers keep the dict contract."""
+    governance = _governance_module()
+    report = tmp_path / "knip.json"
+    report.write_text("[]", encoding="utf-8")
+    row = {
+        "name": "knip", "status": "failed",
+        "reason": "analyzer_exit_nonzero", "report": report.name,
+    }
+    assert "unexpected report shape" in " ".join(
+        governance._audit_failure_evidence(row, tmp_path)
+    )
+
+
 def test_pip_audit_checks_are_judged_by_the_acceptance_record() -> None:
     """The acceptance record is the vulnerability policy, for both analyzers.
 

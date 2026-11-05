@@ -1541,9 +1541,31 @@ def _audit_failure_evidence(row: dict[str, Any], output: Path) -> list[str]:
         detail = json.loads(report.read_text(encoding="utf-8"))
     except (ValueError, UnicodeError):
         return accepted_evidence + [f"  {name}: report is not readable JSON"]
+    evidence: list[str] = []
+    if isinstance(detail, list) and name.startswith("deptry"):
+        # deptry's --json-output is a top-level array of findings, not a dict.
+        # The runner's availability check only json.loads (an empty array on a
+        # pass is still "available"), so this branch is reachable only after a
+        # failure is already recorded. Print the real findings instead of a
+        # shape complaint: the next red deptry must name the offending import.
+        for item in detail[:5]:
+            if not isinstance(item, dict):
+                evidence.append(f"  {name}: unreadable finding: {item!r}")
+                continue
+            error = item.get("error")
+            location = item.get("location")
+            error = error if isinstance(error, dict) else {}
+            location = location if isinstance(location, dict) else {}
+            evidence.append(
+                f"  {name}: {error.get('code', 'DEP???')} "
+                f"{error.get('message', '')} "
+                f"({location.get('file', '?')}:{location.get('line', '?')})"
+            )
+        if len(detail) > 5:
+            evidence.append(f"  {name}: (+{len(detail) - 5} more finding(s))")
+        return (accepted_evidence + evidence)[:40]
     if not isinstance(detail, dict):
         return accepted_evidence + [f"  {name}: unexpected report shape"]
-    evidence: list[str] = []
     if name == "pnpm-audit":
         advisories = detail.get("advisories") or {}
         for item in advisories.values() if isinstance(advisories, dict) else []:
