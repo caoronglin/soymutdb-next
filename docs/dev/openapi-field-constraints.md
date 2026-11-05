@@ -419,3 +419,83 @@ A legitimate regenerate that moves a tag between fields must move the
 snapshot's `examples` in the same commit with a reason; no literal re-pin is
 needed for door 11 itself, because its authority is the digest-pinned
 snapshot projection.
+
+## Phase 7 — an independent literal for the generated `@example` values (door 12)
+
+Phase 6 / door 11 pins *which field* prints each of the 7 `@example` tags, but
+both door 8 and door 11 read the **snapshot** as their reference while the
+generator reads `openapi.d.ts`. A regenerate that moves one value in **both
+halves** is invisible to any two-artifact comparison by construction. The only
+surviving witness was `_EXAMPLE_DIGEST` — and a regenerate *requires* you to
+re-pin it, honestly, with a reason, alongside the two provenance blob ids.
+Re-pinning those three is the "one deliberate act" the topology already
+blesses; none of them is a literal for the value the client actually renders.
+
+**Decisive ablation on live `9a7c3e52` / `8d5cb898`**: `Jane Doe` → `John Roe`
+in `UserCreate.full_name`'s snapshot `examples` *and* its generated `@example`
+tag, `_EXAMPLE_DIGEST` re-pinned to the derived value, both blob ids honestly
+re-pinned:
+
+| gate | result |
+| --- | --- |
+| `check_openapi_field_constraints.py` plain + `--self-test` | `rc=0` / `32 cases, 0` |
+| all 12 wired `check_openapi_*` guards | `rc=0` |
+| door 5 / door 11 | zero failures |
+| `smoke.sh --profile contracts` | `SMOKE FAIL / 12 failed` — all from
+  the guard's `str.replace` plants and `_PINNED_ARTIFACTS` blob ids, not from
+  a witness that the published value is right |
+
+The layer that caught it was plant fragility plus provenance re-pinning, not a
+fixed point on the value. A hand re-pin of `snapshot_blob` / `generated_blob`
+fixes all 12 without touching the value. This is the same genus as
+"`_TABLE_DIGEST` cannot see an absent row": a digest over a projection whose
+reference is the projection.
+
+### The fix (zero new wiring, one ledger)
+
+Extend the same already-registered guard; `smoke.sh` / registry / teeth /
+`REQUIRED_GUARD_CALLS` / `_WIRED_SELF_TESTS` untouched:
+
+* `_GENERATED_EXAMPLE_VALUE_DIGEST` — hand-written sha256 over canonical
+  sorted `(component, field, value)` rows read from the 7 generated tags, in
+  the `_DEFAULT_TAG_VALUE_DIGEST` mould. One literal, read from nowhere,
+  separate from `_EXAMPLE_DIGEST` so a dropped tag and a retyped value do not
+  read as the same drift.
+* Exact row-count constant `_EXPECTED_GENERATED_EXAMPLE_VALUE_ROWS = 7`.
+* **Door 12 stands down whenever the two halves already disagree**, so a
+  one-sided rewrite keeps door 11's named-field failure, a snapshot-side
+  rewrite stays door 5's alone, and a cardinality drift stays with the count
+  door. What is left is the coordinated shape: both halves publish the same
+  *new* value, all counts hold, and the snapshot digest has been honestly
+  re-pinned — every two-artifact door is silent and only this literal names it.
+* A reviewed regenerate now re-pins **two** literals in the same commit as
+  both artifacts, with a reason. Re-pinning only `_EXAMPLE_DIGEST` (the shape
+  the topology used to bless) no longer agrees; that off-control is planted.
+
+`openapi.json` / `openapi.d.ts` byte-for-byte unchanged — this adds a reader
+and one literal, it touches neither artifact. `--self-test` **32 → 35 cases**,
+companion **60 → 70 passed** (+10). The contracts layer's wiring line count
+is unchanged.
+
+### Division of labour (positive controls)
+
+| drift | fires |
+| --- | --- |
+| value rewritten in both halves + `_EXAMPLE_DIGEST` re-pinned | door 12 only |
+| one-sided generated value rewrite | door 11 only, field named |
+| same-value tag relocated between two fields | door 11 only, both fields named |
+| snapshot-side value rewrite | `_EXAMPLE_DIGEST` only; door 12 silent |
+| a stray second tag | count door only; door 12 stands down |
+| reviewed regenerate re-pins both literals | green |
+| regenerate re-pins only `_EXAMPLE_DIGEST` | door 12 |
+
+### Residual acknowledged, not asked for
+
+Door 11 compares `sorted()` over `(component, field)`, so the **file order** of
+the doc blocks is unpinned: a regenerate that reorders properties moves only
+`generated_blob`. Narrow, same family. Not this phase.
+
+**Unrelated pre-existing gap, flagged once:** 912 of the 919 generated doc
+blocks carry no `@example`, and `_DEFAULT_TAG_DIGEST` pins presence of
+`@default` tags only, so *which fields print a doc block at all* is unpinned.
+Historical and wider; not proposed here.
