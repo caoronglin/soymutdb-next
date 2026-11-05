@@ -58,6 +58,11 @@ NUMERIC_LIMITS: tuple[tuple[str, str, str], ...] = (
         r"pub const MAX_REGIONS:\s*usize\s*=\s*([\d_]+)",
         r"^MAX_REGIONS\s*=\s*([\d_]+)",
     ),
+    (
+        "max_alignment_cells",
+        r"pub const MAX_ALIGNMENT_CELLS:\s*u64\s*=\s*([\d_]+)",
+        r"^MAX_ALIGNMENT_CELLS\s*=\s*([\d_]+)",
+    ),
 )
 
 
@@ -78,6 +83,7 @@ def _rust_numeric_limits(sources: dict[str, str]) -> dict[str, int]:
         "max_pattern": (SEQUENCE_RS, "MAX_PATTERN"),
         "max_hits": (INTERVALS_RS, "MAX_HITS"),
         "max_regions": (INTERVALS_RS, "MAX_REGIONS"),
+        "max_alignment_cells": (SEQUENCE_RS, "MAX_ALIGNMENT_CELLS"),
     }
     for name, rs_pattern, _ in NUMERIC_LIMITS:
         path, _const = rust_by_name[name]
@@ -132,6 +138,39 @@ def _python_literals(schema: str) -> dict[str, object]:
     }
 
 
+# Keys the kernel advertises through ``capabilities()``.  A key present in the
+# kernel but absent from the API response is a bound advertised nowhere: the
+# value-by-value comparison above only walks keys both sides already have, so a
+# field removed from the response reads exactly like "no difference".  Clients
+# keep sending input sized to a limit they can no longer read until the kernel
+# rejects it with BUDGET_EXCEEDED, and no snapshot drift is visible because the
+# API never mentioned the bound at all.
+#
+# ``engine``/``engine_version`` are excluded: the service copies those from the
+# live bridge status, not from this dict, so their presence is not a bound.
+ADVERTISED_KEYS_SKIP: frozenset[str] = frozenset({"engine", "engine_version"})
+
+
+def _rust_advertised_keys(sources: dict[str, str]) -> set[str]:
+    """Keys the kernel advertises through ``capabilities()``."""
+    bindings = sources[str(BINDINGS_RS)]
+    block = bindings[bindings.index("fn capabilities("):]
+    block = block[: block.index("#[pymodule]")]
+    return set(re.findall(r'set_item\(\s*"([a-z_]+)"', block)) - ADVERTISED_KEYS_SKIP
+
+
+def _python_advertised_keys(schema: str) -> set[str]:
+    """Keys the API's capability response actually carries."""
+    body = schema[schema.index("class SequenceCapabilitiesResponse"):]
+    body = body[: body.index("\n\n\n")] if "\n\n\n" in body else body
+    keys = set()
+    for line in body.splitlines():
+        field = re.match(r"    ([a-z_]+):", line)
+        if field:
+            keys.add(field.group(1))
+    return keys - ADVERTISED_KEYS_SKIP
+
+
 def check(sources: dict[str, str]) -> list[str]:
     """Return drift descriptions; empty list means parity."""
     errors: list[str] = []
@@ -140,6 +179,8 @@ def check(sources: dict[str, str]) -> list[str]:
         py_num = _python_numeric_limits(sources[str(SCHEMA_PY)])
         rust_lit = _rust_literals(sources)
         py_lit = _python_literals(sources[str(SCHEMA_PY)])
+        rust_keys = _rust_advertised_keys(sources)
+        py_keys = _python_advertised_keys(sources[str(SCHEMA_PY)])
     except ValueError as exc:
         return [str(exc)]
 
@@ -153,6 +194,10 @@ def check(sources: dict[str, str]) -> list[str]:
             errors.append(
                 f"{name}: kernel reports {rust_lit[name]!r} but the API advertises {py_lit[name]!r}"
             )
+    for name in sorted(rust_keys - py_keys):
+        errors.append(
+            f"{name}: kernel advertises this limit but the API response omits it entirely"
+        )
     return errors
 
 
@@ -172,7 +217,11 @@ def self_test() -> int:
 
     cases: list[tuple[str, str, str, str]] = []
     for name, rs_pattern, py_pattern in NUMERIC_LIMITS:
-        path = str(SEQUENCE_RS) if name in {"max_inline_sequence", "max_pattern"} else str(INTERVALS_RS)
+        path = (
+            str(SEQUENCE_RS)
+            if name in {"max_inline_sequence", "max_pattern", "max_alignment_cells"}
+            else str(INTERVALS_RS)
+        )
         cases.append((f"rust {name} drifts", path, rs_pattern, "MUTATE_RUST"))
         cases.append((f"python {name} drifts", str(SCHEMA_PY), py_pattern, "MUTATE_PY"))
     cases += [

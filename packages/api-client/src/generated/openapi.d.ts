@@ -12131,6 +12131,16 @@ export interface components {
              */
             max_hits: number;
             /**
+             * Max Regions
+             * @default 1000
+             */
+            max_regions: number;
+            /**
+             * Max Alignment Cells
+             * @default 10000000
+             */
+            max_alignment_cells: number;
+            /**
              * K Range
              * @default [
              *       1,

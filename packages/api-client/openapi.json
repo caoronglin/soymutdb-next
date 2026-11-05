@@ -34395,6 +34395,16 @@
             "default": 1000,
             "title": "Max Hits"
           },
+          "max_regions": {
+            "type": "integer",
+            "default": 1000,
+            "title": "Max Regions"
+          },
+          "max_alignment_cells": {
+            "type": "integer",
+            "default": 10000000,
+            "title": "Max Alignment Cells"
+          },
           "k_range": {
             "type": "array",
             "prefixItems": [

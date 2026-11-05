@@ -15,6 +15,7 @@ MAX_INLINE_SEQUENCE = 1_048_576  # 1 MiB, mirrors the Rust kernel
 MAX_PATTERN = 256
 MAX_HITS = 1000
 MAX_REGIONS = 1000
+MAX_ALIGNMENT_CELLS = 10_000_000  # query_len * target_len, mirrors the Rust kernel
 
 SequenceText = Annotated[str, StringConstraints(min_length=1, max_length=MAX_INLINE_SEQUENCE)]
 Alphabet = Literal["dna", "rna", "protein"]
@@ -193,6 +194,8 @@ class SequenceCapabilitiesResponse(BaseModel):
     max_inline_sequence: int = MAX_INLINE_SEQUENCE
     max_pattern: int = MAX_PATTERN
     max_hits: int = MAX_HITS
+    max_regions: int = MAX_REGIONS
+    max_alignment_cells: int = MAX_ALIGNMENT_CELLS
     k_range: tuple[int, int] = (1, 32)
     genetic_codes: list[int] = Field(default_factory=lambda: [1])
     coordinate_system_internal: str = "0-based-half-open"

@@ -168,6 +168,18 @@ async def kmers(req: s.KmerRequest) -> s.KmerResponse:
 
 
 def capabilities() -> s.SequenceCapabilitiesResponse:
+    """Advertise the limits the kernel enforces, with or without the engine.
+
+    The numeric limits fall back to the Pydantic defaults (which mirror the Rust
+    ``pub const`` values). They are deliberately NOT read from
+    ``bridge.require()``: this endpoint must answer when the wheel is missing,
+    reporting ``available: false`` plus a reason instead of a 503.
+
+    Keeping ``SequenceCapabilitiesResponse`` in step with the keys the kernel
+    advertises is enforced by ``scripts/check_bio_core_capability_parity.py``.
+    A bound the kernel enforces but this response omits is invisible to a
+    value-by-value comparison, so that guard also compares key presence.
+    """
     st = bridge.status()
     return s.SequenceCapabilitiesResponse(
         available=st.available,

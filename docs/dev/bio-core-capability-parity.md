@@ -30,9 +30,15 @@
 - 判据只读**已提交的源码字节**：不需要 wheel、不需要 Rust 工具链、不需要
   FastAPI import、不需要 PostgreSQL。因此能挂在 `scripts/verify-bio-core.sh`
   里、排在昂贵的 `maturin build` **之前**，缺工具链时照样能拦住契约漂移。
-- Rust 是权威侧，Python 是副本侧。守卫对四个数值上限、`k_range`、
+- Rust 是权威侧，Python 是副本侧。守卫对五个数值上限（inline 序列、
+  pattern、`max_hits`、`max_regions`、`max_alignment_cells`）、`k_range`、
   `genetic_codes`、两个坐标系标签逐项比对，**字段缺失或形状被改写必须报错，
   不能当成「没差异」**。
+- 还比**键的存在性**：内核 `capabilities()` 广告的每个键，API 响应必须真的
+  带着。只比值不够——数值比对只遍历两侧都有的键，**一个从 API 里被删掉的
+  字段在它看来与「没有差异」完全同形**。`max_regions` 和
+  `max_alignment_cells` 就是这么躺着的：内核一直在广告，API 响应从来没带过，
+  每一层检查都是绿的。
 - 守卫自带 `--self-test`：14 个单向变异（每个字段的 Rust 侧 / Python 侧各一）
   逐个注入，确认每一个都被点名。判据要自证「自己会响」，否则又是一条
   「文件在仓库里、但没人跑过」的守卫。
@@ -59,9 +65,10 @@
 ## 改动点
 
 - 新增 `scripts/check_bio_core_capability_parity.py`：读 5 份源码字节、逐项
-  比对；`--self-test` 14 例；现树检查 exit 0/1，漂移逐行报出字段名与两侧值。
-- 新增 `scripts/test_bio_core_capability_parity.py`：18 条（含 14 个参数化单向
-  漂移、缺字段、恒绿弱化检出、自测通过）。
+  比对**数值、字面量与键的存在性**；`--self-test` 16 例；现树检查 exit 0/1，
+  漂移逐行报出字段名与两侧值。
+- 新增 `scripts/test_bio_core_capability_parity.py`：22 条（含 16 个参数化单向
+  漂移、缺字段、恒绿弱化检出、内核广告而 API 缺失、键集合不由 API 自证）。
 - 新增 `scripts/test_bio_core_capability_parity_wiring.py`：4 条钉住接线位置、
   `--self-test`、回归套件在门禁里真跑、以及「摘掉接线必须被检出」的负控。
 - `scripts/verify-bio-core.sh`：构建前两层 + 构建后一层，共三处调用。
@@ -76,4 +83,19 @@
 - 把 `k_range` / `genetic_codes` / 坐标系标签任一侧改掉：同样逐项点名。
 - 删掉 `--self-test` 调用、删掉回归套件调用、把 `check()` 改成恒绿：各自被
   对应接线断言 / 承重回归判红。
-- 不改变任何端点行为、不触碰 `openapi.json` / `openapi.d.ts`、不新增运行时依赖。
+- **从 API 响应里删掉任何一个内核广告的字段**：守卫报
+  `<field>: kernel advertises this limit but the API response omits it entirely`，
+  exit 1。这是本轮补的那条判据，也是 `max_regions` / `max_alignment_cells`
+  此前一路绿灯的原因。
+- **本轮补上的两个真实缺口**（都发生在「API 响应里没有这个字段」这一侧，任何
+  比值检查都看不见）：
+  - `max_alignment_cells`：内核 `MAX_ALIGNMENT_CELLS = 10_000_000`
+    （`query.len() * target.len()`，超出即 `BUDGET_EXCEEDED`，见
+    `sequence.rs:308`），在 `capabilities()` 里广告，但 API 响应完全没有这个
+    字段。客户端唯一能看到的限制是 1 MiB inline，而两个 4 kb 序列按 16M cells
+    就会撞预算被拒——**广告面缺了一条真正会拒绝请求的边界**。
+  - `max_regions`：已在 API 的 `MAX_REGIONS` 与 `OverlapRequest` 里生效，
+    却没有出现在 `SequenceCapabilitiesResponse`。
+
+  两者现在都进了响应、进了 OpenAPI 快照与生成的 `openapi.d.ts`；本轮是**唯一
+  一次**触碰这两个快照文件，且只增 10 行、不删不改既有字段。

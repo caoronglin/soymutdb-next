@@ -58,6 +58,8 @@ def test_guard_self_test_passes(guard: ModuleType) -> None:
         ("SCHEMA_PY", "MAX_PATTERN = 256", "MAX_PATTERN = 257"),
         ("SCHEMA_PY", "MAX_HITS = 1000", "MAX_HITS = 1001"),
         ("SCHEMA_PY", "MAX_REGIONS = 1000", "MAX_REGIONS = 1001"),
+        ("SEQUENCE_RS", "MAX_ALIGNMENT_CELLS: u64 = 10_000_000", "MAX_ALIGNMENT_CELLS: u64 = 10_000_001"),
+        ("SCHEMA_PY", "MAX_ALIGNMENT_CELLS = 10_000_000", "MAX_ALIGNMENT_CELLS = 20_000_000"),
         ("SCHEMA_PY", "k_range: tuple[int, int] = (1, 32)", "k_range: tuple[int, int] = (1, 33)"),
         ("SCHEMA_PY", "lambda: [1]", "lambda: [2]"),
         ("SCHEMA_PY", 'coordinate_system_internal: str = "0-based-half-open"', 'coordinate_system_internal: str = "0-based-closed"'),
@@ -92,3 +94,40 @@ def test_weakened_guard_is_detected(guard: ModuleType, monkeypatch: pytest.Monke
     # Restore the real function to prove the un-weakened one still catches it.
     real = _load_guard()
     assert real.check(rust), "restoring the real guard must re-expose the drift"
+
+def test_limit_advertised_by_kernel_but_absent_from_api_is_reported(
+    guard: ModuleType, sources: dict[str, str]
+) -> None:
+    """Dropping a field from the response must not read as "no difference".
+
+    The numeric comparison only visits keys both sides already have, so a field
+    removed from the API is invisible to it: the kernel keeps advertising the
+    bound, clients keep sending input sized to an ad they can no longer read,
+    and every check stays green.  This is the shape that let ``max_regions``
+    and ``max_alignment_cells`` sit in the kernel without reaching the API.
+    """
+    path = str(guard.SCHEMA_PY)
+    for field in ("    max_regions: int = MAX_REGIONS\n", "    max_alignment_cells: int = MAX_ALIGNMENT_CELLS\n"):
+        assert field in sources[path], f"anchor missing: {field!r}"
+        mutated = dict(sources)
+        mutated[path] = sources[path].replace(field, "", 1)
+        errors = guard.check(mutated)
+        assert errors, f"dropping {field.strip()!r} from the API must be reported"
+        assert "omits it entirely" in errors[0], errors
+
+
+def test_advertised_key_sets_are_not_derived_from_the_api(
+    guard: ModuleType, sources: dict[str, str]
+) -> None:
+    """The Rust side owns the key set; the API cannot define its own workload.
+
+    If both sets were read from the same file the comparison would be a
+    tautology, so assert the kernel set is larger and that every advertised
+    numeric limit is also a response field.
+    """
+    rust_keys = guard._rust_advertised_keys(sources)
+    py_keys = guard._python_advertised_keys(sources[str(guard.SCHEMA_PY)])
+    assert rust_keys, "kernel advertises no keys at all"
+    assert rust_keys <= py_keys, f"kernel advertises {rust_keys - py_keys} which the API omits"
+    for name, _, _ in guard.NUMERIC_LIMITS:
+        assert name in py_keys, f"{name} is compared but never exposed by the API"
