@@ -178,6 +178,35 @@ def test_self_test_mutation_cases_all_pass() -> None:
     assert len(reported) == 1 and reported[0] == len(emitted), out
 
 
+def test_the_co_revert_re_pin_pair_is_load_bearing() -> None:
+    """Both limbs must live in the guard's self-test, from a second file.
+
+    A coordinated retype of both artifacts is invisible to every consistency
+    door; the only thing that can see it is the independent digest. So an
+    un-re-pinned tree must be named and a same-commit re-pin must stay green.
+    Pinning both here means a single-file edit cannot drop the evidence and
+    its own assertion together.
+    """
+    source = Path(guard.__file__).read_text(encoding="utf-8")
+    assert "with its digest re-pinned" in source
+    assert "expect_clean=True" in source
+    assert 'kwargs.pop("expect_clean", False)' in source
+    # Behavioural: re-derive the re-pinned digest from the planted tree and
+    # assert the guard says clean, while the same tree without the re-pin is
+    # named as drift. Uses the guard's own helpers, not a second literal.
+    snapshot, generated = _co_revert()
+    document = json.loads(snapshot)
+    rows = (
+        guard._snapshot_map(document)
+        if hasattr(guard, "_snapshot_map")
+        else guard._snapshot_parameters(document)
+    )
+    fresh = guard.failures(snapshot=snapshot, generated=generated, digest=guard._digest(rows))
+    assert not fresh, fresh
+    stale = guard.failures(snapshot=snapshot, generated=generated)
+    assert any("drifted" in problem for problem in stale), stale
+
+
 def _run_all() -> int:
     cases = [
         value

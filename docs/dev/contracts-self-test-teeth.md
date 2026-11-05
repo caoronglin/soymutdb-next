@@ -4,9 +4,12 @@
 
 `scripts/smoke.sh` wires the contracts layer through two mechanisms: a
 `local tests=( ... )` array collected by pytest, and standalone
-`"${PYTHON_BIN}" scripts/check_*.py ... || rc=$?` calls. Fifteen of those
-standalone calls carry `--self-test` and no plain invocation: the guard's
-`check()` never runs in this layer. Only its self-test does.
+`"${PYTHON_BIN}" scripts/check_*.py ... || rc=$?` calls. Twenty of those
+standalone calls carry `--self-test`; this guard's own call is the twenty-first.
+For most of them that is the only invocation in the layer, so `check()` never
+runs here — only their self-test does. Three also have a plain call elsewhere
+in `smoke_contracts()`; the teeth floor covers the `--self-test` body either
+way.
 
 `check_contracts_registry_collection.py` pins that every call **exists** and
 is listed in `REQUIRED_GUARD_CALLS`. It does not read the body the call
@@ -63,6 +66,12 @@ collectible" cell: registered, collectible, invoked — and vacuous.
   Membership is listed as literals and audited against the output, not derived
   from the plants: the point is that a guard's evidence is read, not that the
   guard is trusted to be one of the good ones.
+  **A member is not exempted because its evidence is unfakeable; it is exempted
+  because it emits more than one line.** `_SIGNATURES` still matches one line
+  of that output, so a gut reduced to `print(<closing line>); return 0` would
+  satisfy it — of the thirteen, one prints `ok: planted 'x' -> caught`, the
+  others print `PASS self-test: ...` variants. What makes them load-bearing is
+  `_CASE_FLOOR` below, not the shape of their output.
 - `probe()` runs each wired guard as a real subprocess with `cwd=ROOT` and
   requires `rc == 0` plus a signature match. A gutted self-test, a failing
   self-test and an empty-output self-test are each named.
@@ -72,18 +81,31 @@ prints that line from a number it computes itself, so an edit that keeps the
 `cases` dict, empties the loop over it, and prints `len(cases)` emits a
 well-formed success line that no case produced. Measured on the #256 tree:
 `for name, plant in []:` plus the `len(cases)` success line still printed
-`(12 negative cases + clean tree)` and this probe stayed green. `_CASE_FLOOR`
-closes that: an entry per guard whose self-test must still *reach* its
-declared ablations — the mapping must hold at least N entries and some `for`
-in the same function must iterate it. Both halves are read from the guard's
-source by `ast`, so no printed number can satisfy them. Counts stay a free
-variable: shifting the printed N by +5 stays green.
+`(12 negative cases + clean tree)` and this probe stayed green.
+
+The two plants have the same one-sided shape: they disable one check or one
+entry point, not a *case*. Deleting the decisive `cases.append((...))` block
+from `check_openapi_operation_id_floor.py` leaves its self-test at
+`10 cases, 0 failure(s)` while every plant, signature, evidence line and
+count check here stays green — the tuple `(path, anchor, replacement, why)`
+cannot assert "this anchor is still the only one". (A marker-preserving gut of
+`check_app_shell_assets.py` is caught *specifically because* that guard has a
+plant; the per-case-evidence guards are not covered by that claim.)
+
+`_CASE_FLOOR` closes both: one reviewed row per `EVIDENCE_MEMBERS` guard,
+reading the case rows from the guard's **source** (`dict`/`list`/`tuple`
+literals, `cases.append(...)`, `cases[key] = ...`, or a module-level literal
+such as `CLAIMS`) and requiring some `for` in the same function to name that
+container. A deleted case then names itself. `evidence_floor_errors()` fails
+closed if an audited guard has no row, so adding one is a reviewed edit.
+Both halves are read by `ast`, so no printed number can satisfy them. Counts
+stay a free variable: shifting the printed N by +5 stays green.
 
 The guard's own `--self-test` plants a no-op into one guard **in process**
 (import + replace `self_test` with a lambda returning 0 + `sys.argv` patch),
 asserts a clean control first, then that exactly one guard loses its
 signature and no other guard is collateral. Planting the mutation in a
-partial temp tree made all 17 probes fail to open, so the case passed
+partial temp tree made all probes fail to open, so the case passed
 vacuously — the first-hit trap this repo keeps paying for. The control
 assertion is what keeps it honest.
 
@@ -103,7 +125,7 @@ keeps every self-test PASS line. Measured on 999a39b3 —
 `check_tree(tree)` kept all twelve `ok: planted ... -> caught` lines and the
 whole contracts layer at `SMOKE PASS`. Both limbs are asserted again.
 
-`scripts/test_contracts_self_test_teeth.py` (24 cases) is the second file:
+`scripts/test_contracts_self_test_teeth.py` is the second file:
 it pins the wiring into `smoke.sh`, the `REQUIRED_GUARD_CALLS` floor, status
 propagation, the literal (non-derived) nature of the floors, both plants per
 wire, the gut leg's two limbs, the `EVIDENCE_MEMBERS` direction (summary-only
@@ -115,7 +137,8 @@ self-test plant.
 ## Wiring discipline
 
 Adding a wired `--self-test` guard requires **four** edits in the same
-change (a fifth when it also needs a `_CASE_FLOOR` row), per #223's set-equality rule:
+change (a fifth, mandatory for every `EVIDENCE_MEMBERS` guard, is its
+`_CASE_FLOOR` row), per #223's set-equality rule:
 
 1. the standalone call in `smoke_contracts()` with `|| rc=$?`;
 2. an entry in `REQUIRED_GUARD_CALLS`;
@@ -124,9 +147,9 @@ change (a fifth when it also needs a `_CASE_FLOOR` row), per #223's set-equality
    `_SELF_TEST_GUTS` (a plain run to gut);
 4. the doc line below.
 
-   A pinned self-test that prints a count also needs an entry in `_CASE_FLOOR`;
-   one whose summary can be echoed by a stub also belongs in
-   `EVIDENCE_MEMBERS`.
+   A guard audited for per-case evidence belongs in `EVIDENCE_MEMBERS` **and**
+   gets a `_CASE_FLOOR` row (guard, source file, function, case container,
+   minimum declared rows).
 
 The companion suite is a normal `tests=()` row; `PINNED_SUITES` is a floor,
 not an allowlist, so adding a suite needs no edit there (see

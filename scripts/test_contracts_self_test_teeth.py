@@ -311,6 +311,65 @@ class TeethGuardContract(unittest.TestCase):
             ),
         )
 
+    def test_every_evidence_member_pins_a_case_floor(self) -> None:
+        """An audited per-case guard with no _CASE_FLOOR row fails closed."""
+        self.assertEqual(guard.evidence_floor_errors(), [])
+        self.assertEqual(set(guard._CASE_FLOOR), set(guard.EVIDENCE_MEMBERS))
+        original = guard._CASE_FLOOR
+        guard._CASE_FLOOR = dict(original)
+        guard._CASE_FLOOR.pop("scripts/check_openapi_operation_id_floor.py")
+        try:
+            found = guard.evidence_floor_errors()
+        finally:
+            guard._CASE_FLOOR = original
+        self.assertTrue(
+            any("has no _CASE_FLOOR row" in f for f in found),
+            f"an audited guard without a floor must be named, got {found}",
+        )
+
+    def test_a_deleted_case_is_reported_by_name(self) -> None:
+        """Both plants disable a check or an entry point, not a case."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp)
+            target = tree / "scripts/check_openapi_operation_id_floor.py"
+            target.parent.mkdir(parents=True)
+            text = (ROOT / "scripts/check_openapi_operation_id_floor.py").read_text(
+                encoding="utf-8"
+            )
+            anchor = (
+                '    cases.append(\n        (\n'
+                '            "a coordinated operationId retype in both halves"'
+            )
+            start = text.index(anchor)
+            end = text.index("    # 2. Snapshot-only retype", start)
+            deleted = text[:start] + text[end:]
+            self.assertNotEqual(deleted, text, "setup is not a control")
+            target.write_text(deleted, encoding="utf-8")
+            found = guard.declared_case_errors(tree)
+        self.assertTrue(
+            any("below the pinned floor" in f for f in found),
+            f"a deleted case must be named, got {found}",
+        )
+
+    def test_the_case_floor_is_a_literal_not_derived_from_output(self) -> None:
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("_CASE_FLOOR: dict[str, tuple[str, str, str, int]] = {", source)
+        self.assertIn("declared = _declared_cases(target, function, mapping)", source)
+        self.assertIn("evidence_floor_errors()", source)
+
+    def test_the_re_pin_case_is_load_bearing_from_a_second_file(self) -> None:
+        """Both limbs of the coordinated retype must live in the case list."""
+        for name in (
+            "check_openapi_operation_id_floor.py",
+            "check_openapi_operation_parameter_floor.py",
+        ):
+            source = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+            self.assertIn("with its digest re-pinned", source)
+            self.assertIn("expect_clean=True", source)
+            self.assertIn('kwargs.pop("expect_clean", False)', source)
+
     def test_the_guards_own_self_test_has_teeth(self) -> None:
         # The --self-test must actually plant a no-op and catch it. A body that
         # only prints PASS lines without asserting would still exit 0.
