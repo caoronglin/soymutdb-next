@@ -35,6 +35,8 @@
         "scripts/check-vue-retirement.mjs",
         "scripts/check_visible_i18n_react.mjs",
         "scripts/test_visible_i18n_react_guard.mjs",
+        "scripts/check-admin-i18n-keys.mjs",
+        "scripts/test_admin_i18n_keys_guard.mjs",
         "scripts/dev/local-preview-server.mjs",
         "tests/load/api-load.js",
         "tests/load/smoke.js",

@@ -20,10 +20,16 @@ type ContentType = "news" | "publication" | "page";
 // Helpers
 // ---------------------------------------------------------------------------
 
-const TYPE_CONFIG: Record<ContentType, { label: string; icon: typeof ReadOutlined }> = {
-  news: { label: "News", icon: ReadOutlined },
-  publication: { label: "Publication", icon: ReadOutlined },
-  page: { label: "Pages", icon: FileTextOutlined },
+/**
+ * Tab metadata. `labelKey` is spelled out instead of being built as
+ * `admin.content.type_${typeKey}`: the catalogs register `admin.contentTab.*`,
+ * and a template-built key that matches nothing renders the raw key in a zh
+ * console instead of failing loudly.
+ */
+const TYPE_CONFIG: Record<ContentType, { label: string; labelKey: string; icon: typeof ReadOutlined }> = {
+  news: { label: "News", labelKey: "admin.contentTab.news", icon: ReadOutlined },
+  publication: { label: "Publications", labelKey: "admin.contentTab.publication", icon: ReadOutlined },
+  page: { label: "Pages", labelKey: "admin.contentTab.page", icon: FileTextOutlined },
 };
 
 // ---------------------------------------------------------------------------
@@ -76,7 +82,7 @@ export default function ContentPage() {
                     }`}
                   >
                     <Icon className="size-3.5" />
-                    {t(`admin.content.type_${typeKey}`, { defaultValue: TYPE_CONFIG[typeKey].label })}
+                    {t(TYPE_CONFIG[typeKey].labelKey, { defaultValue: TYPE_CONFIG[typeKey].label })}
                   </button>
                 );
               })}

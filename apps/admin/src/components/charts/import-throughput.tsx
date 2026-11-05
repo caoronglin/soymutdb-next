@@ -19,6 +19,14 @@ export interface ImportThroughputDataPoint {
   date: string;
   imported: number;
   failed: number;
+  /**
+   * Tasks of that day that are queued or still executing.
+   *
+   * The API used to drop them from the aggregate entirely, so a day whose
+   * imports had not finished yet drew as a day with no activity. Optional
+   * because an older deployment returns only the two outcome series.
+   */
+  running?: number;
 }
 
 interface ImportThroughputChartProps {
@@ -41,6 +49,7 @@ export function ImportThroughputChart({
   const { t } = useTranslation();
   const importedLabel = t("admin.charts.imported", { defaultValue: "Imported" });
   const failedLabel = t("admin.charts.failed", { defaultValue: "Failed" });
+  const runningLabel = t("admin.charts.running", { defaultValue: "In progress" });
   const recordsLabel = t("admin.charts.records", { defaultValue: "Records" });
   const theme = useAdminChartTheme(IMPORT_SERIES_COLORS);
   const animation = useAdminChartAnimation();
@@ -50,8 +59,13 @@ export function ImportThroughputChart({
       toSeriesRows(data, [
         { name: importedLabel, pick: (datum) => datum.imported },
         { name: failedLabel, pick: (datum) => datum.failed },
+        // Rendered only when the endpoint reports the bucket, so the legend
+        // does not grow a series that is always zero on an older deployment.
+        ...(data.some((datum) => (datum.running ?? 0) > 0)
+          ? [{ name: runningLabel, pick: (datum: ImportThroughputDataPoint) => datum.running ?? 0 }]
+          : []),
       ]),
-    [data, importedLabel, failedLabel],
+    [data, importedLabel, failedLabel, runningLabel],
   );
 
   const definition = React.useMemo<ChartDefinition>(

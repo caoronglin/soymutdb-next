@@ -1,7 +1,7 @@
 import { BarChartOutlined, CopyOutlined, CheckOutlined, ExportOutlined, InfoCircleOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Badge, Button, PageContainer, ProCard, Typography } from "@/lib/antd";
+import { Button, PageContainer, ProCard, Tag, Typography } from "@/lib/antd";
 const ENV_VAR = "VITE_CLOUDFLARE_ANALYTICS_TOKEN";
 const BEACON_ORIGIN = "https://static.cloudflareinsights.com/beacon.min.js";
 const CF_DASHBOARD_ANALYTICS_URL =
@@ -56,10 +56,10 @@ export default function AnalyticsSettingsPage() {
 
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge color="success">{t("admin.analyticsSettings.badgeCloudflare", { defaultValue: "Cloudflare Web Analytics" })}</Badge>
-              <Badge >{t("admin.analyticsSettings.badgeBeacon", { defaultValue: "Beacon (static JS)" })}</Badge>
-              <Badge >{t("admin.analyticsSettings.badgeBuildTimeInjection", { defaultValue: "Build-time injection" })}</Badge>
-              <Badge >{t("admin.analyticsSettings.badgeCookieFree", { defaultValue: "Cookie-free" })}</Badge>
+              <Tag color="success">{t("admin.analyticsSettings.badgeCloudflare", { defaultValue: "Cloudflare Web Analytics" })}</Tag>
+              <Tag color="default">{t("admin.analyticsSettings.badgeBeacon", { defaultValue: "Beacon (static JS)" })}</Tag>
+              <Tag color="default">{t("admin.analyticsSettings.badgeBuildTimeInjection", { defaultValue: "Build-time injection" })}</Tag>
+              <Tag color="default">{t("admin.analyticsSettings.badgeCookieFree", { defaultValue: "Cookie-free" })}</Tag>
             </div>
             <p className="text-sm text-muted-foreground">{t("admin.analyticsSettings.beaconNote", { defaultValue: "Only the public portal (apps/web) loads the beacon; this admin console and the JBrowse app do not." })}</p>
             <div className="flex items-center gap-3">
@@ -128,8 +128,8 @@ export default function AnalyticsSettingsPage() {
 
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <Badge >{t("admin.analyticsSettings.badgeBuildTime", { defaultValue: "Build-time" })}</Badge>
-              <Badge >{t("admin.analyticsSettings.badgeRuntimeDetection", { defaultValue: "Runtime detection: N/A" })}</Badge>
+              <Tag color="default">{t("admin.analyticsSettings.badgeBuildTime", { defaultValue: "Build-time" })}</Tag>
+              <Tag color="default">{t("admin.analyticsSettings.badgeRuntimeDetection", { defaultValue: "Runtime detection: N/A" })}</Tag>
             </div>
             <div className="rounded-lg border border-border bg-muted/40 p-3 font-mono text-xs">
               {BEACON_ORIGIN}

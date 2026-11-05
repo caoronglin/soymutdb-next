@@ -2,6 +2,7 @@ import { Button, PageContainer, ProCard, ProDescriptions } from "@/lib/antd";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { http } from "@soymutdb/api-client";
+import { useTranslation } from "react-i18next";
 
 type ImportTaskDetail = {
   id: number;
@@ -22,19 +23,24 @@ export default function ImportTaskDetailRoute() {
 }
 
 export function ImportTaskDetailPage({ taskId }: { taskId: number }) {
+  const { t } = useTranslation();
   const taskQuery = useQuery({
     queryKey: ["admin-import", taskId],
     queryFn: () => http.get<ImportTaskDetail>("/admin/imports/" + taskId),
   });
 
-  if (taskQuery.isPending) return <p className="p-6" role="status">Loading import task…</p>;
+  if (taskQuery.isPending) return <p className="p-6" role="status">{t("admin.importDetail.loading", { defaultValue: "Loading import task…" })}</p>;
   if (taskQuery.isError || !taskQuery.data) {
     return (
       <PageContainer
-        title="Import task unavailable"
-        extra={[<Button key="back"><Link to="/imports">Back to imports</Link></Button>]}
+        title={t("admin.importDetail.unavailableTitle", { defaultValue: "Import task unavailable" })}
+        extra={[<Button key="back"><Link to="/imports">{t("admin.importDetail.back", { defaultValue: "Back to imports" })}</Link></Button>]}
       >
-        <p className="text-muted-foreground">The task may have been removed or you may not have access.</p>
+        <p className="text-muted-foreground">
+          {t("admin.importDetail.unavailableBody", {
+            defaultValue: "The task may have been removed or you may not have access.",
+          })}
+        </p>
       </PageContainer>
     );
   }
@@ -42,9 +48,9 @@ export function ImportTaskDetailPage({ taskId }: { taskId: number }) {
   const task = taskQuery.data;
   return (
     <PageContainer
-      title={`Import task #${task.id}`}
+      title={t("admin.importDetail.titleWithId", { id: task.id, defaultValue: "Import task #{{id}}" })}
       subTitle={task.filename}
-      extra={[<Button key="back"><Link to="/imports">Back to imports</Link></Button>]}
+      extra={[<Button key="back"><Link to="/imports">{t("admin.importDetail.back", { defaultValue: "Back to imports" })}</Link></Button>]}
     >
       {/*
         These six label/value pairs used to be a hand-written `<dl>` grid. The

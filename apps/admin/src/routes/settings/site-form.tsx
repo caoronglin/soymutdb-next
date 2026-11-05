@@ -1,6 +1,7 @@
 import { GlobalOutlined, SaveOutlined } from "@ant-design/icons";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { http } from "@soymutdb/api-client";
 import { Button, Input, ProCard, Select, Typography } from "@/lib/antd";
 
@@ -21,6 +22,7 @@ function toSiteFields(values: GeneralSettings | undefined): SiteFields {
 }
 
 export function SiteSettingsForm() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["admin-settings", "general"],
@@ -44,21 +46,27 @@ export function SiteSettingsForm() {
         <div>
           <Typography.Title level={5} className="flex items-center gap-2 text-base">
             <GlobalOutlined className="size-4 text-primary" aria-hidden />
-            Site information
+            {t("admin.settings.siteForm.title", { defaultValue: "Site information" })}
           </Typography.Title>
-          <Typography.Text type="secondary">Configure the public site identity and default language.</Typography.Text>
+          <Typography.Text type="secondary">
+            {t("admin.settings.siteForm.description", {
+              defaultValue: "Configure the public site identity and default language.",
+            })}
+          </Typography.Text>
         </div>
-        {query.isLoading ? <p role="status">Loading site settings…</p> : null}
-        {query.isError ? <p role="alert" className="text-destructive">Unable to load site settings.</p> : null}
+        {query.isLoading ? <p role="status">{t("admin.settings.siteForm.loading", { defaultValue: "Loading site settings…" })}</p> : null}
+        {query.isError ? <p role="alert" className="text-destructive">
+            {t("admin.settings.siteForm.loadError", { defaultValue: "Unable to load site settings." })}
+          </p> : null}
         {!query.isLoading && !query.isError ? (
           <>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="space-y-1.5">
-                <span>Site Name</span>
+                <span>{t("admin.settings.siteForm.siteName", { defaultValue: "Site Name" })}</span>
                 <Input value={fields.siteName} onChange={(event) => setFields((current) => ({ ...current, siteName: event.target.value }))} />
               </label>
               <label className="space-y-1.5">
-                <span>Default Language</span>
+                <span>{t("admin.settings.siteForm.defaultLanguage", { defaultValue: "Default Language" })}</span>
                 <Select
                   value={fields.defaultLanguage}
                   onChange={(value) => setFields((current) => ({ ...current, defaultLanguage: value }))}
@@ -70,19 +78,23 @@ export function SiteSettingsForm() {
               </label>
             </div>
             <label className="block space-y-1.5">
-              <span>Site Description</span>
+              <span>{t("admin.settings.siteForm.siteDescription", { defaultValue: "Site Description" })}</span>
               <Input.TextArea value={fields.siteDescription} rows={2} onChange={(event) => setFields((current) => ({ ...current, siteDescription: event.target.value }))} />
             </label>
             <div className="flex justify-end">
               <Button onClick={() => saveMutation.mutate()} loading={saveMutation.isPending}>
                 <SaveOutlined aria-hidden className="size-4" />
-                Save site information
+                {t("admin.settings.siteForm.save", { defaultValue: "Save site information" })}
               </Button>
             </div>
           </>
         ) : null}
-        {saveMutation.isError ? <p role="alert" className="text-destructive">Unable to save site settings.</p> : null}
-        {saveMutation.isSuccess ? <p role="status" className="text-success">Site information saved.</p> : null}
+        {saveMutation.isError ? <p role="alert" className="text-destructive">
+            {t("admin.settings.siteForm.saveError", { defaultValue: "Unable to save site settings." })}
+          </p> : null}
+        {saveMutation.isSuccess ? <p role="status" className="text-success">
+            {t("admin.settings.siteForm.saved", { defaultValue: "Site information saved." })}
+          </p> : null}
       </div>
     </ProCard>
   );

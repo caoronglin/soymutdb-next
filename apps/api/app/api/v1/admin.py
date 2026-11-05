@@ -796,8 +796,9 @@ async def admin_dashboard_series(
 ) -> AdminDashboardSeries:
     """Time series for the admin dashboard charts.
 
-    - ``import_throughput``: daily import tasks (completed vs. failed) from
-      the PostgreSQL ``import_tasks`` table.
+    - ``import_throughput``: daily import tasks from the PostgreSQL
+      ``import_tasks`` table, split into completed vs. failed/cancelled vs.
+      still queued or running.
     - ``query_latency``: daily p50/p95/p99 percentiles from the PostgreSQL
       analytics events (empty when that query is unavailable).
     - ``storage_growth``: no reliable storage source exists yet — empty.
@@ -817,14 +818,24 @@ async def admin_dashboard_series(
     )
     rows = (await db.execute(import_stmt)).all()
 
+    # Every status lands in a bucket. The first version only counted COMPLETED
+    # and FAILED, so queued/validating/ingesting tasks vanished: a day whose
+    # imports were still executing rendered as a day with no activity at all.
+    # Anything that is not a terminal outcome is counted as in flight, so a
+    # status added to `ImportStatus` later cannot silently under-report again.
+    completed_states = {ImportTaskStatus.COMPLETED.value}
+    failed_states = {ImportTaskStatus.FAILED.value}
     by_day: dict[str, dict[str, int]] = {}
     for day, status_val, count in rows:
         key = day.isoformat() if hasattr(day, "isoformat") else str(day)
-        entry = by_day.setdefault(key, {"imported": 0, "failed": 0})
-        if str(status_val) == ImportTaskStatus.COMPLETED.value:
+        entry = by_day.setdefault(key, {"imported": 0, "failed": 0, "running": 0})
+        status_text = str(status_val)
+        if status_text in completed_states:
             entry["imported"] += int(count)
-        elif str(status_val) == ImportTaskStatus.FAILED.value:
+        elif status_text in failed_states:
             entry["failed"] += int(count)
+        else:
+            entry["running"] += int(count)
 
     import_throughput = [
         ImportThroughputPoint(date=day, **entry) for day, entry in sorted(by_day.items())

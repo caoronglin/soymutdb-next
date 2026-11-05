@@ -109,7 +109,7 @@ export function NewsPublicationTab({ type }: { type: "news" | "publication" }) {
 
   const items = data?.items ?? [];
   const config = TYPE_CONFIG[type];
-  const typeLabel = t(`admin.content.type_${type}`, { defaultValue: config.label });
+  const typeLabel = t(`admin.content.type.${type}`, { defaultValue: config.label });
 
   const columns: DataTableColumn<ContentItem>[] = [
     {
@@ -130,7 +130,7 @@ export function NewsPublicationTab({ type }: { type: "news" | "publication" }) {
       sortable: true,
       sortAccessor: (c) => c.status,
       cell: (c) => (
-        <Badge color={statusBadgeVariant(c.status)}>{t(`admin.content.status_${c.status}`, { defaultValue: c.status })}</Badge>
+        <Badge color={statusBadgeVariant(c.status)}>{t(`admin.content.status.${c.status}`, { defaultValue: c.status })}</Badge>
       ),
     },
     {

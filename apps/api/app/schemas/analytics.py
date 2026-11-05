@@ -251,11 +251,18 @@ class AdminDashboardStats(BaseModel):
 
 
 class ImportThroughputPoint(BaseModel):
-    """Daily import task throughput (success vs. failure)."""
+    """Daily import task throughput.
+
+    ``imported`` and ``failed`` are the terminal outcomes. ``running`` counts
+    every task of that day that is still queued or executing: the first version
+    of this aggregate dropped them silently, so a day whose tasks had not
+    finished yet looked like a day with no imports at all.
+    """
 
     date: str
     imported: int = Field(default=0, ge=0)
     failed: int = Field(default=0, ge=0)
+    running: int = Field(default=0, ge=0)
 
 
 class QueryLatencyPoint(BaseModel):

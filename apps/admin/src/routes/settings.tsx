@@ -137,7 +137,7 @@ function isConfigurationRecord(value: unknown): value is Record<string, unknown>
 
 function SettingsLoadError({ section }: { section: SettingsSection }) {
   const { t } = useTranslation();
-  const sectionLabel = t(`admin.settings.section_${section}`, { defaultValue: settingsSectionLabels[section] });
+  const sectionLabel = t(`admin.settings.section.${section}`, { defaultValue: settingsSectionLabels[section] });
   return (
     <Alert
       className="mt-2"
@@ -496,7 +496,7 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
           >
             <p>
               {t("admin.settings.saveFailed", {
-                section: t(`admin.settings.section_${saveFailure.section}`, {
+                section: t(`admin.settings.section.${saveFailure.section}`, {
                   defaultValue: settingsSectionLabel(saveFailure.section),
                 }),
                 defaultValue: "The {{section}} settings could not be saved. The values on screen are unchanged.",
@@ -1016,12 +1016,17 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
             <div className="space-y-4">
               {CONTENT_AREA_ORDER.map((area) => (
                 <div key={area} className="space-y-2">
-                  <Typography.Title level={5} className="mb-1">{t(`admin.settings.contentArea_${area}`, { defaultValue: CONTENT_AREA_LABELS[area] })}</Typography.Title>
+                  <Typography.Title level={5} className="mb-1">{t(`admin.settings.contentArea.${area}`, { defaultValue: CONTENT_AREA_LABELS[area] })}</Typography.Title>
                   <div className="grid gap-x-4 sm:grid-cols-2">
                     {contentFields.filter((field) => field.area === area).map((field) => (
                       <Form.Item
                         key={field.key}
-                        label={t(`admin.settings.contentField_${field.key.replace(/\./g, "_")}`, { defaultValue: field.label })}
+                        // The label is the registered CMS key itself. It used to be
+                        // wrapped in `t(\`admin.settings.contentField_...\`)`, a lookup
+                        // that could never resolve: nothing registers that namespace,
+                        // and `field.key` is the content schema key (e.g.
+                        // `hero.title_zh`), which already localises per site variant.
+                        label={field.label}
                         htmlFor={`content-${field.key}`}
                       >
                         {field.textarea ? (

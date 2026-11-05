@@ -10506,7 +10506,7 @@
           "admin"
         ],
         "summary": "Dashboard trend series",
-        "description": "Time series for the admin dashboard charts.\n\n- ``import_throughput``: daily import tasks (completed vs. failed) from\n  the PostgreSQL ``import_tasks`` table.\n- ``query_latency``: daily p50/p95/p99 percentiles from the PostgreSQL\n  analytics events (empty when that query is unavailable).\n- ``storage_growth``: no reliable storage source exists yet \u2014 empty.",
+        "description": "Time series for the admin dashboard charts.\n\n- ``import_throughput``: daily import tasks from the PostgreSQL\n  ``import_tasks`` table, split into completed vs. failed/cancelled vs.\n  still queued or running.\n- ``query_latency``: daily p50/p95/p99 percentiles from the PostgreSQL\n  analytics events (empty when that query is unavailable).\n- ``storage_growth``: no reliable storage source exists yet \u2014 empty.",
         "operationId": "admin_dashboard_series_api_v1_admin_dashboard_series_get",
         "security": [
           {
@@ -27586,6 +27586,12 @@
             "minimum": 0.0,
             "default": 0,
             "title": "Failed"
+          },
+          "running": {
+            "type": "integer",
+            "minimum": 0.0,
+            "default": 0,
+            "title": "Running"
           }
         },
         "type": "object",
@@ -27593,7 +27599,7 @@
           "date"
         ],
         "title": "ImportThroughputPoint",
-        "description": "Daily import task throughput (success vs. failure)."
+        "description": "Daily import task throughput.\n\n``imported`` and ``failed`` are the terminal outcomes. ``running`` counts\nevery task of that day that is still queued or executing: the first version\nof this aggregate dropped them silently, so a day whose tasks had not\nfinished yet looked like a day with no imports at all."
       },
       "ImportValidationRequest": {
         "properties": {

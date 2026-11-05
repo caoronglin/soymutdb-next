@@ -260,7 +260,7 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
       sortable: true,
       sortAccessor: (p) => p.status,
       cell: (p) => (
-        <Badge color={statusBadgeVariant(p.status)}>{t(`admin.content.status_${p.status}`, { defaultValue: p.status })}</Badge>
+        <Badge color={statusBadgeVariant(p.status)}>{t(`admin.content.status.${p.status}`, { defaultValue: p.status })}</Badge>
       ),
     },
     {

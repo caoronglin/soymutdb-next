@@ -92,6 +92,13 @@ python3 scripts/check_visible_i18n.py
 node scripts/check_visible_i18n_react.mjs --self-test
 node scripts/check_visible_i18n_react.mjs
 
+# The visible-text guard catches hardcoded copy; it cannot catch the opposite
+# failure — a `t()` key that was never registered. i18next then falls back to
+# `defaultValue`, so a zh console prints English and every gate stays green.
+step "Admin i18n key guard (every referenced key exists in zh and en)"
+node scripts/test_admin_i18n_keys_guard.mjs
+node scripts/check-admin-i18n-keys.mjs
+
 # A call site may pass a different option name than the catalog placeholder
 # (`conds` vs `{{conditions}}`); i18next then renders the raw braces and no other
 # gate notices. exppattern shipped exactly that, so check the call sites.

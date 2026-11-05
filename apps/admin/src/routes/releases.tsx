@@ -59,7 +59,7 @@ export default function ReleasesPage() {
       title: t("releases.status"),
       key: "status",
       editable: false,
-      render: (_value, release) => <Tag color={statusTone(release.status)}>{t(`releases.statuses.${release.status}`, { defaultValue: release.status })}</Tag>,
+      render: (_value, release) => <Tag color={statusTone(release.status)}>{t(`releaseStatus.${release.status}`, { defaultValue: release.status })}</Tag>,
     },
     {
       title: t("releases.variantCount"),
@@ -149,7 +149,7 @@ export default function ReleasesPage() {
               items={[
                 { key: "name", label: t("releases.releaseName"), children: detail.name || "—" },
                 { key: "version", label: t("releases.version", { defaultValue: "Version" }), children: detail.version || "—" },
-                { key: "status", label: t("releases.status"), children: <Tag color={statusTone(detail.status)}>{t(`releases.statuses.${detail.status}`, { defaultValue: detail.status })}</Tag> },
+                { key: "status", label: t("releases.status"), children: <Tag color={statusTone(detail.status)}>{t(`releaseStatus.${detail.status}`, { defaultValue: detail.status })}</Tag> },
                 { key: "published", label: t("releases.releaseDate"), children: formatDate(detail.publishedAt) },
                 { key: "variants", label: t("releases.variantCount"), children: formatNumber(detail.variantCount) },
                 { key: "genes", label: t("releases.geneCount"), children: formatNumber(detail.geneCount) },

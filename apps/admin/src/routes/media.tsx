@@ -42,13 +42,18 @@ type AssetStatus = "ready" | "archived";
  * The purpose filter is built from a dynamic i18n key
  * (`admin.media.purposes.<value>`), so the call site must carry a default
  * value: without one the dropdown showed the raw key
- * (`admin.media.purposes.news`) instead of a label.
+ * (`admin.media.purposes.news`) instead of a label. The keys are registered in
+ * both catalogs; the fallback only covers a purpose the catalog has not caught
+ * up with yet (the API allowlist is the source of truth for the values).
  */
 const PURPOSE_LABELS: Record<(typeof PURPOSE_OPTIONS)[number], string> = {
   news: "News",
   editor: "Editor",
   about: "About",
 };
+
+/** Upload purposes the API accepts (`ALLOWED_UPLOAD_PURPOSES` in apps/api). */
+const DEFAULT_UPLOAD_PURPOSE: (typeof PURPOSE_OPTIONS)[number] = "news";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return bytes + " B";
@@ -61,8 +66,12 @@ export default function MediaPage() {
   const { message } = App.useApp();
   const [items, setItems] = useState<MediaAsset[]>([]);
   const [search, setSearch] = useState("");
+  // The filter and the upload purpose are separate state on purpose. They used
+  // to share one `purpose` value, so clearing the filter (`allowClear` fires
+  // `onChange(undefined)`) silently reset the purpose the header's upload
+  // button would stamp on the next file.
   const [purpose, setPurpose] = useState<string | undefined>();
-  const uploadPurpose = purpose ?? "news";
+  const [uploadPurpose, setUploadPurpose] = useState<string>(DEFAULT_UPLOAD_PURPOSE);
   const [assetStatus, setAssetStatus] = useState<AssetStatus>("ready");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -184,15 +193,29 @@ export default function MediaPage() {
       title={t("admin.media.title")}
       subTitle={t("admin.media.description")}
       extra={[
-        <FileUpload
-          key="upload"
-          value={undefined}
-          purpose={uploadPurpose}
-          accept="image/jpeg,image/png,image/webp"
-          maxSizeMB={10}
-          buttonText={t("admin.media.upload")}
-          onUploaded={handleUploaded}
-        />,
+        // The upload purpose is chosen here, not borrowed from the filter: an
+        // asset is filed under the purpose it was uploaded for, and filtering
+        // the library is a view action.
+        <div key="upload" className="flex items-center gap-2">
+          <Select
+            value={uploadPurpose}
+            aria-label={t("admin.media.uploadPurpose", { defaultValue: "Upload purpose" })}
+            options={PURPOSE_OPTIONS.map((value) => ({
+              value,
+              label: t(`admin.media.purposes.${value}`, { defaultValue: PURPOSE_LABELS[value] }),
+            }))}
+            onChange={(value: string) => setUploadPurpose(value)}
+            className="w-32"
+          />
+          <FileUpload
+            value={undefined}
+            purpose={uploadPurpose}
+            accept="image/jpeg,image/png,image/webp"
+            maxSizeMB={10}
+            buttonText={t("admin.media.upload")}
+            onUploaded={handleUploaded}
+          />
+        </div>,
       ]}
     >
       <div className="route-fade-in space-y-6">
@@ -215,7 +238,7 @@ export default function MediaPage() {
               placeholder={t("admin.media.filterPurpose")}
               options={PURPOSE_OPTIONS.map((value) => ({
                 value,
-                label: t("admin.media.purposes." + value, {
+                label: t(`admin.media.purposes.${value}`, {
                   defaultValue: PURPOSE_LABELS[value],
                 }),
               }))}

@@ -642,6 +642,13 @@
     "jobStatus": "Status",
     "parametersHint": "Defaults suit a first look. Change them only if you need a different sensitivity."
   },
+  "releaseStatus": {
+    "draft": "Draft",
+    "validated": "Validated",
+    "ready": "Ready",
+    "published": "Published",
+    "rolled_back": "Rolled back"
+  },
   "releases": {
     "title": "Data Releases",
     "subtitle": "Browse all data releases",
@@ -1151,6 +1158,12 @@
     "brand": {
       "title": "Site brand",
       "description": "Manage the names and icon shown by each SoyMutDB site.",
+      "uploadPurpose": "Upload purpose",
+      "purposes": {
+        "news": "News",
+        "editor": "Editor",
+        "about": "About"
+      },
       "nameZh": "Chinese display name",
       "nameEn": "English display name",
       "iconUrl": "Site icon",
@@ -1261,6 +1274,7 @@
       "pipelineHeadline": "Keep the data pipeline moving",
       "pipelineDesc": "Start from the real operational workflows instead of decorative management pages.",
       "openImports": "Open imports",
+      "openAnalytics": "Visitor analytics",
       "trendUnavailable": "Dashboard trend data is unavailable."
     },
     "dashboardStats": {
@@ -1309,7 +1323,75 @@
           "description": "Data, notification, and file-preview configuration."
         }
       },
-      "sectionsLabel": "Settings sections",
+      "appearanceForm": {
+      "title": "Appearance",
+      "description": "Configure the administrator interface primary colour.",
+      "loading": "Loading appearance settings…",
+      "loadError": "Unable to load appearance settings.",
+      "primaryColor": "Primary color",
+      "primaryColorHelp": "Controls Ant Design buttons, links, tags, and selected states.",
+      "save": "Save appearance",
+      "saveError": "Unable to save appearance settings.",
+      "saved": "Appearance saved."
+    },
+    "localizationForm": {
+      "title": "Localization",
+      "description": "Configure the default language used by the public site.",
+      "loading": "Loading localization settings…",
+      "loadError": "Unable to load localization settings.",
+      "defaultLanguage": "Default Language",
+      "save": "Save localization",
+      "saveError": "Unable to save localization settings.",
+      "saved": "Localization saved."
+    },
+    "securityForm": {
+      "title": "Security",
+      "description": "Authentication and access-control settings.",
+      "loading": "Loading security settings…",
+      "loadError": "Unable to load security settings.",
+      "sessionTimeout": "Session Timeout (minutes)",
+      "maxLoginAttempts": "Max Login Attempts",
+      "passwordMinLength": "Password Min Length",
+      "twoFactor": "Two-Factor Auth",
+      "required": "Required",
+      "optional": "Optional",
+      "toggle": "Toggle",
+      "save": "Save security",
+      "saveError": "Unable to save security settings.",
+      "saved": "Security settings saved."
+    },
+    "siteForm": {
+      "title": "Site information",
+      "description": "Configure the public site identity and default language.",
+      "loading": "Loading site settings…",
+      "loadError": "Unable to load site settings.",
+      "siteName": "Site Name",
+      "defaultLanguage": "Default Language",
+      "siteDescription": "Site Description",
+      "save": "Save site information",
+      "saveError": "Unable to save site settings.",
+      "saved": "Site information saved."
+    },
+    "sectionsLabel": "Settings sections",
+    "contentArea": {
+      "hero": "Hero",
+      "tools": "Tool cards",
+      "search": "Search pages",
+      "blast": "BLAST",
+      "help": "Help",
+      "generic": "Generic UI"
+    },
+    "section": {
+      "general": "General settings",
+      "about": "About settings",
+      "home": "Homepage welcome settings",
+      "data": "Data & Storage settings",
+      "email": "Email & Notifications settings",
+      "security": "Security settings",
+      "filePreview": "File Preview settings",
+      "footer": "Footer settings",
+      "content": "Site content settings"
+    },
       "overview": "Settings overview",
       "sections": {
         "general": "General",
@@ -1468,6 +1550,11 @@
     "imports": "Data Imports",
     "importDetail": {
       "title": "Import task",
+      "loading": "Loading import task…",
+      "unavailableTitle": "Import task unavailable",
+      "unavailableBody": "The task may have been removed or you may not have access.",
+      "back": "Back to imports",
+      "titleWithId": "Import task #{{id}}",
       "loadError": "Could not load this import.",
       "back": "Back to imports",
       "filename": "File",
@@ -1547,6 +1634,16 @@
       "deleteContentTitle": "Delete Content",
       "deleteContentConfirm": "Are you sure you want to delete ",
       "unknownError": "An unknown error occurred",
+    "type": {
+      "news": "News",
+      "publication": "Publications",
+      "page": "Pages"
+    },
+    "status": {
+      "draft": "Draft",
+      "published": "Published",
+      "archived": "Archived"
+    },
       "editPageTitle": "Edit Page",
       "newPage": "New Page",
       "editPageDesc": "Editing ",
@@ -1625,6 +1722,18 @@
       "migrationTitle": "Page Builder migration preview",
       "migrationBody": "This preview only validates legacy pages and reports draft candidates. It never creates, publishes, or changes source pages.",
       "previewMigration": "Preview migration",
+      "migrationColumnSlug": "Legacy slug",
+      "migrationColumnRoute": "Draft route",
+      "migrationColumnOutcome": "Result",
+      "migrationColumnMessage": "Message",
+      "migrationReady": "Ready for a draft migration.",
+      "migrationPreviewError": "Unable to load the migration preview. Try again later.",
+      "migrationSummary": "Dry run: {{created}} ready, {{skipped}} already mapped, {{invalid}} needs review.",
+      "migrationOutcome": {
+        "created": "Ready",
+        "skipped": "Already mapped",
+        "invalid": "Needs review"
+      },
       "publishTitle": "Publish page",
       "publishConfirm": "Publish \"{{title}}\"? It becomes visible on the public site.",
       "unpublishTitle": "Unpublish page",
@@ -2027,7 +2136,47 @@
       "abstract": "Abstract",
       "deleteTitle": "Delete publication"
     },
+    "previewTestData": {
+      "title": "Test data preview",
+      "subtitle": "Unpublished test data on this machine. Only availability can be edited here; it survives a re-import.",
+      "columnSiteKey": "Mutation site (line parent + position)",
+      "columnChromosome": "Chromosome",
+      "columnPosition": "Position",
+      "columnConfidence": "Confidence",
+      "confidenceHigh": "High",
+      "confidenceLow": "Low",
+      "columnGene": "Gene",
+      "columnFeature": "Feature",
+      "columnAvailable": "Available",
+      "start": "Start",
+      "end": "End",
+      "query": "Query",
+      "yes": "Yes",
+      "no": "No",
+      "loadFailedTitle": "Load failed",
+      "loadError": "Unable to load preview data. This endpoint is only served on a local dev machine.",
+      "saveError": "Unable to save the availability flag.",
+      "toggleAria": "Toggle availability for {{key}}",
+      "resultCount": "{{count}} rows"
+    },
     "importsHint": "Every import task this deployment has accepted, server-filtered by status.",
+    "contentTab": {
+      "news": "News",
+      "publication": "Publications",
+      "page": "Pages"
+    },
+    "status": {
+      "releaseDraft": "Draft",
+      "releaseImporting": "Importing",
+      "releaseValidating": "Validating",
+      "releaseActive": "Active",
+      "releaseArchived": "Archived",
+      "taskPending": "Pending",
+      "taskRunning": "Running",
+      "taskCompleted": "Completed",
+      "taskFailed": "Failed",
+      "taskCancelled": "Cancelled"
+    },
     "releasesHint": "Release versions, publication status and database counts.",
     "media": {
       "description": "Uploaded assets referenced by news and pages. Archiving removes an asset from the picker without breaking published references.",
@@ -2040,6 +2189,12 @@
       "uploadFirst": "Upload a file to get started.",
       "clearFilters": "Clear filters",
       "searchPlaceholder": "Search by file name or caption…",
+      "purposes": {
+        "news": "News",
+        "editor": "Editor",
+        "about": "About"
+      },
+      "uploadPurpose": "Upload purpose",
       "filterPurpose": "Filter by purpose",
       "altPlaceholder": "Alt text",
       "missingAlt": "Missing alt text",
@@ -2267,6 +2422,7 @@
       "imported": "Imported",
       "failed": "Failed",
       "records": "Records",
+      "running": "In progress",
       "importThroughput": "Import Throughput",
       "importThroughputAria": "Import throughput chart",
       "noData": "No chart data",

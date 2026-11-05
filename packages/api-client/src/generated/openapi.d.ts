@@ -2961,8 +2961,9 @@ export interface paths {
          * Dashboard trend series
          * @description Time series for the admin dashboard charts.
          *
-         *     - ``import_throughput``: daily import tasks (completed vs. failed) from
-         *       the PostgreSQL ``import_tasks`` table.
+         *     - ``import_throughput``: daily import tasks from the PostgreSQL
+         *       ``import_tasks`` table, split into completed vs. failed/cancelled vs.
+         *       still queued or running.
          *     - ``query_latency``: daily p50/p95/p99 percentiles from the PostgreSQL
          *       analytics events (empty when that query is unavailable).
          *     - ``storage_growth``: no reliable storage source exists yet — empty.
@@ -8923,7 +8924,12 @@ export interface components {
         };
         /**
          * ImportThroughputPoint
-         * @description Daily import task throughput (success vs. failure).
+         * @description Daily import task throughput.
+         *
+         *     ``imported`` and ``failed`` are the terminal outcomes. ``running`` counts
+         *     every task of that day that is still queued or executing: the first version
+         *     of this aggregate dropped them silently, so a day whose tasks had not
+         *     finished yet looked like a day with no imports at all.
          */
         ImportThroughputPoint: {
             /** Date */
@@ -8938,6 +8944,11 @@ export interface components {
              * @default 0
              */
             failed: number;
+            /**
+             * Running
+             * @default 0
+             */
+            running: number;
         };
         /** ImportValidationRequest */
         ImportValidationRequest: {

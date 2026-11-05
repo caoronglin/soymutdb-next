@@ -9,10 +9,16 @@ export const SETTINGS_DOMAINS = [
 
 export type SettingsDomain = (typeof SETTINGS_DOMAINS)[number];
 
+export interface SettingsRevisionSection {
+  id: string;
+  /** Registered in both catalogs as `admin.settings.sections.<id>`. */
+  label: string;
+}
+
 export interface SettingsDomainMeta {
   title: string;
   description: string;
-  revisionSections: Array<{ id: string; label: string }>;
+  revisionSections: SettingsRevisionSection[];
 }
 
 export const SETTINGS_DOMAIN_META: Record<SettingsDomain, SettingsDomainMeta> = {

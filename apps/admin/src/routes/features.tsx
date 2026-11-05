@@ -1,6 +1,6 @@
 import { WarningOutlined, CloseOutlined, CheckOutlined } from "@ant-design/icons";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { App, Badge, Button, PageContainer, ProCard, Typography } from "@/lib/antd";
+import { App, Button, PageContainer, ProCard, Tag, Typography } from "@/lib/antd";
 import { capabilitiesApi, type FeatureDefinitionResponse } from "@soymutdb/api-client";
 import { resolvePluginState } from "../lib/capability-state";
 import { useState } from "react";
@@ -52,8 +52,8 @@ export default function FeaturesPage() {
 
   return (
     <PageContainer
-      title={t("admin.ops.featureFlagsTitle", { defaultValue: "\"Feature Flags\"" })}
-      subTitle={t("admin.ops.featureFlagsSubtitle", { defaultValue: "\"Enable or disable registered capabilities atomically. Disabling rejects new requests and does not kill running jobs.\"" })}
+      title={t("admin.ops.featureFlagsTitle", { defaultValue: "Feature Flags" })}
+      subTitle={t("admin.ops.featureFlagsSubtitle", { defaultValue: "Enable or disable registered capabilities atomically. Disabling rejects new requests and does not kill running jobs." })}
     >
       <div className="space-y-6">
         {featuresQuery.error ? (
@@ -102,7 +102,7 @@ export default function FeaturesPage() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <code className="text-sm">{feature.key}</code>
-                    {feature.public ? <Badge >{t("admin.ops.badgePublic", { defaultValue: "public" })}</Badge> : <Badge >{t("admin.ops.badgeInternal", { defaultValue: "internal" })}</Badge>}
+                    {feature.public ? <Tag color="default">{t("admin.ops.badgePublic", { defaultValue: "public" })}</Tag> : <Tag color="default">{t("admin.ops.badgeInternal", { defaultValue: "internal" })}</Tag>}
                   </div>
                   <p className="mt-1 text-sm text-muted-foreground">{feature.description}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{t("admin.ops.disableBehavior", { defaultValue: "disable: {{behavior}}", behavior: feature.disable_behavior })}</p>
@@ -156,9 +156,9 @@ export default function FeaturesPage() {
                             {status.reason ?? t("admin.ops.pluginReady", { defaultValue: "ready" })}
                           </p>
                         </div>
-                        <Badge color={status.state === "available" ? "green" : "default"}>
+                        <Tag color={status.state === "available" ? "green" : "default"}>
                           {status.state === "available" ? t("admin.ops.available", { defaultValue: "Available" }) : t("admin.ops.unavailable", { defaultValue: "Unavailable" })}
-                        </Badge>
+                        </Tag>
                         {plugin?.version ? (
                           <span className="text-xs text-muted-foreground">v{plugin.version}</span>
                         ) : null}

@@ -78,9 +78,20 @@ export default function DashboardPage() {
                 resolves to `LegacyUnavailablePage`: the console's single primary
                 call-to-action opened "this page is unavailable". Imports is the
                 live workflow the unavailable page itself recommends. */}
-            <Link to="/imports" className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-              {t("admin.dashboard.openImports", { defaultValue: "Open imports" })} <ArrowRightOutlined className="size-4" aria-hidden />
-            </Link>
+            <div className="flex flex-wrap items-center gap-2">
+              <Link to="/imports" className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+                {t("admin.dashboard.openImports", { defaultValue: "Open imports" })} <ArrowRightOutlined className="size-4" aria-hidden />
+              </Link>
+              {/* Visitor analytics lives on its own settings page and, until
+                  this link existed, the dashboard had no route to it: the only
+                  path was the sidebar entry under Administration. */}
+              <Link
+                to="/analytics-settings"
+                className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
+              >
+                {t("admin.dashboard.openAnalytics", { defaultValue: "Visitor analytics" })}
+              </Link>
+            </div>
           </div>
         </section>
 
@@ -176,7 +187,16 @@ export default function DashboardPage() {
             <Suspense fallback={<ChartLoading />}><QueryLatencyChart data={seriesLoading ? [] : latencyData} /></Suspense>
           </div>
 
-          <Suspense fallback={<ChartLoading />}><StorageGrowthChart data={seriesLoading ? [] : storageData} /></Suspense>
+          {/* `GET /admin/dashboard-series` returns `storage_growth: []` on
+              every deployment: no reliable storage source exists yet
+              (apps/api/app/api/v1/admin.py::admin_dashboard_series says so in
+              its own docstring). Rendering the card anyway put a permanent
+              "No chart data" panel on the dashboard, which reads as a broken
+              widget rather than as a metric that is not measured. The card is
+              rendered only when there is something to show. */}
+          {!seriesLoading && storageData.length === 0 ? null : (
+            <Suspense fallback={<ChartLoading />}><StorageGrowthChart data={seriesLoading ? [] : storageData} /></Suspense>
+          )}
         </div>
 
         {/* Quick stats footer */}

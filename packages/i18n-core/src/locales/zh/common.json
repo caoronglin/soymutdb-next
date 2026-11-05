@@ -642,6 +642,13 @@
     "jobStatus": "状态",
     "parametersHint": "默认值适合先看一眼；除非需要不同灵敏度，否则不必改动。"
   },
+  "releaseStatus": {
+    "draft": "草稿",
+    "validated": "已校验",
+    "ready": "待发布",
+    "published": "已发布",
+    "rolled_back": "已回滚"
+  },
   "releases": {
     "title": "数据版本",
     "subtitle": "浏览所有数据版本",
@@ -1151,6 +1158,12 @@
     "brand": {
       "title": "站点品牌",
       "description": "管理各 SoyMutDB 站点显示的名称和图标。",
+      "uploadPurpose": "上传用途",
+      "purposes": {
+        "news": "新闻",
+        "editor": "编辑器",
+        "about": "关于我们"
+      },
       "nameZh": "中文显示名称",
       "nameEn": "英文显示名称",
       "iconUrl": "站点图标",
@@ -1261,6 +1274,7 @@
       "pipelineHeadline": "让数据流水线保持运转",
       "pipelineDesc": "从真实的运维流程开始，而不是装饰性的管理页面。",
       "openImports": "打开导入",
+      "openAnalytics": "访问统计配置",
       "trendUnavailable": "仪表盘趋势数据暂不可用。"
     },
     "dashboardStats": {
@@ -1309,7 +1323,75 @@
           "description": "数据、通知和文件预览配置。"
         }
       },
-      "sectionsLabel": "设置分区",
+      "appearanceForm": {
+      "title": "外观",
+      "description": "配置管理员界面的主色调。",
+      "loading": "正在加载外观设置…",
+      "loadError": "无法加载外观设置。",
+      "primaryColor": "主色",
+      "primaryColorHelp": "控制 Ant Design 的按钮、链接、标签与选中态。",
+      "save": "保存外观",
+      "saveError": "无法保存外观设置。",
+      "saved": "外观已保存。"
+    },
+    "localizationForm": {
+      "title": "本地化",
+      "description": "配置公开站点使用的默认语言。",
+      "loading": "正在加载本地化设置…",
+      "loadError": "无法加载本地化设置。",
+      "defaultLanguage": "默认语言",
+      "save": "保存本地化",
+      "saveError": "无法保存本地化设置。",
+      "saved": "本地化设置已保存。"
+    },
+    "securityForm": {
+      "title": "安全",
+      "description": "认证与访问控制设置。",
+      "loading": "正在加载安全设置…",
+      "loadError": "无法加载安全设置。",
+      "sessionTimeout": "会话超时（分钟）",
+      "maxLoginAttempts": "最大登录尝试次数",
+      "passwordMinLength": "密码最小长度",
+      "twoFactor": "两步验证",
+      "required": "必须",
+      "optional": "可选",
+      "toggle": "切换",
+      "save": "保存安全设置",
+      "saveError": "无法保存安全设置。",
+      "saved": "安全设置已保存。"
+    },
+    "siteForm": {
+      "title": "站点信息",
+      "description": "配置公开站点的标识与默认语言。",
+      "loading": "正在加载站点设置…",
+      "loadError": "无法加载站点设置。",
+      "siteName": "站点名称",
+      "defaultLanguage": "默认语言",
+      "siteDescription": "站点描述",
+      "save": "保存站点信息",
+      "saveError": "无法保存站点设置。",
+      "saved": "站点信息已保存。"
+    },
+    "sectionsLabel": "设置分区",
+    "contentArea": {
+      "hero": "首屏",
+      "tools": "工具卡片",
+      "search": "检索页",
+      "blast": "BLAST",
+      "help": "帮助",
+      "generic": "通用界面"
+    },
+    "section": {
+      "general": "常规设置",
+      "about": "关于设置",
+      "home": "首页欢迎设置",
+      "data": "数据与存储",
+      "email": "邮件与通知",
+      "security": "安全设置",
+      "filePreview": "文件预览设置",
+      "footer": "页脚设置",
+      "content": "站点内容设置"
+    },
       "overview": "设置概览",
       "sections": {
         "general": "常规",
@@ -1468,6 +1550,11 @@
     "imports": "数据导入",
     "importDetail": {
       "title": "导入任务",
+      "loading": "正在加载导入任务…",
+      "unavailableTitle": "导入任务不可用",
+      "unavailableBody": "该任务可能已被删除，或你无权访问。",
+      "back": "返回导入列表",
+      "titleWithId": "导入任务 #{{id}}",
       "loadError": "无法加载该导入任务。",
       "back": "返回导入列表",
       "filename": "文件",
@@ -1547,6 +1634,16 @@
       "deleteContentTitle": "删除内容",
       "deleteContentConfirm": "确定要删除吗？",
       "unknownError": "发生未知错误",
+    "type": {
+      "news": "新闻",
+      "publication": "论文",
+      "page": "静态页面"
+    },
+    "status": {
+      "draft": "草稿",
+      "published": "已发布",
+      "archived": "已归档"
+    },
       "editPageTitle": "编辑页面",
       "newPage": "新建页面",
       "editPageDesc": "正在编辑",
@@ -1625,6 +1722,18 @@
       "migrationTitle": "页面构建器迁移预览",
       "migrationBody": "该预览仅校验旧版页面并报告草稿候选，不会创建、发布或修改任何源页面。",
       "previewMigration": "预览迁移",
+      "migrationColumnSlug": "旧版 slug",
+      "migrationColumnRoute": "草稿路由",
+      "migrationColumnOutcome": "结果",
+      "migrationColumnMessage": "信息",
+      "migrationReady": "可进行草稿迁移。",
+      "migrationPreviewError": "无法加载迁移预览，请稍后重试。",
+      "migrationSummary": "试运行：{{created}} 个可迁移，{{skipped}} 个已映射，{{invalid}} 个需人工确认。",
+      "migrationOutcome": {
+        "created": "可迁移",
+        "skipped": "已映射",
+        "invalid": "需确认"
+      },
       "publishTitle": "发布页面",
       "publishConfirm": "确定发布“{{title}}”吗？发布后将立即在公开站点可见。",
       "unpublishTitle": "取消发布页面",
@@ -2027,7 +2136,47 @@
       "abstract": "摘要",
       "deleteTitle": "删除文献"
     },
+    "previewTestData": {
+      "title": "测试数据预览",
+      "subtitle": "本机上未发布的测试数据；「可获得」可在此修改，重新导入时会保留。",
+      "columnSiteKey": "突变体系（株系母+位置）",
+      "columnChromosome": "染色体号",
+      "columnPosition": "位点",
+      "columnConfidence": "可信度",
+      "confidenceHigh": "高",
+      "confidenceLow": "低",
+      "columnGene": "基因号",
+      "columnFeature": "特征",
+      "columnAvailable": "可获得",
+      "start": "起始位点",
+      "end": "终止位点",
+      "query": "查询",
+      "yes": "是",
+      "no": "否",
+      "loadFailedTitle": "加载失败",
+      "loadError": "无法加载预览数据；该接口仅在本机 dev 环境可用。",
+      "saveError": "保存「可获得」状态失败。",
+      "toggleAria": "切换 {{key}} 的可获得状态",
+      "resultCount": "共 {{count}} 条"
+    },
     "importsHint": "该部署已接收的全部导入任务，按状态在服务端过滤。",
+    "contentTab": {
+      "news": "新闻",
+      "publication": "论文",
+      "page": "静态页面"
+    },
+    "status": {
+      "releaseDraft": "草稿",
+      "releaseImporting": "导入中",
+      "releaseValidating": "校验中",
+      "releaseActive": "生效中",
+      "releaseArchived": "已归档",
+      "taskPending": "等待中",
+      "taskRunning": "运行中",
+      "taskCompleted": "已完成",
+      "taskFailed": "失败",
+      "taskCancelled": "已取消"
+    },
     "releasesHint": "管理数据版本、发布状态及数据库记录统计。",
     "media": {
       "description": "新闻与页面引用的已上传素材；归档只从选择器中移除，不破坏已发布的引用。",
@@ -2040,6 +2189,12 @@
       "uploadFirst": "请先上传媒体文件。",
       "clearFilters": "清除筛选",
       "searchPlaceholder": "搜索文件名或说明…",
+      "purposes": {
+        "news": "新闻",
+        "editor": "编辑器",
+        "about": "关于我们"
+      },
+      "uploadPurpose": "上传用途",
       "filterPurpose": "按用途筛选",
       "altPlaceholder": "替代文本",
       "missingAlt": "缺少替代文本",
@@ -2267,6 +2422,7 @@
       "imported": "已导入",
       "failed": "失败",
       "records": "记录数",
+      "running": "进行中",
       "importThroughput": "导入吞吐量",
       "importThroughputAria": "导入吞吐量图表",
       "noData": "暂无图表数据",
