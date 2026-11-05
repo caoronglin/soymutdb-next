@@ -12,16 +12,31 @@ authenticated transport.
 
 ## Tools
 
-| Tool              | Type   | Backing endpoint            | Notes |
-|-------------------|--------|-----------------------------|-------|
-| `gene_by_id`      | read   | `GET /api/v1/genes/{id}`    | |
-| `variant_by_region` | read | `GET /api/v1/variants/region` | |
-| `news_list`       | read   | `GET /api/v1/news`          | category + pagination |
-| `stats_summary`   | read   | `GET /api/v1/stats/dashboard` | |
-| `seqfetch`        | read   | `POST /api/v1/tools/seqfetch` | assembly-scoped genes[] or region mode |
-| `blast_submit`    | write  | `POST /api/v1/blast/jobs`   | async; returns job + submitter token |
-| `blast_job_status` | write | `GET /api/v1/blast/jobs/{id}` | ownership-checked polling |
-| `analyses_query`  | write  | `GET /api/v1/analyses/{id}` | ownership-checked result polling |
+| Tool              | Type   | Backing endpoint            | Release pin | Notes |
+|-------------------|--------|-----------------------------|-------------|-------|
+| `gene_by_id`      | read   | `GET /api/v1/genes/{id}`    | `release_id` | |
+| `variant_by_region` | read | `GET /api/v1/variants/region` | `release_id` | |
+| `news_list`       | read   | `GET /api/v1/news`          | — | category + pagination |
+| `stats_summary`   | read   | `GET /api/v1/stats/dashboard` | `release_id` | |
+| `seqfetch`        | read   | `POST /api/v1/tools/seqfetch` | — | assembly-scoped genes[] or region mode |
+| `blast_submit`    | write  | `POST /api/v1/blast/jobs`   | — | async; returns job + submitter token |
+| `blast_job_status` | write | `GET /api/v1/blast/jobs/{id}` | — | ownership-checked polling |
+| `analyses_query`  | write  | `GET /api/v1/analyses/{id}` | — | ownership-checked result polling |
+
+### Release pinning
+
+The endpoints behind `gene_by_id`, `variant_by_region` and `stats_summary`
+accept `X-SoyMutDB-Release` and otherwise resolve **whichever release is active
+when the request is served**. Those three tools therefore take an optional
+`release_id` and forward it through `_api_request`, so an MCP answer can be
+pinned to the same release the caller is reading on the web portal. Omit it and
+the API's active release is used — the same default as the REST endpoint, but
+now a visible choice instead of an invisible one.
+
+`seqfetch` is scoped by its explicit `assembly`; `blast_submit` creates a job
+whose release is resolved when the worker runs. See
+`docs/dev/mcp-release-binding.md` for why those two are deliberately unpinned
+and which guard keeps the three declarations of this surface aligned.
 
 Full machine-readable inventory in `mcp_server/manifest.py`
 (`MANIFEST["tools"]`, plus `MANIFEST["auth"]`).

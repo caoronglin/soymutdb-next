@@ -377,7 +377,7 @@ class TestStatsSummary:
         captured: dict[str, Any] = {}
 
         async def handler(method, url, *, params, json, headers):
-            captured.update(method=method, url=url, params=params)
+            captured.update(method=method, url=url, params=params, headers=headers)
             return _ok(
                 {
                     "total_variants": 12345,
@@ -394,6 +394,7 @@ class TestStatsSummary:
             result = asyncio.run(server.stats_summary())
 
         assert captured["url"] == "http://localhost:8010/api/v1/stats/dashboard"
+        assert "X-SoyMutDB-Release" not in captured["headers"]
         assert result["total_variants"] == 12345
         assert result["current_release"] == "v1.0"
 
@@ -741,3 +742,46 @@ class TestRateLimiting:
         with _patch_client(handler):
             result = asyncio.run(server.stats_summary())
         assert "error" not in result
+
+
+class TestReleasePinning:
+    """The release-scoped tools must forward the caller's release pin.
+
+    Without it the API resolves whichever release is *active*, so an MCP answer
+    and a web answer for the same gene can come from different releases with
+    nothing in the response saying so. The source guard
+    (``scripts/check_mcp_release_binding.py``) proves the declaration is there;
+    these cases prove the header actually leaves the process.
+    """
+
+    def _capture(self, call):
+        captured: dict[str, Any] = {}
+
+        async def handler(method, url, *, params, json, headers):
+            captured.update(method=method, url=url, params=params, headers=headers)
+            return _ok({"gene_id": "G1", "total_variants": 1})
+
+        with _patch_client(handler):
+            call()
+        return captured
+
+    def test_gene_by_id_forwards_the_pin(self):
+        captured = self._capture(lambda: asyncio.run(server.gene_by_id("G1", release_id=7)))
+        assert captured["headers"]["X-SoyMutDB-Release"] == "7"
+
+    def test_variant_by_region_forwards_the_pin(self):
+        captured = self._capture(
+            lambda: asyncio.run(
+                server.variant_by_region("Wm82.a4.v1", "chr1", 1, 2, release_id=9)
+            )
+        )
+        assert captured["headers"]["X-SoyMutDB-Release"] == "9"
+
+    def test_stats_summary_forwards_the_pin(self):
+        captured = self._capture(lambda: asyncio.run(server.stats_summary(release_id=11)))
+        assert captured["headers"]["X-SoyMutDB-Release"] == "11"
+
+    def test_an_omitted_pin_sends_no_header(self):
+        """Omission keeps the API default; it must not invent a release."""
+        captured = self._capture(lambda: asyncio.run(server.gene_by_id("G1")))
+        assert "X-SoyMutDB-Release" not in captured["headers"]

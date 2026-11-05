@@ -123,11 +123,17 @@ class UpstreamUnavailable(Exception):
 # ---------------------------------------------------------------------------
 
 
-def _headers() -> dict[str, str]:
-    """Auth headers for internal API calls (bearer token passthrough)."""
+def _headers(release_id: int | None = None) -> dict[str, str]:
+    """Auth headers for internal API calls (bearer token passthrough).
+
+    ``_api_request`` always passes an explicit ``release_id``; the default is
+    kept so the header dictionary stays a pure function of its inputs.
+    """
     headers = {"Accept": "application/json"}
     if API_TOKEN:
         headers["Authorization"] = f"Bearer {API_TOKEN}"
+    if release_id is not None:
+        headers["X-SoyMutDB-Release"] = str(release_id)
     return headers
 
 
@@ -172,12 +178,21 @@ async def _api_request(
     *,
     params: dict[str, Any] | None = None,
     payload: dict[str, Any] | None = None,
+    release_id: int | None = None,
 ) -> Any:
     """Call the internal API and return the parsed JSON body.
 
     Raises :class:`ApiError` on HTTP >= 400 and :class:`UpstreamUnavailable`
     on transport failures.  Success responses are returned verbatim (the
     API has no success envelope — schemas are returned directly).
+
+    ``release_id`` is forwarded as ``X-SoyMutDB-Release``.  The REST endpoints
+    back ``gene_by_id`` / ``variant_by_region`` / ``stats_summary`` accept that
+    header and otherwise resolve whatever release is *active* when the request
+    is served — so without a pin, MCP answers are computed against a different
+    release than the one the caller asked the web portal for.  The pin lives
+    here, in the single transport, rather than in per-tool call sites: one
+    header decision, one place to audit.
     """
     request_id = uuid.uuid4().hex
     try:
@@ -187,7 +202,7 @@ async def _api_request(
                 f"{API_BASE}{path}",
                 params=params,
                 json=payload,
-                headers=_headers(),
+                headers=_headers(release_id),
             )
     except httpx.TimeoutException as exc:
         raise UpstreamUnavailable(f"upstream request timed out: {path}") from exc
@@ -331,7 +346,10 @@ mcp = FastMCP(
     description="Look up a soybean gene by gene id (read-only).",
 )
 async def gene_by_id(
-    gene_id: str, assembly_id: int | None = None, ctx: Context | None = None
+    gene_id: str,
+    assembly_id: int | None = None,
+    release_id: int | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """GET {API_BASE}/api/v1/genes/{gene_id} → compact gene record."""
     rate_err = _rate_limit_error(ctx)
@@ -339,7 +357,9 @@ async def gene_by_id(
         return rate_err
     params = {"assembly_id": assembly_id} if assembly_id is not None else None
     data = await _safe_call(
-        _api_request("GET", f"/api/v1/genes/{gene_id}", params=params)
+        _api_request(
+            "GET", f"/api/v1/genes/{gene_id}", params=params, release_id=release_id
+        )
     )
     if _is_error(data):
         return data
@@ -369,6 +389,7 @@ async def variant_by_region(
     start: int,
     end: int,
     max_results: int = 1000,
+    release_id: int | None = None,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
     """GET {API_BASE}/api/v1/variants/region → {count, variants}."""
@@ -388,6 +409,7 @@ async def variant_by_region(
                 "end": end,
                 "max_results": max_results,
             },
+            release_id=release_id,
         )
     )
     if _is_error(data):
@@ -457,12 +479,16 @@ async def news_list(
     name="stats_summary",
     description="Homepage statistics summary (read-only).",
 )
-async def stats_summary(ctx: Context | None = None) -> dict[str, Any]:
+async def stats_summary(
+    release_id: int | None = None, ctx: Context | None = None
+) -> dict[str, Any]:
     """GET {API_BASE}/api/v1/stats/dashboard → dashboard counters."""
     rate_err = _rate_limit_error(ctx)
     if rate_err is not None:
         return rate_err
-    data = await _safe_call(_api_request("GET", "/api/v1/stats/dashboard"))
+    data = await _safe_call(
+        _api_request("GET", "/api/v1/stats/dashboard", release_id=release_id)
+    )
     if _is_error(data):
         return data
     return {
