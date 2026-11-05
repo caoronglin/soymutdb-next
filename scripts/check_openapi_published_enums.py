@@ -27,10 +27,13 @@ knows only one of them is a guard that mostly passes:
   checked here too.
 
 ``StrEnum``/``Enum`` classes are read as class bodies and matched to the schema
-they become; a class pydantic flattens inline instead of defining is skipped by
-name, not by guess. A ``Literal`` whose members are not statically recoverable
-(a comprehension over a runtime enum, an ``Annotated``/validator composition) is
-reported as unverifiable rather than silently dropped.
+they become. The handful of classes pydantic flattens inline instead of giving
+a component are named in ``INLINED_ENUM_CLASSES``: an enum class that is NOT on
+that list must publish a component, because "the component is absent" is the
+exact co-revert a guard like this exists to catch. A ``Literal`` whose members
+are not statically recoverable (a comprehension over a runtime enum, an
+``Annotated``/validator composition) is reported as unverifiable rather than
+silently dropped.
 
 Usage:
     python3 scripts/check_openapi_published_enums.py
@@ -76,6 +79,28 @@ INLINED_MODELS = frozenset(
         # component for the base itself, so its own entry has nothing to check.
         "EnrichmentCalculationResponse",
         "EnrichmentGseaCalculationResponse",
+    }
+)
+
+# Enum classes pydantic publishes inline (as a bare ``enum``/``const`` on the
+# referencing field) instead of as a named ``components.schemas`` entry. This
+# list is a reviewed, independent fixed point: absence from the snapshot is
+# NEVER allowed to prove an exemption. Without it, ``inline_classes`` was
+# derived from the very artifact being guarded, so deleting a real enum
+# component (source + both exports in step) reclassified the enum as inline
+# and the check stayed green while ``compared`` silently dropped. Verified on
+# live ``main``: exactly these 8 of the 26 source enum classes have no
+# component; the other 18 must keep theirs.
+INLINED_ENUM_CLASSES = frozenset(
+    {
+        "AssemblyMetricReason",
+        "GeneFeatureType",
+        "SeedAvailability",
+        "SeedRequestStatus",
+        "SortOrder",
+        "_Availability",
+        "_EvidenceKind",
+        "_SectionState",
     }
 )
 
@@ -407,9 +432,18 @@ def failures(
     compared = 0
     components = document.get("components", {}).get("schemas", {})
     enum_classes = [name for name, fields in constraints.items() if "__enum__" in fields]
-    # A class pydantic flattens inline never gets its own schema. That is a
-    # property of the source, not a regression, so it is skipped by name.
-    inline_classes = [name for name in enum_classes if name not in components]
+    # Exemptions come from a reviewed literal, never from the artifact under
+    # guard. An enum class absent from components.schemas that is NOT on the
+    # list is a regression (its published value domain disappeared), not an
+    # inline class to skip.
+    inline_classes = [name for name in enum_classes if name in INLINED_ENUM_CLASSES]
+    for name in enum_classes:
+        if name not in inline_classes and name not in components:
+            found.append(
+                f"openapi.json publishes no `{name}` enum component, so its "
+                "declared value domain cannot be verified (add it to "
+                "INLINED_ENUM_CLASSES only if pydantic truly inlines it)"
+            )
 
     for model, fields in sorted(constraints.items()):
         if "__enum__" in fields:
@@ -440,7 +474,12 @@ def failures(
     for name in enum_classes:
         if name in inline_classes:
             continue
-        domains = published_domains(components[name])
+        schema = components.get(name)
+        if schema is None:
+            # Named above as an unexpected absence; fail cleanly instead of
+            # raising KeyError on a mutated artifact.
+            continue
+        domains = published_domains(schema)
         if not domains:
             found.append(f"`{name}` is an enum class but publishes no `enum` or `const`")
             continue
@@ -569,6 +608,15 @@ def _self_test(document: dict[str, Any], constraints: dict[str, dict[str, EnumSp
         mutated["SyntheticNotPublished"] = {"field": ["x"]}
         return failures(doc, mutated)[0]
 
+    def enum_component_dropped(doc: dict[str, Any]) -> list[str]:
+        # The vacuous exemption this guard used to have: absence from
+        # components.schemas proved "pydantic inlined it". Deleting a real
+        # enum component must be a named failure, not a silent skip.
+        victim = next(n for n, f in sorted(constraints.items())
+                      if "__enum__" in f and n in doc["components"]["schemas"])
+        doc["components"]["schemas"].pop(victim)
+        return failures(doc, constraints)[0]
+
     cases = [
         ("published domain drops a declared member", drop_member),
         ("published domain invents a member", invent_member),
@@ -580,6 +628,7 @@ def _self_test(document: dict[str, Any], constraints: dict[str, dict[str, EnumSp
         ("source drops a member the snapshot still lists", source_drops),
         ("source spelling the guard cannot resolve", source_unresolvable),
         ("model missing from the snapshot is named", inline_model_still_checked),
+        ("a real enum component disappearing is named", enum_component_dropped),
     ]
 
     result = 0
