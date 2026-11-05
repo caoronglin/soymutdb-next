@@ -32402,7 +32402,7 @@
         "properties": {
           "version": {
             "type": "integer",
-            "default": 2,
+            "default": 3,
             "title": "Version"
           },
           "features": {
@@ -32421,9 +32421,15 @@
           },
           "databases": {
             "$ref": "#/components/schemas/DatabaseCapabilitiesResponse"
+          },
+          "sequence": {
+            "$ref": "#/components/schemas/SequenceCapabilitiesResponse"
           }
         },
         "type": "object",
+        "required": [
+          "sequence"
+        ],
         "title": "PublicCapabilitiesResponse"
       },
       "PublicPageDefinitionResponse": {

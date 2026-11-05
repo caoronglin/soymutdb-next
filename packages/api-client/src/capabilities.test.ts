@@ -57,12 +57,27 @@ describe("capabilities API", () => {
 
   it("reads the compatible public capability snapshot", async () => {
     const response = {
-      version: 2,
+      version: 3,
       features: { page_builder: true },
       plugins: { jbrowse: plugin() },
       databases: {
         authoritative: "postgresql" as const,
         analytics: "postgresql" as const,
+      },
+      sequence: {
+        available: false,
+        engine: null,
+        engine_version: null,
+        reason: "compiled bio-core wheel is not installed",
+        max_inline_sequence: 1_048_576,
+        max_pattern: 256,
+        max_hits: 1000,
+        k_range: [1, 32],
+        genetic_codes: [1],
+        coordinate_system_internal: "0-based-half-open",
+        coordinate_system_public: "1-based-inclusive",
+        programs: ["reverse-complement", "match", "align", "stats", "orfs", "translate", "kmers"],
+        formats: ["fasta", "fastq", "bed"],
       },
     };
     mockGet.mockResolvedValueOnce(response);

@@ -11164,7 +11164,7 @@ export interface components {
         PublicCapabilitiesResponse: {
             /**
              * Version
-             * @default 2
+             * @default 3
              */
             version: number;
             /** Features */
@@ -11176,6 +11176,7 @@ export interface components {
                 [key: string]: components["schemas"]["PluginCapabilityResponse"];
             };
             databases?: components["schemas"]["DatabaseCapabilitiesResponse"];
+            sequence: components["schemas"]["SequenceCapabilitiesResponse"];
         };
         /**
          * PublicPageDefinitionResponse

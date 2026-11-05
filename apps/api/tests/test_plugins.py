@@ -279,7 +279,7 @@ async def test_capabilities_preserves_features_and_adds_plugins_and_databases(
     response = await capabilities.get_capabilities(_FeatureDb())
     body = response.model_dump(mode="json")
 
-    assert body["version"] == 2
+    assert body["version"] == 3
     assert "features" in body
     assert body["plugins"]["jbrowse"] == {
         "version": "2.17.0",
@@ -295,12 +295,80 @@ async def test_capabilities_preserves_features_and_adds_plugins_and_databases(
         "authoritative": "postgresql",
         "analytics": "postgresql",
     }
+    # v3: the public face carries the same sequence engine state as the narrow
+    # /tools/sequence/capabilities endpoint, without a second source of truth.
+    assert body["sequence"]["coordinate_system_public"] == "1-based-inclusive"
+    assert body["sequence"]["genetic_codes"] == [1]
+    assert "match" in body["sequence"]["programs"]
+    assert isinstance(body["sequence"]["available"], bool)
 
 
-def test_capabilities_response_model_keeps_plugins_backward_compatible_default() -> None:
+def test_capabilities_response_model_keeps_plugin_defaults_and_requires_sequence() -> None:
     from app.schemas.features import PublicCapabilitiesResponse
+    from app.schemas.sequence_tools import SequenceCapabilitiesResponse
 
-    response = PublicCapabilitiesResponse(features={"page_builder": True})
-    assert response.version == 2
+    response = PublicCapabilitiesResponse(
+        features={"page_builder": True},
+        sequence=SequenceCapabilitiesResponse(available=False),
+    )
+    assert response.version == 3
     assert response.plugins == {}
     assert response.databases.authoritative == "postgresql"
+
+
+@pytest.mark.asyncio
+async def test_public_capabilities_sequence_matches_narrow_endpoint(monkeypatch) -> None:
+    """v3 is one public face, not a second copy of the engine state.
+
+    The public /capabilities document must carry exactly the object returned
+    by the narrow /tools/sequence/capabilities owner, whether or not the
+    wheel is installed. A missing wheel is reported as ``available: false``;
+    the public endpoint must still answer 200 and never raise the 503 that
+    compute paths use.
+    """
+    from app.api.v1 import capabilities, tools_sequence
+    from app.services import sequence_tools_service
+
+    registry = _registry(_manifest())
+    monkeypatch.setattr(capabilities, "get_plugin_registry", lambda: registry)
+
+    public = await capabilities.get_capabilities(_FeatureDb())
+    narrow = await tools_sequence.sequence_capabilities()
+
+    assert public.version == 3
+    assert public.sequence == narrow
+    assert sequence_tools_service.capabilities() == narrow
+    if not narrow.available:
+        assert narrow.reason is not None
+    else:
+        assert narrow.engine is not None
+
+
+@pytest.mark.asyncio
+async def test_public_capabilities_http_is_v3_and_reports_engine_state() -> None:
+    """The public endpoint answers 200 with the unified face, wheel or not.
+
+    Compute endpoints fail closed with 503 when the wheel is missing; the
+    capabilities endpoint must remain readable so clients can tell "engine
+    unavailable" from "field absent".
+    """
+    from app.api.v1 import capabilities as capabilities_module
+    from app.core.database import get_db
+    from fastapi import FastAPI
+    from httpx import ASGITransport, AsyncClient
+
+    application = FastAPI()
+    application.include_router(capabilities_module.router, prefix="/api/v1")
+    application.dependency_overrides[get_db] = lambda: _FeatureDb()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=application), base_url="http://test"
+    ) as client:
+        response = await client.get("/api/v1/capabilities")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["version"] == 3
+    assert body["sequence"]["coordinate_system_public"] == "1-based-inclusive"
+    assert body["sequence"]["programs"]
+    assert isinstance(body["sequence"]["available"], bool)
