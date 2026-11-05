@@ -119,11 +119,28 @@ stays green; an honest pin is not a whitelist.
 
 ### Two-file evidence and wiring
 
-`check_openapi_published_enums.py` carries module-level `test_*` functions
-(8 → 14) as the second-file regression: the literal's independence, the
-decisive retype, a same-count rotation, the re-pin control, and the guard's
-own source plants. That file is now a gating `tests=()` row, so a one-file
-edit to `failures()` cannot silence them. This adds one row to `smoke.sh` and
-one entry to `PINNED_SUITES`; `REQUIRED_GUARD_CALLS` / `_WIRED_SELF_TESTS`
-are unchanged (suites ≠ guard calls), and the teeth case floor is a minimum.
-The guard's `--self-test` grows 17 ablations with three named marker plants.
+`check_openapi_published_enums.py` carries 16 module-level `test_*` functions
+as the second-file regression: the literal's independence, the decisive
+retype, a same-count relocation **from committed bytes**, both re-pin
+controls, and the guard's own source plants. That file is a gating `tests=()`
+row, so a one-file edit to `failures()` cannot silence them. It adds one row
+to `smoke.sh` and one entry to `PINNED_SUITES`; `REQUIRED_GUARD_CALLS` /
+`_WIRED_SELF_TESTS` are unchanged (suites ≠ guard calls).
+
+The guard's `--self-test` still runs 17 document ablations plus three marker
+plants, but each plant now names the one door that must catch it:
+
+| plant on committed `openapi.d.ts` bytes | count doors | sequence digest |
+| --- | --- | --- |
+| retype one `@enum {string}` tag | fire | fires |
+| retype one `@constant` tag | fire | fires |
+| swap two tags between doc blocks (136/100/36 unchanged) | silent | **sole catcher** |
+
+The third plant is decisive: a same-count relocation leaves every count door
+green, so gutting `_GENERATED_MARKER_SEQUENCE_DIGEST` cannot stay hidden
+behind a substituted tag. The self-test keeps its marker verdict (exactly one
+`result = 0`, before the loop) and a second-file test pins that shape; gutted
+doors now make `--self-test` exit non-zero instead of printing `OK (17
+ablations)` over three `FAIL: ... was not caught` lines. A duplicate
+`test_a_repin_in_the_same_commit_stays_green` definition that shadowed the
+document-side re-pin control is renamed, so all 16 regressions are collected.

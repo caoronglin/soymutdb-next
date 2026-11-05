@@ -956,6 +956,7 @@ def _load(root: Path) -> tuple[dict[str, Any], dict[str, dict[str, EnumSpec]]]:
 
 
 def _self_test(document: dict[str, Any], constraints: dict[str, dict[str, EnumSpec]]) -> int:
+    result = 0
     target = None
     components = document["components"]["schemas"]
     for model, fields in sorted(constraints.items()):
@@ -1176,47 +1177,83 @@ def _self_test(document: dict[str, Any], constraints: dict[str, dict[str, EnumSp
     ]
 
     # Generated-client marker door: plants edit the *generated* half, which
-    # the document-only ablation loop above cannot reach.
+    # the document-only ablation loop above cannot reach. Each plant names the
+    # one door that must catch it, so gutting any single door is reported.
     generated_bytes = (REPO_ROOT / GENERATED).read_text(encoding="utf-8")
-    marker_cases: list[tuple[str, str]] = []
+    marker_cases: list[tuple[str, str, str, bool]] = []
 
-    # One marker retyped in place, byte-preserving width. A co-revert of source
-    # and snapshot cannot restore a hover annotation the generator dropped.
-    dropped = generated_bytes.replace(
+    # One marker retyped in place, byte-preserving width. The tag string
+    # changes, so the count doors AND the sequence digest must both name it.
+    retyped_enum = generated_bytes.replace(
         "             * @enum {string}\n",
         "             * @enumX{string}\n",
         1,
     )
-    assert dropped != generated_bytes
-    marker_cases.append(("a generated @enum marker is retyped", dropped))
-
-    # A same-count rotation: swap which field carries an @constant marker.
-    # The multiset of tags is unchanged; only the sequence literal can see it.
-    rotated = generated_bytes.replace(
+    assert retyped_enum != generated_bytes
+    marker_cases.append(
+        ("a generated @enum marker is retyped", retyped_enum, "marker counts", True)
+    )
+    retyped_constant = generated_bytes.replace(
         "             * @constant\n",
         "             * @constanX\n",
         1,
     )
-    assert rotated != generated_bytes
-    marker_cases.append(("a generated @constant marker is retyped", rotated))
-
-    # The strongest plant: a legitimate regenerate that moves both halves but
-    # forgets one marker. Re-pinning the *source* baseline must not make it
-    # green -- the generated literal is independent of the documents.
+    assert retyped_constant != generated_bytes
     marker_cases.append(
-        ("a marker dropped while the document halves still agree", dropped)
+        ("a generated @constant marker is retyped", retyped_constant, "marker counts", True)
     )
 
-    for label, planted in marker_cases:
+    # A genuine same-count relocation, built from the committed bytes: swap
+    # which doc block carries which tag. 136/100/36 are unchanged, so the count
+    # doors stay silent and the sequence digest is the ONLY possible catcher.
+    # A multiset or a derived-row permutation cannot stand in for this plant.
+    marker_line = re.compile(r"^\s*\* (@enum \{string\}|@constant)\s*$")
+    marker_lines = generated_bytes.splitlines(keepends=True)
+    enum_index = next(
+        index for index, line in enumerate(marker_lines)
+        if marker_line.match(line) and "@enum" in line
+    )
+    constant_index = next(
+        index for index, line in enumerate(marker_lines)
+        if marker_line.match(line) and "@constant" in line
+    )
+    relocated_lines = marker_lines[:]
+    relocated_lines[enum_index] = "             * @constant\n"
+    relocated_lines[constant_index] = "             * @enum {string}\n"
+    relocated = "".join(relocated_lines)
+    assert relocated != generated_bytes
+    assert len(generated_marker_rows(relocated)) == _EXPECTED_GENERATED_MARKERS
+    assert _marker_counts(relocated) == (
+        _EXPECTED_ENUM_MARKERS,
+        _EXPECTED_CONSTANT_MARKERS,
+    )
+    marker_cases.append(
+        (
+            "a same-count marker relocation between two doc blocks",
+            relocated,
+            "_GENERATED_MARKER_SEQUENCE_DIGEST",
+            False,
+        )
+    )
+
+    for label, planted, needle, counts_must_fire in marker_cases:
         problems = failures(document, constraints, generated=planted)[0]
-        named = any("marker" in problem.lower() for problem in problems)
-        if not named:
-            print(f"FAIL: {label} was not caught")
+        count_doors = [
+            problem for problem in problems
+            if "row count" in problem or "marker counts" in problem
+        ]
+        if not any(needle in problem for problem in problems):
+            print(f"FAIL: {label} was not caught by {needle}")
+            result = 1
+        elif counts_must_fire and not count_doors:
+            print(f"FAIL: {label} did not move the count doors")
+            result = 1
+        elif not counts_must_fire and count_doors:
+            print(f"FAIL: {label} moved the count doors; the digest was not the sole catcher")
             result = 1
         else:
             print(f"PASS marker ablation: {label} -> {len(problems)} failure(s)")
 
-    result = 0
     for label, mutate in cases:
         problems = mutate(copy.deepcopy(document))
         if not problems:
@@ -1483,17 +1520,40 @@ def test_a_retyped_generated_constant_marker_is_rejected() -> None:
     assert any("marker" in p.lower() for p in found), found
 
 
-def test_a_same_count_marker_rotation_is_rejected() -> None:
-    """The sequence literal, not a multiset, must see a moved marker."""
+def test_a_same_count_marker_relocation_from_bytes_is_rejected() -> None:
+    """The sequence literal, not a multiset, must see a moved marker.
+
+    The plant swaps two tag strings between doc blocks in the committed bytes,
+    so all three count doors stay silent and the digest is the sole catcher.
+    Permuting the derived row list would prove nothing about the reader.
+    """
     generated = _committed_generated()
-    rows = generated_marker_rows(generated)
-    rotated = list(rows)
-    rotated[0], rotated[1] = rotated[1], rotated[0]
-    assert _generated_marker_digest(rotated) != _GENERATED_MARKER_SEQUENCE_DIGEST
-    assert len(rotated) == _EXPECTED_GENERATED_MARKERS
+    lines = generated.splitlines(keepends=True)
+    marker = re.compile(r"^\s*\* (@enum \{string\}|@constant)\s*$")
+    enum_index = next(
+        i for i, line in enumerate(lines) if marker.match(line) and "@enum" in line
+    )
+    constant_index = next(
+        i for i, line in enumerate(lines) if marker.match(line) and "@constant" in line
+    )
+    lines[enum_index] = "             * @constant\n"
+    lines[constant_index] = "             * @enum {string}\n"
+    planted = "".join(lines)
+    assert planted != generated
+    assert len(generated_marker_rows(planted)) == _EXPECTED_GENERATED_MARKERS
+    assert _marker_counts(planted) == (
+        _EXPECTED_ENUM_MARKERS,
+        _EXPECTED_CONSTANT_MARKERS,
+    )
+    document, constraints = _load(REPO_ROOT)
+    found = failures(document, constraints, generated=planted)[0]
+    assert any("_GENERATED_MARKER_SEQUENCE_DIGEST" in problem for problem in found), found
+    assert not any(
+        "row count" in problem or "marker counts" in problem for problem in found
+    ), found
 
 
-def test_a_repin_in_the_same_commit_stays_green() -> None:
+def test_a_marker_repin_in_the_same_commit_stays_green() -> None:
     """An exact pin moves with both artifacts, not as a whitelist."""
     generated = _committed_generated()
     planted = generated.replace(_MARKER_NEEDLE, "             * @enumX{string}\n", 1)
@@ -1518,7 +1578,43 @@ def test_the_guard_source_carries_the_marker_plants() -> None:
     source = Path(__file__).read_text(encoding="utf-8")
     assert "_GENERATED_MARKER_SEQUENCE_DIGEST = (" in source
     assert "a generated @enum marker is retyped" in source
+    assert "a same-count marker relocation between two doc blocks" in source
+    assert "relocated_lines[enum_index]" in source
     assert "generated_marker_rows(" in source
+
+
+def test_the_self_test_keeps_the_marker_verdict() -> None:
+    """A marker plant that goes uncaught must make --self-test non-zero."""
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    func = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_self_test"
+    )
+    zeroes = [
+        node for node in ast.walk(func)
+        if isinstance(node, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "result" for t in node.targets)
+        and isinstance(node.value, ast.Constant)
+        and node.value.value == 0
+    ]
+    # Exactly one ``result = 0`` (the initialiser), and it must precede the
+    # marker loop. A later reset would discard every marker verdict and let a
+    # gutted door print ``OK (N ablations)`` with rc=0.
+    assert len(zeroes) == 1
+    loop = next(
+        node for node in ast.walk(func)
+        if isinstance(node, ast.For)
+        and isinstance(node.iter, ast.Name)
+        and node.iter.id == "marker_cases"
+    )
+    assert any(
+        isinstance(n, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "result" for t in n.targets)
+        and isinstance(n.value, ast.Constant)
+        and n.value.value == 1
+        for n in ast.walk(loop)
+    )
+    assert zeroes[0].lineno < loop.lineno
 
 
 if __name__ == "__main__":
