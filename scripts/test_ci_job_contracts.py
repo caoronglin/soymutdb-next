@@ -1154,6 +1154,19 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 [],
                 "the shipped citation stays green",
             )
+            # A quote ending a trailing prose clause is not attached to the
+            # path. When the label veto is bypassed unconditionally, this prose
+            # is promoted to a section claim — the regression that broke the
+            # composition with the wider post-path window on PR #163.
+            self.assertEqual(
+                checker.doc_ref_errors(
+                    f"# Resolve every {doc} reference before shipping, "
+                    '"hello"',
+                    root,
+                ),
+                [],
+                "a quote at the end of a prose clause is not a section label",
+            )
 
     def test_bio_core_static_gate_scans_every_shared_script(self) -> None:
         """--static must cover the same file set as the contract citation guard.
