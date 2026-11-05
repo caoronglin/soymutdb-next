@@ -289,3 +289,42 @@ call are already registered. The in-file `--self-test` grows 22 -> 28 cases
 double re-pin positive control); the companion grows 36 -> 42 cases, pinning
 the literals, the count door, the ablation plants and the door's source shape
 from a second file so a single-file edit cannot hide it.
+
+## How to reproduce the numbers in this ledger
+
+A figure needs a tree, a working directory and an invocation before it is a
+measurement. Two readings carried into the response-status-order receipt were
+taken on trust and are corrected here (measured on `b279e4c9`, the shipped
+head, byte-identical to the landed guard on `6f9c4219`):
+
+- **Working directory.** `check_openapi_response_surface.py` resolves
+  `SNAPSHOT`, `GENERATED` and `SMOKE` from `Path(__file__).resolve().parents[1]`,
+  so the cwd does not choose the bytes; the guard's own tree does. A bare
+  repo-root invocation is only meaningful against a tree where the guard and
+  its `scripts/{SELF}` call in `smoke.sh` both exist. On `ae5a2bf3` the guard
+  file is absent (bare invocation `rc=2`); copying just the guard into that
+  older tree yields `contracts smoke layer does not invoke <SELF>` / `rc=1`.
+  Run it from the worktree whose bytes you are measuring, and name that tree.
+
+- **Invocation behind the companion count.** `test_openapi_*.py` mixes
+  module-level `def test_*` (pytest-collected) with `unittest.TestCase`
+  subclasses. `python3 -m unittest scripts.test_openapi_response_surface`
+  reports `Ran 0 tests` because that file has no `TestCase` subclass — a
+  loader outcome, not a defect. Real collection with
+  `python3 -m pytest scripts/test_openapi_*.py -q` on `b279e4c9` is
+  **404 passed**: 375 module-level `def test_*` plus 29 `TestCase` methods in
+  `test_openapi_auth_surface_floor.py`. The receipt's `375 passed` was a
+  static `grep -c '^def test_'` count labelled as a pass count, which is not
+  the same sentence. On live `6f9c4219` the same invocation is **436 passed**:
+  the later merges grew the module-level suites 375 -> 400 (four files) and
+  the `TestCase` suite 29 -> 36, i.e. +32 cases total; `smoke.sh --profile
+  contracts` is `SMOKE PASS / 1241 passed, 41 subtests` there and
+  `SMOKE PASS / 1196 passed, 41 subtests` on the clean `b279e4c9` tree.
+
+The decisive two-tree A/B survives both corrections: on byte-identical
+drifted artifacts (a coherent swap of the first two status blocks in both
+halves, both `_PINNED_ARTIFACTS` blob ids honestly re-pinned, trees differing
+only in the guard file), the pre-fix guard reports `rc=0` and the fixed guard
+`rc=1`, naming `_RESPONSE_STATUS_ORDER_DIGEST` and
+`_CLIENT_RESPONSE_STATUS_ORDER_DIGEST`. Both literals are independent of the
+artifacts they audit; neither reading is a self-agreeing baseline.
