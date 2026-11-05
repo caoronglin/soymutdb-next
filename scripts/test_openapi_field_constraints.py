@@ -422,3 +422,102 @@ def test_zero_new_wiring_for_door_five() -> None:
     assert "_EXAMPLE_DIGEST" in source
     # No new guard file: door 5 lives in an already-registered guard.
     assert not (ROOT / "scripts" / "check_openapi_published_examples.py").exists()
+
+
+def _generated_defaults() -> str:
+    return (
+        ROOT / "packages" / "api-client" / "src" / "generated" / "openapi.d.ts"
+    ).read_text(encoding="utf-8")
+
+
+def test_the_generated_default_tag_pin_is_an_independent_literal() -> None:
+    """The tag digest is a source literal, not derived from the artifact."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    assigned = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "_DEFAULT_TAG_DIGEST"
+            for target in node.targets
+        )
+    ]
+    assert len(assigned) == 1
+    value = ast.literal_eval(assigned[0].value)
+    assert isinstance(value, str) and len(value) == 64
+    assert value == guard._default_tag_digest(
+        guard.default_tag_rows(_generated_defaults())
+    )
+
+
+def test_the_committed_generated_tags_match_the_pinned_literal() -> None:
+    """The clean committed generated half is the pinned projection."""
+    rows_ = guard.default_tag_rows(_generated_defaults())
+    assert len(rows_) == guard._EXPECTED_DEFAULT_TAGS
+    assert guard._default_tag_digest(rows_) == guard._DEFAULT_TAG_DIGEST
+    assert not guard.failures(generated=_generated_defaults())
+
+
+def test_a_dropped_generated_default_tag_is_rejected() -> None:
+    """The exact gap: delete one @default tag, snapshot untouched."""
+    lines = _generated_defaults().splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if "@default" in line and line.lstrip().startswith("* @"):
+            del lines[index]
+            break
+    else:
+        raise AssertionError("no @default tag found to drop")
+    found = guard.failures(generated="".join(lines))
+    assert any("tag count is" in problem for problem in found), found
+    assert any("generated default tags drifted" in problem for problem in found), found
+
+
+def test_a_same_count_tag_relocation_is_caught_only_by_the_digest() -> None:
+    """Move a tag between two fields; every count door must stay silent."""
+    generated = _generated_defaults()
+    moved = generated.replace(
+        "            /** @default custom */\n"
+        '            category: components["schemas"]["WidgetCategoryEnum"];',
+        "            /** Template Path */\n"
+        '            category: components["schemas"]["WidgetCategoryEnum"];',
+        1,
+    )
+    moved = moved.replace(
+        "            /** Template Path */\n            template_path: string;",
+        "            /** @default custom */\n            template_path: string;",
+        1,
+    )
+    assert moved != generated
+    assert len(guard.default_tag_rows(moved)) == guard._EXPECTED_DEFAULT_TAGS
+    found = guard.failures(generated=moved)
+    # Only Door 6's digest fires: no snapshot door, no example door, no count.
+    assert len(found) == 1, found
+    assert "generated default tags drifted" in found[0], found
+
+
+def test_the_generated_tag_pin_does_not_duplicate_the_example_floor() -> None:
+    """@default and @example are two different published JSDoc projections."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "default_tag_rows(generated)" in source
+    assert "generated_examples(generated)" in source
+    tags = guard.default_tag_rows(_generated_defaults())
+    examples = guard.generated_examples(_generated_defaults())
+    assert tags and examples and tags != examples
+
+
+def test_a_repin_of_the_tag_digest_alone_stays_green() -> None:
+    """A reviewed regenerate re-pins both halves in the same commit."""
+    lines = _generated_defaults().splitlines(keepends=True)
+    for index, line in enumerate(lines):
+        if "@default" in line and line.lstrip().startswith("* @"):
+            del lines[index]
+            break
+    edited = "".join(lines)
+    new_digest = guard._default_tag_digest(guard.default_tag_rows(edited))
+    assert new_digest != guard._DEFAULT_TAG_DIGEST
+    assert not guard.failures(
+        generated=edited,
+        tag_digest=new_digest,
+        expected_tags=guard._EXPECTED_DEFAULT_TAGS - 1,
+    )
