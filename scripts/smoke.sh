@@ -114,6 +114,10 @@ smoke_contracts() {
     # a single-file edit must not be able to drop both the behaviour and its
     # own self-test plant.
     scripts/test_api_error_code_fallback_declaration.py
+    # The contract guard's own regression suite. It proves the guard still has
+    # a live signal (planted drifts are caught) and pins the gate wiring, so
+    # this row is what keeps the call above from being deleted silently.
+    scripts/test_check_error_code_contract.py
     scripts/test_deployment_workflows.py
     # Behavior contracts injected by app.main (x-idempotent / x-pagination /
     # x-error-codes / documented 429 / uniform 500) are client-visible, but
@@ -356,6 +360,14 @@ smoke_contracts() {
   # of source_codes() back to a constant-only read keeps the whole layer green.
   "${PYTHON_BIN}" scripts/check_api_error_code_vocabulary.py --self-test || rc=$?
   "${PYTHON_BIN}" scripts/check_error_code_catalog.py || rc=$?
+  # The third guard of that family was left behind in check-contract.sh. It is
+  # the only one that executes the runtime catalog and reconciles the published
+  # x-error-status block with error_status_map(); the two above read
+  # declarations and a hand-written lock. Re-measured: a coordinated rename with
+  # the lock re-pinned leaves both of those GREEN and this one RED, so without
+  # this line the contracts layer has no net under the status binding.
+  # Committed bytes only -- no API venv, no export, same as its siblings.
+  "${PYTHON_BIN}" scripts/check_error_code_contract.py || rc=$?
   # Pin those two wires: dropping or neutralising either lets the layer stay
   # green while the guard's failure is swallowed. --self-test plants the
   # decisive co-rename and proves the wired guard still has a real signal.

@@ -17,6 +17,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 GUARD = ROOT / "scripts" / "check_error_code_contract.py"
 CONTRACT_SH = ROOT / "packages/api-client/scripts/check-contract.sh"
+SMOKE = ROOT / "scripts" / "smoke.sh"
+REGISTRY = ROOT / "scripts" / "check_contracts_registry_collection.py"
 SNAPSHOT = ROOT / "packages/api-client/openapi.json"
 CODES = ROOT / "packages/api-client/error-codes.json"
 SOURCE = ROOT / "apps/api/app/core/exceptions.py"
@@ -50,6 +52,54 @@ class TestErrorCodeContract(unittest.TestCase):
         self.assertTrue(GUARD.is_file())
         gate = CONTRACT_SH.read_text(encoding="utf-8")
         self.assertIn("scripts/check_error_code_contract.py", gate)
+
+    def test_contracts_layer_invokes_it_too(self) -> None:
+        """The guard must be consumed by the layer that runs on a clean checkout.
+
+        It was called only from ``check-contract.sh``, which sits behind the
+        frontend gate's API-venv export. Its two siblings were later wired into
+        ``smoke.sh`` for exactly this reason and this one was left behind, so a
+        coordinated source+snapshot+lock drift left the whole contracts layer
+        green -- reproduced, not inferred: with the golden lock re-pinned to a
+        renamed code, ``check_api_error_code_vocabulary.py`` and
+        ``check_error_code_catalog.py`` both returned rc=0 while this guard
+        returned rc=1 on the x-error-status binding.
+        """
+        contracts = SMOKE.read_text(encoding="utf-8")
+        marker = "smoke_contracts() {"
+        self.assertIn(marker, contracts, "smoke.sh no longer defines smoke_contracts()")
+        body = contracts.split(marker, 1)[1].split("\n}\n", 1)[0]
+        # Read the invocation, not a comment that mentions the path.
+        invocations = [
+            line
+            for line in body.splitlines()
+            if "scripts/check_error_code_contract.py" in line
+            and "test_check_error_code_contract.py" not in line
+            and not line.lstrip().startswith("#")
+            and "--self-test" not in line
+        ]
+        self.assertTrue(
+            invocations,
+            "smoke_contracts() no longer invokes scripts/check_error_code_contract.py",
+        )
+        # Unconditionally, and with its status propagated: `|| :` / `2>/dev/null`
+        # / a trailing pipe would keep the layer green while the guard failed.
+        for line in invocations:
+            self.assertIn("|| rc=$?", line, f"guard failure is swallowed: {line!r}")
+
+    def test_contracts_layer_wiring_is_pinned_in_the_registry_floor(self) -> None:
+        """A wired call the floor does not name can be dropped without a red.
+
+        ``check_contracts_registry_collection.py`` fails closed on a wired call
+        the floor omits; naming the guard here is what makes its removal a
+        failure rather than a silent shrink of the layer.
+        """
+        registry = REGISTRY.read_text(encoding="utf-8")
+        self.assertIn(
+            '"scripts/check_error_code_contract.py"',
+            registry,
+            "check_error_code_contract.py is not pinned in REQUIRED_GUARD_CALLS",
+        )
 
     def test_published_catalog_is_exact(self) -> None:
         document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
