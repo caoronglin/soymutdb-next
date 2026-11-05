@@ -21,6 +21,12 @@ literal pin of every published domain, compared with type identity, so the pin
 means "publishes exactly this"; a legitimate change must move the literal in
 the same commit and say why.
 
+The pin walks the *whole* snapshot, not just ``components.schemas``: a path or
+query parameter can publish an inline ``enum`` (the ``{kind}`` table-view
+selector is one today). Such a domain has no source-side comparison here at all,
+so a coordinated regenerate of the model, the snapshot and the generated client
+moves all three halves together with nothing left to object.
+
 The snapshot has three spellings for one declared ``Literal``, and a guard that
 knows only one of them is a guard that mostly passes:
 
@@ -337,6 +343,9 @@ _PUBLISHED_ENUM_BASELINE: dict[str, list[list[Any]]] = {
     ],
     'app__schemas__seed__SeedRequestStatus': [
         ['pending', 'approved', 'shipped', 'completed', 'rejected'],
+    ],
+    'paths./api/v1/table-views/{kind}.get.parameters.schema': [
+        ['mutation_sites', 'variants', 'genes', 'mutant_lines'],
     ],
 }
 
@@ -656,12 +665,32 @@ def _same(a: Any, b: Any) -> bool:
     return a == b
 
 
+def _first_parameter_enum(document: dict[str, Any]) -> dict[str, Any] | None:
+    """The first inline ``enum`` holder under a path/query parameter."""
+    for methods in document.get("paths", {}).values():
+        if not isinstance(methods, dict):
+            continue
+        for operation in methods.values():
+            if not isinstance(operation, dict):
+                continue
+            for parameter in operation.get("parameters") or []:
+                if not isinstance(parameter, dict):
+                    continue
+                node = parameter.get("schema")
+                if isinstance(node, dict) and isinstance(node.get("enum"), list):
+                    return node
+    return None
+
+
 def _published_domains(document: dict[str, Any]) -> dict[str, list[list[Any]]]:
     """Every published ``enum`` / ``const`` domain, keyed by its schema path.
 
-    Derived from the snapshot alone, so a domain the source-driven comparisons
-    skip (an inlined model, a ``$defs`` copy, a field whose ``Literal`` the AST
-    reader cannot resolve) is still pinned by the independent baseline.
+    Walks the whole snapshot, not just ``components.schemas``: a path or query
+    parameter can publish an inline ``enum``, which has no source-side
+    comparison here and would otherwise be unpinned. Derived from the snapshot
+    alone, so a domain the source-driven comparisons skip (an inlined model, a
+    ``$defs`` copy, a field whose ``Literal`` the AST reader cannot resolve) is
+    still pinned by the independent baseline.
     """
     found: dict[str, list[list[Any]]] = {}
 
@@ -679,8 +708,15 @@ def _published_domains(document: dict[str, Any]) -> dict[str, list[list[Any]]]:
             for value in node:
                 walk(value, label)
 
-    for name, schema in sorted(document.get("components", {}).get("schemas", {}).items()):
+    components = document.get("components", {})
+    for name, schema in sorted(components.get("schemas", {}).items()):
         walk(schema, name)
+    for key, value in sorted(components.items()):
+        if key != "schemas":
+            walk(value, f"components.{key}")
+    for section, body in sorted(document.items()):
+        if section != "components":
+            walk(body, section)
     return {label: sorted(domains, key=repr) for label, domains in sorted(found.items())}
 
 
@@ -812,6 +848,9 @@ def _self_test(document: dict[str, Any], constraints: dict[str, dict[str, EnumSp
     if target is None:
         print("FAIL: self-test found no published value domain to mutate")
         return 1
+    if _first_parameter_enum(document) is None:
+        print("FAIL: self-test found no inline parameter enum outside components.schemas")
+        return 1
     model, field = target
 
     def holder(doc: dict[str, Any]) -> dict[str, Any]:
@@ -942,6 +981,15 @@ def _self_test(document: dict[str, Any], constraints: dict[str, dict[str, EnumSp
                 return failures(doc, mutated)[0]
         return []
 
+    def path_parameter_domain_add(doc: dict[str, Any]) -> list[str]:
+        # A parameter enum lives outside ``components.schemas`` and has no
+        # source-side comparison at all. A coordinated regenerate of the
+        # model, the snapshot and the generated client moves every half
+        # together; only the independent literal can see the new member.
+        node = _first_parameter_enum(doc)
+        node["enum"].append("__path_added__")
+        return failures(doc, constraints)[0]
+
     def coord_wholesale_drop(doc: dict[str, Any]) -> list[str]:
         # Remove every constrained field from the source view and its published
         # domain from the snapshot together.  Enum classes still compare, so
@@ -997,6 +1045,10 @@ def _self_test(document: dict[str, Any], constraints: dict[str, dict[str, EnumSp
         ("coordinated RETYPE of a member in both halves", coord_retype),
         ("coordinated bool -> int type weakening in both halves", coord_bool_to_int),
         ("wholesale coordinated drop of all constrained domains", coord_wholesale_drop),
+        (
+            "published path-parameter domain drifts outside components.schemas",
+            path_parameter_domain_add,
+        ),
     ]
 
     result = 0
@@ -1103,6 +1155,18 @@ def test_committed_tree_matches_the_independent_enum_pin() -> None:
     """The literal must be an exact, type-exact description of the snapshot."""
     document, constraints = _load(REPO_ROOT)
     assert failures(document, constraints)[0] == []
+
+
+def test_path_parameter_domains_are_pinned_too() -> None:
+    """The pin must cover ``paths``, not only ``components.schemas``."""
+    document, constraints = _load(REPO_ROOT)
+    published = _published_domains(document)
+    assert any(key.startswith("paths.") for key in published)
+    assert _same(published, _PUBLISHED_ENUM_BASELINE)
+    node = _first_parameter_enum(document)
+    assert node is not None
+    node["enum"] = node["enum"] + ["__co_added__"]
+    assert any("independent baseline" in p for p in failures(document, constraints)[0])
 
 
 def test_a_coordinated_add_is_rejected() -> None:
