@@ -29,6 +29,7 @@ REQUIRED = sorted(guard.REQUIRED_GUARD_CALLS)
 CI_OK = (
     "smoke_contracts_run() {\n"
     f'  python3 "${{REPO_ROOT}}/scripts/{guard.GUARD_NAME}" --self-test\n'
+    '  bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts\n'
     "}\n"
 )
 
@@ -274,6 +275,23 @@ class RegistryCollectionGuardTests(unittest.TestCase):
         )
         failures = guard.check(prefix + body, files)
         self.assertTrue(any("not propagated" in f for f in failures), failures)
+
+    def test_ci_ordering_fails_closed_when_layer_call_is_gone(self) -> None:
+        """No layer call means no reference point: do not silently skip."""
+        smoke = _smoke(["scripts/test_example.py"], REQUIRED)
+        files = _files()
+        files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
+        ci = (
+            "smoke_contracts_run() {\n"
+            f'  python3 "${{REPO_ROOT}}/scripts/{guard.GUARD_NAME}" --self-test\n'
+            "}\n"
+        )
+        failures = guard.check(smoke, files, ci)
+        self.assertTrue(any("call is missing" in f for f in failures), failures)
+
+        # A renamed profile argument must not lose the ordering reference.
+        renamed = CI_OK.replace("--profile contracts", "--profile static", 1)
+        self.assertEqual(guard.check(smoke, files, renamed), [])
 
 
 if __name__ == "__main__":

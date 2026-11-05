@@ -58,8 +58,11 @@ body.
 The line must use `python3`, the exact guard path and `--self-test`, it must
 appear **before** the `bash smoke.sh` call -- otherwise the layer would already
 have run by the time the gate fires -- and it must be a bare statement, not
-merely a substring of one. Those are three separate properties, and a pin that
-reads bytes instead of shell semantics has failed on each of them in turn:
+merely a substring of one. If that `bash smoke.sh` call disappears or is
+renamed, the ordering assertion has no reference point, so the guard fails
+closed rather than silently skipping it. Those are separate properties, and a
+pin that reads bytes instead of shell semantics has failed on each of them in
+turn:
 
 | Shape | What a substring pin sees | What bash does |
 | --- | --- | --- |

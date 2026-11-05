@@ -64,9 +64,12 @@ CI_SELF_TEST = re.compile(
 )
 # The CI line exists to gate the layer *before* it runs. A hand-merge can move
 # it below the smoke.sh call while still matching, inverting the ordering.
+# Match the `bash .../smoke.sh` invocation itself, not its arguments: the
+# ordering reference is the call to the layer runner, whatever profile it is
+# given. Pinning the literal `--profile contracts` would lose the reference
+# (and skip the assertion) the moment a hand-merge edits that argument.
 CI_LAYER_CALL = re.compile(
-    r'^[ \t]*bash[ \t]+"\$\{REPO_ROOT\}/scripts/smoke\.sh"[ \t]+'
-    r"--profile[ \t]+contracts[ \t]*$",
+    r'^[ \t]*bash[ \t]+"\$\{REPO_ROOT\}/scripts/smoke\.sh"(?:[ \t][^\n]*)?$',
     re.MULTILINE,
 )
 
@@ -232,7 +235,17 @@ def ci_wiring_errors(ci_body: str) -> list[str]:
         ]
 
     layer = CI_LAYER_CALL.search(ci_body)
-    if layer is not None and ci_body.index(hits[0]) > layer.start():
+    if layer is None:
+        # Fail closed. If the `bash .../smoke.sh` call is dropped or its
+        # arguments change, there is no reference point for the ordering
+        # assertion; skipping it would leave the gate "present" while the layer
+        # it is supposed to precede no longer exists in this function.
+        return [
+            f"{GUARD_NAME} --self-test must run before the contracts layer in "
+            "scripts/ci-job-steps.sh (smoke_contracts_run), but the "
+            "'bash .../smoke.sh' call is missing"
+        ]
+    if ci_body.index(hits[0]) > layer.start():
         return [
             f"{GUARD_NAME} --self-test runs after the contracts layer in "
             "scripts/ci-job-steps.sh (must gate it beforehand)"
@@ -409,6 +422,13 @@ def self_test() -> int:
     )
     cases.append(("the driver registry guard line is commented out",
                   smoke_driver_comment, dict(files), ci_steps))
+
+    # Fail closed when the layer call itself disappears: with no reference
+    # point, the ordering assertion must not silently skip.
+    ci_no_layer = ci_steps.replace(bash_line, "", 1)
+    assert ci_no_layer != ci_steps, "self-test could not remove the layer call"
+    cases.append(("the contracts layer call is dropped from the CI job",
+                  smoke, dict(files), ci_no_layer))
 
     # Positive control: adding a NEW guard call must not require an edit here.
     extra = "scripts/check_extra_wiring_probe.py"
