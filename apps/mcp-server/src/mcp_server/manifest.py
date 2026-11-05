@@ -185,8 +185,10 @@ TOOLS: list[dict[str, object]] = [
             "blastx, tblastn, tblastx; forwarded unchanged to the selected engine",
             "database": "str, optional — database name alias",
             "database_id": "int, optional — numeric database id",
-            "params": "dict, optional — search parameters (evalue, "
-            "max_target_seqs, matrix, ...) sent as 'parameters'",
+            "parameters": "dict, optional — search parameters (evalue, "
+            "max_target_seqs, matrix, ...); sent as the request body's "
+            "'parameters' property, so the MCP argument and the REST field "
+            "share one name",
         },
         "outputs": {
             "job_id": "str",

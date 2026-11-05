@@ -83,6 +83,24 @@ _REQUIRED_KEYS = ("name", "type", "endpoint", "auth")
 # without an edit here (positive control), but a published tool cannot silently
 # leave or move. A deliberate retirement/rename is an explicit, reviewable edit
 # to this literal in the same commit as the three declarations.
+# Fields a tool documents in the manifest but deliberately does not put in the
+# JSON body: they travel as a query parameter, as the release header, or are
+# tool-local (ownership proofs the MCP server enforces itself). This is a
+# reviewed allowlist, not a default: a new REST input that silently misses the
+# payload must be an explicit edit here in the same commit.
+_NOT_IN_BODY: frozenset[str] = frozenset({"release_id", "submitter_token", "ctx"})
+
+# Manifest input names that are accepted under a different payload key. The
+# manifest is the specification an MCP client reads, so the name it documents
+# has to be the name the REST operation accepts -- an alias here is a real
+# defect and must be fixed at the source, not excused. Kept empty on purpose:
+# the check reports the ``params`` / ``parameters`` split rather than hiding it.
+_OPTIONAL_PARAMETER_INPUTS: frozenset[str] = frozenset()
+
+# Payload keys carried as a query parameter rather than the JSON body (the
+# OpenAPI operation publishes them under ``parameters``, not ``properties``).
+_REQUIRED_PARAMETER_NOT_IN_BODY: frozenset[str] = frozenset({"release_id"})
+
 PINNED_MCP_TOOLS: dict[str, tuple[str, str]] = {
     "gene_by_id": ("GET /api/v1/genes/{gene_id}", "read"),
     "variant_by_region": ("GET /api/v1/variants/region", "read"),
@@ -172,6 +190,48 @@ def parse_server(source: str) -> dict[str, tuple[str, str] | None]:
                 found = (method.upper(), norm(path))
                 break
         calls[name] = found
+    return calls
+
+
+def parse_server_calls(source: str) -> dict[str, tuple[tuple[str, str] | None, ast.Call]]:
+    """``parse_server`` plus the ``_api_request`` call node for each tool.
+
+    The endpoint pair drives the pre-existing checks; the node additionally
+    lets :func:`check_request_bodies` read *how* the payload is assembled
+    without executing ``server.py`` (which imports FastMCP, the manifest and an
+    HTTP client -- none of which exist in a dependency-free contracts layer).
+    """
+    tree = ast.parse(source, filename="server.py")
+    calls: dict[str, tuple[tuple[str, str] | None, ast.Call]] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        name: str | None = None
+        for dec in node.decorator_list:
+            if not isinstance(dec, ast.Call):
+                continue
+            if "mcp.tool" not in ast.unparse(dec.func):
+                continue
+            for kw in dec.keywords:
+                if kw.arg == "name" and isinstance(kw.value, ast.Constant):
+                    name = str(kw.value.value)
+        if name is None:
+            continue
+        for sub in ast.walk(node):
+            if not isinstance(sub, ast.Call) or len(sub.args) < 2:
+                continue
+            if not ast.unparse(sub.func).endswith("_api_request"):
+                continue
+            method = _string_arg(sub.args[0])
+            path = _string_arg(sub.args[1])
+            if method and path and method.lower() in METHODS:
+                # ast nodes have no parent pointers; stash the tool function on
+                # the call so payload-shape helpers can resolve name bindings.
+                sub._soymutdb_scope = node  # type: ignore[attr-defined]
+                calls[name] = ((method.upper(), norm(path)), sub)
+                break
+        else:
+            calls[name] = (None, ast.Call())
     return calls
 
 
@@ -272,6 +332,252 @@ def check(
     return found
 
 
+def resolve_schema(
+    schema: dict[str, Any], document: dict[str, Any], depth: int = 0
+) -> dict[str, Any]:
+    """Dereference a local ``$ref`` so a body's properties become comparable."""
+    if not isinstance(schema, dict) or depth > 8:
+        return {}
+    ref = schema.get("$ref")
+    if not (isinstance(ref, str) and ref.startswith("#/")):
+        return schema
+    target: Any = document
+    for part in ref[2:].split("/"):
+        target = target.get(part) if isinstance(target, dict) else None
+    return resolve_schema(target, document, depth + 1) if isinstance(target, dict) else {}
+
+
+def published_body_schema(
+    method: str, path: str, document: dict[str, Any]
+) -> dict[str, Any] | None:
+    """The JSON request-body schema published for ``METHOD /path``, or None."""
+    for candidate, item in document.get("paths", {}).items():
+        if norm(candidate) != path or not isinstance(item, dict):
+            continue
+        operation = item.get(method.lower())
+        if not isinstance(operation, dict):
+            return None
+        body = operation.get("requestBody")
+        if not isinstance(body, dict):
+            return None
+        content = body.get("content") or {}
+        schema = (content.get("application/json") or {}).get("schema")
+        return resolve_schema(schema, document) if isinstance(schema, dict) else None
+    return None
+
+
+def tool_parameters(call: ast.Call) -> list[str]:
+    """Names of the tool function's own MCP arguments, ``ctx`` excluded.
+
+    These are the values a caller can actually supply. A documented input that
+    is neither a tool parameter nor reachable another way (a query parameter,
+    the release header) cannot be caller-supplied at all, and the assignment of
+    it into the payload would name an undefined variable.
+    """
+    scope = getattr(call, "_soymutdb_scope", None)
+    if not isinstance(scope, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return []
+    args = scope.args
+    names = [a.arg for a in list(args.posonlyargs) + list(args.args)]
+    names += [a.arg for a in args.kwonlyargs]
+    return [name for name in names if name not in _NOT_IN_BODY]
+
+
+def payload_shape(call: ast.Call) -> tuple[dict[str, ast.If | None] | None, bool]:
+    """The payload the tool sends: ``(key -> guarding if, is_literal)``.
+
+    ``payload=`` is a dict literal or a name bound once in the tool function
+    (``payload: dict[str, Any] = {...}``). Each key is paired with the
+    enclosing ``if`` whose *body* assigned it, so a documented optional field
+    (``if assembly: payload["assembly"] = assembly``) can be told apart from a
+    field that never leaves the process. A payload that is not statically
+    enumerable returns ``(None, False)``; the caller reports that instead of
+    assuming the body is complete.
+    """
+    node: ast.expr | None = None
+    for keyword in call.keywords:
+        if keyword.arg == "payload":
+            node = keyword.value
+    if node is None:
+        return {}, True
+    if isinstance(node, ast.Name):
+        # A name bound exactly once is a pre-built literal; a name re-bound
+        # conditionally (`payload = {**payload, ...}`) is reassigned twice and
+        # comes back as None, which the caller reports as unprovable.
+        node = _unique_binding(call, node.id)
+    if not isinstance(node, ast.Dict):
+        return None, False
+    guards: dict[str, ast.If | None] = {}
+    for key in node.keys:
+        if not (isinstance(key, ast.Constant) and isinstance(key.value, str)):
+            return None, False
+        guards[str(key.value)] = None
+    # A conditional field is assigned into the dict after it is built
+    # (`if assembly: payload["assembly"] = assembly`), so those keys exist only
+    # in the surrounding `if` bodies and not in the literal itself. Collect
+    # them here; a key assigned only on an `else` branch is left out and the
+    # caller reports it as a body that never carries the documented input.
+    for if_node in _conditional_assignments(call, node):
+        guards.setdefault(if_node, _guarding_if(call, if_node))
+    return guards, True
+
+
+def _conditional_assignments(call: ast.Call, payload: ast.Dict) -> list[str]:
+    """Keys assigned into ``payload`` inside some ``if`` body in the function."""
+    names = {
+        keyword.value.id
+        for keyword in call.keywords
+        if keyword.arg == "payload" and isinstance(keyword.value, ast.Name)
+    }
+    keys: list[str] = []
+    for node in _scope_nodes(call):
+        if not isinstance(node, ast.If):
+            continue
+        for body in node.body:
+            if not isinstance(body, ast.Assign):
+                continue
+            for target in body.targets:
+                if not isinstance(target, ast.Subscript):
+                    continue
+                if not (isinstance(target.value, ast.Name) and target.value.id in names):
+                    continue
+                index = target.slice
+                if isinstance(index, ast.Constant) and isinstance(index.value, str):
+                    if index.value not in keys:
+                        keys.append(index.value)
+    return keys
+
+
+def _scope_nodes(call: ast.Call) -> list[ast.AST]:
+    """The tool function's statements, recovered from the call node itself.
+
+    ``ast`` nodes carry no parent pointers, so :func:`parse_server_calls`
+    attaches the enclosing function to the call it finds. Reading the scope
+    from the call keeps this helper pure and testable.
+    """
+    scope = getattr(call, "_soymutdb_scope", None)
+    return list(ast.walk(scope)) if scope is not None else []
+
+
+def _unique_binding(call: ast.Call, name: str) -> ast.expr | None:
+    """The single value bound to ``name`` inside the tool function."""
+    values: list[ast.expr] = []
+    for node in _scope_nodes(call):
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == name:
+                    values.append(node.value)
+        elif isinstance(node, ast.AnnAssign) and node.value is not None:
+            if isinstance(node.target, ast.Name) and node.target.id == name:
+                values.append(node.value)
+    return values[0] if len(values) == 1 else None
+
+
+def _guarding_if(call: ast.Call, key: str) -> ast.If | None:
+    """The ``if`` whose body assigns ``payload[key]``, or ``None``.
+
+    A documented optional field is written conditionally
+    (``if assembly: payload["assembly"] = assembly``); the assignment sits in
+    that ``if``'s body, so the key is sent only when the argument is present.
+    A key assigned on the *false* branch, or outside every ``if`` in a dict
+    literal, is not conditional and must be carried unconditionally.
+    """
+    for node in _scope_nodes(call):
+        if not isinstance(node, ast.If):
+            continue
+        for body in node.body:
+            if not isinstance(body, ast.Assign):
+                continue
+            for target in body.targets:
+                if not isinstance(target, ast.Subscript):
+                    continue
+                index = target.slice
+                if isinstance(index, ast.Constant) and index.value == key:
+                    return node
+    return None
+
+
+def _declared_conditions(call: ast.Call, key: str, payload: ast.Dict) -> bool:
+    """Whether ``payload`` already carries ``key`` in its literal form."""
+    return any(
+        isinstance(k, ast.Constant) and k.value == key for k in payload.keys
+    )
+
+
+def check_request_bodies(
+    tools: list[dict[str, Any]],
+    server_calls: dict[str, tuple[tuple[str, str] | None, ast.Call]],
+    document: dict[str, Any],
+) -> list[str]:
+    """A documented input that the tool never sends is a spec it cannot honour.
+
+    The endpoint/audience checks prove the tool calls the right ``(method,
+    path)``. They say nothing about the *body* that request carries: a tool can
+    advertise a documented input and never place it in the payload, and every
+    surface stays in agreement (the manifest is a declaration, ``server.py`` is
+    another, and the operation's schema is a third -- the first two are never
+    compared field by field). This check closes that hole for the operations
+    that publish a JSON request body:
+
+    * an input the manifest documents must appear in the payload the tool
+      sends, unless it is carried another way (a query parameter, the
+      ``X-SoyMutDB-Release`` header, or a tool-local argument the REST call does
+      not take). A manifest that says ``params`` while the payload says
+      ``parameters`` is reported, because the documented name is not the one
+      the API accepts.
+    * a payload key the request schema does not publish is accepted by nobody:
+      the API's models forbid unknown fields, so the value is dropped and the
+      documented behaviour silently never happens.
+
+    A payload that is not statically enumerable is reported, never assumed
+    correct.
+    """
+    found: list[str] = []
+    for tool in tools:
+        label = str(tool.get("name"))
+        entry = server_calls.get(label)
+        if entry is None or entry[0] is None:
+            continue  # reported by check()
+        (method, path), call = entry
+        schema = published_body_schema(method, path, document)
+        if schema is None:
+            continue
+        properties = {str(name) for name in (schema.get("properties") or {})}
+        declared = {str(name) for name in (tool.get("inputs") or {})}
+        shape, literal = payload_shape(call)
+        if not literal or shape is None:
+            found.append(
+                f"{label}: payload for {method} {path} is not a static dict "
+                "literal, so its body cannot be reconciled with the operation"
+            )
+            continue
+        sent = set(shape)
+        parameters = tool_parameters(call)
+        for key in sorted(declared - set(parameters) - properties - _NOT_IN_BODY):
+            found.append(
+                f"{label}: manifest documents input {key!r} but the tool takes no "
+                f"argument of that name and {method} {path} publishes no such "
+                "request property, so no caller can ever supply it"
+            )
+        for key in sorted(set(tool.get("inputs") or {}) - sent):
+            if key in _NOT_IN_BODY or key in _OPTIONAL_PARAMETER_INPUTS:
+                continue
+            if shape.get(key) is not None:
+                continue  # assembled inside an `if`, i.e. an optional field
+            found.append(
+                f"{label}: manifest documents input {key!r} but the payload sent "
+                f"to {method} {path} never carries it"
+            )
+        for key in sorted(sent - properties):
+            if key in _REQUIRED_PARAMETER_NOT_IN_BODY:
+                continue
+            found.append(
+                f"{label}: payload sends {key!r} but {method} {path} publishes no "
+                "such request property (the API rejects or drops unknown fields)"
+            )
+    return found
+
+
 def check_wiring(smoke: str) -> list[str]:
     """The guard is only as good as the layer that collects it.
 
@@ -284,12 +590,46 @@ def check_wiring(smoke: str) -> list[str]:
     return []
 
 
-def load() -> tuple[list[dict[str, Any]], dict[str, tuple[str, str] | None], dict[str, Any]]:
+def load_all(
+    tools_source: str | None = None,
+    server_source: str | None = None,
+    document: dict[str, Any] | None = None,
+) -> tuple[
+    list[dict[str, Any]],
+    dict[str, tuple[tuple[str, str] | None, ast.Call]],
+    dict[str, Any],
+]:
+    """Read all three declarations, optionally overriding any of them.
+
+    The overrides let the body checks run against an edited copy built from
+    committed bytes -- the alternative (round-tripping ``server.py`` through
+    ``ast.unparse``) would test the synthesised file, not the shipped one.
+    """
     return (
-        parse_manifest(MANIFEST.read_text(encoding="utf-8")),
-        parse_server(SERVER.read_text(encoding="utf-8")),
-        json.loads(SNAPSHOT.read_text(encoding="utf-8")),
+        parse_manifest(
+            tools_source if tools_source is not None else MANIFEST.read_text(encoding="utf-8")
+        ),
+        parse_server_calls(
+            server_source if server_source is not None else SERVER.read_text(encoding="utf-8")
+        ),
+        document
+        if document is not None
+        else json.loads(SNAPSHOT.read_text(encoding="utf-8")),
     )
+
+
+def load() -> tuple[list[dict[str, Any]], dict[str, tuple[str, str] | None], dict[str, Any]]:
+    tools, calls, document = load_all()
+    return tools, {name: pair[0] for name, pair in calls.items()}, document
+
+
+def check_bodies(
+    tools_source: str | None = None,
+    server_source: str | None = None,
+    document: dict[str, Any] | None = None,
+) -> list[str]:
+    """``check_request_bodies`` over committed (or supplied) declarations."""
+    return check_request_bodies(*load_all(tools_source, server_source, document))
 
 
 def _clean() -> tuple[list[dict[str, Any]], dict[str, tuple[str, str] | None], dict[str, Any]]:
@@ -438,6 +778,93 @@ def test_a_new_consistent_tool_needs_no_allowlist_edit() -> None:
     assert check(tools, calls, document) == []
 
 
+def test_a_documented_input_missing_from_the_payload_is_rejected() -> None:
+    """The manifest names an input the tool never sends: a spec it cannot honour."""
+    tools_source = MANIFEST.read_text(encoding="utf-8")
+    drifted = tools_source.replace(
+        '"database_id": "int, optional — numeric database id",',
+        '"database_id": "int, optional — numeric database id",\n'
+        '            "database_version": "str, optional — pinned database build",',
+        1,
+    )
+    assert drifted != tools_source
+    failures = check_bodies(tools_source=drifted)
+    assert any(
+        "blast_submit" in f and "database_version" in f and "never carries it" in f
+        for f in failures
+    ), failures
+
+
+def test_an_input_documented_under_a_name_the_api_does_not_accept_is_rejected() -> None:
+    """The blast_submit defect: manifest said ``params``, the body sends ``parameters``.
+
+    Committed bytes put the real (drifted) shape back, so this case fails if the
+    check ever goes back to comparing endpoints only.
+    """
+    tools_source = MANIFEST.read_text(encoding="utf-8").replace(
+        '"parameters": "dict, optional — search parameters (evalue, "',
+        '"params": "dict, optional — search parameters (evalue, "',
+        1,
+    )
+    failures = check_bodies(tools_source=tools_source)
+    assert any("blast_submit" in f and "'params'" in f for f in failures), failures
+
+
+def test_an_input_sent_only_on_the_else_branch_is_rejected() -> None:
+    server_source = SERVER.read_text(encoding="utf-8")
+    drifted = server_source.replace(
+        """    if database:
+        payload["database"] = database""",
+        """    if database:
+        pass
+    else:
+        payload["database"] = database""",
+        1,
+    )
+    assert drifted != server_source
+    failures = check_bodies(server_source=drifted)
+    assert any("blast_submit" in f and "'database'" in f for f in failures), failures
+
+
+def test_an_unguarded_optional_field_stays_accepted() -> None:
+    """Positive control: ``if database: payload[...]`` is a sendable optional input."""
+    assert check_bodies() == []
+
+
+def test_an_opaque_payload_is_reported_not_assumed() -> None:
+    server_source = SERVER.read_text(encoding="utf-8").replace(
+        """    payload: dict[str, Any] = {
+        "engine": engine,""",
+        """    payload: dict[str, Any] = {
+        **(extra or {}),
+        "engine": engine,""",
+        1,
+    )
+    failures = check_bodies(server_source=server_source)
+    assert any("blast_submit" in f and "not a static dict literal" in f for f in failures), failures
+
+
+def test_a_payload_property_the_operation_does_not_publish_is_rejected() -> None:
+    server_source = SERVER.read_text(encoding="utf-8").replace(
+        '        "query_sequence": query_sequence,',
+        '        "query_sequence": query_sequence,\n        "query_type": "protein",',
+        1,
+    )
+    failures = check_bodies(server_source=server_source)
+    assert any("blast_submit" in f and "query_type" in f for f in failures), failures
+
+
+def test_request_body_agreement_covers_every_tool_with_a_body() -> None:
+    """No tool may quietly opt out of the body checks."""
+    tools, calls, document = load_all()
+    covered = {
+        str(tool["name"])
+        for tool in tools
+        if published_body_schema(*calls[str(tool["name"])][0], document) is not None
+    }
+    assert covered == {"seqfetch", "blast_submit"}, covered
+
+
 # ---------------------------------------------------------------------------
 # Direct stdlib runner (also used by --self-test)
 # ---------------------------------------------------------------------------
@@ -462,6 +889,13 @@ def self_test() -> int:
         test_a_flipped_pinned_audience_is_rejected,
         test_the_floor_is_a_literal_not_an_export,
         test_a_new_consistent_tool_needs_no_allowlist_edit,
+        test_a_documented_input_missing_from_the_payload_is_rejected,
+        test_an_input_documented_under_a_name_the_api_does_not_accept_is_rejected,
+        test_an_input_sent_only_on_the_else_branch_is_rejected,
+        test_an_unguarded_optional_field_stays_accepted,
+        test_an_opaque_payload_is_reported_not_assumed,
+        test_a_payload_property_the_operation_does_not_publish_is_rejected,
+        test_request_body_agreement_covers_every_tool_with_a_body,
     ]
     failures = 0
     for fn in checks:
@@ -482,7 +916,11 @@ def main() -> int:
     if args.self_test:
         return self_test()
     tools, calls, document = load()
-    errors = check(tools, calls, document) + check_wiring(SMOKE.read_text(encoding="utf-8"))
+    errors = (
+        check(tools, calls, document)
+        + check_bodies()
+        + check_wiring(SMOKE.read_text(encoding="utf-8"))
+    )
     if errors:
         for error in errors:
             print(f"FAIL: {error}", file=sys.stderr)

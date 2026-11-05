@@ -559,7 +559,7 @@ async def blast_submit(
     engine: str = "ncbi_blast",
     database: str | None = None,
     database_id: int | None = None,
-    params: dict[str, Any] | None = None,
+    parameters: dict[str, Any] | None = None,
     ctx: Context | None = None,
 ) -> dict[str, Any]:
     """POST {API_BASE}/api/v1/blast/jobs → {job_id, status, submitter_token}."""
@@ -575,8 +575,8 @@ async def blast_submit(
         payload["database"] = database
     if database_id is not None:
         payload["database_id"] = database_id
-    if params:
-        payload["parameters"] = params
+    if parameters:
+        payload["parameters"] = parameters
     data = await _safe_call(
         _api_request("POST", "/api/v1/blast/jobs", payload=payload)
     )
