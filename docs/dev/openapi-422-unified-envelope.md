@@ -266,6 +266,14 @@ is already true there and would be a vacuous check. Its equality cousin is
 `_RESPONSE_BODY_BASELINE`: gained paths must grow the response distribution,
 and that is what fires.
 
+The table's admission rule is not "every literal in a guard". It is: an
+**equality against the committed bytes**, whose value a human can edit into
+agreement, belongs in the table. `_INLINE_BODY_BASELINE` and
+`_CLIENT_INLINE_BASELINE` satisfy that (the seventh defect below shows exactly
+why: re-pinning them is one edit). `_PINNED_ARTIFACTS` does not: those are blob
+ids recording that the bytes were regenerated, and gating provenance on "the
+artifacts moved" is the same vacuous check `_SNAPSHOT_FLOOR` is excluded for.
+
 ## The sixth defect: inline bodies had no fixed point at all
 
 Every fixed point above pins `$ref` bodies — responses, requests, their
@@ -294,6 +302,20 @@ artifact, plus exact pins for the client's inline shapes and non-JSON media.
 The snapshot distribution must equal the baseline exactly (missing / extra /
 retyped each named); the client shapes and media must equal their pins exactly.
 A coordinated drift in both halves now fails here.
+
+That fixed the *detection*, and left this guard's own hole open: the new
+literals were not in `check_openapi_baseline_sync.py`'s table, so retyping an
+inline body in both halves and re-pinning the two literals was still one
+deliberate act that turned every OpenAPI guard green — including the sync guard
+that was supposed to trip. The table now carries four baselines, one per
+literal per half: `_INLINE_BODY_BASELINE` against `openapi.json`,
+`_CLIENT_INLINE_BASELINE` against `openapi.d.ts`. Each gate names exactly one
+artifact, because a gate naming the wrong half stays green on the semantic door
+(both halves really did move) and only loses the history door; the pairing is
+asserted by name rather than inferred. `--self-test`: 14 -> 21 checks,
+including a negative control that runs the same drifted tree against the
+pre-extension two-gate set and requires silence, and a case that reads both
+readers and requires them to agree.
 
 ## The seventh defect: the client inline pin was a bag, not a topology
 

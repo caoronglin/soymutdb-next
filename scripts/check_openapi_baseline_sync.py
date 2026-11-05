@@ -7,6 +7,9 @@ written in their own source:
 * ``test_openapi_422_unified_envelope._ERROR_RESPONSE_BASELINE``;
 * ``test_openapi_snapshot_body_integrity._RESPONSE_BODY_BASELINE`` and
   ``_REQUEST_BODY_BASELINE`` (and ``_CLIENT_BODY_TOTAL`` with them);
+* ``check_openapi_inline_body_integrity._INLINE_BODY_BASELINE`` and
+  ``_CLIENT_INLINE_BASELINE`` -- the inline (non-``$ref``) bodies, keyed per
+  operation on both halves;
 * ``test_openapi_snapshot_contract._SNAPSHOT_FLOOR``.
 
 That is the right idiom -- an independent fixed point is the only thing that
@@ -50,6 +53,25 @@ be a vacuous check. Its equality cousin is the response baseline: if the
 snapshot gained paths, ``_RESPONSE_BODY_BASELINE`` must grow with them, and that
 is the check that fires.
 
+Which literals belong in the table, and which do not
+----------------------------------------------------
+The rule is not "every literal in a guard". It is: a literal that is an
+**equality against the committed bytes** and whose value a human can edit into
+agreement belongs here. That is why the two inline pins are in it (their own
+docstring calls re-pinning them alongside a regenerate "one deliberate act")
+and why ``_PINNED_ARTIFACTS`` is **not**: those are blob ids of provenance, not
+a description of the contract surface -- changing one is a note that the bytes
+were regenerated, and gating it on "the artifacts moved" would be the vacuous
+check ``_SNAPSHOT_FLOOR`` gets excluded for.
+
+Each gate names exactly one artifact, deliberately. ``recomputed`` delegates the
+inline kinds to the pin's own reader instead of re-deriving the distribution,
+because two readers would drift and the one that matters is the one the guard
+compares against. A gate whose ``artifacts`` tuple names the wrong half stays
+green on the semantic door (both halves really did move) and only loses the
+history door, so the pairing is pinned by name in the suite rather than left to
+inference.
+
 Usage:
     python3 scripts/check_openapi_baseline_sync.py
     python3 scripts/check_openapi_baseline_sync.py --self-test
@@ -72,6 +94,7 @@ SNAPSHOT = ROOT / "packages/api-client/openapi.json"
 GENERATED = ROOT / "packages/api-client/src/generated/openapi.d.ts"
 ENVELOPE_GUARD = ROOT / "scripts/test_openapi_422_unified_envelope.py"
 BODY_GUARD = ROOT / "scripts/test_openapi_snapshot_body_integrity.py"
+INLINE_GUARD = ROOT / "scripts/check_openapi_inline_body_integrity.py"
 SMOKE = ROOT / "scripts/smoke.sh"
 SELF = Path(__file__).name
 
@@ -99,9 +122,26 @@ class Gate:
         self.artifacts = artifacts
 
 
+INLINE_SNAPSHOT_GATE = Gate(
+    "_INLINE_BODY_BASELINE", INLINE_GUARD, "inline_snapshot", ("snapshot",)
+)
+INLINE_CLIENT_GATE = Gate(
+    "_CLIENT_INLINE_BASELINE", INLINE_GUARD, "inline_client", ("generated",)
+)
+
 GATES = (
     Gate("_ERROR_RESPONSE_BASELINE", ENVELOPE_GUARD, "error_status", ("snapshot",)),
     Gate("_CLIENT_BODY_TOTAL", BODY_GUARD, "client_total", ("snapshot", "generated")),
+    # The inline (non-$ref) bodies. Same hole, same file family, and the guard
+    # that pins them says so in its own docstring: re-pinning both artifacts'
+    # blob ids "alongside a regenerate is one deliberate act, and every guard
+    # then agrees with the new bytes". Without a gate here, the re-pin *is* the
+    # escape hatch, and retyping one inline body in both artifacts leaves every
+    # other fixed point -- components, floors, byte equality, blob provenance --
+    # green. ``recomputed`` delegates to the pin's own reader so the two cannot
+    # disagree about what the artifact says.
+    INLINE_SNAPSHOT_GATE,
+    INLINE_CLIENT_GATE,
 )
 
 ARTIFACT_PATHS = {
@@ -196,11 +236,36 @@ def client_bodies(generated: str) -> dict[str, int]:
     return counts
 
 
+_INLINE_MODULE: Any = None
+
+
+def inline_guard() -> Any:
+    """The inline-body pin, loaded by path so no package layout is assumed."""
+    global _INLINE_MODULE
+    if _INLINE_MODULE is None:
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "check_openapi_inline_body_integrity", INLINE_GUARD
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _INLINE_MODULE = module
+    return _INLINE_MODULE
+
+
 def recomputed(gate: Gate, document: dict, generated: str) -> Any:
     if gate.kind == "error_status":
         return error_statuses(document)
     if gate.kind == "client_total":
         return sum(client_bodies(generated).values())
+    # Delegate to the pin's own reader rather than re-deriving it here. Two
+    # independent readers would drift, and the one that matters is the one the
+    # guard actually compares against.
+    if gate.kind == "inline_snapshot":
+        return inline_guard()._snapshot_inline(document)
+    if gate.kind == "inline_client":
+        return inline_guard()._client_inline_bodies(generated)
     raise AssertionError(f"unknown gate kind {gate.kind}")
 
 
@@ -211,6 +276,8 @@ def _diff(pinned: Any, actual: Any) -> str:
             for name in sorted(set(pinned) | set(actual))
             if pinned.get(name, 0) != actual.get(name, 0)
         ]
+        # Per-operation inline pins are dict-of-list: the counts read as
+        # "0->1", which is the honest statement -- the key appeared or went.
         return ", ".join(changed[:6]) + (" ..." if len(changed) > 6 else "")
     return f"{pinned!r} -> {actual!r}"
 
