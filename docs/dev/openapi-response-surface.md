@@ -123,3 +123,45 @@ pins those two comparisons in a second file, so a single-file edit cannot
 delete the evidence. No ``smoke.sh`` / ``PINNED_SUITES`` /
 ``REQUIRED_GUARD_CALLS`` change was needed — the extension lives inside an
 already-wired guard.
+
+## Request-body surface follow-up
+
+The two earlier pins left one more client-visible column unguarded:
+`requestBody.required`. `openapi-typescript` renders it as the optional marker
+on the `requestBody` line of each `operations[...]` definition:
+
+| snapshot | generated |
+| --- | --- |
+| `requestBody.required: true` | `requestBody: {` |
+| `requestBody.required: false` | `requestBody?: {` |
+| no `requestBody` | `requestBody?: never;` |
+
+86 of 268 operations publish a required body. No landed guard reads that flag:
+the body baselines count `$ref` bodies, `_RESPONSE_SURFACE_DIGEST` walks
+`responses`, `_OPERATION_SUMMARY_DIGEST` walks `summary`, and
+`_PINNED_ARTIFACTS` is a provenance blob id that a regenerate re-pins in the
+same deliberate act.
+
+Measured on live bytes, a byte-preserving coordinated co-revert — flip
+`POST /api/v1/auth/register`'s `required` to `false` in the snapshot, change
+the generated marker to `requestBody?: {`, and honestly re-pin both provenance
+blob ids — left **all eight wired OpenAPI guards `rc=0`** and the full
+`smoke.sh --profile contracts` layer green. Dropping the body entirely, and a
+same-count permutation moving a body between operations, were equally silent.
+
+The guard now adds a third independent literal:
+
+* `_REQUEST_BODY_SURFACE_DIGEST` — a hand-written sha256 over the canonical
+  sorted `(METHOD, path, operationId, state)` rows, `state` being
+  `absent` / `true` / `false`. Read from nowhere, so a co-revert of both halves
+  still changes it.
+* `_EXPECTED_REQUEST_BODY_BEARING_OPERATIONS` (86) — an exact count door.
+* generated marker == published state for every operation, so a one-sided edit
+  is named by `(METHOD, path)`.
+
+`--self-test` grew 10 -> 15 cases (one-sided snapshot / one-sided generated /
+coordinated co-revert / dropped body / same-count permutation); the companion
+grew 17 -> 23 cases and pins the literal, the count door, and both comparisons
+from a second file. No `smoke.sh` / `PINNED_SUITES` / `REQUIRED_GUARD_CALLS` /
+teeth change was needed — the extension lives inside an already-wired guard,
+so it does not contend with the in-flight wiring edits in #272 / #273.

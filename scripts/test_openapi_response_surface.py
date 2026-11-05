@@ -273,3 +273,99 @@ def test_the_summary_plant_is_load_bearing() -> None:
     snapshot, generated = _co_revert_summary()
     found = guard.failures(snapshot=snapshot, generated=generated)
     assert any("summaries drifted" in problem for problem in found), found
+
+
+def _co_revert_request_body() -> tuple[str, str]:
+    """Flip one ``requestBody.required`` in both halves -- decisive drift."""
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    target, symbol = "/api/v1/auth/register", "register_api_v1_auth_register_post"
+    document["paths"][target]["post"]["requestBody"]["required"] = False
+    start = generated.find(f"    {symbol}: {{")
+    assert start >= 0
+    block = generated[start : start + 1200]
+    changed = block.replace("        requestBody: {", "        requestBody?: {", 1)
+    assert changed != block
+    return json.dumps(document, indent=2), generated[:start] + changed + generated[
+        start + 1200 :
+    ]
+
+
+def test_coordinated_request_body_co_revert_is_rejected() -> None:
+    """Both halves agree; only the independent literal can catch it."""
+    snapshot, generated = _co_revert_request_body()
+    found = guard.failures(snapshot=snapshot, generated=generated)
+    assert any("request bodies drifted" in problem for problem in found), found
+
+
+def test_one_sided_snapshot_request_body_flip_is_rejected() -> None:
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    document["paths"]["/api/v1/auth/register"]["post"]["requestBody"][
+        "required"
+    ] = False
+    found = guard.failures(snapshot=json.dumps(document, indent=2))
+    assert any("disagrees with generated client" in p for p in found), found
+
+
+def test_one_sided_generated_request_body_marker_is_rejected() -> None:
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    start = generated.find("    register_api_v1_auth_register_post: {")
+    assert start >= 0
+    block = generated[start : start + 1200]
+    changed = block.replace("        requestBody: {", "        requestBody?: {", 1)
+    assert changed != block
+    found = guard.failures(
+        generated=generated[:start] + changed + generated[start + 1200 :]
+    )
+    assert any("disagrees with generated client" in p for p in found), found
+
+
+def test_request_body_digest_is_an_independent_literal() -> None:
+    """The pin must be a module-level literal, not derived from the artifact."""
+    source = (ROOT / "scripts" / "check_openapi_response_surface.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    target = None
+    for node in tree.body:
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            names = (
+                [t.id for t in node.targets if isinstance(t, ast.Name)]
+                if isinstance(node, ast.Assign)
+                else [node.target.id]
+                if isinstance(node.target, ast.Name)
+                else []
+            )
+            if "_REQUEST_BODY_SURFACE_DIGEST" in names:
+                target = node.value
+    assert target is not None, "digest literal is missing"
+    assert isinstance(target, ast.Constant) and isinstance(target.value, str), (
+        "digest must be a hand-written string literal, not a derived value"
+    )
+    assert len(target.value) == 64, "digest must be a sha256 hex string"
+
+
+def test_request_body_count_door_is_load_bearing() -> None:
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    del document["paths"]["/api/v1/auth/register"]["post"]["requestBody"]
+    found = guard.failures(
+        snapshot=json.dumps(document, indent=2),
+        expected_request_body_operations=guard._EXPECTED_REQUEST_BODY_BEARING_OPERATIONS
+        - 1,
+    )
+    assert not any("request-body-bearing operation count is" in p for p in found), found
+    assert any("request bodies drifted" in p or "disagrees" in p for p in found), found
+
+
+def test_request_body_comparison_is_load_bearing() -> None:
+    """A single-file edit cannot remove both doors without the companion."""
+    source = (ROOT / "scripts" / "check_openapi_response_surface.py").read_text(
+        encoding="utf-8"
+    )
+    assert "_REQUEST_BODY_SURFACE_DIGEST" in source
+    assert "published request bodies drifted" in source
+    assert "if actual_request_body_digest != pinned_request_body_digest:" in source
+    assert "rendered = gen_request_bodies.get(symbol)" in source
+    snapshot, generated = _co_revert_request_body()
+    found = guard.failures(snapshot=snapshot, generated=generated)
+    assert any("request bodies drifted" in problem for problem in found), found
