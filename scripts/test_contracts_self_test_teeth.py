@@ -404,6 +404,65 @@ class TeethGuardContract(unittest.TestCase):
         self.assertIn("if teeth_errors(wired, control):", source)
         self.assertIn("len(lost) == 1 and not others", source)
 
+    def test_both_calls_floor_is_a_hand_written_literal(self) -> None:
+        """A floor derived from the layer would green-light its own deletion."""
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("BOTH_CALLS: frozenset[str] = frozenset(", source)
+        self.assertIn("both_call_errors(text, wired)", source)
+        self.assertEqual(
+            guard.BOTH_CALLS,
+            {
+                "scripts/check_api_error_code_vocabulary.py",
+                "scripts/check_error_code_catalog.py",
+                "scripts/check_variant_summary_assembly_consistency.py",
+            },
+        )
+
+    def test_committed_layer_has_every_pinned_plain_run(self) -> None:
+        smoke = _smoke()
+        self.assertIn(
+            "scripts/check_variant_summary_assembly_consistency.py",
+            guard.plain_guard_calls(smoke),
+        )
+        self.assertEqual(
+            guard.both_call_errors(smoke, guard.wired_self_tests(smoke)), []
+        )
+
+    def test_deleting_a_pinned_plain_run_is_named(self) -> None:
+        """The registry floor pins a path, not a call count: deletion is green."""
+        smoke = _smoke()
+        victim = "scripts/check_variant_summary_assembly_consistency.py"
+        dropped = "\n".join(
+            line for line in smoke.splitlines()
+            if line.strip() != f'"${{PYTHON_BIN}}" {victim} || rc=$?'
+        ) + "\n"
+        self.assertNotEqual(dropped, smoke, "setup is not a control")
+        found = guard.both_call_errors(dropped, guard.wired_self_tests(dropped))
+        self.assertTrue(any(victim in f and "lost its plain run" in f for f in found), found)
+
+    def test_an_unpinned_plain_run_fails_closed(self) -> None:
+        """A new second call without a pin is reported, not silently adopted."""
+        smoke = _smoke()
+        extra = (
+            '  "${PYTHON_BIN}" scripts/check_openapi_response_surface.py '
+            '|| rc=$?\n'
+        )
+        added = smoke.replace(
+            '  "${PYTHON_BIN}" scripts/check_openapi_response_surface.py '
+            '--self-test || rc=$?\n',
+            '  "${PYTHON_BIN}" scripts/check_openapi_response_surface.py '
+            '--self-test || rc=$?\n' + extra,
+            1,
+        )
+        self.assertNotEqual(added, smoke, "setup is not a control")
+        found = guard.both_call_errors(added, guard.wired_self_tests(added))
+        self.assertTrue(any("not in BOTH_CALLS" in f for f in found), found)
+
+    def test_the_deletion_ablation_reaches_the_guards_own_self_test(self) -> None:
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("dropped_plain != smoke", source)
+        self.assertIn("both_call_errors(dropped_plain, wired)", source)
+
 
 if __name__ == "__main__":
     unittest.main()

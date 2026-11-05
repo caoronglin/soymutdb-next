@@ -3,10 +3,14 @@
 
 Twenty guards are wired into ``smoke_contracts()`` through ``--self-test``
 (this guard's own call is the twenty-first). For most of them that is the only
-invocation in the layer, so their plain ``check()`` never runs here. The
-registry guard (``check_contracts_registry_collection.py``) pins that each
-call *exists* and is listed in ``REQUIRED_GUARD_CALLS`` -- it does not read
-the body the call reaches. Measured on live main: replacing
+invocation in the layer, so their plain ``check()`` never runs here. Three are
+called twice on purpose: their plain run is the only call that reads the
+committed tree. ``BOTH_CALLS`` pins that set -- deleting a plain run otherwise
+keeps every gate and the whole contracts layer green while the guard never
+inspects the real source. The registry guard
+(``check_contracts_registry_collection.py``) pins that each call *exists* and
+is listed in ``REQUIRED_GUARD_CALLS`` -- it does not read the body the
+call reaches. Measured on live main: replacing
 ``check_app_shell_assets.self_test`` with ``return 0`` keeps the whole layer
 at ``SMOKE PASS / 741 passed / 0 failed``. The call is present, pinned and
 green while the guard has lost every assertion it owned.
@@ -72,6 +76,20 @@ _WIRED_SELF_TESTS: frozenset[str] = frozenset(
         "scripts/check_variant_summary_assembly_consistency.py",
         "scripts/check_openapi_published_enums.py",
         "scripts/check_visible_i18n.py",
+    }
+)
+
+# Reviewed literal floor: wired guards whose *second* (plain) call is the only
+# thing that reads the committed tree. The registry guard pins a guard's path,
+# not how many times it is invoked, so deleting this plain run keeps its path
+# in REQUIRED_GUARD_CALLS, keeps the --self-test call green and keeps the whole
+# layer at SMOKE PASS. A floor must be hand-written, not derived from the bytes
+# it audits: a single-file edit cannot drop both the call and its own pin here.
+BOTH_CALLS: frozenset[str] = frozenset(
+    {
+        "scripts/check_api_error_code_vocabulary.py",
+        "scripts/check_error_code_catalog.py",
+        "scripts/check_variant_summary_assembly_consistency.py",
     }
 )
 
@@ -493,6 +511,34 @@ def wired_self_tests(smoke: str) -> dict[str, list[str]]:
     return out
 
 
+def plain_guard_calls(smoke: str) -> set[str]:
+    """Paths with a plain (no ``--self-test``) standalone call in the layer."""
+    out: set[str] = set()
+    for path, raw_args in GUARD_CALL.findall(contracts_function(smoke)):
+        if "--self-test" not in raw_args.split() and path != SELF:
+            out.add(path)
+    return out
+
+
+def both_call_errors(smoke: str, wired: dict[str, list[str]]) -> list[str]:
+    """Fail closed when a pinned both-calls guard loses its plain run."""
+    plain = plain_guard_calls(smoke)
+    problems = [
+        f"both-calls guard {p!r} lost its plain run in the contracts layer: "
+        "the --self-test call alone never reads the committed tree"
+        for p in sorted(BOTH_CALLS - plain)
+    ]
+    problems += [
+        f"both-calls guard {p!r} is pinned but no longer wired via --self-test"
+        for p in sorted(BOTH_CALLS - set(wired))
+    ]
+    problems += [
+        f"wired --self-test guard {p!r} also has a plain run but is not in BOTH_CALLS"
+        for p in sorted((set(wired) & plain) - BOTH_CALLS)
+    ]
+    return problems
+
+
 def floor_errors(wired: dict[str, list[str]]) -> list[str]:
     found = set(wired)
     problems = [
@@ -813,6 +859,7 @@ def check(
         return [str(exc)]
     problems = (
         floor_errors(wired)
+        + both_call_errors(text, wired)
         + drift_floor_errors()
         + evidence_floor_errors()
         + declared_case_errors(root)
@@ -1203,6 +1250,27 @@ def self_test() -> int:
             "and is caught by the plain run",
             gutted,
             self_test_blind and plain_caught,
+        )
+    )
+
+    # 9. The wiring shape the guard's plants cannot see: deleting the plain
+    # run of a both-calls guard (not gutting its body) keeps every --self-test
+    # green, keeps its path in REQUIRED_GUARD_CALLS and keeps the whole layer
+    # at SMOKE PASS -- the guard then never reads the committed tree. Pin the
+    # plain call itself, and assert both limbs: clean tree has no error, the
+    # deleted plain run is named by the BOTH_CALLS floor.
+    victim = "scripts/check_variant_summary_assembly_consistency.py"
+    dropped_plain = "\n".join(
+        line for line in smoke.splitlines()
+        if line.strip() != f'"${{PYTHON_BIN}}" {victim} || rc=$?'
+    ) + "\n"
+    cases.append(
+        (
+            "deleting a both-calls guard's plain run is caught by BOTH_CALLS",
+            victim,
+            dropped_plain != smoke
+            and not both_call_errors(smoke, wired)
+            and any(victim in f for f in both_call_errors(dropped_plain, wired)),
         )
     )
 

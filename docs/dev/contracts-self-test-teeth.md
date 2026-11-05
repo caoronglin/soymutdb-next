@@ -8,8 +8,11 @@
 standalone calls carry `--self-test`; this guard's own call is the twenty-first.
 For most of them that is the only invocation in the layer, so `check()` never
 runs here — only their self-test does. Three also have a plain call elsewhere
-in `smoke_contracts()`; the teeth floor covers the `--self-test` body either
-way.
+in `smoke_contracts()`: that plain run is the only call that reads the
+committed tree. `BOTH_CALLS` pins that set — deleting a plain run otherwise
+keeps every gate and the whole layer green while the guard never inspects the
+real source. Do not "remove the duplicate call" without removing its
+`BOTH_CALLS` row in the same reviewed change.
 
 `check_contracts_registry_collection.py` pins that every call **exists** and
 is listed in `REQUIRED_GUARD_CALLS`. It does not read the body the call
@@ -114,7 +117,7 @@ partial temp tree made all probes fail to open, so the case passed
 vacuously — the first-hit trap this repo keeps paying for. The control
 assertion is what keeps it honest.
 
-Its own `--self-test` runs eight cases. The sixth pins the gap one layer below
+Its own `--self-test` plants one case per gap. The sixth pins the gap one layer below
 the signature floor: a body gutted to `print(<pinned signature>); return 0`
 still satisfies `_SIGNATURES` — the marker is a string a mutator can write —
 so the case asserts **both** that the signature check stays green (or the case
@@ -155,6 +158,13 @@ change (a fifth, mandatory for every `EVIDENCE_MEMBERS` guard, is its
    A guard audited for per-case evidence belongs in `EVIDENCE_MEMBERS` **and**
    gets a `_CASE_FLOOR` row (guard, source file, function, case container,
    minimum declared rows).
+
+A guard that must also read the committed tree needs a **second** plain call in
+`smoke_contracts()` and a matching row in `BOTH_CALLS`. The registry floor pins
+a guard's path, not how many times it is invoked: deleting the plain run keeps
+its path pinned, keeps the `--self-test` green and keeps `SMOKE PASS`. Do not
+"remove the duplicate call" without removing its `BOTH_CALLS` row in the same
+reviewed change -- that row is the only net under the plain half.
 
 The companion suite is a normal `tests=()` row; `PINNED_SUITES` is a floor,
 not an allowlist, so adding a suite needs no edit there (see
