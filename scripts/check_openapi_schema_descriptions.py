@@ -9,6 +9,12 @@ the prose is client-visible: it is what an IDE shows a caller hovering a field.
 Multi-line descriptions become ``@description <first line>`` plus indented
 continuation lines; the generator also emits exactly one synthetic
 ``@description discriminator enum property added by openapi-typescript``.
+Those continuation lines are client-visible IDE hover text. The description
+half's two literals read only ``@description`` first lines, so a regenerate
+that rewrote, dropped or relocated one of the 204 indented continuation
+lines -- with both provenance blob ids honestly re-pinned -- stayed green.
+Door 3c pins that component-schema share of the same continuation
+projection with a third hand-written literal in this guard.
 
 No other wired fixed point reads this surface:
 
@@ -56,6 +62,13 @@ This guard reads committed bytes only (``json`` + ``re`` + stdlib): no Python
   and the multiset unchanged, and a coordinated co-revert that re-pins only
   the snapshot digest agrees with itself and passes. This literal is read from
   nowhere, so that rotation and that co-revert both move it.
+* ``_CLIENT_DESCRIPTION_CONTINUATION_DIGEST`` -- a third hand-written sha256
+  over canonical sorted ``(component, description, index, prose)`` rows of the
+  generated indented continuation lines, read from the committed client bytes.
+  Doors 3 / 3b read only ``@description`` first lines; the 204 continuation
+  lines across 50 description nodes are the component-schema share of the same
+  projection #314 pins on ``paths``. ``_EXPECTED_CLIENT_CONTINUATION_ROWS`` /
+  ``_EXPECTED_CLIENT_CONTINUATION_NODES`` are its exact count doors.
 
 The ``title`` half is a second, independent fixed point over its own rows:
 
@@ -442,6 +455,83 @@ def _digest_client_property_order(rows_: list[tuple[str, str, str]]) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+# Third hand-written literal in this guard: the generated client's *continuation*
+# prose. The two literals above read only ``@description`` first lines; a
+# multi-line description also renders 204 indented ``*     ...`` lines (50
+# description nodes) that no landed door reads. sha256 over canonical sorted
+# ``(component|description|index|prose)`` rows, read from nowhere. A one-sided
+# rewrite, a drop, a same-count relocation between nodes, and a coordinated
+# co-revert with both blob ids re-pinned all move it. Regenerate with
+# _digest_client_continuations() after an intentional, reviewed prose change,
+# in the same commit as both artifacts, with a reason.
+_CLIENT_DESCRIPTION_CONTINUATION_DIGEST = (
+    "ccc25f1c2e289f12bcefa716408896282c0a9ef8eb3a8386fb9b0f58d99867e8"
+)
+_EXPECTED_CLIENT_CONTINUATION_ROWS = 204
+_EXPECTED_CLIENT_CONTINUATION_NODES = 50
+
+_CONTINUATION_LINE = re.compile(r"^\s*\*\s{4,}(\S.*)$")
+_COMPONENT_NAME = re.compile(r"^        (\w+): \{$")
+
+
+def client_description_continuations(
+    generated: str,
+) -> list[tuple[str, str, str, str]]:
+    """(component, description, index, prose) rows of generated continuation prose.
+
+    Only JSDoc blocks carrying an ``@description`` first line own continuation
+    rows; a ``@default`` block that renders a multi-line array is deliberately
+    excluded -- its indented lines are a value, not published description
+    prose. The row is keyed by (component, description, index) so a line that
+    moves to another description node or another position changes the digest
+    even when the total count is preserved.
+    """
+    block = _COMPONENT_SCHEMAS.search(generated)
+    if block is None:
+        raise ValueError("generated client has no components.schemas block")
+    out: list[tuple[str, str, str, str]] = []
+    component: str | None = None
+    doc: list[str] = []
+    in_doc = False
+    for line in block.group("body").splitlines():
+        match = _COMPONENT_NAME.match(line)
+        if match:
+            component = match.group(1)
+            continue
+        if line.strip().startswith("/**"):
+            in_doc = True
+            doc = []
+            continue
+        if in_doc:
+            doc.append(line)
+            if line.strip() == "*/":
+                descs = _DESCRIPTION_LINE.findall("\n".join(doc))
+                if descs:
+                    owner = descs[0]
+                    index = 0
+                    for entry in doc:
+                        prose = _CONTINUATION_LINE.match(entry)
+                        if prose:
+                            out.append(
+                                (component or "", owner, str(index), prose.group(1))
+                            )
+                            index += 1
+                in_doc = False
+                doc = []
+    return out
+
+
+def _digest_client_continuations(
+    rows_: list[tuple[str, str, str, str]],
+) -> str:
+    canonical = sorted(f"{c}|{d}|{i}|{t}" for c, d, i, t in rows_)
+    blob = "\n".join(
+        ["soymutdb-client-schema-description-continuations/v1", *canonical]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+
 def failures(
     *,
     snapshot: str | None = None,
@@ -457,6 +547,9 @@ def failures(
     expected_client_title_rows: int | None = None,
     client_description_sequence_digest: str | None = None,
     expected_client_description_lines: int | None = None,
+    client_continuation_digest: str | None = None,
+    expected_client_continuation_rows: int | None = None,
+    expected_client_continuation_nodes: int | None = None,
     property_order_digest: str | None = None,
     expected_property_order_rows: int | None = None,
     expected_property_order_schemas: int | None = None,
@@ -478,6 +571,7 @@ def failures(
         titles_ = title_rows(document)
         client_title_lines = client_titles(generated)
         client_title_triples = client_title_rows(generated)
+        client_continuations = client_description_continuations(generated)
         property_order = property_order_rows(document)
         client_property_order = client_property_order_rows(generated)
         component_order = component_definition_order(document)
@@ -560,6 +654,57 @@ def failures(
             f"generated client @description line count is {len(client)}, "
             f"_EXPECTED_CLIENT_DESCRIPTION_LINES pins {pinned_client_lines}: "
             "a description was added or dropped without moving the literal"
+        )
+
+    # Door 3c -- a third hand-written literal in this guard, over the
+    # component-schema share of the same continuation projection #314 pins on
+    # ``paths``. Doors 3 / 3b read only ``@description`` first lines; the
+    # generated client also renders 204 indented continuation lines across 50
+    # description nodes, and no landed fixed point reads them. A coordinated
+    # co-revert of both halves with both provenance blob ids honestly re-pinned
+    # stayed green: the snapshot digest, the first-line multiset and the
+    # first-line sequence all still agreed. This literal is read from nowhere
+    # and keyed by (component, description, index), so a rewrite, a drop, or a
+    # same-count relocation between nodes moves it.
+    pinned_continuation = (
+        _CLIENT_DESCRIPTION_CONTINUATION_DIGEST
+        if client_continuation_digest is None
+        else client_continuation_digest
+    )
+    actual_continuation = _digest_client_continuations(client_continuations)
+    if actual_continuation != pinned_continuation:
+        found.append(
+            "generated client description continuations drifted: "
+            f"_CLIENT_DESCRIPTION_CONTINUATION_DIGEST pins "
+            f"{pinned_continuation} but the client derives "
+            f"{actual_continuation}. Re-pin the literal in the same commit "
+            "as both artifacts, with a reason."
+        )
+    pinned_continuation_rows = (
+        _EXPECTED_CLIENT_CONTINUATION_ROWS
+        if expected_client_continuation_rows is None
+        else expected_client_continuation_rows
+    )
+    if len(client_continuations) != pinned_continuation_rows:
+        found.append(
+            f"generated client description continuation row count is "
+            f"{len(client_continuations)}, "
+            f"_EXPECTED_CLIENT_CONTINUATION_ROWS pins "
+            f"{pinned_continuation_rows}: a published description "
+            "continuation was dropped or invented in openapi.d.ts"
+        )
+    continuation_nodes = {(c, d) for c, d, _i, _t in client_continuations}
+    pinned_continuation_nodes = (
+        _EXPECTED_CLIENT_CONTINUATION_NODES
+        if expected_client_continuation_nodes is None
+        else expected_client_continuation_nodes
+    )
+    if len(continuation_nodes) != pinned_continuation_nodes:
+        found.append(
+            f"generated client description continuations span "
+            f"{len(continuation_nodes)} description nodes, "
+            f"_EXPECTED_CLIENT_CONTINUATION_NODES pins "
+            f"{pinned_continuation_nodes}"
         )
 
     # Door 4 -- independent fixed point over the whole published title surface.
@@ -820,6 +965,7 @@ def main() -> int:
         f"openapi-schema-descriptions: OK ({_EXPECTED_ROWS} published "
         f"descriptions and {_EXPECTED_TITLE_ROWS} titles pinned across "
         f"{_EXPECTED_SCHEMAS} / {_EXPECTED_TITLE_SCHEMAS} schemas, "
+        f"{_EXPECTED_CLIENT_CONTINUATION_ROWS} generated continuations, "
         f"{_EXPECTED_COMPONENT_DEFINITIONS} component definitions pinned "
         f"in order, {_EXPECTED_PROPERTY_ORDER_ROWS} component property order "
         "rows pinned)"

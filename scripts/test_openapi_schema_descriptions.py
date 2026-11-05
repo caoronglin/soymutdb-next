@@ -890,3 +890,163 @@ def test_the_property_order_literals_are_module_level_literals() -> None:
     source = Path(guard.__file__).read_text(encoding="utf-8")
     assert "property_order_rows(" in source
     assert "client_property_order_rows(" in source
+
+
+# --- Door 3c: generated component-schema description continuation prose. ---
+
+
+def _first_continuation() -> tuple[str, str]:
+    for component, desc, index, prose in guard.client_description_continuations(
+        _GENERATED
+    ):
+        return f"*     {prose}", prose
+    raise AssertionError("no generated component-schema continuation lines")
+
+
+def _generated_continuation_with(old: str, new: str) -> str:
+    line, prose = _first_continuation()
+    assert line in _GENERATED
+    return _GENERATED.replace(line, f"*     {prose.replace(old, new, 1)}", 1)
+
+
+def test_continuation_rows_are_pinned_to_a_literal() -> None:
+    rows_ = guard.client_description_continuations(_GENERATED)
+    assert len(rows_) == guard._EXPECTED_CLIENT_CONTINUATION_ROWS
+    assert guard._CLIENT_DESCRIPTION_CONTINUATION_DIGEST == (
+        guard._digest_client_continuations(rows_)
+    )
+
+
+def test_continuation_one_sided_rewrite_is_rejected() -> None:
+    generated = _generated_continuation_with("", " (DRIFTED)")
+    found = guard.failures(snapshot=_SNAPSHOT, generated=generated)
+    assert any("_CLIENT_DESCRIPTION_CONTINUATION_DIGEST" in f for f in found), found
+
+
+def test_continuation_dropped_line_is_rejected() -> None:
+    line, _prose = _first_continuation()
+    generated = _GENERATED.replace(line + "\n", "", 1)
+    assert generated != _GENERATED
+    found = guard.failures(snapshot=_SNAPSHOT, generated=generated)
+    assert any("_EXPECTED_CLIENT_CONTINUATION_ROWS" in f for f in found), found
+
+
+def test_continuation_same_count_relocation_is_rejected() -> None:
+    """Swap two continuation lines between two distinct description nodes."""
+    rows_ = guard.client_description_continuations(_GENERATED)
+    first = rows_[0]
+    second = next(r for r in rows_ if (r[0], r[1]) != (first[0], first[1]))
+    a, b = f"*     {first[3]}", f"*     {second[3]}"
+    assert a in _GENERATED and b in _GENERATED and a != b
+    swapped = (
+        _GENERATED.replace(a, "@@A@@", 1)
+        .replace(b, "@@B@@", 1)
+        .replace("@@A@@", b, 1)
+        .replace("@@B@@", a, 1)
+    )
+    assert swapped != _GENERATED
+    found = guard.failures(snapshot=_SNAPSHOT, generated=swapped)
+    assert any("_CLIENT_DESCRIPTION_CONTINUATION_DIGEST" in f for f in found), found
+
+
+def test_continuation_co_revert_with_honest_repin_is_rejected() -> None:
+    """The decisive shape: both halves move, every other literal re-pinned."""
+    line, prose = _first_continuation()
+    document = json.loads(_SNAPSHOT)
+    owner = None
+    for name, schema in document["components"]["schemas"].items():
+        for key, value in schema.items():
+            if isinstance(value, str) and prose in value:
+                owner = (name, key)
+                break
+        if owner:
+            break
+    assert owner is not None, "continuation prose not found in the snapshot"
+    name, key = owner
+    document["components"]["schemas"][name][key] = document["components"][
+        "schemas"
+    ][name][key].replace(prose, prose + " (REVIEWED)", 1)
+    snapshot = json.dumps(document, indent=2)
+    generated = _GENERATED.replace(line, line + " (REVIEWED)", 1)
+    assert snapshot != _SNAPSHOT and generated != _GENERATED
+    found = guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        digest=guard._digest(guard.rows(document)),
+        client_description_sequence_digest=(
+            guard._digest_client_description_sequence(
+                guard.client_descriptions(generated)
+            )
+        ),
+    )
+    assert any("_CLIENT_DESCRIPTION_CONTINUATION_DIGEST" in f for f in found), found
+
+
+def test_continuation_digest_is_an_independent_literal() -> None:
+    """The fixed point must be a module-level literal, not a re-derivation."""
+    source = (ROOT / "scripts" / "check_openapi_schema_descriptions.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    for node in tree.body:
+        targets: list[ast.expr] = []
+        value: ast.expr | None = None
+        if isinstance(node, ast.Assign):
+            targets = node.targets
+            value = node.value
+        elif isinstance(node, ast.AnnAssign):
+            targets = [node.target]
+            value = node.value
+        else:
+            continue
+        for target in targets:
+            if (
+                isinstance(target, ast.Name)
+                and target.id == "_CLIENT_DESCRIPTION_CONTINUATION_DIGEST"
+            ):
+                assert isinstance(value, ast.Constant)
+                assert isinstance(value.value, str)
+                assert len(value.value) == 64
+                return
+    raise AssertionError(
+        "_CLIENT_DESCRIPTION_CONTINUATION_DIGEST is not a module-level literal"
+    )
+
+
+def test_continuation_count_doors_are_load_bearing() -> None:
+    found = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=_GENERATED,
+        expected_client_continuation_rows=(
+            guard._EXPECTED_CLIENT_CONTINUATION_ROWS + 1
+        ),
+    )
+    assert any("_EXPECTED_CLIENT_CONTINUATION_ROWS" in f for f in found), found
+    found = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=_GENERATED,
+        expected_client_continuation_nodes=(
+            guard._EXPECTED_CLIENT_CONTINUATION_NODES + 1
+        ),
+    )
+    assert any("_EXPECTED_CLIENT_CONTINUATION_NODES" in f for f in found), found
+
+
+def test_guard_docstring_names_the_continuation_literals() -> None:
+    """The guard's own "It pins:" list must describe the Door 3c it implements.
+
+    A reviewed wording drift once left the module docstring enumerating only
+    the two first-line literals while the code shipped a third hand-written
+    one, so a reader would conclude the continuation prose was still unowned.
+    Pin the three Door 3c literals in the docstring, from the second file.
+    """
+    source = (ROOT / "scripts" / "check_openapi_schema_descriptions.py").read_text(
+        encoding="utf-8"
+    )
+    docstring = ast.get_docstring(ast.parse(source)) or ""
+    for literal in (
+        "_CLIENT_DESCRIPTION_CONTINUATION_DIGEST",
+        "_EXPECTED_CLIENT_CONTINUATION_ROWS",
+        "_EXPECTED_CLIENT_CONTINUATION_NODES",
+    ):
+        assert literal in docstring, f"guard docstring omits {literal}"
