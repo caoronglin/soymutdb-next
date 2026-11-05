@@ -144,15 +144,29 @@ def doc_ref_errors(
     errors: list[str] = []
     for line in _fold_wrapped_comments(text).splitlines():
         for match in DOC_REF.finditer(line):
-            if not is_doc_citation(line[:match.start()]):
+            # A quoted label attached to the path is decisive evidence of a
+            # citation: it is not vetoed by a prose word in front of the path.
+            # Otherwise `section "X" in docs/…` stays green while
+            # `see section "X" in docs/…` is red — one reference, two verdicts,
+            # decided only by the comment's first word.
+            labels = section_labels(line, match.start(), match.end())
+            prefix = line[:match.start()]
+            # A quoted label overrides the prose veto only when it is attached
+            # to this path: written in front of it (`section "X" in docs/…`) or
+            # introduced by the comma directly after it. A quote ending a
+            # trailing prose clause is not that path's section label, so the
+            # veto still decides — otherwise `Resolve every docs/… reference
+            # before shipping, "hello"` would be promoted to a citation.
+            attached = bool(
+                re.match(r"\s*[,，]", line[match.end():])
+                or re.search(r'section\s+"[^"]+"[^"]*?$', prefix)
+            )
+            if not (labels and attached) and not is_doc_citation(prefix):
                 continue
             ref = match.group(0)
             doc = root / ref
             if not doc.is_file():
                 errors.append(f"{source} cites missing doc {ref!r}")
-                continue
-            labels = section_labels(line, match.start(), match.end())
-            if not labels:
                 continue
             headings = {
                 heading.lstrip("#").strip()
