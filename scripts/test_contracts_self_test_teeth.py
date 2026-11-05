@@ -163,6 +163,53 @@ class TeethGuardContract(unittest.TestCase):
             guard._SIGNATURES = original
         self.assertTrue(any("no success signature" in f for f in found))
 
+    def test_a_reachable_but_unreached_ablation_set_is_rejected(self) -> None:
+        """The #256-forgery: keep the cases dict, empty the loop, print a count.
+
+        A signature can only pin the shape of the success line, and the guard
+        writes that line from a number it chooses. This shape is what the
+        printed evidence cannot distinguish from a real run, so the source is
+        read instead: the declared ablations have to be *reached*.
+        """
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp)
+            target = tree / "scripts/check_error_code_catalog.py"
+            target.parent.mkdir(parents=True)
+            text = (ROOT / "scripts/check_error_code_catalog.py").read_text(encoding="utf-8")
+            forged = text.replace(
+                "    for name, plant in cases.items():", "    for name, plant in []:", 1
+            )
+            self.assertNotEqual(forged, text, "setup is not a control")
+            target.write_text(forged, encoding="utf-8")
+            found = guard.declared_case_errors(tree)
+        self.assertTrue(
+            any("no longer iterates its cases mapping" in f for f in found),
+            f"an emptied self-test loop must be rejected, got {found}",
+        )
+
+    def test_the_case_floor_is_read_from_source_not_from_output(self) -> None:
+        """Dropping the ablations entirely is the other half of the same hole."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp)
+            target = tree / "scripts/check_error_code_catalog.py"
+            target.parent.mkdir(parents=True)
+            text = (ROOT / "scripts/check_error_code_catalog.py").read_text(encoding="utf-8")
+            start = text.index("    cases = {")
+            end = text.index("\n    }\n", start) + len("\n    }\n")
+            target.write_text(text[:start] + "    cases = {}\n" + text[end:], encoding="utf-8")
+            found = guard.declared_case_errors(tree)
+        self.assertTrue(
+            any("below the pinned floor" in f for f in found),
+            f"an emptied cases dict must be rejected, got {found}",
+        )
+
+    def test_the_committed_tree_declares_its_ablations(self) -> None:
+        self.assertEqual(guard.declared_case_errors(), [])
+
     def test_the_guards_own_self_test_has_teeth(self) -> None:
         # The --self-test must actually plant a no-op and catch it. A body that
         # only prints PASS lines without asserting would still exit 0.

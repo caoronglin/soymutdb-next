@@ -4,7 +4,7 @@
 
 `scripts/smoke.sh` wires the contracts layer through two mechanisms: a
 `local tests=( ... )` array collected by pytest, and standalone
-`"${PYTHON_BIN}" scripts/check_*.py ... || rc=$?` calls. Fifteen of those
+`"${PYTHON_BIN}" scripts/check_*.py ... || rc=$?` calls. Seventeen of those
 standalone calls carry `--self-test` and no plain invocation: the guard's
 `check()` never runs in this layer. Only its self-test does.
 
@@ -38,15 +38,27 @@ collectible" cell: registered, collectible, invoked — and vacuous.
   requires `rc == 0` plus a signature match. A gutted self-test, a failing
   self-test and an empty-output self-test are each named.
 
+A signature pins the shape of one printed line, and nothing more. The guard
+prints that line from a number it computes itself, so an edit that keeps the
+`cases` dict, empties the loop over it, and prints `len(cases)` emits a
+well-formed success line that no case produced. Measured on the #256 tree:
+`for name, plant in []:` plus the `len(cases)` success line still printed
+`(12 negative cases + clean tree)` and this probe stayed green. `_CASE_FLOOR`
+closes that: an entry per guard whose self-test must still *reach* its
+declared ablations — the mapping must hold at least N entries and some `for`
+in the same function must iterate it. Both halves are read from the guard's
+source by `ast`, so no printed number can satisfy them. Counts stay a free
+variable: shifting the printed N by +5 stays green.
+
 The guard's own `--self-test` plants a no-op into one guard **in process**
 (import + replace `self_test` with a lambda returning 0 + `sys.argv` patch),
 asserts a clean control first, then that exactly one guard loses its
 signature and no other guard is collateral. Planting the mutation in a
-partial temp tree made all 15 probes fail to open, so the case passed
+partial temp tree made all 17 probes fail to open, so the case passed
 vacuously — the first-hit trap this repo keeps paying for. The control
 assertion is what keeps it honest.
 
-`scripts/test_contracts_self_test_teeth.py` (11 cases) is the second file:
+`scripts/test_contracts_self_test_teeth.py` (14 cases) is the second file:
 it pins the wiring into `smoke.sh`, the `REQUIRED_GUARD_CALLS` floor, status
 propagation, the literal (non-derived) nature of the two floors, and each
 negative direction under pytest collection. A single-file edit cannot drop
@@ -55,12 +67,14 @@ both the behaviour and its own self-test plant.
 ## Wiring discipline
 
 Adding a wired `--self-test` guard requires **four** edits in the same
-change, per #223's set-equality rule:
+change (a fifth when it also needs a `_CASE_FLOOR` row), per #223's set-equality rule:
 
 1. the standalone call in `smoke_contracts()` with `|| rc=$?`;
 2. an entry in `REQUIRED_GUARD_CALLS`;
 3. an entry in `_WIRED_SELF_TESTS` **and** a signature in `_SIGNATURES`;
-4. the doc line below.
+4. an entry in `_CASE_FLOOR` when its self-test can print a count it
+   computes itself (the shape a signature cannot audit);
+5. the doc line below.
 
 The companion suite is a normal `tests=()` row; `PINNED_SUITES` is a floor,
 not an allowlist, so adding a suite needs no edit there (see
