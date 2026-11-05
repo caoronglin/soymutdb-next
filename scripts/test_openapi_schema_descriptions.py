@@ -600,6 +600,114 @@ def test_both_description_digests_must_move_together() -> None:
     ), found
     assert any("@description lines disagree" in f for f in found), found
 
+# ---------------------------------------------------------------------------
+# Component definition order: the one dimension every door above sorts away
+# ---------------------------------------------------------------------------
+
+
+def _component_block_bounds() -> tuple[list[str], list[tuple[int, int]]]:
+    """(names, line bounds) of every ``components.schemas`` member block."""
+    names = guard.component_definition_order(json.loads(_SNAPSHOT))
+    lines = _SNAPSHOT.split("\n")
+    start = lines.index('    "schemas": {')
+    starts: list[int] = []
+    index = start + 1
+    while index < len(lines):
+        if lines[index] in ("    },", "    }"):
+            break
+        if lines[index].startswith('      "') and lines[index].endswith(": {"):
+            starts.append(index)
+        index += 1
+    bounds = [
+        (offset, starts[k + 1] if k + 1 < len(starts) else index)
+        for k, offset in enumerate(starts)
+    ]
+    assert len(bounds) == len(names), (len(bounds), len(names))
+    return names, bounds
+
+
+def _snapshot_with_rotated_definitions(first: int, second: int) -> str:
+    """Swap two member blocks of ``components.schemas``, byte for byte."""
+    _, bounds = _component_block_bounds()
+    lines = _SNAPSHOT.split("\n")
+    a, b = bounds[first], bounds[second]
+    return "\n".join(
+        lines[: a[0]] + lines[b[0] : b[1]] + lines[a[0] : a[1]] + lines[b[1] :]
+    )
+
+
+def test_component_definition_order_is_pinned_by_an_independent_literal() -> None:
+    names = guard.component_definition_order(json.loads(_SNAPSHOT))
+    assert len(names) == guard._EXPECTED_COMPONENT_DEFINITIONS
+    assert guard._digest_component_definition_order(names) == (
+        guard._COMPONENT_DEFINITION_ORDER_DIGEST
+    )
+
+
+def test_component_definition_rotation_is_invisible_to_every_other_door() -> (
+    None
+):
+    """Sorted digests and the by-field lookup are blind to definition order."""
+    rotated = _snapshot_with_rotated_definitions(3, 4)
+    assert rotated != _SNAPSHOT
+    assert len(rotated) == len(_SNAPSHOT), "must be byte-preserving"
+    original = json.loads(_SNAPSHOT)
+    after = json.loads(rotated)
+    assert guard._digest(guard.rows(after)) == guard._SCHEMA_DESCRIPTION_DIGEST
+    assert guard._digest_title(guard.title_rows(after)) == (
+        guard._SCHEMA_TITLE_DIGEST
+    )
+    assert len(guard.rows(after)) == len(guard.rows(original))
+    assert len(guard.title_rows(after)) == len(guard.title_rows(original))
+    assert guard._digest_component_definition_order(
+        guard.component_definition_order(after)
+    ) != guard._COMPONENT_DEFINITION_ORDER_DIGEST
+
+
+def test_component_definition_rotation_is_named_by_door_twelve() -> None:
+    rotated = _snapshot_with_rotated_definitions(3, 4)
+    found = guard.failures(snapshot=rotated)
+    named = [f for f in found if "_COMPONENT_DEFINITION_ORDER_DIGEST" in f]
+    assert named, found
+    # The by-field lookup (Door 8) still resolves every title: rotation does
+    # not change which component owns which field.
+    assert not any("snapshot publishes" in f for f in found), found
+
+
+def test_component_definition_count_door_is_load_bearing() -> None:
+    found = guard.failures(
+        expected_component_definitions=guard._EXPECTED_COMPONENT_DEFINITIONS - 1
+    )
+    assert any("_EXPECTED_COMPONENT_DEFINITIONS" in f for f in found), found
+
+
+def test_a_honest_definition_order_repin_clears_door_twelve() -> None:
+    """The reviewed re-pin path works: re-derive the literal for the new order."""
+    rotated = _snapshot_with_rotated_definitions(3, 4)
+    digest = guard._digest_component_definition_order(
+        guard.component_definition_order(json.loads(rotated))
+    )
+    assert guard.failures(
+        snapshot=rotated, component_definition_order_digest=digest
+    ) == []
+
+
+def test_moving_a_whole_component_block_keeps_both_published_multisets() -> None:
+    """Rotation preserves the description and title multisets exactly.
+
+    That is why Doors 1/4/6/7 cannot see it, and why Door 12 has to carry the
+    order itself rather than another sorted digest.
+    """
+    rotated = _snapshot_with_rotated_definitions(0, 1)
+    before = json.loads(_SNAPSHOT)
+    after = json.loads(rotated)
+    assert Counter(
+        value for _, value in guard.rows(before)
+    ) == Counter(value for _, value in guard.rows(after))
+    assert Counter(
+        value for _, value in guard.title_rows(before)
+    ) == Counter(value for _, value in guard.title_rows(after))
+
 
 # --- component-property declaration order (Door 9) --------------------------
 

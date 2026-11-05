@@ -72,6 +72,23 @@ The ``title`` half is a second, independent fixed point over its own rows:
   line, so the check is a sub-multiset of the pins, not an equality. A
   co-revert of both halves still changes the published digest.
 
+Finally, the door every one of the above sorts away: the snapshot's own
+``components.schemas`` **definition order**.
+
+* ``_COMPONENT_DEFINITION_ORDER_DIGEST`` -- a hand-written sha256 over the
+  definition names *in insertion order*, read from nowhere. Doors 1/4/6/7 are
+  sorted row digests and Door 8 resolves a title *by* ``(component, field)``,
+  so a byte-preserving rotation of two adjacent member blocks keeps all of
+  them -- and both count doors -- green. ``openapi-typescript`` emits the
+  component interfaces in snapshot insertion order, so which definition comes
+  first is a published fact;
+* ``_EXPECTED_COMPONENT_DEFINITIONS`` -- the exact definition count.
+
+Decisive ablation on live bytes: swapping two adjacent
+``components.schemas`` member blocks byte for byte leaves every other door at
+``rc=0`` (the description and title multisets are unchanged, both counts
+unchanged, Door 8 still resolves every field); only Door 12 names it.
+
 A legitimate prose change must move the digest in the same commit as both
 artifacts and say why. Re-deriving the digest from the artifact under guard
 would make the pin self-referential.
@@ -264,6 +281,38 @@ def _digest_client_title(lines: list[str]) -> str:
     blob = "\n".join(["soymutdb-client-schema-titles/v1", *canonical])
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
+# Door 12 -- the snapshot's own ``components.schemas`` *definition order*.
+# Every door above is order-insensitive in this dimension: Doors 1/4 are
+# sorted row digests, Doors 6/7 sort their client rows, and Door 8 looks a
+# title up *by* ``(component, field)``. ``openapi-typescript`` emits the
+# component interfaces in snapshot insertion order, so the definition order
+# is what a caller sees in IDE completion and when enumerating the module --
+# a published fact with no fixed point. Two byte-preserving rotations survive
+# every door above: swapping two adjacent component definitions in the
+# snapshot, and moving a component's ``description`` row to a different
+# component (the multiset is unchanged). Door 12 is a hand-written sha256
+# over the definition names IN INSERTION ORDER, read from nowhere, so both
+# rotations move it and a one-sided edit cannot hide behind a re-pinned count.
+_COMPONENT_DEFINITION_ORDER_DIGEST = (
+    "91f239588b99fd442ea8341908dd13d5721cc270e16dd48e450f91c31d74b968"
+)
+_EXPECTED_COMPONENT_DEFINITIONS = 362
+
+
+def component_definition_order(document: dict[str, Any]) -> list[str]:
+    """Every ``components.schemas`` name, in snapshot insertion order."""
+    schemas = document.get("components", {}).get("schemas", {})
+    if not isinstance(schemas, dict):
+        return []
+    return list(schemas)
+
+
+def _digest_component_definition_order(names: list[str]) -> str:
+    """sha256 over the definition order -- a sequence, not a sorted multiset."""
+    blob = "\n".join(["soymutdb-component-definition-order/v1", *names])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 # ``client_titles()`` keeps a *sorted* digest, so it cannot see two
 # same-count title lines swap places: the multiset is unchanged. That is a
 # real client-visible drift -- the label an IDE shows for one field lands on
@@ -413,6 +462,8 @@ def failures(
     expected_property_order_schemas: int | None = None,
     client_property_order_digest: str | None = None,
     expected_client_property_order_rows: int | None = None,
+    component_definition_order_digest: str | None = None,
+    expected_component_definitions: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -429,6 +480,7 @@ def failures(
         client_title_triples = client_title_rows(generated)
         property_order = property_order_rows(document)
         client_property_order = client_property_order_rows(generated)
+        component_order = component_definition_order(document)
     except (ValueError, TypeError) as exc:
         return [f"cannot read published schema descriptions: {exc}"]
 
@@ -717,6 +769,42 @@ def failures(
                 )
                 break
 
+
+    # Door 12 -- independent fixed point over the component *definition*
+    # order. Doors 1/4/6/7 sort, and Door 8 looks a row up by field, so a
+    # byte-preserving rotation of two adjacent definitions (or a description
+    # row moving between two components) keeps every door above green while
+    # the generated interface order -- a client-visible published fact --
+    # changes.
+    pinned_component_order = (
+        _COMPONENT_DEFINITION_ORDER_DIGEST
+        if component_definition_order_digest is None
+        else component_definition_order_digest
+    )
+    actual_component_order = _digest_component_definition_order(component_order)
+    if actual_component_order != pinned_component_order:
+        found.append(
+            "published component definition order drifted: "
+            "_COMPONENT_DEFINITION_ORDER_DIGEST pins "
+            f"{pinned_component_order} but the snapshot derives "
+            f"{actual_component_order}. Every door above sorts its rows, so "
+            "a reordered components.schemas block is invisible to them; the "
+            "generated interfaces keep the snapshot's order. Re-pin the "
+            "literal in the same commit as both artifacts, with a reason."
+        )
+
+    pinned_component_count = (
+        _EXPECTED_COMPONENT_DEFINITIONS
+        if expected_component_definitions is None
+        else expected_component_definitions
+    )
+    if len(component_order) != pinned_component_count:
+        found.append(
+            f"component definition count is {len(component_order)}, "
+            f"_EXPECTED_COMPONENT_DEFINITIONS pins {pinned_component_count}: "
+            "a schema was added or dropped without moving the fixed point"
+        )
+
     return found
 
 
@@ -732,7 +820,9 @@ def main() -> int:
         f"openapi-schema-descriptions: OK ({_EXPECTED_ROWS} published "
         f"descriptions and {_EXPECTED_TITLE_ROWS} titles pinned across "
         f"{_EXPECTED_SCHEMAS} / {_EXPECTED_TITLE_SCHEMAS} schemas, "
-        f"{_EXPECTED_PROPERTY_ORDER_ROWS} component property order rows pinned)"
+        f"{_EXPECTED_COMPONENT_DEFINITIONS} component definitions pinned "
+        f"in order, {_EXPECTED_PROPERTY_ORDER_ROWS} component property order "
+        "rows pinned)"
     )
     return 0
 
