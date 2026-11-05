@@ -95,6 +95,7 @@ _STATIC_PAGE_TEMPLATES: tuple[str, ...] = (
     "/tools/exppattern",
     "/tools/ld",
     "/tools/seqfetch",
+    "/tools/sequence",
     "/variants",
 )
 

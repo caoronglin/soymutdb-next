@@ -58,11 +58,43 @@ CONTRACT DEBT: packages/api-client/openapi.json is out of sync with app.main:app
 
 判据：
 
-- 判定「这条分支相对当前 `main` 改了什么」，一律用两点 `git diff origin/main HEAD`；
+- 判定「这条分支相对当前 `main` 改了什么」，默认用两点 `git diff origin/main HEAD`，
+  但结论前必须先确认 `merge-base` 是不是 `main` 的祖先（见下节）；
 - 三点 `git diff origin/main...HEAD` 只回答「本分支自己提交了什么」，适合看净新增，
   不适合判定是否回退了 `main` 上已有的东西；
 - 报结论时带上 `git rev-parse origin/main` 与 `git merge-base origin/main HEAD`，
   否则「main」和「基线」容易被混成同一棵树。
+
+### 反向的坑：stale base 让两点 diff 把「没跟上 main」报成回退
+
+上面那条是三点 diff 拿旧 merge-base 当 `main`，把旧形状看成回退。反过来也成立：
+基线是 **stale base** 时，两点 `git diff origin/main HEAD` 会把 `main` 后来前进的部分
+整片显示成「本分支删掉了它」。实测一例：
+
+- `origin/main = 93443961`（#116 合入），分支 head `a48ce1d5`，`merge-base = 8bc94028`；
+- `8bc94028` 是 `main` 的祖先，分支从未碰过 `scripts/*`；
+- 两点 diff 报 `test_ci_job_contracts.py` −134、`verify-backend-tests.sh` 加回
+  `sh.rustup.rs` / `maturin build`、`verify-bio-core.sh` 少 `rm -f` —— 三处「删除」全是影子；
+- 三点 `git diff 8bc94028 a48ce1d5`：改动 10 个文件，全在 `apps/web/**` 与
+  `packages/api-client/src/**`，与 #116 的 12 个文件交集为空；
+- 试合并树 `git merge-tree --write-tree 93443961 a48ce1d5` → `0ea233d1`，`rc=0`，
+  该树里 #116 的 12 个文件逐 blob 与 `main` 相同，边界守卫（单次建构断言、
+  `sh.rustup.rs`/`maturin build` 计数 0、`rm -f …/soymutdb_bio_core-*.whl`）全部在位。
+
+判据补一句：**两点 diff 上看见「删了 `main` 的东西」时，先查 `merge-base`；若
+`merge-base` 是 `main` 的祖先、且该分支从未碰过那个文件，那是 stale base，不是 revert。**
+分辨办法是把两条 diff 与文件集放一起看：
+
+```bash
+git rev-parse origin/main $(git merge-base origin/main HEAD) HEAD   # 三棵树先摆出来
+# 本分支真实改动（三点），与两点读数相减的那部分才是「基线滞后」
+comm -13 <(git diff --name-only origin/main...HEAD | sort) \
+         <(git diff --name-only origin/main HEAD  | sort)
+```
+
+`rc=0` 在这里也确实是无损的，但理由不是「没有冲突」，而是**两侧改动的文件集合不相交**，
+3-way merge 各自取增量；一旦两侧动过同一批字节，`rc=0` 仍然可能静默丢东西
+（见上文生成产物那节）。
 
 ## 源码与测试一起退化时，契约门禁不会喊
 

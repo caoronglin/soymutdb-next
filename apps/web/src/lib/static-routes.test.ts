@@ -47,6 +47,7 @@ describe("deriveStaticRouteEntries", () => {
       "/tools/enrichment",
       "/tools/exppattern",
       "/tools/seqfetch",
+      "/tools/sequence",
       "/variants",
     ]);
     // A POST-form tool renders nothing without JS, so it gets no document of
@@ -58,6 +59,7 @@ describe("deriveStaticRouteEntries", () => {
     expect(paths).toContain("/tools/enrichment");
     expect(paths).toContain("/tools/seqfetch");
     expect(paths).toContain("/tools/exppattern");
+    expect(paths).toContain("/tools/sequence");
     // Dynamic detail routes render from parameters; they never get a document.
     expect(paths).not.toContain("/genes/:geneId");
     expect(paths).not.toContain("/mutants/:publicId");

@@ -28,6 +28,7 @@ import { Route as SeedRequestRouteImport } from './routes/seed-request'
 import { Route as SraRouteImport } from './routes/sra'
 import { Route as ToolsIndexRouteImport } from './routes/tools/index'
 import { Route as ToolsSeqfetchRouteImport } from './routes/tools/seqfetch'
+import { Route as ToolsSequenceRouteImport } from './routes/tools/sequence'
 import { Route as ToolsEnrichmentRouteImport } from './routes/tools/enrichment'
 import { Route as ToolsExppatternRouteImport } from './routes/tools/exppattern'
 import { Route as ToolsAllelefreqRouteImport } from './routes/tools/allelefreq'
@@ -150,6 +151,11 @@ const ToolsIndexRoute = ToolsIndexRouteImport.update({
 const ToolsSeqfetchRoute = ToolsSeqfetchRouteImport.update({
   id: '/tools/seqfetch',
   path: '/tools/seqfetch',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ToolsSequenceRoute = ToolsSequenceRouteImport.update({
+  id: '/tools/sequence',
+  path: '/tools/sequence',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ToolsEnrichmentRoute = ToolsEnrichmentRouteImport.update({
@@ -344,6 +350,7 @@ export interface FileRoutesByFullPath {
   '/seed-request': typeof SeedRequestRoute
   '/sra': typeof SraRoute
   '/tools/seqfetch': typeof ToolsSeqfetchRoute
+  '/tools/sequence': typeof ToolsSequenceRoute
   '/tools/enrichment': typeof ToolsEnrichmentRoute
   '/tools/exppattern': typeof ToolsExppatternRoute
   '/tools/allelefreq': typeof ToolsAllelefreqRoute
@@ -397,6 +404,7 @@ export interface FileRoutesByTo {
   '/assemblies': typeof AssembliesIndexRoute
   '/assemblies/$assemblyId': typeof AssembliesAssemblyIdRoute
   '/tools/seqfetch': typeof ToolsSeqfetchRoute
+  '/tools/sequence': typeof ToolsSequenceRoute
   '/tools/enrichment': typeof ToolsEnrichmentRoute
   '/tools/exppattern': typeof ToolsExppatternRoute
   '/tools/allelefreq': typeof ToolsAllelefreqRoute
@@ -444,6 +452,7 @@ export interface FileRoutesById {
   '/seed-request': typeof SeedRequestRoute
   '/sra': typeof SraRoute
   '/tools/seqfetch': typeof ToolsSeqfetchRoute
+  '/tools/sequence': typeof ToolsSequenceRoute
   '/tools/enrichment': typeof ToolsEnrichmentRoute
   '/tools/exppattern': typeof ToolsExppatternRoute
   '/tools/allelefreq': typeof ToolsAllelefreqRoute
@@ -493,6 +502,7 @@ export interface FileRouteTypes {
     | '/seed-request'
     | '/sra'
     | '/tools/seqfetch'
+    | '/tools/sequence'
     | '/tools/enrichment'
     | '/tools/exppattern'
     | '/tools/allelefreq'
@@ -543,6 +553,7 @@ export interface FileRouteTypes {
     | '/sra'
     | '/tools'
     | '/tools/seqfetch'
+    | '/tools/sequence'
     | '/tools/enrichment'
     | '/tools/exppattern'
     | '/tools/allelefreq'
@@ -589,6 +600,7 @@ export interface FileRouteTypes {
     | '/seed-request'
     | '/sra'
     | '/tools/seqfetch'
+    | '/tools/sequence'
     | '/tools/enrichment'
     | '/tools/exppattern'
     | '/tools/allelefreq'
@@ -632,6 +644,7 @@ export interface RootRouteChildren {
   SraRoute: typeof SraRoute
   ToolsIndexRoute: typeof ToolsIndexRoute
   ToolsSeqfetchRoute: typeof ToolsSeqfetchRoute
+  ToolsSequenceRoute: typeof ToolsSequenceRoute
   ToolsEnrichmentRoute: typeof ToolsEnrichmentRoute
   ToolsExppatternRoute: typeof ToolsExppatternRoute
   ToolsAllelefreqRoute: typeof ToolsAllelefreqRoute
@@ -946,6 +959,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ToolsSeqfetchRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tools/sequence': {
+      id: '/tools/sequence'
+      path: '/tools/sequence'
+      fullPath: '/tools/sequence'
+      preLoaderRoute: typeof ToolsSequenceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/tools/enrichment': {
       id: '/tools/enrichment'
       path: '/tools/enrichment'
@@ -1008,6 +1028,7 @@ const rootRouteChildren: RootRouteChildren = {
   SraRoute: SraRoute,
   ToolsIndexRoute: ToolsIndexRoute,
   ToolsSeqfetchRoute: ToolsSeqfetchRoute,
+  ToolsSequenceRoute: ToolsSequenceRoute,
   ToolsEnrichmentRoute: ToolsEnrichmentRoute,
   ToolsExppatternRoute: ToolsExppatternRoute,
   ComparativeIndexRoute: ComparativeIndexRoute,

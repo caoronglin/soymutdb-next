@@ -99,6 +99,7 @@ const FULL_PATH_TO_TEMPLATE: Readonly<Record<string, string>> = Object.freeze({
   "/tools/enrichment": "/tools/enrichment",
   "/tools/exppattern": "/tools/exppattern",
   "/tools/seqfetch": "/tools/seqfetch",
+  "/tools/sequence": "/tools/sequence",
   "/variants/": "/variants",
   // `/genome-view` exists in the router but is NOT in the server allowlist,
   // so it intentionally resolves to `/other` below.

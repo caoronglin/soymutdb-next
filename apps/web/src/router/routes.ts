@@ -40,6 +40,7 @@ export interface PortalRouteDefinition {
     | "downloads"
     | "tools"
     | "seqfetch"
+    | "sequence"
     | "exppattern"
     | "enrichment"
     | "news"
@@ -463,6 +464,18 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
     meta: {
       title: "Sequence fetch — SoyMutDB",
       description: "Extract FASTA sequences from an explicit assembly by gene accession or genomic region.",
+      prerender: true,
+      sitemap: true,
+    },
+  },
+  {
+    path: "/tools/sequence",
+    name: "sequence",
+    componentKey: "sequence",
+    meta: {
+      title: "Sequence toolkit — SoyMutDB",
+      description:
+        "Reverse complement, pattern matching, composition, translation, k-mers, ORF scanning, pairwise alignment and FASTA/FASTQ/BED validation on sequence text you supply.",
       prerender: true,
       sitemap: true,
     },

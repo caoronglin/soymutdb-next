@@ -1,7 +1,7 @@
 /**
- * Tools hub — entry cards for SeqFetch, Enrichment, ExpPattern and the three
- * population-genetics tools (linkage disequilibrium, nucleotide diversity,
- * allele frequency).
+ * Tools hub — entry cards for SeqFetch, the sequence toolkit, Enrichment,
+ * ExpPattern and the three population-genetics tools (linkage disequilibrium,
+ * nucleotide diversity, allele frequency).
  */
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
@@ -13,6 +13,7 @@ import {
   PartitionOutlined,
   PieChartOutlined,
   RiseOutlined,
+  ThunderboltOutlined,
 } from "@ant-design/icons";
 import { Breadcrumb, Tag, Typography } from "@/lib/antd";
 import * as React from "react";
@@ -52,6 +53,13 @@ const TOOLS: ToolCard[] = [
     titleKey: "tools.exppattern.title",
     descKey: "tools.exppattern.cardDesc",
     statusKey: "tools.exppattern.status",
+  },
+  {
+    to: "/tools/sequence",
+    icon: ThunderboltOutlined,
+    titleKey: "tools.sequence.title",
+    descKey: "tools.sequence.cardDesc",
+    statusKey: "tools.sequence.status",
   },
   {
     to: "/tools/ld",

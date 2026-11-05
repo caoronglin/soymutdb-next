@@ -62,6 +62,7 @@ EMAIL_SENTINEL = "sentinel.user@example.invalid"
         ("/search/tools", "/search/tools"),
         ("/tools", "/tools"),
         ("/tools/seqfetch", "/tools/seqfetch"),
+        ("/tools/sequence", "/tools/sequence"),
         ("/tools/exppattern", "/tools/exppattern"),
         ("/tools/enrichment", "/tools/enrichment"),
         ("/news", "/news"),

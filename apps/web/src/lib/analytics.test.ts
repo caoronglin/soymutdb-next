@@ -112,6 +112,9 @@ describe("B4 pageview producer", () => {
       expect(toPageTemplate("/news/some-slug", stub.router)).toBe("/news/:slug");
       expect(toPageTemplate("/analyses/job-1", stub.router)).toBe("/analyses/:jobId");
       expect(toPageTemplate("/", stub.router)).toBe("/");
+      // Bare-pathname form checks the allowlist key itself; the stub router
+      // collapses every /tools/* child to the /tools parent.
+      expect(toPageTemplate("/tools/sequence")).toBe("/tools/sequence");
     });
 
     it("collapses a router route the server allowlist does not name", () => {
