@@ -7,9 +7,12 @@ than feature noun, as the roadmap requires. Zero file overlap with the twelve
 in-flight PRs on base `05a1d4bb`: none of them touches
 `scripts/check_openapi_auth_surface.py`, `scripts/test_openapi_auth_surface_floor.py`,
 this document, or `docs/implementation/roadmap.md`. `scripts/smoke.sh` is a
-hot file (four open PRs own it), so this phase deliberately adds **no** wiring
-line there: the guard already runs as a standalone `--self-test`, and the
-companion suite is collected by a plain `pytest scripts/` run.
+hot file (several open PRs own it), so this phase deliberately adds **no**
+standalone guard call there. The companion suite is registered in the gating
+`tests[]` array so the contracts layer actually collects it; a plain
+`pytest scripts/` run is a local hand-run, not a CI stage. The guard's own
+`--self-test` also pins that `NON_ADMIN_PROTECTED` stays a hand-written source
+literal.
 
 ## The defect
 
@@ -72,11 +75,14 @@ consequence of running the export.
 | Add `HTTPBearer` to a public non-admin op | `rc=0` OK | `rc=1` names 1 extra |
 | Drop all admin `security` (check 2, control) | `rc=1` | `rc=1` unchanged |
 
-The guard's `--self-test` grew from 7 to 10 ablations with three new co-revert
-shapes; each is emitted and checked by name. The companion
+The guard's `--self-test` grew from 7 to 12 ablations: three co-revert shapes
+plus two source-level plants that prove the literal-floor pin itself has teeth.
+Each is emitted and checked by name. The companion
 `scripts/test_openapi_auth_surface_floor.py` (7 pytest cases) exercises
 `failures()` on synthetic snapshots and pins that the floor is a literal, not
-a `json.load` of the artifact it checks.
+a `json.load` of the artifact it checks. It is registered in `smoke.sh`'s
+gating array; the guard's `--self-test` carries the same pin for the stdlib-only
+entry point, so neither door depends on the other being collected.
 
 ## Validation (this branch, CPython 3.11.2, Node 26.13.0)
 
@@ -84,7 +90,8 @@ a `json.load` of the artifact it checks.
 - `python3 scripts/check_openapi_auth_surface.py` — OK
 - `python3 scripts/check_openapi_auth_surface.py --self-test` — OK (10 ablations)
 - `python3 -m unittest scripts.test_ci_job_contracts -q` — 103 OK
-- `python3 scripts/check_contracts_registry_collection.py` — OK (41 gating suites, 13 guard calls)
+- `python3 scripts/check_contracts_registry_collection.py` (plain mode) — OK (44 gating suites, 18 guard calls)
+- `python3 scripts/check_contracts_registry_collection.py --self-test` — 33 cases, 0 failure
 - `bash scripts/smoke.sh --profile contracts` — **SMOKE PASS / 640 passed + 5 subtests + 10 env-bound / 0 failed**
 - `py_compile` on both changed Python files — OK
 

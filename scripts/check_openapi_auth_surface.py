@@ -103,6 +103,51 @@ NON_ADMIN_PROTECTED = frozenset({
 })
 # pinned count: 48 non-admin protected, checked below
 
+_LITERAL_FLOOR_LINE = re.compile(
+    r"^NON_ADMIN_PROTECTED = frozenset\(\{$", re.MULTILINE
+)
+
+
+def _literal_floor_errors(source: str) -> list[str]:
+    """The floor must be a hand-written source literal, not a derived value.
+
+    Re-computing NON_ADMIN_PROTECTED from openapi.json is self-referential: a
+    co-revert that drops ``security`` and re-exports moves both halves together,
+    so every export==snapshot gate stays green. The companion pytest suite pins
+    this too, but no CI stage collects that suite -- a plain ``pytest scripts/``
+    run is a local hand-run. This check therefore lives in the guard's own
+    ``--self-test``, which ``smoke.sh`` invokes as a standalone gate.
+    """
+    match = _LITERAL_FLOOR_LINE.search(source)
+    if match is None:
+        return [
+            "NON_ADMIN_PROTECTED is not declared as a hand-written frozenset "
+            "literal in the guard source (a snapshot-derived floor is a tautology)"
+        ]
+    block = source[match.end():].split("\n})", 1)[0]
+    rows = [line for line in block.splitlines() if line.startswith('    ("/api/v1/')]
+    if len(rows) != len(NON_ADMIN_PROTECTED):
+        return [
+            f"the literal floor declares {len(rows)} source rows but the constant "
+            f"has {len(NON_ADMIN_PROTECTED)} entries"
+        ]
+    return []
+
+
+def _mutate_source(source: str, *, kind: str) -> str:
+    """Source-level ablations proving the literal pin itself has teeth."""
+    if kind == "derived_floor_source":
+        return source.replace(
+            "NON_ADMIN_PROTECTED = frozenset({",
+            "NON_ADMIN_PROTECTED = frozenset(\n"
+            "    (p, m) for p, m in _derived_from_snapshot()\n"
+            ")\n_OLD_LITERAL = frozenset({",
+            1,
+        )
+    if kind == "shrunken_floor_source":
+        return source.replace('    ("/api/v1/analyses", "get"),\n', "", 1)
+    raise ValueError(kind)
+
 
 def _operations(document: dict) -> list[tuple[str, str, dict]]:
     out = []
@@ -272,6 +317,8 @@ def _self_test() -> int:
     if clean:
         print("openapi-auth-surface: self-test setup is dirty: " + "; ".join(clean), file=sys.stderr)
         return 1
+    source = Path(__file__).read_text(encoding="utf-8")
+    source_cases = {"derived_floor_source", "shrunken_floor_source"}
     cases = [
         "drop_refresh_scheme",
         "retype_bearer",
@@ -283,11 +330,14 @@ def _self_test() -> int:
         "strip_non_admin_security",
         "drop_one_non_admin_security",
         "phantom_non_admin_security",
+        *sorted(source_cases),
     ]
-    problems = []
+    problems = [f"literal floor: {item}" for item in _literal_floor_errors(source)]
     for kind in cases:
-        mutant = _mutate(*base, kind=kind)
-        result = failures(*mutant)
+        if kind in source_cases:
+            result = _literal_floor_errors(_mutate_source(source, kind=kind))
+        else:
+            result = failures(*_mutate(*base, kind=kind))
         if not result:
             problems.append(f"{kind}: regression was NOT detected")
     if problems:
