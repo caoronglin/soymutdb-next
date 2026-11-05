@@ -109,6 +109,9 @@ REQUIRED_GUARD_CALLS: frozenset[str] = frozenset(
         "scripts/check_app_shell_assets.py",
         "scripts/check_visible_i18n.py",
         "scripts/check_nginx_security_headers.py",
+        "scripts/check_api_error_code_vocabulary.py",
+        "scripts/check_error_code_catalog.py",
+        "scripts/check_error_code_gate_wiring.py",
     }
 )
 
