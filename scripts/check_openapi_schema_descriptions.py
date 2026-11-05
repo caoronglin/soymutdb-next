@@ -76,6 +76,20 @@ A legitimate prose change must move the digest in the same commit as both
 artifacts and say why. Re-deriving the digest from the artifact under guard
 would make the pin self-referential.
 
+The component-property declaration order is the same genus one level up.
+``openapi-typescript`` prints a component's properties in the snapshot's
+insertion order, so the generated interface's field sequence is part of the
+published shape (IDE completion order, object key enumeration). Every landed
+digest on this surface walks *values* or *field sets*, never the positional
+``(component, index, field)`` triple: rotating two adjacent properties in both
+halves, with both provenance blob ids honestly re-pinned, keeps all twelve
+wired OpenAPI guards, their companion suites and the whole contracts layer
+``SMOKE PASS`` while two client-visible declarations silently swap. Two
+independent hand-written literals pin that order -- one over the snapshot
+rows, one over the generated component blocks -- so re-pinning either half
+alone cannot silence the other, and a one-sided edit is named by component
+and field.
+
 Usage:
     python3 scripts/check_openapi_schema_descriptions.py
 """
@@ -274,6 +288,35 @@ _CLIENT_TITLE_ROWS_DIGEST = (
 )
 _EXPECTED_CLIENT_TITLE_ROWS = 1952
 
+# Reviewed, hand-written fixed point on component-property declaration order.
+# sha256 of "\n".join(["soymutdb-component-property-order/v1"] +
+#   sorted(f"{component}|{index}|{field}")) over every direct ``properties``
+# entry of every component schema, in snapshot insertion order. Read from
+# nowhere -- regenerate with _digest_property_order() after an intentional,
+# reviewed reorder, in the same commit as both artifacts, with a reason.
+_PROPERTY_ORDER_DIGEST = (
+    "85ae9dc9832c6ba547fade07dad0eb7ce3f0a8d8673683da6b630371e09bd812"
+)
+_EXPECTED_PROPERTY_ORDER_ROWS = 2083
+_EXPECTED_PROPERTY_ORDER_SCHEMAS = 335
+
+# Second independent fixed point: the generated component blocks' own
+# (component, index, field) rows, in document order. A coordinated co-revert
+# moves this literal too; re-pinning only the snapshot digest cannot silence
+# it, and comparing the client against the snapshot under guard would be
+# self-referential on exactly that shape.
+_CLIENT_PROPERTY_ORDER_DIGEST = (
+    "759631f346cec56ae0cfd055a70360a51b7e1bedfc7ff6bb976b70ac56fd1e8a"
+)
+_EXPECTED_CLIENT_PROPERTY_ORDER_ROWS = 2083
+
+# A direct property declaration in a generated component block, at the one
+# indentation level the generator uses for top-level component fields. Nested
+# inline object fields are two levels deeper and are deliberately not read.
+_PROPERTY_DECL = re.compile(
+    r'^            (?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))\??:', re.M
+)
+
 
 def _first_plain_line(doc: str) -> str | None:
     for line in doc.splitlines():
@@ -307,6 +350,49 @@ def _digest_client_title_rows(rows_: list[tuple[str, str, str]]) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+def property_order_rows(document: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Canonical (component, index, field) rows in snapshot insertion order."""
+    out: list[tuple[str, str, str]] = []
+    for name, schema in document.get("components", {}).get("schemas", {}).items():
+        properties = schema.get("properties")
+        if isinstance(properties, dict):
+            for index, field in enumerate(properties):
+                out.append((name, str(index), field))
+    return out
+
+
+def client_property_order_rows(generated: str) -> list[tuple[str, str, str]]:
+    """Canonical (component, index, field) rows from generated blocks.
+
+    Only the ``components.schemas`` region is walked, so ``operations`` and
+    ``parameters`` sub-blocks (also 8-space indented) cannot be mistaken for
+    component definitions. The index is the property's position inside its
+    own block, which is what a caller sees in the emitted interface.
+    """
+    block = _COMPONENT_SCHEMAS.search(generated)
+    if block is None:
+        return []
+    out: list[tuple[str, str, str]] = []
+    for schema in _SCHEMA_BLOCK.finditer(block.group("body")):
+        for index, field in enumerate(_PROPERTY_DECL.finditer(schema.group("body"))):
+            out.append(
+                (schema.group("name"), str(index), field.group(1) or field.group(2))
+            )
+    return out
+
+
+def _digest_property_order(rows_: list[tuple[str, str, str]]) -> str:
+    canonical = sorted(f"{c}|{i}|{f}" for c, i, f in rows_)
+    blob = "\n".join(["soymutdb-component-property-order/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _digest_client_property_order(rows_: list[tuple[str, str, str]]) -> str:
+    canonical = sorted(f"{c}|{i}|{f}" for c, i, f in rows_)
+    blob = "\n".join(["soymutdb-client-component-property-order/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def failures(
     *,
     snapshot: str | None = None,
@@ -322,6 +408,11 @@ def failures(
     expected_client_title_rows: int | None = None,
     client_description_sequence_digest: str | None = None,
     expected_client_description_lines: int | None = None,
+    property_order_digest: str | None = None,
+    expected_property_order_rows: int | None = None,
+    expected_property_order_schemas: int | None = None,
+    client_property_order_digest: str | None = None,
+    expected_client_property_order_rows: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -336,6 +427,8 @@ def failures(
         titles_ = title_rows(document)
         client_title_lines = client_titles(generated)
         client_title_triples = client_title_rows(generated)
+        property_order = property_order_rows(document)
+        client_property_order = client_property_order_rows(generated)
     except (ValueError, TypeError) as exc:
         return [f"cannot read published schema descriptions: {exc}"]
 
@@ -536,6 +629,94 @@ def failures(
                 f"but the snapshot publishes {expected!r}"
             )
 
+    # Door 9 -- component-property declaration order. Every landed digest on
+    # this surface walks values or field sets, never the positional
+    # (component, index, field) triple. Rotating two adjacent properties in
+    # both halves (with the provenance blob ids honestly re-pinned) therefore
+    # kept the whole contracts layer green while two client-visible
+    # declarations swapped. Two independent literals pin the order, one per
+    # artifact half, so re-pinning one cannot silence the other.
+    pinned_order = (
+        _PROPERTY_ORDER_DIGEST
+        if property_order_digest is None
+        else property_order_digest
+    )
+    actual_order = _digest_property_order(property_order)
+    if actual_order != pinned_order:
+        found.append(
+            "published component property order drifted: _PROPERTY_ORDER_DIGEST "
+            f"pins {pinned_order} but the snapshot derives {actual_order}. "
+            "A fixed point is pinned against the artifact, not derived from it "
+            "-- re-pin the digest in the same commit as both artifacts, with a "
+            "reason."
+        )
+    pinned_order_rows = (
+        _EXPECTED_PROPERTY_ORDER_ROWS
+        if expected_property_order_rows is None
+        else expected_property_order_rows
+    )
+    pinned_order_schemas = (
+        _EXPECTED_PROPERTY_ORDER_SCHEMAS
+        if expected_property_order_schemas is None
+        else expected_property_order_schemas
+    )
+    if len(property_order) != pinned_order_rows:
+        found.append(
+            f"published component property row count is {len(property_order)}, "
+            f"_EXPECTED_PROPERTY_ORDER_ROWS pins {pinned_order_rows}: a property "
+            "was added or dropped without moving the fixed point"
+        )
+    order_schemas = {row[0] for row in property_order}
+    if len(order_schemas) != pinned_order_schemas:
+        found.append(
+            f"published component property order spans {len(order_schemas)} "
+            f"schemas, _EXPECTED_PROPERTY_ORDER_SCHEMAS pins "
+            f"{pinned_order_schemas}"
+        )
+
+    pinned_client_order = (
+        _CLIENT_PROPERTY_ORDER_DIGEST
+        if client_property_order_digest is None
+        else client_property_order_digest
+    )
+    actual_client_order = _digest_client_property_order(client_property_order)
+    if actual_client_order != pinned_client_order:
+        found.append(
+            "generated client component property order drifted: "
+            f"_CLIENT_PROPERTY_ORDER_DIGEST pins {pinned_client_order} but the "
+            f"client derives {actual_client_order}. The two digests must move "
+            "in the same commit as an intentional contract change; re-pinning "
+            "only the snapshot side leaves this door red."
+        )
+    pinned_client_order_rows = (
+        _EXPECTED_CLIENT_PROPERTY_ORDER_ROWS
+        if expected_client_property_order_rows is None
+        else expected_client_property_order_rows
+    )
+    if len(client_property_order) != pinned_client_order_rows:
+        found.append(
+            f"generated client component property row count is "
+            f"{len(client_property_order)}, "
+            f"_EXPECTED_CLIENT_PROPERTY_ORDER_ROWS pins "
+            f"{pinned_client_order_rows}"
+        )
+
+    # Named positional agreement: a one-sided reorder is reported by the
+    # component and field that moved, not only by a moved digest. Checked
+    # against the pinned snapshot rows, so a coordinated regenerate cannot
+    # pass by making both halves agree on the drifted order.
+    if property_order != client_property_order:
+        snap_map = {(c, i): f for c, i, f in property_order}
+        cli_map = {(c, i): f for c, i, f in client_property_order}
+        for key in sorted(set(snap_map) | set(cli_map)):
+            if snap_map.get(key) != cli_map.get(key):
+                found.append(
+                    f"generated client component property order disagrees at "
+                    f"{key[0]}[{key[1]}]: snapshot publishes "
+                    f"{snap_map.get(key)!r}, client prints {cli_map.get(key)!r}"
+                )
+                break
+
     return found
 
 
@@ -550,7 +731,8 @@ def main() -> int:
     print(
         f"openapi-schema-descriptions: OK ({_EXPECTED_ROWS} published "
         f"descriptions and {_EXPECTED_TITLE_ROWS} titles pinned across "
-        f"{_EXPECTED_SCHEMAS} / {_EXPECTED_TITLE_SCHEMAS} schemas)"
+        f"{_EXPECTED_SCHEMAS} / {_EXPECTED_TITLE_SCHEMAS} schemas, "
+        f"{_EXPECTED_PROPERTY_ORDER_ROWS} component property order rows pinned)"
     )
     return 0
 
