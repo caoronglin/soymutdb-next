@@ -47,6 +47,10 @@ halves and then "fixes" the numbers it broke -- is reported as the artifact
 having moved. ``_BODY_PAIR_DIGEST`` is the fourth literal: a permutation that
 preserves every count still changes the pair set, so it has its own pin.
 
+The snapshot's top-level ``tags`` catalog went from 6 to 50 entries in #205.
+That block is not a body: neither baseline count nor ``_BODY_PAIR_DIGEST`` moves
+with it, so only ``snapshot_blob`` follows the artifact.
+
 The generator prints response and request bodies as the same
 ``"application/json": components["schemas"][...];`` line, which is why the
 client total (807) exceeds the response-only count (722): the 85 request
@@ -339,7 +343,7 @@ _CLIENT_BODY_TOTAL = 807
 # these from the artifacts would make the pin self-referential again, which is
 # the whole failure this file replaced.
 _PINNED_ARTIFACTS = {
-    "snapshot_blob": "3660886cabc443fe574ffff6c65ee84132262009",
+    "snapshot_blob": "943b9463d9d180d4483936dfa7c81c5afb6e4753",
     "generated_blob": "5f2c4a407d96083abdac8ac67e44a40f3ed68a89",
 }
 
