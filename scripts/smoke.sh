@@ -103,6 +103,9 @@ smoke_contracts() {
   # runner: several suites need its `tmp_path` fixture, and a hand-rolled
   # fallback would silently skip exactly the isolation cases that matter.
   local tests=(
+    # PR #135 shipped this wiring suite but no gate collected it: deleting
+    # the parity guard's two invocations from verify-bio-core.sh stayed green.
+    scripts/test_bio_core_capability_parity_wiring.py
     scripts/test_deployment_workflows.py
     scripts/test_platform_delivery_contracts.py
     scripts/test_dependency_governance_contracts.py

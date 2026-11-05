@@ -632,6 +632,10 @@ class DeliveryArchitectureTests(unittest.TestCase):
         smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
         self.assertIn("check_bio_core_wheel.py --static", smoke)
         self.assertIn("check_bio_core_wheel.py --runtime", smoke)
+        # PR #135 landed scripts/test_bio_core_capability_parity_wiring.py but
+        # no gate collected it, so removing the parity guard's two invocations
+        # from verify-bio-core.sh stayed green. Pin the suite into the layer.
+        self.assertIn("test_bio_core_capability_parity_wiring.py", smoke)
         # The crate pins its own compiler; no second Rust version in the YAML.
         pin = (ROOT / "packages/bio-core/rust-toolchain.toml").read_text(encoding="utf-8")
         self.assertIn("channel", pin)
