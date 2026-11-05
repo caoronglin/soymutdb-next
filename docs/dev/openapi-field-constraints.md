@@ -82,3 +82,72 @@ companion in `tests=()`, and pinned in all three floors (unchanged by the
 `_SIGNATURES` + `_EVIDENCE_PER_CASE` (teeth). The teeth guard runs the
 `--self-test` as a real process and requires its pinned evidence; dropping any
 one of the five wiring lines fails closed.
+
+## Phase 2 — the published `examples` projection (door 5)
+
+`openapi.json` publishes 7 `examples` arrays on property schemas
+(`LoginRequest` × 3, `UserCreate` × 4). The generator renders each as a
+`* @example <value>` JSDoc tag in `openapi.d.ts`. That second half is **not** a
+defence: a coordinated regenerate that rewrites all 7 values in the snapshot
+*and* the 7 `@example` tags, then honestly re-pins both provenance blob ids,
+leaves every two-artifact check self-consistent.
+
+Decisive ablation on live `ebfa4c5f`: all 7 values rewritten in both halves +
+both blob ids re-pinned →
+
+| reader | result |
+| --- | --- |
+| 12 wired OpenAPI guards | all `rc=0` |
+| 12 OpenAPI `test_*` suites | 187 passed |
+| `smoke.sh --profile contracts` | SMOKE PASS / 922 + 5 + 10 / 0 |
+
+`_FIELD_CONSTRAINT_DIGEST` walks the scalar constraint/default keywords only;
+`examples` is a list-valued sibling and is not one of `_KEYS`. No operation
+digest descends into these property nodes. This column had **zero fixed
+points** — not "one guard with a weak signal", which is the sharper failure
+mode than a simple unread field.
+
+### The pin, and why it is a separate door
+
+- `_EXAMPLE_DIGEST` — a second hand-written sha256 over canonical sorted
+  `(path, index, value)` rows of every published `examples` array. Separate
+  from `_FIELD_CONSTRAINT_DIGEST` on purpose: folding ordered sample values
+  into the scalar-keyword digest would lose failure resolution (a dropped
+  `@example` tag would read as a constraint drift).
+- `_EXPECTED_EXAMPLES = 7` / `_EXPECTED_GENERATED_EXAMPLES = 7` — exact count
+  doors on both halves. The generated half uses a strict `^\s*\* @example `
+  marker: a `@description` block carrying `user@example.com` makes the naive
+  substring count **8**, and must not be inherited as an 8th tag.
+- `example_rows()` applies the same schema-marker rule as `rows()`: a field
+  literally named `examples` is not the keyword.
+
+Division of labour is pinned by positive controls, not asserted in prose:
+
+| ablation | fires |
+| --- | --- |
+| coordinated co-revert (both halves + blob re-pin) | `_EXAMPLE_DIGEST` only (1) |
+| same-count value swap | `_EXAMPLE_DIGEST` only; count doors silent |
+| one example dropped from the snapshot | digest + `_EXPECTED_EXAMPLES` |
+| one generated `@example` tag dropped | `_EXPECTED_GENERATED_EXAMPLES` only |
+| forged strict marker invented in prose | `_EXPECTED_GENERATED_EXAMPLES` only |
+
+Without the swap control, door 5 would be nothing but a count check wearing a
+digest-shaped coat. The complement — the real `@description` decoy line is
+*not* counted — is a clean-tree reverse invariant pinned from the companion
+suite, not an ablation.
+
+### Non-duplication, made testable
+
+- `_KEYS` still contains no `examples`; `_FIELD_CONSTRAINT_DIGEST` is unchanged
+  and still recomputes from the constraint rows alone.
+- `test_openapi_behavior_contracts.py` still reads `x-idempotent` /
+  `x-pagination`, and the operation digests still do not descend into property
+  `examples` — door 5 does not converge with any of them.
+- **Zero new wiring**: no `smoke.sh` / `check_contracts_registry_collection.py`
+  / `check_contracts_self_test_teeth.py` edit, no new guard file. Those three
+  are exactly where #272 / #273 / #281 collided while in flight. The teeth
+  `_SIGNATURES` regex is `\d+ cases` (count-independent), so the self-test
+  growing 8 → 14 plants needs no floor edit.
+
+Read data: `--self-test` 8 → 14 cases; companion suite 15 → 25 passed;
+`openapi.json` / `openapi.d.ts` byte-for-byte unchanged.

@@ -213,3 +213,162 @@ def test_the_wiring_is_pinned_in_all_three_places() -> None:
     assert "scripts/test_openapi_field_constraints.py" in SMOKE
     assert "scripts/test_openapi_field_constraints.py" in REGISTRY
     assert f"scripts/{guard.SELF}" in TEETH
+
+
+# ---------------------------------------------------------------------------
+# Door 5 -- the published ``examples`` projection.
+# ---------------------------------------------------------------------------
+
+
+def _example_doc(change) -> str:
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    change(document)
+    return json.dumps(document, indent=2)
+
+
+def _generated() -> str:
+    return guard._GENERATED.read_text(encoding="utf-8")
+
+
+def test_committed_examples_match_the_independent_literal() -> None:
+    """The literal is recomputable from committed bytes but not derived by it."""
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    rows_ = guard.example_rows(document)
+    assert len(rows_) == guard._EXPECTED_EXAMPLES == 7
+    assert guard._example_digest(rows_) == guard._EXAMPLE_DIGEST
+    # The digest is a module-level literal, not a call folded into failures().
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    assigned = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "_EXAMPLE_DIGEST"
+            for target in node.targets
+        )
+    ]
+    assert len(assigned) == 1
+    assert ast.literal_eval(assigned[0].value) == guard._EXAMPLE_DIGEST
+
+
+def test_examples_digest_is_separate_from_the_constraint_digest() -> None:
+    """A drift here must say 'examples', not 'field constraints'."""
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    assert "examples" not in guard._KEYS
+    assert guard._FIELD_CONSTRAINT_DIGEST != guard._EXAMPLE_DIGEST
+    # Non-duplication: the constraint digest is unchanged by this door.
+    assert guard._digest(guard.rows(document)) == guard._FIELD_CONSTRAINT_DIGEST
+
+
+def test_coordinated_examples_co_revert_is_caught_only_by_the_digest() -> None:
+    """The decisive drift: all 7 values rewritten in BOTH halves."""
+
+    def change(doc: dict) -> None:
+        for name in ("LoginRequest", "UserCreate"):
+            for prop in doc["components"]["schemas"][name]["properties"].values():
+                if isinstance(prop, dict) and isinstance(prop.get("examples"), list):
+                    prop["examples"] = [v + "X" for v in prop["examples"]]
+
+    gen = _generated()
+    for value in ("researcher@univ.edu", "S3cureP@ss!", "Jane Doe", "viewer"):
+        gen = gen.replace("@example " + value, "@example " + value + "X")
+    found = guard.failures(snapshot=_example_doc(change), generated=gen)
+    assert len(found) == 1, found
+    assert "_EXAMPLE_DIGEST" in found[0], found
+    assert "count" not in found[0].lower(), found
+
+
+def test_same_count_example_swap_is_caught_only_by_the_digest() -> None:
+    """A permutation must not be dismissed as a count check in disguise."""
+
+    def change(doc: dict) -> None:
+        props = doc["components"]["schemas"]["LoginRequest"]["properties"]
+        props["username"]["examples"], props["password"]["examples"] = (
+            props["password"]["examples"],
+            props["username"]["examples"],
+        )
+
+    found = guard.failures(snapshot=_example_doc(change))
+    assert len(found) == 1, found
+    assert "_EXAMPLE_DIGEST" in found[0], found
+    assert "count" not in found[0].lower(), found
+
+
+def test_a_dropped_snapshot_example_names_the_count_door() -> None:
+    def change(doc: dict) -> None:
+        doc["components"]["schemas"]["LoginRequest"]["properties"]["username"].pop(
+            "examples"
+        )
+
+    found = guard.failures(snapshot=_example_doc(change))
+    assert any("_EXPECTED_EXAMPLES pins 7" in problem for problem in found), found
+
+
+def test_a_dropped_generated_tag_names_only_the_generated_count_door() -> None:
+    gen = _generated().replace(
+        "             * @example researcher@univ.edu\n", "", 1
+    )
+    found = guard.failures(
+        snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
+        generated=gen,
+    )
+    assert len(found) == 1, found
+    assert "_EXPECTED_GENERATED_EXAMPLES pins 7" in found[0], found
+    assert "_EXAMPLE_DIGEST" not in found[0], found
+
+
+def test_the_description_decoy_is_not_counted_as_an_example() -> None:
+    """``user@example.com`` lives in a @description block, not an @example tag."""
+    gen = _generated()
+    # The decoy line carries the substring but no strict JSDoc marker.
+    decoy = next(line for line in gen.splitlines() if "user@example.com" in line)
+    assert "@example" in decoy
+    assert guard._GENERATED_EXAMPLE.search(decoy) is None
+    assert len(guard.generated_examples(gen)) == 7
+    # A naive substring scan counts 8; the strict marker must not inherit it.
+    assert sum("@example" in line for line in gen.splitlines()) == 8
+    assert not guard.failures()
+
+
+def test_examples_repin_in_the_same_commit_stays_green() -> None:
+    """A reviewed regenerate re-pins the example literal with the artifact."""
+
+    def change(doc: dict) -> None:
+        for name in ("LoginRequest", "UserCreate"):
+            for prop in doc["components"]["schemas"][name]["properties"].values():
+                if isinstance(prop, dict) and isinstance(prop.get("examples"), list):
+                    prop["examples"] = [v + "X" for v in prop["examples"]]
+
+    snapshot = _example_doc(change)
+    gen = _generated()
+    for value in ("researcher@univ.edu", "S3cureP@ss!", "Jane Doe", "viewer"):
+        gen = gen.replace("@example " + value, "@example " + value + "X")
+    new_digest = guard._example_digest(guard.example_rows(json.loads(snapshot)))
+    assert new_digest != guard._EXAMPLE_DIGEST
+    assert not guard.failures(
+        snapshot=snapshot, generated=gen, example_digest=new_digest
+    )
+
+
+def test_door_five_self_test_plants_are_registered() -> None:
+    """From a second file: the ablations exist and the clean control is green."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "example_cases" in source
+    for name in (
+        "coordinated examples co-revert",
+        "same-count example swap",
+        "one-sided example dropped",
+        "one-sided example added",
+        "one-sided generated tag dropped",
+        "forged generated tag invented",
+    ):
+        assert name in source, name
+
+
+def test_zero_new_wiring_for_door_five() -> None:
+    """The hot files #272/#273/#281 crashed into are deliberately untouched."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "_EXAMPLE_DIGEST" in source
+    # No new guard file: door 5 lives in an already-registered guard.
+    assert not (ROOT / "scripts" / "check_openapi_published_examples.py").exists()
