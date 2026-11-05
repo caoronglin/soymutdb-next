@@ -52,11 +52,12 @@ MUTATION_MUTATOR = "source_wiring_mutated_in_place"
 UNCOMPILABLE_LABEL = "create_app does not compile under symtable"
 UNRUNNABLE_LABEL = "create_app would not run (compiler rejects it)"
 TAG_ASSIGNMENT_LABEL = "operation tag assignment permuted"
+INFO_SHAPE_LABEL = "phantom info key added"
 REQUIRED_ABLATIONS = frozenset(
     (DECOY_LABEL, SHADOW_LABEL, MUTATION_LABEL, UNCOMPILABLE_LABEL,
-     TAG_ASSIGNMENT_LABEL)
+     TAG_ASSIGNMENT_LABEL, INFO_SHAPE_LABEL)
 )
-EXPECTED_ABLATIONS = 28
+EXPECTED_ABLATIONS = 29
 
 
 def _guard(path: Path = GUARD):
@@ -366,8 +367,27 @@ def _regressed_guard_source() -> str:
     )
     assert tag_assignment_block in source, "tag assignment ablation not found"
     source = source.replace(tag_assignment_block, "", 1)
-    # The regressed guard predates the tag-assignment fixed point. Strip the
-    # check so its self-test stays green at the historical 22- ablation count.
+    info_shape_block = (
+        "        (\n"
+        '            "phantom info key added",\n'
+        "            edit_snapshot(invented_info_key),\n"
+        '            "published info key set drifted",\n'
+        "        ),\n"
+    )
+    assert info_shape_block in source, "info-shape ablation not found"
+    source = source.replace(info_shape_block, "", 1)
+    # The regressed guard predates the tag-assignment fixed point AND the
+    # published ``info`` shape door. Strip both, so the regression really is
+    # the historical one and its count really is the historical 22 instead of
+    # being propped up by newer cases (which is exactly the vacuity this
+    # test exists to catch).
+    info_shape_check = source.find(
+        "    # 0. Published ``info`` SHAPE. The golden lock below compares"
+    )
+    if info_shape_check >= 0:
+        info_shape_end = source.find("    # 1. Published == golden.", info_shape_check)
+        assert info_shape_end > info_shape_check
+        source = source[:info_shape_check] + source[info_shape_end:]
     start = source.find("    # 7. The operation -> tag assignment is a fixed point")
     if start >= 0:
         end = source.find("    return found", start)
@@ -565,3 +585,145 @@ def test_operation_tag_assignment_is_an_independent_literal() -> None:
     # A legitimate same-commit re-pin (snapshot + literal moved together) is
     # green on the same bytes.
     assert not guard.failures(*parts, tag_digest=moved)
+
+
+def test_published_info_shape_is_an_independent_literal() -> None:
+    """The four golden VALUES cannot see a fifth ``info`` key.
+
+    Reproduce the fail-open cell on committed bytes: inject a client-visible
+    ``license`` key with the four reviewed values untouched. The old guard
+    (byte lock + source lock + generated-half absence) is GREEN on that tree;
+    the committed guard is RED and names the shape. Then strip the shape door
+    from an in-memory copy and prove the ablation goes back to GREEN -- the
+    door, not the rest of the guard, is what catches it. Finally pin that the
+    literal is hand-written in the guard source, so a single-file edit cannot
+    delete both the door and its own evidence.
+    """
+    guard = _guard()
+    snapshot, generated, golden, main, config, smoke, routers = guard._load()
+    document = json.loads(snapshot)
+    document["info"]["license"] = {"name": "CC0-1.0", "url": "https://example.invalid"}
+    drifted = json.dumps(document, ensure_ascii=False)
+
+    # The four locked values are untouched by construction: no golden, source
+    # or generated-half check can fire. Only the shape door can.
+    found = guard.failures(
+        drifted, generated, golden, main, config, smoke, routers
+    )
+    assert any("published info key set drifted" in item for item in found), found
+    assert not any("no longer matches the golden lock" in item for item in found), found
+
+    # Strip ONLY the shape door and prove the drifted tree goes green again.
+    source = GUARD.read_text(encoding="utf-8")
+    door = (
+        "        actual_info_keys = frozenset(info)\n"
+        "        if actual_info_keys != _INFO_KEYS:\n"
+    )
+    assert door in source, "shape door not found in committed guard source"
+    stripped = source.replace(door, "        if False:\n", 1)
+    assert stripped != source
+    # The count door independently sees the same drift, so it has to come out
+    # too: otherwise "strip the set door" still fails, just from the other
+    # door, and this assertion would be measuring the wrong thing.
+    count_door = (
+        "        if len(info) != _EXPECTED_INFO_KEYS:\n"
+        "            found.append(\n"
+        "                f\"openapi.json info carries {len(info)} key(s), \"\n"
+        "                f\"_EXPECTED_INFO_KEYS pins {_EXPECTED_INFO_KEYS}: a key was \"\n"
+        "                \"added or dropped without moving the fixed point\"\n"
+        "            )\n"
+    )
+    assert count_door in source, "count door not found in committed guard source"
+    stripped = stripped.replace(count_door, "", 1)
+    with tempfile.TemporaryDirectory() as tmp:
+        stripped_path = Path(tmp) / "check_openapi_document_metadata.py"
+        stripped_path.write_text(
+            stripped.replace(
+                "ROOT = Path(__file__).resolve().parents[1]",
+                f"ROOT = Path({str(Path(__file__).resolve().parents[1])!r})",
+            ),
+            encoding="utf-8",
+        )
+        stripped_guard = _guard(stripped_path)
+        assert stripped_guard.failures(
+            drifted, generated, golden, main, config, smoke, routers
+        ) == [], "shape door is not the thing catching the phantom info key"
+
+    # The literal is a module-level frozenset in the guard source, and the
+    # self-test case is driven by its named mutator, not a same-named no-op.
+    # A derived expectation (recompute the set from the info object under
+    # guard) plus a re-pinned count door is the self-agreeing failure this
+    # whole guard family exists to kill. Prove the companion's source-literal
+    # pin is what stops it: the regressed guard is GREEN on the drifted tree.
+    derived = source.replace(
+        "        actual_info_keys = frozenset(info)\n"
+        "        if actual_info_keys != _INFO_KEYS:",
+        "        actual_info_keys = frozenset(info)\n"
+        "        if actual_info_keys != frozenset(info):",
+        1,
+    ).replace("_EXPECTED_INFO_KEYS = 3", "_EXPECTED_INFO_KEYS = 4", 1)
+    assert derived != source
+    with tempfile.TemporaryDirectory() as tmp:
+        derived_path = Path(tmp) / "check_openapi_document_metadata.py"
+        derived_path.write_text(
+            derived.replace(
+                "ROOT = Path(__file__).resolve().parents[1]",
+                f"ROOT = Path({str(Path(__file__).resolve().parents[1])!r})",
+            ),
+            encoding="utf-8",
+        )
+        assert _guard(derived_path).failures(
+            drifted, generated, golden, main, config, smoke, routers
+        ) == [], "a derived expectation with a re-pinned count would be vacuous"
+
+    assert "_INFO_KEYS = frozenset(" in source
+    assert "_EXPECTED_INFO_KEYS = 3" in source
+    assert "invented_info_key" in source
+    _problems, ablations, _positives, labels = guard.self_test()
+    assert ablations == EXPECTED_ABLATIONS
+    assert INFO_SHAPE_LABEL in labels
+
+
+def test_info_shape_positive_control_stays_green() -> None:
+    """A reviewed metadata change re-pins the literal in the same commit.
+
+    The golden lock is a *value* lock; the shape literal is a second, separate
+    authority. Prove they are orthogonal: blessing a new ``info`` key in the
+    golden file alone (the four values still match, the shape literal does not)
+    must stay RED, while re-pinning both the shape set and the count door to
+    the new reviewed shape must go GREEN. That is the one deliberate reviewed
+    act a legitimate metadata change performs.
+    """
+    guard = _guard()
+    snapshot, generated, golden, main, config, smoke, routers = guard._load()
+    document = json.loads(snapshot)
+    document["info"]["contact"] = {"name": "SoyMutDB maintainers"}
+    drifted = json.dumps(document, ensure_ascii=False)
+    blessed_golden = json.dumps(json.loads(golden) | {"contact": "maintainers"}, ensure_ascii=False)
+
+    # Golden-only blessing is NOT enough: the byte lock agrees, the shape does not.
+    found = guard.failures(
+        drifted, generated, blessed_golden, main, config, smoke, routers
+    )
+    assert any("published info key set drifted" in item for item in found), found
+
+    # Both literals re-pinned to the new reviewed shape: clean.
+    source = GUARD.read_text(encoding="utf-8")
+    re_pinned = source.replace(
+        '_INFO_KEYS = frozenset({"title", "version", "description"})',
+        '_INFO_KEYS = frozenset({"title", "version", "description", "contact"})',
+        1,
+    ).replace("_EXPECTED_INFO_KEYS = 3", "_EXPECTED_INFO_KEYS = 4", 1)
+    assert re_pinned != source
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "check_openapi_document_metadata.py"
+        path.write_text(
+            re_pinned.replace(
+                "ROOT = Path(__file__).resolve().parents[1]",
+                f"ROOT = Path({str(Path(__file__).resolve().parents[1])!r})",
+            ),
+            encoding="utf-8",
+        )
+        assert _guard(path).failures(
+            drifted, generated, blessed_golden, main, config, smoke, routers
+        ) == [], "re-pinning both literals should stay green"
