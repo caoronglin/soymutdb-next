@@ -783,9 +783,39 @@ def test_every_schema_object_carries_the_snapshot_key_order() -> None:
     # omits, and ``_wrong_order`` below judges a keyword's position solely
     # against the table -- so for a key the table does not list, the value
     # survives and the order check reads "canonical" whether it is or not.
-    # The two error schemas are what make this check bite for ``$defs`` today;
-    # a ``$defs`` mounted somewhere the scan does not reach (a ``$ref`` alias,
-    # a nested schema) would not appear in ``unlisted`` at all.
+    # The two error schemas are what make this check bite for ``$defs`` today,
+    # and the reach of that safety net is worth stating: ``unlisted`` reads the
+    # keys of ``components.schemas`` entries that carry ``properties``, and
+    # nothing below them. The snapshot also holds 27 schemas that never reach
+    # it -- leaves spelled ``{enum, title, type}`` plus ``description``, no
+    # combinators -- so the scan is one level deep and partial, not exhaustive.
+    #
+    # Read the count carefully: it is a measurement of one tree, not a
+    # statement about the guard. Two error schemas carry ``$defs`` today, which
+    # is what makes the check bite; the assertion fires while some schema still
+    # *prints* a keyword the table omits, not while the number of such schemas
+    # falls. Four states, measured on this snapshot:
+    #
+    #   carriers intact + table lists  $defs -> set()       green
+    #   carriers intact + table lacks  $defs -> {'$defs'}   RED
+    #   carriers stripped + table lists $defs -> set()      green
+    #   carriers stripped + table lacks $defs -> set()      green
+    #
+    # So dropping the table entry reddens the check only while a carrier still
+    # remains. Clear the carriers as well and the coverage is zero with nothing
+    # red -- the failure mode is real, but it is "no schema prints it any more",
+    # not "the count fell to zero".
+    #
+    # ``additionalProperties`` is not an example of that reach. It is a *member*
+    # of ``_OBJECT_KEY_ORDER``, so it cannot appear in ``unlisted`` wherever it
+    # is mounted -- renaming ``$defs`` to it would come back green for a reason
+    # unrelated to the scan. Only a keyword outside the table carries evidence:
+    # move ``$defs`` into a property object's schema instead.
+    #
+    # What the reach does *not* cover, and never did: the contents of a
+    # definition. Changing ``ErrorResponse.$defs.ErrorDetail.type`` from
+    # ``object`` to ``string`` leaves ``_loses_keys``, ``_wrong_order`` and this
+    # assertion all green. Coverage here is of keyword *names*.
     schemas = _document().get("components", {}).get("schemas", {})
     unlisted = {
         keyword
