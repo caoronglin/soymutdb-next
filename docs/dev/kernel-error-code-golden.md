@@ -79,3 +79,26 @@ python3 -m unittest discover -s packages/bio-core/python_tests -p 'test_kernel_e
 字段、不冻结客户端 TS 联合类型。若将来要把它发布成 `packages/api-client` 的
 `details.code` 联合类型，那是另一个 phase：本刀提供的是可被那种生成器消费的
 独立锚点，不是生成器本身。
+
+## 本轮 CI 的真实状态（不是判据转红）
+
+`verify` 流水线（`cnb-i0m-1k6kr0ilc`）在 `Prepare` 阶段就结束了，八个验证 stage
+全部 `skipped`（0ms），没有任何门禁运行：
+
+```
+Pipeline prepare error: Root Group's events CPU core-hours are insufficient
+for pre-freezing (Freezing time: 10.00 min, equivalent to 2.67 core-hours).
+Contact the root group administrator to extend.
+```
+
+`2.67 核时 = 16 cpus × 10 min / 60`，来自 `.cnb.yml` 的 `runner.cpus: 16`——
+本 PR 未改该文件（只新增 4 个文件）。同一时间窗内 #160、#163 等无关 PR 的
+`verify` 以**完全相同**的 Prepare 报错结束，属于根组织云原生构建 CPU 配额耗尽，
+不是本轮改动引起，也无法在仓库里修：本分支没有 `api_trigger` 配置，自动重跑
+不可用；上调配额后重跑即可。这与 #160 同日同因的处理一致。
+
+所以「预期 / 实跑证据」全部来自本机，**没有一条是 CI 代签的**：这既不是判据
+转红，也不能读成绿灯。本机只读项：`--self-test` 16/16、回归 6 例 OK、
+`check_bio_core_wheel.py --static` OK、`test_ci_job_contracts.py` 92 OK、
+`check-toolchain-pins` OK、`py_compile` / `json.tool` / `git diff --check` 全清。
+CI 终态以平台为准。
