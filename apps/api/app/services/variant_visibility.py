@@ -6,26 +6,75 @@ Neither public path gains private access merely because a caller is signed in.
 """
 from __future__ import annotations
 
-from sqlalchemy import and_, or_, select
+from typing import Any
+
+from sqlalchemy import Table, and_, column, exists, literal, or_, select, table
+from sqlalchemy.sql import ColumnElement
 
 from ..models.content import Release, ReleaseStatus
 from ..models.variant import MutantLine, VariantSummary
+from ..models.variant_facts import variant_facts
 
-# Only fixed SQL identifiers appear here. No caller-provided identifiers/values.
-# EXISTS keeps pages/counts stable even if historical names are not unique.
-PUBLIC_FACT_VISIBILITY = """(
-    EXISTS (SELECT 1 FROM releases public_release
-            WHERE public_release.id = variant_facts.release_id
-              AND public_release.status = 'published')
-    AND (variant_facts.mutant_line_name = '' OR EXISTS (
-        SELECT 1 FROM mutant_lines public_mutant
-        WHERE public_mutant.release_id = variant_facts.release_id
-          AND public_mutant.name = variant_facts.mutant_line_name
-          AND public_mutant.is_public = true
-          AND public_mutant.is_deleted = false
-          AND public_mutant.public_id IS NOT NULL
-    ))
-)"""
+# ``releases.status`` is a native enum column (``release_status_enum``). Bind
+# the literal with that column's own type: a plain string parameter renders as
+# VARCHAR and PostgreSQL refuses ``release_status_enum = character varying``.
+_RELEASE_STATUS_TYPE = Release.status.type
+
+# ``variant_facts`` visibility: the fact must belong to a published release and
+# either name no mutant line or name one that is public, undeleted and has a
+# public id *in the same release*. It is a SQLAlchemy expression, so a caller
+# composes it with ``&`` and can never append SQL text of its own; the tables
+# are fixed aliases below, never names derived from caller input.
+_FACT_RELEASES = table("releases", column("id"), column("status"))
+_FACT_MUTANT_LINES = table(
+    "mutant_lines",
+    column("release_id"),
+    column("name"),
+    column("is_public"),
+    column("is_deleted"),
+    column("public_id"),
+)
+
+
+def _published_release(fact):
+    return exists(
+        select(literal(1)).where(
+            _FACT_RELEASES.c.id == fact.c.release_id,
+            _FACT_RELEASES.c.status
+            == literal(ReleaseStatus.PUBLISHED.value, _RELEASE_STATUS_TYPE),
+        )
+    )
+
+
+def _public_mutant_line(fact):
+    # EXISTS keeps pages/counts stable even if historical names are not unique.
+    return or_(
+        fact.c.mutant_line_name == "",
+        exists(
+            select(literal(1)).where(
+                _FACT_MUTANT_LINES.c.release_id == fact.c.release_id,
+                _FACT_MUTANT_LINES.c.name == fact.c.mutant_line_name,
+                _FACT_MUTANT_LINES.c.is_public.is_(True),
+                _FACT_MUTANT_LINES.c.is_deleted.is_(False),
+                _FACT_MUTANT_LINES.c.public_id.is_not(None),
+            )
+        ),
+    )
+
+
+def variant_fact_visibility(
+    fact: Table | None = None,
+) -> ColumnElement[Any]:
+    """Public visibility of ``variant_facts`` rows (expression form).
+
+    ``fact`` is a table construct named in code, never by a caller: callers pass
+    the alias they are already selecting from. The default is the ORM table.
+    """
+    surface = fact if fact is not None else variant_facts
+    return and_(_published_release(surface), _public_mutant_line(surface))
+
+
+PUBLIC_FACT_VISIBILITY = variant_fact_visibility()
 
 
 def public_mutant_visibility():

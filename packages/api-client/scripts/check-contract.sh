@@ -14,6 +14,12 @@ API_PYTHON="${SOYMUTDB_API_PYTHON:-$API_DIR/.venv/bin/python}"
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+# Before paying for an export: does the committed snapshot look like something
+# the export could have written? A hand-edited field spelling (a dropped
+# `title`) is otherwise reported below as backend drift the backend never made,
+# which is what reddened PR #102 for AlleleFreqVariant/LdVariant.
+python3 "$PKG_DIR/scripts/check_snapshot_spelling.py" "$PKG_DIR/openapi.json"
+
 echo ">> exporting OpenAPI from backend..."
 export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 "$API_PYTHON" "$PKG_DIR/scripts/export_contract.py" \
