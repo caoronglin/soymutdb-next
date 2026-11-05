@@ -73,8 +73,10 @@ fn reverse_complement(
     // Releases the GIL for the pure-CPU part; no Python objects are touched.
     let out = py.detach(|| sequence::reverse_complement(sequence.as_bytes(), a, preserve_case));
     let bytes = out.or_else(raise)?;
-    String::from_utf8(bytes)
-        .map_err(|_| BioCoreException::new_err(("INVALID_CHARACTER", "invalid utf-8")))
+    // The kernel only emits ASCII, so this branch is defensive. It must still
+    // raise through errors.rs, not a second literal sentence for the same code:
+    // one code carries exactly one message across the FFI boundary.
+    String::from_utf8(bytes).or_else(|_| raise(BioCoreError::InvalidCharacter))
 }
 
 #[pyfunction]

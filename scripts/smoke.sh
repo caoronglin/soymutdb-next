@@ -122,6 +122,10 @@ smoke_contracts() {
     scripts/test_kubernetes_delivery_contracts.py
     scripts/test_backup_restore_contracts.py
     scripts/test_native_backup_runtime.py
+    # One code = one sentence across the FFI boundary; guards read committed
+    # Rust bytes, so no wheel or Rust toolchain is needed.
+    scripts/test_kernel_error_messages.py
+    scripts/test_kernel_error_messages_wiring.py
     scripts/test_ci_job_contracts.py
     # A stale-base branch carried an older variants row key AND the shorter
     # test file that matches it: vitest stayed green (2/2) and no contract gate

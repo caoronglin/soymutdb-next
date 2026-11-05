@@ -81,6 +81,14 @@ step "Rust kernel ↔ advertised capability parity"
 "${PY}" scripts/check_bio_core_capability_parity.py --self-test
 "${PY}" scripts/check_bio_core_capability_parity.py
 
+step "Kernel error-message contract (FFI exceptions come from errors.rs)"
+# BioCoreException is the public boundary: args[0] is a machine code clients
+# key on, args[1] the human sentence. errors.rs owns that mapping; a hand-built
+# exception in bindings.rs once gave INVALID_CHARACTER a different sentence.
+# Read the Rust bytes before the build, and prove the guard is load-bearing.
+"${PY}" scripts/check_kernel_error_messages.py --self-test
+"${PY}" scripts/check_kernel_error_messages.py
+
 step "Lock file consistency"
 # --locked makes an uncommitted dependency resolution a hard failure.
 (cd "${CRATE_DIR}" && cargo metadata --locked --format-version 1 >/dev/null)
