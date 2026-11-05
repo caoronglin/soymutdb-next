@@ -176,11 +176,29 @@ def ledger_failures(text: str) -> list[str]:
     and marks unobserved ones as pending rather than inventing a value.
     """
     failures: list[str] = []
+    rows: dict[str, list[str]] = {}
+    for line in text.splitlines():
+        if not line.startswith("|"):
+            continue
+        cells = [cell.strip().strip("`") for cell in line.strip().strip("|").split("|")]
+        if len(cells) >= 3 and cells[0] in MACHINES:
+            rows[cells[0]] = cells
     for arch, machine in MACHINES.items():
-        if not re.search(rf"^\|\s*`{arch}`\s*\|", text, flags=re.MULTILINE):
+        row = rows.get(arch)
+        if row is None:
             failures.append(f"ledger has no row for {arch}")
-        if f"_{machine}" not in text:
-            failures.append(f"ledger never names the {arch} machine token {machine!r}")
+            continue
+        # The row itself must name its machine. A global `_{machine}` check
+        # passes when the token survives elsewhere (e.g. the expected-tag
+        # column) while the machine column says something else entirely.
+        if machine not in row:
+            failures.append(f"ledger {arch} row does not name its machine {machine!r}")
+        if row[1] != machine:
+            failures.append(
+                f"ledger {arch} machine column is {row[1]!r}, expected {machine!r}"
+            )
+        if f"_{machine}" not in row[2]:
+            failures.append(f"ledger {arch} expected tag does not name {machine!r}")
     if CPYTHON_TAG not in text:
         failures.append(f"ledger does not record the {CPYTHON_TAG} tag")
     for marker in ("PEP 425", "PEP 600", "pending"):

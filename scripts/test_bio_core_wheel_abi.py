@@ -90,6 +90,38 @@ def test_ledger_without_pending_marker_is_rejected() -> None:
     assert any("pending" in f for f in guard.ledger_failures(text.replace("pending", "done")))
 
 
+def test_ledger_row_machine_column_is_checked_per_arch() -> None:
+    """A token surviving elsewhere in the text must not vouch for its row.
+
+    The old check asked whether `_{machine}` appeared anywhere in the ledger,
+    so flipping ONLY the arm64 machine column to x86_64 stayed green while the
+    expected-tag column still said aarch64. Each row now has to name its own
+    machine in both the machine cell and the expected-tag cell.
+    """
+    text = (guard.ROOT / "docs/dev/bio-core-wheel-abi-tags.md").read_text(encoding="utf-8")
+    assert guard.ledger_failures(text) == []
+    broken = text.replace("| `arm64` | `aarch64` |", "| `arm64` | `x86_64` |", 1)
+    failures = guard.ledger_failures(broken)
+    assert any("machine column" in f for f in failures), failures
+    assert any("does not name its machine" in f for f in failures), failures
+
+
+def test_ledger_row_expected_tag_is_checked_per_arch() -> None:
+    text = (guard.ROOT / "docs/dev/bio-core-wheel-abi-tags.md").read_text(encoding="utf-8")
+    broken = text.replace(
+        "manylinux_<major>_<minor>_aarch64", "manylinux_<major>_<minor>_x86_64", 1
+    )
+    failures = guard.ledger_failures(broken)
+    assert any("expected tag" in f for f in failures), failures
+
+
+def test_ledger_amd64_row_machine_column_is_checked_too() -> None:
+    text = (guard.ROOT / "docs/dev/bio-core-wheel-abi-tags.md").read_text(encoding="utf-8")
+    broken = text.replace("| `amd64` | `x86_64` |", "| `amd64` | `aarch64` |", 1)
+    failures = guard.ledger_failures(broken)
+    assert any("amd64 machine column" in f for f in failures), failures
+
+
 def _shared_script_names() -> list[str]:
     """The canonical shared-script list, read from the contract suite.
 
