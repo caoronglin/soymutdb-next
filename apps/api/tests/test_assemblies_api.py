@@ -34,6 +34,24 @@ V5_GENES = 2
 V5_TRANSCRIPTS = 2
 V5_CHROMOSOMES = (("chr01", 4_000),)
 
+# Fake release counters are not round numbers. The old fixture used
+# ``999`` / ``888`` / ``777`` and then substring-scanned the whole serialised
+# body for them, so unrelated digits matched too: a microsecond timestamp
+# (``...26.888379Z``) failed the run on CI while the endpoint was correct.
+# These values are wide enough that no timestamp, id, or count below can
+# contain them.
+_COUNTER_VALUES = {
+    "gene_count": 999_001,
+    "variant_count": 888_002,
+    "mutant_line_count": 777_003,
+}
+
+
+def _assert_counters_absent(text: str, release: Release) -> None:
+    for field, expected in _COUNTER_VALUES.items():
+        assert getattr(release, field) == expected
+        assert str(expected) not in text, f"{field}={expected} leaked from the release row"
+
 
 async def _seed_release(db_session, token: str) -> tuple[Release, Assembly, Assembly]:
     """One published release, two assemblies, deliberately unequal contents."""
@@ -42,9 +60,7 @@ async def _seed_release(db_session, token: str) -> tuple[Release, Assembly, Asse
         name="assemblies fixture",
         status=ReleaseStatus.PUBLISHED,
         # Wrong-on-purpose counters. Nothing may read them.
-        gene_count=999,
-        variant_count=888,
-        mutant_line_count=777,
+        **_COUNTER_VALUES,
     )
     db_session.add(release)
     await db_session.flush()
@@ -179,19 +195,18 @@ async def test_list_reports_each_assembly_own_counts(assembly_fixture, client):
 async def test_release_counters_are_never_read(assembly_fixture, client):
     """The denormalised ``Release.*_count`` values must not appear anywhere.
 
-    They are 999/888/777 in the fixture and no assembly contains that many
+    They are six-digit fakes in the fixture and no assembly contains that many
     rows, so any appearance is a copied release total.
     """
     release, _v4, _v5 = assembly_fixture
     listing = await client.get(ASSEMBLIES, params={"release_id": release.id})
     assert listing.status_code == 200
-    assert "999" not in listing.text
-    assert "888" not in listing.text
-    assert "777" not in listing.text
+    _assert_counters_absent(listing.text, release)
 
     for slug in {row["id"] for row in listing.json()}:
         detail = await client.get(f"{ASSEMBLIES}/{slug}", params={"release_id": release.id})
         assert detail.status_code == 200
+        _assert_counters_absent(detail.text, release)
         assert detail.json()["statistics"]["gene_count"]["value"] != release.gene_count
 
 

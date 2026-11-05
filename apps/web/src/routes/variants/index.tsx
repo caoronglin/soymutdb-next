@@ -66,6 +66,14 @@ export const Route = createFileRoute("/variants/")({
 
 const PAGE_SIZE = 25;
 
+/**
+ * Row identity for this table only: the variant id paired with the assembly the
+ * row was read from. The id is release-scoped, not canonical, and the assembly
+ * is nullable, so the pair is serialized rather than joined by a separator —
+ * a `""` fallback or a ":" join could fold two different rows onto one key.
+ */
+const rowKey = (row: VariantSummary) => JSON.stringify([row.variant_id, row.assembly ?? null]);
+
 function VariantsComponent() {
   const { t } = useTranslation();
   const { get } = useSiteContent();
@@ -399,25 +407,17 @@ function VariantsComponent() {
                   {`${t("search.releaseLabel")}: ${releaseId}`}
                 </Typography.Text>
               ) : null}
-              {/* `variant_id` is release-scoped, not canonical: the same number
-              can name another record in another release, and the identifier
-              column already prints it. Keying on it alone would let a
-              cross-release or cross-assembly page collide and have React
-              silently reuse a row. This is row stability for this page only;
-              canonical identity is a separate, larger job.
-
-              The assembly is appended as a serialized part rather than through
-              a separator: `assembly` is nullable, and an empty string is a
-              distinct value from an absent one. A `?? ""` fallback folds both
-              into the same key, and since keys are strings, `["a","b"]` joined
-              by ":" could also spell a neighbour's key. `JSON.stringify` keeps
-              `null` and `""` apart.
-
-              A wide result table must stay readable on a phone: the table takes
-              its natural width and the region scrolls sideways instead of
-              squeezing the identifier column into an unreadable stub. */}
+              {/* Row key: the variant id is release-scoped, not canonical (the same number
+                  can name another record in another release, and the identifier column
+                  already prints it), so it is paired with the row's own assembly. A
+                  serialized tuple keeps that unambiguous: the assembly is nullable, so a
+                  separator or a "" fallback could fold two different rows onto one key.
+                  This is row stability for this page only; canonical identity is a
+                  separate, larger job. A wide result table must stay readable on a
+                  phone too: the region scrolls sideways instead of squeezing the
+                  identifier column into an unreadable stub. */}
               <Table<VariantSummary>
-                rowKey={(row) => JSON.stringify([row.variant_id, row.assembly ?? null])}
+                rowKey={rowKey}
                 onRow={() =>
                   ({ "data-testid": "variant-row" }) as React.HTMLAttributes<HTMLElement>
                 }
