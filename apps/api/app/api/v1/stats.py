@@ -62,7 +62,11 @@ from ...services.release_context import (
     get_release_context,
     resolve_release_context,
 )
-from ...services.variant_visibility import public_mutant_visibility, public_summary_visibility
+from ...services.variant_visibility import (
+    public_mutant_visibility,
+    public_summary_visibility,
+    summary_assembly_consistency,
+)
 
 logger = get_logger(__name__)
 
@@ -97,8 +101,13 @@ async def _variant_type_counts_from_pg(
     or any SQL expression that resolves to one (see ``_release_scope``);
     public callers must pass it, otherwise the aggregate spans every release.
     """
+    # Count cross-assembly rows out with FILTER, not WHERE: the statement must
+    # still scan one ``variant_summaries`` claim, only stop adding these rows.
     stmt = (
-        select(VariantSummary.variant_type, func.count())
+        select(
+            VariantSummary.variant_type,
+            func.count().filter(summary_assembly_consistency()),
+        )
         .where(public_summary_visibility())
         .group_by(VariantSummary.variant_type)
     )
