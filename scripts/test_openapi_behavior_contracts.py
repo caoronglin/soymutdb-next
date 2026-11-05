@@ -362,6 +362,8 @@ def test_dropping_the_429_constant_is_rejected() -> None:
 def test_a_whole_set_429_co_revert_is_rejected() -> None:
     """Source + snapshot emptied together must fail, not pass vacuously."""
     document, generated, main, smoke = _load()
+    committed = _declared(document, "429")
+    assert committed, "committed tree already declares no 429; setup is not a control"
     for path, ops in document["paths"].items():
         for method, op in ops.items():
             if isinstance(op, dict) and "responses" in op:
@@ -373,7 +375,13 @@ def test_a_whole_set_429_co_revert_is_rejected() -> None:
         count=1,
     )
     assert emptied != main, "whole-set co-revert already applied to the committed tree; setup is not a control"
-    assert "429" not in str(document), "whole-set co-revert left a declared 429 behind; setup is not a control"
+    # The control is "the snapshot used to declare 429s and now declares none in
+    # the operations this test rewrote", not "the substring 429 vanished from
+    # the document": the x-error-codes map legitimately spells 429 as a value.
+    remaining = _declared(document, "429")
+    assert not remaining.keys() & committed.keys(), (
+        "whole-set co-revert left a declared 429 behind; setup is not a control"
+    )
     assert _any(
         failures(document, generated, emptied, smoke),
         "empty RATE_LIMITED_OPERATIONS",

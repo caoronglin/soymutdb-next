@@ -70,7 +70,13 @@ BODY = re.compile(r'"application/json": components\["schemas"\]\["(\w+)"\];')
 #
 # This is an independent fixed point, NOT computed from either artifact.
 # Update it in the same commit as an intentional contract change and say why.
-_CLIENT_BODY_TOTAL = 800
+#
+# 800 -> 807 (PR #71, downloads provenance): two new operations
+# (`POST /api/v1/exports/query`, `GET /api/v1/variants/export/{id}/manifest`)
+# add ExportQueryRequest, ExportQueryResponse and ExportManifestResponse, plus
+# one ErrorResponse and one HTTPValidationError each. Nothing was removed, so
+# the increase is the declared surface growing, not one half drifting.
+_CLIENT_BODY_TOTAL = 807
 
 
 def _operations(document: dict) -> list[tuple[str, str, dict]]:
