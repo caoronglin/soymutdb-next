@@ -1,7 +1,7 @@
 # Published component-schema descriptions and titles
 
 `packages/api-client/openapi.json` publishes **257 `description` strings** on
-component-schema nodes across **169 schemas**, and **2320 `title` strings**
+component-schema nodes across **169 schemas**, and **2327 `title` strings**
 across all **362 schemas**. `openapi-typescript` renders each description as an
 `@description` line and each title as the first prose line of a
 `components["schemas"]` JSDoc block — the prose an IDE shows a caller hovering
@@ -53,7 +53,7 @@ artifacts and say why.
 Every landed `title` guard pins key **order** (`_title_last` in the snapshot
 contract), the normalizer's spelling, or the top-level `info.title` — none
 reads the published title **values**. The generator emits a JSDoc block only
-for annotated nodes (1232 of 2320 titles render), so the surface is not a
+for annotated nodes (1232 of 2327 titles render), so the surface is not a
 one-to-one map; a sub-multiset check against the snapshot would be
 self-referential and pass on a coordinated co-revert of both halves.
 
@@ -64,11 +64,11 @@ OpenAPI guards and the whole contracts layer stay `SMOKE PASS`. Two
 independent digests close it:
 
 * `_SCHEMA_TITLE_DIGEST` — sha256 over canonical sorted
-  `(schema path, title)` rows of all 2320 published titles, read from nowhere;
+  `(schema path, title)` rows of all 2327 published titles, read from nowhere;
 * `_CLIENT_TITLE_DIGEST` — sha256 over the 1232 generated JSDoc first-prose
   lines, read from nowhere. A co-revert of both halves moves **both**, so
   re-pinning one still trips the other;
-* `_EXPECTED_TITLE_ROWS` (2320) / `_EXPECTED_TITLE_SCHEMAS` (362) /
+* `_EXPECTED_TITLE_ROWS` (2327) / `_EXPECTED_TITLE_SCHEMAS` (362) /
   `_EXPECTED_CLIENT_TITLE_LINES` (1232) — exact count doors.
 
 The companion asserts both digests remain independent literals in the guard
@@ -94,24 +94,29 @@ field had moved to its sibling and nothing named it. Doors 7 and 8 close it:
   **pinned** snapshot row for that `(component, field)`, so a one-sided edit
   is named by component and field rather than only moving a digest.
 
-One reviewed exception: seven components render their own schema name as the
-leading line of their `title` property (`AdminPublicationResponse`,
-`ExternalArticlePreviewResponse`, `LiteratureRecord`, `NotificationResponse`,
-`PublicationCreate`, `PublicationUpdate`,
-`app__schemas__content__PublicationResponse`). They are listed by name in
-`_SYNTHETIC_CLIENT_TITLE_COMPONENTS`; a new one cannot join silently, and the
-companion asserts the observed set equals the listed set exactly.
+These seven components publish a property literally named `title` whose value
+is `Title` (`AdminPublicationResponse`, `ExternalArticlePreviewResponse`,
+`LiteratureRecord`, `NotificationResponse`, `PublicationCreate`,
+`PublicationUpdate`, `app__schemas__content__PublicationResponse`). An earlier
+walker skipped the `title` key after consuming it, so those seven rows never
+entered `_SCHEMA_TITLE_DIGEST`: a byte-preserving rewrite of one in the
+snapshot alone, with both provenance blob ids re-pinned, kept all twelve wired
+OpenAPI guards and the whole contracts layer `SMOKE PASS`. The walker now
+recurses into the `title` key itself, the census is 2327, and the positional
+cross-artifact door needs no exception list — those rows are published values,
+not synthetic generator lines. The companion pins the seven by path.
 
 ## Wiring
 
 `scripts/test_openapi_schema_descriptions.py` is listed in `smoke.sh`'s
 contracts `tests=()` array. The guard has no `--self-test` wire, so
 `check_contracts_self_test_teeth.py` (20 wired guards) and
-`check_contracts_registry_collection.py` (59 suites / 32 guard calls) are
+`check_contracts_registry_collection.py` (61 suites / 32 guard calls) are
 unchanged. The companion suite is both a pytest target and a standalone
 stdlib runner; it proves the decisive co-revert on both surfaces, one-sided
 edits on each half, count-door teeth, same-count rotations, each digest's
-independence, the reviewed synthetic lines, and the second-file source plant.
+independence, the reviewed synthetic line, the seven
+`title`-named rows, and the second-file source plant.
 
 ## Boundaries
 

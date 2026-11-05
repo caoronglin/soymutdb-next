@@ -1,6 +1,6 @@
 """Regression coverage for ``scripts/check_openapi_schema_descriptions.py``.
 
-The guard pins 257 published component-schema ``description`` strings and 2320
+The guard pins 257 published component-schema ``description`` strings and 2327
 ``title`` strings to hand-written literals and checks the generated client's
 JSDoc lines against them. These cases prove each failure direction on real
 committed bytes: the decisive byte-preserving co-revert of both halves (with
@@ -304,9 +304,13 @@ def test_one_sided_title_client_rewrite_is_rejected() -> None:
 def test_synthetic_client_title_is_reviewed() -> None:
     lines = guard.client_titles(_GENERATED)
     assert lines.count(guard._SYNTHETIC_CLIENT_TITLE) == 1
-    assert guard._SYNTHETIC_CLIENT_TITLE not in {
-        value for _, value in guard.title_rows(json.loads(_SNAPSHOT))
-    }
+    # Seven component schemas publish a property literally named ``title``
+    # whose value is ``Title``. The old walker skipped the ``title`` key after
+    # consuming it, so those rows never entered the digest and a snapshot-only
+    # rewrite of one stayed green. They are published values, not synthetic
+    # generator lines: the corrected walker must pin all seven.
+    published = [value for _, value in guard.title_rows(json.loads(_SNAPSHOT))]
+    assert published.count(guard._SYNTHETIC_CLIENT_TITLE) == 7
 
 
 def test_guard_source_pins_both_title_doors() -> None:
@@ -327,7 +331,6 @@ def test_guard_source_pins_both_title_doors() -> None:
     assert "_CLIENT_TITLE_ROWS_DIGEST" in source
     assert "actual_rows_digest != pinned_rows_digest" in source
     assert "_EXPECTED_CLIENT_TITLE_ROWS" in source
-    assert "_SYNTHETIC_CLIENT_TITLE_COMPONENTS" in source
 
 
 _ROTATION_COMPONENT = "AboutContentResponse"
@@ -415,12 +418,26 @@ def test_client_title_row_count_door_is_load_bearing() -> None:
     ), found
 
 
-def test_synthetic_client_title_components_are_reviewed() -> None:
-    """The cross-artifact door exempts exactly the listed components."""
-    triples = guard.client_title_rows(_GENERATED)
-    observed = {
-        component
-        for component, field, title in triples
-        if field == "title" and title == guard._SYNTHETIC_CLIENT_TITLE
-    }
-    assert observed == set(guard._SYNTHETIC_CLIENT_TITLE_COMPONENTS)
+def test_title_named_property_rows_are_pinned() -> None:
+    """A ``title`` property's own published title must be in the digest.
+
+    The old walker skipped the ``title`` key after consuming it, so the seven
+    ``properties.title.title`` rows were invisible to the snapshot digest. A
+    byte-preserving rewrite of one such row in the snapshot alone, with both
+    provenance blob ids re-pinned, kept the whole contracts layer green.
+    """
+    document = json.loads(_SNAPSHOT)
+    target = document["components"]["schemas"]["PublicationCreate"]["properties"][
+        "title"
+    ]
+    assert target["title"] == guard._SYNTHETIC_CLIENT_TITLE
+    before = guard.title_rows(json.loads(_SNAPSHOT))
+    named = [p for p, v in before if p.endswith("/properties/title") and v == "Title"]
+    assert len(named) == 7, named
+    assert "PublicationCreate/properties/title" in named
+    target["title"] = "TitleX"
+    snapshot = json.dumps(document, indent=2, ensure_ascii=False)
+    drifted = guard._digest_title(guard.title_rows(json.loads(snapshot)))
+    assert drifted != guard._SCHEMA_TITLE_DIGEST
+    found = guard.failures(snapshot=snapshot, generated=_GENERATED)
+    assert any("_SCHEMA_TITLE_DIGEST" in f for f in found), found
