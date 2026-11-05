@@ -170,6 +170,51 @@ driver-level dispatch are anchored to the start of a line, and
 commented-out variant for each of the three slots (CI `--self-test` line,
 standalone guard call, driver dispatch) and asserts the guard reports it.
 
+## The next cell: auditing the whole set, not just each row
+
+`#192` made every active `tests=()` row full-match a bare path. That fixed
+"the row is wrong". It did **not** fix "a row is gone": `registry()` is an
+*extractor*, so deleting a suite lowers both the input and the output. An
+equality such as `active_rows == len(registry())` is therefore **redundant**
+(the bare-row check already rejects every non-bare active row) and **green on
+deletion** (both sides drop together) -- the same co-reversion shape a
+consistency check cannot see.
+
+Measured on live `main` with the guard still printing
+`OK (46 gating suites, 19 guard calls)` and `SMOKE PASS`:
+
+| Drift | What the layer actually did |
+| --- | --- |
+| delete a `tests=()` row | `45 gating suites`, `SMOKE PASS`, 8 tests gone |
+| `-k "not interval"` on the gating pytest line | `718 passed, 8 deselected`, `SMOKE PASS` |
+| delete the whole gating pytest line | `SMOKE PASS`, zero gating suites collected |
+
+Two controls matter. `>/dev/null` on a **standalone** guard call does **not**
+drop it: `GUARD_CALL`'s `[^|]*?` tolerates internal redirection and
+`|| rc=$?` still propagates the exit status -- diagnostics are swallowed, the
+gate is live. And `--ignore=<path>` does **not** deselect an explicitly listed
+argv path: pytest still collects that suite. `--ignore` is rejected here only
+as a deviation from the reviewed bare form, not because it deselects anything.
+The standalone guard calls themselves are already fully pinned on live `main`
+(`REQUIRED_GUARD_CALLS` covers all 19, plus an assertion that any newly wired
+call must be pinned in the same change), so that half of the original report
+is closed.
+
+The fix is two independent pins, reached through `wiring_errors()` so the
+synthetic unit-test fixtures keep calling the extraction-only `check()`:
+
+- `PINNED_SUITES`: a literal frozenset of the committed set, compared against
+  what was extracted. A fixed point must not be derived from the bytes it
+  audits. It is a **floor, not an allowlist** -- adding a suite needs no edit;
+  retiring one requires updating the pin.
+- `GATING_PYTEST`: the gating pytest invocation must be exactly one bare
+  statement. This is the `CI_LAYER_BARE` shape brought one layer down; pinning
+  the reviewed form catches `-k`, `--deselect`, `--ignore`, redirection,
+  `|| true` and deletion without enumerating pytest flags.
+
+`--self-test` adds 8 mutations for these shapes; its summary stays measured
+from emitted result lines.
+
 ## Running
 
 ```bash
@@ -190,12 +235,13 @@ is kept for direct runs and editor integration.
 ## Changing the layer
 
 - Adding a suite: put the path in `tests=()`, keep at least one `test_*`
-  name. No edit to this guard.
+  name. No edit to this guard (the pin is a floor).
 - Adding a standalone guard: add the `|| rc=$?` call **and** its path to
   `REQUIRED_GUARD_CALLS` in the same change. The guard rejects an unpinned
   addition; `--self-test` proves it.
-- Retiring a suite or a called guard: remove the entry/call **and** its pin
-  from `REQUIRED_GUARD_CALLS`. A green `SMOKE PASS` after deleting a guard
+- Retiring a suite: remove the row **and** its `PINNED_SUITES` entry.
+- Retiring a called guard: remove the call **and** its pin from
+  `REQUIRED_GUARD_CALLS`. A green `SMOKE PASS` after deleting a guard
   file must not be possible.
 - Never change the driver's guard call back to `|| rc=$?`; `--self-test`
   fails on that mutation.

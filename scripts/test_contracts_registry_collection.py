@@ -465,5 +465,70 @@ class RegistryCollectionGuardTests(unittest.TestCase):
                 )
 
 
+    def test_a_dropped_registered_suite_is_named(self) -> None:
+        """An equality cannot see a row deletion; an independent floor can.
+
+        Deleting a row lowers ``active rows`` and ``len(registry())`` together.
+        ``PINNED_SUITES`` is a separate literal, so the deletion is named.
+        """
+        smoke, ci, files = guard.load_sources()
+        row = "    scripts/test_motion_policy.py\n"
+        self.assertIn(row, smoke)
+        for label, mutated in {
+            "deleted": smoke.replace(row, "", 1),
+            "commented out": smoke.replace(row, "    # " + row.strip() + "\n", 1),
+        }.items():
+            with self.subTest(shape=label):
+                failures = guard.wiring_errors(mutated, files, ci)
+                self.assertTrue(
+                    any("pinned gating suite" in f for f in failures), failures
+                )
+
+    def test_the_gating_pytest_call_must_stay_a_bare_statement(self) -> None:
+        smoke, ci, files = guard.load_sources()
+        line = '  "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?\n'
+        self.assertIn(line, smoke)
+        self.assertEqual(guard.wiring_errors(smoke, files, ci), [])
+        shapes = {
+            "-k deselect": line.replace(" -q ||", ' -q -k "not interval" ||'),
+            "--deselect": line.replace(
+                " -q ||", " -q --deselect=scripts/test_motion_policy.py ||"
+            ),
+            "--ignore": line.replace(
+                " -q ||", " -q --ignore=scripts/test_motion_policy.py ||"
+            ),
+            "|| true": line.replace("|| rc=$?", "|| true"),
+            "redirection": line.replace(" -q ||", " -q >/dev/null ||"),
+            "deleted": "",
+        }
+        for label, replacement in shapes.items():
+            with self.subTest(shape=label):
+                failures = guard.wiring_errors(
+                    smoke.replace(line, replacement, 1), files, ci
+                )
+                self.assertTrue(
+                    any("gating pytest invocation" in f for f in failures), failures
+                )
+
+    def test_a_redirected_standalone_guard_still_gates(self) -> None:
+        """``>/dev/null`` on a guard call is not a dropped call.
+
+        ``GUARD_CALL`` tolerates internal redirection via ``[^|]*?`` and the
+        exit status still propagates through ``|| rc=$?``: diagnostics are
+        swallowed, the gate is live. Honest boundary, not a hole.
+        """
+        smoke, ci, files = guard.load_sources()
+        call = (
+            '  "${PYTHON_BIN}" scripts/check_openapi_published_enums.py '
+            "--self-test || rc=$?\n"
+        )
+        self.assertIn(call, smoke)
+        redirected = call.replace(" --self-test", " --self-test >/dev/null")
+        self.assertEqual(
+            guard.wiring_errors(smoke.replace(call, redirected, 1), files, ci), []
+        )
+
+
+
 if __name__ == "__main__":
     unittest.main()

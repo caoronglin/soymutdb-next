@@ -144,6 +144,80 @@ REQUIRED_GUARD_CALLS: frozenset[str] = frozenset(
 )
 
 
+# Extraction-only checks answer "is every row I saw a bare path" and "is every
+# path I extracted real". They never answer "did I see every row". Deleting a
+# suite from tests=() lowers both active rows and ``len(registry())`` together,
+# so an equality such as ``active_rows == len(registry())`` is redundant here
+# (the bare-row check already rejects every non-bare active row) and green on
+# deletion (both sides drop). Pin the committed set as an independent literal:
+# a fixed point must not be derived from the bytes it audits.
+#
+# This is a floor, not an allowlist: adding a suite needs no edit here;
+# retiring one requires removing its entry (same discipline as
+# ``REQUIRED_GUARD_CALLS``).
+PINNED_SUITES: frozenset[str] = frozenset(
+    {
+        'infra/clickhouse/test_schema_contract.py',
+        'scripts/test_api_client_base_path_guard.py',
+        'scripts/test_artifact_e2e_gate.py',
+        'scripts/test_backup_restore_contracts.py',
+        'scripts/test_bio_core_capability_parity_wiring.py',
+        'scripts/test_bio_core_supply_chain.py',
+        'scripts/test_bio_core_wheel_abi.py',
+        'scripts/test_bio_core_wheel_tags.py',
+        'scripts/test_ci_job_contracts.py',
+        'scripts/test_clickhouse_migration_contracts.py',
+        'scripts/test_contracts_layer_self_containment.py',
+        'scripts/test_custom_element_registration_contracts.py',
+        'scripts/test_dependency_governance_contracts.py',
+        'scripts/test_deployment_workflows.py',
+        'scripts/test_development_compose_contract.py',
+        'scripts/test_dockerfile_contracts.py',
+        'scripts/test_error_code_doc_counts.py',
+        'scripts/test_error_code_gate_wiring.py',
+        'scripts/test_format_inspect_validation_order.py',
+        'scripts/test_i18n_interpolation_guard.py',
+        'scripts/test_import_capability_contracts.py',
+        'scripts/test_install_python_workspace.py',
+        'scripts/test_interval_visibility_order.py',
+        'scripts/test_kernel_error_messages.py',
+        'scripts/test_kernel_error_messages_wiring.py',
+        'scripts/test_kubernetes_delivery_contracts.py',
+        'scripts/test_legacy_worker_test_contract.py',
+        'scripts/test_locale_language_purity.py',
+        'scripts/test_mcp_openapi_parity.py',
+        'scripts/test_mcp_release_binding_wiring.py',
+        'scripts/test_motion_policy.py',
+        'scripts/test_native_backup_runtime.py',
+        'scripts/test_openapi_422_unified_envelope.py',
+        'scripts/test_openapi_auth_surface_floor.py',
+        'scripts/test_openapi_baseline_sync.py',
+        'scripts/test_openapi_behavior_contracts.py',
+        'scripts/test_openapi_document_metadata_guard.py',
+        'scripts/test_openapi_snapshot_body_integrity.py',
+        'scripts/test_openapi_snapshot_contract.py',
+        'scripts/test_platform_delivery_contracts.py',
+        'scripts/test_portal_font_subset.py',
+        'scripts/test_production_artifact_scan.py',
+        'scripts/test_production_compose_contract.py',
+        'scripts/test_site_artifact_isolation.py',
+        'scripts/test_supply_chain_contracts.py',
+        'scripts/test_variant_row_key_contract.py',
+    }
+)
+
+# The gating pytest call must be exactly this bare statement. ``--ignore`` does
+# not deselect an explicitly listed path, but ``-k`` / ``--deselect`` do, and
+# deleting the line drops every registered suite at once -- while the layer
+# still prints ``SMOKE PASS``. Pin the reviewed form rather than enumerating
+# pytest flags.
+GATING_PYTEST = re.compile(
+    r'^[ \t]*"\$\{PYTHON_BIN\}"[ \t]+-m[ \t]+pytest[ \t]+"\$\{tests\[@\]\}"'
+    r'[ \t]+-q[ \t]+\|\|[ \t]+rc=\$\?[ \t]*$',
+    re.MULTILINE,
+)
+
+
 DRIVER_MARKER = "if should_run contracts; then"
 
 
@@ -216,6 +290,46 @@ def array_line_errors(smoke: str) -> list[str]:
             )
     return errors
 
+
+
+def pinned_suite_errors(smoke: str) -> list[str]:
+    """Name a suite dropped from the committed ``tests=()`` set."""
+    missing = PINNED_SUITES - set(registry(smoke))
+    return [
+        f"pinned gating suite {relative!r} is missing from tests=() "
+        "(a registered suite was dropped; SMOKE PASS would collect fewer suites)"
+        for relative in sorted(missing)
+    ]
+
+
+def gating_pytest_errors(smoke: str) -> list[str]:
+    """The gating pytest invocation must be exactly one bare statement."""
+    matches = GATING_PYTEST.findall(contracts_function(smoke))
+    if len(matches) == 1:
+        return []
+    return [
+        "the gating pytest invocation in scripts/smoke.sh (smoke_contracts) "
+        f"is not exactly one bare statement (found {len(matches)}): a trailing "
+        "-k/--deselect, redirection, `|| true` or a deleted line drops "
+        "registered suites while the layer still prints SMOKE PASS"
+    ]
+
+
+def wiring_errors(
+    smoke: str, files: dict[str, str], ci_steps: str | None = None
+) -> list[str]:
+    """Every check that gates the real layer, composed.
+
+    ``check()`` stays the extraction-only validator so the synthetic unit-test
+    fixtures keep their original meaning. The literal-floor check and the
+    bare-statement pin describe the *committed* ``scripts/smoke.sh``; both real
+    entry points (``main`` and ``self_test``) go through this function.
+    """
+    return (
+        check(smoke, files, ci_steps)
+        + pinned_suite_errors(smoke)
+        + gating_pytest_errors(smoke)
+    )
 
 def guard_calls(smoke: str) -> list[str]:
     """Standalone ``check_*.py`` invocations inside smoke_contracts()."""
@@ -399,8 +513,11 @@ def load_sources() -> tuple[str, str, dict[str, str]]:
     """Read the committed bytes of both wirings and their referenced files."""
     smoke = SMOKE.read_text(encoding="utf-8")
     ci_steps = CI_STEPS.read_text(encoding="utf-8")
-    referenced = set(registry(smoke)) | set(guard_calls(smoke)) | set(
-        REQUIRED_GUARD_CALLS
+    referenced = (
+        set(registry(smoke))
+        | set(guard_calls(smoke))
+        | set(REQUIRED_GUARD_CALLS)
+        | set(PINNED_SUITES)
     )
     files = {
         p: (ROOT / p).read_text(encoding="utf-8")
@@ -418,7 +535,7 @@ def self_test() -> int:
     added, which is the very failure shape this guard exists to eliminate.
     """
     smoke, ci_steps, files = load_sources()
-    clean = check(smoke, files, ci_steps)
+    clean = wiring_errors(smoke, files, ci_steps)
     if clean:
         print(f"FAIL self-test: clean tree drifts: {clean}")
         return 1
@@ -558,14 +675,44 @@ def self_test() -> int:
     mutant7 = dict(files)
     mutant7[extra] = "# a real guard\n"
 
+    # Extraction-only checks never compare how many rows the array has with
+    # how many were audited. Deleting a row lowers both sides together; an
+    # independent literal is the only fixed point that can see it.
+    suite_row = "    scripts/test_motion_policy.py\n"
+    assert suite_row in smoke, "self-test could not locate a pinned suite row"
+    cases.append(("a pinned gating suite is deleted from tests=()",
+                  smoke.replace(suite_row, "", 1), dict(files), ci_steps))
+    cases.append(("a pinned gating suite is commented out in tests=()",
+                  smoke.replace(suite_row, "    # " + suite_row.strip() + "\n", 1),
+                  dict(files), ci_steps))
+
+    pytest_line = '  "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?\n'
+    assert pytest_line in smoke, "self-test could not locate the gating pytest line"
+    for label, replacement in {
+        "a -k deselect is appended to the gating pytest call":
+            pytest_line.replace(" -q ||", ' -q -k "not interval" ||'),
+        "a --deselect is appended to the gating pytest call":
+            pytest_line.replace(" -q ||", " -q --deselect=scripts/test_motion_policy.py ||"),
+        "an --ignore is appended to the gating pytest call":
+            pytest_line.replace(" -q ||", " -q --ignore=scripts/test_motion_policy.py ||"),
+        "the gating pytest call is neutralised with || true":
+            pytest_line.replace("|| rc=$?", "|| true"),
+        "the gating pytest call redirects its diagnostics":
+            pytest_line.replace(" -q ||", " -q >/dev/null ||"),
+        "the gating pytest call is deleted": "",
+    }.items():
+        mutated = smoke.replace(pytest_line, replacement, 1)
+        assert mutated != smoke, label
+        cases.append((label, mutated, dict(files), ci_steps))
+
     for label, mutated_smoke, mutated_files, mutated_ci in cases:
-        found = check(mutated_smoke, mutated_files, mutated_ci)
+        found = wiring_errors(mutated_smoke, mutated_files, mutated_ci)
         report(
             bool(found),
             f"PASS self-test: {label} -> {len(found)} failure(s)",
             f"FAIL self-test: {label} was NOT caught",
         )
-    fresh = check(smoke7, mutant7, ci_steps)
+    fresh = wiring_errors(smoke7, mutant7, ci_steps)
     report(
         bool(fresh) and any("is wired but not pinned" in f for f in fresh),
         "PASS self-test: a new guard call outside the floor is caught",
@@ -724,7 +871,7 @@ def main() -> int:
     if args.self_test:
         return self_test()
     smoke, ci_steps, files = load_sources()
-    errors = check(smoke, files, ci_steps)
+    errors = wiring_errors(smoke, files, ci_steps)
     if errors:
         for error in errors:
             print(f"FAIL: {error}", file=sys.stderr)
