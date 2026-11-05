@@ -593,11 +593,12 @@ def test_published_info_shape_is_an_independent_literal() -> None:
     Reproduce the fail-open cell on committed bytes: inject a client-visible
     ``license`` key with the four reviewed values untouched. The old guard
     (byte lock + source lock + generated-half absence) is GREEN on that tree;
-    the committed guard is RED and names the shape. Then strip the shape door
-    from an in-memory copy and prove the ablation goes back to GREEN -- the
-    door, not the rest of the guard, is what catches it. Finally pin that the
-    literal is hand-written in the guard source, so a single-file edit cannot
-    delete both the door and its own evidence.
+    the committed guard is RED and names the shape. Both the shape door and
+    the exact count door see the same extra key, so strip BOTH from an
+    in-memory copy to prove the ablation goes back to GREEN -- stripping only
+    one leaves the other door red. Finally pin that the literal is
+    hand-written in the guard source, so a single-file edit cannot delete both
+    the door and its own evidence.
     """
     guard = _guard()
     snapshot, generated, golden, main, config, smoke, routers = guard._load()
@@ -606,14 +607,15 @@ def test_published_info_shape_is_an_independent_literal() -> None:
     drifted = json.dumps(document, ensure_ascii=False)
 
     # The four locked values are untouched by construction: no golden, source
-    # or generated-half check can fire. Only the shape door can.
+    # or generated-half check can fire. Both info-shape doors fire: the set
+    # door and the exact count door, on the same extra key.
     found = guard.failures(
         drifted, generated, golden, main, config, smoke, routers
     )
     assert any("published info key set drifted" in item for item in found), found
     assert not any("no longer matches the golden lock" in item for item in found), found
 
-    # Strip ONLY the shape door and prove the drifted tree goes green again.
+    # Strip BOTH info-shape doors and prove the drifted tree goes green again.
     source = GUARD.read_text(encoding="utf-8")
     door = (
         "        actual_info_keys = frozenset(info)\n"
