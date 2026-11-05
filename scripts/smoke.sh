@@ -245,6 +245,11 @@ smoke_contracts() {
     # reports that co-revert and every one-sided drift.
     scripts/test_openapi_operation_id_floor.py
     scripts/test_openapi_operation_parameter_floor.py
+    # Field-level JSON Schema constraints (minimum/maxLength/pattern/
+    # format/...) are published in the snapshot but emitted nowhere in
+    # the generated client, so no two-artifact check can see one drift.
+    # This suite proves an independent literal pins all 815 of them.
+    scripts/test_openapi_field_constraints.py
     # The per-operation response surface (status codes + content presence)
     # is client-visible but unread by every body digest for content-less
     # responses. This suite proves the independent literal pins it.
@@ -383,6 +388,10 @@ smoke_contracts() {
   # regenerate that rewrites one on both halves, with re-pinned provenance
   # blobs, kept every wired guard green. Pin the whole annotation surface.
   "${PYTHON_BIN}" scripts/check_openapi_operation_annotations.py --self-test || rc=$?
+  # The published field-level constraints have no generated half and no
+  # body/$ref footprint. A byte-preserving maxItems retype with re-pinned
+  # provenance blob ids kept every wired OpenAPI guard green. Pin them.
+  "${PYTHON_BIN}" scripts/check_openapi_field_constraints.py --self-test || rc=$?
   # The visible-text budget may fall but never rise; new hardcoded strings fail.
   "${PYTHON_BIN}" scripts/check_visible_i18n.py --self-test || rc=$?
   # nginx security-header fragments and the locations that must re-include
@@ -438,7 +447,7 @@ smoke_contracts() {
   # make this a dead guard -- it would pass while the real source regressed.
   "${PYTHON_BIN}" scripts/check_variant_summary_assembly_consistency.py --self-test || rc=$?
   "${PYTHON_BIN}" scripts/check_variant_summary_assembly_consistency.py || rc=$?
-  # Fifteen guards are wired here through --self-test alone. If one of
+  # Eighteen guards are wired here through --self-test alone. If one of
   # their self_test bodies is replaced with `return 0`, the call is still
   # present, still pinned and still green: this guard runs each one as a
   # real process and requires its pinned evidence of mutation cases.
