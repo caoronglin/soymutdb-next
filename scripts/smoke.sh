@@ -229,6 +229,13 @@ smoke_contracts() {
     scripts/test_interval_visibility_order.py
     # A clean checkout must be able to run this layer without a sibling stage's
     # node_modules; the guard's own ablations prove the wiring stays in place.
+    # The 268 published operationIds are the keys of the generated
+    # `operations` TypeScript interface. A coordinated source+artifact
+    # co-revert (retype one symbol in both halves, re-pin both provenance
+    # blob ids) kept every wired OpenAPI guard green on live bytes: no
+    # guard read them. This suite proves the independent digest pin
+    # reports that co-revert and every one-sided drift.
+    scripts/test_openapi_operation_id_floor.py
     scripts/test_contracts_layer_self_containment.py
     # The error-code gate wiring guard judges its co-rename probe by the copied
     # tree's exit status. A clean control must be green first, or an incomplete
@@ -324,6 +331,10 @@ smoke_contracts() {
   # both artifacts are exports. Self-test mode, like the guards above, so this
   # adds one line here instead of a row in the shared `tests[]` array.
   "${PYTHON_BIN}" scripts/check_openapi_published_enums.py --self-test || rc=$?
+  # operationId is a client-visible published symbol: the key of the
+  # generated `operations` interface. --self-test plants the co-revert
+  # that every artifact-vs-artifact check is blind to.
+  "${PYTHON_BIN}" scripts/check_openapi_operation_id_floor.py --self-test || rc=$?
   # The visible-text budget may fall but never rise; new hardcoded strings fail.
   "${PYTHON_BIN}" scripts/check_visible_i18n.py --self-test || rc=$?
   # nginx security-header fragments and the locations that must re-include
