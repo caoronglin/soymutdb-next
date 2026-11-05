@@ -49,10 +49,14 @@ GUARD_NAME = "check_contracts_registry_collection.py"
 # The CI-side wiring: `python3 "${REPO_ROOT}/scripts/<guard>.py" --self-test`
 # inside smoke_contracts_run(). A path/flag change must fail loudly, not drift.
 CI_SELF_TEST = re.compile(
-    r'^\s*python3\s+"\$\{REPO_ROOT\}/scripts/'
+    r'python3\s+"\$\{REPO_ROOT\}/scripts/'
     + re.escape(GUARD_NAME)
-    + r'"\s+--self-test\s*$',
-    re.MULTILINE,
+    + r'"\s+--self-test(?=\s|$)'
+)
+# The CI line exists to gate the layer *before* it runs. A hand-merge can move
+# it below the smoke.sh call while still matching, inverting the ordering.
+CI_LAYER_CALL = re.compile(
+    r'bash\s+"\$\{REPO_ROOT\}/scripts/smoke\.sh"\s+--profile\s+contracts'
 )
 
 ARRAY_ENTRY = re.compile(
@@ -159,11 +163,19 @@ def check(
         except ValueError as exc:
             errors.append(str(exc))
         else:
-            if not CI_SELF_TEST.search(ci_body):
+            match = CI_SELF_TEST.search(ci_body)
+            if match is None:
                 errors.append(
                     f"{GUARD_NAME} --self-test is not wired in "
                     "scripts/ci-job-steps.sh (smoke_contracts_run)"
                 )
+            else:
+                layer = CI_LAYER_CALL.search(ci_body)
+                if layer is not None and match.start() > layer.start():
+                    errors.append(
+                        f"{GUARD_NAME} --self-test runs after the contracts "
+                        "layer in ci-job-steps.sh (must gate it beforehand)"
+                    )
 
     entries = registry(smoke)
     if not entries:
@@ -289,6 +301,16 @@ def self_test() -> int:
         )
     )
 
+    # Ordering: the guard must gate the layer *before* it runs. A hand-merge
+    # can move the line below the smoke.sh call while it still matches.
+    bash_line = '  bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts\n'
+    assert bash_line in ci_steps, "self-test could not locate the layer call"
+    ci_after = ci_steps.replace(ci_line, "", 1).replace(
+        bash_line, bash_line + ci_line, 1
+    )
+    cases.append(("the CI --self-test line runs after the layer",
+                  smoke, dict(files), ci_after))
+
     # Positive control: adding a NEW guard call must not require an edit here.
     extra = "scripts/check_extra_wiring_probe.py"
     smoke7 = smoke.replace(
@@ -315,7 +337,22 @@ def self_test() -> int:
     else:
         print("PASS self-test: adding a new guard call needs no allowlist edit")
 
-    print(f"self-test: {len(cases) + 1} cases, {failures} failure(s)")
+    # Indentation inside the function is noise: bash runs it either way, and
+    # the relaxed pin must accept both a deeper space indent and a tab.
+    for label, mutated_ci in (
+        ("a deeper-indented CI --self-test line is accepted",
+         ci_steps.replace(ci_line, "    " + ci_line.strip() + "\n", 1)),
+        ("a tab-indented CI --self-test line is accepted",
+         ci_steps.replace(ci_line, "\t" + ci_line.strip() + "\n", 1)),
+    ):
+        found = check(smoke, files, mutated_ci)
+        if found:
+            print(f"FAIL self-test: {label} was rejected: {found}")
+            failures += 1
+        else:
+            print(f"PASS self-test: {label}")
+
+    print(f"self-test: {len(cases) + 3} cases, {failures} failure(s)")
     return 1 if failures else 0
 
 

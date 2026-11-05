@@ -45,6 +45,24 @@ driver registers the failure in `FAILED` instead, and the guard's
 `--self-test` includes a mutation that restores `|| rc=$?` and asserts it is
 caught.
 
+## The CI entry point and its ordering
+
+`ci-job-steps.sh`'s `smoke_contracts_run()` invokes the guard with
+`--self-test` before running `bash smoke.sh --profile contracts`. That line is
+a third wiring slot: a `keep one side` hand-merge of the add/add conflict in
+this function can drop it while the local `smoke.sh` dispatch stays intact --
+and a validator that reads only `smoke.sh` cannot see it. The guard therefore
+reads `ci-job-steps.sh` too and requires the invocation inside that function
+body.
+
+Indentation inside a bash function is noise, so the match is not anchored to
+the start of a line: a deeper space indent or a tab still runs in bash and is
+accepted. But the line must use `python3`, the exact guard path, and
+`--self-test`, and it must appear **before** the `bash smoke.sh` call --
+otherwise the layer would already have run by the time the gate fires. Moving
+it below that call is a silent inversion, and `--self-test` asserts it is
+caught.
+
 ## Boundary
 
 The guard is a **static** proxy, not a pytest subprocess. It recognises

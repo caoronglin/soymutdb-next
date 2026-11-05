@@ -146,6 +146,33 @@ class RegistryCollectionGuardTests(unittest.TestCase):
                     any("not wired in" in f for f in failures), failures
                 )
 
+    def test_ci_self_test_line_may_be_indented(self) -> None:
+        smoke = _smoke(["scripts/test_example.py"], REQUIRED)
+        files = _files()
+        files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
+        for indent in ("    ", "\t"):
+            ci = (
+                "smoke_contracts_run() {\n"
+                + indent
+                + f'python3 "${{REPO_ROOT}}/scripts/{guard.GUARD_NAME}" --self-test\n'
+                + "}\n"
+            )
+            with self.subTest(indent=repr(indent)):
+                self.assertEqual(guard.check(smoke, files, ci), [])
+
+    def test_ci_self_test_must_run_before_the_layer(self) -> None:
+        smoke = _smoke(["scripts/test_example.py"], REQUIRED)
+        files = _files()
+        files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
+        ci = (
+            "smoke_contracts_run() {\n"
+            '  bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts\n'
+            f'  python3 "${{REPO_ROOT}}/scripts/{guard.GUARD_NAME}" --self-test\n'
+            "}\n"
+        )
+        failures = guard.check(smoke, files, ci)
+        self.assertTrue(any("runs after" in f for f in failures), failures)
+
 
 if __name__ == "__main__":
     unittest.main()
