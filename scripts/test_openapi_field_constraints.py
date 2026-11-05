@@ -395,9 +395,15 @@ def test_examples_repin_in_the_same_commit_stays_green() -> None:
     for value in ("researcher@univ.edu", "S3cureP@ss!", "Jane Doe", "viewer"):
         gen = gen.replace("@example " + value, "@example " + value + "X")
     new_digest = guard._example_digest(guard.example_rows(json.loads(snapshot)))
+    new_value_digest = guard._generated_example_value_digest(
+        guard.generated_example_rows(gen)
+    )
     assert new_digest != guard._EXAMPLE_DIGEST
     assert not guard.failures(
-        snapshot=snapshot, generated=gen, example_digest=new_digest
+        snapshot=snapshot,
+        generated=gen,
+        example_digest=new_digest,
+        generated_example_value_digest=new_value_digest,
     )
 
 
@@ -652,7 +658,10 @@ def test_zero_new_wiring_for_door_seven() -> None:
 
 
 def test_a_one_sided_generated_value_rewrite_is_named_only_by_door_eight() -> None:
-    """The residual: rewrite one @example value, keep all 7 tags."""
+    """The residual: rewrite one @example value, keep all 7 tags.
+
+    Door 11 names the field; door 8 stands down so the drift is reported once.
+    """
     gen = _generated().replace("@example Jane Doe", "@example John Roe", 1)
     assert len(guard.generated_examples(gen)) == guard._EXPECTED_GENERATED_EXAMPLES
     found = guard.failures(
@@ -661,6 +670,7 @@ def test_a_one_sided_generated_value_rewrite_is_named_only_by_door_eight() -> No
     )
     assert len(found) == 1, found
     assert "generated @example values disagree" in found[0], found
+    assert "UserCreate.full_name" in found[0], found
     assert "_EXAMPLE_DIGEST" not in found[0], found
     assert "tag count" not in found[0].lower(), found
 
@@ -680,8 +690,10 @@ def test_a_same_count_generated_value_permutation_is_named() -> None:
         snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
         generated=gen,
     )
-    assert len(found) == 1, found
-    assert "generated @example values disagree" in found[0], found
+    assert len(found) == 2, found
+    assert all("generated @example values disagree" in f for f in found), found
+    assert "UserCreate.full_name" in found[0], found
+    assert "UserCreate.role_name" in found[1], found
 
 
 def test_the_snapshot_side_drift_is_named_only_by_door_five() -> None:
@@ -724,8 +736,14 @@ def test_door_eight_keeps_a_reviewed_repin_green() -> None:
     for value in ("researcher@univ.edu", "S3cureP@ss!", "Jane Doe", "viewer"):
         gen = gen.replace("@example " + value, "@example " + value + "X")
     new_digest = guard._example_digest(guard.example_rows(json.loads(snapshot)))
+    new_value_digest = guard._generated_example_value_digest(
+        guard.generated_example_rows(gen)
+    )
     assert not guard.failures(
-        snapshot=snapshot, generated=gen, example_digest=new_digest
+        snapshot=snapshot,
+        generated=gen,
+        example_digest=new_digest,
+        generated_example_value_digest=new_value_digest,
     )
 
 
@@ -877,3 +895,296 @@ def test_additional_properties_self_test_cases_are_registered() -> None:
     source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
     assert "coordinated additionalProperties false->true" in source
     assert "same-commit re-pin stays green" in source
+
+
+# ---------------------------------------------------------------------------
+# Door 11 -- the field each generated @example tag is printed under.
+# ---------------------------------------------------------------------------
+
+_LOGIN_USERNAME_BLOCK = """            /**
+             * Username
+             * @description Email address or username
+             * @default null
+             * @example researcher@univ.edu
+             */
+            username: string | null;
+            /**
+             * Email
+             * @description Email address (alternative to ``username``)
+             * @default null
+             * @example researcher@univ.edu
+             */"""
+
+_LOGIN_RELOCATED_BLOCK = """            /**
+             * Username
+             * @description Email address or username
+             * @default null
+             */
+            username: string | null;
+            /**
+             * Email
+             * @description Email address (alternative to ``username``)
+             * @default null
+             * @example researcher@univ.edu
+             * @example researcher@univ.edu
+             */"""
+
+
+def _relocated() -> str:
+    gen = _generated()
+    assert gen.count(_LOGIN_USERNAME_BLOCK) == 1
+    return gen.replace(_LOGIN_USERNAME_BLOCK, _LOGIN_RELOCATED_BLOCK, 1)
+
+
+def test_a_tag_relocated_between_two_fields_is_named() -> None:
+    """The flat door 8 sequence survives a same-value tag relocation."""
+    gen = _relocated()
+    assert guard.generated_examples(gen) == guard.generated_examples(_generated())
+    found = guard.failures(
+        snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
+        generated=gen,
+    )
+    assert len(found) == 2, found
+    assert any("LoginRequest.username" in f for f in found), found
+    assert any("LoginRequest.email" in f for f in found), found
+
+
+def test_door_eleven_off_leaves_the_relocation_silent() -> None:
+    """Without door 11, live main's flat comparison cannot see the drift."""
+    found = guard.failures(
+        snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
+        generated=_relocated(),
+        pin_example_fields=False,
+    )
+    assert not found, found
+
+
+def test_the_example_tag_reader_uses_finditer() -> None:
+    """Two @example tags in one doc block are two published values, not one."""
+    gen = _generated().replace(
+        "             * @example Jane Doe\n",
+        "             * @example Jane Doe\n             * @example Jane Doe\n",
+        1,
+    )
+    rows = [
+        row
+        for row in guard.generated_example_rows(gen)
+        if row[:2] == ("UserCreate", "full_name")
+    ]
+    assert len(rows) == 2, rows
+
+
+def test_a_stray_tag_is_resolved_by_the_count_door_alone() -> None:
+    """Cardinality drift is door 5's; door 11 stands down, no double report."""
+    gen = _generated().replace(
+        "             * @example Jane Doe\n",
+        "             * @example Jane Doe\n             * @example Jane Doe\n",
+        1,
+    )
+    found = guard.failures(
+        snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
+        generated=gen,
+    )
+    assert len(found) == 1, found
+    assert "tag count is 8" in found[0], found
+
+
+def test_door_eleven_stands_down_on_a_snapshot_drift() -> None:
+    """A snapshot-side rewrite stays door 5's alone, never counted twice."""
+
+    def change(doc: dict) -> None:
+        doc["components"]["schemas"]["UserCreate"]["properties"]["full_name"][
+            "examples"
+        ] = ["John Roe"]
+
+    found = guard.failures(snapshot=_example_doc(change))
+    assert len(found) == 1, found
+    assert "_EXAMPLE_DIGEST" in found[0], found
+
+
+def test_door_eleven_adds_no_new_wiring() -> None:
+    """One guard, one ledger: no new guard file or wiring row."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "def generated_example_rows(" in source
+    assert "def example_projection(" in source
+    assert not (ROOT / "scripts" / "check_openapi_example_fields.py").exists()
+    for text in (SMOKE, REGISTRY, TEETH):
+        assert "example_field_cases" not in text
+        assert "check_openapi_example_fields" not in text
+
+
+def test_door_eleven_self_test_plants_are_registered() -> None:
+    """From a second file: the ablation exists and is consumed."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "one @example tag relocated between two fields" in source
+    assert "pin_example_fields=False" in source
+
+
+# ---------------------------------------------------------------------------
+# Door 12 -- an independent literal for the 7 generated @example values.
+# ---------------------------------------------------------------------------
+
+
+def _both_halves_example_rewrite() -> tuple[str, str, str]:
+    """A regenerate shape: one published value moved in BOTH halves.
+
+    The snapshot digest is honestly re-pinned to the derived value, as a
+    reviewed regenerate requires. Both artifacts now publish ``John Roe``;
+    every two-artifact door agrees with itself.
+    """
+
+    def change(doc: dict) -> None:
+        doc["components"]["schemas"]["UserCreate"]["properties"]["full_name"][
+            "examples"
+        ] = ["John Roe"]
+
+    snapshot = _example_doc(change)
+    generated = _generated().replace("@example Jane Doe", "@example John Roe", 1)
+    assert generated != _generated()
+    new_digest = guard._example_digest(guard.example_rows(json.loads(snapshot)))
+    assert new_digest != guard._EXAMPLE_DIGEST
+    return snapshot, generated, new_digest
+
+
+def test_the_generated_example_value_pin_is_an_independent_literal() -> None:
+    """The new digest is a module-level literal, not derived from artifacts."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    assigned = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name)
+            and target.id == "_GENERATED_EXAMPLE_VALUE_DIGEST"
+            for target in node.targets
+        )
+    ]
+    assert len(assigned) == 1
+    assert ast.literal_eval(assigned[0].value) == guard._GENERATED_EXAMPLE_VALUE_DIGEST
+    assert guard._GENERATED_EXAMPLE_VALUE_DIGEST != guard._EXAMPLE_DIGEST
+    assert guard._GENERATED_EXAMPLE_VALUE_DIGEST != guard._DEFAULT_TAG_VALUE_DIGEST
+
+
+def test_committed_generated_example_values_match_the_pinned_literal() -> None:
+    rows = guard.generated_example_rows(_generated())
+    assert len(rows) == guard._EXPECTED_GENERATED_EXAMPLE_VALUE_ROWS
+    assert guard._generated_example_value_digest(rows) == (
+        guard._GENERATED_EXAMPLE_VALUE_DIGEST
+    )
+
+
+def test_a_coordinated_both_halves_example_rewrite_is_rejected() -> None:
+    """The R2 residual: both halves move together, digest honestly re-pinned.
+
+    Doors 8 / 11 read the snapshot as their reference, so they agree with the
+    regenerate; the count doors and the re-pinned snapshot digest stay silent.
+    Only the independent generated-value literal can name it.
+    """
+    snapshot, generated, new_digest = _both_halves_example_rewrite()
+    found = guard.failures(
+        snapshot=snapshot, generated=generated, example_digest=new_digest
+    )
+    assert len(found) == 1, found
+    assert "_GENERATED_EXAMPLE_VALUE_DIGEST" in found[0], found
+    assert "published examples drifted" not in found[0], found
+    assert "tag count is" not in found[0], found
+
+
+def test_re_pinning_only_the_snapshot_digest_is_no_longer_enough() -> None:
+    """The topology's old 'one deliberate act' now needs a second one."""
+    snapshot, generated, new_digest = _both_halves_example_rewrite()
+    assert guard.failures(
+        snapshot=snapshot, generated=generated, example_digest=new_digest
+    )
+
+
+def test_a_reviewed_both_halves_re_pin_stays_green() -> None:
+    """Re-pin BOTH literals in the same commit: not a dead witness."""
+    snapshot, generated, new_digest = _both_halves_example_rewrite()
+    new_value_digest = guard._generated_example_value_digest(
+        guard.generated_example_rows(generated)
+    )
+    assert new_value_digest != guard._GENERATED_EXAMPLE_VALUE_DIGEST
+    assert not guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        example_digest=new_digest,
+        generated_example_value_digest=new_value_digest,
+    )
+
+
+def test_door_twelve_does_not_double_report_a_one_sided_rewrite() -> None:
+    """A one-sided generated rewrite stays door 11's named-field failure."""
+    generated = _generated().replace("@example Jane Doe", "@example John Roe", 1)
+    found = guard.failures(
+        snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
+        generated=generated,
+    )
+    assert len(found) == 1, found
+    assert "UserCreate.full_name" in found[0], found
+    assert "_GENERATED_EXAMPLE_VALUE_DIGEST" not in found[0], found
+
+
+def test_door_twelve_does_not_double_report_a_tag_relocation() -> None:
+    """A same-value relocation stays door 11's two named fields."""
+    found = guard.failures(
+        snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
+        generated=_relocated(),
+    )
+    assert len(found) == 2, found
+    assert all("_GENERATED_EXAMPLE_VALUE_DIGEST" not in f for f in found), found
+
+
+def test_door_twelve_stands_down_on_a_snapshot_drift() -> None:
+    """A snapshot-side rewrite is door 5's alone, never counted twice."""
+
+    def change(doc: dict) -> None:
+        doc["components"]["schemas"]["UserCreate"]["properties"]["full_name"][
+            "examples"
+        ] = ["John Roe"]
+
+    found = guard.failures(snapshot=_example_doc(change))
+    assert len(found) == 1, found
+    assert "_EXAMPLE_DIGEST" in found[0], found
+
+
+def test_door_twelve_adds_no_new_wiring() -> None:
+    """One guard, one ledger: no new guard file or wiring row."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "def _generated_example_value_digest(" in source
+    assert "_GENERATED_EXAMPLE_VALUE_DIGEST" in source
+    for text in (SMOKE, REGISTRY, TEETH):
+        assert "independent_value_cases" not in text, text
+        assert "GENERATED_EXAMPLE_VALUE_DIGEST" not in text, text
+
+
+def test_door_twelve_self_test_plants_are_registered() -> None:
+    """From a second file: the decisive ablation and both controls exist."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "coordinated both-halves example rewrite" in source
+    assert "reviewed example-value re-pin stays green" in source
+    assert "re-pinning only the snapshot digest does not agree" in source
+
+
+def test_door_twelve_digest_is_load_bearing() -> None:
+    """A single-file ``actual = pinned`` edit must fail the decisive case."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    gutted = source.replace(
+        "    actual_generated_example_values = _generated_example_value_digest(\n"
+        "        printed_example_rows\n"
+        "    )",
+        "    actual_generated_example_values = pinned_generated_example_digest",
+        1,
+    )
+    assert gutted != source
+    namespace: dict = {
+        "__name__": "gutted_guard",
+        "__file__": str(ROOT / "scripts" / guard.SELF),
+    }
+    exec(compile(gutted, str(ROOT / "scripts" / guard.SELF), "exec"), namespace)  # noqa: S102
+    snapshot, generated, new_digest = _both_halves_example_rewrite()
+    found = namespace["failures"](
+        snapshot=snapshot, generated=generated, example_digest=new_digest
+    )
+    assert not any("_GENERATED_EXAMPLE_VALUE_DIGEST" in f for f in found), found
