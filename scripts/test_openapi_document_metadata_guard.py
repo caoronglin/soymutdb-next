@@ -11,8 +11,17 @@ The ablation-count pin is NOT a ``>=`` floor. A floor from an older world
 (``ablations >= 22``) stays green when the one ablation that catches the
 AST-vs-substring wiring regression is deleted together with the guard it
 protects, because the count merely returns to the old value. Pin the exact
-count, the named regression case, AND prove the pin itself would go red when
-that case disappears (``test_ablation_count_pin_is_not_vacuous``).
+count, the named regression cases, AND prove the pin itself would go red when
+a case disappears (``test_ablation_count_pin_is_not_vacuous``).
+
+Two wiring rows are pinned by name. The decoy-comment row proves the guard
+reads the parsed ``FastAPI(...)`` call rather than whole-file text. The
+local-rebinding row proves it goes one step further: ``_kw_expr`` pins only the
+*spelling* of the keyword, so a local rebinding of ``OPENAPI_DESCRIPTION`` /
+``OPENAPI_TAGS`` inside ``create_app`` would make the running app publish
+different bytes while the call-site text, the module-level literal, the
+snapshot and the golden all stay put. The guard resolves names with the stdlib
+symbol table; this face proves that resolution is load-bearing.
 """
 
 from __future__ import annotations
@@ -31,8 +40,11 @@ GUARD = Path(__file__).with_name("check_openapi_document_metadata.py")
 # that reads the parsed call from one that greps the whole file.
 DECOY_LABEL = "description/tags unwired with decoy comment"
 DECOY_MUTATOR = "source_wiring_unwired_with_decoy_comment"
-REQUIRED_ABLATIONS = frozenset((DECOY_LABEL,))
-EXPECTED_ABLATIONS = 23
+SHADOW_LABEL = "description/tags shadowed by local rebinding"
+SHADOW_MUTATOR = "source_wiring_shadowed_by_local_rebinding"
+UNCOMPILABLE_LABEL = "create_app does not compile under symtable"
+REQUIRED_ABLATIONS = frozenset((DECOY_LABEL, SHADOW_LABEL, UNCOMPILABLE_LABEL))
+EXPECTED_ABLATIONS = 25
 
 
 def _guard(path: Path = GUARD):
@@ -56,9 +68,11 @@ def test_every_ablation_is_caught() -> None:
     assert positives >= 1
     # The specific regression, by name, cannot quietly vanish from the table.
     assert REQUIRED_ABLATIONS <= labels, labels - REQUIRED_ABLATIONS
-    # The registered label must be driven by the decoy mutator, not a
-    # same-named no-op: pin the wiring between label and implementation.
-    assert DECOY_MUTATOR in GUARD.read_text(encoding="utf-8")
+    # Each registered label must be driven by its mutator, not a same-named
+    # no-op: pin the wiring between label and implementation.
+    source = GUARD.read_text(encoding="utf-8")
+    assert DECOY_MUTATOR in source
+    assert SHADOW_MUTATOR in source
 
 
 def test_decoy_wiring_ablation_really_rejects_a_substring_guard() -> None:
@@ -99,11 +113,105 @@ def test_decoy_wiring_ablation_really_rejects_a_substring_guard() -> None:
     assert any("OPENAPI_TAGS as openapi_tags" in item for item in found), found
 
 
+def test_local_rebinding_of_wiring_names_is_rejected() -> None:
+    """A row the old table lacked: pin what the keyword name *resolves to*.
+
+    ``_kw_expr`` proves the FastAPI(...) keyword still reads
+    ``OPENAPI_DESCRIPTION`` / ``OPENAPI_TAGS``. It does not prove those names
+    still resolve to the locked module-level constants: a local rebinding in
+    ``create_app`` shadows them, so the running app exports different metadata
+    while the call-site text, the 1209-char module literal, the snapshot and
+    the golden are all untouched. Prove the committed guard (a) rejects that
+    mutant, (b) resolves names by scope, not spelling, and (c) would be green
+    under a spelling-only guard -- i.e. this test is a load-bearing control,
+    not a restatement of ``problems == []``.
+    """
+    guard = _guard()
+    snapshot, generated, golden, main, config, smoke, routers = guard._load()
+    injected = (
+        '    """Create and configure the FastAPI application."""\n'
+        '    OPENAPI_DESCRIPTION = "(rewritten)"\n'
+        '    OPENAPI_TAGS = [{"name": "x"}]\n'
+        '    app = FastAPI('
+    )
+    original = '    """Create and configure the FastAPI application."""\n    app = FastAPI('
+    mutant = main.replace(original, injected, 1)
+    assert mutant != main, "create_app injection anchor changed"
+
+    # (a) The keyword spelling is unchanged and the module literal is intact.
+    kwargs = guard._fastapi_kwargs(ast.parse(mutant))
+    assert guard._kw_expr(kwargs, "description") == "OPENAPI_DESCRIPTION"
+    assert guard._kw_expr(kwargs, "openapi_tags") == "OPENAPI_TAGS"
+    facts = guard.source_facts(mutant, config)
+    assert len(facts["description"]) == 1209
+    assert guard._assignments(ast.parse(mutant)).get("OPENAPI_DESCRIPTION") is not None
+
+    # (b) The scope resolution sees exactly the two shadowed names.
+    assert guard._shadowed_wiring_names(main) == []
+    assert guard._shadowed_wiring_names(mutant) == ["OPENAPI_DESCRIPTION", "OPENAPI_TAGS"]
+
+    # (c) A spelling-only guard (the pre-fix shape) stays GREEN on this mutant;
+    #     only the name-resolution check makes it red. Rebuild that shape on an
+    #     in-memory copy so this test cannot pass by trusting the committed code.
+    spelling_only = GUARD.read_text(encoding="utf-8").replace(
+        "    try:\n"
+        "        shadowed = _shadowed_wiring_names(main)\n"
+        "    except (SyntaxError, ValueError) as exc:\n"
+        "        # ``symtable`` compiles, so it rejects a few shapes ``ast.parse``\n"
+        "        # accepts (e.g. duplicate parameters). Report a clean FAIL instead of\n"
+        "        # letting the exception escape the guard (the #166 StopIteration class).\n"
+        '        found.append(f"main.py does not compile as a metadata source: {exc}")\n'
+        "    else:\n"
+        "        if shadowed:\n"
+        "            found.append(\n"
+        '                "create_app() rebinds metadata names in its local scope ("\n'
+        "                + \", \".join(shadowed)\n"
+        '                + "): the FastAPI(...) call would read a different value than "\n'
+        '                "the locked module-level constant"\n'
+        "            )\n",
+        "",
+        1,
+    )
+    assert spelling_only != GUARD.read_text(encoding="utf-8"), "shadow block not found"
+    with tempfile.TemporaryDirectory() as tmp:
+        regressed_path = Path(tmp) / "check_openapi_document_metadata.py"
+        regressed_path.write_text(
+            spelling_only.replace(
+                "ROOT = Path(__file__).resolve().parents[1]",
+                f"ROOT = Path({str(Path(__file__).resolve().parents[1])!r})",
+            ),
+            encoding="utf-8",
+        )
+        regressed_guard = _guard(regressed_path)
+        assert regressed_guard.failures(
+            snapshot, generated, golden, mutant, config, smoke, routers
+        ) == [], "spelling-only guard unexpectedly caught the shadow mutant"
+
+    # The committed guard is RED, and self_test() exercises this exact class.
+    found = guard.failures(snapshot, generated, golden, mutant, config, smoke, routers)
+    assert any("rebinds metadata names in its local scope" in item for item in found), found
+    problems, ablations, _, labels = guard.self_test()
+    assert problems == [], problems
+    assert SHADOW_LABEL in labels
+    assert ablations == EXPECTED_ABLATIONS
+
+    # The defensive branch is exercised too: a duplicate-parameter create_app
+    # (ast.parse-ok, symtable-reject) yields a clean FAIL, not a traceback.
+    uncompilable = main.replace(
+        "def create_app() -> FastAPI:", "def create_app(x, x) -> FastAPI:", 1
+    )
+    found = guard.failures(
+        snapshot, generated, golden, uncompilable, config, smoke, routers
+    )
+    assert any("does not compile as a metadata source" in item for item in found), found
+
+
 def _regressed_guard_source() -> str:
     """Revert the AST wiring judgement to the old substring check and delete
-    the decoy ablation, on an IN-MEMORY COPY of the guard source. This is the
-    exact regression deepseek materialized on the merge tree: guard reverted +
-    new ablation removed. Nothing is written to the committed file."""
+    every wiring ablation added on top of it, on an IN-MEMORY COPY of the
+    guard source. This reconstructs the pre-fix world: guard reverted to
+    substring + the decoy / shadow / uncompilable cases removed, so the count
+    falls back to 22. Nothing is written to the committed file."""
     source = GUARD.read_text(encoding="utf-8")
     source = source.replace(
         '        "description_expr": _kw_expr(kwargs, "description"),\n'
@@ -126,6 +234,24 @@ def _regressed_guard_source() -> str:
     )
     assert block in source, "decoy ablation tuple not found in guard source"
     source = source.replace(block, "", 1)
+    shadow_block = (
+        "        (\n"
+        '            "description/tags shadowed by local rebinding",\n'
+        "            source_wiring_shadowed_by_local_rebinding,\n"
+        '            "rebinds metadata names in its local scope",\n'
+        "        ),\n"
+    )
+    assert shadow_block in source, "shadow ablation tuple not found in guard source"
+    source = source.replace(shadow_block, "", 1)
+    uncompilable_block = (
+        "        (\n"
+        '            "create_app does not compile under symtable",\n'
+        "            source_wiring_uncompilable,\n"
+        '            "does not compile as a metadata source",\n'
+        "        ),\n"
+    )
+    assert uncompilable_block in source, "uncompilable ablation tuple not found"
+    source = source.replace(uncompilable_block, "", 1)
     return source
 
 
@@ -162,6 +288,8 @@ def test_ablation_count_pin_is_not_vacuous() -> None:
     assert problems == [], problems
     assert ablations == 22, ablations
     assert DECOY_LABEL not in labels
+    assert SHADOW_LABEL not in labels
+    assert UNCOMPILABLE_LABEL not in labels
     # The fossil floor would have stayed green:
     assert ablations >= 22
     # The new pin would NOT: both the count and the named-label assertions fire.

@@ -58,7 +58,16 @@ committed bytes:
    running app export metadata diverging from the snapshot. All three keyword
    values are read from the parsed `FastAPI(...)` call, not from a whole-file
    substring: a decoy comment containing `description=OPENAPI_DESCRIPTION`
-   cannot keep this check green after the real kwargs are unwired.
+   cannot keep this check green after the real kwargs are unwired. Reading the
+   keyword *expression* proves its spelling, not what the name resolves to, so
+   the guard also resolves the referenced root names with the stdlib symbol
+   table: a local rebinding of `OPENAPI_DESCRIPTION` / `OPENAPI_TAGS` /
+   `settings` inside `create_app` (before `FastAPI(...)`) is rejected, because
+   the running app would then export different bytes while the call-site text,
+   the module-level literal, the snapshot and the golden all stay put. A
+   same-name local in a nested helper is a different scope and is not flagged.
+   A shape `ast.parse` accepts but `symtable` rejects (e.g. duplicate
+   parameters) yields a clean FAIL rather than an escaping traceback.
 
 It also rejects a hollow / duplicate-key golden, checks the tag catalog is
 non-empty and each tag has a name and description, and stays honest about its
@@ -89,16 +98,24 @@ a `>=` floor: an older-world floor (`ablations >= 22`) stays green when the
 one case that catches the AST-vs-substring wiring regression is deleted
 together with the guard it protects, because the count merely returns to the
 old value. `self_test()` returns the registered case labels alongside the
-counts, `test_every_ablation_is_caught` asserts `== 23` and that
-`description/tags unwired with decoy comment` is present and driven by its
-mutator, and `test_ablation_count_pin_is_not_vacuous` materializes the exact
-revert-and-delete regression to prove the pin itself would go red. A count
-written into an assert grows its own tree; the pin must name what it guards.
+counts, `test_every_ablation_is_caught` asserts the exact count (`== 25` at
+this cut) and that all three wiring rows are present and driven by their
+mutators — `description/tags unwired with decoy comment` (parsed call vs
+whole-file substring), `description/tags shadowed by local rebinding`
+(name resolution, not spelling), and `create_app does not compile under
+symtable` (clean FAIL, no traceback). `test_ablation_count_pin_is_not_vacuous`
+materializes the exact revert-and-delete regression to prove the pin itself
+would go red, and `test_local_rebinding_of_wiring_names_is_rejected` rebuilds a
+spelling-only guard on in-memory bytes to prove the name-resolution check is
+load-bearing. A count written into an assert grows its own tree; the pin must
+name what it guards, and the table must have a row for each shape the guard
+claims to reject.
 
 ## Verification / not claimed
 
-Stdlib guard + 23 self-test ablations (including the coordinated co-revert and
-the decoy-comment wiring case) run on CPython 3.11 without the API venv. The
+Stdlib guard + 25 self-test ablations (including the coordinated co-revert,
+the decoy-comment wiring case, the local-rebinding name-resolution case and the
+symtable-reject clean-FAIL case) run on CPython 3.11 without the API venv. The
 real 3.15 export lane, full API/worker pytest, turbo, Playwright E2E and OCI
 are CI's authority; they are not signed here. A new golden file is committed,
 so `generate:api-client` must not overwrite it (it is not an output of the
