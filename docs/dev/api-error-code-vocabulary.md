@@ -56,10 +56,10 @@ API import, no Python 3.15 venv, no wheel, no database. It asserts:
   and the `catalog[HTTP_ERROR_CODE] = ...` entry are present, so a dropped
   catalog entry cannot hide behind a leftover constant.
 
-`--self-test` plants eight independent defects (coordinated rename, dropped
+`--self-test` plants nine independent defects (coordinated rename, dropped
 code, changed description, lock turned into a generated artifact, invented
-source code, renamed `http_error` fallback, empty lock, duplicate key) and
-proves each is caught.
+source code, renamed `http_error` fallback, dropped fallback catalog entry,
+empty lock, duplicate key) and proves each is caught.
 
 `packages/api-client/python_tests/test_api_error_code_vocabulary.py` provides
 ten `unittest` regressions, including the killing mutation: a rename applied
@@ -74,9 +74,10 @@ GitHub mirror (the job bodies are shared scripts). That gate re-exports the
 backend with the API venv, so the guards are also consumed by
 `scripts/smoke.sh --profile contracts` — the contracts layer that runs on a
 clean checkout without an API venv — as standalone `|| rc=$?` calls.
-`scripts/check_error_code_gate_wiring.py` pins those two wires (dropping or
-neutralising either must fail). Its `--self-test` plants the decisive co-rename
-as a **differential** probe: a complete clean copy of the tree must print
+`scripts/check_error_code_gate_wiring.py` pins those two wires and the
+vocabulary guard's `--self-test` wire (dropping or neutralising any of the three
+must fail; the self-test call is what runs the decisive ablation plants). Its
+`--self-test` plants the decisive co-rename as a **differential** probe: a complete clean copy of the tree must print
 `OK` and exit 0, and only then is the co-renamed copy judged red — with named
 `FAIL:` lines and no traceback. A bare exit-status check was a false positive
 here: the vocabulary guard reads `export_contract.py` unconditionally, so a
