@@ -146,6 +146,7 @@ REQUIRED_GUARD_CALLS: frozenset[str] = frozenset(
         "scripts/check_openapi_response_surface.py",
         "scripts/check_variant_summary_assembly_consistency.py",
         "scripts/check_contracts_self_test_teeth.py",
+        "scripts/check_static_placeholder_scan.py",
     }
 )
 
@@ -188,6 +189,7 @@ PINNED_SUITES: frozenset[str] = frozenset(
         'scripts/test_clickhouse_migration_contracts.py',
         'scripts/test_contracts_layer_self_containment.py',
         'scripts/test_contracts_self_test_teeth.py',
+        'scripts/test_static_placeholder_scan.py',
         'scripts/test_custom_element_registration_contracts.py',
         'scripts/test_dependency_governance_contracts.py',
         'scripts/test_deployment_workflows.py',
