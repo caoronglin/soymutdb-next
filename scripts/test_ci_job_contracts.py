@@ -2018,9 +2018,18 @@ class DeliveryArchitectureTests(unittest.TestCase):
         )
 
         # Exactly one Rust finding set: no second cargo-* analyzer in the
-        # governance policy, which would produce a contradictory report.
-        policy = (ROOT / "dependency-governance.json").read_text(encoding="utf-8")
-        self.assertNotIn("cargo audit", policy)
+        # governance policy, which would produce a contradictory report. Parse
+        # the checks structurally; a literal "cargo audit" substring check
+        # misses a check named `cargo-deny` (PR #180's hole).
+        from scripts.check_bio_core_wheel_abi import foreign_cargo_analyzers
+
+        registered = foreign_cargo_analyzers(ROOT / "dependency-governance.json")
+        self.assertEqual(
+            registered,
+            [],
+            "a second Rust cargo analyzer was registered in the governance "
+            "policy; the release lane must have exactly one Rust finding set",
+        )
 
     def test_contracts_job_provisions_every_import_it_needs(self) -> None:
         """The contracts stage must provision the layer's whole dependency set.
