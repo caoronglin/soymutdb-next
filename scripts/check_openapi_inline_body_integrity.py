@@ -650,7 +650,11 @@ def test_the_committed_inline_title_digest_is_an_independent_literal() -> None:
 def test_a_coordinated_inline_title_rewrite_is_rejected() -> None:
     """Snapshot-only drift, provenance blob re-pinned: still named."""
     document = _retype_one_inline_title()
-    found = failures(document, GENERATED.read_text(encoding="utf-8"), SMOKE.read_text(encoding="utf-8"))
+    found = failures(
+        document,
+        GENERATED.read_text(encoding="utf-8"),
+        SMOKE.read_text(encoding="utf-8"),
+    )
     assert any("_INLINE_TITLE_DIGEST" in problem for problem in found), found
 
 
@@ -659,7 +663,11 @@ def test_the_title_digest_is_load_bearing_not_the_count_door() -> None:
     document = _retype_one_inline_title()
     rows = inline_title_rows(document)
     assert len(rows) == _EXPECTED_INLINE_TITLES
-    found = failures(document, GENERATED.read_text(encoding="utf-8"), SMOKE.read_text(encoding="utf-8"))
+    found = failures(
+        document,
+        GENERATED.read_text(encoding="utf-8"),
+        SMOKE.read_text(encoding="utf-8"),
+    )
     assert any("_INLINE_TITLE_DIGEST" in problem for problem in found), found
 
 
@@ -668,7 +676,12 @@ def test_repinning_the_title_digest_from_the_drifted_tree_is_not_enough() -> Non
     document = _retype_one_inline_title()
     derived = _inline_title_digest(inline_title_rows(document))
     assert derived != _INLINE_TITLE_DIGEST
-    found = failures(document, GENERATED.read_text(encoding="utf-8"), SMOKE.read_text(encoding="utf-8"), title_digest=derived)
+    found = failures(
+        document,
+        GENERATED.read_text(encoding="utf-8"),
+        SMOKE.read_text(encoding="utf-8"),
+        title_digest=derived,
+    )
     # with the literal re-derived the door is silent: that is exactly why the
     # pinned value must be a reviewed hand-written constant, not a computation.
     assert not any("_INLINE_TITLE_DIGEST" in problem for problem in found), found
