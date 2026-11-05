@@ -187,7 +187,15 @@ nothing self-referential. A regenerate that drifts both halves together now
 fails on the baseline, not on a difference between the halves. `_CLIENT_BODY_TOTAL`
 stays as a loud aggregate first signal.
 
-Verified on the committed tree: 13 checks, `OK`, rc=0, collected by pytest (13
+Verified on the committed tree: 15 checks, `OK`, rc=0, collected by pytest (15
 passed). In-file mutation cases cover all five drifts above plus client-only,
 snapshot-only, undeclared-component and smoke-wiring regressions; byte-preserving
 working-tree ablations of each drift go red and restore green.
+
+A baseline is only a fixed point if the commit that turns it red cannot also
+re-pin it. `_PINNED_ARTIFACTS` records the git blob id of both artifacts the
+literals were counted from, and `_baseline_moved_with_the_artifacts()` recomputes
+those ids from the committed bytes on every run. So a regenerate that drifts both
+halves and bumps the counts in one commit also has to re-pin the blob ids in the
+same diff, and a re-pin that does not match the artifacts it claims to describe
+is rejected on its own message.
