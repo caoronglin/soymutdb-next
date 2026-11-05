@@ -126,13 +126,20 @@ that does not move with the catalog. Three consequences:
 ### Measurement that motivated this cut
 
 On the tree before this change the published catalog declared **6** tags while
-operations carried **49** distinct names (`undeclared = 43`). The 49 operation
+operations carried **50** distinct names (`undeclared = 44`). The 50 operation
 tags were *exactly* the `tags=[...]` literals in router source, confirming the
 catalog — not the routers — was the stale side. Note that the `admin-*` family
 is **not** an existing taxonomy rule: nothing in committed bytes names it, and
-none of the 97 `admin-*` operations also carried the declared `admin` rollup.
-So the invariant is plain `emitted ∪ used ⊆ declared ⊆ emitted ∪ used`, with
-no prefix exception invented for the sake of making today's tree pass.
+none of the `admin-*` operations also carried the declared `admin` rollup. So
+the invariant is plain `emitted == used == declared`, with no prefix exception
+invented for the sake of making today's tree pass.
+
+A live example arrived while this cut was being prepared: `export_query.py`
+landed on `main` with `tags=["exports"]` between `#178` and this change. The
+guard, rebased onto that `main`, went **red** with `tag catalog is incomplete:
+exports` — precisely the "next router makes the lock stale" case. Adding the
+one catalog entry (source + golden + snapshot) turned it green without editing
+any constant table of tag names.
 
 ### Legitimate change: adding or retiring a router
 

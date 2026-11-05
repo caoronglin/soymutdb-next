@@ -129,6 +129,10 @@ OPENAPI_TAGS = [
     {"name": "comparative", "description": "Comparative genomics families and comparisons."},
     {"name": "content", "description": "Public content snapshots, news and downloads."},
     {"name": "expression", "description": "Gene expression libraries and measurements."},
+    {
+        "name": "exports",
+        "description": "Unified whitelist query builder over the export pipeline.",
+    },
     {"name": "genes", "description": "Gene search and gene structure."},
     {"name": "gwas", "description": "GWAS uploads and jobs."},
     {"name": "homologs", "description": "Gene homolog lookup and search."},

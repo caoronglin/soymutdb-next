@@ -121,6 +121,10 @@
       "description": "Gene expression libraries and measurements."
     },
     {
+      "name": "exports",
+      "description": "Unified whitelist query builder over the export pipeline."
+    },
+    {
       "name": "genes",
       "description": "Gene search and gene structure."
     },
