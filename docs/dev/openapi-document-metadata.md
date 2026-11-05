@@ -234,3 +234,32 @@ Python 3.15 venv, no FastAPI, no service. That also means it cannot prove a
 router is *registered* on the app — it proves the published tag set and the
 declared catalog track the router source that owns them. Registration remains
 the runtime export lane's job (`check-contract.sh`).
+
+## Follow-up: the operation → tag assignment is a fixed point, not a set
+
+The catalog-completeness invariant above compares **sets of tag names**:
+router literals, operation tags, and the declared catalog. It cannot see
+*which operation carries which tag*. A byte-preserving permutation that swaps
+two operations' tag lists leaves the name multiset, the catalog, the router
+literals, the golden lock and the provenance blob ids all unchanged — yet the
+published grouping changes. Measured on live bytes (268 operations, 50 tag
+names), swapping one `health` operation with one `auth` operation, with the
+snapshot provenance blob re-pinned, left **all 21 wired OpenAPI guards green**
+and the whole contracts layer `SMOKE PASS / 892 passed, 0 failed`.
+`openapi-typescript` does not emit tags into the generated client, so there is
+no second half to compare against; only an independent literal can see it.
+
+`_OPERATION_TAG_DIGEST` is a hand-written sha256 over the canonical sorted
+`(METHOD, path, sorted-tags)` tuple set, read from nowhere. It is a reviewed
+literal, not derived from the snapshot under guard, so a co-revert of the
+snapshot still changes it. A one-sided or permuted retag now fails with the
+cause named (`published operation tag assignment drifted`), and the
+`--self-test` plants one such permutation (28 ablations, 2 positive controls).
+A legitimate retag moves the digest in the same commit as the snapshot and
+says why; the "legitimate retag with re-pinned literal" positive control
+proves that path stays green. Adding a new router also legitimately moves the
+digest, so the existing "legitimate new router" control re-pins it too.
+
+On the fix tree the same permutation makes the layer `SMOKE FAIL / 6 failed,
+887 passed` while every sibling OpenAPI guard stays `rc=0`; restore is
+`SMOKE PASS / 893 passed` (+1 net, the one new second-file case).
