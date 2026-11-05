@@ -547,6 +547,43 @@ class RegistryCollectionGuardTests(unittest.TestCase):
                 else:
                     self.assertEqual(rc, 1, "ablation stayed green: probe is vacuous")
 
+    def test_the_unpinned_probe_fails_for_the_pin_only(self) -> None:
+        """The self-test case must assert the failure IS the pin, not just any
+        failure.
+
+        A generic ``bool(found)`` passes even when the plant is removed: the
+        missing-file error fires first and the probe stays green. The dedicated
+        report must require exactly one failure naming ``PINNED_SUITES``; both
+        ``plant removed`` and ``unpinned = set()`` must turn it red.
+        """
+        source = GUARD_PATH.read_text()
+        needle = '"not pinned in PINNED_SUITES" in unpinned_found[0]'
+        self.assertIn(needle, source, "the failure-for-the-pin assertion is gone")
+        self.assertIn("len(unpinned_found) == 1", source,
+                      "the single-failure isolation is gone")
+
+        import types
+        plant = (
+            '    unpinned_files["scripts/test_unpinned_new_suite.py"] = (\n'
+            '        "def test_unpinned():\\n    assert True\\n"\n'
+            '    )\n'
+        )
+        self.assertIn(plant, source, "the probe is no longer planted on disk")
+        ablation = ('    unpinned = registered - PINNED_SUITES\n',
+                    '    unpinned = set()\n')
+        for label, body in {
+            "planted": source,
+            "plant removed": source.replace(plant, "", 1),
+            "unpinned ablated": source.replace(*ablation, 1),
+        }.items():
+            with self.subTest(shape=label):
+                module = types.ModuleType("guard_" + label.replace(" ", "_"))
+                module.__file__ = str(GUARD_PATH)
+                exec(compile(body, str(GUARD_PATH), "exec"), module.__dict__)
+                with contextlib.redirect_stdout(io.StringIO()):
+                    rc = module.self_test()
+                self.assertEqual(rc, 0 if label == "planted" else 1, label)
+
     def test_the_gating_pytest_call_must_stay_a_bare_statement(self) -> None:
         smoke, ci, files = guard.load_sources()
         line = '  "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?\n'

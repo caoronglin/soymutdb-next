@@ -153,7 +153,10 @@ and a set member no longer wired. This is deliberate. A guard added to the
 layer without being pinned here can be dropped later with a green `SMOKE PASS`
 -- its only wiring probe may live inside the very call that was dropped, as
 with the inline-body guard. `--self-test` plants an unpinned addition and
-asserts it is caught, plus a control showing a same-change pin stays green.
+asserts it fails **for the pin alone** (exactly one failure naming
+`PINNED_SUITES`): a generic "was caught" check also passes when the
+plant is dropped, because the missing-file error fires first. A control
+shows a same-change pin stays green.
 Retire a call and remove its pin in the same commit; set-equality fails
 closed on drift in either direction.
 
