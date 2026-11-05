@@ -44,10 +44,11 @@ SHADOW_MUTATOR = "source_wiring_shadowed_by_local_rebinding"
 MUTATION_LABEL = "description/tags mutated in place"
 MUTATION_MUTATOR = "source_wiring_mutated_in_place"
 UNCOMPILABLE_LABEL = "create_app does not compile under symtable"
+UNRUNNABLE_LABEL = "create_app would not run (compiler rejects it)"
 REQUIRED_ABLATIONS = frozenset(
     (DECOY_LABEL, SHADOW_LABEL, MUTATION_LABEL, UNCOMPILABLE_LABEL)
 )
-EXPECTED_ABLATIONS = 26
+EXPECTED_ABLATIONS = 27
 
 
 def _guard(path: Path = GUARD):
@@ -338,6 +339,15 @@ def _regressed_guard_source() -> str:
     )
     assert uncompilable_block in source, "uncompilable ablation tuple not found"
     source = source.replace(uncompilable_block, "", 1)
+    unrunnable_block = (
+        "        (\n"
+        '            "create_app would not run (compiler rejects it)",\n'
+        "            source_wiring_unrunnable,\n"
+        '            "would not run",\n'
+        "        ),\n"
+    )
+    assert unrunnable_block in source, "unrunnable ablation tuple not found"
+    source = source.replace(unrunnable_block, "", 1)
     return source
 
 
@@ -377,6 +387,7 @@ def test_ablation_count_pin_is_not_vacuous() -> None:
     assert SHADOW_LABEL not in labels
     assert MUTATION_LABEL not in labels
     assert UNCOMPILABLE_LABEL not in labels
+    assert UNRUNNABLE_LABEL not in labels
     # The fossil floor would have stayed green:
     assert ablations >= 22
     # The new pin would NOT: both the count and the named-label assertions fire.

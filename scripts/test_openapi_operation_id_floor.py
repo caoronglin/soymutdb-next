@@ -44,7 +44,8 @@ def _co_revert() -> tuple[str, str]:
 
 
 def test_committed_tree_passes() -> None:
-    assert guard.failures() == []
+    found = guard.failures()
+    assert not found, found
 
 
 def test_coordinated_co_revert_is_rejected() -> None:

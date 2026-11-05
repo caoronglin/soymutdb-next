@@ -309,6 +309,22 @@ def _mutated_wiring_names(main: str) -> list[str]:
     return sorted(found)
 
 
+def _uncompilable_wiring(main: str) -> str | None:
+    """A clean-FAIL reason if ``create_app`` would not run at all.
+
+    The scope and mutation passes read the AST. ``ast.parse`` and ``symtable``
+    both accept ``__debug__ = 1``; only ``compile()`` rejects it. So a module
+    that cannot even be imported reads GREEN on those passes. ``compile()`` is
+    the authority that matches the runtime, so it is asked directly; anything
+    it rejects is a clean FAIL, not an escaping traceback.
+    """
+    try:
+        compile(main, "<main.py>", "exec")
+    except SyntaxError as exc:
+        return f"create_app() would not run: {exc}"
+    return None
+
+
 def source_facts(main: str, config: str) -> dict[str, Any]:
     """Derive the metadata the backend *intends* to publish from source bytes."""
     main_tree = ast.parse(main)
@@ -453,6 +469,13 @@ def failures(
                 + "): the FastAPI(...) call would read a different value than "
                 "the locked module-level constant"
             )
+        # 3c. Both passes above read the AST. A statement ``ast.parse`` accepts
+        #     but the compiler rejects (``__debug__ = 1``) leaves them silent
+        #     while the module cannot be imported at all -- guard GREEN on bytes
+        #     that could never run. compile() is the authority for "runs".
+        unrunnable = _uncompilable_wiring(main)
+        if unrunnable:
+            found.append(unrunnable)
 
     # 4. The generated client must NOT start encoding this metadata. Its
     #    absence is the premise for "one committed artifact"; if a future
@@ -707,6 +730,20 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
         )
         return snapshot, generated, golden, main, config, smoke
 
+    def source_wiring_unrunnable(snapshot, generated, golden, main, config, smoke):
+        # ``ast.parse`` and ``symtable`` both accept ``__debug__ = 1``; only
+        # ``compile()`` rejects it. Every AST pass stays silent, so this row
+        # pins the compile probe. The module would never import: GREEN on bytes
+        # that cannot run is the hole.
+        main = main.replace(
+            '    """Create and configure the FastAPI application."""\n    app = FastAPI(',
+            '    """Create and configure the FastAPI application."""\n'
+            "    __debug__ = 1\n"
+            "    app = FastAPI(",
+            1,
+        )
+        return snapshot, generated, golden, main, config, smoke
+
     def source_wiring_uncompilable(snapshot, generated, golden, main, config, smoke):
         # ast.parse accepts duplicate parameters; symtable (which compiles)
         # rejects them. A guard that called symtable without guarding would let
@@ -759,6 +796,11 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
             "description/tags mutated in place",
             source_wiring_mutated_in_place,
             "mutates metadata constants in place",
+        ),
+        (
+            "create_app would not run (compiler rejects it)",
+            source_wiring_unrunnable,
+            "would not run",
         ),
         (
             "create_app does not compile under symtable",
