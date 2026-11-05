@@ -173,6 +173,11 @@ smoke_contracts() {
     # the snapshot guard pins path/schema floors; neither counts success or
     # request bodies. Needs no Python 3.15.
     scripts/test_openapi_snapshot_body_integrity.py
+    # The guards above pin the contract to literals in their own source, so
+    # bumping a literal is a one-file edit that leaves every one of them green
+    # with the artifacts untouched. This suite proves the sync guard reports
+    # that edit, both directions, without touching the repository.
+    scripts/test_openapi_baseline_sync.py
     # The offline browser-gate inventory (scripts/test_artifact_e2e_gate.py)
     # must fail a build when a gate is dropped from the sweep or the sweep stops
     # failing closed.
@@ -269,6 +274,13 @@ smoke_contracts() {
   # rule did exactly that to packages/shared/src/build/) leaves every local
   # build green while a clean clone has no source for the import at all.
   "${PYTHON_BIN}" scripts/check_workspace_exports.py || rc=$?
+  # The two pinned OpenAPI baselines in the guards below are literals, so
+  # bumping one is a one-file edit that turns every guard green with the
+  # artifacts untouched -- the documented "update the baseline in the same
+  # commit" escape hatch, with nothing checking the same-commit part. This
+  # compares the literal to the artifacts (no git needed, so it holds in a
+  # squash and on a shallow clone) and to the commit that moved it.
+  "${PYTHON_BIN}" scripts/check_openapi_baseline_sync.py --self-test || rc=$?
   # The published OpenAPI auth surface (both security schemes + the per-op
   # HTTPBearer requirement on admin routes) is client-visible, but a co-revert
   # of main.py + openapi.json keeps check-contract.sh green. Pin it against

@@ -229,3 +229,39 @@ passed). In-file mutation cases cover all five drifts above, the two repin cases
 the two permutations, plus client-only, snapshot-only, undeclared-component and
 smoke-wiring regressions; byte-preserving working-tree ablations of each drift
 go red and restore green.
+
+## The baselines are literals, so bumping one is a one-file edit
+
+Everything above rests on fixed points written in the guards' own source:
+`_ERROR_RESPONSE_BASELINE`, `_RESPONSE_BODY_BASELINE` /
+`_REQUEST_BODY_BASELINE` / `_CLIENT_BODY_TOTAL`, `_BODY_PAIR_DIGEST` and
+`_SNAPSHOT_FLOOR`. That is the only shape that catches a coordinated edit of
+both artifacts — and it creates the last hole in the chain: the fixed point is a
+**literal**. Raising a baseline is one edit to one file, and every guard goes
+green again with `openapi.json` and `openapi.d.ts` untouched.
+
+The guards' own instructions are the escape hatch: *"update the baseline in the
+same commit and say why"*. Nothing checked that the same-commit part happened.
+The numbers in this document have already drifted from that instruction once
+(#184 repaired 800/266 to 807/268 on live bytes), which is what a number with
+no enforcement behind it looks like.
+
+`scripts/check_openapi_baseline_sync.py` (wired into `smoke.sh --profile
+contracts`, mutation-tested by `scripts/test_openapi_baseline_sync.py`) closes
+it with two independent doors:
+
+1. **semantic** — the pinned literal must equal the number recomputed from the
+   committed artifacts. Needs no git, so it holds on a shallow CI checkout and
+   under a squash commit where a parent diff would lie. This is the door that
+   makes "bump a number" fail on its own;
+2. **history** — a literal that moved between the base commit and `HEAD` must
+   sit in a commit where the artifact it pins also changed. This is the case
+   door 1 cannot see: a number edited to match a tree that was never committed
+   is self-consistent by construction. `--ref` / `--base` make the comparison
+   explicit where history is truncated.
+
+`_SNAPSHOT_FLOOR` is deliberately excluded. It is a floor, not an equality, and
+it moves on every API-growing commit — "the artifacts changed in an ancestor"
+is already true there and would be a vacuous check. Its equality cousin is
+`_RESPONSE_BODY_BASELINE`: gained paths must grow the response distribution,
+and that is what fires.
