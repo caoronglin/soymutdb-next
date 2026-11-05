@@ -1,11 +1,11 @@
 """Regression coverage for ``scripts/check_openapi_field_constraints.py``.
 
 The guard pins the 1712 published field-level values (815 constraints + 897
-``default`` values) to a hand-written literal. These cases prove each failure
-direction on real
-committed bytes, that the literal is independent of the artifact it audits,
-and that the wiring cannot quietly rot. Collected by the contracts layer's
-``tests=()`` array; stdlib-only, no Python 3.15 needed.
+``default`` values) plus the published ``examples`` arrays and both generated
+JSDoc projections to hand-written literals. These cases prove each failure
+direction on real committed bytes, that each literal is independent of the
+artifact it audits, and that the wiring cannot quietly rot. Collected by the
+contracts layer's ``tests=()`` array; stdlib-only, no Python 3.15 needed.
 """
 
 from __future__ import annotations
@@ -491,9 +491,13 @@ def test_a_same_count_tag_relocation_is_caught_only_by_the_digest() -> None:
     assert moved != generated
     assert len(guard.default_tag_rows(moved)) == guard._EXPECTED_DEFAULT_TAGS
     found = guard.failures(generated=moved)
-    # Only Door 6's digest fires: no snapshot door, no example door, no count.
-    assert len(found) == 1, found
-    assert "generated default tags drifted" in found[0], found
+    # Door 6 names the relocated field; Door 7 sees the same move as a changed
+    # (component, field, value) row. Both count doors and every snapshot door
+    # stay silent -- that is the load-bearing part of this plant.
+    assert len(found) == 2, found
+    assert any("generated default tags drifted" in f for f in found), found
+    assert any("generated default tag values drifted" in f for f in found), found
+    assert not any("tag count is" in f for f in found), found
 
 
 def test_the_generated_tag_pin_does_not_duplicate_the_example_floor() -> None:
@@ -515,9 +519,230 @@ def test_a_repin_of_the_tag_digest_alone_stays_green() -> None:
             break
     edited = "".join(lines)
     new_digest = guard._default_tag_digest(guard.default_tag_rows(edited))
+    new_value_digest = guard._default_tag_value_digest(
+        guard.default_tag_values(edited)
+    )
     assert new_digest != guard._DEFAULT_TAG_DIGEST
+    assert new_value_digest != guard._DEFAULT_TAG_VALUE_DIGEST
+    # A legitimate reviewed regenerate re-pins both halves' literals in the
+    # same commit: dropping a tag changes the location rows and the value rows.
     assert not guard.failures(
         generated=edited,
         tag_digest=new_digest,
+        tag_value_digest=new_value_digest,
         expected_tags=guard._EXPECTED_DEFAULT_TAGS - 1,
     )
+
+
+# --- Door 7: the value written in each generated @default tag --------------
+
+
+def test_generated_default_values_match_the_independent_literal() -> None:
+    """896 named (component, field, value) rows; one bare tag is positional."""
+    gen = _generated_defaults()
+    rows_ = guard.default_tag_values(gen)
+    assert len(rows_) == guard._EXPECTED_DEFAULT_TAGS == 896
+    assert all(name and field for name, field, _ in rows_)
+    assert guard._default_tag_value_digest(rows_) == guard._DEFAULT_TAG_VALUE_DIGEST
+    bare = [(c, f) for c, f, v in rows_ if v == ""]
+    assert bare == [("BlastHit", "subject_title")], bare
+
+
+def test_the_generated_default_value_pin_is_an_independent_literal() -> None:
+    """Re-deriving the value digest from the client would make it vacuous."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assigned = [
+        node
+        for node in ast.parse(source).body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(t, ast.Name) and t.id == "_DEFAULT_TAG_VALUE_DIGEST"
+            for t in node.targets
+        )
+    ]
+    assert len(assigned) == 1
+    value = ast.literal_eval(assigned[0].value)
+    assert isinstance(value, str) and len(value) == 64
+    assert value == guard._default_tag_value_digest(
+        guard.default_tag_values(_generated_defaults())
+    )
+    # Separate literal from #297's location digest: a retyped value must not
+    # be able to agree with the presence/location pin.
+    assert value != guard._DEFAULT_TAG_DIGEST
+
+
+def test_a_retyped_generated_default_value_with_blob_repin_is_rejected() -> None:
+    """The decisive co-revert: one tag value retyped, generated_blob re-pinned.
+
+    #297's Door 6 pins (component, field) presence, so it stays green: the
+    location digest is unchanged and the count door holds. The snapshot's 897
+    default rows are untouched too. Only Door 7 has to see it.
+    """
+    gen = _generated_defaults()
+    needle = "             * @default 10000\n"
+    assert gen.count(needle) == 1
+    drifted = gen.replace(needle, "             * @default 9999\n", 1)
+    found = guard.failures(generated=drifted)
+    assert len(found) == 1, found
+    assert "generated default tag values drifted" in found[0], found
+    # Door 6 and every snapshot-side door are silent.
+    assert guard._default_tag_digest(
+        guard.default_tag_rows(drifted)
+    ) == guard._DEFAULT_TAG_DIGEST
+
+
+def test_a_same_count_generated_value_rotation_hits_only_door_seven() -> None:
+    """Two distinct tag values swapped: location rows and count unchanged."""
+    gen = _generated_defaults()
+    a = "             * @default SNP\n"
+    b = "             * @default genome\n"
+    assert gen.count(a) == gen.count(b) == 1
+    rotated = gen.replace(a, "@@A@@", 1).replace(b, a, 1).replace("@@A@@", b, 1)
+    found = guard.failures(generated=rotated)
+    assert len(found) == 1, found
+    assert "generated default tag values drifted" in found[0], found
+    assert guard._default_tag_digest(
+        guard.default_tag_rows(rotated)
+    ) == guard._DEFAULT_TAG_DIGEST
+    assert len(guard.default_tag_rows(rotated)) == guard._EXPECTED_DEFAULT_TAGS
+
+
+def test_filling_the_bare_generated_default_value_is_rejected() -> None:
+    """The one empty-string default must stay a bare @default tag."""
+    gen = _generated_defaults()
+    bare = "             * @default\n"
+    assert gen.count(bare) == 1
+    filled = gen.replace(bare, "             * @default filled\n", 1)
+    found = guard.failures(generated=filled)
+    assert any("generated default tag values drifted" in f for f in found), found
+
+
+def test_a_repin_of_the_value_digest_alone_stays_green() -> None:
+    """A reviewed regenerate re-pins Door 7's literal with the client, once."""
+    gen = _generated_defaults()
+    drifted = gen.replace(
+        "             * @default 10000\n", "             * @default 9999\n", 1
+    )
+    new_digest = guard._default_tag_value_digest(
+        guard.default_tag_values(drifted)
+    )
+    assert new_digest != guard._DEFAULT_TAG_VALUE_DIGEST
+    assert not guard.failures(
+        generated=drifted,
+        tag_value_digest=new_digest,
+    )
+
+
+def test_door_seven_self_test_plants_are_registered() -> None:
+    """The guard's own self-test must plant a value retype, not just a drop."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "generated @default value retyped" in source
+    assert "same-count generated @default value rotation" in source
+    assert "default_value_cases" in source
+
+
+def test_zero_new_wiring_for_door_seven() -> None:
+    """Door 7 lives in an already-registered guard; no smoke/registry/teeth edit."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "def default_tag_values(" in source
+    assert "_DEFAULT_TAG_VALUE_DIGEST" in source
+# ---------------------------------------------------------------------------
+# Door 8 -- the generated half's @example values, not just their cardinality.
+# ---------------------------------------------------------------------------
+
+
+def test_a_one_sided_generated_value_rewrite_is_named_only_by_door_eight() -> None:
+    """The residual: rewrite one @example value, keep all 7 tags."""
+    gen = _generated().replace("@example Jane Doe", "@example John Roe", 1)
+    assert len(guard.generated_examples(gen)) == guard._EXPECTED_GENERATED_EXAMPLES
+    found = guard.failures(
+        snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
+        generated=gen,
+    )
+    assert len(found) == 1, found
+    assert "generated @example values disagree" in found[0], found
+    assert "_EXAMPLE_DIGEST" not in found[0], found
+    assert "tag count" not in found[0].lower(), found
+
+
+def test_a_same_count_generated_value_permutation_is_named() -> None:
+    """Two distinct values swapped between tags: cardinality cannot see it."""
+    gen = (
+        _generated()
+        .replace("@example Jane Doe", "@example __SWAP__", 1)
+        .replace("@example viewer", "@example Jane Doe", 1)
+        .replace("@example __SWAP__", "@example viewer", 1)
+    )
+    assert sorted(guard.generated_examples(gen)) == sorted(
+        guard.generated_examples(_generated())
+    )
+    found = guard.failures(
+        snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
+        generated=gen,
+    )
+    assert len(found) == 1, found
+    assert "generated @example values disagree" in found[0], found
+
+
+def test_the_snapshot_side_drift_is_named_only_by_door_five() -> None:
+    """Door 8 stands down when the snapshot digest drifts: full resolution."""
+
+    def change(doc: dict) -> None:
+        for name in ("LoginRequest", "UserCreate"):
+            for prop in doc["components"]["schemas"][name]["properties"].values():
+                if isinstance(prop, dict) and isinstance(prop.get("examples"), list):
+                    prop["examples"] = [v + "X" for v in prop["examples"]]
+
+    found = guard.failures(snapshot=_example_doc(change))
+    assert len(found) == 1, found
+    assert "_EXAMPLE_DIGEST" in found[0], found
+    assert "@example values disagree" not in found[0], found
+
+
+def test_door_eight_self_test_plants_are_registered() -> None:
+    """From a second file: the two new ablations exist and are consumed."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    for name in (
+        "one-sided generated example value rewritten",
+        "same-count generated example value permutation",
+    ):
+        assert name in source, name
+    assert "generated @example values disagree" in source
+
+
+def test_door_eight_keeps_a_reviewed_repin_green() -> None:
+    """A reviewed regenerate moves the digest AND both halves' values."""
+
+    def change(doc: dict) -> None:
+        for name in ("LoginRequest", "UserCreate"):
+            for prop in doc["components"]["schemas"][name]["properties"].values():
+                if isinstance(prop, dict) and isinstance(prop.get("examples"), list):
+                    prop["examples"] = [v + "X" for v in prop["examples"]]
+
+    snapshot = _example_doc(change)
+    gen = _generated()
+    for value in ("researcher@univ.edu", "S3cureP@ss!", "Jane Doe", "viewer"):
+        gen = gen.replace("@example " + value, "@example " + value + "X")
+    new_digest = guard._example_digest(guard.example_rows(json.loads(snapshot)))
+    assert not guard.failures(
+        snapshot=snapshot, generated=gen, example_digest=new_digest
+    )
+
+
+def test_door_eight_adds_no_new_wiring() -> None:
+    """Zero smoke.sh / registry / teeth churn, exactly like door 5, 6 and 7."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "generated @example values disagree" in source
+    assert not (ROOT / "scripts" / "check_openapi_published_examples.py").exists()
+    import subprocess
+
+    for relative in (
+        "scripts/smoke.sh",
+        "scripts/check_contracts_registry_collection.py",
+        "scripts/check_contracts_self_test_teeth.py",
+    ):
+        ours = (ROOT / relative).read_bytes()
+        main = subprocess.check_output(
+            ["git", "show", f"origin/main:{relative}"], cwd=ROOT
+        )
+        assert ours == main, relative

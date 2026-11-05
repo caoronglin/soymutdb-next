@@ -203,3 +203,92 @@ re-pin `_DEFAULT_TAG_DIGEST` and `_EXPECTED_DEFAULT_TAGS` in the same commit as
 `openapi.d.ts`. The companion suite pins the literal from a second file, proves
 the two generated JSDoc projections (`@default` and `@example`) are distinct,
 and asserts both ablation shapes are named.
+
+## Phase 4 — the value written in each generated `@default` tag (door 7)
+
+Phase 3 pins the *presence and location* of the 896 tags — `(component,
+field)` rows — but not the published value written in the tag. That is a
+second, genuinely unowned cell, one layer deeper:
+
+**Decisive ablation on live `94dfac2e`**: retype one generated
+`@default 10000` → `@default 9999`, leave the snapshot's 897 `default` rows
+untouched, and honestly re-pin `generated_blob` in `_PINNED_ARTIFACTS` to the
+new bytes. `_DEFAULT_TAG_DIGEST` is unchanged (same `(component, field)`),
+`_EXPECTED_DEFAULT_TAGS` holds (896), every other wired OpenAPI guard and the
+whole contracts layer stay **`SMOKE PASS / 1017 passed + 41 subtests / 0
+failed`**. A client reading the generated fallback value gets `9999` instead
+of `10000`, and no fixed point reports it.
+
+### The pin
+
+- `_DEFAULT_TAG_VALUE_DIGEST` — a second hand-written sha256 over canonical
+  sorted `(component, field, value)` rows, read from nowhere. Deliberately
+  **separate** from `_DEFAULT_TAG_DIGEST`: a dropped tag and a retyped value
+  are different drifts with different failure reasons, and folding them into
+  one digest would lose that resolution.
+- `default_tag_values()` reuses Phase 3's doc-block region and property
+  regexes, so the two readers cannot disagree about *which* fields carry a
+  tag. The value is the tail of the `@default` line only; trailing
+  `* @enum` / `* @constant` / `*/` lines in a multi-line block are not part of
+  the published value. The one empty-string default renders as a bare
+  `@default` and is counted by its position as `""`.
+- Checked against the **literal**, not against the snapshot's `default`
+  values: the generator renders floats (`0.00001`), arrays and the empty
+  string differently from JSON, so a two-artifact token comparison would be a
+  second brittle ledger.
+
+### Division of labour (positive controls, not prose)
+
+| Drift | Doors that fire |
+| --- | --- |
+| one tag value retyped (`@default 10000 → 9999`) | **Door 7 only** (1 failure); Door 6's location digest and count stay silent |
+| two distinct tag values swapped (same count) | **Door 7 only** (1 failure) |
+| one `@default` tag dropped | Door 6 count + Door 6 location + Door 7 value |
+| one tag relocated between two fields | Door 6 location + Door 7 value; both count doors silent |
+| bare `@default` given a value | **Door 7 only** |
+
+A pure retype firing only door 7 is the decisive control: without it, this
+would be a count check wearing a digest-shaped coat. A reviewed regenerate
+re-pins both digests in the same commit as the client, with a reason.
+
+### Zero new wiring
+
+Door 7 lives in the already-registered `check_openapi_field_constraints.py`.
+No `smoke.sh` / registry / teeth edit, no new guard file, no `git config`
+change, and `openapi.json` / `openapi.d.ts` byte-for-byte unchanged. The teeth
+`_SIGNATURES` regex is `\d+ cases`, so the self-test growing 16 → 19 plants
+needs no floor edit. Two Phase-3 companion assertions were reconciled (not
+weakened): a tag relocation and a reviewed tag drop now legitimately move the
+value rows too, so they re-pin / expect both digests.
+
+## Phase 5 — the generated `@example` half is value-pinned, not just counted
+
+Door 5 pinned the generated half's **cardinality** (7 strict `@example` tags)
+and the snapshot half's **values** (the independent `_EXAMPLE_DIGEST`); the
+generated half's own values were pinned only *transitively* through that
+snapshot digest. Rewriting one `@example` value in `openapi.d.ts` alone
+(`Jane Doe` → `John Roe`) keeps all 7 tags, leaves the snapshot digest and
+both count doors silent, and — once `generated_blob` is honestly re-pinned —
+passes the whole contracts layer as SMOKE PASS. That is a
+hand-edit-of-generated-file shape rather than a regenerate shape, and the
+published contract value still cannot move silently because the snapshot
+digest covers the same 7 values, but door 5 must not be read as "the generated
+half is pinned". (Door 6 pins the *positions* of the 896 `@default` tags; it
+does not read `@example` values.)
+
+Phase 4 / door 7 pins the *values* of the 896 generated `@default` tags; it
+does not read `@example`. This phase is the orthogonal column on the other
+JSDoc projection, hence door 8 / Phase 5. The two land in the same commit on
+one branch, so the guard file has a single ledger for all five doors.
+
+Door 8 closes the asymmetry inside the same already-registered guard, with zero
+new wiring: once the snapshot digest matches its literal and the tag count is
+exact, the generated `@example` values are compared **in order** against the
+digest-pinned snapshot projection. Ordered comparison (not a multiset) also
+catches a same-count permutation that moves one tag's value onto another field.
+Door 8 deliberately stands down when the snapshot digest drifts, so a
+snapshot-side change is named by door 5 with full failure resolution rather
+than being double-counted. Combined read data on this branch: `--self-test`
+16 → 21 cases (19 for door 7 + 2 for door 8), companion suite 32 → 46 passed,
+`openapi.json` / `openapi.d.ts` byte-for-byte unchanged, and the three hot
+wiring files untouched.
