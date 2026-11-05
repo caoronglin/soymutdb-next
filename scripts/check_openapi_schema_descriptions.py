@@ -117,6 +117,21 @@ _EXPECTED_TITLE_SCHEMAS = 362
 # generator change to this line is a reviewed edit, not a silent extra row.
 _SYNTHETIC_CLIENT_TITLE = "Title"
 
+# The components that legitimately render their own schema name as the
+# leading line of their ``title`` property. Reviewed, hand-listed: a change
+# here is a reviewed edit, and Door 8 still names any other mismatch.
+_SYNTHETIC_CLIENT_TITLE_COMPONENTS = frozenset(
+    {
+        "AdminPublicationResponse",
+        "ExternalArticlePreviewResponse",
+        "LiteratureRecord",
+        "NotificationResponse",
+        "PublicationCreate",
+        "PublicationUpdate",
+        "app__schemas__content__PublicationResponse",
+    }
+)
+
 # Second independent fixed point: the generated client's JSDoc first-prose
 # lines. A digest over these lines, read from nowhere, catches a coordinated
 # co-revert that edits both halves: the snapshot digest moves, and so does
@@ -219,6 +234,62 @@ def _digest_client_title(lines: list[str]) -> str:
     blob = "\n".join(["soymutdb-client-schema-titles/v1", *canonical])
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
+# ``client_titles()`` keeps a *sorted* digest, so it cannot see two
+# same-count title lines swap places: the multiset is unchanged. That is a
+# real client-visible drift -- the label an IDE shows for one field lands on
+# another -- and it survives every other door on this surface. Pin the
+# positional triple instead: the component, the field name and the prose,
+# read from the generated client only.
+_SCHEMA_BLOCK = re.compile(
+    r"^        (?P<name>\w+): \{\n(?P<body>.*?)^        \};$", re.M | re.S
+)
+_FIELD_DOC = re.compile(
+    r"^            /\*\*(?P<doc>.*?)\*/\n"
+    r"^            (?P<field>[A-Za-z_][A-Za-z0-9_]*)\??:",
+    re.M | re.S,
+)
+
+# Reviewed, hand-written fixed point on the generated client's positional
+# title triples. sha256 of the canonical sorted ``component|field|title``
+# rows. regenerate with _digest_client_title_rows() after an intentional
+# prose change, in the same commit as both artifacts.
+_CLIENT_TITLE_ROWS_DIGEST = (
+    "8ece22ef60eba74cbe47e3e4e0806348a8cbfcf8fe804221141afdcd606ce271"
+)
+_EXPECTED_CLIENT_TITLE_ROWS = 1952
+
+
+def _first_plain_line(doc: str) -> str | None:
+    for line in doc.splitlines():
+        line = line.strip()
+        if line.startswith("*"):
+            line = line[1:].strip()
+        if not line or line.startswith("@") or line == "/":
+            continue
+        return line
+    return None
+
+
+def client_title_rows(generated: str) -> list[tuple[str, str, str]]:
+    """(component, field, leading JSDoc line) for every documented field."""
+    block = _COMPONENT_SCHEMAS.search(generated)
+    if block is None:
+        raise ValueError("generated client has no components.schemas block")
+    out: list[tuple[str, str, str]] = []
+    for schema in _SCHEMA_BLOCK.finditer(block.group("body")):
+        name = schema.group("name")
+        for field in _FIELD_DOC.finditer(schema.group("body")):
+            title = _first_plain_line(field.group("doc"))
+            if title is not None:
+                out.append((name, field.group("field"), title))
+    return out
+
+
+def _digest_client_title_rows(rows_: list[tuple[str, str, str]]) -> str:
+    canonical = sorted(f"{c}|{f}|{t}" for c, f, t in rows_)
+    blob = "\n".join(["soymutdb-client-schema-title-rows/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
 
 def failures(
     *,
@@ -231,6 +302,8 @@ def failures(
     client_title_digest: str | None = None,
     expected_title_rows: int | None = None,
     expected_title_schemas: int | None = None,
+    client_title_rows_digest: str | None = None,
+    expected_client_title_rows: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -244,6 +317,7 @@ def failures(
         client = client_descriptions(generated)
         titles_ = title_rows(document)
         client_title_lines = client_titles(generated)
+        client_title_triples = client_title_rows(generated)
     except (ValueError, TypeError) as exc:
         return [f"cannot read published schema descriptions: {exc}"]
 
@@ -356,6 +430,66 @@ def failures(
             f"{client_title_lines.count(_SYNTHETIC_CLIENT_TITLE)} synthetic "
             f"{_SYNTHETIC_CLIENT_TITLE!r} line(s), expected exactly one"
         )
+
+    # Door 7 -- independent fixed point over the *positional* client triples.
+    # Door 6 pins a sorted digest, so a same-count rotation of two title
+    # lines keeps the multiset and the counts intact and passes every door
+    # above. This one carries the field name, so a swap moves it.
+    pinned_rows_digest = (
+        _CLIENT_TITLE_ROWS_DIGEST
+        if client_title_rows_digest is None
+        else client_title_rows_digest
+    )
+    actual_rows_digest = _digest_client_title_rows(client_title_triples)
+    if actual_rows_digest != pinned_rows_digest:
+        found.append(
+            "generated client JSDoc title rows drifted: "
+            f"_CLIENT_TITLE_ROWS_DIGEST pins {pinned_rows_digest} but the "
+            f"client derives {actual_rows_digest}. A field label moved to "
+            "another field; re-pin the literal in the same commit as both "
+            "artifacts, with a reason."
+        )
+
+    pinned_rows_count = (
+        _EXPECTED_CLIENT_TITLE_ROWS
+        if expected_client_title_rows is None
+        else expected_client_title_rows
+    )
+    if len(client_title_triples) != pinned_rows_count:
+        found.append(
+            "generated client JSDoc title row count is "
+            f"{len(client_title_triples)}, _EXPECTED_CLIENT_TITLE_ROWS pins "
+            f"{pinned_rows_count}: a documented field gained or lost its "
+            "leading title line"
+        )
+
+    # Door 8 -- positional cross-artifact door. Every generated triple must
+    # match the *pinned* snapshot row for that (component, field), so a
+    # one-sided edit is named by component and field instead of only moving
+    # a digest.
+    published_titles = {
+        (path.split("/")[0], path.split("/")[2]): value
+        for path, value in titles_
+        if len(path.split("/")) == 3 and path.split("/")[1] == "properties"
+    }
+    for component, field, title in client_title_triples:
+        if field == "title" and title == _SYNTHETIC_CLIENT_TITLE:
+            # Documented exception: a published schema whose *own* name is
+            # rendered as the leading line of its ``title`` property. Listed
+            # by name below so a new one cannot join silently.
+            if component in _SYNTHETIC_CLIENT_TITLE_COMPONENTS:
+                continue
+        expected = published_titles.get((component, field))
+        if expected is None:
+            found.append(
+                f"generated client documents {component}.{field} with title "
+                f"{title!r}, but the snapshot publishes no title for it"
+            )
+        elif expected != title:
+            found.append(
+                f"generated client title for {component}.{field} is {title!r} "
+                f"but the snapshot publishes {expected!r}"
+            )
 
     return found
 

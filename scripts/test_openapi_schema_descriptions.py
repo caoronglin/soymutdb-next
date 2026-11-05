@@ -324,3 +324,71 @@ def test_guard_source_pins_both_title_doors() -> None:
     assert "_EXPECTED_TITLE_ROWS" in source
     assert "_EXPECTED_CLIENT_TITLE_LINES" in source
     assert "_SYNTHETIC_CLIENT_TITLE" in source
+    assert "_CLIENT_TITLE_ROWS_DIGEST" in source
+    assert "actual_rows_digest != pinned_rows_digest" in source
+    assert "_EXPECTED_CLIENT_TITLE_ROWS" in source
+    assert "_SYNTHETIC_CLIENT_TITLE_COMPONENTS" in source
+
+
+def _generated_with_client_rotation(source: str) -> str:
+    """Swap two same-count leading title lines in the generated client."""
+    lines = [
+        "* Summary En",
+        "* Summary Zh",
+        "* Title En",
+        "* Title Zh",
+    ]
+    for first in lines:
+        for second in lines:
+            if first == second:
+                continue
+            if source.count(first) and source.count(second):
+                return source.replace(first, "* ROTATED", 1).replace(
+                    second, first, 1
+                ).replace("* ROTATED", second, 1)
+    raise AssertionError("no rotatable pair found")
+
+
+def test_client_only_title_rotation_is_rejected() -> None:
+    """A same-count rotation confined to the generated half used to pass.
+
+    ``client_titles()`` and ``_digest_client_title()`` are order-insensitive,
+    so moving one field's label onto a sibling kept the multiset, the counts
+    and both digests intact: every door above stayed green while the IDE
+    showed a caller the wrong label. Door 7 carries the field name.
+    """
+    rotated = _generated_with_client_rotation(_GENERATED)
+    assert rotated != _GENERATED
+    original_rows = guard.client_title_rows(_GENERATED)
+    rotated_rows = guard.client_title_rows(rotated)
+    assert len(original_rows) == len(rotated_rows)
+    assert Counter(t for _, _, t in original_rows) == Counter(
+        t for _, _, t in rotated_rows
+    )
+    found = guard.failures(snapshot=_SNAPSHOT, generated=rotated)
+    assert any("_CLIENT_TITLE_ROWS_DIGEST" in f for f in found), found
+    assert any(
+        "generated client title for " in f for f in found
+    ), found
+
+
+def test_client_title_row_count_door_is_load_bearing() -> None:
+    found = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=_GENERATED,
+        expected_client_title_rows=guard._EXPECTED_CLIENT_TITLE_ROWS + 1,
+    )
+    assert any(
+        "_EXPECTED_CLIENT_TITLE_ROWS" in f for f in found
+    ), found
+
+
+def test_synthetic_client_title_components_are_reviewed() -> None:
+    """The cross-artifact door exempts exactly the listed components."""
+    triples = guard.client_title_rows(_GENERATED)
+    observed = {
+        component
+        for component, field, title in triples
+        if field == "title" and title == guard._SYNTHETIC_CLIENT_TITLE
+    }
+    assert observed == set(guard._SYNTHETIC_CLIENT_TITLE_COMPONENTS)
