@@ -80,6 +80,16 @@ would make the pin self-referential. ``--self-test`` injects one-sided and
 coordinated drifts into copies of the bytes and asserts each is caught; the
 clean tree must pass.
 
+#297 pins the *presence and location* of those 896 tags -- ``(component,
+field)`` rows -- but not the published value written in the tag. A single
+retyped ``@default 10000 -> @default 9999`` with ``generated_blob`` honestly
+re-pinned keeps Door 6 and every other wired guard green (``SMOKE PASS``).
+``_DEFAULT_TAG_VALUE_DIGEST`` is a second independent literal over
+``(component, field, value)`` triples, so the client-visible fallback value
+has a fixed point too. Kept separate from ``_DEFAULT_TAG_DIGEST``: folding a
+value into a location digest would lose failure resolution (a dropped tag and
+a retyped value would read as the same drift).
+
 Usage:
     python3 scripts/check_openapi_field_constraints.py
     python3 scripts/check_openapi_field_constraints.py --self-test
@@ -179,6 +189,19 @@ _DEFAULT_TAG_DIGEST = (
     "f5737d9fbfb4a689721a52c51604185c6997b5c011999091be128b95dc72d065"
 )
 _EXPECTED_DEFAULT_TAGS = 896
+
+# Independent fixed point for the *value* written in each generated @default
+# tag. sha256 of "\n".join(["soymutdb-generated-default-values/v1"] +
+#   sorted(f"{component}|{field}|{value}")) over the 896 doc blocks. #297's
+# _DEFAULT_TAG_DIGEST pins (component, field) only; a retyped value keeps that
+# digest green. Hand-written, NOT derived from the artifacts under guard:
+# regenerating it from openapi.d.ts would make the pin self-referential, and a
+# co-revert with a re-pinned generated_blob would then agree with itself.
+# Regenerate with _default_tag_value_digest() after an intentional, reviewed
+# regenerate and update in the same commit as both artifacts, with a reason.
+_DEFAULT_TAG_VALUE_DIGEST = (
+    "c7c1f7f5c31416c69b892107f8711f64ef629b8919619a7c9d614c1c7d013824"
+)
 
 
 def rows(document: dict[str, Any]) -> list[tuple[str, str, Any]]:
@@ -311,6 +334,43 @@ def _default_tag_digest(rows_: list[tuple[str, str]]) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+def default_tag_values(generated: str) -> list[tuple[str, str, str]]:
+    """Canonical ``(component, field, value)`` rows of generated @default tags.
+
+    Reuses the same doc-block region as ``default_tag_rows`` so the two readers
+    cannot disagree about *which* properties carry a tag. The value is the tail
+    of the ``@default`` marker; a bare tag (the one empty-string default) is an
+    empty string, counted by its position rather than by a substring scan.
+    """
+    region = _SCHEMAS_REGION.search(generated)
+    if region is None:
+        return []
+    out: list[tuple[str, str, str]] = []
+    for block in _COMPONENT_BLOCK.finditer(region.group("body")):
+        name = block.group("name")
+        for prop in _PROPERTY_DOC.finditer(block.group("body")):
+            marker = re.search(
+                r"@default\b(?P<tail>[^\n]*)(?:\n\s*\*[^\n]*)*",
+                prop.group("doc"),
+            )
+            if not marker:
+                continue
+            # The value is the rest of the @default line only. A multiline doc
+            # block may carry further tags (* @enum / * @constant / */); those
+            # are not part of the published default value.
+            value = marker.group("tail").replace("*/", "").strip()
+            out.append((name, prop.group("field"), value))
+    return out
+
+
+def _default_tag_value_digest(
+    rows_: list[tuple[str, str, str]],
+) -> str:
+    canonical = sorted(f"{name}|{field}|{value}" for name, field, value in rows_)
+    blob = "\n".join(["soymutdb-generated-default-values/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def failures(
     *,
     snapshot: str | None = None,
@@ -324,6 +384,7 @@ def failures(
     expected_generated_examples: int | None = None,
     tag_digest: str | None = None,
     expected_tags: int | None = None,
+    tag_value_digest: str | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -348,6 +409,11 @@ def failures(
     pinned_by_key = _EXPECTED_BY_KEY if by_key is None else by_key
     pinned_tag_digest = _DEFAULT_TAG_DIGEST if tag_digest is None else tag_digest
     pinned_tags = _EXPECTED_DEFAULT_TAGS if expected_tags is None else expected_tags
+    pinned_value_digest = (
+        _DEFAULT_TAG_VALUE_DIGEST
+        if tag_value_digest is None
+        else tag_value_digest
+    )
 
     # Door 1 -- independent fixed point over the whole surface. A single value
     # change, a moved constraint between two same-count fields, or a
@@ -446,6 +512,26 @@ def failures(
             f"pins {pinned_tag_digest} but openapi.d.ts derives "
             f"{actual_tags}. Re-pin the tag digest in the same commit as "
             "both artifacts, with a reason."
+        )
+
+    # Door 7 -- the value written in each generated @default tag. #297's Door 6
+    # pins (component, field) presence, so a retyped value (with the one
+    # generated_blob re-pin) keeps every other wired guard green. Checked
+    # against an independent literal, not against the snapshot's default
+    # values: openapi-typescript renders floats / arrays / the empty string
+    # differently from JSON, so a two-artifact token comparison would be a
+    # second brittle ledger. A same-count value rotation moves only this
+    # digest; both of Door 6's doors stay silent.
+    value_rows = default_tag_values(generated)
+    actual_values = _default_tag_value_digest(value_rows)
+    if actual_values != pinned_value_digest:
+        found.append(
+            "published generated default tag values drifted: "
+            f"_DEFAULT_TAG_VALUE_DIGEST pins {pinned_value_digest} but "
+            f"openapi.d.ts derives {actual_values}. A baseline is a fixed "
+            "point for the artifact, not a place to make a guard agree with "
+            "itself -- re-pin the value digest in the same commit as both "
+            "artifacts, with a reason."
         )
     return found
 
@@ -677,7 +763,63 @@ def self_test() -> int:
         else:
             print(f"PASS self-test: {name!r} is caught -> {len(found)} failure(s)")
 
-    total = len(cases) + len(example_cases) + len(default_tag_cases)
+    # Door 7 -- the value written in the tag. #297 pins (component, field)
+    # presence, so these plants must be caught *only* by the value digest:
+    # Door 6's count and location digest both stay green on a pure retype.
+    default_value_cases: dict[str, tuple[str, str]] = {}
+
+    # Decisive shape: one published @default value retyped in the generated
+    # half, with generated_blob honest-re-pinned. Snapshot untouched, so the
+    # 897 default rows and every snapshot-side door stay green.
+    needle = "             * @default 10000\n"
+    assert generated.count(needle) == 1
+    retyped = generated.replace(needle, "             * @default 9999\n", 1)
+    assert retyped != generated
+    default_value_cases["generated @default value retyped"] = (
+        snapshot_clean,
+        retyped,
+    )
+
+    # A same-count value rotation: two distinct tag values swapped. Door 6's
+    # (component, field) rows are unchanged, its count door holds -- only the
+    # positional value digest moves.
+    a = "             * @default SNP\n"
+    b = "             * @default genome\n"
+    assert generated.count(a) == generated.count(b) == 1
+    rotated = generated.replace(a, "@@A@@", 1).replace(b, a, 1).replace(
+        "@@A@@", b, 1
+    )
+    assert rotated != generated
+    default_value_cases["same-count generated @default value rotation"] = (
+        snapshot_clean,
+        rotated,
+    )
+
+    # The one bare @default tag (empty-string default) given a value. Door 6's
+    # location rows are unchanged; only the value digest sees it.
+    bare = "             * @default\n"
+    assert generated.count(bare) == 1
+    filled = generated.replace(bare, "             * @default filled\n", 1)
+    assert filled != generated
+    default_value_cases["bare generated @default value filled"] = (
+        snapshot_clean,
+        filled,
+    )
+
+    for name, (snapshot, gen) in default_value_cases.items():
+        found = failures(snapshot=snapshot, generated=gen)
+        if not found:
+            print(f"SELF-TEST FAIL: {name!r} was NOT caught")
+            failures_count += 1
+        else:
+            print(f"PASS self-test: {name!r} is caught -> {len(found)} failure(s)")
+
+    total = (
+        len(cases)
+        + len(example_cases)
+        + len(default_tag_cases)
+        + len(default_value_cases)
+    )
     print(f"self-test: {total} cases, {failures_count} failure(s)")
     return 1 if failures_count else 0
 
