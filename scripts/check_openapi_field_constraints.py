@@ -4,27 +4,33 @@
 ``openapi.json`` publishes 1712 field-level values -- 815 JSON Schema
 constraint rows (``minimum``, ``maximum``, ``maxLength``, ``minLength``,
 ``pattern``, ``format``, item counts, exclusive bounds) plus 897 ``default``
-values -- across 263 component schemas. They are part of the public contract:
-a client generated from this document can read them, and runtime validation
-enforces them. Unlike ``enum``/``const``, the constraints are not emitted in
-the generated ``openapi.d.ts``; ``default`` is rendered as ``@default``, so a
-coordinated regenerate can change one value in *both* halves, re-pin the
-provenance blob ids, and leave every other wired fixed point blind:
+values -- across 263 component schemas, and 7 published ``examples`` arrays on
+property schemas. They are part of the public contract: a client generated from
+this document can read them, and runtime validation enforces them. Unlike
+``enum``/``const``, the constraints are not emitted in the generated
+``openapi.d.ts``; ``default`` is rendered as ``@default`` and ``examples`` as
+``@example``, so a coordinated regenerate can change one value in *both*
+halves, re-pin the provenance blob ids, and leave every other wired fixed
+point blind:
 
 * ``_PUBLISHED_ENUM_BASELINE`` walks only ``enum`` / ``const``;
 * ``_RESPONSE_BODY_BASELINE`` / ``_BODY_PAIR_DIGEST`` / the inline-body pins
   read bodies, not property schemas;
 * the operationId, parameter, response-surface and document-metadata digests
   do not descend into ``components.schemas`` properties;
+* ``_FIELD_CONSTRAINT_DIGEST`` walks the constraint/default keywords only --
+  ``examples`` is a list-valued sibling, not one of ``_KEYS``;
 * ``_PINNED_ARTIFACTS`` is provenance blob ids: re-pinning them is the
   documented "one reviewed action" beside a regenerate.
 
 Decisive ablations on live bytes: byte-preserving ``maxItems: 100 -> 999`` in
-the snapshot, and a coordinated ``default: 0 -> 999999`` rewritten in the
-snapshot and the generated ``@default`` line with both blob ids re-pinned --
-all wired OpenAPI guards, their ``--self-test`` suites and the whole contracts
-layer stay green. That second shape is why ``default`` is pinned here too, not
-left to a two-artifact comparison that a co-revert satisfies.
+the snapshot, a coordinated ``default: 0 -> 999999`` rewritten in the snapshot
+and the generated ``@default`` line with both blob ids re-pinned, and all 7
+``examples`` values rewritten in the snapshot *and* the generated ``@example``
+tags with both blob ids honestly re-pinned -- all 12 wired OpenAPI guards, 12
+OpenAPI test suites and the whole contracts layer (SMOKE PASS 922 passed) stay
+green. Those coordinated shapes are why ``default`` and ``examples`` are pinned
+here too, not left to a two-artifact comparison that a co-revert satisfies.
 
 This guard reads committed bytes only (``json`` + stdlib): no Python 3.15, no
 API import, no wheel, no database, no workspace install. It pins:
@@ -36,8 +42,24 @@ API import, no wheel, no database, no workspace install. It pins:
   snapshot, with a reason;
 * ``_EXPECTED_CONSTRAINT_ROWS`` / ``_EXPECTED_SCHEMAS`` / ``_EXPECTED_BY_KEY``
   -- exact count doors that a same-count permutation cannot satisfy alone;
-* a one-sided drop, add, retype or move of any single constraint is named by
-  its path, so the failure says which field changed.
+* ``_EXAMPLE_DIGEST`` -- a second hand-written sha256 over the canonical
+  sorted ``(path, index, value)`` rows of every published ``examples`` array.
+  It is deliberately separate from ``_FIELD_CONSTRAINT_DIGEST``: constraints
+  and defaults are scalar keywords, examples are ordered lists of sample
+  values. Folding them together would lose the failure resolution (a dropped
+  ``@example`` tag would read as a constraint drift);
+* ``_EXPECTED_EXAMPLES`` / ``_EXPECTED_GENERATED_EXAMPLES`` -- exact count
+  doors on both halves. The generated half counts only strict ``* @example ``
+  JSDoc markers: a ``@description`` blob containing ``user@example.com`` is
+  a decoy that a naive ``'@example' in line`` scan would miscount as an 8th;
+* a one-sided drop, add, retype or move of any single constraint/example is
+  named by its path, so the failure says which field changed.
+
+Division of labour is pinned by positive controls, not asserted in prose: a
+same-count ``examples`` value swap must make *only* ``_EXAMPLE_DIGEST`` fire
+(the two count doors stay silent), while dropping one generated ``@example``
+tag must make *only* the generated count door fire. Otherwise door 5 would be
+nothing but a count check wearing a digest-shaped coat.
 
 A legitimate contract change must move the digest in the same commit as the
 snapshot and say why. Re-deriving the digest from the artifacts under guard
@@ -56,6 +78,7 @@ import argparse
 import copy
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -117,6 +140,22 @@ _EXPECTED_BY_KEY: dict[str, int] = {
     "pattern": 24,
 }
 
+# Independent fixed point for the published ``examples`` arrays. sha256 of
+# "\n".join(["soymutdb-published-examples/v1"] +
+#   sorted(f"{path}|{index}|{json.dumps(value, sort_keys=True)}")) of every
+# ``examples`` list on a property schema. Hand-written, NOT derived from the
+# artifacts under guard. Regenerate with _example_digest() after an intentional
+# contract change and update in the same commit, with a reason.
+_EXAMPLE_DIGEST = "505821408a432b85893123625136d747a5b787f4337c3d8cf1da3e09c89e6fe4"
+_EXPECTED_EXAMPLES = 7
+_EXPECTED_GENERATED_EXAMPLES = 7
+_GENERATED = ROOT / "packages" / "api-client" / "src" / "generated" / "openapi.d.ts"
+
+# Strict JSDoc marker. ``grep -c '@example'`` returns 8 on this tree because a
+# @description block carries ``user@example.com``; that decoy is prose, not a
+# published example, and must not be counted.
+_GENERATED_EXAMPLE = re.compile(r"^\s*\* @example ", re.MULTILINE)
+
 
 def rows(document: dict[str, Any]) -> list[tuple[str, str, Any]]:
     """Canonical (path, key, value) rows for every real schema node."""
@@ -160,13 +199,63 @@ def _schemas(rows_: list[tuple[str, str, Any]]) -> set[str]:
     return {path.split("/")[1] for path, _, _ in rows_}
 
 
+def example_rows(document: dict[str, Any]) -> list[tuple[str, str, Any]]:
+    """Canonical (path, index, value) rows for every published ``examples`` list.
+
+    Only ``components.schemas`` property nodes are walked. A dict is a schema
+    node only when it carries a schema marker, so a field literally named
+    ``examples`` is never mistaken for the keyword itself (same rule as
+    ``rows()`` uses for ``default`` / ``format``-named properties).
+    """
+    out: list[tuple[str, str, Any]] = []
+
+    def walk(node: Any, path: str) -> None:
+        if isinstance(node, dict):
+            is_schema = any(marker in node for marker in _SCHEMA_MARKERS)
+            if is_schema and isinstance(node.get("examples"), list):
+                for index, value in enumerate(node["examples"]):
+                    out.append((path, str(index), value))
+            for name, value in node.items():
+                walk(value, f"{path}/{name}")
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, f"{path}/{index}")
+
+    walk(document.get("components", {}).get("schemas", {}), "")
+    return out
+
+
+def _example_digest(rows_: list[tuple[str, str, Any]]) -> str:
+    canonical = sorted(
+        f"{path}|{index}|{json.dumps(value, sort_keys=True, ensure_ascii=False)}"
+        for path, index, value in rows_
+    )
+    blob = "\n".join(["soymutdb-published-examples/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def generated_examples(generated: str | None = None) -> list[str]:
+    """Strict ``* @example `` JSDoc values from the generated client."""
+    if generated is None:
+        generated = _GENERATED.read_text(encoding="utf-8")
+    return [
+        line.split("@example ", 1)[1].strip()
+        for line in generated.splitlines()
+        if _GENERATED_EXAMPLE.search(line)
+    ]
+
+
 def failures(
     *,
     snapshot: str | None = None,
+    generated: str | None = None,
     digest: str | None = None,
     expected_rows: int | None = None,
     expected_schemas: int | None = None,
     by_key: dict[str, int] | None = None,
+    example_digest: str | None = None,
+    expected_examples: int | None = None,
+    expected_generated_examples: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -175,6 +264,7 @@ def failures(
     try:
         document = json.loads(snapshot)
         rows_ = rows(document)
+        example_rows_ = example_rows(document)
     except (ValueError, TypeError) as exc:
         return [f"cannot read published constraints from snapshot: {exc}"]
 
@@ -225,6 +315,43 @@ def failures(
             "published constraint counts by keyword changed: "
             + ", ".join(changed[:6])
             + (" ..." if len(changed) > 6 else "")
+        )
+
+    # Door 5 -- the published ``examples`` projection. Deliberately its own
+    # digest: a drift here must say "examples", not "field constraints".
+    pinned_example_digest = _EXAMPLE_DIGEST if example_digest is None else example_digest
+    pinned_examples = (
+        _EXPECTED_EXAMPLES if expected_examples is None else expected_examples
+    )
+    pinned_generated = (
+        _EXPECTED_GENERATED_EXAMPLES
+        if expected_generated_examples is None
+        else expected_generated_examples
+    )
+    actual_example_digest = _example_digest(example_rows_)
+    if actual_example_digest != pinned_example_digest:
+        found.append(
+            "published examples drifted: _EXAMPLE_DIGEST pins "
+            f"{pinned_example_digest} but the snapshot derives "
+            f"{actual_example_digest}. A coordinated regenerate that rewrites "
+            "one example in both halves and re-pins the provenance blob ids "
+            "satisfies every two-artifact check; re-pin this digest in the "
+            "same commit as the snapshot, with a reason."
+        )
+    if len(example_rows_) != pinned_examples:
+        found.append(
+            f"published example count is {len(example_rows_)}, "
+            f"_EXPECTED_EXAMPLES pins {pinned_examples}: an example was added "
+            "or dropped without moving the fixed point"
+        )
+    gen_examples = generated_examples(generated)
+    if len(gen_examples) != pinned_generated:
+        found.append(
+            f"generated @example tag count is {len(gen_examples)}, "
+            f"_EXPECTED_GENERATED_EXAMPLES pins {pinned_generated}: the "
+            "generator dropped or invented a published example. The strict "
+            "'* @example ' marker is used, so the @description decoy "
+            "user@example.com is not counted."
         )
     return found
 
@@ -314,7 +441,100 @@ def self_test() -> int:
             failures_count += 1
         else:
             print(f"PASS self-test: {name!r} is caught -> {len(found)} failure(s)")
-    print(f"self-test: {len(cases)} cases, {failures_count} failure(s)")
+
+    # Door 5's plants live in their own dict: some of them must also rewrite
+    # the generated half, which the constraint/default cases never need.
+    # Keeping ``cases`` unchanged leaves the teeth guard's declared-case and
+    # loop-consumption probes on this guard exactly as they were.
+    generated = _GENERATED.read_text(encoding="utf-8")
+    example_cases: dict[str, tuple[str, str]] = {}
+
+    def example_doc(change) -> str:
+        doc = copy.deepcopy(document)
+        change(doc)
+        return json.dumps(doc, indent=2)
+
+    # 1. The decisive coordinated regenerate: all 7 examples rewritten in the
+    #    snapshot AND the generated @example tags, provenance blob ids honestly
+    #    re-pinned. Only _EXAMPLE_DIGEST sees it; both count doors stay silent.
+    def co_revert(doc: dict) -> None:
+        for name in ("LoginRequest", "UserCreate"):
+            props = doc["components"]["schemas"][name]["properties"]
+            for prop in props.values():
+                if isinstance(prop, dict) and isinstance(prop.get("examples"), list):
+                    prop["examples"] = [v + "X" for v in prop["examples"]]
+
+    co_gen = generated
+    for value in ("researcher@univ.edu", "S3cureP@ss!", "Jane Doe", "viewer"):
+        co_gen = co_gen.replace("@example " + value, "@example " + value + "X")
+    example_cases["coordinated examples co-revert"] = (example_doc(co_revert), co_gen)
+
+    # 2. A same-count value swap (two examples exchange values): the digest
+    #    must fire and BOTH count doors must stay silent. Without this positive
+    #    control, door 5 is just a count check wearing a digest-shaped coat.
+    def swap(doc: dict) -> None:
+        props = doc["components"]["schemas"]["LoginRequest"]["properties"]
+        props["username"]["examples"], props["password"]["examples"] = (
+            props["password"]["examples"],
+            props["username"]["examples"],
+        )
+
+    example_cases["same-count example swap"] = (example_doc(swap), generated)
+
+    # 3. One example dropped from the snapshot: exact count door names it.
+    def drop_snapshot(doc: dict) -> None:
+        doc["components"]["schemas"]["LoginRequest"]["properties"]["username"].pop(
+            "examples"
+        )
+
+    example_cases["one-sided example dropped"] = (example_doc(drop_snapshot), generated)
+
+    # 4. A second example appended to an existing list: the digest fires and
+    #    the exact count door names the addition (8 != 7).
+    def add_snapshot(doc: dict) -> None:
+        doc["components"]["schemas"]["UserCreate"]["properties"]["email"][
+            "examples"
+        ] = ["researcher@univ.edu", "extra@univ.edu"]
+
+    example_cases["one-sided example added"] = (example_doc(add_snapshot), generated)
+
+    # 5. One generated @example tag dropped: only the generated count door
+    #    fires (the snapshot digest and its count door stay silent).
+    dropped_gen = generated.replace(
+        "             * @example researcher@univ.edu\n", "", 1
+    )
+    assert dropped_gen != generated
+    example_cases["one-sided generated tag dropped"] = (
+        json.dumps(document, indent=2),
+        dropped_gen,
+    )
+
+    # 6. A forged strict marker in the generated half: the count door fires.
+    #    The complement -- the real ``@description`` line carrying
+    #    ``user@example.com`` must NOT be counted -- is a clean-tree assertion,
+    #    pinned from a second file by the companion suite, not an ablation.
+    forged_gen = generated.replace(
+        '         *             "submitted_by": "user@example.com"',
+        '         * @example user@example.com\n'
+        '         *             "submitted_by": "user@example.com"',
+        1,
+    )
+    assert forged_gen != generated
+    example_cases["forged generated tag invented"] = (
+        json.dumps(document, indent=2),
+        forged_gen,
+    )
+
+    for name, (snapshot, gen) in example_cases.items():
+        found = failures(snapshot=snapshot, generated=gen)
+        if not found:
+            print(f"SELF-TEST FAIL: {name!r} was NOT caught")
+            failures_count += 1
+        else:
+            print(f"PASS self-test: {name!r} is caught -> {len(found)} failure(s)")
+
+    total = len(cases) + len(example_cases)
+    print(f"self-test: {total} cases, {failures_count} failure(s)")
     return 1 if failures_count else 0
 
 
