@@ -133,6 +133,12 @@ smoke_contracts() {
     # which names neither the file nor the reason. This suite names it, and
     # needs no Python 3.15.
     scripts/test_openapi_snapshot_contract.py
+    # The runtime 422 handler always returns the unified ValidationErrorResponse
+    # envelope, but setdefault("422") let FastAPI's auto HTTPValidationError win
+    # on 235 operations: both committed artifacts agreed with each other while
+    # typing a response the server never sends. This guard reads committed
+    # bytes and pins the source contract; needs no Python 3.15.
+    scripts/test_openapi_422_unified_envelope.py
     # The offline browser-gate inventory (scripts/test_artifact_e2e_gate.py)
     # must fail a build when a gate is dropped from the sweep or the sweep stops
     # failing closed.

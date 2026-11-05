@@ -209,6 +209,26 @@ class TestOpenApiContract:
                 assert "422" in responses, f"{method.upper()} {path} missing 422"
                 assert "500" in responses, f"{method.upper()} {path} missing 500"
 
+    def test_every_422_advertises_the_unified_envelope(self):
+        """The runtime handler never sends FastAPI's HTTPValidationError."""
+        unified = {"$ref": "#/components/schemas/ValidationErrorResponse"}
+        for path, path_item in SCHEMA["paths"].items():
+            for method, operation in path_item.items():
+                if method not in ("get", "post", "put", "patch", "delete"):
+                    continue
+                response = operation.get("responses", {}).get("422")
+                assert response is not None, f"{method.upper()} {path} missing 422"
+                schema = (
+                    response.get("content", {})
+                    .get("application/json", {})
+                    .get("schema")
+                )
+                assert schema == unified, (
+                    f"{method.upper()} {path} declares 422 as {schema!r}; the "
+                    "registered validation_exception_handler always returns the "
+                    "unified ValidationErrorResponse envelope"
+                )
+
     def test_stats_paths_are_public(self):
         for path in ("/api/v1/stats/homepage", "/api/v1/stats/summary/impact"):
             operation = SCHEMA["paths"][path]["get"]
