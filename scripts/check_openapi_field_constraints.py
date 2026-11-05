@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Pin the published field-level constraints to an independent literal.
 
-``openapi.json`` publishes 815 JSON Schema constraint values -- ``minimum``,
-``maximum``, ``maxLength``, ``minLength``, ``pattern``, ``format``, the item
-counts and the exclusive bounds -- across 207 component schemas. They are part
-of the public contract: a client generated from this document can read them,
-and runtime validation enforces them. Unlike ``enum``/``const``, none of them
-is emitted as a JSDoc tag in the generated ``openapi.d.ts``; a coordinated
-regenerate that changes one value in the snapshot has no second half to agree
-with, and every other wired fixed point is blind to it:
+``openapi.json`` publishes 1712 field-level values -- 815 JSON Schema
+constraint rows (``minimum``, ``maximum``, ``maxLength``, ``minLength``,
+``pattern``, ``format``, item counts, exclusive bounds) plus 897 ``default``
+values -- across 263 component schemas. They are part of the public contract:
+a client generated from this document can read them, and runtime validation
+enforces them. Unlike ``enum``/``const``, the constraints are not emitted in
+the generated ``openapi.d.ts``; ``default`` is rendered as ``@default``, so a
+coordinated regenerate can change one value in *both* halves, re-pin the
+provenance blob ids, and leave every other wired fixed point blind:
 
 * ``_PUBLISHED_ENUM_BASELINE`` walks only ``enum`` / ``const``;
 * ``_RESPONSE_BODY_BASELINE`` / ``_BODY_PAIR_DIGEST`` / the inline-body pins
@@ -18,17 +19,21 @@ with, and every other wired fixed point is blind to it:
 * ``_PINNED_ARTIFACTS`` is provenance blob ids: re-pinning them is the
   documented "one reviewed action" beside a regenerate.
 
-Decisive ablation on live bytes: byte-preserving ``maxItems: 100 -> 999`` in
-the snapshot, re-pin both blob ids, and all eight wired OpenAPI guards, their
-eight ``--self-test`` suites and all ten companion suites stay ``rc=0``.
+Decisive ablations on live bytes: byte-preserving ``maxItems: 100 -> 999`` in
+the snapshot, and a coordinated ``default: 0 -> 999999`` rewritten in the
+snapshot and the generated ``@default`` line with both blob ids re-pinned --
+all wired OpenAPI guards, their ``--self-test`` suites and the whole contracts
+layer stay green. That second shape is why ``default`` is pinned here too, not
+left to a two-artifact comparison that a co-revert satisfies.
 
 This guard reads committed bytes only (``json`` + stdlib): no Python 3.15, no
 API import, no wheel, no database, no workspace install. It pins:
 
 * ``_FIELD_CONSTRAINT_DIGEST`` -- a hand-written sha256 over the canonical
   sorted ``(path, key, value)`` rows of every real schema node, read from
-  nowhere. A same-commit re-pin of the literal is checked by
-  ``check_openapi_baseline_sync.py`` (a gate below), not by this file;
+  nowhere. Re-deriving it from the artifacts under guard would be
+  self-referential. A legitimate change re-pins it in the same commit as the
+  snapshot, with a reason;
 * ``_EXPECTED_CONSTRAINT_ROWS`` / ``_EXPECTED_SCHEMAS`` / ``_EXPECTED_BY_KEY``
   -- exact count doors that a same-count permutation cannot satisfy alone;
 * a one-sided drop, add, retype or move of any single constraint is named by
@@ -75,6 +80,11 @@ _KEYS: tuple[str, ...] = (
     "pattern",
     "format",
     "multipleOf",
+    # ``default`` is a published value, not just an annotation: clients read
+    # it and the generator renders it as ``@default``. Pinning it here closes
+    # the coordinated rewrite in both halves that every two-artifact check
+    # (and the provenance blob re-pin) agrees with.
+    "default",
 )
 # A dict is a schema node (and its keyword values are constraints) only when
 # it carries one of these markers. ``properties``/``$defs`` maps are name ->
@@ -84,16 +94,18 @@ _SCHEMA_MARKERS = frozenset(
 )
 
 # Reviewed, hand-written fixed point on the whole published constraint
-# surface. sha256 of "\n".join(["soymutdb-field-constraints/v1"] +
+# surface. sha256 of "\n".join(["soymutdb-field-constraints/v2"] +
 #   sorted(f"{path}|{key}|{json.dumps(value, sort_keys=True)}")).
+# v2 folds the 897 published ``default`` values into the same fixed point.
 # Regenerate with _digest() after an intentional contract change and update in
 # the same commit, with a reason.
 _FIELD_CONSTRAINT_DIGEST = (
-    "d062eb6c81a66fbab3c97753179d2410d251b3ef1a07b44623294ceb36450acb"
+    "405ca0867e880043ee132cc37647981fa372ff85fb0d4db2db2c4f6e56f7a56c"
 )
-_EXPECTED_CONSTRAINT_ROWS = 815
-_EXPECTED_SCHEMAS = 207
+_EXPECTED_CONSTRAINT_ROWS = 1712
+_EXPECTED_SCHEMAS = 263
 _EXPECTED_BY_KEY: dict[str, int] = {
+    "default": 897,
     "exclusiveMinimum": 6,
     "format": 151,
     "maxItems": 24,
@@ -132,7 +144,7 @@ def _digest(rows_: list[tuple[str, str, Any]]) -> str:
         f"{path}|{key}|{json.dumps(value, sort_keys=True)}"
         for path, key, value in rows_
     )
-    blob = "\n".join(["soymutdb-field-constraints/v1", *canonical])
+    blob = "\n".join(["soymutdb-field-constraints/v2", *canonical])
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
@@ -266,6 +278,33 @@ def self_test() -> int:
         "format"
     ]["pattern"] = "^never$"
     cases["new constraint on a keyword-named property"] = json.dumps(doc5, indent=2)
+
+    # The coordinated regenerate shape this pin is here for: one published
+    # default retyped in the snapshot. The generated @default line would move
+    # with it and the blob ids can be re-pinned, so only the literal sees it.
+    doc6 = copy.deepcopy(document)
+    assert doc6["components"]["schemas"]["AdminDashboardStats"]["properties"][
+        "totalUsers"
+    ]["default"] == 0
+    doc6["components"]["schemas"]["AdminDashboardStats"]["properties"][
+        "totalUsers"
+    ]["default"] = 999999
+    cases["coordinated default retype"] = json.dumps(doc6, indent=2)
+
+    # A default dropped from one field: exact count door names it.
+    doc7 = copy.deepcopy(document)
+    doc7["components"]["schemas"]["AdminDashboardStats"]["properties"][
+        "totalUsers"
+    ].pop("default")
+    cases["one-sided default dropped"] = json.dumps(doc7, indent=2)
+
+    # A property literally *named* ``default`` is a schema node of its own;
+    # its own keyword values count, the map entry itself does not.
+    doc8 = copy.deepcopy(document)
+    doc8["components"]["schemas"]["SettingFieldSchema"]["properties"][
+        "default"
+    ]["pattern"] = "^never$"
+    cases["new constraint on the default-named property"] = json.dumps(doc8, indent=2)
 
     failures_count = 0
     for name, snapshot in cases.items():
