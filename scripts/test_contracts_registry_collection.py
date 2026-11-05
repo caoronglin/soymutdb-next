@@ -13,6 +13,8 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -27,6 +29,27 @@ guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
 
 REQUIRED = sorted(guard.REQUIRED_GUARD_CALLS)
+
+
+# Exercises the *process* exit code of the canonical ``--self-test`` entry,
+# not just the in-process ``self_test()`` return value. A caller that discards
+# ``self_test()``'s return (e.g. ``import ...; g.self_test()``) prints the drift
+# yet exits 0, so the only safe assertion is on the real subprocess rc.
+_RC_DRIVER = r"""
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("g", sys.argv[1])
+g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g)
+smoke, ci, files = g.load_sources()
+if sys.argv[2] == "drift":
+    slot = "    scripts/test_mcp_release_binding_wiring.py\n"
+    assert slot in smoke, "array slot missing"
+    smoke = smoke.replace(
+        slot, "    scripts/check_mcp_release_binding.py --self-test\n" + slot, 1
+    )
+g.load_sources = lambda: (smoke, ci, files)
+g.sys.argv = ["g", "--self-test"]
+raise SystemExit(g.main())
+"""
 
 CI_OK = (
     "smoke_contracts_run() {\n"
@@ -358,6 +381,37 @@ class RegistryCollectionGuardTests(unittest.TestCase):
         files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
         smoke = _smoke(["scripts/test_example.py"], REQUIRED)
         self.assertEqual(guard.check(smoke, files, CI_OK), [])
+
+    def test_self_test_exit_status_reaches_the_process(self) -> None:
+        """``clean tree drifts`` must fail closed through the process rc.
+
+        ``self_test()`` returns 1 on a dirty clean-tree check, but a caller
+        that invokes it without ``SystemExit`` would print the drift and still
+        exit 0 -- while CI reads only the rc. Pin the real entry point: a
+        flag-bearing ``tests=()`` row must make canonical ``--self-test`` exit
+        non-zero, and the clean tree must exit 0.
+        """
+        result = subprocess.run(
+            [sys.executable, "-c", _RC_DRIVER, str(GUARD_PATH), "drift"],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+            check=False,
+        )
+        self.assertNotEqual(result.returncode, 0, result.stdout)
+        self.assertIn("clean tree drifts", result.stdout)
+
+        clean = subprocess.run(
+            [sys.executable, "-c", _RC_DRIVER, str(GUARD_PATH), "clean"],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+            check=False,
+        )
+        self.assertEqual(clean.returncode, 0, clean.stdout + clean.stderr)
+
+        tail = "\n".join(GUARD_PATH.read_text(encoding="utf-8").splitlines()[-3:])
+        self.assertIn("raise SystemExit(main())", tail)
 
     def test_ci_layer_call_must_stay_a_bare_statement(self) -> None:
         smoke = _smoke(["scripts/test_example.py"], REQUIRED)
