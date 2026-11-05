@@ -30,8 +30,13 @@ def _decode(data: str) -> bytes:
 
 
 async def inspect(payload: s.FormatInspectRequest) -> s.FormatInspectResponse:
-    core = bridge.require()
+    # Request validation is a client-input fact, independent of kernel
+    # availability. Decode and size-check the payload before requiring the
+    # compiled wheel, so malformed base64 / oversized bodies still answer 422
+    # in a deployment where the wheel is missing (otherwise a 503 masks the
+    # client error and the existing 422 assertions cannot reach their branch).
     raw = _decode(payload.data)
+    core = bridge.require()
     fn = {
         "fasta": "validate_fasta",
         "fastq": "validate_fastq",

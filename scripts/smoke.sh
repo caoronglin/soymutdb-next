@@ -150,6 +150,9 @@ smoke_contracts() {
     scripts/test_dockerfile_contracts.py
     scripts/test_legacy_worker_test_contract.py
     scripts/test_custom_element_registration_contracts.py
+    # /tools/sequence/inspect must validate the client payload before requiring
+    # the kernel; this suite proves each ordering ablation is caught.
+    scripts/test_format_inspect_validation_order.py
     infra/clickhouse/test_schema_contract.py
   )
   # Suites that need an interpreter or service this smoke layer does not own
@@ -179,6 +182,9 @@ smoke_contracts() {
   # Rust kernel: the crate pins + CI job + wheel-install gate must exist even
   # when this layer has no compiled extension available.
   "${PYTHON_BIN}" scripts/check_bio_core_wheel.py --static || rc=$?
+  # Read the committed service bytes: the pytest suite exercises behaviour,
+  # this guard catches the validation ordering being moved back at source.
+  "${PYTHON_BIN}" scripts/check_format_inspect_validation_order.py || rc=$?
   # Workspace exports are checked the same way, and for the same reason: a
   # gitignore pattern that swallows an imported source directory (the `build/`
   # rule did exactly that to packages/shared/src/build/) leaves every local
