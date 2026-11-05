@@ -127,6 +127,97 @@ _SIGNATURES: dict[str, re.Pattern[str]] = {
     "scripts/check_visible_i18n.py": re.compile(r"visible i18n self-test passed"),
 }
 
+# Per-wire drift plants. A success signature is a string a gutted body can
+# also write: ``print("... self-test passed"); return 0`` reproduces every
+# pinned marker while detecting nothing. The signature pin therefore only
+# proves "the body still emits agreed evidence", not "the body still detects
+# a planted drift".
+#
+# So each guard whose signature a one-line gut *can* fake (the ones that print
+# a single summary line) also gets a drift plant: a source edit that disables
+# its detection entry point. The probe applies the plant to the real tree, runs
+# the wired ``--self-test``, and requires a non-zero exit. A guard that prints
+# its signature but no longer plants anything stays green on the signature
+# check and goes red here.
+#
+# Guards that print per-case evidence (``ok: planted 'x' -> caught``) cannot be
+# faked by a summary line, so their signature already carries the proof and
+# they need no plant. ``_DRIFT_COVERED`` is a floor over the thin set: adding a
+# thin guard without a plant fails closed.
+#
+# (path, anchor, replacement, why the plant is a drift)
+_DRIFT_PLANTS: tuple[tuple[str, str, str, str], ...] = (
+    (
+        "scripts/check_app_shell_assets.py",
+        '    """Check Umi\'s icon declaration and every built tree that exists."""\n',
+        '    """Check Umi\'s icon declaration and every built tree that exists."""\n'
+        "    return  # planted drift: detection disabled\n",
+        "the shell check stops reporting failures",
+    ),
+    (
+        "scripts/check_bio_core_wheel_abi.py",
+        "def filename_failures(name: str, arch: str) -> list[str]:\n",
+        "def filename_failures(name: str, arch: str) -> list[str]:\n"
+        "    return []  # planted drift: detection disabled\n",
+        "filename scrutiny accepts every tag",
+    ),
+    (
+        "scripts/check_openapi_auth_surface.py",
+        "def failures(snapshot: str, main: str, deps: str, auth: str, config: str) -> list[str]:\n",
+        "def failures(snapshot: str, main: str, deps: str, auth: str, config: str) -> list[str]:\n"
+        "    return []  # planted drift: detection disabled\n",
+        "the auth surface accepts every ablation",
+    ),
+    (
+        "scripts/check_openapi_baseline_sync.py",
+        "    found: list[str] = []\n\n    if tree is not None:",
+        "    found: list[str] = []\n    return found  # planted drift: detection disabled\n"
+        "\n    if tree is not None:",
+        "baseline drift is never reported",
+    ),
+    (
+        "scripts/check_openapi_inline_body_integrity.py",
+        "    found: list[str] = []\n"
+        "    pinned = _INLINE_BODY_BASELINE if baseline is None else baseline",
+        "    found: list[str] = []\n    return found  # planted drift: detection disabled\n"
+        "    pinned = _INLINE_BODY_BASELINE if baseline is None else baseline",
+        "inline body drift is never reported",
+    ),
+    (
+        "scripts/check_openapi_published_enums.py",
+        '    """Return ``(problems, compared_enum_pairs)``."""\n    found: list[str] = []',
+        '    """Return ``(problems, compared_enum_pairs)``."""\n    found: list[str] = []\n'
+        "    return found, 0  # planted drift: detection disabled",
+        "published enum drift is never reported",
+    ),
+    (
+        "scripts/check_visible_i18n.py",
+        "def collect(root: Path) -> dict[str, int]:\n    counts: dict[str, int] = {}\n",
+        "def collect(root: Path) -> dict[str, int]:\n    counts: dict[str, int] = {}\n"
+        "    return counts  # planted drift: detection disabled\n",
+        "the collector finds no hardcoded strings",
+    ),
+)
+
+# Guards whose self-test prints per-case evidence, so a summary line cannot
+# fake the signature. Listed explicitly so a new thin guard is a reviewed edit.
+_EVIDENCE_PER_CASE: frozenset[str] = frozenset(
+    {
+        "scripts/check_api_error_code_vocabulary.py",
+        "scripts/check_error_code_catalog.py",
+        "scripts/check_error_code_doc_counts.py",
+        "scripts/check_error_code_gate_wiring.py",
+        "scripts/check_mcp_manifest_reconcile.py",
+        "scripts/check_mcp_release_binding.py",
+        "scripts/check_openapi_operation_id_floor.py",
+        "scripts/check_openapi_operation_parameter_floor.py",
+        "scripts/check_openapi_response_surface.py",
+        "scripts/check_variant_summary_assembly_consistency.py",
+    }
+)
+
+_DRIFT_COVERED: frozenset[str] = frozenset(p for p, _, _, _ in _DRIFT_PLANTS)
+
 
 def contracts_function(smoke: str) -> str:
     marker = "smoke_contracts() {"
@@ -216,16 +307,107 @@ def check(
     smoke: str | None = None,
     results: dict[str, tuple[int, str]] | None = None,
     root: Path = ROOT,
+    drift_results: dict[str, tuple[int, str]] | None = None,
 ) -> list[str]:
     text = smoke if smoke is not None else SMOKE.read_text(encoding="utf-8")
     try:
         wired = wired_self_tests(text)
     except ValueError as exc:
         return [str(exc)]
-    problems = floor_errors(wired)
+    problems = floor_errors(wired) + drift_floor_errors()
     if results is None:
         results = probe(wired, root=root)
-    return problems + teeth_errors(wired, results)
+    if drift_results is None:
+        drift_results = drift_probe(wired, root=root)
+    return (
+        problems
+        + teeth_errors(wired, results)
+        + drift_errors(wired, drift_results)
+    )
+
+
+def drift_probe(
+    wired: dict[str, list[str]], root: Path = ROOT, runner: list[str] | None = None
+) -> dict[str, tuple[int, str]]:
+    """Plant one drift per guard and run its wired ``--self-test``.
+
+    Returns path -> (rc, output) for the *mutated* tree. A guard that detects
+    the plant exits non-zero; a guard that only prints a signature exits 0.
+    """
+    base = runner if runner is not None else [sys.executable]
+    out: dict[str, tuple[int, str]] = {}
+    for path, fragment, replacement, _why in _DRIFT_PLANTS:
+        if path not in wired:
+            continue
+        target = root / path
+        try:
+            original = target.read_text(encoding="utf-8")
+        except OSError as exc:
+            out[path] = (1, f"could not read {path}: {exc}")
+            continue
+        if fragment not in original:
+            out[path] = (1, f"drift plant anchor missing from {path}")
+            continue
+        # Sanity: the plant must not be a no-op, or it proves nothing.
+        mutated = original.replace(fragment, replacement, 1)
+        if mutated == original:
+            out[path] = (1, f"drift plant for {path} changed nothing")
+            continue
+        try:
+            target.write_text(mutated, encoding="utf-8")
+            argv = base + [path] + wired[path]
+            try:
+                result = subprocess.run(
+                    argv, capture_output=True, text=True, cwd=root, timeout=90, check=False
+                )
+                out[path] = (result.returncode, result.stdout + result.stderr)
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                out[path] = (1, f"could not run {path}: {exc}")
+        finally:
+            target.write_text(original, encoding="utf-8")
+    return out
+
+
+def drift_errors(
+    wired: dict[str, list[str]], results: dict[str, tuple[int, str]]
+) -> list[str]:
+    problems: list[str] = []
+    for path in sorted(_DRIFT_COVERED):
+        if path not in wired:
+            problems.append(
+                f"pinned drift plant {path!r} targets a guard that is not wired"
+            )
+            continue
+        rc, output = results.get(path, (0, "guard was not probed"))
+        if rc == 0:
+            why = next(w for p, _, _, w in _DRIFT_PLANTS if p == path)
+            problems.append(
+                f"{path} --self-test stayed green on a planted drift "
+                f"({why}); it emits its signature without detecting anything"
+            )
+    return problems
+
+
+def drift_floor_errors() -> list[str]:
+    """Every wired guard must be classed as drift-planted or per-case evidence."""
+    problems = [
+        f"wired --self-test guard {p!r} has no drift plant in _DRIFT_PLANTS "
+        "and is not listed in _EVIDENCE_PER_CASE"
+        for p in sorted(set(_WIRED_SELF_TESTS) - _DRIFT_COVERED - _EVIDENCE_PER_CASE)
+    ]
+    problems += [
+        f"guard {p!r} is listed in _EVIDENCE_PER_CASE and also has a drift plant"
+        for p in sorted(_DRIFT_COVERED & _EVIDENCE_PER_CASE)
+    ]
+    problems += [
+        f"drift plant {p!r} targets a guard that is not wired"
+        for p in sorted(_DRIFT_COVERED - set(_WIRED_SELF_TESTS))
+    ]
+    problems += [
+        f"per-case-evidence guard {p!r} is not wired"
+        for p in sorted(_EVIDENCE_PER_CASE - set(_WIRED_SELF_TESTS))
+    ]
+    return problems
 
 
 def self_test() -> int:
@@ -344,6 +526,29 @@ def self_test() -> int:
             "an empty/unpinned self-test output is caught",
             "check_app_shell_assets.py",
             any("no pinned evidence" in f for f in teeth_errors(wired, fake)),
+        )
+    )
+
+    # 6. The decisive gap this guard exists to close one layer down: a self-test
+    # gutted to ``print(<pinned signature>); return 0`` still satisfies the
+    # signature check -- the marker is a string a mutator can write -- while
+    # detecting nothing. The drift probe must catch it. Both limbs are asserted:
+    # the signature check stays green (or the case proves nothing) and the
+    # planted drift turns the wired call red.
+    marker = "app shell asset self-test passed"
+    poisoned = (0, marker + "\n")
+    signature_blind = not teeth_errors(
+        wired, {**control, "scripts/check_app_shell_assets.py": poisoned}
+    )
+    drift_caught = drift_errors(
+        wired, {"scripts/check_app_shell_assets.py": (0, marker + "\n")}
+    )
+    cases.append(
+        (
+            "a marker-preserving gut defeats the signature pin but not the drift probe",
+            "check_app_shell_assets.py",
+            signature_blind
+            and any("check_app_shell_assets.py" in f for f in drift_caught),
         )
     )
 
