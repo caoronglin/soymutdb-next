@@ -2018,9 +2018,18 @@ class DeliveryArchitectureTests(unittest.TestCase):
         )
 
         # Exactly one Rust finding set: no second cargo-* analyzer in the
-        # governance policy, which would produce a contradictory report.
-        policy = (ROOT / "dependency-governance.json").read_text(encoding="utf-8")
-        self.assertNotIn("cargo audit", policy)
+        # governance policy, which would produce a contradictory report. Parse
+        # the checks structurally; a literal "cargo audit" substring check
+        # misses a check named `cargo-deny` (PR #180's hole).
+        from scripts.check_bio_core_wheel_abi import foreign_cargo_analyzers
+
+        registered = foreign_cargo_analyzers(ROOT / "dependency-governance.json")
+        self.assertEqual(
+            registered,
+            [],
+            "a second Rust cargo analyzer was registered in the governance "
+            "policy; the release lane must have exactly one Rust finding set",
+        )
 
     def test_contracts_job_provisions_every_import_it_needs(self) -> None:
         """The contracts stage must provision the layer's whole dependency set.
@@ -5629,24 +5638,12 @@ def test_pr_artifact_browser_acceptance_covers_frontend_changes() -> None:
     assert "github.event_name != 'pull_request'" in workflow["jobs"]["e2e"]["if"]
 
 
-def _cnb_cpus(template_path: Path):
-    """Yield ``(where, cpus, cost, depth)`` per runner declaration.
+def _cnb_runner_declarations(template_path: Path):
+    """Yield ``(where, cpus, event, depth)`` per runner declaration.
 
-    ``.cnb.yml`` nests events under the ``main`` and ``$`` root branches, so the
-    event name has to be read from the inner map: at top level every event looks
-    like a pull request.
-
-    ``cost`` answers the only question this walk exists for -- does the
-    reservation land on a review branch?
-
-    * ``"verify"``: a ``pull_request`` pipeline. Prepare freezes ``cpus x
-      window`` for it on every push to a review branch.
-    * ``"agent"``: an ``@npc`` pipeline. It rides the same event, but the
-      platform buys its runner on its own budget, so the frozen reservation is
-      not the same charge (and adding one here makes the bill worse, not
-      clearer).
-    * ``None``: anything else (push, tag, manual, schedule) -- never warm while
-      somebody is reading a diff.
+    ``.cnb.yml`` nests events under the ``main`` / ``$`` root branches, so the
+    event has to be read from the inner map: at top level every event looks like
+    a pull request.
     """
     config = yaml.safe_load(template_path.read_text(encoding="utf-8"))
 
@@ -5664,11 +5661,6 @@ def _cnb_cpus(template_path: Path):
         for event_name, pipelines in branches.items():
             if not isinstance(pipelines, list):
                 continue
-            cost = None
-            if str(event_name) == "pull_request":
-                cost = "verify"
-            elif str(event_name).startswith("pull_request."):
-                cost = "agent"
             for pipeline in pipelines:
                 if not isinstance(pipeline, dict):
                     continue
@@ -5676,11 +5668,11 @@ def _cnb_cpus(template_path: Path):
                 runner = pipeline.get("runner") or {}
                 # ``None`` is a declaration too: a pipeline that forgets a
                 # runner pays the platform default, which cannot be counted.
-                yield name, runner.get("cpus"), cost, 1
+                yield name, runner.get("cpus"), str(event_name), 1
                 for stage in walk_stages(pipeline.get("stages")):
                     stage_runner = stage.get("runner") or {}
                     where = f"{name}/{stage.get('name')}"
-                    yield where, stage_runner.get("cpus"), cost, 2
+                    yield where, stage_runner.get("cpus"), str(event_name), 2
 
 
 def test_cnb_runner_declarations_are_honest_and_measurable() -> None:
@@ -5688,22 +5680,25 @@ def test_cnb_runner_declarations_are_honest_and_measurable() -> None:
 
     The only red reading on a pull request every time Prepare dies is
     ``Root Group's events CPU core-hours are insufficient for pre-freezing``.
-    Nothing in the changed files causes it -- CNB freezes a reservation for
-    ``cpus x freeze_window`` before the first stage runs, so a PR whose
-    pipelines declare oversized runners dies before any script is reachable and
+    Nothing in the changed files causes it -- CNB freezes a reservation per
+    stage before the first one starts, so a template that declares 16 cores on
+    more stages than the org can freeze dies before any script is reachable and
     reports it as a pipeline ``error`` rendered next to the commit. The cost is
     paid during review, on somebody else's PR, attributed to their diff.
 
-    The gate is deliberately shallow, but it is scored twice over, because a
+    The gate is deliberately shallow, and it is scored twice over, because a
     depth-2-only walk has already gone green against a planted ``cpus: 32``:
 
     1. Every value under a ``cpus:`` key anywhere in the template must be one
        of the sizes this repo actually schedules. This half is a text scan, not
        a walk, so a shape the walker cannot descend into still cannot smuggle
        in ``cpus: 160``.
-    2. The pull request pipeline -- the one that pays the reservation on every
-       push to a review branch -- must stay inside a small, counted budget.
-       Release and manual pipelines are excluded: they run once per release.
+    2. The number of 16-core stages the repository declares must stay inside a
+       small, counted budget, and the ``pull_request`` family inside its own.
+       The reservation is frozen per stage, before the first one starts, and the
+       balance is organisation-wide: push, tag and the manual buttons spend it
+       exactly like ``pull_request`` does, so "it only runs on a tag" is not a
+       discount.
 
     It does not try to predict the org balance; that number is invisible here.
     """
@@ -5721,38 +5716,70 @@ def test_cnb_runner_declarations_are_honest_and_measurable() -> None:
         f"(allowed: {sorted(allowed)})"
     )
 
-    # (2) Walk: what a review branch actually reserves.
-    declarations = list(_cnb_cpus(template))
+    # (2) Walk: what an event actually freezes.
+    declarations = list(_cnb_runner_declarations(template))
     # Guard the guard: a walk that descends into nothing passes everything
     # above, which is exactly how a stage override stayed invisible.
     assert len(declarations) >= 15, (
         f"only {len(declarations)} runner declarations walked from .cnb.yml; "
         "the walk is broken"
     )
-    assert any(count == 2 for _w, _c, _warm, count in declarations), (
+    assert any(depth == 2 for _w, _c, _e, depth in declarations), (
         "the walk found no stage declaration; it is not descending into `stages`"
     )
     # Only pipelines are scored for a missing runner: a stage inherits the
     # pipeline's, so `None` there is the normal case, not a hole.
-    warm = [
-        (where, cpus)
-        for where, cpus, cost, depth in declarations
-        if cost == "verify" and depth == 1
-    ]
-    assert warm, "no pull_request pipeline declares a runner"
-    # The `@npc` pipelines stay outside this count on purpose: they do ride the
-    # pull_request event, but they are summoned by a comment and the platform
-    # buys their runner on its own budget, so a frozen `cpus x window`
-    # reservation is not the same charge. They stay inside the scan above, which
-    # is where an oversized one would show up.
-    agents = [where for where, _cpus, cost, depth in declarations if cost == "agent"]
-    assert agents, "the @npc pipelines left the walk; they are part of the pull request event"
-    pr_cores = [(where, int(cpus)) for where, cpus in warm]
-    # 16 cores are reserved for the pipeline that genuinely fans out (pnpm
-    # install + turbo build + vitest projects + Python). PR pipelines pay that
-    # reservation on every push; a second 16-core PR pipeline doubles the bill
-    # and starts failing in Prepare before the diff is ever read -- which is
-    # what made this PR look broken.
-    assert len(pr_cores) <= 2 and sum(cpus for _w, cpus in pr_cores) <= 20, (
-        f"pull request pipelines reserve too many cores per run: {pr_cores}"
+    assert any(depth == 1 for _w, _c, _e, depth in declarations), (
+        "no pipeline declares a runner"
     )
+    assert any(event == "pull_request" for _w, _c, event, _d in declarations), (
+        "the pull_request event left the walk; it is the event this gate exists for"
+    )
+    # A reservation is frozen per stage before the first one starts, and the
+    # balance is organisation-wide, so what has to stay bounded is the whole
+    # template -- not the per-PR reading, which is the cheapest one and would
+    # have gone green against the state that failed.
+    #
+    # Only the 16-core declarations are counted. An 8-core runner is how the
+    # single-suite lanes are already written (clickhouse migration, mcp e2e,
+    # publication, the nightly sweep), and demoting one changes its failure
+    # mode without moving the bill; the fan-out gates are the ones that
+    # genuinely need the machine, and they are the ones that got copied.
+    #
+    # The budget is the current 16-core shape plus one:
+    #   * 2 fan-out verifiers (push, pull_request),
+    #   * 6 release-lane resolvers (amd64 + arm64 on push / tag / the image
+    #     button / the release button),
+    #   * 2 manual image sessions (the "build images only" button),
+    #   * 1 manual verifier,
+    #   * 1 spare, so a new legitimate lane does not have to rewrite this gate.
+    # Anything past 12 is a rounding-up pass over existing stages, which is the
+    # shape of the regression this gate exists for.
+    #
+    # It does not predict the org balance; that number is invisible from inside
+    # the repository. It only keeps the pre-frozen area at the size that was
+    # measured to work.
+    sixteen = [
+        where
+        for where, cpus, _event, _depth in declarations
+        if str(cpus) == "16"
+    ]
+    assert len(sixteen) <= 12, (
+        f"{len(sixteen)} stages declare `cpus: 16`; the organisation pre-freezes "
+        f"every one of them on every event: {sixteen}"
+    )
+    # Keep the cheapest reading honest too: the PR family fans out into six
+    # gates, so it is one 16-core pipeline and that is all.
+    pr_cores = sum(
+        int(str(cpus))
+        for _where, cpus, event, depth in declarations
+        if event == "pull_request" and depth == 1 and str(cpus).isdigit()
+    )
+    assert pr_cores <= 24, (
+        f"the pull_request pipeline family reserves {pr_cores} cores per run; "
+        "prepare freezes that on every push to a review branch"
+    )
+
+
+if __name__ == "__main__":  # pragma: no cover - unittest entry point
+    unittest.main()

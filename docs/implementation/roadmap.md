@@ -191,3 +191,25 @@ cargo-audit 抬到 0.22.2、并让失败路径打印证据；`2649f71f` 把 carg
 `AUDIT_RC`/`DENY_RC` 后调用；`deny.toml` 是 lint level 的唯一真相源，不再
 加 `--deny warnings`。源码守卫与 contracts 层双重钉住，六组变异各自咬一层。
 行为回归 + 变异验证见 `docs/dev/bio-core-wheel-abi-tags.md`。
+
+---
+
+## OpenAPI contract hardening — re-phased slices (2026-11-05, cont.)
+
+Each slice is one PR, cut by file ownership so no two parallel agents write the
+same bytes. All are on base `05a1d4bb`; links are to the PR that carries the
+passing test, not to a design note.
+
+| Phase | PR | Content | Verification |
+| --- | --- | --- | --- |
+| A1 | #190 | Pin request/success body components to independent literal baselines | 48 passed, SMOKE PASS 644+5+10 |
+| A2 | #193 | A pinned baseline may only move together with the artifacts it pins | 15 checks, SMOKE PASS |
+| A3 | #199 | Pin published `x-pagination` values to an independent floor; kill the co-revert that kept the old guard green | SMOKE PASS 640+5+10, negative control |
+| A4 | (this PR) | Pin the **non-admin** protected OpenAPI operations to a reviewed literal floor: the old `protected < len(admin)` bound was vacuous (admin ⊆ protected), so stripping `security` from all 48 non-admin ops stayed green. See [`../dev/openapi-auth-surface-nonadmin-floor.md`](../dev/openapi-auth-surface-nonadmin-floor.md) | 7 pytest, guard 10 ablations, SMOKE PASS 640+5+10, 4 negative controls |
+| E1 | #196 / #201 | Freeze `http_error` and wire both error-code guards into the gate (the two guards are `rc=1` on live main and unconsumed by any `scripts/*.sh`) | in flight |
+
+The recurring lesson across A1–A4: `check-contract.sh` proves
+*export == snapshot*, which is self-consistency, not truth. Any fact pinned
+against bytes derived from the same export can be co-reverted. Every new
+floor is a hand-written literal in the guard, compared in both directions,
+with an ablation that moves both halves together and must still go red.

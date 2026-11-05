@@ -91,6 +91,13 @@ def source_codes(root: Path) -> set[str]:
     tree = ast.parse((root / EXCEPTIONS).read_text(encoding="utf-8"))
     codes: set[str] = set()
     for node in tree.body:
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            value = node.value
+            # Collected below, and only when the catalog entry is also there:
+            # reading the constant here made the fallback count as declared
+            # from the leftover constant alone.
+            # (a later `HTTP_ERROR_CODE = "http_error"` literal must not leak in)
         if not isinstance(node, ast.ClassDef):
             continue
         for stmt in node.body:
@@ -109,6 +116,7 @@ def source_codes(root: Path) -> set[str]:
                 codes.add(value.value)
 
     const_value: str | None = None
+    catalog_entry = False
     for node in tree.body:
         if not isinstance(node, ast.Assign):
             continue
@@ -132,8 +140,12 @@ def source_codes(root: Path) -> set[str]:
                 and isinstance(target.slice, ast.Name)
                 and target.slice.id == "HTTP_ERROR_CODE"
             ):
-                codes.add(const_value)
+                catalog_entry = True
                 break
+    # Both halves, not either: a leftover constant with the catalog entry
+    # deleted still advertises nothing, so it must not count as declared.
+    if const_value is not None and catalog_entry:
+        codes.add(const_value)
     return codes
 
 
@@ -241,6 +253,14 @@ def _self_test() -> int:
                 '    error_code = "validation_error"\n\nclass _Phantom(SoyMutDBError):\n    error_code = "phantom_code"',
             )
             p.write_text(s)
+        elif kind == "rename the http fallback in the source":
+            p = tree / EXCEPTIONS
+            p.write_text(
+                p.read_text().replace(
+                    'HTTP_ERROR_CODE = "http_error"',
+                    'HTTP_ERROR_CODE = "http_error_renamed"',
+                )
+            )
         elif kind == "empty the lock":
             (tree / GOLDEN).write_text("{}\n")
         elif kind == "duplicate a key in the lock":
@@ -258,6 +278,7 @@ def _self_test() -> int:
         "change a frozen description",
         "turn the lock into a generated artifact",
         "invent a code in the source",
+        "rename the http fallback in the source",
         "empty the lock",
         "duplicate a key in the lock",
     )

@@ -56,12 +56,13 @@ API import, no Python 3.15 venv, no wheel, no database. It asserts:
   and the `catalog[HTTP_ERROR_CODE] = ...` entry are present, so a dropped
   catalog entry cannot hide behind a leftover constant.
 
-`--self-test` plants seven independent defects (coordinated rename, dropped
+`--self-test` plants eight independent defects (coordinated rename, dropped
 code, changed description, lock turned into a generated artifact, invented
-source code, empty lock, duplicate key) and proves each is caught.
+source code, renamed `http_error` fallback, empty lock, duplicate key) and
+proves each is caught.
 
 `packages/api-client/python_tests/test_api_error_code_vocabulary.py` provides
-seven `unittest` regressions, including the killing mutation: a rename applied
+eight `unittest` regressions, including the killing mutation: a rename applied
 to the source **and** both published artifacts still fails, because the lock is
 not one of them.
 
@@ -69,12 +70,22 @@ not one of them.
 
 `packages/api-client/scripts/check-contract.sh` runs the guard and the
 regression suite at the end of the frontend contract gate, on both CNB and the
-GitHub mirror (the job bodies are shared scripts). The guard is also runnable
-standalone from a developer machine:
+GitHub mirror (the job bodies are shared scripts). That gate re-exports the
+backend with the API venv, so the guards are also consumed by
+`scripts/smoke.sh --profile contracts` — the contracts layer that runs on a
+clean checkout without an API venv — as standalone `|| rc=$?` calls.
+`scripts/check_error_code_gate_wiring.py` pins those two wires (dropping or
+neutralising either must fail) and its `--self-test` plants the decisive
+co-rename to prove the wired guard still has a real signal. The wires are also
+part of `REQUIRED_GUARD_CALLS` in
+`scripts/check_contracts_registry_collection.py`, the independent floor pin.
+
+The guard is runnable standalone from a developer machine:
 
 ```bash
 python3 scripts/check_api_error_code_vocabulary.py
 python3 scripts/check_api_error_code_vocabulary.py --self-test
+python3 scripts/check_error_code_gate_wiring.py --self-test
 python3 -m unittest discover -s packages/api-client/python_tests -p 'test_*.py'
 ```
 

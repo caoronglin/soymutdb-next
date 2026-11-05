@@ -136,9 +136,38 @@ def _fallback_from_source(tree: ast.Module) -> tuple[str, str] | None:
 
 
 def _derived_catalog(exceptions_path: Path) -> dict[str, str]:
-    """Reproduce ``error_code_catalog()`` from source, without importing the app."""
+    """Reproduce ``error_code_catalog()`` from source, without importing the app.
+
+    ``error_code_catalog()`` also publishes ``HTTP_ERROR_CODE`` for the generic
+    ``HTTPException`` handler (PR #152), even though no ``SoyMutDBError``
+    subclass carries it. Read the constant and its published description from
+    the source so the derived catalog stays byte-for-byte with the runtime one.
+    """
     tree = ast.parse(exceptions_path.read_text(encoding="utf-8"), filename=str(exceptions_path))
     catalog: dict[str, str] = {}
+    fallback: str | None = None
+    for node in ast.walk(tree):
+        # Module-level ``HTTP_ERROR_CODE = "http_error"``.
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            value = node.value
+            if (
+                isinstance(value, ast.Constant)
+                and isinstance(value.value, str)
+                and any(isinstance(t, ast.Name) and t.id == "HTTP_ERROR_CODE" for t in targets)
+            ):
+                fallback = value.value
+        # ``catalog[HTTP_ERROR_CODE] = "description"`` inside error_code_catalog().
+        if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant):
+            desc = node.value.value
+            if isinstance(desc, str):
+                for target in node.targets:
+                    if (
+                        isinstance(target, ast.Subscript)
+                        and isinstance(target.slice, ast.Name)
+                        and target.slice.id == "HTTP_ERROR_CODE"
+                    ):
+                        catalog[fallback or "http_error"] = desc
     for node in tree.body:
         if not isinstance(node, ast.ClassDef):
             continue
@@ -250,6 +279,10 @@ def self_test() -> int:
         "source code renamed": lambda p: _mutate_source(
             p / "apps/api/app/core/exceptions.py",
             lambda s: s.replace('error_code = "not_found"', 'error_code = "not_found_tampered"'),
+        ),
+        "fallback code renamed in source": lambda p: _mutate_source(
+            p / "apps/api/app/core/exceptions.py",
+            lambda s: s.replace('HTTP_ERROR_CODE = "http_error"', 'HTTP_ERROR_CODE = "http_error_tampered"'),
         ),
         "empty hierarchy": lambda p: (p / "apps/api/app/core/exceptions.py").write_text(
             "# no classes\n", encoding="utf-8"

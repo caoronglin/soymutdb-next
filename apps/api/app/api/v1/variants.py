@@ -449,6 +449,20 @@ async def get_variant_export_status(
 @router.get(
     "/export/{export_id}/manifest",
     response_model=ExportManifestResponse,
+    # Same reason as ``/exports/query``: a 422 declared here is the one
+    # ``_build_openapi_schema`` retypes to ``ValidationErrorResponse``; without
+    # it the operation publishes FastAPI's ``HTTPValidationError`` and the
+    # generated client types a body the handler never sends.
+    responses={
+        422: {
+            "model": ValidationErrorResponse,
+            "description": (
+                "Validation Error. The path parameter is not a well-formed "
+                "export identifier; the response carries the unified envelope "
+                "with field-level ``errors``."
+            ),
+        }
+    },
 )
 async def get_variant_export_manifest(
     export_id: uuid.UUID,

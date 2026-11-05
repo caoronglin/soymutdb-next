@@ -165,12 +165,19 @@ smoke_contracts() {
     # typing a response the server never sends. This guard reads committed
     # bytes and pins the source contract; needs no Python 3.15.
     scripts/test_openapi_422_unified_envelope.py
-    # Pin every response body: the client must declare each snapshot response
-    # exactly as often as the snapshot does, and reference no undeclared
-    # component. The envelope guard pins 4xx/5xx shapes and the snapshot guard
-    # pins path/schema floors; neither counts 2xx bodies, so a success response
-    # dropped or retyped in one half stayed invisible. Needs no Python 3.15.
+    # Pin every $ref body in both committed artifacts to independent literal
+    # fixed points: two per-component baselines (responses + requests) plus a
+    # digest of the (method, path, status|requestBody, component) pair set, so
+    # a regenerate that drifts both halves together AND a permutation of two
+    # same-count bodies both fail. The envelope guard pins 4xx/5xx shapes and
+    # the snapshot guard pins path/schema floors; neither counts success or
+    # request bodies. Needs no Python 3.15.
     scripts/test_openapi_snapshot_body_integrity.py
+    # The guards above pin the contract to literals in their own source, so
+    # bumping a literal is a one-file edit that leaves every one of them green
+    # with the artifacts untouched. This suite proves the sync guard reports
+    # that edit, both directions, without touching the repository.
+    scripts/test_openapi_baseline_sync.py
     # The offline browser-gate inventory (scripts/test_artifact_e2e_gate.py)
     # must fail a build when a gate is dropped from the sweep or the sweep stops
     # failing closed.
@@ -267,6 +274,13 @@ smoke_contracts() {
   # rule did exactly that to packages/shared/src/build/) leaves every local
   # build green while a clean clone has no source for the import at all.
   "${PYTHON_BIN}" scripts/check_workspace_exports.py || rc=$?
+  # The two pinned OpenAPI baselines in the guards below are literals, so
+  # bumping one is a one-file edit that turns every guard green with the
+  # artifacts untouched -- the documented "update the baseline in the same
+  # commit" escape hatch, with nothing checking the same-commit part. This
+  # compares the literal to the artifacts (no git needed, so it holds in a
+  # squash and on a shallow clone) and to the commit that moved it.
+  "${PYTHON_BIN}" scripts/check_openapi_baseline_sync.py --self-test || rc=$?
   # The published OpenAPI auth surface (both security schemes + the per-op
   # HTTPBearer requirement on admin routes) is client-visible, but a co-revert
   # of main.py + openapi.json keeps check-contract.sh green. Pin it against
@@ -290,6 +304,18 @@ smoke_contracts() {
   # Read the committed service bytes: the pytest suite exercises behaviour,
   # this guard catches the ordering being moved back at the source level.
   "${PYTHON_BIN}" scripts/check_interval_visibility_order.py || rc=$?
+  # The published error-code vocabulary is frozen against a hand-written lock:
+  # a coordinated source + artifact co-revert stays green under every
+  # consistency check. The catalog guard re-derives the runtime catalog from
+  # source. Both ran only in check-contract.sh (behind the frontend gate's
+  # export), so a failing guard or a co-rename never reddened the contracts
+  # layer that actually runs on a clean checkout. Consume them here too.
+  "${PYTHON_BIN}" scripts/check_api_error_code_vocabulary.py || rc=$?
+  "${PYTHON_BIN}" scripts/check_error_code_catalog.py || rc=$?
+  # Pin those two wires: dropping or neutralising either lets the layer stay
+  # green while the guard's failure is swallowed. --self-test plants the
+  # decisive co-rename and proves the wired guard still has a real signal.
+  "${PYTHON_BIN}" scripts/check_error_code_gate_wiring.py --self-test || rc=$?
   "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?
   echo
   echo "-- environment-bound contract suites (reported, not gating here) --"

@@ -44,6 +44,65 @@ PUBLIC_AUTH = {
     ("/api/v1/auth/refresh", "post"),
 }
 
+# Reviewed literal floor: the non-admin operations that must require
+# HTTPBearer in the published snapshot. This is NOT derived from
+# openapi.json -- a co-revert that drops `security` from these ops and
+# re-exports the snapshot keeps every export==snapshot gate green, and
+# the old `protected < len(admin)` bound can never fire because admin
+# is a subset of protected. Any deliberate change is an explicit,
+# reviewable edit to this set in the same commit as the re-export.
+NON_ADMIN_PROTECTED = frozenset({
+    ("/api/v1/analyses", "get"),
+    ("/api/v1/analyses/uploads", "post"),
+    ("/api/v1/analyses/{analysis_type}/submit", "post"),
+    ("/api/v1/analyses/{job_id}", "get"),
+    ("/api/v1/analyses/{job_id}/download", "get"),
+    ("/api/v1/auth/change-password", "post"),
+    ("/api/v1/auth/logout", "post"),
+    ("/api/v1/auth/me", "get"),
+    ("/api/v1/blast/databases/{database_id}", "patch"),
+    ("/api/v1/blast/index-builds", "post"),
+    ("/api/v1/blast/index-builds/{build_id}", "get"),
+    ("/api/v1/blast/jobs", "get"),
+    ("/api/v1/blast/jobs", "post"),
+    ("/api/v1/blast/jobs/{job_id}", "get"),
+    ("/api/v1/blast/jobs/{job_id}/cancel", "post"),
+    ("/api/v1/blast/jobs/{job_id}/hits/{subject_id}/genome-target", "get"),
+    ("/api/v1/blast/jobs/{job_id}/results", "get"),
+    ("/api/v1/blast/jobs/{job_id}/retry", "post"),
+    ("/api/v1/comparative/artifacts", "post"),
+    ("/api/v1/content/snapshot", "get"),
+    ("/api/v1/exports/query", "post"),
+    ("/api/v1/gwas/submit", "post"),
+    ("/api/v1/gwas/uploads", "post"),
+    ("/api/v1/gwas/{job_id}", "get"),
+    ("/api/v1/gwas/{job_id}/results", "get"),
+    ("/api/v1/notifications", "get"),
+    ("/api/v1/notifications/read", "post"),
+    ("/api/v1/notifications/unread-count", "get"),
+    ("/api/v1/releases", "get"),
+    ("/api/v1/releases/{release_id}", "get"),
+    ("/api/v1/search/internal", "get"),
+    ("/api/v1/seeds/requests", "get"),
+    ("/api/v1/seeds/requests/{request_id}", "patch"),
+    ("/api/v1/site/about", "get"),
+    ("/api/v1/site/branding", "get"),
+    ("/api/v1/site/content", "get"),
+    ("/api/v1/site/footer", "get"),
+    ("/api/v1/site/home", "get"),
+    ("/api/v1/table-views/{kind}", "get"),
+    ("/api/v1/tracks", "get"),
+    ("/api/v1/tracks/jbrowse-config", "get"),
+    ("/api/v1/tracks/{track_id}", "get"),
+    ("/api/v1/tracks/{track_id}/signed-url", "get"),
+    ("/api/v1/variants/export", "post"),
+    ("/api/v1/variants/export/{export_id}", "get"),
+    ("/api/v1/variants/export/{export_id}/download", "get"),
+    ("/api/v1/variants/export/{export_id}/manifest", "get"),
+    ("/api/v1/widget/{name}", "get"),
+})
+# pinned count: 48 non-admin protected, checked below
+
 
 def _operations(document: dict) -> list[tuple[str, str, dict]]:
     out = []
@@ -95,17 +154,33 @@ def failures(snapshot: str, main: str, deps: str, auth: str, config: str) -> lis
         if not _bearer(operation):
             found.append(f"{method.upper()} {path} does not require HTTPBearer")
 
-    # 3. A lower bound on the whole protected surface: a co-revert that strips
-    #    `security` from every operation at once cannot hide behind the admin
-    #    check (admin would also be empty, which check 2 catches) -- but a
-    #    wholesale renumbering that keeps admin while dropping the other 46
-    #    protected operations would otherwise go unnoticed.
-    protected = sum(1 for _, _, o in operations if _bearer(o))
-    if protected < len(admin):
-        found.append(
-            f"only {protected} operations require HTTPBearer; {len(admin)} admin "
-            "operations alone need it"
-        )
+    # 3. A reviewed literal floor on the non-admin protected surface. The old
+    #    `protected < len(admin)` bound could never fire: admin is a subset of
+    #    protected, so protected >= len(admin) by construction. Stripping
+    #    `security` from every one of the 48 non-admin operations left the
+    #    count equal to len(admin) and kept this guard green. Compare the exact
+    #    published set against an independent hand-written lock instead, so a
+    #    co-revert (or a re-export that drops one) is caught in both directions.
+    published_non_admin = {
+        (p, m)
+        for p, m, o in operations
+        if not p.startswith("/api/v1/admin/") and _bearer(o)
+    }
+    if published_non_admin != NON_ADMIN_PROTECTED:
+        missing = sorted(NON_ADMIN_PROTECTED - published_non_admin)
+        extra = sorted(published_non_admin - NON_ADMIN_PROTECTED)
+        if missing:
+            found.append(
+                f"{len(missing)} pinned non-admin operations no longer require "
+                f"HTTPBearer (e.g. {missing[0][1].upper()} {missing[0][0]}): "
+                "a published-operation co-revert is not allowed"
+            )
+        if extra:
+            found.append(
+                f"{len(extra)} non-admin operations now require HTTPBearer but "
+                "are not in the reviewed floor: update NON_ADMIN_PROTECTED in "
+                "the same commit as the re-export"
+            )
 
     # 4. The auth bootstrap endpoints must stay public. A blanket top-level
     #    `security` (or a hand-edit adding it to login/register/refresh) would
@@ -167,6 +242,25 @@ def _mutate(snapshot: str, main: str, deps: str, auth: str, config: str, *, kind
             'security_schemes.setdefault(\n        "refreshCookie"',
             'security_schemes.setdefault(\n        "_removed"',
         )
+    elif kind == "strip_non_admin_security":
+        # The whole co-revert the old `protected < len(admin)` bound missed:
+        # drop `security` from EVERY non-admin protected operation, keep admin.
+        for path, item in doc["paths"].items():
+            if path.startswith("/api/v1/admin/"):
+                continue
+            for method, op in item.items():
+                if method in METHODS and isinstance(op, dict):
+                    op.pop("security", None)
+    elif kind == "drop_one_non_admin_security":
+        target = sorted(NON_ADMIN_PROTECTED)[0]
+        doc["paths"][target[0]][target[1]].pop("security", None)
+    elif kind == "phantom_non_admin_security":
+        # A genuinely public non-admin operation gains HTTPBearer without the
+        # floor being reviewed. Pick one outside PUBLIC_AUTH so check 4 does not
+        # fire and check 3's `extra` direction is the one that bites.
+        doc["paths"]["/api/v1/assemblies"]["get"]["security"] = [
+            {"HTTPBearer": []}
+        ]
     else:
         raise ValueError(kind)
     return (json.dumps(doc), main, deps, auth, config)
@@ -186,6 +280,9 @@ def _self_test() -> int:
         "global_security",
         "secure_login",
         "co_revert_source",
+        "strip_non_admin_security",
+        "drop_one_non_admin_security",
+        "phantom_non_admin_security",
     ]
     problems = []
     for kind in cases:

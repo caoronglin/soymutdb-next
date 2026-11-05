@@ -23,7 +23,14 @@ const GUARD = path.join(ROOT, "scripts", "check-admin-i18n-keys.mjs");
  * Build a throwaway tree holding a locale pair plus one admin source file, run
  * the guard against it, and return `{ code, output }`.
  */
-function run({ zh, en, source, sourcePath = "apps/admin/src/page.tsx" }) {
+function run({
+  zh,
+  en,
+  source,
+  sourcePath = "apps/admin/src/page.tsx",
+  bootstrap = null,
+  resources = null,
+}) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "admin-i18n-"));
   try {
     for (const [lang, catalog] of Object.entries({ zh, en })) {
@@ -34,6 +41,16 @@ function run({ zh, en, source, sourcePath = "apps/admin/src/page.tsx" }) {
     const file = path.join(tmp, sourcePath);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, source, "utf8");
+    if (bootstrap !== null) {
+      const bootstrapFile = path.join(tmp, "apps/web/src/lib/i18n.ts");
+      fs.mkdirSync(path.dirname(bootstrapFile), { recursive: true });
+      fs.writeFileSync(bootstrapFile, bootstrap, "utf8");
+    }
+    if (resources !== null) {
+      const resourcesFile = path.join(tmp, "apps/web/src/lib/i18n-resources.ts");
+      fs.mkdirSync(path.dirname(resourcesFile), { recursive: true });
+      fs.writeFileSync(resourcesFile, resources, "utf8");
+    }
     try {
       const stdout = execFileSync("node", [GUARD, "--root", tmp], {
         encoding: "utf8",
@@ -154,10 +171,85 @@ function expect(condition, message) {
   expect(result.code === 0, `test files should be skipped, got: ${result.output}`);
 }
 
+// 9. A key registered only in the portal-only runtime overlay must pass.
+//    The app merges these bundles in `lib/i18n.ts`; a guard that reads only
+//    `common.json` would reject it, which is exactly how `tools.sequence.*`
+//    shipped 178 false positives while the UI rendered the right copy.
+{
+  const overlay = `export const EXTRA_RESOURCES: Record<string, unknown> = {
+  en: { tools: { sequence: { title: "Sequence Toolkit" } } },
+  zh: { tools: { sequence: { title: "序列工具" } } },
+};
+`;
+  const bootstrap = `import { EXTRA_RESOURCES } from "./i18n-resources";
+export function init(): void {
+  for (const [lng, bundle] of Object.entries(EXTRA_RESOURCES)) void [lng, bundle];
+}
+`;
+  const args = {
+    zh: { admin: { greeting: "你好" } },
+    en: { admin: { greeting: "Hello" } },
+    source: 'export const x = () => t("tools.sequence.title");\n',
+    bootstrap,
+    resources: overlay,
+  };
+  const result = run(args);
+  expect(result.code === 0, `a runtime-overlay key should pass, got ${result.code}: ${result.output}`);
+}
+
+// 10. ...and dropping the overlay from the bootstrap makes it fail again.
+//    This pins that the guard reads the composition from `i18n.ts` rather than
+//    hardcoding an overlay list that can drift away from the app.
+{
+  const overlay = `export const EXTRA_RESOURCES: Record<string, unknown> = {
+  en: { tools: { sequence: { title: "Sequence Toolkit" } } },
+  zh: { tools: { sequence: { title: "序列工具" } } },
+};
+`;
+  const bootstrap = `import { EXTRA_RESOURCES } from "./i18n-resources";
+export function init(): void { void EXTRA_RESOURCES; }
+`;
+  const result = run({
+    zh: { admin: { greeting: "你好" } },
+    en: { admin: { greeting: "Hello" } },
+    source: 'export const x = () => t("tools.sequence.title");\n',
+    bootstrap,
+    resources: overlay,
+  });
+  expect(result.code === 1, "an overlay the app no longer merges must not satisfy the guard");
+  expect(
+    result.output.includes("tools.sequence.title"),
+    `the report must name the unregistered key, got: ${result.output}`,
+  );
+}
+
+// 11. Same shape through the dynamic-prefix path: a namespace that exists only
+//     in the runtime overlay is a valid `t("prefix." + value)` target.
+{
+  const overlay = `export const TOOLS_RESOURCES: Record<string, unknown> = {
+  en: { tools: { sequence: { error: { unknown: "Unknown" } } } },
+  zh: { tools: { sequence: { error: { unknown: "未知" } } } },
+};
+`;
+  const bootstrap = `import { TOOLS_RESOURCES } from "./i18n-resources";
+export function init(): void {
+  for (const [lng, bundle] of Object.entries(TOOLS_RESOURCES)) void [lng, bundle];
+}
+`;
+  const result = run({
+    zh: { admin: { greeting: "你好" } },
+    en: { admin: { greeting: "Hello" } },
+    source: 'export const x = (code: string) => t(`tools.sequence.error.${code}`);\n',
+    bootstrap,
+    resources: overlay,
+  });
+  expect(result.code === 0, `a runtime-overlay namespace should pass, got: ${result.output}`);
+}
+
 if (failures.length > 0) {
   console.error(`admin i18n key guard ablation FAILED (${failures.length}):`);
   for (const failure of failures) console.error(`  - ${failure}`);
   process.exit(1);
 }
 
-console.log("admin i18n key guard ablation OK (8 scenarios)");
+console.log("admin i18n key guard ablation OK (11 scenarios)");
