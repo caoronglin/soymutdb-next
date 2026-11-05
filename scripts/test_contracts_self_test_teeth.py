@@ -438,6 +438,7 @@ class TeethGuardContract(unittest.TestCase):
                 "scripts/check_api_error_code_vocabulary.py",
                 "scripts/check_error_code_catalog.py",
                 "scripts/check_variant_summary_assembly_consistency.py",
+                "scripts/check_published_route_manifest.py",
             },
         )
 
@@ -489,10 +490,10 @@ class TeethGuardContract(unittest.TestCase):
     def test_both_calls_cardinality_is_a_reviewed_literal(self) -> None:
         """Membership alone is data: a row and its plain call can drop together."""
         source = GUARD.read_text(encoding="utf-8")
-        self.assertIn("BOTH_CALLS_SIZE = 3", source)
+        self.assertIn("BOTH_CALLS_SIZE = 4", source)
         self.assertIn("len(BOTH_CALLS) != BOTH_CALLS_SIZE", source)
         self.assertEqual(len(guard.BOTH_CALLS), guard.BOTH_CALLS_SIZE)
-        self.assertEqual(guard.BOTH_CALLS_SIZE, 3)
+        self.assertEqual(guard.BOTH_CALLS_SIZE, 4)
         self.assertEqual(guard.both_call_errors(_smoke(), guard.wired_self_tests(_smoke())), [])
 
     def test_shrinking_the_both_calls_floor_is_named(self) -> None:

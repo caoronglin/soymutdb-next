@@ -92,13 +92,14 @@ BOTH_CALLS: frozenset[str] = frozenset(
         "scripts/check_api_error_code_vocabulary.py",
         "scripts/check_error_code_catalog.py",
         "scripts/check_variant_summary_assembly_consistency.py",
+        "scripts/check_published_route_manifest.py",
     }
 )
 # Membership alone is data, not mechanism: dropping one row *and* that guard's
 # plain run in the same edit makes every rule below agree with the edited tree
 # (nothing is left to complain about). The reviewed cardinality turns it into a
 # counted floor. A fourth both-calls pair needs the same reviewed edit here.
-BOTH_CALLS_SIZE = 3
+BOTH_CALLS_SIZE = 4
 
 # Pinned success signatures. Counts are deliberately not pinned: a legitimate
 # new ablation changes "OK (11 checks)" to "OK (12 checks)" and must stay
