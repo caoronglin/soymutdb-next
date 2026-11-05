@@ -56,10 +56,54 @@ as all three declarations agree (positive control in `--self-test`); a
 co-revert that changes the backend, snapshot and generated client together
 cannot hide a stale MCP declaration.
 
-`--self-test` runs 11 one-sided mutations (dropped backend path, wrong method,
+## The body, which agreement does not cover
+
+Endpoint agreement says the tool calls the right `(method, path)`. It says
+nothing about the JSON body that request carries, and the body is where a
+documented input can quietly stop working: the manifest is what an MCP client
+reads (`inputs`), `server.py`'s `payload={...}` is the only place a field can
+leave the process, and the operation's request schema is what the API will
+accept. Since #212 all three surfaces can agree while the second one drops a
+field the first one documents.
+
+Measured on live `main` before this check existed: `blast_submit` documented
+its search-parameter dict as `params` and sent `parameters`. The API accepted
+the request and applied the parameters, so nothing 404'd, nothing 422'd, and no
+gate read either name — but the manifest told every MCP client the wrong
+argument name, so a caller passing `params` had it dropped by the tool
+signature and never reached the request body at all.
+
+`check_request_bodies()` closes that hole for every tool whose operation
+publishes a JSON request body (`seqfetch`, `blast_submit` today; the test
+`test_request_body_agreement_covers_every_tool_with_a_body` pins the covered
+set so a new body-declaring tool cannot silently opt out). It reads `ast` only:
+
+- **name reachability** — every input the manifest documents must be a tool
+  function parameter *or* a published request property, otherwise no caller can
+  ever supply it;
+- **payload completeness** — every documented input must appear in the payload
+  literal, or be assigned inside an `if` *body* (`if database: payload[...]`,
+  the shape of an optional field). A key assigned only on the `else` branch is
+  not sent, and is reported;
+- **payload legality** — a payload key the operation does not publish is named
+  (the API's models forbid unknown fields, so it is dropped);
+- **unprovable bodies fail closed** — a `**spread`, a computed value or a
+  twice-rebound `payload` is reported as unreconcilable rather than assumed
+  correct.
+
+The allowlist is `_NOT_IN_BODY` (values that travel as a query parameter, the
+release header, or are tool-local ownership proofs). It is reviewed, not
+derived: a new REST input that silently misses the payload must be an explicit
+edit to that literal in the same commit.
+
+`--self-test` runs 22 one-sided mutations (dropped backend path, wrong method,
 drifted server call, unregistered tool, manifest-only tool, auth downgrade /
-upgrade, missing key, dropped wiring, plus the consistent-new-tool positive
-control). Each must be caught; the clean tree must pass.
+upgrade, missing key, dropped wiring, the consistent-new-tool positive control,
+plus seven body cases: a documented input missing from the payload, a
+documented name the API does not accept, a key sent only on the `else` branch,
+the unguarded-optional positive control, an opaque payload, an unpublished
+payload key, and the covered-tool set). Each must be caught; the clean tree must
+pass.
 
 ## Why not run the MCP tests here
 
@@ -76,7 +120,11 @@ Adding or moving an MCP-facing endpoint requires updating, in one change:
 1. the backend route (and a real `generate:api-client` re-export under Python
    3.15, per `docs/dev/openapi-422-unified-envelope.md`);
 2. `manifest.py` (`TOOLS[].endpoint`, and `type` if the audience changed);
-3. `server.py` (`_api_request` method/path and the `@mcp.tool` signature).
+3. `server.py` (`_api_request` method/path, the `@mcp.tool` signature, and the
+   payload key for each new field). The MCP argument name and the request-body
+   property should be the same string: `blast_submit` shipped `params` vs
+   `parameters` and only this guard reads both.
+4. `manifest.py`'s `inputs` — the names a client is told to pass.
 
 If any one is missed, `scripts/test_mcp_openapi_parity.py` names the tool and
 the specific disagreement. Do not relax the guard; fix the declaration.

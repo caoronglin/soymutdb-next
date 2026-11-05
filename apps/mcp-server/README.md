@@ -19,7 +19,7 @@ authenticated transport.
 | `news_list`       | read   | `GET /api/v1/news`          | — | category + pagination |
 | `stats_summary`   | read   | `GET /api/v1/stats/dashboard` | `release_id` | |
 | `seqfetch`        | read   | `POST /api/v1/tools/seqfetch` | — | assembly-scoped genes[] or region mode |
-| `blast_submit`    | write  | `POST /api/v1/blast/jobs`   | — | async; returns job + submitter token |
+| `blast_submit`    | write  | `POST /api/v1/blast/jobs`   | — | async; search params go as `parameters` |
 | `blast_job_status` | write | `GET /api/v1/blast/jobs/{id}` | — | ownership-checked polling |
 | `analyses_query`  | write  | `GET /api/v1/analyses/{id}` | — | ownership-checked result polling |
 

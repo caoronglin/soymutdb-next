@@ -476,7 +476,7 @@ class TestBlastSubmit:
                     program="blastp",
                     database="glyma_cds",
                     database_id=3,
-                    params={"evalue": 1e-5},
+                    parameters={"evalue": 1e-5},
                 )
             )
 
