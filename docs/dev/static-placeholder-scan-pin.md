@@ -87,7 +87,9 @@ bytes and pins:
 - `PATTERNS=()` keeps `localhost:8000`, `LOOPBACK_PATTERNS=()` keeps its two
   loopback binds; any other extra on either side is a **divergence**;
 - the three corpora above;
-- `test_production_artifact_scan.py` still plants every shared token;
+- `test_production_artifact_scan.py` still plants every shared token **as a
+  literal**, and still **asserts** (by AST) that the scanner rejects a planted
+  marker with `returncode == 1`;
 - **the static layer actually fires**: `witness()` runs the real
   `--profile static` layer on a temp tree with the committed `smoke.sh` --
   a clean control must be green, then each of the four markers planted into
@@ -98,12 +100,24 @@ bytes and pins:
   static layer. A broken clean control aborts the witness (no vacuous
   "four drifts caught").
 
-`--self-test` plants eleven one-sided drifts on copies of the bytes plus
-two behavioural plants (clean tree fires, byte-intact blind scanner caught),
-and asserts each is caught (§4a ablation, token additions/drops, three corpus
-drifts), so a weakened pin cannot pass vacuously. The byte plants pass
-`witness_scan=False` so they still exercise only the literal floors; the
-plain `check()` call always witnesses.
+`--self-test` plants twelve one-sided byte drifts (including the
+assertion deletion below), two behavioural plants (clean tree fires,
+byte-intact blind scanner caught), and asserts each is caught. The byte plants
+pass `witness_scan=False` so they still exercise only the literal floors;
+the plain `check()` call always witnesses.
+
+The read-back floor has two halves on purpose. Literal presence alone is not
+signal: on merged `#270`, deleting the single rejection assertion from the
+behavioural suite -- leaving every marker literal and the `scan()` call in
+place -- kept the guard, its 7 vacuously-green tests and the whole contracts
+layer `SMOKE PASS` (filed as the read-back hole on PR #206). The guard now
+parses the parametrised test function and requires a real `ast.Assert` on
+`result.returncode == 1`, so a comment quoting the assertion cannot stand in
+for it. This is one step stronger than the sibling
+`check_interval_visibility_order.py`'s `"db.calls == 1" not in test` text pin,
+which a comment would satisfy verbatim. Dropping a marker from the plant list
+is still caught by the literal half; rewriting the `scan()` argument is still
+caught at pytest runtime by the surviving assertion.
 `scripts/test_static_placeholder_scan.py` pins from a second file that the
 plain call is wired into `smoke_contracts()`, that it is listed in
 `REQUIRED_GUARD_CALLS`, that the companion suite itself is collected, that
@@ -125,3 +139,6 @@ guard fails closed on any subset. A production-only token belongs in
 `PRODUCTION_ONLY` or `LOOPBACK_ONLY` plus a behavioural plant. Changing a
 corpus (any `--include` / `--exclude`) is a separate reviewed edit to the
 matching corpus constant here, with a self-test plant in the same commit.
+Keep the parametrised rejection assertion: the guard reads its syntax, not a
+substring, so renaming `result` or folding the `assert` into a helper needs a
+reviewed update to `rejection_is_asserted()` in the same commit.

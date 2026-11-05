@@ -2,13 +2,15 @@
 """Wiring + non-vacuity pin for the static placeholder-scan guard.
 
 ``check_static_placeholder_scan.py`` pins both scanners' token floors and
-their corpora against reviewed literals. It only helps if (a) the contracts
-layer actually runs it, (b) its call is pinned in ``REQUIRED_GUARD_CALLS``,
-(c) its own ``--self-test`` still fails on a one-sided drift, and (d) the
-pinned corpora are not silently mutable. Each is asserted here from a second
-file, so deleting a pin, dropping the wire, gutting the self-test or drifting
-an ``--include`` set fails the contracts layer instead of shipping a green
-layer with an unguarded scanner (§4a, PR #206).
+their corpora against reviewed literals, and reads the behavioural suite back
+for both marker literals and a real rejection assertion. It only helps if
+(a) the contracts layer actually runs it, (b) its call is pinned in
+``REQUIRED_GUARD_CALLS``, (c) its own ``--self-test`` still fails on a one-sided
+drift, (d) the pinned corpora are not silently mutable, and (e) the assertion
+floor itself is not vacuous. Each is asserted here from a second file, so
+deleting a pin, dropping the wire, gutting the self-test, drifting an
+``--include`` set or deleting the behavioural assertion fails the contracts
+layer instead of shipping a green layer with an unguarded scanner (§4a, PR #206).
 
 Stdlib only. Run directly or collect with pytest.
 """
@@ -156,6 +158,47 @@ class TestStaticPlaceholderScan(unittest.TestCase):
             and ("corpus" in line or "_headers" in line)
         ]
         self.assertGreaterEqual(len(corpus_passes), 3, buf.getvalue())
+
+    def test_rejection_floor_pins_signal_not_literals(self) -> None:
+        """The read-back floor must reject an assertion-deleted suite.
+
+        Literal presence is not signal: every marker (and the scan() call) can
+        survive while the one assertion that fails a broken scanner is gone.
+        A gutted rejection_is_asserted() returning True must be caught too,
+        or this floor is as vacuous as the bytes it replaces.
+        """
+        behaviour = (ROOT / "scripts" / "test_production_artifact_scan.py").read_text(
+            encoding="utf-8"
+        )
+        assertion = (
+            "    assert result.returncode == 1, "
+            "(marker, result.stdout, result.stderr)\n"
+        )
+        self.assertIn(assertion, behaviour, "ablation anchor moved")
+        self.assertTrue(module.rejection_is_asserted(behaviour))
+        gutted = behaviour.replace(assertion, "", 1)
+        self.assertEqual(
+            module.check(behaviour=gutted, witness_scan=False),
+            [
+                "test_production_artifact_scan.py no longer asserts that the "
+                "scanner rejects a planted marker (returncode == 1)"
+            ],
+        )
+        # A commented-out assertion is still not signal.
+        commented = behaviour.replace(assertion, "    # " + assertion.strip() + "\n", 1)
+        self.assertIn(
+            "no longer asserts",
+            " ".join(module.check(behaviour=commented, witness_scan=False)),
+        )
+
+        original = module.rejection_is_asserted
+        module.rejection_is_asserted = lambda _b: True  # type: ignore[assignment]
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = module.self_test()
+        finally:
+            module.rejection_is_asserted = original
+        self.assertNotEqual(rc, 0, "a vacuous assertion floor passed")
 
     def test_companion_suite_is_collected(self) -> None:
         smoke = SMOKE.read_text(encoding="utf-8")
