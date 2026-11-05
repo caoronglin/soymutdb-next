@@ -78,6 +78,32 @@ class TestErrorCodeContract(unittest.TestCase):
             snap.write_text(json.dumps(document, indent=2), encoding="utf-8")
             self.assertTrue(module.check(snap, CODES, SOURCE))
 
+    def test_guard_rejects_a_catalog_that_stops_emitting_a_code(self) -> None:
+        """The snapshot keeping a code must not excuse the source dropping it.
+
+        Deleting ``catalog[HTTP_ERROR_CODE] = ...`` leaves the ``HTTP_ERROR_CODE``
+        constant in the file, so a literal scan still "sees" http_error and the
+        published snapshot still lists it. Only executing ``error_code_catalog()``
+        proves the two agree, and that is the function the snapshot is built from.
+        """
+        source = SOURCE.read_text(encoding="utf-8")
+        trimmed = source.replace(module._FALLBACK_CATALOG_ENTRY, "")
+        self.assertNotEqual(trimmed, source, "fixture no longer matches exceptions.py")
+
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            source_path = Path(tmp) / "exceptions.py"
+            source_path.write_text(trimmed, encoding="utf-8")
+            self.assertTrue(module.check(SNAPSHOT, CODES, source_path))
+
+    def test_executed_catalog_matches_the_published_one(self) -> None:
+        executed, why = module._executed_catalog(SOURCE)
+        self.assertIsNone(why)
+        self.assertIsNotNone(executed)
+        document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+        self.assertEqual(sorted(executed), sorted(document["x-error-codes"]))
+
     def test_self_test_passes(self) -> None:
         self.assertEqual(module.self_test(), 0)
 

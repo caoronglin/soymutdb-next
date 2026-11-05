@@ -32,6 +32,16 @@ CODES = ROOT / "packages/api-client/error-codes.json"
 SOURCE = ROOT / "apps/api/app/core/exceptions.py"
 
 FALLBACK_CODE = "http_error"
+
+#: The exact source line that publishes the fallback code in the catalog.
+#: Held as one constant so the guard, its self-test and the wiring test all
+#: assert against the same text instead of three drifting copies.
+_FALLBACK_CATALOG_ENTRY = (
+    "    catalog[HTTP_ERROR_CODE] = (\n"
+    '        "Generic HTTPException fallback; see x-error-status for the statuses that use it."\n'
+    "    )\n"
+)
+
 HTTP_STATUS_CODES = {
     "401": "authentication_failed",
     "403": "forbidden",
@@ -45,6 +55,13 @@ def _source_error_codes(source: str) -> set[str]:
     Covers both the ``error_code``/``code`` assignments inside exception
     classes/handlers and the module-level ``HTTP_ERROR_CODE`` fallback
     constant, so a co-revert that renames the fallback cannot pass.
+
+    A literal scan alone is too weak: dropping the ``catalog[HTTP_ERROR_CODE]``
+    assignment leaves the constant in place, so ``http_error`` still appears in
+    the literal set and the *only* gate that notices is the 3.15 export diff.
+    ``check`` therefore additionally evaluates the source tree and compares the
+    real ``error_code_catalog()`` output, which is the function the published
+    snapshot is actually generated from.
     """
     tree = ast.parse(source)
     found: set[str] = set()
@@ -63,6 +80,73 @@ def _source_error_codes(source: str) -> set[str]:
             }:
                 found.add(value.value)
     return found
+
+
+def _executed_catalog(source: Path) -> tuple[dict[str, str] | None, str | None]:
+    """Import the module and return the catalog it really builds.
+
+    The literal scan in :func:`_source_error_codes` answers "is this string
+    mentioned anywhere?", which a leftover ``HTTP_ERROR_CODE = "http_error"``
+    keeps answering yes to after the catalog entry itself was deleted. This
+    runs ``error_code_catalog()`` -- the function the published ``x-error-codes``
+    is generated from -- so the guard pins behaviour, not vocabulary.
+
+    ``app.core.exceptions`` imports FastAPI/Starlette, which the guard must not
+    require (it runs before the export, on hosts with no API venv). The module
+    is therefore executed in isolation: its imports are stubbed and only the
+    catalog function is called.
+    """
+    import types
+
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+
+    # Collect the module-level names the catalog function closes over: the
+    # exception hierarchy, ``_iter_error_types`` and the fallback constant.
+    keep_functions = {"_iter_error_types", "error_code_catalog"}
+    keep_assigns = {"HTTP_ERROR_CODE", "UNPROCESSABLE_STATUS"}
+    body: list[ast.stmt] = []
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name in keep_functions:
+            body.append(node)
+        elif isinstance(node, ast.ClassDef):
+            body.append(node)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            names = {t.id for t in targets if isinstance(t, ast.Name)}
+            if names & keep_assigns:
+                if names & {"UNPROCESSABLE_STATUS"}:
+                    node = ast.Assign(
+                        targets=list(targets),
+                        value=ast.Constant(value=422),
+                    )
+                    ast.fix_missing_locations(node)
+                body.append(node)
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if module.startswith("__future__"):
+                body.append(node)
+
+    if not any(isinstance(n, ast.FunctionDef) and n.name == "error_code_catalog" for n in body):
+        return None, "source has no error_code_catalog() to verify"
+
+    module = ast.Module(body=body, type_ignores=[])
+    namespace: dict[str, object] = {"status": types.SimpleNamespace(**{
+        "HTTP_500_INTERNAL_SERVER_ERROR": 500,
+        "HTTP_401_UNAUTHORIZED": 401,
+        "HTTP_403_FORBIDDEN": 403,
+        "HTTP_404_NOT_FOUND": 404,
+        "HTTP_409_CONFLICT": 409,
+        "HTTP_429_TOO_MANY_REQUESTS": 429,
+        "HTTP_503_SERVICE_UNAVAILABLE": 503,
+    })}
+    try:
+        exec(compile(module, str(source), "exec"), namespace)  # noqa: S102
+        catalog = namespace["error_code_catalog"]()
+    except Exception as exc:  # pragma: no cover - reported, not raised
+        return None, f"could not evaluate error_code_catalog(): {exc}"
+    if not isinstance(catalog, dict):
+        return None, "error_code_catalog() did not return a dict"
+    return {str(k): str(v) for k, v in catalog.items()}, None
 
 
 def check(snapshot: Path, codes: Path, source: Path) -> list[str]:
@@ -98,6 +182,28 @@ def check(snapshot: Path, codes: Path, source: Path) -> list[str]:
         failures.append(
             f"x-error-codes omits the generic HTTPException fallback '{FALLBACK_CODE}'"
         )
+
+    # The literal scan above is satisfied by the bare ``HTTP_ERROR_CODE``
+    # constant even when ``error_code_catalog()`` stops publishing it, so pin
+    # the executed function too. Without this, deleting the one
+    # ``catalog[HTTP_ERROR_CODE] = ...`` assignment leaves every stdlib gate
+    # green and only the 3.15 export diff (which needs an API venv) notices.
+    executed, why = _executed_catalog(source)
+    if executed is None:
+        failures.append(f"cannot verify the emitted catalog: {why}")
+    else:
+        unpublished = sorted(set(executed) - set(catalog))
+        if unpublished:
+            failures.append(
+                "x-error-codes omits codes emitted by error_code_catalog(): "
+                f"{unpublished}"
+            )
+        phantom = sorted(set(catalog) - set(executed))
+        if phantom:
+            failures.append(
+                "x-error-codes publishes codes error_code_catalog() never emits: "
+                f"{phantom}"
+            )
 
     by_code = status.get("by_code")
     http_exception = status.get("http_exception")
@@ -142,7 +248,8 @@ def self_test() -> int:
     cases.append(("drop http_error from catalog", doc, dict(codes), src))
 
     doc = json.loads(json.dumps(base))
-    cases.append(("stale error-codes.json", doc, {k: v for k, v in codes.items() if k != FALLBACK_CODE}, src))
+    stale_codes = {k: v for k, v in codes.items() if k != FALLBACK_CODE}
+    cases.append(("stale error-codes.json", doc, stale_codes, src))
 
     doc = json.loads(json.dumps(base))
     del doc["x-error-status"]
@@ -171,6 +278,19 @@ def self_test() -> int:
             src.replace('HTTP_ERROR_CODE = "http_error"', 'HTTP_ERROR_CODE = "http_err"'),
         )
     )
+    # The constant survives here, so only running the real catalog catches it:
+    # the published snapshot still lists http_error while the function stopped
+    # returning it. A literal scan alone reports this tree as clean.
+    dropped_catalog_entry = src.replace(_FALLBACK_CATALOG_ENTRY, "")
+    assert dropped_catalog_entry != src, "self-test fixture no longer matches the source"
+    cases.append(
+        (
+            "catalog stops emitting the fallback while the constant remains",
+            json.loads(json.dumps(base)),
+            dict(codes),
+            dropped_catalog_entry,
+        )
+    )
 
     ok = 0
     with tempfile.TemporaryDirectory() as tmp:
@@ -179,7 +299,9 @@ def self_test() -> int:
         source_path = Path(tmp) / "exceptions.py"
         for name, doc, code_map, source_text in cases:
             snap.write_text(json.dumps(doc, indent=2), encoding="utf-8")
-            code_path.write_text(json.dumps(code_map, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            code_path.write_text(
+                json.dumps(code_map, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+            )
             source_path.write_text(source_text, encoding="utf-8")
             failures = check(snap, code_path, source_path)
             if failures:
@@ -210,10 +332,8 @@ def main() -> int:
         for failure in failures:
             print(f"  - {failure}", file=sys.stderr)
         return 1
-    print(
-        f"error-code contract passed "
-        f"({len(json.loads(args.snapshot_path.read_text(encoding='utf-8'))['x-error-codes'])} codes)"
-    )
+    document = json.loads(args.snapshot_path.read_text(encoding="utf-8"))
+    print(f"error-code contract passed ({len(document['x-error-codes'])} codes)")
     return 0
 
 
