@@ -89,19 +89,60 @@ def require() -> Any:
     return _module
 
 
-def translate_error(exc: Exception) -> Exception:
-    """Map a BioCoreException to the repository's unified error envelope.
+#: Every code ``packages/bio-core/src/errors.rs`` raises, with the sentence that
+#: file publishes for it.  ``scripts/check_bio_core_error_codes.py`` reads both
+#: sources and fails the build when a code is missing, misspelled, or carries a
+#: different sentence -- this table is a mirror, not a second truth.
+KERNEL_ERROR_MESSAGES = {
+    "EMPTY_SEQUENCE": "empty sequence",
+    "INVALID_CHARACTER": "invalid character for the selected alphabet",
+    "UNSUPPORTED_ALPHABET": "unsupported alphabet for this operation",
+    "SEQUENCE_TOO_LONG": "sequence exceeds the configured size limit",
+    "BUDGET_EXCEEDED": "input exceeds the configured budget",
+    "INVALID_INTERVAL": "invalid coordinate: start must be >= 0 and stop must be > start",
+    "COORDINATE_OVERFLOW": "integer overflow while computing coordinates",
+    "UNSUPPORTED_PARAMETER": "unsupported parameter value",
+    "UNKNOWN_GENETIC_CODE": "genetic code is not implemented",
+    "INVALID_RECORD": "invalid FASTA/FASTQ record",
+}
 
-    ``BioCoreException.args[0]`` is a stable machine-readable code; the second
-    element is a human message that never contains sequence content or paths.
+#: Status every kernel code is reported as.  A rejected input is a 422 whichever
+#: code fired; the *code* is what tells the caller which input to change.
+_FALLBACK_CODE = "validation_error"
+_FALLBACK_MESSAGE = "invalid sequence tool request"
+
+
+def translate_error(exc: Exception) -> Exception:
+    """Map a kernel failure to the repository's unified error envelope.
+
+    ``BioCoreException(args=(CODE, sentence))`` is the only trusted shape: the
+    kernel raises exactly that (``bindings.rs`` ``raise()`` builds the pair, and
+    the two direct constructions do too).  Anything else -- a ``TypeError`` from
+    the FFI, a plain ``Exception("timeout")`` -- has no machine code, so it must
+    not invent one: publishing ``details.code == "timeout"`` would hand clients a
+    code the caller-facing vocabulary has never contained.
+
+    The sentence comes from :data:`KERNEL_ERROR_MESSAGES`, i.e. from the same
+    file that defines the codes.  The kernel's own second element is deliberately
+    not forwarded: it is an implementation detail of the Rust error type, and
+    unifying it here is what keeps one code = one sentence.
     """
-    code = "validation_error"
-    message = "invalid sequence tool request"
     args = getattr(exc, "args", ())
-    if args and isinstance(args[0], str):
-        code = args[0]
-    if len(args) > 1 and isinstance(args[1], str):
-        message = args[1]
-    if code in {"SEQUENCE_TOO_LONG", "BUDGET_EXCEEDED"}:
-        return ValidationError(message, details={"code": code})
-    return ValidationError(message, details={"code": code})
+    if (
+        len(args) == 2
+        and isinstance(args[0], str)
+        and isinstance(args[1], str)
+        and args[0] in KERNEL_ERROR_MESSAGES
+    ):
+        message = KERNEL_ERROR_MESSAGES[args[0]]
+        return ValidationError(message, details={"code": args[0]})
+    return ValidationError(_FALLBACK_MESSAGE, details={"code": _FALLBACK_CODE})
+
+
+__all__ = [
+    "KERNEL_ERROR_MESSAGES",
+    "BioCoreStatus",
+    "require",
+    "status",
+    "translate_error",
+]

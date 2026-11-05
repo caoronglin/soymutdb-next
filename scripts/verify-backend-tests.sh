@@ -91,6 +91,16 @@ step "Deprecated-API ratchet"
 "${VENV_PYTHON}" scripts/check_deprecated_api_usage.py --self-test
 "${VENV_PYTHON}" scripts/check_deprecated_api_usage.py
 
+step "Bio-core error code contract (Rust codes ↔ the message table)"
+# The frontend keys on ``error.details.code``; that makes the kernel's code set a
+# public contract. This guard reads errors.rs and bio_core_bridge.py and fails
+# when a code has no sentence, a sentence disagrees, or a non-kernel exception
+# could forge a code. It needs neither the wheel nor a database, so it runs
+# BEFORE the wheel install: a broken mapping is reported as itself, not as an
+# import error several steps later.
+"${VENV_PYTHON}" scripts/check_bio_core_error_codes.py --self-test
+"${VENV_PYTHON}" scripts/check_bio_core_error_codes.py
+
 step "Install the Rust bio-core wheel into the API test venv"
 # The /tools/sequence/* and /tools/intervals/overlap endpoints are backed by a
 # private compiled extension. Their API tests (and the wheel contract tests)
