@@ -99,7 +99,14 @@ def test_artifacts_moving_alone_are_rejected() -> None:
 
 def test_a_baseline_that_disappears_is_rejected() -> None:
     tree = _tree()
-    tree[BODY_PATH] = tree[BODY_PATH].replace("_CLIENT_BODY_TOTAL", "_CLIENT_BODY_TOTAL_OLD", 1)
+    # Delete the *assignment*, not the first mention: since #190 the guard's
+    # docstring names ``_CLIENT_BODY_TOTAL`` ~250 lines above the literal, so a
+    # first-match replace there edits prose, the reader still finds the literal,
+    # and the ablation would pass vacuously.
+    lines = tree[BODY_PATH].splitlines(keepends=True)
+    kept = [ln for ln in lines if not ln.startswith("_CLIENT_BODY_TOTAL = ")]
+    assert len(kept) == len(lines) - 1
+    tree[BODY_PATH] = "".join(kept)
     found = guard.failures(tree=tree)
     assert _any(found, "_CLIENT_BODY_TOTAL"), found
 
