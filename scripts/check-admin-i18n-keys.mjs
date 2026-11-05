@@ -24,11 +24,17 @@
  * 2. zh and en have the same key set (a key added to one catalog only is the
  *    same bug from the other direction).
  *
+ * The catalog is not just `common.json`: `lib/i18n.ts` also overlays the
+ * portal-only bundles from `lib/i18n-resources.ts` at runtime. The guard reads
+ * that file's `Object.entries(...RESOURCES)` calls so its bundle view is the
+ * same composition the app uses, instead of a second hardcoded declaration.
+ * Node 26 strips the TS types on import; no build or workspace install needed.
+ *
  * Exit code 0 when clean, 1 with a per-key report otherwise.
  */
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const defaultRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -84,6 +90,35 @@ const catalogs = Object.fromEntries(
     flatten(JSON.parse(fs.readFileSync(path.join(root, file), "utf8"))),
   ]),
 );
+
+/**
+ * Merge the portal-only overlays `lib/i18n.ts` applies at runtime. Reading the
+ * composition from the bootstrap keeps this guard and the app on one truth:
+ * add a resource bundle there and both see it, drop one and both lose it.
+ */
+async function mergeRuntimeBundles() {
+  const bootstrap = path.join(root, "apps/web/src/lib/i18n.ts");
+  const resources = path.join(root, "apps/web/src/lib/i18n-resources.ts");
+  if (!fs.existsSync(bootstrap) || !fs.existsSync(resources)) return;
+  const source = fs.readFileSync(bootstrap, "utf8");
+  const names = [
+    ...source.matchAll(/Object\.entries\(([A-Z_]*RESOURCES)\)/g),
+  ].map((match) => match[1]);
+  if (names.length === 0) return;
+  const module = await import(pathToFileURL(resources).href);
+  for (const name of names) {
+    const bundles = module[name];
+    if (!bundles) {
+      console.error(`admin i18n key check FAILED: i18n.ts overlays ${name}, but it is not exported`);
+      process.exit(1);
+    }
+    for (const [lang, bundle] of Object.entries(bundles)) {
+      if (catalogs[lang]) Object.assign(catalogs[lang], flatten(bundle));
+    }
+  }
+}
+
+await mergeRuntimeBundles();
 
 /** @type {Map<string, Set<string>>} key/prefix -> files that reference it */
 const literal = new Map();
