@@ -525,6 +525,92 @@ class DeliveryArchitectureTests(unittest.TestCase):
             jobs,
         )
 
+    def test_shared_script_catalog_does_not_silently_shrink(self) -> None:
+        """Deleting a SHARED_SCRIPTS entry must fail, not stay green.
+
+        Every loop over SHARED_SCRIPTS proves a property of the scripts that
+        ARE listed (is_file, executable, strict mode, no credential echo).
+        None prove the reverse -- that a script the delivery pipeline calls is
+        still listed. Deleting one entry makes every loop skip that script and
+        the whole suite stays green: on dfa5915b, removing the
+        ``with-postgres-service.sh`` line leaves 88 tests OK and
+        ``check_bio_core_wheel.py --static`` green, because both gates then
+        scan one fewer shared script. PR #124's two smoke.sh assertions pin
+        the *call sites*, not this registration half (its commit message says
+        "mutation-tested each half"; the registration half was not tested).
+
+        This is the reverse half, following the shape of
+        ``test_worker_science_build_deps_are_provisioned_before_the_worker_install``:
+        a typed floor the catalog must still cover. Subset, not equality --
+        adding a new shared script is allowed, but it must not displace an
+        existing one silently. The plant below proves the assertion is
+        load-bearing for the real tuple shape, not a vacuous pass.
+        """
+        expected = frozenset({
+            "scripts/ci-job-steps.sh",
+            "scripts/setup-workspace.sh",
+            "scripts/install_python_workspace.py",
+            "scripts/stage-pages-publication.sh",
+            "scripts/verify-frontend-artifacts.sh",
+            "scripts/verify-backend-tests.sh",
+            "scripts/verify-bio-core.sh",
+            "scripts/check_bio_core_wheel.py",
+            "scripts/install-worker-science-build-deps.sh",
+            "scripts/with-postgres-service.sh",
+            "scripts/build-static-apps.sh",
+            "scripts/build-all-static-apps.sh",
+            "scripts/ci-nightly-artifact-gate.sh",
+            "scripts/build-release-image.sh",
+            "scripts/release-contract.golden.sh",
+            "scripts/build-pages-artifact.sh",
+            "scripts/verify-pages-artifact.sh",
+            "scripts/verify-site-variant-artifacts.sh",
+            "scripts/verify-artifact-e2e.sh",
+            "scripts/mcp-transport-smoke.sh",
+            "scripts/assert-clickhouse-migration.py",
+            "scripts/smoke.sh",
+            "scripts/start-cloud-dev.sh",
+            "scripts/acceptance.sh",
+        })
+        missing = sorted(expected - set(SHARED_SCRIPTS))
+        self.assertEqual(
+            missing, [],
+            "these shared scripts dropped out of SHARED_SCRIPTS, so the "
+            "is_file/executable/strict loops silently stopped checking them",
+        )
+        self.assertEqual(
+            len(SHARED_SCRIPTS), len(set(SHARED_SCRIPTS)),
+            "SHARED_SCRIPTS contains duplicate entries",
+        )
+
+        # Load-bearing: planting a deletion in the committed tuple must remove
+        # the entry from the parsed catalog. Scope to the tuple block -- the
+        # same 4-space string also appears in 12-space assertIn lines
+        # elsewhere in this file, and a bare sed-style plant there fakes a red.
+        source = (ROOT / "scripts" / "test_ci_job_contracts.py").read_text(
+            encoding="utf-8"
+        )
+        match = re.search(r"SHARED_SCRIPTS\s*=\s*\((.*?)\n\)", source, re.DOTALL)
+        self.assertIsNotNone(match, "SHARED_SCRIPTS tuple must be parseable")
+        assert match is not None
+        line_re = re.compile(
+            r'^    "scripts/with-postgres-service\.sh",\n?', re.MULTILINE
+        )
+        self.assertEqual(len(line_re.findall(match.group(1))), 1)
+        mutated = (
+            source[: match.start(1)]
+            + line_re.sub("", match.group(1), count=1)
+            + source[match.end(1) :]
+        )
+        parsed = re.search(r"SHARED_SCRIPTS\s*=\s*\((.*?)\n\)", mutated, re.DOTALL)
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertNotIn(
+            "scripts/with-postgres-service.sh",
+            re.findall(r'"([^"]+)"', parsed.group(1)),
+            "the plant must actually drop the entry from the parsed catalog",
+        )
+
     def test_bio_core_gate_is_delegated_by_both_providers(self) -> None:
         """The Rust kernel gate must be one shared job body, not two YAML copies."""
         steps = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
