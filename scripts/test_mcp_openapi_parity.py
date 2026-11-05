@@ -59,6 +59,7 @@ import copy
 import json
 import re
 import sys
+from named_guard_diagnostics import describe_assertion
 from pathlib import Path
 from typing import Any
 
@@ -644,7 +645,8 @@ def _clean() -> tuple[list[dict[str, Any]], dict[str, tuple[str, str] | None], d
 
 
 def test_committed_tree_reconciles_manifest_server_and_openapi() -> None:
-    assert check(*load()) == []
+    found = check(*load())
+    assert not found, found
 
 
 def test_a_dropped_backend_path_is_rejected() -> None:
@@ -702,7 +704,8 @@ def test_a_manifest_entry_missing_a_required_key_is_rejected() -> None:
 
 def test_dropping_the_smoke_wiring_is_rejected() -> None:
     smoke = SMOKE.read_text(encoding="utf-8")
-    assert check_wiring(smoke) == []
+    found = check_wiring(smoke)
+    assert not found, found
     assert check_wiring(smoke.replace(f"scripts/{SELF}", "", 1))
 
 
@@ -775,7 +778,8 @@ def test_a_new_consistent_tool_needs_no_allowlist_edit() -> None:
         }
     )
     calls["news_list_again"] = ("GET", "/api/v1/news")
-    assert check(tools, calls, document) == []
+    found = check(tools, calls, document)
+    assert not found, found
 
 
 def test_a_documented_input_missing_from_the_payload_is_rejected() -> None:
@@ -828,7 +832,8 @@ def test_an_input_sent_only_on_the_else_branch_is_rejected() -> None:
 
 def test_an_unguarded_optional_field_stays_accepted() -> None:
     """Positive control: ``if database: payload[...]`` is a sendable optional input."""
-    assert check_bodies() == []
+    found = check_bodies()
+    assert not found, found
 
 
 def test_an_opaque_payload_is_reported_not_assumed() -> None:
@@ -903,7 +908,7 @@ def self_test() -> int:
             fn()
             print(f"PASS self-test: {fn.__name__}")
         except AssertionError as exc:
-            print(f"FAIL self-test: {fn.__name__}: {exc}")
+            print(f"FAIL self-test: {fn.__name__}: {describe_assertion(exc, fn)}")
             failures += 1
     print(f"self-test: {len(checks)} cases, {failures} failure(s)")
     return 1 if failures else 0

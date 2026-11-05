@@ -49,6 +49,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from named_guard_diagnostics import describe_assertion
 from pathlib import Path
 from typing import Any, Iterator
 
@@ -982,7 +983,7 @@ def _run() -> int:
         try:
             test()
         except AssertionError as exc:
-            problems.append(f"{test.__name__}: {exc or 'assertion failed'}")
+            problems.append(f"{test.__name__}: {describe_assertion(exc, test)}")
     if problems:
         for problem in problems:
             print(f"openapi-snapshot-contract: FAIL: {problem}", file=sys.stderr)

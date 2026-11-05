@@ -33,6 +33,7 @@ import os
 import subprocess
 import sys
 import tempfile
+from named_guard_diagnostics import describe_assertion
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -73,7 +74,8 @@ def _set_total(tree: dict[str, str], value: int) -> None:
 
 
 def test_committed_tree_passes() -> None:
-    assert guard.failures(tree=_tree()) == []
+    found = guard.failures(tree=_tree())
+    assert not found, found
 
 
 def test_bumped_total_with_untouched_artifacts_is_rejected() -> None:
@@ -156,7 +158,8 @@ def test_the_suite_has_teeth() -> None:
     """
     cases = [name for name in globals() if name.startswith("test_")]
     assert len(cases) >= 14, cases
-    assert guard.failures(tree=_tree()) == []
+    found = guard.failures(tree=_tree())
+    assert not found, found
 
 
 def _source_with_total(value: int) -> str:
@@ -366,7 +369,7 @@ def _run_all() -> int:
         try:
             case()
         except AssertionError as exc:
-            problems.append(f"{case.__name__}: {exc or 'assertion failed'}")
+            problems.append(f"{case.__name__}: {describe_assertion(exc, case)}")
     if problems:
         for problem in problems:
             print(f"openapi-baseline-sync-tests: FAIL: {problem}", file=sys.stderr)

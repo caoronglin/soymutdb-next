@@ -87,6 +87,7 @@ import hashlib
 import json
 import re
 import sys
+from named_guard_diagnostics import describe_assertion
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -657,7 +658,8 @@ def test_coordinated_response_body_permutation_is_rejected() -> None:
 
 
 def test_committed_tree_has_matching_response_bodies() -> None:
-    assert failures(*_load()) == []
+    found = failures(*_load())
+    assert not found, found
 
 
 def test_success_body_dropped_from_the_client_is_rejected() -> None:
@@ -895,7 +897,7 @@ def _run() -> int:
         try:
             test()
         except AssertionError as exc:
-            problems.append(f"{test.__name__}: {exc or 'assertion failed'}")
+            problems.append(f"{test.__name__}: {describe_assertion(exc, test)}")
     if problems:
         for problem in problems:
             print(f"openapi-snapshot-bodies: FAIL: {problem}", file=sys.stderr)

@@ -192,6 +192,7 @@ PINNED_SUITES: frozenset[str] = frozenset(
         'scripts/test_mcp_openapi_parity.py',
         'scripts/test_mcp_release_binding_wiring.py',
         'scripts/test_motion_policy.py',
+        'scripts/test_named_guard_diagnostics.py',
         'scripts/test_native_backup_runtime.py',
         'scripts/test_openapi_422_unified_envelope.py',
         'scripts/test_openapi_auth_surface_floor.py',
