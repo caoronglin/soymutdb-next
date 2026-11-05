@@ -276,6 +276,11 @@ smoke_contracts() {
     # A red guard that cannot say which byte moved has not measured:
     # stdlib runners must render a named cause for every failed check.
     scripts/test_named_guard_diagnostics.py
+    # The placeholder-origin regex is committed twice (smoke.sh static layer +
+    # check-production-artifact.sh). Only the second scanner is read back
+    # behaviourally; nothing parses smoke.sh's copy, so deleting an origin
+    # there stays green. This suite pins both copies from a second file.
+    scripts/test_static_placeholder_scan.py
     # Every wired --self-test guard must still execute its mutation cases.
     # The registry guard pins that a call exists, not that the body it
     # reaches survived. A no-op self_test() kept the whole layer green.
@@ -432,6 +437,11 @@ smoke_contracts() {
   # present, still pinned and still green: this guard runs each one as a
   # real process and requires its pinned evidence of mutation cases.
   "${PYTHON_BIN}" scripts/check_contracts_self_test_teeth.py --self-test || rc=$?
+  # §4a (PR #206): the placeholder-origin regex is committed twice. Only the
+  # production scanner has a behavioural suite reading it back; the static
+  # layer's copy can lose an origin with every gate still green. Pin both
+  # copies against a reviewed floor; the companion suite plants the drifts.
+  "${PYTHON_BIN}" scripts/check_static_placeholder_scan.py || rc=$?
   "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?
   echo
   echo "-- environment-bound contract suites (reported, not gating here) --"
