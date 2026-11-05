@@ -504,22 +504,14 @@ def test_binding_contract_is_pinned() -> None:
             "    _helper()\n",
         )
     ) == []
-    # RED by a separate check: in-place mutation is not a *binding*, so the
-    # symbol-table pass stays silent and the mutation pass reports it by name.
-    # Keeping this here pins that the two passes are distinct, not that the
-    # mutation is uncovered.
-    mutated = fails(
-        _inject(
-            main,
-            "    OPENAPI_TAGS.clear()\n"
-            '    OPENAPI_TAGS.append({"name": "x"})\n',
-        )
+    # GREEN via a different string: in-place mutation is not a *binding*, so
+    # the symbol-table pass stays silent and ``_mutated_wiring_names`` reports
+    # it by name. Keeping both assertions here pins that the two checks are
+    # distinguishable, so neither can be read as covering the other.
+    mutated = _inject(
+        main,
+        "    OPENAPI_TAGS.clear()\n"
+        '    OPENAPI_TAGS.append({"name": "x"})\n',
     )
-    assert mutated and any("mutates metadata constants in place" in f for f in mutated)
-    assert not is_red(
-        _inject(
-            main,
-            "    OPENAPI_TAGS.clear()\n"
-            '    OPENAPI_TAGS.append({"name": "x"})\n',
-        )
-    ), "in-place mutation must not be reported as an in-scope binding"
+    assert not is_red(mutated), "in-place mutation must not read as an in-scope binding"
+    assert any("mutates metadata constants in place" in item for item in fails(mutated))
