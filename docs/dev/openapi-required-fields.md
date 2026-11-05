@@ -230,3 +230,44 @@ is the same "legal change path" as Phase 2.
 
 Files changed in this phase: `scripts/check_openapi_required_fields.py`,
 `scripts/test_openapi_required_fields.py`, `docs/dev/openapi-required-fields.md`.
+
+## Door 9 — published scalar `type` assignment
+
+`openapi.json` publishes **3044** scalar `type` values on schema nodes
+(component roots, properties, `anyOf`/`oneOf` branches, `items`, nested
+`$defs` copies). `openapi-typescript` turns each property's type into the
+TypeScript declaration a consumer compiles against, so `integer` → `number`
+and `string` → `string` are client-visible facts. No landed fixed point read
+the value:
+
+- `_FIELD_CONSTRAINT_DIGEST` walks constraint keywords, not `type`;
+- `_REQUIRED_FIELD_DIGEST` walks required-field names;
+- `_VALUE_DIGEST` walks positional/cardinality keywords;
+- the enum baseline walks value domains, the response/operation digests walk
+  paths, and `test_openapi_snapshot_contract.py` checks key order and field
+  sets but never the type value;
+- `_PINNED_ARTIFACTS` is a provenance blob id — re-pinning both beside a
+  regenerate is the documented reviewed act.
+
+Decisive ablation on live bytes: byte-preserving `integer → string` rewrite of
+`AdminDashboardStats.totalUsers` in **both** artifacts, with both blob ids
+honestly re-pinned, left every wired `check_openapi_*` guard, every
+`test_openapi_*` suite and `smoke.sh --profile contracts` `SMOKE PASS` while
+the generated client silently retyped a numeric metric.
+
+`check_openapi_required_fields.py` now pins two independent literals:
+
+- `_SCHEMA_TYPE_DIGEST` — sha256 over canonical sorted `(schema path, type)`
+  rows, read from nowhere. A co-revert of both halves still moves it.
+- `_CLIENT_PROPERTY_TYPE_DIGEST` — a second, separately hand-written sha256
+  over `(component, field, TS type)` rows parsed from the generated component
+  blocks. Re-pinning only the snapshot side cannot silence a retyped
+  declaration.
+- `_EXPECTED_SCHEMA_TYPE_ROWS` / `_EXPECTED_SCHEMA_TYPE_BY_TYPE` /
+  `_EXPECTED_CLIENT_PROPERTY_ROWS` — exact count and distribution doors; a
+  same-count rotation between two sibling properties is caught positionally.
+
+`--self-test` adds five Door 9 cases (coordinated co-revert, both one-sided
+halves, single-digest re-pin stays red, same-count rotation) and the companion
+suite pins each literal's independence and each failure direction on committed
+bytes.
