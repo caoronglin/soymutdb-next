@@ -14,10 +14,11 @@ collected layer green while the vocabulary guard went red on its own.
 
 This guard pins the other half of the contract: both error-code checks must be
 invoked as standalone ``|| rc=$?`` calls in ``smoke_contracts()``, and the
-vocabulary check must still fail on the decisive co-rename. It reads committed
-bytes only; ``--self-test`` plants each ablation on a copy of the tree and
-asserts the check reports it by name, so weakening the guard cannot make it
-pass vacuously.
+vocabulary guard's ``--self-test`` must be wired too -- a plain call alone can
+be green while its decisive ablation plants never run. It reads committed bytes
+only; ``--self-test`` plants each ablation on a copy of the tree and asserts
+the check reports it by name, so weakening the guard cannot make it pass
+vacuously.
 
 The decisive negative is a *differential* probe, not a bare exit status: a
 clean copy must print ``OK`` and exit 0, and only then may the co-renamed copy
@@ -63,6 +64,14 @@ WIRE_RE = {
     )
     for rel in WIRES
 }
+# The guard's own `--self-test` plants the decisive ablations. The plain wire
+# alone can be green while a weakening of `source_codes()` goes unnoticed, so
+# this second call is a required wire too.
+SELF_TEST_RE = re.compile(
+    r'^[ \t]*"\$\{PYTHON_BIN\}"[ \t]+' + re.escape(VOCAB)
+    + r'[ \t]+--self-test[ \t]*\|\|[ \t]*rc=\$\?[ \t]*$',
+    re.MULTILINE,
+)
 
 OLD, NEW = "settings_version_conflict", "settings_version_conflictx"
 
@@ -99,6 +108,11 @@ def check(root: Path) -> list[str]:
                 f"{rel} is not wired as a standalone `|| rc=$?` call in "
                 "smoke_contracts(); the contracts layer would stop consuming it"
             )
+    if not SELF_TEST_RE.search(body):
+        problems.append(
+            f"{VOCAB} --self-test is not wired as a standalone `|| rc=$?` call "
+            "in smoke_contracts(); the decisive ablation plants would stop running"
+        )
     return problems
 
 
@@ -137,6 +151,7 @@ def _self_test() -> int:
         "drop both wires": lambda t: (_drop_wire(t, VOCAB), _drop_wire(t, CATALOG)),
         "comment out the vocabulary wire": lambda t: _comment_wire(t, VOCAB),
         "chain the catalog wire behind `|| true`": lambda t: _neutralise(t, CATALOG),
+        "drop the vocabulary self-test wire": lambda t: _drop_wire(t, VOCAB, "--self-test"),
     }
     failures = 0
     for label, plant in ablations.items():
@@ -196,11 +211,12 @@ def _self_test() -> int:
     return 0
 
 
-def _drop_wire(tree: Path, rel: str) -> None:
+def _drop_wire(tree: Path, rel: str, flag: str = "") -> None:
     p = tree / "scripts/smoke.sh"
     text = p.read_text(encoding="utf-8")
-    line = f'  "${{PYTHON_BIN}}" {rel} || rc=$?\n'
-    assert line in text, rel
+    suffix = f" {flag}" if flag else ""
+    line = f'  "${{PYTHON_BIN}}" {rel}{suffix} || rc=$?\n'
+    assert line in text, (rel, flag)
     p.write_text(text.replace(line, "", 1), encoding="utf-8")
 
 

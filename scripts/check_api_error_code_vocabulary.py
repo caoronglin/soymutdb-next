@@ -261,6 +261,20 @@ def _self_test() -> int:
                     'HTTP_ERROR_CODE = "http_error_renamed"',
                 )
             )
+        elif kind == "drop the fallback catalog entry":
+            # The converse of the constant-only rename: a leftover constant
+            # must not stand in for the missing subscript assignment. This is
+            # the ablation that weakens `source_codes()` to a constant-only
+            # read; it must stay red here, not just in the two other guards.
+            p = tree / EXCEPTIONS
+            source = p.read_text(encoding="utf-8")
+            desc = (
+                "Generic HTTPException fallback; see x-error-status for the "
+                "statuses that use it."
+            )
+            block = f'    catalog[HTTP_ERROR_CODE] = (\n        "{desc}"\n    )\n'
+            assert block in source, "committed fallback block shape changed"
+            p.write_text(source.replace(block, "", 1), encoding="utf-8")
         elif kind == "empty the lock":
             (tree / GOLDEN).write_text("{}\n")
         elif kind == "duplicate a key in the lock":
@@ -279,6 +293,7 @@ def _self_test() -> int:
         "turn the lock into a generated artifact",
         "invent a code in the source",
         "rename the http fallback in the source",
+        "drop the fallback catalog entry",
         "empty the lock",
         "duplicate a key in the lock",
     )
