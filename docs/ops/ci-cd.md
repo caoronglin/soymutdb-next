@@ -578,6 +578,16 @@ bash scripts/smoke.sh --list
 | `e2e` | 线上/本地站点浏览器冒烟 | `e2e/node_modules` + Playwright |
 | `images` | 镜像构建/冒烟/扫描/SBOM | Docker daemon |
 
+`contracts` 的「无前置条件」必须是**这一层自己保证的**，不能是同流水线其它 stage
+的副作用。`check_visible_i18n_react.mjs` 在模块加载时 `import ts from "typescript"`，
+只有 `pnpm install` 之后才能解析；CNB 的 `Frontend verification` 会把 `node_modules`
+留在共享的 `/workspace` 里，所以曾经挂在 contracts 层的那条 Node 自测一直绿，
+但干净 checkout、单独重跑 `Contract suites`、或调整 stage 顺序都会报
+`ERR_MODULE_NOT_FOUND: Cannot find package 'typescript'`（issue #125）。现在 React
+守卫的自测与实扫都归 `verify-frontend-artifacts.sh`（两侧 provider 都先 bootstrap
+workspace），contracts 层只留纯 Python / stdlib 守卫；
+`scripts/test_contracts_layer_self_containment.py` 把这层边界钉成可执行判据。
+
 **关键约定**：前置条件缺失时输出 `SKIPPED: <原因>` 并计入 summary，**绝不冒充通过**。
 只有真正执行过的 layer 才会决定退出码。
 

@@ -476,9 +476,15 @@ smoke_contracts_run() {
   # scripts/check-production-artifact.sh passed every pipeline and reached main.
   # This job is the coverage that made that class of regression shippable.
   #
-  # The contracts layer is plain pytest under scripts/; it needs no workspace
-  # install, no API venv and no service, which is why it can run as its own cheap
-  # stage instead of being appended to a heavier job.
+  # The contracts layer is plain pytest plus stdlib-only guards under scripts/;
+  # it needs no workspace install, no API venv and no service, which is why it
+  # can run as its own cheap stage instead of being appended to a heavier job.
+  # The one Node-backed gate it used to call (the React i18n self-test) had a
+  # module-level `import ts from "typescript"` and only passed because the
+  # Frontend stage had already left node_modules in the shared /workspace.
+  # It now lives in verify-frontend-artifacts.sh, which bootstraps the workspace
+  # on both providers; scripts/test_contracts_layer_self_containment.py keeps
+  # that boundary from regressing (issue #125).
   ensure_contracts_python
   python3 "${REPO_ROOT}/scripts/check_contracts_registry_collection.py" --self-test
   bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts
