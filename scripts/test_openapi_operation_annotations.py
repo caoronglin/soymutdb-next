@@ -9,7 +9,6 @@ contracts layer's ``tests=()`` array; stdlib-only, no Python 3.15 needed.
 from __future__ import annotations
 
 import ast
-import copy
 import json
 import sys
 from pathlib import Path
@@ -17,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import check_openapi_operation_annotations as guard
+import check_openapi_operation_annotations as guard  # noqa: E402
 
 SMOKE = (ROOT / "scripts" / "smoke.sh").read_text(encoding="utf-8")
 REGISTRY = (ROOT / "scripts" / "check_contracts_registry_collection.py").read_text(
