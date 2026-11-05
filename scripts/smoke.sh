@@ -123,6 +123,11 @@ smoke_contracts() {
     # silently undo the first-load payload reduction.
     scripts/test_portal_font_subset.py
     scripts/test_site_artifact_isolation.py
+    # The document-level info/tags block lives in exactly one committed
+    # artifact (openapi.d.ts drops it) and is a reviewed contract: a
+    # source+export co-revert keeps check-contract.sh green. Freeze it to
+    # a hand-written golden lock; stdlib-only, no 3.15 venv.
+    scripts/test_openapi_document_metadata_guard.py
     scripts/test_production_artifact_scan.py
     scripts/test_supply_chain_contracts.py
     scripts/test_production_compose_contract.py

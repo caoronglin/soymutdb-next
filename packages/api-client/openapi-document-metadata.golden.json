@@ -1,0 +1,32 @@
+{
+  "_comment": "Hand-written, reviewed lock on the published OpenAPI document-level contract. NOT generated from main.py or openapi.json. A deliberate change to title/version/description/tags is an explicit, reviewable edit to THIS file, then regenerate the snapshot. See docs/dev/openapi-document-metadata.md.",
+  "title": "SoyMutDB",
+  "version": "2.0.0",
+  "description": "\nSoyMutDB API — high-performance multi-species genomic variant platform\n(soybean currently the default species).\n\n## Error contract\n\nEvery error response uses the unified envelope (see `ErrorResponse`):\n\n```json\n{\n  \"error\": {\"code\": \"not_found\", \"message\": \"...\", \"details\": {}},\n  \"request_id\": \"…\",\n  \"status_code\": 404\n}\n```\n\n- `request_id` is always present and echoed in the `X-Request-ID` header.\n- Validation failures (422) additionally return a field-level `errors` array\n  (`ValidationErrorResponse`); internal framework structures are never\n  exposed.\n- 500 responses never include stack traces, SQL, paths, or exception text.\n\n## Authentication\n\n- **Bearer**: JWT access tokens via `Authorization: Bearer <token>`\n  (obtained from `POST /api/v1/auth/login`).\n- **Cookie**: refresh sessions use the HttpOnly `soymutdb_refresh` cookie\n  (path-scoped to `/api/v1/auth`) for `POST /api/v1/auth/refresh` and\n  `POST /api/v1/auth/logout`.\n",
+  "tags": [
+    {
+      "name": "health",
+      "description": "Liveness / readiness probes."
+    },
+    {
+      "name": "auth",
+      "description": "Registration, login, token refresh, logout, profile."
+    },
+    {
+      "name": "stats",
+      "description": "Public statistics and dashboard aggregates."
+    },
+    {
+      "name": "admin",
+      "description": "Administrator-only operations (audit logs, config, dashboard)."
+    },
+    {
+      "name": "analytics",
+      "description": "Behavioural analytics tracking and summaries."
+    },
+    {
+      "name": "widgets",
+      "description": "Dashboard widgets and layouts."
+    }
+  ]
+}
