@@ -60,7 +60,7 @@ guard that reads the source hierarchy itself.
 `scripts/test_check_error_code_contract.py` pins the wiring and the exact
 published code set and status binding from a second file.
 
-`--self-test` proves eleven negative shapes are rejected.
+`--self-test` proves fourteen negative shapes are rejected.
 
 A coordinate change that updates the hierarchy *and* every dependent published
 value would also agree with a fresh export; no byte-reading guard can detect
@@ -82,3 +82,44 @@ are attached globally). That is a separate, larger contract change; this one
 pins the error-code vocabulary and its status binding so later work has a
 verifiable base. `check-contract.sh` remains the sole judge of export ↔
 snapshot ↔ client byte equality.
+
+## The published code → status map has its own fixed point
+
+`check()` compares `x-error-status.by_code` with the **executed**
+`error_status_map()` from `exceptions.py`. That equality is necessary but not
+sufficient: it is satisfied by a coordinated co-revert that moves one
+exception's `status_code` in the source **and** its published `by_code` binding
+in the snapshot. The existing `status co-revert in source and snapshot`
+self-test case does not close this — it flips `NotFoundError`, which also moves
+`plugin_disabled`, so two codes drift and the equality check fires by accident.
+A **single-code** co-revert (`AuthorizationError` 403 → 409, plus
+`by_code.forbidden` 403 → 409) leaves every agreement check consistent and the
+whole contracts layer `SMOKE PASS / 1102 passed` on live bytes, with the
+provenance blob id honestly re-pinned.
+
+`x-error-status.by_code` is client-visible: it tells a caller which HTTP status
+a stable `error.code` arrives on. It therefore gets an independent literal,
+read from nowhere:
+
+- `_BY_CODE_DIGEST` — sha256 over the canonical sorted `(code, status)` rows,
+  13 bindings including the `http_error → null` fallback. A same-count rotation
+  of two statuses moves it while every count and the key set stay put.
+- `_EXPECTED_BY_CODE_ROWS` (13) — exact count door.
+
+Kept separate from `HTTP_STATUS_CODES` (the three status → code pairs for the
+generic handler) and from the executed-contract equality. Folding them would
+report a retyped domain status as a generic-handler mismatch and lose the
+failure reason. `check_error_code_catalog.py` and
+`check_api_error_code_vocabulary.py` stay unchanged: they own the code catalog
+and its golden lock, not the status map.
+
+`--self-test` grows 11 → **14 cases**. The new plants are the decisive
+single-code co-revert, a one-sided published retype, and a same-count rotation.
+The companion grows 13 → **19** cases (second-file literal pin, both directions
+of the "equality stays true but the digest fires" positive control, count-door
+load-bearing proof, source-plant pin).
+
+Zero wiring churn: this door lives inside an already-wired guard, so
+`smoke.sh` / `PINNED_SUITES` / `REQUIRED_GUARD_CALLS` / teeth floors are
+untouched. A legitimate status change must re-pin `_BY_CODE_DIGEST` in the
+same commit as the source and both artifacts, with a reason.

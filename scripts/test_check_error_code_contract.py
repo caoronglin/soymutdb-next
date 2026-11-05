@@ -178,6 +178,100 @@ class TestErrorCodeContract(unittest.TestCase):
             snap.write_text(json.dumps(document, indent=2), encoding="utf-8")
             self.assertTrue(module.check(snap, CODES, SOURCE))
 
+    def test_by_code_digest_is_an_independent_literal(self) -> None:
+        """A second file pins the new literal; it must not be self-referential."""
+        document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+        by_code = document["x-error-status"]["by_code"]
+        self.assertEqual(module._by_code_digest(by_code), module._BY_CODE_DIGEST)
+        self.assertEqual(len(by_code), module._EXPECTED_BY_CODE_ROWS)
+
+    def _single_code_co_revert(self):
+        import tempfile
+
+        document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+        document["x-error-status"]["by_code"]["forbidden"] = 409
+        source = SOURCE.read_text(encoding="utf-8")
+        flipped = source.replace(
+            "class AuthorizationError(SoyMutDBError):\n"
+            "    status_code = status.HTTP_403_FORBIDDEN",
+            "class AuthorizationError(SoyMutDBError):\n"
+            "    status_code = status.HTTP_409_CONFLICT",
+            1,
+        )
+        self.assertNotEqual(flipped, source, "fixture no longer matches exceptions.py")
+        tmp = tempfile.TemporaryDirectory()
+        snap = Path(tmp.name) / "openapi.json"
+        src = Path(tmp.name) / "exceptions.py"
+        snap.write_text(json.dumps(document, indent=2), encoding="utf-8")
+        src.write_text(flipped, encoding="utf-8")
+        return tmp, snap, src, document
+
+    def test_a_single_code_status_co_revert_is_rejected(self) -> None:
+        """The decisive shape: source and snapshot agree, nothing else moves.
+
+        Flipping one exception's ``status_code`` and its published ``by_code``
+        binding together keeps every equality check in ``check()`` true. Only
+        the independent literal can object. The guard's own ``--self-test``
+        has a co-revert case, but it flips ``NotFoundError`` (which also moves
+        ``plugin_disabled``); this one is the single-code bypass.
+        """
+        tmp, snap, src, _ = self._single_code_co_revert()
+        with tmp:
+            problems = module.check(snap, CODES, src)
+            self.assertTrue(
+                any("_BY_CODE_DIGEST" in problem for problem in problems),
+                problems,
+            )
+
+    def test_the_literal_alone_catches_the_co_revert(self) -> None:
+        """With every other door silenced by agreement, the digest still fires."""
+        tmp, snap, src, document = self._single_code_co_revert()
+        with tmp:
+            executed, why = module._executed_contract(src)
+            self.assertIsNone(why)
+            self.assertEqual(executed["by_code"], document["x-error-status"]["by_code"])
+            problems = module.check(snap, CODES, src)
+            self.assertEqual(len(problems), 1, problems)
+            self.assertIn("_BY_CODE_DIGEST", problems[0])
+
+    def test_a_same_count_by_code_rotation_is_rejected(self) -> None:
+        """Counts and key set unchanged; only the positional digest moves."""
+        import tempfile
+
+        document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+        by_code = document["x-error-status"]["by_code"]
+        by_code["forbidden"], by_code["conflict"] = (
+            by_code["conflict"],
+            by_code["forbidden"],
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            snap = Path(tmp) / "openapi.json"
+            snap.write_text(json.dumps(document, indent=2), encoding="utf-8")
+            problems = module.check(snap, CODES, SOURCE)
+            self.assertTrue(
+                any("_BY_CODE_DIGEST" in problem for problem in problems),
+                problems,
+            )
+
+    def test_the_count_door_is_load_bearing(self) -> None:
+        import tempfile
+
+        document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+        document["x-error-status"]["by_code"]["rogue"] = 418
+        with tempfile.TemporaryDirectory() as tmp:
+            snap = Path(tmp) / "openapi.json"
+            snap.write_text(json.dumps(document, indent=2), encoding="utf-8")
+            problems = module.check(snap, CODES, SOURCE)
+            self.assertTrue(
+                any("_EXPECTED_BY_CODE_ROWS" in p for p in problems), problems
+            )
+
+    def test_guard_source_still_carries_the_single_code_plant(self) -> None:
+        """A second file pins the plant, so a single-file edit cannot drop it."""
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("_BY_CODE_DIGEST = ", source)
+        self.assertIn("single-code status co-revert in source and snapshot", source)
+
     def test_self_test_passes(self) -> None:
         self.assertEqual(module.self_test(), 0)
 

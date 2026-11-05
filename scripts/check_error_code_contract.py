@@ -12,6 +12,12 @@ Two things can drift without any existing gate noticing:
   ``generate:api-client`` but never checked by ``check-contract.sh``; a
   hand edit, or a stale generation, leaves the two published catalogs
   disagreeing with no red gate.
+* ``x-error-status.by_code`` is compared only with the *executed* source
+  hierarchy. A single-code co-revert -- move one exception's ``status_code``
+  in ``exceptions.py`` **and** its ``by_code`` binding in the snapshot -- keeps
+  that equality true. The published code-to-status map is client-visible (it
+  tells a caller which HTTP status a stable ``error.code`` arrives on), so it
+  needs an independent fixed point of its own.
 
 This guard reads committed bytes only (no API venv, no export), so reverting
 the backend, the snapshot and the generated client together cannot co-revert
@@ -22,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -47,6 +54,15 @@ HTTP_STATUS_CODES = {
     "403": "forbidden",
     "404": "not_found",
 }
+
+# Reviewed, hand-written fixed point over the published code -> status map.
+# sha256 of "\n".join(["soymutdb-error-status-by-code/v1"] +
+#   sorted(f"{code}|{json.dumps(status)}")). Read from nowhere: a coordinated
+# source + snapshot co-revert still moves it, which the executed-contract
+# equality above cannot see. Regenerate with _by_code_digest() after an
+# intentional, reviewed status change and update in the same commit.
+_BY_CODE_DIGEST = "78c053e73a41528fe16a33bc969154d12e892aecc512c384b36608a5dd1c7708"
+_EXPECTED_BY_CODE_ROWS = 13
 
 
 def _source_error_codes(source: str) -> set[str]:
@@ -172,6 +188,14 @@ def _executed_contract(source: Path) -> tuple[dict[str, object] | None, str | No
     }, None
 
 
+def _by_code_digest(by_code: dict[str, object]) -> str:
+    canonical = sorted(
+        f"{code}|{json.dumps(status)}" for code, status in by_code.items()
+    )
+    blob = "\n".join(["soymutdb-error-status-by-code/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def check(snapshot: Path, codes: Path, source: Path) -> list[str]:
     failures: list[str] = []
 
@@ -271,6 +295,24 @@ def check(snapshot: Path, codes: Path, source: Path) -> list[str]:
                 failures.append(
                     f"x-error-status.http_exception[{code}] must be '{expected}'"
                 )
+        # Independent fixed point. The executed-contract equality above is
+        # satisfied by a coordinated source + snapshot co-revert of one
+        # status_code; this literal is not derived from either artifact, so
+        # the published client-facing map cannot be retyped in silence.
+        actual_by_code = _by_code_digest(by_code)
+        if actual_by_code != _BY_CODE_DIGEST:
+            failures.append(
+                "x-error-status.by_code drifted: _BY_CODE_DIGEST pins "
+                f"{_BY_CODE_DIGEST} but the snapshot derives {actual_by_code}. "
+                "A published error.code -> HTTP status binding changed; re-pin "
+                "the digest in the same commit as the source and both "
+                "artifacts, with a reason."
+            )
+        if len(by_code) != _EXPECTED_BY_CODE_ROWS:
+            failures.append(
+                f"x-error-status.by_code row count is {len(by_code)}, "
+                f"_EXPECTED_BY_CODE_ROWS pins {_EXPECTED_BY_CODE_ROWS}"
+            )
 
     return failures
 
@@ -355,6 +397,41 @@ def self_test() -> int:
             flipped_source,
         )
     )
+    # The decisive shape: ONE code's status moves in the source and in its
+    # published by_code binding together. The executed-contract equality stays
+    # true (both halves agree), and no other code is dragged along, so before
+    # the independent literal the whole contracts layer stays green. The
+    # existing 'status co-revert' case above flips NotFoundError, which also
+    # moves plugin_disabled -- a two-code drift that the equality check catches
+    # by accident. This one is the single-code bypass.
+    doc = json.loads(json.dumps(base))
+    doc["x-error-status"]["by_code"]["forbidden"] = 409
+    single_source = src.replace(
+        "class AuthorizationError(SoyMutDBError):\n"
+        "    status_code = status.HTTP_403_FORBIDDEN",
+        "class AuthorizationError(SoyMutDBError):\n"
+        "    status_code = status.HTTP_409_CONFLICT",
+        1,
+    )
+    assert single_source != src, "self-test fixture no longer matches the source"
+    cases.append(
+        (
+            "single-code status co-revert in source and snapshot",
+            doc,
+            dict(codes),
+            single_source,
+        )
+    )
+    # One-sided: published map retyped, source untouched.
+    doc = json.loads(json.dumps(base))
+    doc["x-error-status"]["by_code"]["forbidden"] = 409
+    cases.append(("one-sided published by_code retype", doc, dict(codes), src))
+    # Same-count rotation: swap two bindings' statuses; counts and key set
+    # unchanged, only the positional digest moves.
+    doc = json.loads(json.dumps(base))
+    bc = doc["x-error-status"]["by_code"]
+    bc["forbidden"], bc["conflict"] = bc["conflict"], bc["forbidden"]
+    cases.append(("same-count by_code rotation", doc, dict(codes), src))
 
     ok = 0
     with tempfile.TemporaryDirectory() as tmp:
