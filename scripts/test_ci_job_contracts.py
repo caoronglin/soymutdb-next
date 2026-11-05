@@ -5574,23 +5574,34 @@ def test_pr_artifact_browser_acceptance_covers_frontend_changes() -> None:
     assert "github.event_name != 'pull_request'" in workflow["jobs"]["e2e"]["if"]
 
 
-def _pipelines(template_path: Path):
-    """Yield ``(event, cpus)`` for every runner declaration in the CNB template.
+def _cnb_cpus(template_path: Path):
+    """Yield ``(where, cpus, cost, depth)`` per runner declaration.
 
     ``.cnb.yml`` nests events under the ``main`` and ``$`` root branches, so the
-    event name has to be read from the inner map: at the top level every event
-    looks like a pull request. A pipeline declares ``runner`` itself and a stage
-    may override it, so both are visited.
+    event name has to be read from the inner map: at top level every event looks
+    like a pull request.
+
+    ``cost`` answers the only question this walk exists for -- does the
+    reservation land on a review branch?
+
+    * ``"verify"``: a ``pull_request`` pipeline. Prepare freezes ``cpus x
+      window`` for it on every push to a review branch.
+    * ``"agent"``: an ``@npc`` pipeline. It rides the same event, but the
+      platform buys its runner on its own budget, so the frozen reservation is
+      not the same charge (and adding one here makes the bill worse, not
+      clearer).
+    * ``None``: anything else (push, tag, manual, schedule) -- never warm while
+      somebody is reading a diff.
     """
     config = yaml.safe_load(template_path.read_text(encoding="utf-8"))
 
-    def walk(stages):
+    def walk_stages(stages):
         """Yield every stage dict in a ``stages`` list, including nested ones."""
         for stage in stages or []:
             if not isinstance(stage, dict):
                 continue
             yield stage
-            yield from walk(stage.get("stages"))
+            yield from walk_stages(stage.get("stages"))
 
     for branches in config.values():
         if not isinstance(branches, dict):
@@ -5598,20 +5609,26 @@ def _pipelines(template_path: Path):
         for event_name, pipelines in branches.items():
             if not isinstance(pipelines, list):
                 continue
+            cost = None
+            if str(event_name) == "pull_request":
+                cost = "verify"
+            elif str(event_name).startswith("pull_request."):
+                cost = "agent"
             for pipeline in pipelines:
                 if not isinstance(pipeline, dict):
                     continue
+                name = f"{event_name}/{pipeline.get('name')}"
                 runner = pipeline.get("runner") or {}
-                if "cpus" in runner:
-                    yield event_name, runner["cpus"]
-                for stage in walk(pipeline.get("stages")):
+                # ``None`` is a declaration too: a pipeline that forgets a
+                # runner pays the platform default, which cannot be counted.
+                yield name, runner.get("cpus"), cost, 1
+                for stage in walk_stages(pipeline.get("stages")):
                     stage_runner = stage.get("runner") or {}
-                    if "cpus" in stage_runner:
-                        where = f"{event_name}/{pipeline.get('name')}/{stage.get('name')}"
-                        yield where, stage_runner["cpus"]
+                    where = f"{name}/{stage.get('name')}"
+                    yield where, stage_runner.get("cpus"), cost, 2
 
 
-def test_cnb_stages_declare_their_runner_honestly() -> None:
+def test_cnb_runner_declarations_are_honest_and_measurable() -> None:
     """A runner is a charge, not a preference: declare it or inherit nothing.
 
     The only red reading on a pull request every time Prepare dies is
@@ -5622,29 +5639,65 @@ def test_cnb_stages_declare_their_runner_honestly() -> None:
     reports it as a pipeline ``error`` rendered next to the commit. The cost is
     paid during review, on somebody else's PR, attributed to their diff.
 
-    The gate is deliberately shallow: every explicit runner must be one of the
-    sizes this repo actually schedules, and the *pull request* pipeline -- the
-    one that pays the reservation on every push to a review branch -- must stay
-    inside a small, counted budget. Release and manual pipelines are excluded
-    from the count: they run once per release, not once per review. It does not
-    try to predict the org balance; that number is invisible here.
+    The gate is deliberately shallow, but it is scored twice over, because a
+    depth-2-only walk has already gone green against a planted ``cpus: 32``:
+
+    1. Every value under a ``cpus:`` key anywhere in the template must be one
+       of the sizes this repo actually schedules. This half is a text scan, not
+       a walk, so a shape the walker cannot descend into still cannot smuggle
+       in ``cpus: 160``.
+    2. The pull request pipeline -- the one that pays the reservation on every
+       push to a review branch -- must stay inside a small, counted budget.
+       Release and manual pipelines are excluded: they run once per release.
+
+    It does not try to predict the org balance; that number is invisible here.
     """
-    allowed = {4, 8, 16}
-    declared = []
-    for event, cpus in _pipelines(ROOT / ".cnb.yml"):
-        assert int(cpus) in allowed, f"{event} declares an unexpected runner size: {cpus}"
-        declared.append((event, int(cpus)))
+    template = ROOT / ".cnb.yml"
+    text = template.read_text(encoding="utf-8")
 
-    # Guard the guard: a walk that finds nothing passes every assertion above.
-    assert len(declared) >= 20, f"only {len(declared)} runners walked from .cnb.yml; the walk is broken"
+    # (1) Text scan: no nesting shape, anchor or merge key can hide a
+    # declaration from a regex over `cpus:` values.
+    seen = re.findall(r"^\s*cpus:\s*['\"]?(\d+)['\"]?\s*$", text, re.MULTILINE)
+    assert seen, "no `cpus:` value found in .cnb.yml; the scan is broken"
+    allowed = {"4", "8", "16"}
+    offenders = sorted({value for value in seen if value not in allowed})
+    assert not offenders, (
+        f".cnb.yml declares runner sizes this repo never schedules: {offenders} "
+        f"(allowed: {sorted(allowed)})"
+    )
 
-    pr_cores = [cpus for event, cpus in declared if event == "pull_request"]
-    assert pr_cores, "no pull_request pipeline declares a runner"
+    # (2) Walk: what a review branch actually reserves.
+    declarations = list(_cnb_cpus(template))
+    # Guard the guard: a walk that descends into nothing passes everything
+    # above, which is exactly how a stage override stayed invisible.
+    assert len(declarations) >= 15, (
+        f"only {len(declarations)} runner declarations walked from .cnb.yml; "
+        "the walk is broken"
+    )
+    assert any(count == 2 for _w, _c, _warm, count in declarations), (
+        "the walk found no stage declaration; it is not descending into `stages`"
+    )
+    # Only pipelines are scored for a missing runner: a stage inherits the
+    # pipeline's, so `None` there is the normal case, not a hole.
+    warm = [
+        (where, cpus)
+        for where, cpus, cost, depth in declarations
+        if cost == "verify" and depth == 1
+    ]
+    assert warm, "no pull_request pipeline declares a runner"
+    # The `@npc` pipelines stay outside this count on purpose: they do ride the
+    # pull_request event, but they are summoned by a comment and the platform
+    # buys their runner on its own budget, so a frozen `cpus x window`
+    # reservation is not the same charge. They stay inside the scan above, which
+    # is where an oversized one would show up.
+    agents = [where for where, _cpus, cost, depth in declarations if cost == "agent"]
+    assert agents, "the @npc pipelines left the walk; they are part of the pull request event"
+    pr_cores = [(where, int(cpus)) for where, cpus in warm]
     # 16 cores are reserved for the pipeline that genuinely fans out (pnpm
     # install + turbo build + vitest projects + Python). PR pipelines pay that
     # reservation on every push; a second 16-core PR pipeline doubles the bill
     # and starts failing in Prepare before the diff is ever read -- which is
     # what made this PR look broken.
-    assert len(pr_cores) <= 2 and sum(pr_cores) <= 20, (
+    assert len(pr_cores) <= 2 and sum(cpus for _w, cpus in pr_cores) <= 20, (
         f"pull request pipelines reserve too many cores per run: {pr_cores}"
     )
