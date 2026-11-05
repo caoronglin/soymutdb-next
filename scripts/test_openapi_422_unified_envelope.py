@@ -56,6 +56,7 @@ from __future__ import annotations
 
 import json
 import sys
+from named_guard_diagnostics import describe_assertion
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -252,7 +253,8 @@ def _load() -> tuple[dict, str, str, str]:
 
 
 def test_committed_tree_advertises_the_runtime_error_envelopes() -> None:
-    assert failures(*_load()) == []
+    found = failures(*_load())
+    assert not found, found
 
 
 def test_a_framework_422_is_rejected() -> None:
@@ -422,7 +424,7 @@ def main() -> int:
         try:
             test()
         except AssertionError as exc:
-            problems.append(f"{test.__name__}: {str(exc) or 'assertion failed'}")
+            problems.append(f"{test.__name__}: {describe_assertion(exc, test)}")
     if problems:
         for problem in problems:
             print(f"openapi-error-envelope: FAIL: {problem}", file=sys.stderr)

@@ -265,6 +265,9 @@ smoke_contracts() {
     # PostgreSQL, so this suite is the only net in a clean checkout. Registering
     # it is the point -- unregistered, it never runs and its red cannot block.
     scripts/test_variant_summary_assembly_consistency.py
+    # A red guard that cannot say which byte moved has not measured:
+    # stdlib runners must render a named cause for every failed check.
+    scripts/test_named_guard_diagnostics.py
   )
   # Suites that need an interpreter or service this smoke layer does not own
   # (worker source analysis runs under the API virtualenv; tunnel/compose drift
