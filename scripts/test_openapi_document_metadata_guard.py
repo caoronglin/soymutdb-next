@@ -367,8 +367,27 @@ def _regressed_guard_source() -> str:
     )
     assert tag_assignment_block in source, "tag assignment ablation not found"
     source = source.replace(tag_assignment_block, "", 1)
-    # The regressed guard predates the tag-assignment fixed point. Strip the
-    # check so its self-test stays green at the historical 22- ablation count.
+    info_shape_block = (
+        "        (\n"
+        '            "phantom info key added",\n'
+        "            edit_snapshot(invented_info_key),\n"
+        '            "published info key set drifted",\n'
+        "        ),\n"
+    )
+    assert info_shape_block in source, "info-shape ablation not found"
+    source = source.replace(info_shape_block, "", 1)
+    # The regressed guard predates the tag-assignment fixed point AND the
+    # published ``info`` shape door. Strip both, so the regression really is
+    # the historical one and its count really is the historical 22 instead of
+    # being propped up by newer cases (which is exactly the vacuity this
+    # test exists to catch).
+    info_shape_check = source.find(
+        "    # 0. Published ``info`` SHAPE. The golden lock below compares"
+    )
+    if info_shape_check >= 0:
+        info_shape_end = source.find("    # 1. Published == golden.", info_shape_check)
+        assert info_shape_end > info_shape_check
+        source = source[:info_shape_check] + source[info_shape_end:]
     start = source.find("    # 7. The operation -> tag assignment is a fixed point")
     if start >= 0:
         end = source.find("    return found", start)
@@ -603,6 +622,19 @@ def test_published_info_shape_is_an_independent_literal() -> None:
     assert door in source, "shape door not found in committed guard source"
     stripped = source.replace(door, "        if False:\n", 1)
     assert stripped != source
+    # The count door independently sees the same drift, so it has to come out
+    # too: otherwise "strip the set door" still fails, just from the other
+    # door, and this assertion would be measuring the wrong thing.
+    count_door = (
+        "        if len(info) != _EXPECTED_INFO_KEYS:\n"
+        "            found.append(\n"
+        "                f\"openapi.json info carries {len(info)} key(s), \"\n"
+        "                f\"_EXPECTED_INFO_KEYS pins {_EXPECTED_INFO_KEYS}: a key was \"\n"
+        "                \"added or dropped without moving the fixed point\"\n"
+        "            )\n"
+    )
+    assert count_door in source, "count door not found in committed guard source"
+    stripped = stripped.replace(count_door, "", 1)
     with tempfile.TemporaryDirectory() as tmp:
         stripped_path = Path(tmp) / "check_openapi_document_metadata.py"
         stripped_path.write_text(
