@@ -67,6 +67,16 @@ which is the whole point -- a lock would have gone stale. This invariant reads
 NO golden content; blessing the golden cannot move it. It also reports the
 ``declared-but-unused`` direction, which a byte lock cannot see.
 
+The completeness invariant is a SET of tag names, so it cannot see which
+operation carries which tag. A byte-preserving permutation that swaps two
+operations' tags keeps the name set, the catalog, the router literals and the
+golden lock identical -- yet it changes the published grouping, which is
+client-visible. ``_OPERATION_TAG_DIGEST`` is a second hand-written sha256 over
+the canonical sorted ``(METHOD, path, sorted-tags)`` tuple set. It is a
+reviewed literal, not derived from either artifact under guard, so a
+co-revert of both halves still changes it. A legitimate retag moves the digest
+in the same commit as the snapshot, with a reason.
+
 Usage:
     python3 scripts/check_openapi_document_metadata.py
     python3 scripts/check_openapi_document_metadata.py --self-test
@@ -78,6 +88,7 @@ import argparse
 import ast
 import copy
 import functools
+import hashlib
 import json
 import symtable
 import sys
@@ -98,6 +109,41 @@ WIRED_AS = "scripts/test_openapi_document_metadata_guard.py"
 # Keys the golden locks. ``_comment`` is documentation, not contract.
 LOCKED_KEYS = ("title", "version", "description", "tags")
 REQUIRED_TAG_KEYS = ("name", "description")
+
+METHODS = frozenset(
+    {"get", "put", "post", "patch", "delete", "options", "head", "trace"}
+)
+
+# Independent fixed point for the operation -> tag assignment. sha256 of
+# "\n".join(["soymutdb-operation-tags/v1"] +
+#   sorted(f"{method}|{path}|{','.join(sorted(tags))}")). Regenerate with
+# _operation_tag_digest() after an intentional, reviewed retag and update in
+# the same commit, with a reason.
+_OPERATION_TAG_DIGEST = "a2753305d5790d8f278a0caa4bd21040125631f0fcec75750c669b0cde25b71c"
+
+
+def _operation_tag_rows(document: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Canonical (METHOD, path, sorted-tags) rows from the published document."""
+    rows: list[tuple[str, str, str]] = []
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for method, operation in item.items():
+            if method not in METHODS or not isinstance(operation, dict):
+                continue
+            tags = sorted(
+                tag for tag in (operation.get("tags") or []) if isinstance(tag, str)
+            )
+            rows.append((method.upper(), path, ",".join(tags)))
+    return rows
+
+
+def _operation_tag_digest(rows: list[tuple[str, str, str]]) -> str:
+    blob = "\n".join(
+        ["soymutdb-operation-tags/v1"]
+        + ["|".join(row) for row in sorted(rows)]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -376,6 +422,7 @@ def failures(
     config: str,
     smoke: str,
     routers: dict[str, str],
+    tag_digest: str | None = None,
 ) -> list[str]:
     found: list[str] = []
     try:
@@ -551,6 +598,21 @@ def failures(
             + ", ".join(sorted(unpublished))
         )
 
+    # 7. The operation -> tag assignment is a fixed point, not a set. A
+    #    same-multiset permutation between two operations keeps every check
+    #    above green (the name set, the catalog, the router literals and the
+    #    golden lock are all unchanged) while the published grouping moves.
+    rows = _operation_tag_rows(document)
+    actual = _operation_tag_digest(rows)
+    pinned = _OPERATION_TAG_DIGEST if tag_digest is None else tag_digest
+    if actual != pinned:
+        found.append(
+            "published operation tag assignment drifted: _OPERATION_TAG_DIGEST "
+            f"pins {pinned} but the snapshot derives {actual}. "
+            "Re-pin the literal in the same commit as the snapshot, with a "
+            "reason -- do not make the guard agree with itself."
+        )
+
     return found
 
 
@@ -604,7 +666,8 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
     def check_clean(label: str, mutate) -> None:
         """A legitimate co-change must stay green -- the invariant is not a lock."""
         parts = copy.deepcopy(base)
-        found = failures(*mutate(*parts))
+        args = mutate(*parts)
+        found = failures(*args)
         if found:
             problems.append(f"{label}: legitimate co-change was rejected; got {found}")
 
@@ -646,6 +709,21 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
 
     def hollow_tag(document):
         document["tags"][0] = {"name": "health"}
+
+    def permute_operation_tags(document):
+        """Swap two operations' tags: same name multiset, different grouping."""
+        first = second = None
+        for path, item in document["paths"].items():
+            for method, operation in item.items():
+                if method not in METHODS or not isinstance(operation, dict):
+                    continue
+                tags = operation.get("tags") or []
+                if first is None and tags == ["health"]:
+                    first = operation
+                elif second is None and tags == ["auth"]:
+                    second = operation
+        assert first is not None and second is not None
+        first["tags"], second["tags"] = second["tags"], first["tags"]
 
     def invented_tag(document):
         document["tags"].append({"name": "made-up", "description": "x"})
@@ -783,6 +861,11 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
         ("tag order changed", edit_snapshot(reorder_tags), "no longer matches the golden lock"),
         ("tag hollowed", edit_snapshot(hollow_tag), "no longer matches the golden lock"),
         ("tag invented", edit_snapshot(invented_tag), "no longer matches the golden lock"),
+        (
+            "operation tag assignment permuted",
+            edit_snapshot(permute_operation_tags),
+            "published operation tag assignment drifted",
+        ),
         ("coordinated co-revert (source+snapshot)", coordinated_co_revert, "no longer matches the golden lock"),
         ("golden edited to bless drift", golden_edited, "no longer matches the golden lock"),
         ("golden hollowed", golden_hollow, "missing the reviewed"),
@@ -942,19 +1025,48 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
         return (
             snapshot, generated, json.dumps(lock, ensure_ascii=False),
             main, config, smoke, routers,
+            _operation_tag_digest(_operation_tag_rows(document)),
         )
 
     check_clean("legitimate new router + catalog entry", legitimate_new_router)
 
+    def legitimate_retag(snapshot, generated, golden, main, config, smoke, routers):
+        """A reviewed retag moves the snapshot and the literal in one commit."""
+        document = json.loads(snapshot)
+        for path, item in document["paths"].items():
+            for method, operation in item.items():
+                if method not in METHODS or not isinstance(operation, dict):
+                    continue
+                if operation.get("tags") == ["health"]:
+                    operation["tags"] = ["auth"]
+                    break
+            else:
+                continue
+            break
+        new_digest = _operation_tag_digest(_operation_tag_rows(document))
+        found = failures(
+            json.dumps(document, ensure_ascii=False), generated, golden,
+            main, config, smoke, routers, tag_digest=new_digest,
+        )
+        assert not found, found
+        return snapshot, generated, golden, main, config, smoke, routers
+
+    check_clean("legitimate retag with re-pinned literal", legitimate_retag)
+
+    positive_labels = (
+        "legitimate new router + catalog entry",
+        "legitimate retag with re-pinned literal",
+    )
     labels = frozenset(
         [label for label, _, _ in ablations]
         + [label for label, _, _ in derived]
         + ["invented tag blessed in all three artifacts"]
+        + list(positive_labels)
     )
     count = len(ablations) + len(derived) + 1
-    if len(labels) != count:
+    if len(labels) != count + len(positive_labels):
         problems.append("self-test has duplicate case labels")
-    return problems, count, 1, labels
+    return problems, count, len(positive_labels), labels
 
 
 def main(argv: list[str] | None = None) -> int:

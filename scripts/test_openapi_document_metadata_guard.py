@@ -51,10 +51,12 @@ MUTATION_LABEL = "description/tags mutated in place"
 MUTATION_MUTATOR = "source_wiring_mutated_in_place"
 UNCOMPILABLE_LABEL = "create_app does not compile under symtable"
 UNRUNNABLE_LABEL = "create_app would not run (compiler rejects it)"
+TAG_ASSIGNMENT_LABEL = "operation tag assignment permuted"
 REQUIRED_ABLATIONS = frozenset(
-    (DECOY_LABEL, SHADOW_LABEL, MUTATION_LABEL, UNCOMPILABLE_LABEL)
+    (DECOY_LABEL, SHADOW_LABEL, MUTATION_LABEL, UNCOMPILABLE_LABEL,
+     TAG_ASSIGNMENT_LABEL)
 )
-EXPECTED_ABLATIONS = 27
+EXPECTED_ABLATIONS = 28
 
 
 def _guard(path: Path = GUARD):
@@ -84,6 +86,7 @@ def test_every_ablation_is_caught() -> None:
     assert DECOY_MUTATOR in source
     assert SHADOW_MUTATOR in source
     assert MUTATION_MUTATOR in source
+    assert TAG_ASSIGNMENT_LABEL in labels
 
 
 def test_decoy_wiring_ablation_really_rejects_a_substring_guard() -> None:
@@ -354,6 +357,22 @@ def _regressed_guard_source() -> str:
     )
     assert unrunnable_block in source, "unrunnable ablation tuple not found"
     source = source.replace(unrunnable_block, "", 1)
+    tag_assignment_block = (
+        "        (\n"
+        '            "operation tag assignment permuted",\n'
+        "            edit_snapshot(permute_operation_tags),\n"
+        '            "published operation tag assignment drifted",\n'
+        "        ),\n"
+    )
+    assert tag_assignment_block in source, "tag assignment ablation not found"
+    source = source.replace(tag_assignment_block, "", 1)
+    # The regressed guard predates the tag-assignment fixed point. Strip the
+    # check so its self-test stays green at the historical 22- ablation count.
+    start = source.find("    # 7. The operation -> tag assignment is a fixed point")
+    if start >= 0:
+        end = source.find("    return found", start)
+        assert end > start
+        source = source[:start] + source[end:]
     return source
 
 
@@ -515,3 +534,34 @@ def test_binding_contract_is_pinned() -> None:
     )
     assert not is_red(mutated), "in-place mutation must not read as an in-scope binding"
     assert any("mutates metadata constants in place" in item for item in fails(mutated))
+
+
+def test_operation_tag_assignment_is_an_independent_literal() -> None:
+    """A same-multiset tag permutation must move the digest, not the name set."""
+    guard = _guard()
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    rows = guard._operation_tag_rows(document)
+    original = guard._operation_tag_digest(rows)
+
+    first = second = None
+    for item in document["paths"].values():
+        for method, operation in item.items():
+            if method not in guard.METHODS or not isinstance(operation, dict):
+                continue
+            if first is None and operation.get("tags") == ["health"]:
+                first = operation
+            elif second is None and operation.get("tags") == ["auth"]:
+                second = operation
+    assert first is not None and second is not None
+    first["tags"], second["tags"] = second["tags"], first["tags"]
+
+    moved = guard._operation_tag_digest(guard._operation_tag_rows(document))
+    assert moved != original
+    # Feed the permuted snapshot in with the OLD literal: the drift is named.
+    parts = list(guard._load())
+    parts[0] = json.dumps(document, ensure_ascii=False)
+    found = guard.failures(*parts, tag_digest=original)
+    assert any("published operation tag assignment drifted" in f for f in found), found
+    # A legitimate same-commit re-pin (snapshot + literal moved together) is
+    # green on the same bytes.
+    assert not guard.failures(*parts, tag_digest=moved)
