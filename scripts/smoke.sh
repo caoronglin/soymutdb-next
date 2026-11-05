@@ -211,6 +211,12 @@ smoke_contracts() {
   # The app shells must declare a favicon that resolves in source and in the
   # built tree; the admin console shipped without one and 404'd every load.
   "${PYTHON_BIN}" scripts/check_app_shell_assets.py --self-test || rc=$?
+  # Every value domain (enum / const) the OpenAPI snapshot publishes must still
+  # be the one the model declares. The offline OpenAPI guards all stop at which
+  # schema a response names; a retyped enum survives export==snapshot because
+  # both artifacts are exports. Self-test mode, like the guards above, so this
+  # adds one line here instead of a row in the shared `tests[]` array.
+  "${PYTHON_BIN}" scripts/check_openapi_published_enums.py --self-test || rc=$?
   # The visible-text budget may fall but never rise; new hardcoded strings fail.
   "${PYTHON_BIN}" scripts/check_visible_i18n.py --self-test || rc=$?
   node scripts/check_visible_i18n_react.mjs --self-test || rc=$?
