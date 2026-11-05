@@ -274,6 +274,29 @@ def self_test() -> int:
         print("SELF-TEST FAIL: the committed tree is already out of sync:", clean, file=sys.stderr)
         return 1
 
+    # The plants run through `_require_changed`, and its verdict is the gate:
+    # stubbing it to `return None` turns all of them into no-ops while every
+    # case still reports "caught". Self-test the gate first, with a plant that
+    # is guaranteed to land and one that is guaranteed not to.
+    for planted, expected in (("sentinel-a", "sentinel-b"), ("sentinel-a", "sentinel-a")):
+        with tempfile.TemporaryDirectory() as probe_dir:
+            probe = Path(probe_dir) / "gate.txt"
+            probe.write_text(planted, encoding="utf-8")
+            try:
+                _require_changed(probe, planted, expected)
+            except AssertionError:
+                refused = True
+            else:
+                refused = False
+            changed = planted != expected
+        if refused == changed:
+            print(
+                "SELF-TEST FAIL: _require_changed no longer rejects an ablation "
+                "that changed nothing; every plant below may be a no-op",
+                file=sys.stderr,
+            )
+            return 1
+
     cases = {
         "extra code": lambda p: _mutate_json(
             p / "packages/api-client/error-codes.json", lambda d: d.update(phantom_code="not published")

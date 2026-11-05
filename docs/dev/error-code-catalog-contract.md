@@ -45,9 +45,12 @@ Consequences before this guard:
 It is wired into `packages/api-client/scripts/check-contract.sh` (run on the
 `$API_PYTHON` venv interpreter the gate already provisions), which both CNB
 and GitHub reach through `verify-frontend-artifacts.sh` (`check:contract`).
-`scripts/test_error_code_catalog_contract.py` is the regression suite: 17
+`scripts/test_error_code_catalog_contract.py` is the regression suite: 18
 pytest cases including synthetic drift trees and `--self-test` (12 planted
-negative cases). Removing the loop/call, or weakening any single assertion,
+negative cases). Every plant runs through one `_require_changed` gate, so
+`--self-test` proves that gate still rejects a plant that landed no bytes
+before it trusts any verdict below it -- stubbing the gate to `return None`
+turns the whole case table into no-ops that each still report `caught`. Removing the loop/call, or weakening any single assertion,
 turns a case red. `--self-test` is also consumed by `scripts/smoke.sh
 --profile contracts`; the plain call alone cannot see a plant that landed no
 bytes. The coordinated source + artifact prune is pinned by an independent

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -25,6 +26,7 @@ import check_error_code_catalog as guard
 CATALOG_REL = "packages/api-client/error-codes.json"
 OPENAPI_REL = "packages/api-client/openapi.json"
 EXCEPTIONS_REL = "apps/api/app/core/exceptions.py"
+GUARD_SOURCE = ROOT / "scripts" / "check_error_code_catalog.py"
 GENERATOR_REL = "packages/api-client/scripts/generate-api-client.sh"
 CONTRACT_REL = "packages/api-client/scripts/check-contract.sh"
 
@@ -270,3 +272,50 @@ def _json_mutate(path: Path, mutate) -> None:  # type: ignore[no-untyped-def]
     data = json.loads(path.read_text(encoding="utf-8"))
     mutate(data)
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def test_the_plant_gate_is_itself_self_tested() -> None:
+    """Gutting `_require_changed` must turn `--self-test` red, not green.
+
+    Every plant runs through that one function, so replacing its body with
+    `return None` turns the whole case table into no-ops while each case still
+    prints "caught" -- the clean tree is caught by nothing and reported as
+    caught by everything. The guard now self-tests the gate before trusting
+    any of its verdicts; this pins that it does.
+    """
+    source = GUARD_SOURCE.read_text(encoding="utf-8")
+    marker = (
+        '    if after == before:\n'
+        '        raise AssertionError(f"planted defect did not change {path.name}")\n'
+    )
+    assert marker in source, "control: the plant gate changed shape"
+    hollowed = source.replace(marker, "    return None\n" + marker, 1)
+    assert hollowed != source
+
+    tree = Path(tempfile.mkdtemp())
+    try:
+        # The probe copy walks to `ROOT.parents[1]` for its tree, so it must
+        # run from a copy of the repo, not from the repo with a stray guard.
+        probe = tree / "repo"
+        shutil.copytree(
+            ROOT,
+            probe,
+            ignore=shutil.ignore_patterns(".git", "node_modules", "dist", "__pycache__"),
+        )
+        (probe / "scripts" / "check_error_code_catalog.py").write_text(hollowed, encoding="utf-8")
+        result = subprocess.run(
+            [sys.executable, "scripts/check_error_code_catalog.py", "--self-test"],
+            capture_output=True,
+            text=True,
+            cwd=probe,
+            check=False,
+        )
+        assert result.returncode != 0, (
+            "a guard whose plants cannot fail still reported a green self-test: "
+            + (result.stdout + result.stderr)[-400:]
+        )
+        assert "_require_changed" in result.stderr, (
+            "the failure did not name the plant gate: " + result.stderr[-400:]
+        )
+    finally:
+        shutil.rmtree(tree, ignore_errors=True)
