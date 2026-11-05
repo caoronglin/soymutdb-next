@@ -69,8 +69,16 @@ collectible" cell: registered, collectible, invoked — and vacuous.
   ten members printed a count a `print(<pinned summary>); return 0` stub can
   echo while emitting no evidence, and the whole contracts layer stayed green.
   The floor is one-sided — extra lines stay green — so a legitimate phrasing
-  change or a wider plant cannot turn it into a format audit, and a count that
-  moves with the ablations still passes because the count is not pinned.
+  change or a wider plant cannot turn it into a format audit, and a declared
+  count that moves with the ablations still passes. But the *emitted* evidence
+  is also held to the reviewed `_CASE_FLOOR` literal: a guard whose success line
+  prints a loop counter (e.g. `{results}`) lets an edited loop shrink the
+  declared count and the per-case lines together, so `emitted < declared`
+  never fires. Measured on `c3e88a49`: slicing
+  `check_openapi_operation_id_floor.py`'s loop to 8 of 11 rows printed
+  `8 cases` with 8 PASS lines, all source-AST floors stayed green, and the
+  whole layer reported `OK (20 wired guards probed)`. The literal floor names
+  it.
   Membership is listed as literals and audited against the output, not derived
   from the plants: the point is that a guard's evidence is read, not that the
   guard is trusted to be one of the good ones.
@@ -117,8 +125,9 @@ partial temp tree made all probes fail to open, so the case passed
 vacuously — the first-hit trap this repo keeps paying for. The control
 assertion is what keeps it honest.
 
-Its own `--self-test` plants one case per gap. The sixth pins the gap one layer below
-the signature floor: a body gutted to `print(<pinned signature>); return 0`
+Its own `--self-test` plants one case per gap and runs ten cases.
+The sixth pins the gap one layer below the signature floor: a body
+ gutted to `print(<pinned signature>); return 0`
 still satisfies `_SIGNATURES` — the marker is a string a mutator can write —
 so the case asserts **both** that the signature check stays green (or the case
 proves nothing) and that the drift probe catches the same body. The seventh
@@ -132,6 +141,9 @@ keeps every self-test PASS line. Measured on 999a39b3 —
 `check_error_code_catalog.self_test` with `problems = []` before each
 `check_tree(tree)` kept all twelve `ok: planted ... -> caught` lines and the
 whole contracts layer at `SMOKE PASS`. Both limbs are asserted again.
+The ninth pins the loop-counter forgery above: a coherent short run passes the
+one-sided `emitted < declared` check (or the case proves nothing) and is named
+by the reviewed floor. Both limbs are asserted again.
 
 `scripts/test_contracts_self_test_teeth.py` is the second file:
 it pins the wiring into `smoke.sh`, the `REQUIRED_GUARD_CALLS` floor, status
