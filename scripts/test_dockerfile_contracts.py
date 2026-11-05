@@ -801,3 +801,24 @@ def test_worker_build_width_is_a_build_arg_not_the_host_core_count() -> None:
         "the six sdists must build one at a time; running them concurrently "
         "peaks at the same memory with less headroom"
     )
+
+
+def test_worker_hdf5_link_probe_reads_libs_only_L_not_an_empty_libdir() -> None:
+    """The trixie serial .pc has no ``libdir`` variable; ``--variable=libdir``
+    expands to empty and leaves a bare ``-L`` that swallows ``-lhdf5`` as its
+    argument. Build cnb-fq5-1k6k4qig0-004 died here with
+    ``ld: cannot find -lhdf5_hl`` on amd64 and arm64, which in turn blocked
+    release/publish. The probe must take the search path from ``Libs:`` -- the
+    same field h5py reads -- and the build must fail if it ever regresses to a
+    literal empty ``-L``.
+    """
+    text = _instructions(WORKER_DOCKERFILE.read_text(encoding="utf-8"))
+
+    assert "pkg-config --libs-only-L hdf5-serial" in text, (
+        "the HDF5 link probe must read -L from the .pc Libs: field; "
+        "--variable=libdir is empty on Debian trixie hdf5-serial.pc"
+    )
+    assert "--variable=libdir" not in text, (
+        "hdf5-serial.pc defines no libdir variable; expanding it yields a bare "
+        "-L that consumes the following -lhdf5 as its directory argument"
+    )

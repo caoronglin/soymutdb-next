@@ -52,12 +52,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # with `hdf5-serial.pc`. Link the exact line h5py will use, so a Debian point
 # that renames the flavour paths fails here with a link error naming them
 # instead of inside the h5py build.
+# `hdf5-serial.pc` hardcodes that -L path in its `Libs:` field and defines no
+# `libdir` variable, so `--variable=libdir` expands to empty: the probe used to
+# compile `-L -lhdf5 -lhdf5_hl`, where the bare -L swallowed `-lhdf5` as its
+# directory argument and the linker could not find `-lhdf5_hl`. `--libs-only-L`
+# reads the path from `Libs:`, which is what h5py itself consumes.
 RUN set -eux; \
     pkg-config --exists hdf5-serial; \
     printf 'int main(void) { return 0; }\n' > /tmp/hdf5-link-probe.c; \
     cc /tmp/hdf5-link-probe.c -o /tmp/hdf5-link-probe \
         $(pkg-config --cflags hdf5-serial) \
-        -L"$(pkg-config --variable=libdir hdf5-serial)" -lhdf5 -lhdf5_hl; \
+        $(pkg-config --libs-only-L hdf5-serial) -lhdf5 -lhdf5_hl; \
     /tmp/hdf5-link-probe; \
     rm -f /tmp/hdf5-link-probe /tmp/hdf5-link-probe.c
 
