@@ -28,7 +28,7 @@ def _smoke() -> str:
 
 
 # One real probe per test process. Every test that needs clean results reuses
-# it instead of spawning 13 guards again; the guard's own --self-test still
+# it instead of spawning every wired guard again; the guard's own --self-test still
 # runs its own probe when invoked as a process by smoke.sh.
 _RESULTS: dict[str, tuple[int, str]] = {}
 

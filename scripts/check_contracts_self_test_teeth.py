@@ -53,6 +53,7 @@ _WIRED_SELF_TESTS: frozenset[str] = frozenset(
         "scripts/check_api_error_code_vocabulary.py",
         "scripts/check_app_shell_assets.py",
         "scripts/check_bio_core_wheel_abi.py",
+        "scripts/check_error_code_catalog.py",
         "scripts/check_error_code_doc_counts.py",
         "scripts/check_error_code_gate_wiring.py",
         "scripts/check_mcp_manifest_reconcile.py",
@@ -82,6 +83,9 @@ _SIGNATURES: dict[str, re.Pattern[str]] = {
     ),
     "scripts/check_bio_core_wheel_abi.py": re.compile(
         r"self-test / ledger \+ source contract\]: PASS"
+    ),
+    "scripts/check_error_code_catalog.py": re.compile(
+        r"error-code catalog self-test passed"
     ),
     "scripts/check_error_code_doc_counts.py": re.compile(
         r"error-code doc counts self-test passed"
