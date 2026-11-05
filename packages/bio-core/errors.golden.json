@@ -1,0 +1,12 @@
+{
+  "EMPTY_SEQUENCE": "empty sequence",
+  "INVALID_CHARACTER": "invalid character for the selected alphabet",
+  "UNSUPPORTED_ALPHABET": "unsupported alphabet for this operation",
+  "SEQUENCE_TOO_LONG": "sequence exceeds the configured size limit",
+  "BUDGET_EXCEEDED": "input exceeds the configured budget",
+  "INVALID_INTERVAL": "invalid coordinate: start must be >= 0 and stop must be > start",
+  "COORDINATE_OVERFLOW": "integer overflow while computing coordinates",
+  "UNSUPPORTED_PARAMETER": "unsupported parameter value",
+  "UNKNOWN_GENETIC_CODE": "genetic code is not implemented",
+  "INVALID_RECORD": "invalid FASTA/FASTQ record"
+}
