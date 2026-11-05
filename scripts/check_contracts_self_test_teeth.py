@@ -796,15 +796,21 @@ def evidence_lines(output: str) -> tuple[int | None, int]:
 
 
 def evidence_errors(results: dict[str, tuple[int, str]]) -> list[str]:
-    """A declared case count with fewer per-case lines than it claims.
+    """A declared case count needs its evidence, and a reviewed floor too.
 
     The row is a claim about the *output*, so it is checked against the output:
     N cases need N distinguished lines naming what was caught. Deliberately
     one-sided -- extra lines stay green -- so a legitimate rephrasing, a
-    subtest or a wider plant cannot turn this into a format audit, and the
-    count itself is never pinned, so an added ablation passes. The other
-    direction is already covered one layer up: a guard that stops printing the
+    subtest or a wider plant cannot turn this into a format audit, and a
+    declared count above the floor stays free, so an added ablation passes. The
+    other direction is covered one layer up: a guard that stops printing the
     count at all loses its ``_SIGNATURES`` marker.
+
+    A guard whose success line prints a loop counter lets an edited loop shrink
+    ``declared`` and ``emitted`` together, so ``emitted < declared`` never fires.
+    The reviewed ``_CASE_FLOOR`` is a literal, not derived from the output; the
+    emitted evidence is held to it too. ``declared_case_errors()`` independently
+    pins the source rows and the loop, so the two checks stay orthogonal.
     """
     problems: list[str] = []
     for path in sorted(EVIDENCE_MEMBERS):
@@ -812,6 +818,7 @@ def evidence_errors(results: dict[str, tuple[int, str]]) -> list[str]:
         if rc != 0:
             continue  # an unreachable self-test is reported by teeth_errors
         declared, emitted = evidence_lines(output)
+        floor = _CASE_FLOOR.get(path)
         if declared is None:
             problems.append(
                 f"{path} is audited for per-case evidence but its success line "
@@ -821,6 +828,11 @@ def evidence_errors(results: dict[str, tuple[int, str]]) -> list[str]:
             problems.append(
                 f"{path} claims {declared} case(s) but printed {emitted} per-case "
                 "line(s): the summary is written, the evidence is not"
+            )
+        elif floor is not None and emitted < floor[3]:
+            problems.append(
+                f"{path} printed {emitted} per-case line(s), below its reviewed "
+                f"floor of {floor[3]}: fewer cases ran than were reviewed"
             )
     return problems
 
@@ -1271,6 +1283,35 @@ def self_test() -> int:
             dropped_plain != smoke
             and not both_call_errors(smoke, wired)
             and any(victim in f for f in both_call_errors(dropped_plain, wired)),
+        )
+    )
+
+    # 10. A summary line that prints a loop counter lets an edited loop shrink
+    # ``declared`` and ``emitted`` together, so ``emitted < declared`` never
+    # fires. The reviewed _CASE_FLOOR is the literal that still catches it.
+    # Assert both limbs: a coherent short run is green on the one-sided check
+    # (or the case proves nothing) and the floor names it.
+    short = "scripts/check_openapi_operation_id_floor.py"
+    floor = _CASE_FLOOR[short][3]
+    few = floor - 1
+    shrunk = (0, f"self-test: {few} cases, 0 failure(s)\n" + "\n".join(
+        f"PASS self-test: case {i} is caught -> 1 failure(s)" for i in range(few)
+    ) + "\n")
+    declared, emitted = evidence_lines(shrunk[1])
+    one_sided_blind = not any(
+        "claims" in f for f in evidence_errors({short: shrunk})
+    )
+    caught = evidence_errors({short: shrunk})
+    cases.append(
+        (
+            "a loop shrunken to fewer cases is caught by the reviewed floor",
+            short,
+            declared == few
+            and emitted == few
+            and one_sided_blind
+            and len(caught) == 1
+            and f"below its reviewed floor of {floor}" in caught[0]
+            and not evidence_errors(control),
         )
     )
 

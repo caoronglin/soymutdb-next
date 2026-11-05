@@ -257,6 +257,27 @@ class TeethGuardContract(unittest.TestCase):
         )
         self.assertEqual(guard.evidence_errors({target: (0, widened)}), [])
 
+    def test_a_loop_shrunken_below_the_reviewed_floor_is_rejected(self) -> None:
+        """A loop-counter summary shrinks declared and emitted together.
+
+        ``check_openapi_operation_id_floor.py`` prints ``{results}``, so an
+        edited loop that runs N-1 cases prints ``N-1 cases`` with N-1 per-case
+        lines. ``emitted < declared`` never fires; the literal ``_CASE_FLOOR``
+        is what still names it. Both limbs are asserted: the short run is
+        coherent on the one-sided check, and the floor reports it.
+        """
+        target = "scripts/check_openapi_operation_id_floor.py"
+        self.assertIn(target, guard.EVIDENCE_MEMBERS, "setup is not a control")
+        floor = guard._CASE_FLOOR[target][3]
+        few = floor - 1
+        output = f"self-test: {few} cases, 0 failure(s)\n" + "\n".join(
+            f"PASS self-test: case {i} is caught -> 1 failure(s)" for i in range(few)
+        )
+        self.assertEqual(guard.evidence_lines(output), (few, few))
+        found = guard.evidence_errors({target: (0, output)})
+        self.assertEqual(len(found), 1, "one cause, one owner")
+        self.assertIn(f"below its reviewed floor of {floor}", found[0])
+
     def test_a_failing_evidence_row_is_reported_by_teeth_not_here(self) -> None:
         """One cause, one owner: an unreachable self-test is teeth_errors'."""
         target = "scripts/check_openapi_response_surface.py"
@@ -358,6 +379,8 @@ class TeethGuardContract(unittest.TestCase):
         self.assertIn("_CASE_FLOOR: dict[str, tuple[str, str, str, int]] = {", source)
         self.assertIn("declared = _declared_cases(target, function, mapping)", source)
         self.assertIn("evidence_floor_errors()", source)
+        self.assertIn("floor = _CASE_FLOOR.get(path)", source)
+        self.assertIn("emitted < floor[3]", source)
 
     def test_the_re_pin_case_is_load_bearing_from_a_second_file(self) -> None:
         """Both limbs of the coordinated retype must live in the case list."""
