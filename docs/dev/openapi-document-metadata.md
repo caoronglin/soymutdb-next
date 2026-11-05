@@ -115,17 +115,16 @@ old value. `self_test()` returns the registered case labels alongside the
 counts, `test_every_ablation_is_caught` asserts the exact count (`== 27` at
 this cut) and that the five wiring rows are present and driven by their
 mutators — `description/tags unwired with decoy comment` (parsed call vs
-whole-file substring), `description/tags shadowed by local rebinding`
-(name resolution, not spelling), `description/tags mutated in place`
-(in-place mutation, not binding), `create_app would not run (compiler
-rejects it)` (`compile()` as the runtime authority, not just a parser), and
-`create_app does not compile under symtable` (clean FAIL, no traceback). `test_ablation_count_pin_is_not_vacuous`
+whole-file substring), `description/tags shadowed by in-scope binding`
+(name resolution, not spelling), and `create_app does not compile under
+symtable` (clean FAIL, no traceback). `test_ablation_count_pin_is_not_vacuous`
 materializes the exact revert-and-delete regression to prove the pin itself
-would go red. `test_local_rebinding_of_wiring_names_is_rejected` rebuilds a
+would go red, `test_in_scope_binding_of_wiring_names_is_rejected` rebuilds a
 spelling-only guard on in-memory bytes to prove the name-resolution check is
-load-bearing; `test_in_place_mutation_of_wiring_names_is_rejected` rebuilds a
-resolution-only guard to prove the mutation check is load-bearing.
-A count written into an assert grows its own tree; the pin must
+load-bearing, and `test_binding_contract_is_pinned` fixes exactly which
+binding shapes are red (local / `global`+assignment / after-call / `settings`)
+and which are green by design (bare `global`, nested helper, in-place
+mutation). A count written into an assert grows its own tree; the pin must
 name what it guards, and the table must have a row for each shape the guard
 claims to reject.
 
