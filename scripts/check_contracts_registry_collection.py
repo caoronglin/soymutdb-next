@@ -228,6 +228,7 @@ PINNED_SUITES: frozenset[str] = frozenset(
         'scripts/test_openapi_operation_annotations.py',
         'scripts/test_openapi_field_constraints.py',
         'scripts/test_openapi_required_fields.py',
+        'scripts/test_openapi_schema_descriptions.py',
         'scripts/test_openapi_snapshot_body_integrity.py',
         'scripts/test_openapi_snapshot_contract.py',
         'scripts/test_platform_delivery_contracts.py',
