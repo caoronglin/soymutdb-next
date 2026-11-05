@@ -77,6 +77,7 @@ _WIRED_SELF_TESTS: frozenset[str] = frozenset(
         "scripts/check_openapi_published_enums.py",
         "scripts/check_guard_self_test_verdict.py",
         "scripts/check_visible_i18n.py",
+        "scripts/check_published_route_manifest.py",
     }
 )
 
@@ -166,6 +167,9 @@ _SIGNATURES: dict[str, re.Pattern[str]] = {
     "scripts/check_guard_self_test_verdict.py": re.compile(
         r"self-test: \d+ cases, 0 failure\(s\)"
     ),
+    "scripts/check_published_route_manifest.py": re.compile(
+        r"self-test: \d+ cases, 0 failure\(s\)"
+    ),
 }
 
 # Per-wire drift plants. A success signature is a string a gutted body can
@@ -230,6 +234,14 @@ _DRIFT_PLANTS: tuple[tuple[str, str, str, str], ...] = (
         '    """Return ``(problems, compared_enum_pairs)``."""\n    found: list[str] = []\n'
         "    return found, 0  # planted drift: detection disabled",
         "published enum drift is never reported",
+    ),
+    (
+        "scripts/check_published_route_manifest.py",
+        "    try:\n        document, robots = _read(root)\n    except ValueError as exc:\n"
+        "        return [str(exc)]\n",
+        "    try:\n        document, robots = _read(root)\n    except ValueError as exc:\n"
+        "        return [str(exc)]\n    return []  # planted drift: detection disabled\n",
+        "the published route manifest accepts every drift",
     ),
     (
         "scripts/check_visible_i18n.py",
@@ -447,6 +459,11 @@ _SELF_TEST_GUTS: tuple[tuple[str, str, str], ...] = (
         "scripts/check_variant_summary_assembly_consistency.py",
         '    problems = run(args.visibility, args.stats)\n',
         '    problems = []  # planted drift: the plain run stops reading the real tree\n',
+    ),
+    (
+        "scripts/check_published_route_manifest.py",
+        "    problems = check()\n",
+        "    problems = []  # planted drift: the plain run stops reading the real tree\n",
     ),
     (
         "scripts/check_visible_i18n.py",

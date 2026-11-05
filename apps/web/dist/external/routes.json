@@ -1,0 +1,204 @@
+{
+  "siteVariant": "external",
+  "origin": "https://soymutdb.invalid",
+  "entries": [
+    {
+      "path": "/",
+      "title": "SoyMutDB — Soybean Mutant Database",
+      "description": "Search soybean genes, variants, and mutant lines across assemblies and releases.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/about",
+      "title": "About — SoyMutDB",
+      "description": "About the SoyMutDB soybean mutant database.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/analyses",
+      "title": "Analyses — SoyMutDB",
+      "description": "Run read QC and single-cell clustering on your own data.",
+      "includeInSitemap": false
+    },
+    {
+      "path": "/analytics",
+      "title": "Analytics — SoyMutDB",
+      "description": "Aggregate views of variant density, types, impact and discovery trend.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/assemblies",
+      "title": "Assemblies — SoyMutDB",
+      "description": "Genome assemblies in the current release, each with its own gene, transcript and chromosome counts.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/blast",
+      "title": "BLAST — SoyMutDB",
+      "description": "Search sequences against the activated reference databases.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/browser",
+      "title": "Genome browser — SoyMutDB",
+      "description": "Explore released variants in genomic context through JBrowse 2.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/comparative",
+      "title": "Comparative genomics — SoyMutDB",
+      "description": "Browse gene families and orthologous groups with their source method, version and per-species coverage.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/compare",
+      "title": "Variant comparison — SoyMutDB",
+      "description": "Compare released variants side by side by their public ids.",
+      "includeInSitemap": false
+    },
+    {
+      "path": "/downloads",
+      "title": "Downloads — SoyMutDB",
+      "description": "Download released SoyMutDB data files through short-lived presigned URLs.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/expression",
+      "title": "Expression libraries — SoyMutDB",
+      "description": "Browse released expression libraries with their study, source, assembly and developmental stage, and the genes measured in each one.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/genes",
+      "title": "Genes — SoyMutDB",
+      "description": "Browse released gene models by chromosome, biotype and symbol.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/guide",
+      "title": "Guide — SoyMutDB",
+      "description": "How to retrieve records, coordinates and releases.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/help",
+      "title": "Help — SoyMutDB",
+      "description": "Usage contract, identifiers, assemblies, releases and FAQ.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/login",
+      "title": "Sign in — SoyMutDB",
+      "description": "Sign in to an internal SoyMutDB account.",
+      "includeInSitemap": false
+    },
+    {
+      "path": "/mutants",
+      "title": "Mutant lines — SoyMutDB",
+      "description": "Browse released soybean mutant lines by public identifier.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/news",
+      "title": "News — SoyMutDB",
+      "description": "Announcements, updates, and news from the SoyMutDB project.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/phenotypes",
+      "title": "Phenotype browser — SoyMutDB",
+      "description": "Recorded trait observations across released mutant lines, each traceable to the line that carries it.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/publications",
+      "title": "Publications — SoyMutDB",
+      "description": "Publications citing or describing SoyMutDB.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/search",
+      "title": "Search — SoyMutDB",
+      "description": "Search genes, variants, mutant lines, and publications.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/search/gbrowse",
+      "title": "JBrowse 2 — SoyMutDB",
+      "description": "Open the JBrowse 2 genome browser for a selected assembly.",
+      "includeInSitemap": false
+    },
+    {
+      "path": "/search/genes",
+      "title": "Gene ID search — SoyMutDB",
+      "description": "Find a gene by public identifier inside one genome assembly.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/search/location",
+      "title": "Location search — SoyMutDB",
+      "description": "List variants and genes inside one 1-based inclusive genomic region.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/search/primer",
+      "title": "Primer design — SoyMutDB",
+      "description": "Design heuristic primer pairs for a region of one assembly.",
+      "includeInSitemap": false
+    },
+    {
+      "path": "/search/tools",
+      "title": "Search tools — SoyMutDB",
+      "description": "Browse the analysis tools that complement identifier and location search.",
+      "includeInSitemap": false
+    },
+    {
+      "path": "/seed-request",
+      "title": "Seed request — SoyMutDB",
+      "description": "Request seed material for released mutant lines.",
+      "includeInSitemap": false
+    },
+    {
+      "path": "/sra",
+      "title": "SRA browser — SoyMutDB",
+      "description": "Federated SRA run metadata lookups.",
+      "includeInSitemap": false
+    },
+    {
+      "path": "/tools",
+      "title": "Research tools — SoyMutDB",
+      "description": "Assembly-aware sequence and analysis tools for SoyMutDB data.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/tools/enrichment",
+      "title": "Enrichment analysis — SoyMutDB",
+      "description": "Run GO or KEGG enrichment analysis within a selected genome assembly.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/tools/exppattern",
+      "title": "Expression pattern — SoyMutDB",
+      "description": "Compare gene expression across libraries within one genome assembly.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/tools/seqfetch",
+      "title": "Sequence fetch — SoyMutDB",
+      "description": "Extract FASTA sequences from an explicit assembly by gene accession or genomic region.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/tools/sequence",
+      "title": "Sequence toolkit — SoyMutDB",
+      "description": "Reverse complement, pattern matching, composition, translation, k-mers, ORF scanning, pairwise alignment and FASTA/FASTQ/BED validation on sequence text you supply.",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/variants",
+      "title": "Variants — SoyMutDB",
+      "description": "Explore variants by assembly-scoped region and impact filters.",
+      "includeInSitemap": true
+    }
+  ]
+}
