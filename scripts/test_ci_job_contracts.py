@@ -5574,48 +5574,77 @@ def test_pr_artifact_browser_acceptance_covers_frontend_changes() -> None:
     assert "github.event_name != 'pull_request'" in workflow["jobs"]["e2e"]["if"]
 
 
-def _pipeline_declarations(config: dict):
-    """Yield every stage name in the CNB config, whichever branch declares it."""
-    for event_branch in config.values():
-        if not isinstance(event_branch, list):
+def _pipelines(template_path: Path):
+    """Yield ``(event, cpus)`` for every runner declaration in the CNB template.
+
+    ``.cnb.yml`` nests events under the ``main`` and ``$`` root branches, so the
+    event name has to be read from the inner map: at the top level every event
+    looks like a pull request. A pipeline declares ``runner`` itself and a stage
+    may override it, so both are visited.
+    """
+    config = yaml.safe_load(template_path.read_text(encoding="utf-8"))
+
+    def walk(stages):
+        """Yield every stage dict in a ``stages`` list, including nested ones."""
+        for stage in stages or []:
+            if not isinstance(stage, dict):
+                continue
+            yield stage
+            yield from walk(stage.get("stages"))
+
+    for branches in config.values():
+        if not isinstance(branches, dict):
             continue
-        for pipeline in event_branch:
-            yield from pipeline.get("stages", [])
+        for event_name, pipelines in branches.items():
+            if not isinstance(pipelines, list):
+                continue
+            for pipeline in pipelines:
+                if not isinstance(pipeline, dict):
+                    continue
+                runner = pipeline.get("runner") or {}
+                if "cpus" in runner:
+                    yield event_name, runner["cpus"]
+                for stage in walk(pipeline.get("stages")):
+                    stage_runner = stage.get("runner") or {}
+                    if "cpus" in stage_runner:
+                        where = f"{event_name}/{pipeline.get('name')}/{stage.get('name')}"
+                        yield where, stage_runner["cpus"]
 
 
 def test_cnb_stages_declare_their_runner_honestly() -> None:
     """A runner is a charge, not a preference: declare it or inherit nothing.
 
-    PR #184's only red reading was ``Prepare``:
+    The only red reading on a pull request every time Prepare dies is
     ``Root Group's events CPU core-hours are insufficient for pre-freezing``.
-    Nothing in the changed files caused it -- CNB freezes a reservation for
-    ``cpus x freeze_window`` before the first stage runs, so a PR that declares
-    an oversized runner dies before any script is reachable and reports it as a
-    pipeline ``error`` rendered next to the commit. The cost is paid during
-    review, on somebody else's PR, attributed to their diff.
+    Nothing in the changed files causes it -- CNB freezes a reservation for
+    ``cpus x freeze_window`` before the first stage runs, so a PR whose
+    pipelines declare oversized runners dies before any script is reachable and
+    reports it as a pipeline ``error`` rendered next to the commit. The cost is
+    paid during review, on somebody else's PR, attributed to their diff.
 
-    The gate is deliberately shallow: it checks that every explicit runner is
-    one of the sizes this repo actually schedules, so a typo (``cpus: 160``) or
-    a copy-pasted 16-core stage cannot quietly multiply the reservation. It
-    does not try to predict the org balance -- that number is invisible here.
+    The gate is deliberately shallow: every explicit runner must be one of the
+    sizes this repo actually schedules, and the *pull request* pipeline -- the
+    one that pays the reservation on every push to a review branch -- must stay
+    inside a small, counted budget. Release and manual pipelines are excluded
+    from the count: they run once per release, not once per review. It does not
+    try to predict the org balance; that number is invisible here.
     """
-    config = yaml.safe_load((ROOT / ".cnb.yml").read_text(encoding="utf-8"))
     allowed = {4, 8, 16}
-    oversized = []
-    for stage in _pipeline_declarations(config):
-        runner = stage.get("runner") or {}
-        cpus = runner.get("cpus")
-        if cpus is None:
-            continue
-        assert int(cpus) in allowed, f"{stage.get('name')} declares an unexpected runner size: {cpus}"
-        if int(cpus) == 16:
-            oversized.append(stage.get("name"))
+    declared = []
+    for event, cpus in _pipelines(ROOT / ".cnb.yml"):
+        assert int(cpus) in allowed, f"{event} declares an unexpected runner size: {cpus}"
+        declared.append((event, int(cpus)))
 
-    # 16 cores are reserved for the stages that genuinely fan out (pnpm install
-    # + turbo build + three vitest projects + Python). If that list grows much
-    # further, the per-PR reservation grows with it and Prepare starts failing
-    # before the diff is ever read -- which is what made #184 look broken.
-    assert len(oversized) <= 10, (
-        f"{len(oversized)} stages reserve 16 cores; each one pays a freeze "
-        f"reservation on every pull request: {oversized}"
+    # Guard the guard: a walk that finds nothing passes every assertion above.
+    assert len(declared) >= 20, f"only {len(declared)} runners walked from .cnb.yml; the walk is broken"
+
+    pr_cores = [cpus for event, cpus in declared if event == "pull_request"]
+    assert pr_cores, "no pull_request pipeline declares a runner"
+    # 16 cores are reserved for the pipeline that genuinely fans out (pnpm
+    # install + turbo build + vitest projects + Python). PR pipelines pay that
+    # reservation on every push; a second 16-core PR pipeline doubles the bill
+    # and starts failing in Prepare before the diff is ever read -- which is
+    # what made this PR look broken.
+    assert len(pr_cores) <= 2 and sum(pr_cores) <= 20, (
+        f"pull request pipelines reserve too many cores per run: {pr_cores}"
     )
