@@ -143,10 +143,16 @@ class RegistryCollectionGuardTests(unittest.TestCase):
             with self.subTest(dropped=dropped.strip()):
                 failures = guard.check(smoke, files, dropped)
                 self.assertTrue(
-                    any("not wired in" in f for f in failures), failures
+                    any("not wired" in f for f in failures), failures
                 )
 
-    def test_ci_self_test_line_may_be_indented(self) -> None:
+    def test_ci_self_test_line_may_be_reindented_with_its_body(self) -> None:
+        """A body re-indent moves every line, so nothing is nested.
+
+        This used to accept a *lone* line at any width, which is the blind spot
+        that let `dead() { ...; }` through: one statement moved a level deeper
+        gates nothing while still containing the expected substring.
+        """
         smoke = _smoke(["scripts/test_example.py"], REQUIRED)
         files = _files()
         files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
@@ -154,11 +160,82 @@ class RegistryCollectionGuardTests(unittest.TestCase):
             ci = (
                 "smoke_contracts_run() {\n"
                 + indent
+                + 'ensure_contracts_python\n'
+                + indent
                 + f'python3 "${{REPO_ROOT}}/scripts/{guard.GUARD_NAME}" --self-test\n'
+                + indent
+                + 'bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts\n'
                 + "}\n"
             )
             with self.subTest(indent=repr(indent)):
                 self.assertEqual(guard.check(smoke, files, ci), [])
+
+    def test_ci_self_test_neutralised_by_a_shell_operator_is_caught(self) -> None:
+        smoke = _smoke(["scripts/test_example.py"], REQUIRED)
+        files = _files()
+        files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
+        line = f'  python3 "${{REPO_ROOT}}/scripts/{guard.GUARD_NAME}" --self-test'
+        for suffix in (" || true", " || :", " 2>/dev/null", "  # note", " | tail -1"):
+            ci = (
+                "smoke_contracts_run() {\n"
+                + line
+                + suffix
+                + "\n"
+                '  bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts\n'
+                "}\n"
+            )
+            with self.subTest(suffix=suffix):
+                failures = guard.check(smoke, files, ci)
+                self.assertTrue(
+                    failures, "an operator that eats the exit status passed"
+                )
+                self.assertTrue(
+                    any("standalone statement" in f for f in failures), failures
+                )
+
+    def test_ci_self_test_wrapped_in_a_dead_command_is_caught(self) -> None:
+        smoke = _smoke(["scripts/test_example.py"], REQUIRED)
+        files = _files()
+        files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
+        line = f'python3 "${{REPO_ROOT}}/scripts/{guard.GUARD_NAME}" --self-test'
+        wrappers = {
+            "a function that is never called": f"  dead() {{ {line}; }}\n",
+            "an if-false branch": f"  if false; then {line}; fi\n",
+            "a backgrounded subshell": f"  ( {line} ) &\n",
+            "a call chained after &&": f"  true && {line}\n",
+            "a line moved a level deeper": f"  ensure_contracts_python\n    {line}\n",
+        }
+        for label, body in wrappers.items():
+            ci = (
+                "smoke_contracts_run() {\n"
+                + body
+                + '  bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts\n'
+                + "}\n"
+            )
+            with self.subTest(wrapper=label):
+                failures = guard.check(smoke, files, ci)
+                self.assertTrue(failures, f"{label} kept the gate dead")
+
+    def test_duplicated_ci_self_test_line_is_caught(self) -> None:
+        smoke = _smoke(["scripts/test_example.py"], REQUIRED)
+        files = _files()
+        files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
+        line = f'  python3 "${{REPO_ROOT}}/scripts/{guard.GUARD_NAME}" --self-test\n'
+        ci = (
+            "smoke_contracts_run() {\n"
+            + line
+            + line
+            + '  bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts\n'
+            + "}\n"
+        )
+        failures = guard.check(smoke, files, ci)
+        self.assertTrue(any("2 times" in f for f in failures), failures)
+
+    def test_committed_ci_wiring_is_gated(self) -> None:
+        """The real script must satisfy every property, not just the tests."""
+        _smoke_text, ci_steps, _files_text = guard.load_sources()
+        body = guard.ci_contracts_function(ci_steps)
+        self.assertEqual(guard.ci_wiring_errors(body), [])
 
     def test_ci_self_test_must_run_before_the_layer(self) -> None:
         smoke = _smoke(["scripts/test_example.py"], REQUIRED)

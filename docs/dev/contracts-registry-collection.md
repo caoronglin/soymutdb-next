@@ -55,13 +55,34 @@ and a validator that reads only `smoke.sh` cannot see it. The guard therefore
 reads `ci-job-steps.sh` too and requires the invocation inside that function
 body.
 
-Indentation inside a bash function is noise, so the match is not anchored to
-the start of a line: a deeper space indent or a tab still runs in bash and is
-accepted. But the line must use `python3`, the exact guard path, and
-`--self-test`, and it must appear **before** the `bash smoke.sh` call --
-otherwise the layer would already have run by the time the gate fires. Moving
-it below that call is a silent inversion, and `--self-test` asserts it is
-caught.
+The line must use `python3`, the exact guard path and `--self-test`, it must
+appear **before** the `bash smoke.sh` call -- otherwise the layer would already
+have run by the time the gate fires -- and it must be a bare statement, not
+merely a substring of one. Those are three separate properties, and a pin that
+reads bytes instead of shell semantics has failed on each of them in turn:
+
+| Shape | What a substring pin sees | What bash does |
+| --- | --- | --- |
+| `... --self-test` | the invocation | gates the layer |
+| `... --self-test \|\| true` | the invocation | discards the status |
+| `... --self-test 2>/dev/null` | the invocation | discards the output, keeps the status |
+| `... --self-test \| tail -1` | the invocation | reports `tail`'s status |
+| `... --self-test  # note` | the invocation | fine, but a stale-looking line |
+| `dead() { ...; }` | the invocation | never runs |
+| `if false; then ...; fi` | the invocation | never runs |
+| `( ... ) &` | the invocation | runs detached, status dropped |
+
+The pin is therefore anchored to the whole line -- an end anchor with no
+`re.MULTILINE` alternative, so any trailing operator, redirection, comment or
+wrapper stops matching and is reported rather than accepted. Indentation is
+read structurally instead of by width: re-indenting the function body moves
+every line and is accepted, while a line sitting a level deeper than the
+statement before it is inside a compound command and is reported. The mix of
+tabs and spaces in this repository is why width alone cannot decide.
+
+`--self-test` carries ten mutations for this shape alone: five trailing
+operators, four dead-command wrappers and one duplicate, plus four indentation
+variants that must be reported and the uniform re-indent that must stay green.
 
 ## Boundary
 

@@ -48,15 +48,26 @@ GUARD_NAME = "check_contracts_registry_collection.py"
 
 # The CI-side wiring: `python3 "${REPO_ROOT}/scripts/<guard>.py" --self-test`
 # inside smoke_contracts_run(). A path/flag change must fail loudly, not drift.
+#
+# The pin is anchored to the WHOLE line, not to a substring of it. A substring
+# pin answers "do these bytes occur?" -- which is not the same question as
+# "does bash execute this line and does its exit status reach the pipeline".
+# `... --self-test || true`, `... --self-test 2>/dev/null`, `... --self-test |
+# tail -1`, `... --self-test # note`, `( ... ) &` and `dead() { ...; }` all keep
+# the substring and all keep the gate dead. Anchoring (with no `$` alternative
+# and no `re.MULTILINE`) means any trailing operator, redirection, comment,
+# wrapper or deeper indentation stops matching, so it is reported instead.
 CI_SELF_TEST = re.compile(
-    r'python3\s+"\$\{REPO_ROOT\}/scripts/'
+    r"^(?P<indent>[ \t]*)python3[ \t]+\"\$\{REPO_ROOT\}/scripts/"
     + re.escape(GUARD_NAME)
-    + r'"\s+--self-test(?=\s|$)'
+    + r"\"[ \t]+--self-test[ \t]*$"
 )
 # The CI line exists to gate the layer *before* it runs. A hand-merge can move
 # it below the smoke.sh call while still matching, inverting the ordering.
 CI_LAYER_CALL = re.compile(
-    r'bash\s+"\$\{REPO_ROOT\}/scripts/smoke\.sh"\s+--profile\s+contracts'
+    r'^[ \t]*bash[ \t]+"\$\{REPO_ROOT\}/scripts/smoke\.sh"[ \t]+'
+    r"--profile[ \t]+contracts[ \t]*$",
+    re.MULTILINE,
 )
 
 ARRAY_ENTRY = re.compile(
@@ -151,6 +162,79 @@ def collectible_tests(source: str, path: str) -> list[str]:
     return names
 
 
+def _width(indent: str) -> int:
+    """Columns an indent occupies; a tab advances to the next multiple of 8."""
+    column = 0
+    for char in indent:
+        column = column + 8 - column % 8 if char == "\t" else column + 1
+    return column
+
+
+def _indent(line: str) -> str:
+    """Leading whitespace of a line."""
+    return line[: len(line) - len(line.lstrip(" \t"))]
+
+
+def ci_wiring_errors(ci_body: str) -> list[str]:
+    """Failures in the CI-side wiring of the guard's ``--self-test``.
+
+    Three properties are checked, each one measured rather than assumed:
+    the line is a bare statement (nothing chained, piped, redirected, wrapped
+    or commented onto it), it is not structurally inside a compound command
+    (which is exactly how a gate goes dead while staying "present"), and it
+    runs ahead of the layer it is supposed to gate.
+    """
+    lines = ci_body.splitlines()
+    hits = [line for line in lines if CI_SELF_TEST.match(line)]
+    if not hits:
+        return [
+            f"{GUARD_NAME} --self-test is not wired as a standalone statement "
+            "in scripts/ci-job-steps.sh (smoke_contracts_run): a chained, piped, "
+            "redirected, wrapped or commented-out call never gates the layer"
+        ]
+    if len(hits) > 1:
+        return [
+            f"{GUARD_NAME} --self-test is wired {len(hits)} times in "
+            "scripts/ci-job-steps.sh (smoke_contracts_run)"
+        ]
+
+    # Nesting: a line written inside a compound command (`foo() {`,
+    # `if ...; then`, `( ... )`, `case ... do`) sits one indent deeper than the
+    # line that opened it, and bash records that call's status per command
+    # rather than propagating it. `dead() { ...; }` is the shape: the substring
+    # survives, the gate does not. The reference is the previous statement, so a
+    # cosmetic re-indent of the whole body moves both and is still accepted,
+    # while a line that jumps a level relative to what came before it is
+    # reported. Width alone cannot tell those apart -- and this repository mixes
+    # tabs with spaces -- hence the structural reading.
+    openers = (";", "then", "do", "{", "(", "&")
+    target = next(n for n, line in enumerate(lines) if line == hits[0])
+    previous = ""
+    for line in lines[:target]:
+        if line.strip() and not line.lstrip().startswith("#"):
+            previous = line.rstrip()
+    # An empty body (`smoke_contracts_run() {` then `}`) has no reference
+    # statement; the line is then the body's first, which is not nesting.
+    nested = bool(previous) and (
+        previous.endswith(openers)
+        or _width(_indent(previous)) != _width(_indent(hits[0]))
+    )
+    if nested:
+        return [
+            f"{GUARD_NAME} --self-test is nested inside a compound command in "
+            "scripts/ci-job-steps.sh (smoke_contracts_run), so its exit status "
+            "never reaches the pipeline"
+        ]
+
+    layer = CI_LAYER_CALL.search(ci_body)
+    if layer is not None and ci_body.index(hits[0]) > layer.start():
+        return [
+            f"{GUARD_NAME} --self-test runs after the contracts layer in "
+            "scripts/ci-job-steps.sh (must gate it beforehand)"
+        ]
+    return []
+
+
 def check(
     smoke: str, files: dict[str, str], ci_steps: str | None = None
 ) -> list[str]:
@@ -163,19 +247,7 @@ def check(
         except ValueError as exc:
             errors.append(str(exc))
         else:
-            match = CI_SELF_TEST.search(ci_body)
-            if match is None:
-                errors.append(
-                    f"{GUARD_NAME} --self-test is not wired in "
-                    "scripts/ci-job-steps.sh (smoke_contracts_run)"
-                )
-            else:
-                layer = CI_LAYER_CALL.search(ci_body)
-                if layer is not None and match.start() > layer.start():
-                    errors.append(
-                        f"{GUARD_NAME} --self-test runs after the contracts "
-                        "layer in ci-job-steps.sh (must gate it beforehand)"
-                    )
+            errors.extend(ci_wiring_errors(ci_body))
 
     entries = registry(smoke)
     if not entries:
@@ -337,22 +409,88 @@ def self_test() -> int:
     else:
         print("PASS self-test: adding a new guard call needs no allowlist edit")
 
-    # Indentation inside the function is noise: bash runs it either way, and
-    # the relaxed pin must accept both a deeper space indent and a tab.
-    for label, mutated_ci in (
-        ("a deeper-indented CI --self-test line is accepted",
-         ci_steps.replace(ci_line, "    " + ci_line.strip() + "\n", 1)),
-        ("a tab-indented CI --self-test line is accepted",
-         ci_steps.replace(ci_line, "\t" + ci_line.strip() + "\n", 1)),
-    ):
+    # Indentation was previously *accepted* for any width, on the reading that
+    # bash runs the line either way. That reading is what let `dead() { ...; }`
+    # pass: `{` ends its line, the call is deeper, and the gate is dead. Width
+    # outside the body's own is now a nesting signal, so every variant below
+    # must fail while the uniform re-indent control still passes.
+    for label, lead in {
+        "a one-space CI --self-test line": " ",
+        "a tab-indented CI --self-test line": "\t",
+        "a four-space CI --self-test line": "    ",
+        "a tab-indented CI --self-test line in a tab-indented body": "\t\t",
+    }.items():
+        mutated_ci = ci_steps.replace(ci_line, f"{lead}{ci_line.strip()}\n", 1)
+        assert mutated_ci != ci_steps, label
         found = check(smoke, files, mutated_ci)
         if found:
-            print(f"FAIL self-test: {label} was rejected: {found}")
-            failures += 1
+            print(f"PASS self-test: {label} is caught")
         else:
-            print(f"PASS self-test: {label}")
+            print(f"FAIL self-test: {label} was accepted")
+            failures += 1
 
-    print(f"self-test: {len(cases) + 3} cases, {failures} failure(s)")
+    # Positive control for the nesting probe: re-indent the whole body by one
+    # space. Nothing moved relative to anything, so the clean tree must stay
+    # clean -- a guard that fails this is measuring a column, not a structure.
+    shifted = re.sub(
+        r"^(?=  \S)", " ", ci_contracts_function(ci_steps), flags=re.MULTILINE
+    )
+    shifted_ci = ci_steps.replace(
+        ci_contracts_function(ci_steps), shifted, 1
+    )
+    found = check(smoke, files, shifted_ci)
+    if found:
+        print(f"FAIL self-test: a uniform re-indent was rejected: {found}")
+        failures += 1
+    else:
+        print("PASS self-test: a uniform body re-indent is accepted")
+
+    # Operand blind spot: `--self-test` present but unable to gate. Each of
+    # these kept a substring pin green while the exit status was discarded.
+    neutralised = {
+        "|| true": " || true",
+        "|| :": " || :",
+        "2>/dev/null": " 2>/dev/null",
+        "a trailing comment": "  # do not gate",
+        "| tail -1": " | tail -1",
+    }
+    for label, suffix in neutralised.items():
+        mutated_ci = ci_steps.replace(
+            ci_line, f"{ci_line.rstrip()}{suffix}\n", 1
+        )
+        assert mutated_ci != ci_steps, label
+        found = check(smoke, files, mutated_ci)
+        if found:
+            print(f"PASS self-test: a --self-test line with {label} is caught")
+        else:
+            print(f"FAIL self-test: a --self-test line with {label} was accepted")
+            failures += 1
+
+    wrapped = {
+        "an if-false wrapper": f"  if false; then {ci_line.strip()}; fi\n",
+        "a backgrounded subshell": f"  ( {ci_line.strip()} ) &\n",
+        "a function that is never called": f"  dead() {{ {ci_line.strip()}; }}\n",
+        "a call chained after &&": f"  true && {ci_line.strip()}\n",
+    }
+    for label, replacement in wrapped.items():
+        mutated_ci = ci_steps.replace(ci_line, replacement, 1)
+        assert mutated_ci != ci_steps, label
+        found = check(smoke, files, mutated_ci)
+        if found:
+            print(f"PASS self-test: {label} around --self-test is caught")
+        else:
+            print(f"FAIL self-test: {label} around --self-test was accepted")
+            failures += 1
+
+    duplicated = ci_steps.replace(ci_line, ci_line + ci_line, 1)
+    found = check(smoke, files, duplicated)
+    if found:
+        print("PASS self-test: a duplicated --self-test line is caught")
+    else:
+        print("FAIL self-test: a duplicated --self-test line was accepted")
+        failures += 1
+
+    print(f"self-test: {len(cases) + 15} cases, {failures} failure(s)")
     return 1 if failures else 0
 
 
