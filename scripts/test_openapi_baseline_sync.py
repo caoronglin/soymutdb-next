@@ -73,7 +73,8 @@ def _set_total(tree: dict[str, str], value: int) -> None:
 
 
 def test_committed_tree_passes() -> None:
-    assert guard.failures(tree=_tree()) == []
+    found = guard.failures(tree=_tree())
+    assert not found, found
 
 
 def test_bumped_total_with_untouched_artifacts_is_rejected() -> None:
@@ -156,7 +157,8 @@ def test_the_suite_has_teeth() -> None:
     """
     cases = [name for name in globals() if name.startswith("test_")]
     assert len(cases) >= 14, cases
-    assert guard.failures(tree=_tree()) == []
+    found = guard.failures(tree=_tree())
+    assert not found, found
 
 
 def _source_with_total(value: int) -> str:

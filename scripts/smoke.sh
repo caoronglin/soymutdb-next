@@ -240,6 +240,7 @@ smoke_contracts() {
     # guard read them. This suite proves the independent digest pin
     # reports that co-revert and every one-sided drift.
     scripts/test_openapi_operation_id_floor.py
+    scripts/test_openapi_operation_parameter_floor.py
     scripts/test_contracts_layer_self_containment.py
     # The error-code gate wiring guard judges its co-rename probe by the copied
     # tree's exit status. A clean control must be green first, or an incomplete
@@ -264,6 +265,13 @@ smoke_contracts() {
     # PostgreSQL, so this suite is the only net in a clean checkout. Registering
     # it is the point -- unregistered, it never runs and its red cannot block.
     scripts/test_variant_summary_assembly_consistency.py
+    # A red guard that cannot say which byte moved has not measured:
+    # stdlib runners must render a named cause for every failed check.
+    scripts/test_named_guard_diagnostics.py
+    # Every wired --self-test guard must still execute its mutation cases.
+    # The registry guard pins that a call exists, not that the body it
+    # reaches survived. A no-op self_test() kept the whole layer green.
+    scripts/test_contracts_self_test_teeth.py
   )
   # Suites that need an interpreter or service this smoke layer does not own
   # (worker source analysis runs under the API virtualenv; tunnel/compose drift
@@ -345,6 +353,11 @@ smoke_contracts() {
   # generated `operations` interface. --self-test plants the co-revert
   # that every artifact-vs-artifact check is blind to.
   "${PYTHON_BIN}" scripts/check_openapi_operation_id_floor.py --self-test || rc=$?
+  # Every published operation parameter (name, location, requiredness,
+  # schema) is a client-visible property of the generated operations
+  # interface. A coordinated rename in both artifacts, with re-pinned
+  # provenance blob ids, kept every wired guard and SMOKE PASS green.
+  "${PYTHON_BIN}" scripts/check_openapi_operation_parameter_floor.py --self-test || rc=$?
   # The visible-text budget may fall but never rise; new hardcoded strings fail.
   "${PYTHON_BIN}" scripts/check_visible_i18n.py --self-test || rc=$?
   # nginx security-header fragments and the locations that must re-include
@@ -394,6 +407,11 @@ smoke_contracts() {
   # make this a dead guard -- it would pass while the real source regressed.
   "${PYTHON_BIN}" scripts/check_variant_summary_assembly_consistency.py --self-test || rc=$?
   "${PYTHON_BIN}" scripts/check_variant_summary_assembly_consistency.py || rc=$?
+  # Twelve guards are wired here through --self-test alone. If one of
+  # their self_test bodies is replaced with `return 0`, the call is still
+  # present, still pinned and still green: this guard runs each one as a
+  # real process and requires its pinned evidence of mutation cases.
+  "${PYTHON_BIN}" scripts/check_contracts_self_test_teeth.py --self-test || rc=$?
   "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?
   echo
   echo "-- environment-bound contract suites (reported, not gating here) --"

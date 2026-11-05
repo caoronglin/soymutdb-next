@@ -17,6 +17,7 @@ import json
 import pathlib
 import re
 import sys
+from named_guard_diagnostics import describe_assertion
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 LOCALES = REPO_ROOT / "packages" / "i18n-core" / "src" / "locales"
@@ -238,5 +239,5 @@ if __name__ == "__main__":
                 print(f"PASS {name}")
             except AssertionError as error:
                 failures += 1
-                print(f"FAIL {name}: {error}")
+                print(f"FAIL {name}: {describe_assertion(error, check)}")
     sys.exit(1 if failures else 0)

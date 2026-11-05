@@ -142,7 +142,9 @@ REQUIRED_GUARD_CALLS: frozenset[str] = frozenset(
         "scripts/check_openapi_inline_body_integrity.py",
         "scripts/check_openapi_published_enums.py",
         "scripts/check_openapi_operation_id_floor.py",
+        "scripts/check_openapi_operation_parameter_floor.py",
         "scripts/check_variant_summary_assembly_consistency.py",
+        "scripts/check_contracts_self_test_teeth.py",
     }
 )
 
@@ -155,22 +157,36 @@ REQUIRED_GUARD_CALLS: frozenset[str] = frozenset(
 # deletion (both sides drop). Pin the committed set as an independent literal:
 # a fixed point must not be derived from the bytes it audits.
 #
-# This is a floor, not an allowlist: adding a suite needs no edit here;
-# retiring one requires removing its entry (same discipline as
-# ``REQUIRED_GUARD_CALLS``).
+# This is an allowlist, not a floor. Two shapes read alike and are not:
+# ``REQUIRED_GUARD_CALLS`` below *is* a floor, because ``check()`` separately
+# fails closed on a wired call that is not pinned, so an addition is caught by
+# the second half. Rows have no such second half -- ``tests=()`` is exactly the
+# bytes under audit, and the bare-row check only rejects rows that are present
+# and malformed. So a pinned ``PINNED_SUITES`` alone answers "was a *known* row
+# deleted?" and answers nothing about a row that arrived after it was written.
+# Live main on 2026-11-05 carried three such rows (``#228``'s fallback
+# declaration suite, ``#231``'s error-code contract suite, ``#231``'s
+# operationId floor suite): deleting any one of them left
+# ``OK (N-1 gating suites, ...)`` with exit status 0, i.e. the co-reversion hole
+# this whole section exists to close, reopened for every suite that landed after
+# the pin. ``PINNED_SUITES == set(registry())`` closes it: an added row must be
+# pinned in the same change, exactly like an added guard call.
 PINNED_SUITES: frozenset[str] = frozenset(
     {
         'infra/clickhouse/test_schema_contract.py',
         'scripts/test_api_client_base_path_guard.py',
+        'scripts/test_api_error_code_fallback_declaration.py',
         'scripts/test_artifact_e2e_gate.py',
         'scripts/test_backup_restore_contracts.py',
         'scripts/test_bio_core_capability_parity_wiring.py',
         'scripts/test_bio_core_supply_chain.py',
         'scripts/test_bio_core_wheel_abi.py',
         'scripts/test_bio_core_wheel_tags.py',
+        'scripts/test_check_error_code_contract.py',
         'scripts/test_ci_job_contracts.py',
         'scripts/test_clickhouse_migration_contracts.py',
         'scripts/test_contracts_layer_self_containment.py',
+        'scripts/test_contracts_self_test_teeth.py',
         'scripts/test_custom_element_registration_contracts.py',
         'scripts/test_dependency_governance_contracts.py',
         'scripts/test_deployment_workflows.py',
@@ -191,12 +207,15 @@ PINNED_SUITES: frozenset[str] = frozenset(
         'scripts/test_mcp_openapi_parity.py',
         'scripts/test_mcp_release_binding_wiring.py',
         'scripts/test_motion_policy.py',
+        'scripts/test_named_guard_diagnostics.py',
         'scripts/test_native_backup_runtime.py',
         'scripts/test_openapi_422_unified_envelope.py',
         'scripts/test_openapi_auth_surface_floor.py',
         'scripts/test_openapi_baseline_sync.py',
         'scripts/test_openapi_behavior_contracts.py',
         'scripts/test_openapi_document_metadata_guard.py',
+        'scripts/test_openapi_operation_id_floor.py',
+        'scripts/test_openapi_operation_parameter_floor.py',
         'scripts/test_openapi_snapshot_body_integrity.py',
         'scripts/test_openapi_snapshot_contract.py',
         'scripts/test_platform_delivery_contracts.py',
@@ -206,6 +225,7 @@ PINNED_SUITES: frozenset[str] = frozenset(
         'scripts/test_site_artifact_isolation.py',
         'scripts/test_supply_chain_contracts.py',
         'scripts/test_variant_row_key_contract.py',
+        'scripts/test_variant_summary_assembly_consistency.py',
     }
 )
 
@@ -296,12 +316,27 @@ def array_line_errors(smoke: str) -> list[str]:
 
 
 def pinned_suite_errors(smoke: str) -> list[str]:
-    """Name a suite dropped from the committed ``tests=()`` set."""
-    missing = PINNED_SUITES - set(registry(smoke))
+    """Name a suite dropped from, or added to, the committed ``tests=()`` set.
+
+    Both directions, because one pin cannot answer both questions. ``missing``
+    catches a known row being deleted. ``unpinned`` catches a row that arrived
+    after the literal was written: without it, that row's deletion is invisible
+    (the extractor lowers its own input and output together) and the layer
+    prints a smaller count over ``SMOKE PASS``. That is the same failure the
+    pin exists to prevent, just displaced in time.
+    """
+    registered = set(registry(smoke))
+    missing = PINNED_SUITES - registered
+    unpinned = registered - PINNED_SUITES
     return [
         f"pinned gating suite {relative!r} is missing from tests=() "
         "(a registered suite was dropped; SMOKE PASS would collect fewer suites)"
         for relative in sorted(missing)
+    ] + [
+        f"gating suite {relative!r} is in tests=() but not pinned in "
+        "PINNED_SUITES (add it in the same change: an unpinned row can be "
+        "deleted without this guard seeing a difference)"
+        for relative in sorted(unpinned)
     ]
 
 
@@ -687,6 +722,18 @@ def self_test() -> int:
                   smoke.replace(suite_row, "", 1), dict(files), ci_steps))
     cases.append(("a pinned gating suite is commented out in tests=()",
                   smoke.replace(suite_row, "    # " + suite_row.strip() + "\n", 1),
+                  dict(files), ci_steps))
+    # The floor only sees already-pinned rows. A row that lands *after* the
+    # literal was written gets no coverage at all, and its later deletion is
+    # invisible again, so an addition must be rejected too.
+    extra_row = "    scripts/test_bio_core_wheel_tags.py\n"
+    assert extra_row in smoke, "self-test could not locate a second suite row"
+    cases.append(("an unpinned gating suite is added to tests=()",
+                  smoke.replace(
+                      extra_row,
+                      "    scripts/test_unpinned_new_suite.py\n" + extra_row,
+                      1,
+                  ),
                   dict(files), ci_steps))
 
     pytest_line = '  "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?\n'
