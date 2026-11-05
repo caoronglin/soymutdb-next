@@ -5,9 +5,9 @@
 `packages/api-client/error-codes.golden.json` is a hand-written lock of the
 public `error.code` values the API can emit, with their client-facing
 descriptions. It covers the twelve codes derived from the `SoyMutDBError`
-hierarchy in `apps/api/app/core/exceptions.py` plus the `http_error` fallback
-that `error_code_catalog()` publishes for the generic `HTTPException` handler
-(PR #152), which has no `SoyMutDBError` subclass of its own.
+hierarchy in `apps/api/app/core/exceptions.py`, plus `http_error` — the generic
+HTTPException fallback that `error_code_catalog()` publishes through the
+module-level `HTTP_ERROR_CODE` constant without an exception subclass.
 
 The lock is **not** an input or output of any generator.
 `generate-api-client.sh` writes exactly three artifacts from
@@ -50,9 +50,11 @@ API import, no Python 3.15 venv, no wheel, no database. It asserts:
   artifact without a failing gate;
 - `error-codes.json` and `openapi.json`'s `x-error-codes` match the lock exactly:
   no missing codes, no extra codes, no changed descriptions;
-- every `error_code` literal declared in the exception hierarchy **and** the
-  module-level `HTTP_ERROR_CODE` fallback is frozen, and every frozen code is
-  still declared.
+- every `error_code` literal declared in the exception hierarchy is frozen, and
+  every frozen code is still declared;
+- the `HTTP_ERROR_CODE` fallback counts as declared only when both its constant
+  and the `catalog[HTTP_ERROR_CODE] = ...` entry are present, so a dropped
+  catalog entry cannot hide behind a leftover constant.
 
 `--self-test` plants eight independent defects (coordinated rename, dropped
 code, changed description, lock turned into a generated artifact, invented

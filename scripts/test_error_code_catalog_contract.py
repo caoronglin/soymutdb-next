@@ -147,6 +147,40 @@ def test_self_test_passes() -> None:
     assert guard.self_test() == 0
 
 
+def test_fallback_without_a_subclass_is_derived() -> None:
+    """error_code_catalog() publishes http_error with no exception class."""
+    derived = guard._derived_catalog(ROOT / EXCEPTIONS_REL)
+    assert derived.get("http_error") == (
+        "Generic HTTPException fallback; see x-error-status for the "
+        "statuses that use it."
+    )
+    committed = json.loads((ROOT / CATALOG_REL).read_text(encoding="utf-8"))
+    assert derived == committed
+
+
+def test_dropped_fallback_catalog_entry_is_detected() -> None:
+    """A leftover HTTP_ERROR_CODE constant must not fake a published code."""
+    tree = _synthetic_tree()
+    try:
+        src = tree / EXCEPTIONS_REL
+        desc = (
+            "Generic HTTPException fallback; see x-error-status for the "
+            "statuses that use it."
+        )
+        block = (
+            "    catalog[HTTP_ERROR_CODE] = (\n"
+            f'        "{desc}"\n'
+            "    )\n"
+        )
+        src.write_text(
+            src.read_text(encoding="utf-8").replace(block, ""),
+            encoding="utf-8",
+        )
+        assert guard.check_tree(tree), "dropped fallback entry went unnoticed"
+    finally:
+        _cleanup(tree)
+
+
 def _json_mutate(path: Path, mutate) -> None:  # type: ignore[no-untyped-def]
     data = json.loads(path.read_text(encoding="utf-8"))
     mutate(data)

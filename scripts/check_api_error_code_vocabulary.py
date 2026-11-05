@@ -80,11 +80,11 @@ def source_codes(root: Path) -> set[str]:
     check the lock against the source, never as the source of truth for the
     lock's contents.
 
-    Besides the ``error_code`` class attributes this includes the module-level
-    ``HTTP_ERROR_CODE`` fallback: ``error_code_catalog()`` publishes it for the
-    generic ``HTTPException`` handler even though no ``SoyMutDBError`` subclass
-    carries it (PR #152). Reading the constant keeps the guard aligned with the
-    runtime catalog without executing FastAPI-dependent source.
+    ``error_code_catalog()`` also publishes one code with no ``SoyMutDBError``
+    subclass: the generic HTTPException fallback bound by the module-level
+    ``HTTP_ERROR_CODE`` constant and added via ``catalog[HTTP_ERROR_CODE] = ...``.
+    Both parts must be present for the fallback to count as declared, so a
+    dropped catalog entry cannot lean on a leftover constant.
     """
     import ast
 
@@ -94,15 +94,10 @@ def source_codes(root: Path) -> set[str]:
         if isinstance(node, (ast.Assign, ast.AnnAssign)):
             targets = node.targets if isinstance(node, ast.Assign) else [node.target]
             value = node.value
-            if (
-                isinstance(value, ast.Constant)
-                and isinstance(value.value, str)
-                and any(
-                    isinstance(t, ast.Name) and t.id == "HTTP_ERROR_CODE"
-                    for t in targets
-                )
-            ):
-                codes.add(value.value)
+            # Collected below, and only when the catalog entry is also there:
+            # reading the constant here made the fallback count as declared
+            # from the leftover constant alone.
+            # (a later `HTTP_ERROR_CODE = "http_error"` literal must not leak in)
         if not isinstance(node, ast.ClassDef):
             continue
         for stmt in node.body:
@@ -119,6 +114,38 @@ def source_codes(root: Path) -> set[str]:
                 value = stmt.value
             if isinstance(value, ast.Constant) and isinstance(value.value, str):
                 codes.add(value.value)
+
+    const_value: str | None = None
+    catalog_entry = False
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        for target in node.targets:
+            if (
+                isinstance(target, ast.Name)
+                and target.id == "HTTP_ERROR_CODE"
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                const_value = node.value.value
+    if const_value is not None:
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign) or len(node.targets) != 1:
+                continue
+            target = node.targets[0]
+            if (
+                isinstance(target, ast.Subscript)
+                and isinstance(target.value, ast.Name)
+                and target.value.id == "catalog"
+                and isinstance(target.slice, ast.Name)
+                and target.slice.id == "HTTP_ERROR_CODE"
+            ):
+                catalog_entry = True
+                break
+    # Both halves, not either: a leftover constant with the catalog entry
+    # deleted still advertises nothing, so it must not count as declared.
+    if const_value is not None and catalog_entry:
+        codes.add(const_value)
     return codes
 
 

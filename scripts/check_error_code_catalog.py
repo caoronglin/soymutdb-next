@@ -12,11 +12,20 @@ A stale, hand-edited, or partially reverted catalog therefore ships with no
 gate noticing -- exactly the co-revert blind spot the snapshot guards were
 written for, on a file nobody covered.
 
+``error_code_catalog()`` also publishes one code that has no ``SoyMutDBError``
+subclass: ``HTTP_ERROR_CODE`` (``http_error``), the generic HTTPException
+fallback. The guard reads it from the ``HTTP_ERROR_CODE`` assignment and the
+``catalog[HTTP_ERROR_CODE] = ...`` entry rather than hard-coding the value,
+so the derived catalog matches what the generator writes. This guard is a
+consistency check; the hand-written ``error-codes.golden.json`` lock is what
+makes a coordinated rename of the fallback fail.
+
 This guard reads only committed bytes: the exception hierarchy via ``ast``
 (no API import, no 3.15 interpreter, no pydantic, no database) and the two
 committed JSON artifacts. It derives the catalog the same way the runtime
 function does -- every ``SoyMutDBError`` subclass that declares ``error_code``,
-with ``inspect.cleandoc`` applied to the class docstring -- and asserts:
+with ``inspect.cleandoc`` applied to the class docstring, plus the
+``HTTP_ERROR_CODE`` fallback -- and asserts:
 
 * ``error-codes.json`` equals the derived catalog byte-for-key (including the
   description strings, which carry real client-facing semantics);
@@ -49,6 +58,19 @@ OPENAPI = ROOT / "packages/api-client/openapi.json"
 
 _CODE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
+#: The generic HTTPException fallback is published by ``error_code_catalog()``
+#: but has no exception class. Its code and description are read from the
+#: source assignments below, never hard-coded here.
+_FALLBACK_CONST = "HTTP_ERROR_CODE"
+_FALLBACK_DESC = (
+    "Generic HTTPException fallback; see x-error-status for the statuses that use it."
+)
+_FALLBACK_BLOCK = (
+    "    catalog[HTTP_ERROR_CODE] = (\n"
+    f'        "{_FALLBACK_DESC}"\n'
+    "    )\n"
+)
+
 
 def _error_code_value(stmt: ast.stmt) -> ast.expr | None:
     """Return the assigned ``error_code`` expression, for Assign or AnnAssign."""
@@ -63,6 +85,53 @@ def _error_code_value(stmt: ast.stmt) -> ast.expr | None:
         and stmt.target.id == "error_code"
     ):
         return stmt.value
+    return None
+
+
+def _fallback_from_source(tree: ast.Module) -> tuple[str, str] | None:
+    """Read the ``HTTP_ERROR_CODE`` value and its published description.
+
+    ``error_code_catalog()`` publishes the generic HTTPException fallback that
+    has no ``SoyMutDBError`` subclass:
+
+        catalog[HTTP_ERROR_CODE] = ("...description...")
+
+    Return ``(code, description)`` when both the module-level constant and the
+    ``catalog[...] = ...`` assignment are present, else ``None``. Reading both
+    matters: a bare leftover constant must not make a dropped catalog entry
+    look published.
+    """
+    const_value: str | None = None
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if (
+                    isinstance(target, ast.Name)
+                    and target.id == _FALLBACK_CONST
+                    and isinstance(node.value, ast.Constant)
+                    and isinstance(node.value.value, str)
+                ):
+                    const_value = node.value.value
+    if const_value is None:
+        return None
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Assign):
+            continue
+        target = node.targets[0] if len(node.targets) == 1 else None
+        if not (
+            isinstance(target, ast.Subscript)
+            and isinstance(target.value, ast.Name)
+            and target.value.id == "catalog"
+            and isinstance(target.slice, ast.Name)
+            and target.slice.id == _FALLBACK_CONST
+        ):
+            continue
+        value = node.value
+        if isinstance(value, ast.Tuple) and len(value.elts) == 1:
+            value = value.elts[0]
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            return const_value, value.value
     return None
 
 
@@ -109,7 +178,11 @@ def _derived_catalog(exceptions_path: Path) -> dict[str, str]:
                 # stores __doc__ already cleandoc'd, so cleandoc here matches.
                 doc = inspect.cleandoc(ast.get_docstring(node, clean=False) or "").strip()
                 catalog[value.value] = doc
-    return catalog
+    fallback = _fallback_from_source(tree)
+    if fallback is not None:
+        code, description = fallback
+        catalog[code] = description
+    return dict(sorted(catalog.items()))
 
 
 def check_tree(root: Path) -> list[str]:
@@ -221,6 +294,16 @@ def self_test() -> int:
         "contract gate drops guard": lambda p: _mutate_wiring(
             p / "packages/api-client/scripts/check-contract.sh",
             lambda s: s.replace("check_error_code_catalog.py", "unwired_guard.py"),
+        ),
+        # The fallback has no exception class. A leftover HTTP_ERROR_CODE
+        # constant must not stand in for a dropped catalog[HTTP_ERROR_CODE]
+        # assignment: `_fallback_from_source` needs both, so the published
+        # artifact still containing http_error then disagrees with the source.
+        # This is the shape that reddened #136 on main after d09b8dcb shipped
+        # the fallback without a subclass.
+        "fallback catalog entry dropped": lambda p: _mutate_source(
+            p / "apps/api/app/core/exceptions.py",
+            lambda s: s.replace(_FALLBACK_BLOCK, ""),
         ),
     }
 

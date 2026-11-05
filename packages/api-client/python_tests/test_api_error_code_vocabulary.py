@@ -125,6 +125,43 @@ class ApiErrorVocabularyTests(unittest.TestCase):
             (tree / GOLDEN.relative_to(ROOT)).write_text("{}\n")
             self.assertNotEqual(self.guard.check(tree), [])
 
+    def test_fallback_without_a_subclass_is_declared(self) -> None:
+        """The generic HTTPException fallback has no SoyMutDBError subclass.
+
+        d09b8dcb shipped ``http_error`` via a module-level constant plus a
+        ``catalog[HTTP_ERROR_CODE] = ...`` entry. The guard must read both, not
+        only class bodies, or live main goes red while the published artifacts
+        are actually correct.
+        """
+        self.assertIn("http_error", self.guard.source_codes(ROOT))
+        golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
+        self.assertEqual(set(golden), self.guard.source_codes(ROOT))
+
+    def test_dropped_fallback_catalog_entry_is_detected(self) -> None:
+        """A leftover constant cannot stand in for the catalog entry."""
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = self._tree(Path(tmp))
+            src = tree / EXCEPTIONS.relative_to(ROOT)
+            desc = (
+                "Generic HTTPException fallback; see x-error-status for the "
+                "statuses that use it."
+            )
+            # Spelled from the committed source, not re-wrapped by hand: the
+            # assignment is one line in exceptions.py, so the old three-line
+            # literal matched nothing and the ablation passed vacuously.
+            block = f'    catalog[HTTP_ERROR_CODE] = (\n        "{desc}"\n    )\n'
+            source = src.read_text(encoding="utf-8")
+            assert block in source, source[source.index("catalog[HTTP_ERROR_CODE]") :][:120]
+            src.write_text(
+                src.read_text(encoding="utf-8").replace(block, ""),
+                encoding="utf-8",
+            )
+            problems = self.guard.check(tree)
+            self.assertTrue(
+                any("no longer declares" in p or "does not freeze" in p for p in problems),
+                problems,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
