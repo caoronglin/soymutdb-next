@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Pin published component-schema ``description`` prose to an independent literal.
+"""Pin published component-schema ``description`` and ``title`` prose to literals.
 
 ``openapi.json`` publishes 257 ``description`` strings on component-schema
-property nodes across 169 schemas. ``openapi-typescript`` renders each one as
+property nodes across 169 schemas, and 2320 ``title`` strings across all 362
+schemas. ``openapi-typescript`` renders each one as
 an ``@description`` line in the generated ``components["schemas"]`` JSDoc, so
 the prose is client-visible: it is what an IDE shows a caller hovering a field.
 Multi-line descriptions become ``@description <first line>`` plus indented
@@ -21,6 +22,14 @@ No other wired fixed point reads this surface:
 * ``check_openapi_inline_body_integrity`` / the body baselines read body
   shapes, and ``_PINNED_ARTIFACTS`` is a provenance blob id: re-pinning both
   ids beside a regenerate is the documented "one deliberate reviewed action".
+
+The ``title`` strings are the same genus one keyword earlier. Every landed
+``title`` guard pins key *order* (``_title_last`` in the snapshot contract),
+the normalizer's spelling, or the top-level ``info.title`` -- none reads the
+published title *values*, which ``openapi-typescript`` prints as the first
+prose line of each ``components["schemas"]`` JSDoc block. A byte-preserving
+rewrite of one title in the snapshot and its JSDoc line, with both blob ids
+re-pinned, kept every wired guard and the whole contracts layer green.
 
 Decisive ablation on live bytes: byte-preserving rewrite of one property's
 ``description`` in the snapshot and the matching ``@description`` line in the
@@ -41,6 +50,17 @@ This guard reads committed bytes only (``json`` + ``re`` + stdlib): no Python
   *pinned* rows (plus the one documented synthetic line), so a one-sided edit
   that rewrites only the JSDoc is named too. The client half is checked
   against the pins, not against the snapshot under guard.
+
+The ``title`` half is a second, independent fixed point over its own rows:
+
+* ``_SCHEMA_TITLE_DIGEST`` -- a hand-written sha256 over canonical sorted
+  ``(schema path, title)`` rows, read from nowhere;
+* ``_EXPECTED_TITLE_ROWS`` / ``_EXPECTED_TITLE_SCHEMAS`` -- exact count doors;
+* the generated client's JSDoc first-prose-line multiset, checked against the
+  *pinned* title values. The generator emits a JSDoc block only for annotated
+  nodes (1232 of 2320 titles render) plus exactly one synthetic ``Title``
+  line, so the check is a sub-multiset of the pins, not an equality. A
+  co-revert of both halves still changes the published digest.
 
 A legitimate prose change must move the digest in the same commit as both
 artifacts and say why. Re-deriving the digest from the artifact under guard
@@ -81,6 +101,32 @@ _EXPECTED_SCHEMAS = 169
 _SYNTHETIC_CLIENT_DESCRIPTION = (
     "discriminator enum property added by openapi-typescript"
 )
+
+# Reviewed, hand-written fixed point on the whole published title surface.
+# sha256 of "\n".join(["soymutdb-schema-titles/v1"] +
+#   sorted(f"{path}|{title}")) over every string `title` on a component-schema
+#   node. Regenerate with _digest_title() after an intentional prose change.
+_SCHEMA_TITLE_DIGEST = (
+    "6ae50ade675d97306a73d4e8f9294097dbe9b4aec57274d0753c6887f4015829"
+)
+_EXPECTED_TITLE_ROWS = 2320
+_EXPECTED_TITLE_SCHEMAS = 362
+
+# openapi-typescript emits exactly one JSDoc title that is not in the snapshot
+# (PublicationUpdate.title has no published title of its own). Pinned so a
+# generator change to this line is a reviewed edit, not a silent extra row.
+_SYNTHETIC_CLIENT_TITLE = "Title"
+
+# Second independent fixed point: the generated client's JSDoc first-prose
+# lines. A digest over these lines, read from nowhere, catches a coordinated
+# co-revert that edits both halves: the snapshot digest moves, and so does
+# this one. Comparing the client lines against a multiset derived from the
+# *snapshot under guard* would be self-referential -- a co-revert of both
+# halves would agree with itself and pass.
+_CLIENT_TITLE_DIGEST = (
+    "3daaf30bd143170c66710c8497c7229b3d415a42f60b09bed3014fc7358ba2e9"
+)
+_EXPECTED_CLIENT_TITLE_LINES = 1232
 
 _COMPONENT_SCHEMAS = re.compile(
     r"^    schemas: \{\n(?P<body>.*?)^    \};$", re.M | re.S
@@ -123,6 +169,56 @@ def client_descriptions(generated: str) -> list[str]:
         raise ValueError("generated client has no components.schemas block")
     return _DESCRIPTION_LINE.findall(block.group("body"))
 
+_JSDOC_BLOCK = re.compile(r"/\*\*\n((?:\s*\*.*\n)*?)\s*\*/")
+_FIRST_PROSE = re.compile(r"^\s*\* (?!@)(.*)$", re.M)
+
+
+def title_rows(document: dict[str, Any]) -> list[tuple[str, str]]:
+    """Canonical (schema path, title) rows over every string ``title``."""
+    out: list[tuple[str, str]] = []
+
+    def walk(node: Any, path: str) -> None:
+        if isinstance(node, dict):
+            value = node.get("title")
+            if isinstance(value, str):
+                out.append((path, value))
+            for name, child in node.items():
+                if name == "title" or not isinstance(child, (dict, list)):
+                    continue
+                walk(child, f"{path}/{name}")
+        elif isinstance(node, list):
+            for index, child in enumerate(node):
+                walk(child, f"{path}/{index}")
+
+    for name, schema in document.get("components", {}).get("schemas", {}).items():
+        walk(schema, name)
+    return out
+
+
+def _digest_title(rows_: list[tuple[str, str]]) -> str:
+    canonical = sorted(f"{path}|{value}" for path, value in rows_)
+    blob = "\n".join(["soymutdb-schema-titles/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def client_titles(generated: str) -> list[str]:
+    """First prose line of each components["schemas"] JSDoc block."""
+    block = _COMPONENT_SCHEMAS.search(generated)
+    if block is None:
+        raise ValueError("generated client has no components.schemas block")
+    out: list[str] = []
+    for body in _JSDOC_BLOCK.findall(block.group("body")):
+        match = _FIRST_PROSE.search(body)
+        if match:
+            out.append(match.group(1))
+    return out
+
+
+def _digest_client_title(lines: list[str]) -> str:
+    canonical = sorted(lines)
+    blob = "\n".join(["soymutdb-client-schema-titles/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
 
 def failures(
     *,
@@ -131,6 +227,10 @@ def failures(
     digest: str | None = None,
     expected_rows: int | None = None,
     expected_schemas: int | None = None,
+    title_digest: str | None = None,
+    client_title_digest: str | None = None,
+    expected_title_rows: int | None = None,
+    expected_title_schemas: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -142,6 +242,8 @@ def failures(
         document = json.loads(snapshot)
         rows_ = rows(document)
         client = client_descriptions(generated)
+        titles_ = title_rows(document)
+        client_title_lines = client_titles(generated)
     except (ValueError, TypeError) as exc:
         return [f"cannot read published schema descriptions: {exc}"]
 
@@ -190,6 +292,71 @@ def failures(
             f"schema prose (missing={missing[:4]}, extra={extra[:4]})"
         )
 
+    # Door 4 -- independent fixed point over the whole published title surface.
+    pinned_title_digest = (
+        _SCHEMA_TITLE_DIGEST if title_digest is None else title_digest
+    )
+    actual_title_digest = _digest_title(titles_)
+    if actual_title_digest != pinned_title_digest:
+        found.append(
+            "published schema titles drifted: _SCHEMA_TITLE_DIGEST pins "
+            f"{pinned_title_digest} but the snapshot derives "
+            f"{actual_title_digest}. A baseline is a fixed point for the "
+            "artifact, not a place to make a guard agree with itself -- re-pin "
+            "the digest in the same commit as both artifacts, with a reason."
+        )
+
+    # Door 5 -- exact shape doors for the title surface.
+    pinned_title_rows = (
+        _EXPECTED_TITLE_ROWS if expected_title_rows is None else expected_title_rows
+    )
+    pinned_title_schemas = (
+        _EXPECTED_TITLE_SCHEMAS
+        if expected_title_schemas is None
+        else expected_title_schemas
+    )
+    if len(titles_) != pinned_title_rows:
+        found.append(
+            f"published title row count is {len(titles_)}, "
+            f"_EXPECTED_TITLE_ROWS pins {pinned_title_rows}: a title was added "
+            "or dropped without moving the fixed point"
+        )
+    title_schemas = {path.split("/", 1)[0] for path, _ in titles_}
+    if len(title_schemas) != pinned_title_schemas:
+        found.append(
+            f"titles span {len(title_schemas)} component schemas, "
+            f"_EXPECTED_TITLE_SCHEMAS pins {pinned_title_schemas}"
+        )
+
+    # Door 6 -- independent fixed point on the generated client's JSDoc title
+    # lines. Both artifacts are exports of one source, so a digest over the
+    # client lines (read from nowhere) catches a coordinated co-revert that
+    # moves both halves together; comparing the client against the snapshot
+    # under guard would be self-referential and pass on that exact shape.
+    actual_client_digest = _digest_client_title(client_title_lines)
+    pinned_client_digest = (
+        _CLIENT_TITLE_DIGEST if client_title_digest is None else client_title_digest
+    )
+    if actual_client_digest != pinned_client_digest:
+        found.append(
+            "generated client JSDoc titles drifted: _CLIENT_TITLE_DIGEST pins "
+            f"{pinned_client_digest} but the client derives "
+            f"{actual_client_digest}. Re-pin the digest in the same commit as "
+            "both artifacts, with a reason."
+        )
+    if len(client_title_lines) != _EXPECTED_CLIENT_TITLE_LINES:
+        found.append(
+            f"generated client JSDoc title line count is "
+            f"{len(client_title_lines)}, _EXPECTED_CLIENT_TITLE_LINES pins "
+            f"{_EXPECTED_CLIENT_TITLE_LINES}"
+        )
+    if client_title_lines.count(_SYNTHETIC_CLIENT_TITLE) != 1:
+        found.append(
+            "generated client JSDoc titles carry "
+            f"{client_title_lines.count(_SYNTHETIC_CLIENT_TITLE)} synthetic "
+            f"{_SYNTHETIC_CLIENT_TITLE!r} line(s), expected exactly one"
+        )
+
     return found
 
 
@@ -203,7 +370,8 @@ def main() -> int:
         return 1
     print(
         f"openapi-schema-descriptions: OK ({_EXPECTED_ROWS} published "
-        f"descriptions pinned across {_EXPECTED_SCHEMAS} schemas)"
+        f"descriptions and {_EXPECTED_TITLE_ROWS} titles pinned across "
+        f"{_EXPECTED_SCHEMAS} / {_EXPECTED_TITLE_SCHEMAS} schemas)"
     )
     return 0
 
