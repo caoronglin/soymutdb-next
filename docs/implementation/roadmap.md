@@ -37,6 +37,17 @@ Add PlantTFDB, PlantCARE, PlantCyc and optional GBIF adapters only after source 
 
 Extend the existing asynchronous download service with a no-SQL query builder, provenance manifests, cursor pagination, accessibility and performance gates.
 
+Status (0056): provenance manifests and a whitelisted query builder are
+implemented. `download_files` and `variant_exports` carry nullable
+`sha256`/`license`/`generated_at`/`source_ref`; the worker records the digest
+of the exact uploaded bytes; `GET /variants/export/{id}/manifest` is the
+owner-scoped citable record, and `POST /exports/query` submits whitelisted
+filters through the existing outbox/export pipeline. A legacy artifact with
+no checksum returns `sha256: null` with `sha256_state: not_recorded`.
+Filters with no backing query capability (gene_list/species/biotype/GO/KEGG/
+expression threshold/homolog species) and formats with no artifact builder
+(FASTA/GFF3/GTF) are refused explicitly, not silently dropped or claimed.
+
 ### Phase 1 status: repaired but incomplete
 
 The NCBI execution slice landed unreachable: `ncbi_blast.py` did not parse

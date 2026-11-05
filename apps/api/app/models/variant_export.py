@@ -111,6 +111,15 @@ class VariantExport(Base, TimestampMixin):
     expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    #: Provenance of the exact bytes stored at ``artifact_path``. ``sha256``
+    #: stays NULL for artifacts produced before checksum recording shipped;
+    #: a manifest must say so rather than invent a digest.
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    license: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    source_ref: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     __table_args__ = (
         Index("ix_variant_exports_user_id", "user_id"),

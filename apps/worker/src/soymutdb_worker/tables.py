@@ -361,6 +361,12 @@ variant_exports = Table(
     Column("started_at", DateTime(timezone=True)),
     Column("completed_at", DateTime(timezone=True)),
     Column("expires_at", DateTime(timezone=True)),
+    # Provenance of the produced bytes. The worker fills sha256/generated_at
+    # on success; license/source_ref are catalog metadata.
+    Column("sha256", String(64)),
+    Column("license", String(256)),
+    Column("generated_at", DateTime(timezone=True)),
+    Column("source_ref", String(1024)),
     # The row's own bookkeeping column: the worker's updates refresh it,
     # so "last touched" does not stay at creation time.
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import csv
 import gzip
+import hashlib
 import json
 import logging
 import tempfile
@@ -407,7 +408,10 @@ def _run_export(
                 output_file.close()
                 result.close()
 
-        file_size = output_path.stat().st_size
+        file_bytes = output_path.read_bytes()
+        file_size = len(file_bytes)
+        artifact_sha256 = hashlib.sha256(file_bytes).hexdigest()
+        generated_at = datetime.now(UTC)
 
         # Upload to S3 (use multipart for large files)
         s3_bucket = get_setting("S3_EXPORT_BUCKET", "exports")
@@ -425,6 +429,8 @@ def _run_export(
                 artifact_path=s3_path,
                 record_count=record_count,
                 file_size=file_size,
+                sha256=artifact_sha256,
+                generated_at=generated_at,
                 expires_at=expires_at,
             )
             session.commit()

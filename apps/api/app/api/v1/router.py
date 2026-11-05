@@ -32,6 +32,7 @@ from . import (
     capabilities,
     comparative,
     content,
+    export_query,
     expression,
     genes,
     gwas,
@@ -95,6 +96,7 @@ api_router.include_router(table_views.router)
 api_router.include_router(seeds.router)
 api_router.include_router(seed_requests.router)
 api_router.include_router(content.router)
+api_router.include_router(export_query.router)
 api_router.include_router(news.router)
 api_router.include_router(notifications.router)
 api_router.include_router(ontology.router)

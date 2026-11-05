@@ -359,3 +359,137 @@ def _ctx(session):
         yield session
 
     return database
+
+
+def test_the_produced_artifact_records_its_sha256_and_generation_time(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """The manifest's digest is the hash of the exact uploaded bytes.
+
+    A digest written from a path, a filename or a row count would not be a
+    checksum of the artifact. The worker must hash the bytes it just wrote
+    (before the temporary directory is removed) and persist that value with
+    the success state, so the API can hand it to the downloader as evidence.
+    """
+    import hashlib
+
+    captured: dict = {}
+
+    class _Rows:
+        def __iter__(self):
+            return iter([_row()])
+
+        def close(self):
+            pass
+
+    class _DataSession(_FakeSession):
+        def execute(self, query, parameters=None, **kwargs):
+            if "variant_exports" in str(query):
+                return super().execute(query, parameters, **kwargs)
+            return _Rows()
+
+    data_session = _DataSession("pending")
+    monkeypatch.setattr(export_task, "get_db", _ctx(data_session))
+    monkeypatch.setattr(export_task, "get_setting", lambda *a, **k: "exports")
+    monkeypatch.setattr(
+        export_task,
+        "upload_large_file",
+        lambda local, key: captured.update(
+            local=local, key=key, uploaded_bytes=Path(local).read_bytes()
+        ),
+    )
+    monkeypatch.setattr(export_task.export_variants, "update_state", lambda **k: None)
+    monkeypatch.setattr(
+        export_task.tempfile, "TemporaryDirectory", lambda: _TmpDir(tmp_path)
+    )
+
+    export_task.export_variants.run(
+        "export-1", {"release_key": "7", "assembly": "Wm82.a4.v1"}, "json", False
+    )
+
+    written = data_session.updates[-1]
+    expected = hashlib.sha256(captured["uploaded_bytes"]).hexdigest()
+    assert written["sha256"] == expected
+    assert len(written["sha256"]) == 64
+    assert written["generated_at"] is not None
+    assert written["status"] == JobStatus.SUCCEEDED.value
+    # Mutating the bytes changes the digest: the stored value is actually
+    # derived from the artifact, not a constant that happens to look like one.
+    assert hashlib.sha256(captured["uploaded_bytes"] + b"x").hexdigest() != expected
+
+
+def test_the_uploader_receives_the_output_path_bytes_before_cleanup(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Prove the digest is bound to the *uploaded local file*, not a guess.
+
+    ``upload_large_file`` is a local-file upload: it reads ``output_path`` from
+    the task's ``TemporaryDirectory``. This test captures that exact path and
+    its bytes *while the directory is still open*, then removes the file on
+    cleanup to show the upload could not have happened after the scope closed.
+    A digest computed from a filename, a row count or a re-opened path after
+    cleanup would not survive these assertions.
+    """
+    import hashlib
+
+    captured: dict = {}
+    state = {"cleaned": False}
+
+    class _Rows:
+        def __iter__(self):
+            return iter([_row()])
+
+        def close(self):
+            pass
+
+    class _DataSession(_FakeSession):
+        def execute(self, query, parameters=None, **kwargs):
+            if "variant_exports" in str(query):
+                return super().execute(query, parameters, **kwargs)
+            return _Rows()
+
+    class _CleaningTmpDir:
+        """Stand-in that mirrors real TemporaryDirectory cleanup of the file."""
+
+        def __init__(self, path: Path) -> None:
+            self.name = str(path)
+
+        def __enter__(self) -> str:
+            return self.name
+
+        def __exit__(self, *exc: object) -> bool:
+            state["cleaned"] = True
+            for produced in Path(self.name).glob("soymutdb_export_*"):
+                produced.unlink()
+            return False
+
+    expected_path = tmp_path / build_export_filename("export-1", "json", False)
+
+    def _upload(local: str, key: str) -> None:
+        local_path = Path(local)
+        assert local_path == expected_path, "uploader did not get output_path"
+        assert local_path.is_file(), "uploaded file vanished before upload"
+        assert not state["cleaned"], "upload happened after TemporaryDirectory closed"
+        captured["local"] = local
+        captured["key"] = key
+        captured["uploaded_bytes"] = local_path.read_bytes()
+
+    data_session = _DataSession("pending")
+    monkeypatch.setattr(export_task, "get_db", _ctx(data_session))
+    monkeypatch.setattr(export_task, "get_setting", lambda *a, **k: "exports")
+    monkeypatch.setattr(export_task, "upload_large_file", _upload)
+    monkeypatch.setattr(export_task.export_variants, "update_state", lambda **k: None)
+    monkeypatch.setattr(
+        export_task.tempfile, "TemporaryDirectory", lambda: _CleaningTmpDir(tmp_path)
+    )
+
+    export_task.export_variants.run(
+        "export-1", {"release_key": "7", "assembly": "Wm82.a4.v1"}, "json", False
+    )
+
+    assert captured["key"].endswith("exports/export-1/soymutdb_export_export-1.json")
+    assert state["cleaned"] is True
+    assert not expected_path.exists(), "upload was deferred past tempdir cleanup"
+    written = data_session.updates[-1]
+    assert written["sha256"] == hashlib.sha256(captured["uploaded_bytes"]).hexdigest()
+    assert written["file_size"] == len(captured["uploaded_bytes"])

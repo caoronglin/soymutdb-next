@@ -73,6 +73,7 @@ vi.mock("@soymutdb/api-client", () => ({
   createVariantExport: (...args: unknown[]) => runtime.createVariantExport(...args),
   getVariantExportStatus: (...args: unknown[]) => runtime.getVariantExportStatus(...args),
   getVariantExportDownload: (...args: unknown[]) => runtime.getVariantExportDownload(...args),
+  submitExportQuery: async () => ({ export_id: "query-export-1", status: "pending", message: "submitted", format: "tsv", applied_filters: {} }),
 }));
 vi.mock("@/lib/antd", () => ({
   Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
@@ -84,15 +85,17 @@ vi.mock("@/lib/antd", () => ({
     onChange,
     options,
     id,
+    "data-testid": testId,
   }: {
     value?: string;
     onChange?: (value: string) => void;
     options?: { value: string; label: string }[];
     id?: string;
+    "data-testid"?: string;
   }) => (
     <select
       id={id}
-      data-testid="download-export-assembly"
+      data-testid={testId ?? "download-export-assembly"}
       value={value ?? ""}
       onChange={(event) => onChange?.(event.target.value)}
     >
@@ -102,9 +105,27 @@ vi.mock("@/lib/antd", () => ({
     </select>
   ),
   Skeleton: () => null,
-  Table: () => null,
+  Table: ({ dataSource, columns }: {
+    dataSource?: unknown[];
+    columns?: { key?: string; render?: (_: unknown, row: unknown) => React.ReactNode }[];
+  }) => (
+    <table>
+      <tbody>
+        {(dataSource ?? []).map((row, index) => (
+          <tr key={index}>
+            {(columns ?? []).map((col) => (
+              <td key={col.key}>{col.render ? col.render(undefined, row) : null}</td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  ),
   Tag: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
   Typography: {
+    Title: ({ children, ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+      <h2 {...props}>{children}</h2>
+    ),
     Paragraph: ({ children, ...props }: React.HTMLAttributes<HTMLParagraphElement>) => (
       <p {...props}>{children}</p>
     ),
@@ -164,4 +185,35 @@ it("offers the sign-in path instead of a submission the server would refuse", as
   expect(submit.disabled).toBe(true);
   fireEvent.click(submit);
   expect(runtime.createVariantExport).not.toHaveBeenCalled();
+});
+
+it("renders provenance columns and never shows a fake digest for a legacy file", async () => {
+  runtime.files = [{
+    id: "7",
+    name: "legacy.tsv.gz",
+    description: null,
+    file_url: "https://minio.test/legacy.tsv.gz",
+    file_size: 1024,
+    category: "variants",
+    download_count: 0,
+    created_at: "2026-01-01T00:00:00Z",
+    sha256: null,
+    license: null,
+    generated_at: null,
+    source_ref: null,
+  }];
+  render(<Page />);
+  await waitFor(() => expect(screen.getByTestId("download-checksum-7")).toBeTruthy());
+  // A legacy file must not be presented as a verified checksum: no digest,
+  // no empty string that a reader could mistake for a value.
+  expect(screen.getByTestId("download-checksum-7").textContent).toBe("—");
+  expect(screen.getByTestId("download-checksum-7").getAttribute("title")).toBe("");
+  expect(screen.getByTestId("download-license-7").textContent).toBe("—");
+});
+
+it("shows the query builder empty state when the release has no assemblies", async () => {
+  runtime.assemblies = [];
+  render(<Page />);
+  expect(screen.getByTestId("export-query-empty")).toBeTruthy();
+  expect(screen.queryByTestId("export-query-form")).toBeNull();
 });

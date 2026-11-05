@@ -25,6 +25,7 @@ from ...schemas.variant import (
     MAX_ASSEMBLY_KEY_LENGTH,
     ConsequenceType,
     ExportDownloadResponse,
+    ExportManifestResponse,
     ExportRequest,
     ExportResponse,
     ExportStatusResponse,
@@ -296,6 +297,87 @@ async def get_variant(
     )
 
 
+async def _submit_export(
+    db: AsyncSession,
+    *,
+    export_request: ExportRequest,
+    release_context: ReleaseContext,
+    current_user: User,
+) -> uuid.UUID:
+    """Record one export request and queue it — the only place that does so.
+
+    Both ``POST /variants/export`` and ``POST /exports/query`` call this.
+    Splitting it (resolving filters here, writing the record and the outbox
+    event at each call site) would be two places where release scoping,
+    assembly resolution, provenance and the command payload could drift
+    apart, and the query builder would quietly gain its own semantics.
+    Returns the new export id; the caller commits.
+    """
+    filters = export_request.filters.model_dump(
+        mode="json", exclude_none=True,
+        exclude={"cursor", "limit", "mutant_line_public_id"},
+    )
+    if export_request.filters.mutant_line_public_id is not None:
+        filters["mutant_line_name"] = await _resolve_mutant_line_name(
+            db, export_request.filters.mutant_line_public_id,
+            release_context=release_context,
+        )
+    filters["release_key"] = release_context.release_key
+    # One namespace per artifact. The effective assembly is written into the
+    # filters the worker receives, so the worker's SQL, the artifact's
+    # provenance and the export record all state the same assembly instead
+    # of the record advertising a namespace the file does not use.
+    assembly_scope = _export_assembly_scope(
+        export_request.filters.assembly, release_context
+    )
+    # An artifact that would contain no rows must not be recorded as a
+    # successful export: the request is refused instead, so the submitter
+    # learns that the namespace is empty rather than downloading an empty
+    # file that claims to be the release's data.
+    if not await _assembly_namespace_exists(
+        db, release_context.release_id, assembly_scope
+    ):
+        raise ValidationError(
+            f"No variants are published for assembly {assembly_scope!r} in this "
+            "release. The export was refused: an artifact with no rows would "
+            "claim a namespace the release does not have."
+        )
+    filters["assembly"] = assembly_scope
+
+    export_id = uuid.uuid4()
+    # The export record is the durable, owner-visible state of the request;
+    # it is written in the same transaction as the outbox event, so a
+    # committed request always has both the command and the record.
+    # ``assembly_key`` records the assembly the *artifact* is built from
+    # (the resolved one), not merely the release default, so the status
+    # endpoint cannot advertise a namespace the file does not use.
+    await export_service.create_record(
+        db,
+        export_id=export_id,
+        user_id=current_user.id,
+        release_key=release_context.release_key,
+        assembly_key=assembly_scope,
+        export_format=export_request.format,
+        compress=export_request.compress,
+        filters=filters,
+    )
+    # The dispatcher owns all broker I/O after commit.
+    await enqueue_task_event(
+        db,
+        event_type="variant_export_requested",
+        aggregate_type="variant_export",
+        aggregate_id=str(export_id),
+        task_name=EXPORT_VARIANTS_TASK,
+        kwargs={
+            "export_id": str(export_id),
+            "filters": filters,
+            "format": export_request.format,
+            "compress": export_request.compress,
+        },
+    )
+    return export_id
+
+
 @router.post(
     "/export",
     response_model=ExportResponse,
@@ -332,62 +414,11 @@ async def export_variants(
     request with neither is refused. See ``filters.assembly`` for the exact
     rule and its limits.
     """
-    export_id = uuid.uuid4()
-    filters = request.filters.model_dump(
-        mode="json", exclude_none=True, exclude={"cursor", "limit", "mutant_line_public_id"}
-    )
-    if request.filters.mutant_line_public_id is not None:
-        filters["mutant_line_name"] = await _resolve_mutant_line_name(
-            db, request.filters.mutant_line_public_id, release_context=release_context,
-        )
-    filters["release_key"] = release_context.release_key
-    # One namespace per artifact. The effective assembly is written into the
-    # filters the worker receives, so the worker's SQL, the artifact's
-    # provenance and the export record all state the same assembly instead
-    # of the record advertising a namespace the file does not use.
-    assembly_scope = _export_assembly_scope(request.filters.assembly, release_context)
-    # An artifact that would contain no rows must not be recorded as a
-    # successful export: the request is refused instead, so the submitter
-    # learns that the namespace is empty rather than downloading an empty
-    # file that claims to be the release's data.
-    if not await _assembly_namespace_exists(
-        db, release_context.release_id, assembly_scope
-    ):
-        raise ValidationError(
-            f"No variants are published for assembly {assembly_scope!r} in this "
-            "release. The export was refused: an artifact with no rows would "
-            "claim a namespace the release does not have."
-        )
-    filters["assembly"] = assembly_scope
-    # The export record is the durable, owner-visible state of the request;
-    # it is written in the same transaction as the outbox event, so a
-    # committed request always has both the command and the record.
-    # ``assembly_key`` records the assembly the *artifact* is built from
-    # (the resolved one), not merely the release default, so the status
-    # endpoint cannot advertise a namespace the file does not use.
-    await export_service.create_record(
+    export_id = await _submit_export(
         db,
-        export_id=export_id,
-        user_id=current_user.id,
-        release_key=release_context.release_key,
-        assembly_key=assembly_scope,
-        export_format=request.format,
-        compress=request.compress,
-        filters=filters,
-    )
-    # The dispatcher owns all broker I/O after commit.
-    await enqueue_task_event(
-        db,
-        event_type="variant_export_requested",
-        aggregate_type="variant_export",
-        aggregate_id=str(export_id),
-        task_name=EXPORT_VARIANTS_TASK,
-        kwargs={
-            "export_id": str(export_id),
-            "filters": filters,
-            "format": request.format,
-            "compress": request.compress,
-        },
+        export_request=request,
+        release_context=release_context,
+        current_user=current_user,
     )
     await db.commit()
 
@@ -408,6 +439,30 @@ async def get_variant_export_status(
     """Return the state of one export (submitter or administrator only)."""
     _private(response)
     return await export_service.get_status(
+        db,
+        export_id,
+        user_id=current_user.id,
+        user_roles=get_user_roles(current_user),
+    )
+
+
+@router.get(
+    "/export/{export_id}/manifest",
+    response_model=ExportManifestResponse,
+)
+async def get_variant_export_manifest(
+    export_id: uuid.UUID,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(RoleName.RESEARCHER)),
+) -> ExportManifestResponse:
+    """Return citable provenance for one export (submitter or administrator).
+
+    A legacy artifact with no checksum is reported with ``sha256: null`` and
+    ``sha256_state='not_recorded'``; the response never invents a digest.
+    """
+    _private(response)
+    return await export_service.get_manifest(
         db,
         export_id,
         user_id=current_user.id,
