@@ -1,9 +1,10 @@
 # OpenAPI operation annotation floor
 
 `scripts/check_openapi_operation_annotations.py` pins per-operation
-`description` prose and `deprecated` flags to a hand-written literal.
-Operation `summary` is owned by `check_openapi_response_surface.py` (#269);
-this guard deliberately does not duplicate that fixed point.
+`description` prose and `deprecated` flags to a hand-written literal, plus the
+generated doc-comment continuation prose. Operation `summary` is owned by
+`check_openapi_response_surface.py` (#269); this guard deliberately does not
+duplicate that fixed point.
 
 ## Why
 
@@ -42,6 +43,16 @@ description prose or deprecation flags.
   check), but it is not part of the independent literal.
 * Wiring: an active standalone `--self-test` call inside `smoke_contracts()`.
   A commented-out line does not satisfy it.
+* `_CONTINUATION_DIGEST` — a second hand-written sha256 over canonical sorted
+  `(METHOD, path, line index, prose)` rows of the 393 indented continuation
+  lines in the generated `paths` doc blocks (104 operations). The snapshot's
+  full description is already frozen by `_ANNOTATION_DIGEST`, but the
+  three-way agreement compares only `_description_first_line()` — so the
+  client-visible rendering of the rest of the prose had no fixed point.
+  This is the same genus #297 closed for the generated `@default` tags: pin
+  the generated projection the merged guard did not carry. Two exact count
+  doors (393 lines, 104 operations) sit beside it; a same-count relocation
+  between two operations moves only the digest.
 
 A legitimate contract change must move the digest and the two artifacts in
 the same commit and say why.
@@ -57,10 +68,13 @@ One commit, so both equality floors fail closed on an unpinned addition:
   and `_EVIDENCE_PER_CASE` (this guard prints per-case evidence, so a summary
   line cannot fake it).
 
-`--self-test` plants seven drifts (one-sided summary/description/deprecated,
-coordinated description co-revert, dropped summary, dropped wire) into copies
-of the bytes. The coordinated case is the one #269 cannot see.
-`scripts/test_openapi_operation_annotations.py` (13 cases) pins the literal's
+`--self-test` plants ten drifts (one-sided summary/description/deprecated,
+coordinated description co-revert, dropped summary, dropped wire, one-sided
+generated continuation rewrite, dropped continuation line, same-count
+continuation relocation) into copies of the bytes. The coordinated case is
+the one #269 cannot see; the three continuation plants are the ones no other
+wired guard sees.
+`scripts/test_openapi_operation_annotations.py` (20 cases) pins both literals'
 independence, the count doors, the wiring from all three places, and each
 negative direction from a second file.
 
