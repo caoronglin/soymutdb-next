@@ -30,7 +30,7 @@ This guard reads committed bytes only (``json`` + ``re`` + stdlib): no Python
 3.15, no API import, no wheel, no database, no workspace install. It pins:
 
 * ``_RESPONSE_SURFACE_DIGEST`` -- a hand-written sha256 over the canonical
-  sorted ``(METHOD, path, status, has_content)`` tuple set,
+  sorted ``(METHOD, path, status, description, has_content)`` tuple set,
   read from nowhere. Exported from both artifacts independently, so a
   co-revert of both halves still changes it;
 * ``_EXPECTED_RESPONSE_ENTRIES`` / ``_EXPECTED_OPERATION_COUNT`` -- exact
@@ -76,11 +76,11 @@ METHODS = frozenset(
 
 # A reviewed, hand-written fixed point on the whole published response surface.
 # sha256 of "\n".join(["soymutdb-response-surface/v1"] +
-#   sorted(f"{method} {path} {status} {has_content} {media}")).
+#   sorted(f"{method} {path} {status} {description} {has_content}")).
 # Regenerate with _digest() after an intentional contract change and update in
 # the same commit, with a reason.
 _RESPONSE_SURFACE_DIGEST = (
-    "c782c636e4773516451fe8d9f4d335d748c7deb647b007d714089408fae59987"
+    "eb685be49379913d47db7b2e90ceec2e691931e69f992cb1e724a17b1ff1a951"
 )
 _EXPECTED_RESPONSE_ENTRIES = 808
 _EXPECTED_OPERATION_COUNT = 268
@@ -97,8 +97,8 @@ STATUS_KEY = re.compile(r"^            (\d{3}): \{$", re.MULTILINE)
 
 
 def _snapshot_rows(document: dict[str, Any]) -> list[tuple[str, str, str, str, str]]:
-    """Canonical (METHOD, path, status, has_content) rows, snapshot half."""
-    rows: list[tuple[str, str, str, str]] = []
+    """Canonical (METHOD, path, status, description, has_content) rows."""
+    rows: list[tuple[str, str, str, str, str]] = []
     for path, item in document.get("paths", {}).items():
         if not isinstance(item, dict):
             continue
@@ -108,14 +108,23 @@ def _snapshot_rows(document: dict[str, Any]) -> list[tuple[str, str, str, str, s
             responses = operation.get("responses") or {}
             for status, response in responses.items():
                 content = response.get("content") or {}
-                rows.append((method.upper(), path, str(status), str(bool(content))))
+                rows.append(
+                    (
+                        method.upper(),
+                        path,
+                        str(status),
+                        response.get("description", ""),
+                        str(bool(content)),
+                    )
+                )
     return rows
 
 
-def _digest(rows: list[tuple[str, str, str, str]]) -> str:
+def _digest(rows: list[tuple[str, str, str, str, str]]) -> str:
     canonical = sorted(rows)
     blob = "\n".join(
-        ["soymutdb-response-surface/v1"] + [" ".join(row) for row in canonical]
+        ["soymutdb-response-surface/v2"]
+        + ["|".join(row) for row in canonical]
     )
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
@@ -123,8 +132,8 @@ def _digest(rows: list[tuple[str, str, str, str]]) -> str:
 def _snapshot_surface(
     document: dict[str, Any],
 ) -> dict[tuple[str, str], dict[str, tuple[bool, str]]]:
-    """(METHOD, path) -> {status: has_content} from the snapshot."""
-    out: dict[tuple[str, str], dict[str, bool]] = {}
+    """(METHOD, path) -> {status: (has_content, description)}."""
+    out: dict[tuple[str, str], dict[str, tuple[bool, str]]] = {}
     for path, item in document.get("paths", {}).items():
         if not isinstance(item, dict):
             continue
@@ -132,9 +141,12 @@ def _snapshot_surface(
             if method not in METHODS or not isinstance(operation, dict):
                 continue
             key = (method.upper(), path)
-            surface: dict[str, bool] = {}
+            surface: dict[str, tuple[bool, str]] = {}
             for status, response in (operation.get("responses") or {}).items():
-                surface[str(status)] = bool(response.get("content") or {})
+                surface[str(status)] = (
+                    bool(response.get("content") or {}),
+                    response.get("description", ""),
+                )
             out[key] = surface
     return out
 
@@ -165,13 +177,13 @@ def _generated_path_map(generated: str) -> dict[tuple[str, str], str]:
 def _generated_operations(
     generated: str,
 ) -> dict[str, dict[str, tuple[bool, str]]]:
-    """symbol -> {status: has_content} from the operations interface."""
+    """symbol -> {status: (has_content, description)} from the client."""
     start = generated.find("export interface operations {")
     if start < 0:
         raise ValueError("generated client has no operations interface")
     block = generated[start:]
     matches = list(OP_DEF.finditer(block))
-    out: dict[str, dict[str, bool]] = {}
+    out: dict[str, dict[str, tuple[bool, str]]] = {}
     for i, match in enumerate(matches):
         name = match.group(1)
         body = block[
@@ -180,14 +192,18 @@ def _generated_operations(
         rstart = body.find("        responses: {")
         if rstart < 0:
             continue
-        surface: dict[str, bool] = {}
+        surface: dict[str, tuple[bool, str]] = {}
         for status_match in STATUS_KEY.finditer(body, rstart):
             status = status_match.group(1)
             # The response object runs to the next status key at the same
             # indent or the end of this operation definition.
             nxt = STATUS_KEY.search(body, status_match.end())
             segment = body[status_match.end() : nxt.start() if nxt else len(body)]
-            surface[status] = "content?: never;" not in segment
+            # The @description comment immediately precedes the status key.
+            before = body[: status_match.start()]
+            comments = list(re.finditer(r"/\*\* @description (.*?) \*/", before))
+            description = comments[-1].group(1) if comments else ""
+            surface[status] = ("content?: never;" not in segment, description)
         out[name] = surface
     return out
 
@@ -264,7 +280,7 @@ def failures(
             f"operation set (missing={sorted(set(snap) - set(path_map))[:3]}, "
             f"phantom={sorted(set(path_map) - set(snap))[:3]})"
         )
-    gen: dict[tuple[str, str], dict[str, bool]] = {}
+    gen: dict[tuple[str, str], dict[str, tuple[bool, str]]] = {}
     for key, symbol in path_map.items():
         if symbol not in gen_ops:
             found.append(f"{key}: generated operations interface lacks {symbol!r}")
@@ -281,8 +297,8 @@ def failures(
         for status in sorted(set(snap[key]) & set(gen[key])):
             if snap[key][status] != gen[key][status]:
                 found.append(
-                    f"{key[0]} {key[1]} {status}: generated content presence "
-                    f"disagrees with the snapshot "
+                    f"{key[0]} {key[1]} {status}: published response description "
+                    f"or content presence disagrees with the generated client "
                     f"(snapshot={snap[key][status]}, generated={gen[key][status]})"
                 )
 
@@ -369,6 +385,23 @@ def self_test() -> int:
     cases["coordinated content dropped"] = (
         json.dumps(doc3, indent=2),
         generated[:start2] + changed3 + generated[start2 + 1600 :],
+    )
+
+    # A coordinated response-description retype in both halves. The digest is
+    # the only door that can see it: both artifacts agree with each other, no
+    # status or content shape moves, and every other wired guard stays green.
+    doc4 = copy.deepcopy(document)
+    live4 = doc4["paths"]["/api/v1/health/live"]["get"]["responses"]["200"]
+    live4["description"] = "OK"
+    start4 = generated.find("    liveness_api_v1_health_live_get: {")
+    block4 = generated[start4 : start4 + 1600]
+    changed4 = block4.replace(
+        "/** @description Successful Response */", "/** @description OK */", 1
+    )
+    assert changed4 != block4
+    cases["coordinated response description retype"] = (
+        json.dumps(doc4, indent=2),
+        generated[:start4] + changed4 + generated[start4 + 1600 :],
     )
 
     failures_count = 0

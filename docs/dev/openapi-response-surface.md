@@ -46,7 +46,9 @@ pins:
   -> `operations` reference map, and generated `operations` interface response
   keys. A one-sided edit is named by `(METHOD, path, status)`.
 * `content?: never` vs `content: {` in the generated client, so a dropped or
-  added body on either half is reported.
+  added body on either half is reported;
+* the response `description` in both halves, so a coordinated docstring
+  regenerate is named by the digest and by the two-surface agreement.
 
 `--self-test` plants five drifts (one-sided snapshot rename, one-sided
 generated rename, coordinated rename, coordinated content-less drop,
@@ -69,3 +71,19 @@ A legitimate contract change must move the digest in the same commit as the
 two artifacts and say why, exactly like `_ERROR_RESPONSE_BASELINE` /
 `_BODY_PAIR_DIGEST`. Re-deriving the digest from the artifacts under guard
 would make the pin self-referential — the whole failure this file replaces.
+
+## Follow-up: the description column
+
+The first landed version pinned `(METHOD, path, status, has_content)` only.
+Measured on the shipped tree, a coordinated regenerate that changes one
+response's `description` in **both** halves (snapshot `description` and the
+generated `@description` comment), with the two provenance blob ids re-pinned,
+left this guard `rc=0`, its 9 companion cases green, and **all eight** wired
+OpenAPI guards green. No status, body or content shape moved, so every other
+fixed point was blind to it too.
+
+The digest now carries the description (schema `v2`), the two-surface
+agreement compares `(has_content, description)` per status, `--self-test`
+plants the coordinated retype (6 cases), and the companion suite has two
+second-file checks for it (11 cases). A same-commit re-pin of a legitimate
+docstring change still stays green.
