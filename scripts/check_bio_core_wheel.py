@@ -144,15 +144,18 @@ def doc_ref_errors(
     errors: list[str] = []
     for line in _fold_wrapped_comments(text).splitlines():
         for match in DOC_REF.finditer(line):
-            if not is_doc_citation(line[:match.start()]):
+            # A quoted section label is unambiguous evidence of a citation: it
+            # cannot be vetoed by a prose word in front of the path. Otherwise
+            # `section "X" in docs/…` stays green while `see section "X" in
+            # docs/…` is red — the same reference, two verdicts, decided only
+            # by the comment's first word.
+            labels = section_labels(line, match.start(), match.end())
+            if not labels and not is_doc_citation(line[:match.start()]):
                 continue
             ref = match.group(0)
             doc = root / ref
             if not doc.is_file():
                 errors.append(f"{source} cites missing doc {ref!r}")
-                continue
-            labels = section_labels(line, match.start(), match.end())
-            if not labels:
                 continue
             headings = {
                 heading.lstrip("#").strip()

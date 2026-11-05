@@ -1088,6 +1088,73 @@ class DeliveryArchitectureTests(unittest.TestCase):
             "--static must be green on its own source",
         )
 
+    def test_a_quoted_label_is_never_vetoed_by_prose_in_front_of_the_path(
+        self,
+    ) -> None:
+        """A cited label is a citation whatever prose word precedes the path.
+
+        `fb601eb3` added an `is_doc_citation()` prose-word veto to keep the
+        checker's own docstrings green. Applied before the label is read, it
+        also discards a genuine reference: `section "NOPE" in docs/…` stayed
+        green while `see section "NOPE" in docs/…` was red, decided only by
+        the comment's first word. A quoted label beside the path is decisive
+        evidence and must bypass the prose veto; prose without a label stays
+        out of scope.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_label_veto",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs" / "ops").mkdir(parents=True)
+            (root / "docs" / "ops" / "bio-core-wheel.md").write_text(
+                "# Wheel\n\n## CI：构建一次，消费一次\n", encoding="utf-8"
+            )
+            doc = "docs/ops/bio-core-wheel.md"
+            # Same bad label, two wordings: both must be red. On the unfixed
+            # tree the bare pre-path form is the one that goes silently green.
+            for text in (
+                f'# see section "NOPE" in {doc}',
+                f'# section "NOPE" in {doc}',
+                f'# the file {doc}, "NOPE"',
+                f'# a {doc}, "NOPE"',
+            ):
+                self.assertTrue(
+                    checker.doc_ref_errors(text, root),
+                    f"a quoted label must not be vetoed by prose: {text}",
+                )
+            # A dangling doc with a label must be red in the same shapes.
+            for text in (
+                '# section "NOPE" in docs/ops/gone.md',
+                '# the file docs/ops/gone.md, "NOPE"',
+            ):
+                self.assertTrue(
+                    checker.doc_ref_errors(text, root),
+                    f"a labelled dangling path must fail: {text}",
+                )
+            # Prose without a label stays out of scope; the shipped citation
+            # with a correct heading stays green.
+            self.assertEqual(
+                checker.doc_ref_errors(
+                    "# --static reads every docs/ghost/gone.md path", root
+                ),
+                [],
+                "prose without a label is still not a citation",
+            )
+            self.assertEqual(
+                checker.doc_ref_errors(
+                    f'# see ({doc}, "CI：构建一次，消费一次")', root
+                ),
+                [],
+                "the shipped citation stays green",
+            )
+
     def test_bio_core_static_gate_scans_every_shared_script(self) -> None:
         """--static must cover the same file set as the contract citation guard.
 
