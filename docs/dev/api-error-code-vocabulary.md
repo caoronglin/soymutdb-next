@@ -62,7 +62,7 @@ source code, renamed `http_error` fallback, empty lock, duplicate key) and
 proves each is caught.
 
 `packages/api-client/python_tests/test_api_error_code_vocabulary.py` provides
-eight `unittest` regressions, including the killing mutation: a rename applied
+ten `unittest` regressions, including the killing mutation: a rename applied
 to the source **and** both published artifacts still fails, because the lock is
 not one of them.
 

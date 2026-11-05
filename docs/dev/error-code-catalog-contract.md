@@ -46,7 +46,7 @@ It is wired into `packages/api-client/scripts/check-contract.sh` (run on the
 `$API_PYTHON` venv interpreter the gate already provisions), which both CNB
 and GitHub reach through `verify-frontend-artifacts.sh` (`check:contract`).
 `scripts/test_error_code_catalog_contract.py` is the regression suite: 14
-pytest cases including synthetic drift trees and `--self-test` (10 planted
+pytest cases including synthetic drift trees and `--self-test` (11 planted
 negative cases). Removing the loop/call, or weakening any single assertion,
 turns a case red.
 
