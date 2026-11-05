@@ -44,6 +44,26 @@ Unlike the error envelope's ``required`` rules, these facts are plain literals
 so pinning them does not mean re-deriving pydantic's behaviour and cannot rot
 across pydantic versions.
 
+The tag catalog has a SECOND, different property. ``info.title`` /
+``info.version`` / ``info.description`` are invariants: their *value* is the
+contract, so a lock is the right authority. The catalog's *completeness* is a
+derived quantity: it moves whenever a router adds or drops a tag. A lock can
+freeze the six names it was written with, but it cannot notice that a seventh
+router showed up -- the stale lock stays green. So this guard also asserts a
+non-constant invariant, with an authority that does NOT move with the catalog:
+
+    every tag a router emits (``tags=[...]`` literals in ``apps/api/app``)
+      == every tag the published operations carry (``paths.*.*.tags[]``)
+      == the declared catalog (top-level ``tags[]``)
+
+Both sides are read from committed bytes. The router source is upstream of the
+export, and the snapshot's operation tags are downstream of it, so a
+source+snapshot+golden co-revert that invents a tag still fails here: no router
+emits it. Conversely a legitimate new router plus a catalog entry stays green,
+which is the whole point -- a lock would have gone stale. This invariant reads
+NO golden content; blessing the golden cannot move it. It also reports the
+``declared-but-unused`` direction, which a byte lock cannot see.
+
 Usage:
     python3 scripts/check_openapi_document_metadata.py
     python3 scripts/check_openapi_document_metadata.py --self-test
@@ -54,6 +74,7 @@ from __future__ import annotations
 import argparse
 import ast
 import copy
+import functools
 import json
 import sys
 from pathlib import Path
@@ -66,6 +87,7 @@ GOLDEN = ROOT / "packages/api-client/openapi-document-metadata.golden.json"
 MAIN = ROOT / "apps/api/app/main.py"
 CONFIG = ROOT / "apps/api/app/core/config.py"
 SMOKE = ROOT / "scripts/smoke.sh"
+ROUTER_ROOT = ROOT / "apps/api/app"
 SELF = Path(__file__).name
 WIRED_AS = "scripts/test_openapi_document_metadata_guard.py"
 
@@ -126,6 +148,58 @@ def _literal(expr: ast.expr | None) -> Any:
     return None if expr is None else ast.literal_eval(expr)
 
 
+_ROUTE_METHODS = frozenset(
+    {"get", "post", "put", "patch", "delete", "head", "options", "trace", "api_route"}
+)
+
+
+def router_sources() -> dict[str, str]:
+    """Committed router source bytes. These are upstream of every export."""
+    out: dict[str, str] = {}
+    for path in sorted(ROUTER_ROOT.rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        if "tags=" in text:
+            out[str(path.relative_to(ROOT))] = text
+    return out
+
+
+def router_tag_names(sources: dict[str, str]) -> set[str]:
+    """Tag names a router actually emits, from ``tags=[...]`` literals.
+
+    ``APIRouter(tags=[...])`` and route decorators are the origin of
+    ``paths.*.*.tags[]``; ``export_contract.py`` copies them verbatim. Only
+    those call shapes are read, so an unrelated ``tags=`` kwarg (e.g.
+    ``bleach.clean(..., tags=[...])``) cannot be mistaken for a tag. A
+    non-literal ``tags=`` (e.g. ``tags=app.openapi_tags``) is a pass-through,
+    not a declaration, and is deliberately skipped.
+    """
+    names: set[str] = set()
+    for path, text in sources.items():
+        try:
+            tree = ast.parse(text)
+        except SyntaxError as exc:
+            raise ValueError(f"{path} no longer parses: {exc}") from exc
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            is_router = (isinstance(func, ast.Name) and func.id == "APIRouter") or (
+                isinstance(func, ast.Attribute) and func.attr == "APIRouter"
+            )
+            is_route = isinstance(func, ast.Attribute) and func.attr in _ROUTE_METHODS
+            if not (is_router or is_route):
+                continue
+            for keyword in node.keywords:
+                if keyword.arg != "tags" or not isinstance(
+                    keyword.value, (ast.List, ast.Tuple)
+                ):
+                    continue
+                for value in ast.literal_eval(keyword.value):
+                    if isinstance(value, str):
+                        names.add(value)
+    return names
+
+
 def source_facts(main: str, config: str) -> dict[str, Any]:
     """Derive the metadata the backend *intends* to publish from source bytes."""
     main_tree = ast.parse(main)
@@ -172,6 +246,7 @@ def failures(
     main: str,
     config: str,
     smoke: str,
+    routers: dict[str, str],
 ) -> list[str]:
     found: list[str] = []
     try:
@@ -265,6 +340,58 @@ def failures(
     if WIRED_AS not in smoke and f"scripts/{SELF}" not in smoke:
         found.append("contracts smoke layer no longer collects the metadata guard")
 
+    # 6. Catalog COMPLETENESS -- a derived invariant, not a frozen value.
+    #    Checks 1-3 freeze the catalog's bytes; they cannot tell whether those
+    #    bytes still describe the document. The router source is upstream of
+    #    the export, so it is an authority that does not move with the lock.
+    #    This block deliberately reads no golden content.
+    try:
+        emitted = router_tag_names(routers)
+    except ValueError as exc:
+        found.append(str(exc))
+        return found
+    published_tags = published.get("tags")
+    entries = (
+        [t for t in published_tags if isinstance(t, dict)]
+        if isinstance(published_tags, list)
+        else []
+    )
+    names = [t.get("name") for t in entries]
+    catalog = {n for n in names if isinstance(n, str)}
+    if len(names) != len(catalog):
+        found.append("openapi.json publishes duplicate or non-string tag names")
+
+    operation_tags: set[str] = set()
+    for path_item in document.get("paths", {}).values():
+        if not isinstance(path_item, dict):
+            continue
+        for operation in path_item.values():
+            if isinstance(operation, dict):
+                operation_tags.update(
+                    tag
+                    for tag in (operation.get("tags") or [])
+                    if isinstance(tag, str)
+                )
+
+    missing = (emitted | operation_tags) - catalog
+    if missing:
+        found.append(
+            "tag catalog is incomplete (routers/operations emit undeclared tags): "
+            + ", ".join(sorted(missing))
+        )
+    phantom = catalog - (emitted | operation_tags)
+    if phantom:
+        found.append(
+            "tag catalog declares names no router emits (phantom entries): "
+            + ", ".join(sorted(phantom))
+        )
+    unpublished = operation_tags - emitted
+    if unpublished:
+        found.append(
+            "openapi.json publishes operation tags no router declares: "
+            + ", ".join(sorted(unpublished))
+        )
+
     return found
 
 
@@ -273,7 +400,7 @@ def failures(
 # ---------------------------------------------------------------------------
 
 
-def _load() -> tuple[str, str, str, str, str, str]:
+def _load() -> tuple[str, str, str, str, str, str, dict[str, str]]:
     return (
         SNAPSHOT.read_text(encoding="utf-8"),
         GENERATED.read_text(encoding="utf-8"),
@@ -281,6 +408,7 @@ def _load() -> tuple[str, str, str, str, str, str]:
         MAIN.read_text(encoding="utf-8"),
         CONFIG.read_text(encoding="utf-8"),
         SMOKE.read_text(encoding="utf-8"),
+        router_sources(),
     )
 
 
@@ -288,18 +416,45 @@ def run() -> list[str]:
     return failures(*_load())
 
 
-def self_test() -> list[str]:
+def self_test() -> tuple[list[str], int, int]:
     problems: list[str] = []
     base = _load()
 
     def check(label: str, mutate, needle: str) -> None:
         parts = copy.deepcopy(base)
-        parts = mutate(*parts)
-        found = failures(*parts)
+        found = failures(*mutate(*parts))
         if not any(needle in item for item in found):
             problems.append(
                 f"{label}: guard stayed green (or missed `{needle}`); got {found}"
             )
+
+    def check_only(label: str, mutate, needle: str, absent: tuple[str, ...]) -> None:
+        """The derived invariant fires AND every golden-lock check stays green."""
+        parts = copy.deepcopy(base)
+        found = failures(*mutate(*parts))
+        if not any(needle in item for item in found):
+            problems.append(f"{label}: missed `{needle}`; got {found}")
+        for word in absent:
+            if any(word in item for item in found):
+                problems.append(
+                    f"{label}: golden lock also fired (`{word}`), not isolated; got {found}"
+                )
+        if any("duplicate or non-string" in item for item in found):
+            problems.append(f"{label}: catalog shape check noise; got {found}")
+
+    def check_clean(label: str, mutate) -> None:
+        """A legitimate co-change must stay green -- the invariant is not a lock."""
+        parts = copy.deepcopy(base)
+        found = failures(*mutate(*parts))
+        if found:
+            problems.append(f"{label}: legitimate co-change was rejected; got {found}")
+
+    def router_safe(fn):
+        """Adapt a legacy six-input ablator to the seven-input signature."""
+        @functools.wraps(fn)
+        def wrapper(snapshot, generated, golden, main, config, smoke, routers):
+            return (*fn(snapshot, generated, golden, main, config, smoke), routers)
+        return wrapper
 
     def edit_snapshot(fn):
         def mutate(snapshot, generated, golden, main, config, smoke):
@@ -405,9 +560,133 @@ def self_test() -> list[str]:
         ("smoke wiring dropped", smoke_unwired, "no longer collects the metadata guard"),
     ]
     for label, mutate, needle in ablations:
+        check(label, router_safe(mutate), needle)
+
+    def new_router_without_catalog(snapshot, generated, golden, main, config, smoke, routers):
+        routers = dict(routers)
+        routers["apps/api/app/api/v1/brand_new.py"] = (
+            "from fastapi import APIRouter\n"
+            'router = APIRouter(prefix="/brand-new", tags=["brand-new"])\n'
+        )
+        return snapshot, generated, golden, main, config, smoke, routers
+
+    def invented_tag_blessed_everywhere(snapshot, generated, golden, main, config, smoke, routers):
+        # THE bless channel: source + snapshot + golden agree on a tag no router
+        # emits. The three-way lock is green by construction; only the
+        # router-derived completeness invariant can see it.
+        entry = {"name": "made-up", "description": "x"}
+        main = main.replace(
+            "OPENAPI_TAGS = [\n",
+            'OPENAPI_TAGS = [\n    {"name": "made-up", "description": "x"},\n',
+            1,
+        )
+        document = json.loads(snapshot)
+        document["tags"].insert(0, entry)
+        snapshot = json.dumps(document, ensure_ascii=False)
+        lock = json.loads(golden)
+        lock["tags"].insert(0, entry)
+        return (
+            snapshot, generated, json.dumps(lock, ensure_ascii=False),
+            main, config, smoke, routers,
+        )
+
+    def operation_tag_hand_edited(snapshot, generated, golden, main, config, smoke, routers):
+        document = json.loads(snapshot)
+        operation = next(
+            op
+            for item in document["paths"].values()
+            for op in item.values()
+            if isinstance(op, dict) and op.get("tags")
+        )
+        operation["tags"] = operation["tags"] + ["hand-edited"]
+        return (
+            json.dumps(document, ensure_ascii=False), generated, golden,
+            main, config, smoke, routers,
+        )
+
+    def phantom_catalog_entry(snapshot, generated, golden, main, config, smoke, routers):
+        # A router is retired: its file is gone and no operation carries the
+        # tag, but the reviewed catalog (main/golden/snapshot) is untouched.
+        # A byte lock cannot see a stale entry; the derived invariant can.
+        routers = {k: v for k, v in routers.items() if "table_views.py" not in k}
+        document = json.loads(snapshot)
+        for item in document["paths"].values():
+            for op in item.values():
+                if isinstance(op, dict) and "table-views" in (op.get("tags") or []):
+                    op["tags"] = [t for t in op["tags"] if t != "table-views"]
+        return (
+            json.dumps(document, ensure_ascii=False), generated, golden,
+            main, config, smoke, routers,
+        )
+
+    def duplicate_catalog_name(snapshot, generated, golden, main, config, smoke, routers):
+        document = json.loads(snapshot)
+        document["tags"].append(dict(document["tags"][0]))
+        return (
+            json.dumps(document, ensure_ascii=False), generated, golden,
+            main, config, smoke, routers,
+        )
+
+    derived = [
+        (
+            "new router, catalog not updated",
+            new_router_without_catalog,
+            "tag catalog is incomplete",
+        ),
+        ("operation tag hand-edited", operation_tag_hand_edited, "tag catalog is incomplete"),
+        ("phantom catalog entry", phantom_catalog_entry, "phantom entries"),
+        ("duplicate catalog name", duplicate_catalog_name, "duplicate or non-string"),
+    ]
+    for label, mutate, needle in derived:
         check(label, mutate, needle)
 
-    return problems
+    check_only(
+        "invented tag blessed in all three artifacts",
+        invented_tag_blessed_everywhere,
+        "phantom entries",
+        (
+            "golden lock",
+            "no longer matches",
+            "tag catalog is incomplete",
+            "duplicate or non-string",
+        ),
+    )
+
+    def legitimate_new_router(snapshot, generated, golden, main, config, smoke, routers):
+        # The positive control: a real new router plus a catalog entry in main,
+        # golden AND snapshot. A frozen name table would go stale here; the
+        # invariant must stay green.
+        routers = dict(routers)
+        routers["apps/api/app/api/v1/brand_new.py"] = (
+            "from fastapi import APIRouter\n"
+            'router = APIRouter(prefix="/brand-new", tags=["brand-new"])\n'
+        )
+        main = main.replace(
+            "OPENAPI_TAGS = [\n",
+            "OPENAPI_TAGS = [\n"
+            '    {"name": "brand-new", "description": "A newly registered router."},\n',
+            1,
+        )
+        document = json.loads(snapshot)
+        document["tags"].insert(
+            0, {"name": "brand-new", "description": "A newly registered router."}
+        )
+        document["paths"]["/api/v1/brand-new"] = {
+            "get": {"tags": ["brand-new"], "responses": {"200": {"description": "OK"}}}
+        }
+        snapshot = json.dumps(document, ensure_ascii=False)
+        lock = json.loads(golden)
+        lock["tags"].insert(
+            0, {"name": "brand-new", "description": "A newly registered router."}
+        )
+        return (
+            snapshot, generated, json.dumps(lock, ensure_ascii=False),
+            main, config, smoke, routers,
+        )
+
+    check_clean("legitimate new router + catalog entry", legitimate_new_router)
+
+    return problems, len(ablations) + len(derived) + 1, 1
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -416,12 +695,15 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.self_test:
-        problems = self_test()
+        problems, ablations, positives = self_test()
         for problem in problems:
             print(f"openapi-document-metadata: FAIL: {problem}", file=sys.stderr)
         if problems:
             return 1
-        print(f"openapi-document-metadata: OK ({17} ablations)")
+        print(
+            f"openapi-document-metadata: OK "
+            f"({ablations} ablations, {positives} positive control)"
+        )
         return 0
 
     found = run()
