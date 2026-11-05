@@ -101,6 +101,14 @@ needs no edit here (verified by `--self-test`), removing one fails. The list
 must be updated only when a guard call is intentionally retired from this
 layer.
 
+Every wiring match starts at the command itself, never at a `#`: a
+commented-out line still contains the right text and passes `bash -n`, but
+executes nothing. The standalone `${PYTHON_BIN}` guard calls and the
+driver-level dispatch are anchored to the start of a line, and
+`driver_propagates()` skips comment lines. `--self-test` injects a
+commented-out variant for each of the three slots (CI `--self-test` line,
+standalone guard call, driver dispatch) and asserts the guard reports it.
+
 ## Running
 
 ```bash

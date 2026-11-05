@@ -250,6 +250,31 @@ class RegistryCollectionGuardTests(unittest.TestCase):
         failures = guard.check(smoke, files, ci)
         self.assertTrue(any("runs after" in f for f in failures), failures)
 
+    def test_commented_out_standalone_guard_is_rejected(self) -> None:
+        smoke = _smoke(["scripts/test_example.py"], REQUIRED).replace(
+            '  "${PYTHON_BIN}" ' + REQUIRED[0] + ' || rc=$?',
+            '  # "${PYTHON_BIN}" ' + REQUIRED[0] + ' || rc=$?',
+            1,
+        )
+        files = _files()
+        files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
+        failures = guard.check(smoke, files, CI_OK)
+        self.assertTrue(any("was dropped" in f for f in failures), failures)
+
+    def test_commented_out_driver_line_is_rejected(self) -> None:
+        files = _files()
+        files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
+        body = _smoke(["scripts/test_example.py"], REQUIRED)
+        prefix = (
+            guard.DRIVER_MARKER
+            + "\n"
+            + '  # "${PYTHON_BIN}" scripts/check_contracts_registry_collection.py '
+            + '|| FAILED+=("contracts registry")\n'
+            + "  run_layer contracts smoke_contracts\nfi\n\n"
+        )
+        failures = guard.check(prefix + body, files)
+        self.assertTrue(any("not propagated" in f for f in failures), failures)
+
 
 if __name__ == "__main__":
     unittest.main()

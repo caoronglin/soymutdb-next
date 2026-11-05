@@ -75,9 +75,12 @@ ARRAY_ENTRY = re.compile(
 )
 # Optional arguments (``--static``, ``--self-test``) sit between the path and
 # ``|| rc=$?``; the path alone is what must resolve to a committed file.
+# A commented-out call still matches its text but never runs, so the match
+# must begin at the command itself, not at a `#` (allow leading whitespace).
 GUARD_CALL = re.compile(
-    r'"\$\{PYTHON_BIN\}"\s+(scripts/[A-Za-z0-9_./-]+\.py)'
-    r'(?:\s+[^|]*?)?\s*\|\|\s*rc=\$\?'
+    r'^[ \t]*"\$\{PYTHON_BIN\}"\s+(scripts/[A-Za-z0-9_./-]+\.py)'
+    r'(?:\s+[^|]*?)?\s*\|\|\s*rc=\$\?',
+    re.MULTILINE,
 )
 
 # A dropped guard call is invisible to a validator that only checks paths:
@@ -111,7 +114,9 @@ def driver_propagates(smoke: str) -> bool | None:
         return None
     block = smoke.split(DRIVER_MARKER, 1)[1].split("\nfi", 1)[0]
     for line in block.splitlines():
-        if "check_contracts_registry_collection.py" in line and "||" in line:
+        if not line.lstrip().startswith("#") and (
+            "check_contracts_registry_collection.py" in line and "||" in line
+        ):
             return "FAILED" in line and "rc=$?" not in line
     return False
 
@@ -382,6 +387,28 @@ def self_test() -> int:
     )
     cases.append(("the CI --self-test line runs after the layer",
                   smoke, dict(files), ci_after))
+
+    # The CI line is now pinned as a statement, but the other two wiring slots
+    # are still read by text: a commented-out standalone guard or driver line
+    # passes bash -n yet never executes. Assert both are reported.
+    smoke_comment = smoke.replace(
+        '  "${PYTHON_BIN}" scripts/check_nginx_security_headers.py || rc=$?\n',
+        '  # "${PYTHON_BIN}" scripts/check_nginx_security_headers.py || rc=$?\n',
+        1,
+    )
+    cases.append(("a standalone guard call is commented out",
+                  smoke_comment, dict(files), ci_steps))
+
+    driver_line = (
+        '  "${PYTHON_BIN}" scripts/check_contracts_registry_collection.py '
+        '|| FAILED+=("contracts registry")\n'
+    )
+    assert driver_line in smoke, "self-test could not locate the driver guard line"
+    smoke_driver_comment = smoke.replace(
+        driver_line, "  # " + driver_line.strip() + "\n", 1
+    )
+    cases.append(("the driver registry guard line is commented out",
+                  smoke_driver_comment, dict(files), ci_steps))
 
     # Positive control: adding a NEW guard call must not require an edit here.
     extra = "scripts/check_extra_wiring_probe.py"
