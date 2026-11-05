@@ -241,10 +241,15 @@ No Python 3.15, wheel, database, Rust toolchain or workspace install needed.
 The guard is invoked by `smoke.sh --profile contracts` (local runs) and by
 `ci-job-steps.sh`'s `smoke_contracts_run()` (the CI Contract suites stage,
 with `--self-test`), so it gates both entry points before any suite is
-collected. The guard deliberately does **not** add its regression file to
-`tests=()`: that array is a shared merge slot with many in-flight PRs, and the
-guard's `--self-test` already provides the mutation coverage. The pytest file
-is kept for direct runs and editor integration.
+collected. The regression file **is** collected by `tests=()`. The guard's
+`--self-test` is a single file: a one-file edit can weaken its dedicated
+"fails for the pin alone" report to a generic `any(...)` and still print
+`46 cases, 0 failure(s)` while the whole contracts layer stays green,
+because nothing else reads that report. Only the second-file assertions in
+`scripts/test_contracts_registry_collection.py` name the `len == 1` and
+`in[0]` clauses, so collecting them is what makes the pin two-file. Add the
+row **and** its `PINNED_SUITES` entry in the same change (see below); the
+guard rejects an unpinned addition.
 
 ## Changing the layer
 

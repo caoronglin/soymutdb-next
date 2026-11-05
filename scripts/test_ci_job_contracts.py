@@ -5498,6 +5498,28 @@ class ContractsRegistryWiringTests(unittest.TestCase):
             "green CI stage",
         )
 
+    def test_registry_companion_suite_is_collected(self) -> None:
+        """The guard's second-file assertions must actually run in the layer.
+
+        The dedicated "fails for the pin alone" report lives in one file; only
+        ``scripts/test_contracts_registry_collection.py`` names its ``len == 1``
+        and ``in[0]`` clauses. If that suite is not a gating row, a single-file
+        edit weakening the report to a generic ``any(...)`` keeps ``--self-test``
+        at ``46 cases, 0 failure(s)``, the teeth guard green, and the whole
+        layer at SMOKE PASS. Pin the row from this independent, already-collected
+        door: removing it (even together with its ``PINNED_SUITES`` entry) must
+        fail here rather than silently retire the only second-file evidence.
+        """
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        body = smoke.split("smoke_contracts() {", 1)[1]
+        block = body.split("environment_bound=(", 1)[0]
+        self.assertIn(
+            "    scripts/test_contracts_registry_collection.py\n",
+            block,
+            "the registry guard's companion suite is no longer collected by "
+            "the contracts layer: its second-file assertions cannot gate CI",
+        )
+
     def test_driver_level_guard_failure_reaches_the_exit_status(self) -> None:
         smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
         self.assertRegex(

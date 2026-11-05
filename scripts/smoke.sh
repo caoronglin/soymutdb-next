@@ -259,6 +259,13 @@ smoke_contracts() {
     # responses. This suite proves the independent literal pins it.
     scripts/test_openapi_response_surface.py
     scripts/test_openapi_operation_annotations.py
+    # The registry guard's second-file assertions (the dedicated
+    # "fails for the pin alone" report, its plant, and the companion
+    # suite's own wiring) run ONLY here: the guard's --self-test is a
+    # single file, so a one-file edit can weaken the report and keep
+    # every wired gate green. Collecting this suite makes the CI-run
+    # evidence two-file instead of one-file.
+    scripts/test_contracts_registry_collection.py
     scripts/test_contracts_layer_self_containment.py
     # The error-code gate wiring guard judges its co-rename probe by the copied
     # tree's exit status. A clean control must be green first, or an incomplete
