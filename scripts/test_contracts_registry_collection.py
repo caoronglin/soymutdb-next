@@ -484,6 +484,30 @@ class RegistryCollectionGuardTests(unittest.TestCase):
                     any("pinned gating suite" in f for f in failures), failures
                 )
 
+    def test_a_suite_added_without_a_pin_is_named(self) -> None:
+        """A floor only covers rows that existed when it was written.
+
+        A row that lands after ``PINNED_SUITES`` gets no protection: its later
+        deletion drops the extractor's input and output together and the layer
+        still prints a smaller count over ``SMOKE PASS``. Measured on live
+        ``main`` on 2026-11-05 with three such rows (``#228``, ``#231`` twice):
+        deleting any of them exited 0. The pin must therefore be an equality.
+        """
+        smoke, ci, files = guard.load_sources()
+        row = "    scripts/test_motion_policy.py\n"
+        self.assertIn(row, smoke)
+        self.assertEqual(guard.wiring_errors(smoke, files, ci), [])
+        files = dict(files)
+        files["scripts/test_unpinned_new_suite.py"] = "def test_one():\n    assert True\n"
+        mutated = smoke.replace(
+            row, "    scripts/test_unpinned_new_suite.py\n" + row, 1
+        )
+        with self.subTest(shape="added without a pin"):
+            failures = guard.wiring_errors(mutated, files, ci)
+            self.assertTrue(
+                any("not pinned in PINNED_SUITES" in f for f in failures), failures
+            )
+
     def test_the_gating_pytest_call_must_stay_a_bare_statement(self) -> None:
         smoke, ci, files = guard.load_sources()
         line = '  "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?\n'
