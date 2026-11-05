@@ -1123,6 +1123,63 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 "an unrelated quoted string beside a path is not a section hint",
             )
 
+    def test_section_hint_window_is_a_deliberate_boundary(self) -> None:
+        """A label far from its path is out of scope — decided, not overlooked.
+
+        #141 gap 3: SECTION_HINT only ever searched 120 chars either side of a
+        docs/ path, so a quoted label beyond that returned zero hints. That
+        bound is kept on purpose. There is no delimiter telling the gate that a
+        distant quoted string belongs to the path, so searching the whole line
+        turns `see docs/a.md ... , "anything"` into a heading claim. In-window
+        labels stay checked in both word orders; beyond the window the label is
+        prose, and the shipped citations are all well inside it.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_hint_window",
+            ROOT / "scripts" / "check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        doc = "docs/ops/bio-core-wheel.md"
+        window = checker.PRE_PATH_WINDOW
+        self.assertEqual(window, 120, "the pinned window changed; re-decide the scope")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs" / "ops").mkdir(parents=True)
+            (root / "docs" / "ops" / "bio-core-wheel.md").write_text(
+                "# Wheel\n\n## CI：构建一次，消费一次\n", encoding="utf-8"
+            )
+            # Inside the window: a dangling label must fail, in both orders.
+            near = f'# see {doc}, "NOPE"'
+            before = f'# see section "NOPE" in {doc}'
+            for text in (near, before):
+                self.assertTrue(
+                    checker.doc_ref_errors(text, root),
+                    f"a label inside the window must be checked: {text}",
+                )
+            # Just past the window, in both orders, the same label is prose.
+            far = f'# see {doc} ' + "x" * (window + 1) + ', "NOPE"'
+            far_before = '# see section "NOPE" ' + "x" * (window + 1) + f" {doc}"
+            for text in (far, far_before):
+                self.assertEqual(
+                    checker.doc_ref_errors(text, root), [],
+                    f"a label beyond the window is out of scope by decision: {text}",
+                )
+            # Widening the search would fabricate a citation from an unrelated
+            # quoted string; the bound is what keeps that from happening.
+            unrelated = f'# see {doc} ' + "x" * (window + 1) + ', "unrelated"'
+            self.assertEqual(
+                checker.doc_ref_errors(unrelated, root), [],
+                "a distant unrelated quote must not become a section claim",
+            )
+            # The shipped citation is comfortably inside the bound, so this
+            # decision does not relax a citation the committed tree relies on.
+            shipped = f'# see {doc}, "CI：构建一次，消费一次"'
+            self.assertEqual(checker.doc_ref_errors(shipped, root), [], shipped)
+
     def test_unquoted_section_heading_is_not_a_citation(self) -> None:
         """Unquoted headings stay out of scope — decided, not overlooked.
 

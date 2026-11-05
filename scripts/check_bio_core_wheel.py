@@ -48,6 +48,10 @@ PROSE_BEFORE_PATH = (
 # searched, so a dangling label written first stayed silently green.
 SECTION_HINT = re.compile(r'(?:,\s*|section\s+)"([^"]+)"')
 SECTION_HINT_BEFORE = re.compile(r'section\s+"([^"]+)"[^"]*?$')
+# A quoted label is paired with a path only inside this window. Past it the
+# line is prose: with no delimiter, widening the search promotes any unrelated
+# quoted string into a heading claim. The bound is deliberate; see the window
+# regression test in test_ci_job_contracts.py.
 PRE_PATH_WINDOW = 120
 # An unquoted heading is deliberately NOT parsed: the `docs/` path already
 # carries a mandatory quotation in every checked form, so an unquoted run of
