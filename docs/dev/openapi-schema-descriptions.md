@@ -43,10 +43,48 @@ OpenAPI guards, their `--self-test` suites and the whole contracts layer stay
   against the snapshot under guard. A one-sided JSDoc rewrite is named, and a
   coordinated regenerate cannot pass by making both halves agree on a drift.
 
-The digest and the generated-client door are independent: the client door is
-bound to the committed literal, so the decisive co-revert trips **both**. A
-legitimate prose change must move the digest in the same commit as both
-artifacts and say why.
+The digest and the generated-client multiset door are independent of each
+other on a one-sided edit, but the multiset's expected rows are derived from
+the **snapshot under guard**, not a literal. So a coordinated co-revert that
+rewrites both halves and honestly re-pins `_SCHEMA_DESCRIPTION_DIGEST` in one
+commit makes Door 3 agree with itself and pass — that is the failure below.
+
+## The description half's second literal
+
+The title half already carries two independent generated-client literals
+(Door 6 sorted digest and Door 7 positional triples). The description half
+carried only Door 1 (snapshot digest) and Door 3 (a multiset derived from the
+snapshot). That asymmetry is a real hole on live `8bcf0ec5`:
+
+1. **Same-count rotation.** Rotate three distinct `@description` lines between
+   fields in the generated client only. The line count, the multiset, every
+   count door and Door 3 are unchanged; all twelve wired OpenAPI guards stay
+   `rc=0` and the contracts layer stays `SMOKE PASS`. A client-visible label
+   moves to the wrong field and nothing names it.
+2. **Decisive co-revert with an honest re-pin.** Rewrite one description in
+   both halves (byte-preserving, all occurrences) and re-pin
+   `_SCHEMA_DESCRIPTION_DIGEST` to the new rows. Door 1 goes silent, Door 3
+   derives its expectation from the new snapshot and agrees, and the whole
+   layer is green — a client-visible prose line changes with one reviewed
+   re-pin and no independent fixed point left to object.
+
+Door 3b closes both shapes:
+
+* `_CLIENT_DESCRIPTION_SEQUENCE_DIGEST` — a hand-written sha256 over the 258
+  generated `@description` lines **in document order**, read from nowhere. A
+  multiset is order-blind; this one is not, so the rotation moves it, and a
+  co-revert must re-pin it as a second, separate literal;
+* `_EXPECTED_CLIENT_DESCRIPTION_LINES` (258) — exact count door, named even
+  when the digest is re-pinned.
+
+The companion carries the #289 lesson from the start: the rotation test asserts
+the count **and** the value multiset are unchanged inside the failing case, so
+the digest is the only thing that can be doing the work. It also proves the
+literal is a source-level constant (AST plant), the count door is load-bearing,
+a snapshot-only re-pin stays red, and that re-pinning both digest literals
+silences the two digest doors while Door 3 remains the pinned-multiset
+authority. A legitimate change must move both artifacts, both digests and the
+pinned rows in one commit and say why.
 
 ## The title half
 
@@ -112,11 +150,12 @@ not synthetic generator lines. The companion pins the seven by path.
 contracts `tests=()` array. The guard has no `--self-test` wire, so
 `check_contracts_self_test_teeth.py` (20 wired guards) and
 `check_contracts_registry_collection.py` (61 suites / 32 guard calls) are
-unchanged. The companion suite is both a pytest target and a standalone
-stdlib runner; it proves the decisive co-revert on both surfaces, one-sided
-edits on each half, count-door teeth, same-count rotations, each digest's
-independence, the reviewed synthetic line, the seven
-`title`-named rows, and the second-file source plant.
+unchanged — this phase adds **zero wiring**. The companion suite is both a
+pytest target and a standalone stdlib runner; it proves the decisive co-revert
+on both surfaces, one-sided edits on each half, count-door teeth, same-count
+rotations, each digest's independence, the reviewed synthetic line, the seven
+`title`-named rows, the description sequence literal's independence, and the
+second-file source plant.
 
 ## Boundaries
 

@@ -49,7 +49,13 @@ This guard reads committed bytes only (``json`` + ``re`` + stdlib): no Python
 * the generated client's ``@description`` first-line multiset against the
   *pinned* rows (plus the one documented synthetic line), so a one-sided edit
   that rewrites only the JSDoc is named too. The client half is checked
-  against the pins, not against the snapshot under guard.
+  against the pins, not against the snapshot under guard;
+* ``_CLIENT_DESCRIPTION_SEQUENCE_DIGEST`` -- a second, independent sha256 over
+  the generated ``@description`` lines **in document order**. A multiset is
+  order-blind: rotating three distinct lines between fields keeps every count
+  and the multiset unchanged, and a coordinated co-revert that re-pins only
+  the snapshot digest agrees with itself and passes. This literal is read from
+  nowhere, so that rotation and that co-revert both move it.
 
 The ``title`` half is a second, independent fixed point over its own rows:
 
@@ -105,6 +111,18 @@ _EXPECTED_SCHEMAS = 169
 _SYNTHETIC_CLIENT_DESCRIPTION = (
     "discriminator enum property added by openapi-typescript"
 )
+
+# Second independent fixed point for the description half: a sha256 over the
+# generated client's @description lines IN DOCUMENT ORDER, not a multiset.
+# The title half already has two independent client literals (Door 6 sorted
+# digest + Door 7 positional triples); this is the description half's
+# counterpart. Read from nowhere -- regenerate with
+# _digest_client_description_sequence() after an intentional, reviewed prose
+# change, in the same commit as both artifacts, with a reason.
+_CLIENT_DESCRIPTION_SEQUENCE_DIGEST = (
+    "e2cbc097af0dc74c9f43fcf4def6f279c3dfd86f21f73fdacfc2e9669c80bec4"
+)
+_EXPECTED_CLIENT_DESCRIPTION_LINES = 258
 
 # Reviewed, hand-written fixed point on the whole published title surface.
 # sha256 of "\n".join(["soymutdb-schema-titles/v1"] +
@@ -173,6 +191,14 @@ def client_descriptions(generated: str) -> list[str]:
     if block is None:
         raise ValueError("generated client has no components.schemas block")
     return _DESCRIPTION_LINE.findall(block.group("body"))
+
+
+def _digest_client_description_sequence(lines: list[str]) -> str:
+    """sha256 over the generated ``@description`` lines in document order."""
+    blob = "\n".join(
+        ["soymutdb-client-schema-description-sequence/v1", *lines]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 _JSDOC_BLOCK = re.compile(r"/\*\*\n((?:\s*\*.*\n)*?)\s*\*/")
 _FIRST_PROSE = re.compile(r"^\s*\* (?!@)(.*)$", re.M)
@@ -294,6 +320,8 @@ def failures(
     expected_title_schemas: int | None = None,
     client_title_rows_digest: str | None = None,
     expected_client_title_rows: int | None = None,
+    client_description_sequence_digest: str | None = None,
+    expected_client_description_lines: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -354,6 +382,39 @@ def failures(
         found.append(
             "generated client @description lines disagree with the pinned "
             f"schema prose (missing={missing[:4]}, extra={extra[:4]})"
+        )
+
+    # Door 3b -- a second, independent fixed point for the description half.
+    # Door 3 is a multiset against the pinned snapshot rows: a same-count
+    # rotation of three generated lines keeps that multiset and every count
+    # green, and a coordinated co-revert that honestly re-pins only the
+    # snapshot digest makes the two halves agree with themselves. This literal
+    # is read from nowhere, so both shapes still move it.
+    pinned_client_sequence = (
+        _CLIENT_DESCRIPTION_SEQUENCE_DIGEST
+        if client_description_sequence_digest is None
+        else client_description_sequence_digest
+    )
+    actual_client_sequence = _digest_client_description_sequence(client)
+    if actual_client_sequence != pinned_client_sequence:
+        found.append(
+            "generated client @description sequence drifted: "
+            f"_CLIENT_DESCRIPTION_SEQUENCE_DIGEST pins "
+            f"{pinned_client_sequence} but the client derives "
+            f"{actual_client_sequence}. A client-visible description line "
+            "moved or retyped; re-pin the literal in the same commit as both "
+            "artifacts, with a reason."
+        )
+    pinned_client_lines = (
+        _EXPECTED_CLIENT_DESCRIPTION_LINES
+        if expected_client_description_lines is None
+        else expected_client_description_lines
+    )
+    if len(client) != pinned_client_lines:
+        found.append(
+            f"generated client @description line count is {len(client)}, "
+            f"_EXPECTED_CLIENT_DESCRIPTION_LINES pins {pinned_client_lines}: "
+            "a description was added or dropped without moving the literal"
         )
 
     # Door 4 -- independent fixed point over the whole published title surface.
