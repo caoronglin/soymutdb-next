@@ -114,6 +114,44 @@ class RegistryCollectionGuardTests(unittest.TestCase):
         failures = guard.check(smoke, files, CI_OK)
         self.assertTrue(any("was dropped" in f for f in failures), failures)
 
+    def test_guard_call_floor_covers_the_committed_layer(self) -> None:
+        """A wired guard outside the floor can be dropped with a green SMOKE PASS."""
+        smoke_bytes, _ci, _files = guard.load_sources()
+        wired = set(guard.guard_calls(smoke_bytes))
+        self.assertEqual(
+            wired,
+            set(guard.REQUIRED_GUARD_CALLS),
+            "standalone guard calls and REQUIRED_GUARD_CALLS drifted apart: "
+            "a wired-but-unpinned call is removable without a red layer",
+        )
+
+    def test_dropping_a_newly_landed_guard_call_is_caught(self) -> None:
+        """The inline-body pin landed outside the original floor."""
+        smoke_bytes, ci_bytes, files = guard.load_sources()
+        victim = "scripts/check_openapi_inline_body_integrity.py"
+        self.assertIn(victim, guard.REQUIRED_GUARD_CALLS)
+        dropped = "\n".join(
+            line for line in smoke_bytes.splitlines() if victim not in line
+        ) + "\n"
+        self.assertNotEqual(dropped, smoke_bytes)
+        failures = guard.check(dropped, files, ci_bytes)
+        self.assertTrue(
+            any("was dropped" in f and victim in f for f in failures), failures
+        )
+
+    def test_wired_guard_outside_the_floor_is_caught(self) -> None:
+        """Adding a call without pinning it is the drift that reopens the hole."""
+        smoke = _smoke(["scripts/test_example.py"], REQUIRED + [
+            "scripts/check_extra_wiring_probe.py"
+        ])
+        files = _files()
+        files["scripts/test_example.py"] = "def test_one():\n    assert True\n"
+        files["scripts/check_extra_wiring_probe.py"] = "# guard\n"
+        failures = guard.check(smoke, files, CI_OK)
+        self.assertTrue(
+            any("is wired but not pinned" in f for f in failures), failures
+        )
+
     def test_guard_call_without_file_is_caught(self) -> None:
         smoke = _smoke(["scripts/test_example.py"], REQUIRED)
         files = _files()
