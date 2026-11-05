@@ -62,6 +62,12 @@ _CODE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 #: but has no exception class. Its code and description are read from the
 #: source assignments below, never hard-coded here.
 _FALLBACK_CONST = "HTTP_ERROR_CODE"
+#: An independent floor for the one code the consistency check cannot see.
+#: Deleting the fallback declaration *and* pruning both artifacts together
+#: leaves every ``derived == committed == published`` assertion green, because
+#: all three sides moved as one. The published API contract must not lose a
+#: client-visible code by a coordinated regenerate, so pin it here instead.
+_FALLBACK_CODE = "http_error"
 _FALLBACK_DESC = (
     "Generic HTTPException fallback; see x-error-status for the statuses that use it."
 )
@@ -230,6 +236,17 @@ def check_tree(root: Path) -> list[str]:
             "re-export the contract (generate:api-client)"
         )
 
+    # A coordinated source + artifact co-revert keeps all three sides equal and
+    # every comparison above green. The published code set is client-visible,
+    # so this independent floor is the only assertion that still reddens.
+    for label, mapping in (("error-codes.json", committed), ("x-error-codes", published)):
+        if isinstance(mapping, dict) and _FALLBACK_CODE not in mapping:
+            problems.append(
+                f"{label} no longer publishes {_FALLBACK_CODE!r}: a coordinated "
+                "source + artifact prune of the generic HTTPException fallback "
+                "is a breaking published-contract change, not a regenerate"
+            )
+
     # A guard that compares committed bytes is only meaningful if the bytes
     # can actually be produced and the guard is actually invoked. Pin both
     # wirings so dropping either is a loud failure, not a silent gap.
@@ -305,6 +322,23 @@ def self_test() -> int:
             p / "apps/api/app/core/exceptions.py",
             lambda s: s.replace(_FALLBACK_BLOCK, ""),
         ),
+        # The shape the consistency assertions cannot see: drop the fallback
+        # declaration and prune both artifacts together. Every comparison then
+        # agrees, and only the independent floor above is left to redden.
+        "fallback code pruned from source and both artifacts": lambda p: (
+            _mutate_source(
+                p / "apps/api/app/core/exceptions.py",
+                lambda s: s.replace(_FALLBACK_BLOCK, ""),
+            ),
+            _mutate_json(
+                p / "packages/api-client/error-codes.json",
+                lambda d: d.pop(_FALLBACK_CODE, None),
+            ),
+            _mutate_json(
+                p / "packages/api-client/openapi.json",
+                lambda d: d["x-error-codes"].pop(_FALLBACK_CODE, None),
+            ),
+        ),
     }
 
     failures = 0
@@ -321,7 +355,15 @@ def self_test() -> int:
                 dest = tree / rel
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(ROOT / rel, dest)
-            plant(tree)
+            try:
+                plant(tree)
+            except AssertionError as exc:
+                # A no-op plant is a broken self-test, not a caught defect:
+                # report it by name so the layer says which case lost its teeth
+                # instead of surfacing a bare traceback.
+                print(f"SELF-TEST FAIL: planted {name!r} landed no bytes: {exc}", file=sys.stderr)
+                failures += 1
+                continue
             problems = check_tree(tree)
             if not problems:
                 print(f"SELF-TEST FAIL: planted {name!r} was NOT caught", file=sys.stderr)
@@ -334,18 +376,43 @@ def self_test() -> int:
     return 0
 
 
+def _require_changed(path: Path, before: str, after: str) -> None:
+    """Reject an ablation whose needle matched nothing.
+
+    A ``str.replace`` (or a ``dict.pop`` with no default) returns its input
+    unchanged when the target is gone. Writing that back leaves a pristine
+    tree, so the case would be judged "caught" only by inversion -- green for
+    the wrong reason. Failing here turns the rot into a named self-test error.
+    """
+    if after == before:
+        raise AssertionError(f"planted defect did not change {path.name}")
+
+
 def _mutate_json(path: Path, mutate) -> None:
-    data = json.loads(path.read_text(encoding="utf-8"))
+    before = path.read_text(encoding="utf-8")
+    data = json.loads(before)
+    # Compare parsed data, not the raw text: the canonical re-dump below is not
+    # byte-identical to every committed artifact, so a raw-text check would see
+    # a formatting-only difference and accept a plant that changed no values.
+    snapshot = json.dumps(data, sort_keys=True)
     mutate(data)
+    if json.dumps(data, sort_keys=True) == snapshot:
+        raise AssertionError(f"planted defect did not change {path.name}")
     path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def _mutate_wiring(path: Path, mutate) -> None:
-    path.write_text(mutate(path.read_text(encoding="utf-8")), encoding="utf-8")
+    before = path.read_text(encoding="utf-8")
+    after = mutate(before)
+    _require_changed(path, before, after)
+    path.write_text(after, encoding="utf-8")
 
 
 def _mutate_source(path: Path, mutate) -> None:
-    path.write_text(mutate(path.read_text(encoding="utf-8")), encoding="utf-8")
+    before = path.read_text(encoding="utf-8")
+    after = mutate(before)
+    _require_changed(path, before, after)
+    path.write_text(after, encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:

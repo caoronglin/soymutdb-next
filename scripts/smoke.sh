@@ -118,6 +118,10 @@ smoke_contracts() {
     # a live signal (planted drifts are caught) and pins the gate wiring, so
     # this row is what keeps the call above from being deleted silently.
     scripts/test_check_error_code_contract.py
+    # The catalog guard's regression suite: proves the plants fail closed and
+    # a coordinated source + artifact prune still reddens the guard. Pinning
+    # the collection here keeps both --self-test calls above load-bearing.
+    scripts/test_error_code_catalog_contract.py
     scripts/test_deployment_workflows.py
     # Behavior contracts injected by app.main (x-idempotent / x-pagination /
     # x-error-codes / documented 429 / uniform 500) are client-visible, but
@@ -375,6 +379,12 @@ smoke_contracts() {
   # of source_codes() back to a constant-only read keeps the whole layer green.
   "${PYTHON_BIN}" scripts/check_api_error_code_vocabulary.py --self-test || rc=$?
   "${PYTHON_BIN}" scripts/check_error_code_catalog.py || rc=$?
+  # The plain call above reads committed bytes; --self-test is the only thing
+  # that proves the guard's planted drifts still land and still get caught.
+  # Wired here because check-contract.sh runs only the plain form, so a
+  # _mutate_source no-op (a needle that matches nothing) or a gutted case set
+  # could keep the whole contracts layer green while the guard went blind.
+  "${PYTHON_BIN}" scripts/check_error_code_catalog.py --self-test || rc=$?
   # The third guard of that family was left behind in check-contract.sh. It is
   # the only one that executes the runtime catalog and reconciles the published
   # x-error-status block with error_status_map(); the two above read

@@ -181,6 +181,91 @@ def test_dropped_fallback_catalog_entry_is_detected() -> None:
         _cleanup(tree)
 
 
+def test_no_op_plants_are_refused_by_the_guard() -> None:
+    """A needle that matches nothing is not an ablation.
+
+    ``_mutate_source`` / ``_mutate_wiring`` / ``_mutate_json`` each refuse an
+    edit that landed no bytes. Without that, a regenerate that rewraps the
+    fallback block leaves ``str.replace`` inert and the self-test judges a
+    pristine tree.
+    """
+    tree = _synthetic_tree()
+    try:
+        cases = (
+            (
+                guard._mutate_source,
+                tree / EXCEPTIONS_REL,
+                lambda src: src.replace("no such block", ""),
+            ),
+            (
+                guard._mutate_wiring,
+                tree / GENERATOR_REL,
+                lambda src: src.replace("no such flag", ""),
+            ),
+            (
+                guard._mutate_json,
+                tree / CATALOG_REL,
+                lambda data: data.pop("no_such_code", None),
+            ),
+        )
+        for mutate, path, plant in cases:
+            before = path.read_bytes()
+            with pytest.raises(AssertionError, match="did not change"):
+                mutate(path, plant)
+            assert path.read_bytes() == before, "a refused plant still wrote bytes"
+    finally:
+        _cleanup(tree)
+
+
+def test_coordinated_prune_of_the_fallback_is_rejected() -> None:
+    """Source + both artifacts pruned together must still redden the guard."""
+    tree = _synthetic_tree()
+    try:
+        src = tree / EXCEPTIONS_REL
+        source = src.read_text(encoding="utf-8")
+        assert guard._FALLBACK_BLOCK in source
+        src.write_text(source.replace(guard._FALLBACK_BLOCK, "", 1), encoding="utf-8")
+        for rel, key in ((CATALOG_REL, None), (OPENAPI_REL, "x-error-codes")):
+            path = tree / rel
+            data = json.loads(path.read_text(encoding="utf-8"))
+            target = data if key is None else data[key]
+            target.pop(guard._FALLBACK_CODE, None)
+            path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        problems = guard.check_tree(tree)
+        assert any("no longer publishes" in p for p in problems), problems
+    finally:
+        _cleanup(tree)
+
+
+def test_self_test_plant_set_pins_the_coordinated_prune() -> None:
+    """Dropping the decisive plant from the guard must fail its own self-test."""
+    tree = _synthetic_tree()
+    try:
+        weakened = tree / "scripts/check_error_code_catalog.py"
+        text = (ROOT / "scripts/check_error_code_catalog.py").read_text(encoding="utf-8")
+        marker = '"fallback code pruned from source and both artifacts": lambda p: ('
+        assert marker in text
+        # Replacing the case with one that plants nothing must not stay green.
+        start = text.index("        " + marker)
+        # The case is a tuple expression ending in `),`; the next dict entry
+        # begins with `    }` or another quoted key. Splice on the following
+        # blank line + the `    }` that closes `cases`, so an inner lambda's
+        # `),` cannot be mistaken for the end of the entry.
+        end = text.index("    }\n", start)
+        text = text[:start] + '        "inert probe": lambda p: None,\n' + text[end:]
+        weakened.parent.mkdir(parents=True, exist_ok=True)
+        weakened.write_text(text, encoding="utf-8")
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("weakened_catalog", weakened)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.ROOT = tree
+        assert module.self_test() != 0, "a gutted self-test passed"
+    finally:
+        _cleanup(tree)
+
+
 def _json_mutate(path: Path, mutate) -> None:  # type: ignore[no-untyped-def]
     data = json.loads(path.read_text(encoding="utf-8"))
     mutate(data)
