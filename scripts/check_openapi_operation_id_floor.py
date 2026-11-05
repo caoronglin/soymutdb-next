@@ -260,6 +260,24 @@ def self_test() -> int:
             dict(snapshot=co_snap, generated=co_gen),
         )
     )
+    # 1b. The same co-revert with the fixed point honestly re-pinned in the
+    #     same commit. Both halves agree and the digest moves with them, so
+    #     this is the *only* green shape among the coordinated drifts. Keeping
+    #     both limbs in the case list makes them load-bearing: if the digest
+    #     door is weakened to self-agreement, case 1 stops failing and the
+    #     self-test reports it instead of silently passing a green tree.
+    re_pinned_digest = _digest(_snapshot_map(json.loads(co_snap)))
+    cases.append(
+        (
+            "a coordinated operationId retype with its digest re-pinned",
+            dict(
+                snapshot=co_snap,
+                generated=co_gen,
+                digest=re_pinned_digest,
+                expect_clean=True,
+            ),
+        )
+    )
     # 2. Snapshot-only retype (one-half drift).
     one = copy.deepcopy(document)
     for item in one["paths"].values():
@@ -329,30 +347,20 @@ def self_test() -> int:
     failures_seen = 0
     base: dict[str, Any] = dict(snapshot=snapshot, generated=generated, smoke=smoke)
     for label, kwargs in cases:
+        expect_clean = kwargs.pop("expect_clean", False)
         found = failures(**{**base, **kwargs})
         results += 1
-        if found:
+        if expect_clean:
+            if not found:
+                print(f"PASS self-test: {label} -> stays green")
+            else:
+                failures_seen += 1
+                print(f"FAIL self-test: {label} was rejected: {found}")
+        elif found:
             print(f"PASS self-test: {label} -> {len(found)} failure(s)")
         else:
             failures_seen += 1
             print(f"FAIL self-test: {label} was NOT caught")
-
-    # Positive control: a legitimate rename re-pins the digest in the same
-    # commit. The clean tree must still pass with the updated fixed point.
-    co_doc = json.loads(co_snap)
-    new_digest = _digest(_snapshot_map(co_doc))
-    fresh = failures(
-        snapshot=co_snap,
-        generated=co_gen,
-        digest=new_digest,
-        expected_count=len(_snapshot_map(co_doc)),
-    )
-    results += 1
-    if not fresh:
-        print("PASS self-test: a same-commit re-pin of a real rename stays green")
-    else:
-        failures_seen += 1
-        print(f"FAIL self-test: a legitimate re-pin was rejected: {fresh}")
 
     print(f"self-test: {results} cases, {failures_seen} failure(s)")
     return 1 if failures_seen else 0

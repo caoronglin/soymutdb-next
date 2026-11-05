@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Every wired ``--self-test`` guard must still execute its mutation cases.
 
-Eighteen guards are wired into ``smoke_contracts()`` through ``--self-test``
-alone: their plain ``check()`` is never invoked in the contracts layer. The
+Twenty guards are wired into ``smoke_contracts()`` through ``--self-test``
+(this guard's own call is the twenty-first). For most of them that is the only
+invocation in the layer, so their plain ``check()`` never runs here. The
 registry guard (``check_contracts_registry_collection.py``) pins that each
 call *exists* and is listed in ``REQUIRED_GUARD_CALLS`` -- it does not read
 the body the call reaches. Measured on live main: replacing
@@ -533,34 +534,83 @@ def probe(
 
 
 def _declared_cases(path: Path, function: str, mapping: str) -> int | None:
-    """Count the entries of ``mapping`` inside ``function``; None if unreadable.
+    """Count the case rows of ``mapping`` in ``function``; None if unreadable.
 
-    Only half the evidence: a ``cases`` dict survives an edit that empties the
-    ``for ... in cases.items()`` loop around it, so a count read here can agree
-    with a success line no case produced. :func:`_loop_consumes` covers the
-    other half.
+    Case containers come in four committed shapes: a dict/list/tuple literal,
+    ``cases.append(...)`` calls, ``cases[key] = ...`` subscript writes, and a
+    module-level literal (``CLAIMS``) that the self-test iterates. All are
+    counted from source, never from printed output. Only half the evidence: a
+    container survives an edit that empties the loop over it, so a count read
+    here can agree with a success line no case produced.
+    :func:`_loop_consumes` covers the other half.
     """
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
     except (OSError, SyntaxError):
         return None
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.FunctionDef) or node.name != function:
-            continue
-        for inner in ast.walk(node):
-            if isinstance(inner, ast.Assign):
-                targets, value = inner.targets, inner.value
-            elif isinstance(inner, ast.AnnAssign) and inner.value is not None:
-                targets, value = [inner.target], inner.value
-            else:
+    function_node = next(
+        (
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef) and node.name == function
+        ),
+        None,
+    )
+    if function_node is None:
+        return None
+
+    def literal_size(node: ast.AST) -> int | None:
+        if isinstance(node, ast.Dict):
+            return len(node.keys)
+        if isinstance(node, (ast.List, ast.Tuple)):
+            return len(node.elts)
+        return None
+
+    total = 0
+    seen = False
+    for inner in ast.walk(function_node):
+        if isinstance(inner, (ast.Assign, ast.AnnAssign)):
+            targets = inner.targets if isinstance(inner, ast.Assign) else [inner.target]
+            value = inner.value
+            if value is None:
                 continue
-            if not any(isinstance(t, ast.Name) and t.id == mapping for t in targets):
+            if any(isinstance(t, ast.Name) and t.id == mapping for t in targets):
+                size = literal_size(value)
+                if size is not None:
+                    total += size
+                    seen = True
+            for target in targets:
+                if (
+                    isinstance(target, ast.Subscript)
+                    and isinstance(target.value, ast.Name)
+                    and target.value.id == mapping
+                ):
+                    total += 1
+                    seen = True
+        if (
+            isinstance(inner, ast.Call)
+            and isinstance(inner.func, ast.Attribute)
+            and inner.func.attr == "append"
+            and isinstance(inner.func.value, ast.Name)
+            and inner.func.value.id == mapping
+        ):
+            total += 1
+            seen = True
+    if seen:
+        return total
+    # The case rows live at module level (e.g. ``CLAIMS``); still reviewed
+    # bytes, still unreachable without the loop check below.
+    for inner in tree.body:
+        if isinstance(inner, (ast.Assign, ast.AnnAssign)):
+            targets = inner.targets if isinstance(inner, ast.Assign) else [inner.target]
+            value = inner.value
+            if value is None:
                 continue
-            if not isinstance(value, ast.Dict):
-                continue
-            return len(value.keys)
-        return 0
-    return None
+            if any(isinstance(t, ast.Name) and t.id == mapping for t in targets):
+                size = literal_size(value)
+                if size is not None:
+                    return size
+    return 0
 
 
 def _loop_consumes(path: Path, function: str, mapping: str) -> bool:
@@ -589,38 +639,100 @@ def _loop_consumes(path: Path, function: str, mapping: str) -> bool:
 
 # Guards whose self-test must still *reach* its declared ablations. A signature
 # pins the shape of one printed line, and a guard that prints that shape from a
-# number it computes itself forges it -- measured on the #256 tree: empting the
+# number it computes itself forges it -- measured on the #256 tree: emptying the
 # loop and printing ``len(cases)`` still emitted ``(12 negative cases + clean
-# tree)``, rc=0, this probe green. The evidence no print can fake is in the
-# guard's own source, so read it there. Reviewed floor, like
-# ``_WIRED_SELF_TESTS``: an entry without the declared shape fails closed.
-_CASE_FLOOR: dict[str, tuple[str, str, int]] = {
-    # guard -> (function, local mapping name, minimum declared entries)
-    "scripts/check_error_code_catalog.py": ("self_test", "cases", 5),
+# tree)``, rc=0, this probe green.
+#
+# The drift and gutter plants of #281/#282 each disable one check or one entry
+# point; neither says anything about a *case being deleted*. Deleting the
+# decisive co-revert case from ``check_openapi_operation_id_floor.py`` leaves
+# its self-test at ``10 cases, 0 failure(s)`` while every plant, signature,
+# evidence line and count check here stays green. So every ``EVIDENCE_MEMBERS``
+# guard now pins a reviewed floor on its own case rows, read from source, plus
+# a loop that names the container. A deleted case then names itself. Adding a
+# member without a row fails closed (:func:`evidence_floor_errors`).
+#
+# (guard, source file holding self_test, function, case container, floor)
+_CASE_FLOOR: dict[str, tuple[str, str, str, int]] = {
+    "scripts/check_api_error_code_vocabulary.py": (
+        "scripts/check_api_error_code_vocabulary.py", "_self_test", "cases", 9,
+    ),
+    "scripts/check_error_code_catalog.py": (
+        "scripts/check_error_code_catalog.py", "self_test", "cases", 12,
+    ),
+    "scripts/check_error_code_doc_counts.py": (
+        "scripts/check_error_code_doc_counts.py", "self_test", "CLAIMS", 5,
+    ),
+    "scripts/check_error_code_gate_wiring.py": (
+        "scripts/check_error_code_gate_wiring.py", "_self_test", "ablations", 9,
+    ),
+    "scripts/check_mcp_manifest_reconcile.py": (
+        "scripts/test_mcp_manifest_reconcile.py", "self_test", "checks", 12,
+    ),
+    "scripts/check_mcp_release_binding.py": (
+        "scripts/check_mcp_release_binding.py", "run_self_test", "cases", 6,
+    ),
+    "scripts/check_openapi_operation_id_floor.py": (
+        "scripts/check_openapi_operation_id_floor.py", "self_test", "cases", 11,
+    ),
+    "scripts/check_openapi_operation_parameter_floor.py": (
+        "scripts/check_openapi_operation_parameter_floor.py", "self_test", "cases", 13,
+    ),
+    "scripts/check_openapi_field_constraints.py": (
+        "scripts/check_openapi_field_constraints.py", "self_test", "cases", 5,
+    ),
+    "scripts/check_openapi_response_surface.py": (
+        "scripts/check_openapi_response_surface.py", "self_test", "cases", 10,
+    ),
+    "scripts/check_openapi_required_fields.py": (
+        "scripts/check_openapi_required_fields.py", "self_test", "cases", 6,
+    ),
+    "scripts/check_openapi_operation_annotations.py": (
+        "scripts/check_openapi_operation_annotations.py", "self_test", "cases", 7,
+    ),
+    "scripts/check_variant_summary_assembly_consistency.py": (
+        "scripts/check_variant_summary_assembly_consistency.py", "self_test", "cases", 6,
+    ),
 }
 
 
 def declared_case_errors(root: Path = ROOT) -> list[str]:
     """Fail closed when a pinned self-test no longer reaches its own ablations."""
     problems: list[str] = []
-    for guard_path, (function, mapping, floor) in sorted(_CASE_FLOOR.items()):
+    for guard_path, (source, function, mapping, floor) in sorted(_CASE_FLOOR.items()):
         if guard_path not in _WIRED_SELF_TESTS:
             problems.append(f"case floor {guard_path!r} is pinned but no guard is wired")
             continue
-        declared = _declared_cases(root / guard_path, function, mapping)
+        target = root / source
+        declared = _declared_cases(target, function, mapping)
         if declared is None:
-            problems.append(f"{guard_path} declares no {function}()/{mapping} to audit")
+            problems.append(f"{source} declares no {function}()/{mapping} to audit")
         elif declared < floor:
             problems.append(
-                f"{guard_path} {function}() declares {declared} planted mutation "
-                f"case(s), below the pinned floor of {floor}"
+                f"{source} {function}() declares {declared} mutation case(s), "
+                f"below the pinned floor of {floor}: a case was deleted without "
+                "a reviewed edit"
             )
-        elif not _loop_consumes(root / guard_path, function, mapping):
+        elif not _loop_consumes(target, function, mapping):
             problems.append(
-                f"{guard_path} {function}() no longer iterates its {mapping} "
+                f"{source} {function}() no longer iterates its {mapping} "
                 "mapping: the declared cases are unreachable, so the success "
                 "line reports a count nothing produced"
             )
+    return problems
+
+
+def evidence_floor_errors() -> list[str]:
+    """Every audited per-case guard must pin a reviewed case floor."""
+    problems = [
+        f"per-case guard {p!r} is audited for evidence but has no _CASE_FLOOR "
+        "row: deleting one of its cases would be invisible"
+        for p in sorted(EVIDENCE_MEMBERS - set(_CASE_FLOOR))
+    ]
+    problems += [
+        f"case floor {p!r} targets a guard that is not audited for per-case evidence"
+        for p in sorted(set(_CASE_FLOOR) - EVIDENCE_MEMBERS)
+    ]
     return problems
 
 
@@ -699,7 +811,12 @@ def check(
         wired = wired_self_tests(text)
     except ValueError as exc:
         return [str(exc)]
-    problems = floor_errors(wired) + drift_floor_errors() + declared_case_errors(root)
+    problems = (
+        floor_errors(wired)
+        + drift_floor_errors()
+        + evidence_floor_errors()
+        + declared_case_errors(root)
+    )
     if results is None:
         results = probe(wired, root=root)
     if drift_results is None:
