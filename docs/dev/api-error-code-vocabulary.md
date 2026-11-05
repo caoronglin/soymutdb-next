@@ -54,12 +54,13 @@ API import, no Python 3.15 venv, no wheel, no database. It asserts:
   module-level `HTTP_ERROR_CODE` fallback is frozen, and every frozen code is
   still declared.
 
-`--self-test` plants seven independent defects (coordinated rename, dropped
+`--self-test` plants eight independent defects (coordinated rename, dropped
 code, changed description, lock turned into a generated artifact, invented
-source code, empty lock, duplicate key) and proves each is caught.
+source code, renamed `http_error` fallback, empty lock, duplicate key) and
+proves each is caught.
 
 `packages/api-client/python_tests/test_api_error_code_vocabulary.py` provides
-seven `unittest` regressions, including the killing mutation: a rename applied
+eight `unittest` regressions, including the killing mutation: a rename applied
 to the source **and** both published artifacts still fails, because the lock is
 not one of them.
 
