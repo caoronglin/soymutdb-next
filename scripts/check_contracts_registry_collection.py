@@ -72,6 +72,17 @@ CI_LAYER_CALL = re.compile(
     r'^[ \t]*bash[ \t]+"\$\{REPO_ROOT\}/scripts/smoke\.sh"(?:[ \t][^\n]*)?$',
     re.MULTILINE,
 )
+# The layer call must stay a bare statement too. Pinning only its *position*
+# lets a hand-merge append `|| true`, `2>/dev/null`, `| tail -1` or a trailing
+# comment: the layer still runs and prints SMOKE FAIL, but `set -e` sees
+# success and the whole Contract suites stage goes green. The self-test's own
+# `assert` on the literal line turns that into an opaque AssertionError rather
+# than a named failure, so `check()` must report it on its own.
+CI_LAYER_BARE = re.compile(
+    r'^[ \t]*bash[ \t]+"\$\{REPO_ROOT\}/scripts/smoke\.sh"'
+    r'(?:[ \t]+--profile[ \t]+[A-Za-z0-9_-]+)?[ \t]*$',
+    re.MULTILINE,
+)
 
 ARRAY_ENTRY = re.compile(
     r"^\s+((?:scripts|infra)/[A-Za-z0-9_./-]+\.py)\s*$", re.MULTILINE
@@ -244,6 +255,14 @@ def ci_wiring_errors(ci_body: str) -> list[str]:
             f"{GUARD_NAME} --self-test must run before the contracts layer in "
             "scripts/ci-job-steps.sh (smoke_contracts_run), but the "
             "'bash .../smoke.sh' call is missing"
+        ]
+    layer_lines = [line for line in lines if CI_LAYER_BARE.match(line)]
+    if not layer_lines:
+        return [
+            "the contracts layer call in scripts/ci-job-steps.sh "
+            "(smoke_contracts_run) is not a standalone statement: a trailing "
+            "operator, pipe, redirection or comment swallows a failing layer's "
+            "exit status and turns SMOKE FAIL into a green CI stage"
         ]
     if ci_body.index(hits[0]) > layer.start():
         return [
@@ -526,6 +545,31 @@ def self_test() -> int:
             bool(found),
             f"PASS self-test: a --self-test line with {label} is caught",
             f"FAIL self-test: a --self-test line with {label} was accepted",
+        )
+
+    # The layer call is the other half of the gate: neutralising its exit
+    # status turns a red layer into a green CI stage. Each variant keeps the
+    # ordering reference (so the old assertion still passes) but discards the
+    # failure. `check()` must name it, not leave an opaque AssertionError in
+    # the self-test's own literal-line lookup.
+    layer_neutralised = {
+        "|| true": " || true",
+        "|| :": " || :",
+        "2>/dev/null": " 2>/dev/null",
+        "a trailing comment": "  # ignored",
+        "| tail -1": " | tail -1",
+    }
+    bash_line = '  bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts\n'
+    for label, suffix in layer_neutralised.items():
+        mutated_ci = ci_steps.replace(
+            bash_line, f"{bash_line.rstrip()}{suffix}\n", 1
+        )
+        assert mutated_ci != ci_steps, label
+        found = check(smoke, files, mutated_ci)
+        report(
+            bool(found),
+            f"PASS self-test: a layer call with {label} is caught",
+            f"FAIL self-test: a layer call with {label} was accepted",
         )
 
     wrapped = {

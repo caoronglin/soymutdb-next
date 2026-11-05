@@ -5446,6 +5446,61 @@ class CnbVolumeGrammarTests(unittest.TestCase):
             _cnb_volume_path("a:b:c:d", "loc")
 
 
+class ContractsRegistryWiringTests(unittest.TestCase):
+    """The registry guard is wired into BOTH entry points of the contracts layer.
+
+    Historical hole: deleting the CI-side ``--self-test`` line left the whole
+    collected contracts suite green -- the guard lived on another branch and
+    no assertion in this file named it. This is the independent second door
+    measured at 06:17Z; it reads committed bytes, not the guard's own
+    self-test, so it stays red even if that guard is edited to lie.
+    """
+
+    def test_ci_side_self_test_is_wired_as_a_bare_statement(self) -> None:
+        shared = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        body = shared.split("smoke_contracts_run() {", 1)[1].split("\n}\n", 1)[0]
+        line = (
+            '  python3 "${REPO_ROOT}/scripts/'
+            'check_contracts_registry_collection.py" --self-test'
+        )
+        self.assertIn(
+            line, body,
+            "the CI-side registry --self-test line was dropped from "
+            "smoke_contracts_run(); the Contract suites stage would lose the "
+            "guard without any collected test turning red",
+        )
+        self.assertRegex(
+            body,
+            r'(?m)^[ \t]*python3[ \t]+"\$\{REPO_ROOT\}/scripts/'
+            r'check_contracts_registry_collection\.py"[ \t]+--self-test[ \t]*$',
+            "the CI-side --self-test call must be a standalone statement so "
+            "its exit status reaches the pipeline",
+        )
+
+    def test_ci_layer_call_is_not_neutralised(self) -> None:
+        shared = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        body = shared.split("smoke_contracts_run() {", 1)[1].split("\n}\n", 1)[0]
+        self.assertRegex(
+            body,
+            r'(?m)^[ \t]*bash[ \t]+"\$\{REPO_ROOT\}/scripts/smoke\.sh"'
+            r'(?:[ \t]+--profile[ \t]+contracts)?[ \t]*$',
+            "the contracts layer call must stay a bare statement: a trailing "
+            "operator, pipe, redirection or comment turns a red layer into a "
+            "green CI stage",
+        )
+
+    def test_driver_level_guard_failure_reaches_the_exit_status(self) -> None:
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        self.assertRegex(
+            smoke,
+            r'(?m)^[ \t]*"\$\{PYTHON_BIN\}"[ \t]+scripts/'
+            r'check_contracts_registry_collection\.py[ \t]+\|\|[ \t]+'
+            r'FAILED\+=\("contracts registry"\)',
+            "a bare `|| rc=$?` at top-level scope never reaches SMOKE's exit "
+            "status; only the FAILED array decides it",
+        )
+
+
 if __name__ == "__main__":  # pragma: no cover - unittest entry point
     unittest.main()
 
