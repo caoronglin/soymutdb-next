@@ -1,21 +1,25 @@
 # OpenAPI auth surface: the non-admin protected floor and the projection pin
 
-Three fixed points live in `scripts/check_openapi_auth_surface.py`, and they
-measure three different things:
+Four fixed points live in `scripts/check_openapi_auth_surface.py`, and they
+measure four different things:
 
 
 | literal | rows | what a change to it means |
 | --- | --- | --- |
 | `NON_ADMIN_PROTECTED` | 48 | a reviewed operation lost or gained the bearer requirement |
 | `_SECURITY_PROJECTION_DIGEST` | 268 | an operation moved between protected and public |
+| `_SECURITY_REQUIREMENT_DIGEST` | 268 | a requirement's content changed (scheme, scopes, OR) |
 | `_SECURITY_SCHEME_DESCRIPTION_DIGEST` | 2 | a published security scheme description prose changed |
 
 They are deliberately not the same pin. The floor is a reviewed allowlist of
-operations a human chose to protect; the digest is the *whole* published
-projection, so it also covers the 122 admin operations (which check 2 only
-sweeps in one direction) and the 98 public ones. A count-preserving swap
-between protected and public moves neither the floor's size nor either count
-door -- only the digest.
+operations a human chose to protect; the projection digest is the *whole*
+published projection, so it also covers the 122 admin operations (which check 2
+only sweeps in one direction) and the 98 public ones. The requirement digest
+walks the same 268 operations but reads the *content* of each `security` array,
+not just its presence. A count-preserving swap between protected and public
+moves neither the floor's size nor either count door -- only the projection
+digest; injecting a scope moves neither the projection boolean nor any count --
+only the requirement digest.
 
 ## Phase (one phase, one PR)
 
@@ -231,3 +235,54 @@ plants 5 regressions (two single-value drifts, a swap, a drop, a coordinated
 co-revert); the companion suite pins the literal, the count door, the source
 cross-check and the non-duplication with check 1. Zero new guards, zero
 `smoke.sh` / registry / teeth wiring changes, zero published artifact bytes.
+
+
+## Published `security` requirement content (follow-on phase)
+
+`paths.*.*.security` is a list of requirement objects. Each can name a scheme,
+carry OAuth scopes, or list several OR-ed alternatives. The published
+*content* is client-visible: a generated SDK or an API gateway reads it to
+decide which credentials to send. `openapi-typescript` drops the entire array,
+so there is **no second half** to disagree with.
+
+Every landed door reads either presence or a name:
+
+- `_SECURITY_PROJECTION_DIGEST` collapses the array to `str(bool(security))`;
+- `_bearer()` (check 2) asks only whether `"HTTPBearer"` occurs in a requirement;
+- `NON_ADMIN_PROTECTED` (check 3) is a 48-row `(path, method)` floor;
+- the four source pins (check 5) assert a scheme is injected, not what each
+  operation requires.
+
+A coordinated co-revert that injects a scope
+(`[{"HTTPBearer": ["release:read"]}]`), turns one bearer requirement into an
+OR-alternative (`[{"HTTPBearer": []}, {"refreshCookie": []}]`), or rotates two
+scopes between operations, and honestly re-pins `_PINNED_ARTIFACTS`' two blob
+ids, leaves all 12 wired `check_openapi_*.py` guards, the behaviour suite and
+the whole contracts layer `SMOKE PASS / 1103 + 41 + 10 / 0` on live `9a7c3e52`.
+Measured on committed bytes with a text-clean `json.dumps(d, indent=2)`
+re-export so the normalizer fixed-point test is not polluted by a
+serialization artifact.
+
+Three doors close it, all inside the already-wired guard (zero `smoke.sh` /
+registry / teeth wiring changes, zero published artifact bytes):
+
+| door | shape it catches |
+| --- | --- |
+| `_SECURITY_REQUIREMENT_DIGEST` | value change: scope, OR-alternative, rotation |
+| `_EXPECTED_SECURITY_REQUIREMENT_ROWS` | an operation added or dropped |
+| `_EXPECTED_PROTECTED_REQUIREMENTS` | an operation moved into or out of a protected set |
+
+The digest is a hand-written sha256 over canonical sorted
+`(METHOD, path, operationId, canonical-json-of-security)` rows, where the last
+field is the exact `json.dumps(..., sort_keys=True)` spelling of the published
+array (or `absent`). Read from nowhere -- deriving it from the snapshot under
+guard would be self-referential. A legitimate contract change must move the
+literal in the same commit as the re-export and say why.
+
+Self-test grows from 19 to 23 ablations (scope injection, OR-alternative,
+same-count rotation, emptied-array content). The companion suite grows from 26
+to 34 cases and pins the literals, the digest's independence from committed
+bytes, the positive control that the *boolean* projection stays silent on a
+scope change, and the non-duplication with the sibling response-surface guard.
+Decisive two-tree A/B on the same drifted bytes: OLD guard `rc=0` (blind), NEW
+guard `rc=1` naming `_SECURITY_REQUIREMENT_DIGEST`.

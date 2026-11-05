@@ -42,6 +42,29 @@ being invisible to every count-preserving check above. ``_EXPECTED_PROJECTED``
 / ``_EXPECTED_HIDDEN_OPS`` are exact count doors so a same-count permutation
 cannot satisfy the doors alone.
 
+The projection digest pins a **boolean**: ``str(bool(operation["security"]))``.
+It cannot see *what* a requirement says. ``openapi-typescript`` drops the whole
+``security`` array, so the published requirement content -- which scheme is
+named, its OAuth scopes, and whether several alternatives are OR-ed -- has no
+generated half to disagree with. Every landed door reads either the boolean or
+the scheme's *name*: ``_bearer()`` asks only whether ``"HTTPBearer"`` occurs,
+and the four source pins check that a scheme is injected, not what each
+operation requires. A coordinated co-revert that injects a scope into one
+operation (``[{"HTTPBearer": ["release:read"]}]``), or turns one bearer
+requirement into an OR-alternative (``[{"HTTPBearer": []}, {"refreshCookie": []}]``),
+re-pins the two provenance blob ids, and leaves all 12 wired ``check_openapi_*``
+guards plus the whole contracts layer ``SMOKE PASS``. That is a client-visible
+contract change with zero fixed points.
+
+``_SECURITY_REQUIREMENT_DIGEST`` is a third hand-written sha256 over canonical
+sorted ``(METHOD, path, operationId, requirement)`` rows, where ``requirement``
+is the exact canonical JSON of the published ``security`` array (or
+``"absent"``). Read from nowhere; a co-revert of the snapshot and source still
+moves it. ``_EXPECTED_SECURITY_REQUIREMENT_ROWS`` and
+``_EXPECTED_PROTECTED_REQUIREMENTS`` are exact count doors. Kept separate from
+the projection digest so a dropped requirement and a retyped requirement keep
+distinct failure names.
+
 The two ``securitySchemes`` descriptions are a separate, smaller surface.
 Check 1 pins each scheme's *shape* (http/bearer, cookie apiKey, runtime cookie
 name) but never reads its ``description`` prose. ``openapi-typescript`` drops
@@ -167,6 +190,17 @@ _SECURITY_PROJECTION_DIGEST = (
 _EXPECTED_PROJECTED = 170
 _EXPECTED_HIDDEN_OPS = 98
 
+# Independent fixed point on the *content* of each published security
+# requirement, not just its presence. sha256 over canonical sorted
+# "METHOD|path|operationId|<canonical-json-or-absent>" rows. Read from nowhere:
+# deriving it from the snapshot it guards would be self-referential. Re-pin in
+# the same commit as an intentional contract change, with a reason.
+_SECURITY_REQUIREMENT_DIGEST = (
+    "e227b106475a35cf387a024699cf7ee5bbce7a5b6d3eea0888dcca618d69ac16"
+)
+_EXPECTED_SECURITY_REQUIREMENT_ROWS = 268
+_EXPECTED_PROTECTED_REQUIREMENTS = 170
+
 # Reviewed, hand-written fixed point on the two securityScheme descriptions.
 # sha256 of "\n".join(["soymutdb-security-scheme-descriptions/v1"] +
 #   sorted(f"{scheme}|{description}")) over every component.securitySchemes
@@ -217,6 +251,44 @@ def _projection_digest(rows: list[tuple[str, str, str, str]]) -> str:
     blob = "\n".join(
         ["soymutdb-security-projection/v1"] + ["|".join(row) for row in sorted(rows)]
     )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _requirement_rows(document: dict) -> list[tuple[str, str, str, str]]:
+    """Canonical (METHOD, path, operationId, requirement) rows for every operation.
+
+    ``requirement`` is the exact canonical JSON of the published ``security``
+    array (sorted keys, no whitespace), or ``"absent"`` for a public operation.
+    The generated client drops ``security`` entirely, so this reads the one
+    half that publishes the contract and nothing else.
+    """
+    rows: list[tuple[str, str, str, str]] = []
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for method, operation in item.items():
+            if method not in METHODS or not isinstance(operation, dict):
+                continue
+            requirement = operation.get("security")
+            rendered = (
+                json.dumps(requirement, sort_keys=True, separators=(",", ":"))
+                if requirement is not None
+                else "absent"
+            )
+            rows.append(
+                (
+                    method.upper(),
+                    path,
+                    str(operation.get("operationId", "")),
+                    rendered,
+                )
+            )
+    return rows
+
+
+def _requirement_digest(rows: list[tuple[str, str, str, str]]) -> str:
+    canonical = sorted("|".join(row) for row in rows)
+    blob = "\n".join(["soymutdb-security-requirements/v1", *canonical])
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
@@ -440,6 +512,42 @@ def failures(snapshot: str, main: str, deps: str, auth: str, config: str) -> lis
             "surface moved"
         )
 
+    # 7. Independent fixed point over the *content* of each published
+    #    ``security`` requirement. Check 2 asks whether "HTTPBearer" occurs,
+    #    check 3 pins a 48-row floor, and check 6 collapses the whole surface
+    #    into a boolean -- none of them reads the scheme's scopes or whether
+    #    several alternatives are OR-ed. ``openapi-typescript`` drops the
+    #    array entirely, so there is no generated half to disagree with: a
+    #    coordinated co-revert of snapshot + source + provenance re-pin moves
+    #    nothing above. Only an independent literal over the canonical rows
+    #    sees a scope injection, an OR-alternative, or a same-count rotation.
+    requirement_rows = _requirement_rows(document)
+    actual_requirement = _requirement_digest(requirement_rows)
+    if actual_requirement != _SECURITY_REQUIREMENT_DIGEST:
+        found.append(
+            "published security requirements drifted: "
+            f"_SECURITY_REQUIREMENT_DIGEST pins "
+            f"{_SECURITY_REQUIREMENT_DIGEST} but the snapshot derives "
+            f"{actual_requirement}. The generated client drops `security` on "
+            "purpose, so no second half can disagree: re-pin the literal in "
+            "the same commit as the re-export, with a reason."
+        )
+    if len(requirement_rows) != _EXPECTED_SECURITY_REQUIREMENT_ROWS:
+        found.append(
+            f"{len(requirement_rows)} operations publish a security-requirement "
+            f"row, _EXPECTED_SECURITY_REQUIREMENT_ROWS pins "
+            f"{_EXPECTED_SECURITY_REQUIREMENT_ROWS}: the operation surface moved"
+        )
+    protected_requirements = sum(
+        1 for row in requirement_rows if row[3] != "absent"
+    )
+    if protected_requirements != _EXPECTED_PROTECTED_REQUIREMENTS:
+        found.append(
+            f"{protected_requirements} operations publish a non-absent security "
+            f"requirement, _EXPECTED_PROTECTED_REQUIREMENTS pins "
+            f"{_EXPECTED_PROTECTED_REQUIREMENTS}: the protected surface moved"
+        )
+
     return found
 
 
@@ -553,6 +661,37 @@ def _mutate(snapshot: str, main: str, deps: str, auth: str, config: str, *, kind
         doc["paths"]["/api/v1/assemblies"]["get"]["security"] = [
             {"HTTPBearer": []}
         ]
+    elif kind == "inject_scope":
+        # Published requirement content changes, presence and scheme name do
+        # not. Every landed door (boolean projection, _bearer name check,
+        # NON_ADMIN_PROTECTED floor, source pins) stays silent.
+        doc["paths"]["/api/v1/admin/seed-requests"]["get"]["security"] = [
+            {"HTTPBearer": ["release:read"]}
+        ]
+    elif kind == "or_alternative":
+        # One bearer requirement becomes "bearer OR refresh cookie": a caller
+        # can now authenticate with the refresh cookie alone. _bearer() still
+        # sees "HTTPBearer" in the first alternative, so check 2 stays green.
+        doc["paths"]["/api/v1/admin/seed-requests"]["get"]["security"] = [
+            {"HTTPBearer": []},
+            {"refreshCookie": []},
+        ]
+    elif kind == "same_count_scope_rotation":
+        # Count-preserving: move a scope from one protected operation to
+        # another. Both the row count and the protected count stay at 268/170.
+        first = "/api/v1/admin/seed-requests"
+        second = "/api/v1/admin/features"
+        doc["paths"][first]["get"]["security"] = [
+            {"HTTPBearer": ["release:read"]}
+        ]
+        doc["paths"][second]["get"]["security"] = [
+            {"HTTPBearer": ["seed:read"]}
+        ]
+    elif kind == "drop_one_requirement_content":
+        # Only the *content* digest can name this: the requirement array is
+        # emptied (still present, still named HTTPBearer, still protected), so
+        # the projection boolean, _bearer() and both count doors are silent.
+        doc["paths"]["/api/v1/admin/seed-requests"]["get"]["security"] = [{}]
     else:
         raise ValueError(kind)
     return (json.dumps(doc), main, deps, auth, config)
@@ -584,6 +723,10 @@ def _self_test() -> int:
         "swap_scheme_descriptions",
         "drop_scheme_description",
         "co_revert_scheme_description_source",
+        "inject_scope",
+        "or_alternative",
+        "same_count_scope_rotation",
+        "drop_one_requirement_content",
         *sorted(source_cases),
     ]
     problems = [f"literal floor: {item}" for item in _literal_floor_errors(source)]
