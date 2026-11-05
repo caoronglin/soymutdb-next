@@ -16,12 +16,17 @@ things and either one alone has a blind spot:
   artifacts moved with it. This is the "edited a number to match a tree I never
   committed" case that door 1 cannot see because the tree *is* consistent.
 
-Nothing here writes to the repository: every case injects the tree through
-``failures(tree=...)``.
+Door 1 cases inject the tree through ``failures(tree=...)``. That injection has
+no parent commit, so it skips door 2 by construction -- which is why this suite
+also injects the *history*: ``show`` (old source), ``changed_in`` (artifact
+diff) and ``resolve`` (HEAD) are replaced for the duration of a case, while the
+new sources and both artifacts still come from the committed tree. Nothing here
+writes to the repository or needs a real commit.
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sys
 from pathlib import Path
@@ -139,13 +144,95 @@ def test_client_total_reader_is_anchored_to_the_body_line() -> None:
 def test_the_suite_has_teeth() -> None:
     """Every case above builds a failing tree and asserts on the marker.
 
-    A suite where ``failures()`` always returns ``[]`` would be seven passing
-    no-ops. This pins the count so a deletion is loud, and asserts the clean
-    tree is the *only* one that produces no problems.
+    A suite where ``failures()`` always returns ``[]`` would be a rack of
+    passing no-ops. The floor keeps a deletion loud, and the clean tree is
+    asserted to be the *only* tree that produces no problems. Door 2 has its
+    own cases because an injected ``tree=`` skips it entirely: without them,
+    deleting the whole history door leaves this suite green.
     """
     cases = [name for name in globals() if name.startswith("test_")]
-    assert len(cases) >= 7, cases
+    assert len(cases) >= 13, cases
     assert guard.failures(tree=_tree()) == []
+
+
+@contextlib.contextmanager
+def _history(old_sources: dict[str, str], moved: set[str]):
+    """Inject only the readers door 2 uses, so it runs without a real commit.
+
+    ``failures(base=...)`` takes its new sources and both artifacts from the
+    working tree; git is asked for three things only: the old source
+    (``show``), the artifact diff (``changed_in``) and the HEAD id
+    (``resolve``). Replacing those three is enough to build every history case
+    on the committed tree itself. Restored in ``finally`` so no case leaks.
+    """
+    saved = (guard.resolve, guard.show, guard.changed_in)
+    guard.resolve = lambda _ref: "synthetic-head"
+    guard.show = lambda _commit, path: old_sources.get(path)
+    guard.changed_in = lambda _commit, _since, _paths: set(moved)
+    try:
+        yield
+    finally:
+        guard.resolve, guard.show, guard.changed_in = saved
+
+
+def _old_sources_with_total(value: int) -> dict[str, str]:
+    tree = _tree()
+    _set_total(tree, value)
+    return tree
+
+
+def test_a_literal_moved_without_the_artifacts_is_rejected() -> None:
+    """Door 2, the one edit door 1 cannot see.
+
+    The old source pins 808 and the committed tree pins 807; each agrees with
+    its own artifacts, so the semantic door is silent. Only the history says
+    the pin was bumped while neither artifact changed.
+    """
+    total = guard.pinned_literal(guard.BODY_GUARD, "_CLIENT_BODY_TOTAL")
+    with _history(_old_sources_with_total(total + 1), moved=set()):
+        found = guard.failures(base="synthetic-base")
+    assert _any(found, "_CLIENT_BODY_TOTAL moved"), found
+    assert _any(found, "but none of"), found
+    assert not _any(found, "committed artifacts"), found
+
+
+def test_a_literal_moved_with_the_artifacts_passes() -> None:
+    """The door is satisfiable: a regenerate moving pin + artifacts is green."""
+    total = guard.pinned_literal(guard.BODY_GUARD, "_CLIENT_BODY_TOTAL")
+    with _history(_old_sources_with_total(total + 1),
+                  moved={SNAPSHOT_PATH, GENERATED_PATH}):
+        found = guard.failures(base="synthetic-base")
+    assert found == [], found
+
+
+def test_the_history_door_respects_each_gates_own_artifacts() -> None:
+    """The error baseline pins the snapshot; moving only the client is not enough."""
+    old = _tree()
+    pinned = guard.pinned_literal(guard.ENVELOPE_GUARD, "_ERROR_RESPONSE_BASELINE")
+    was = json.dumps(pinned, sort_keys=True)
+    pinned["500"] = pinned["500"] + 1
+    line = f"_ERROR_RESPONSE_BASELINE = {was}"
+    assert line in old[ENVELOPE_PATH]
+    old[ENVELOPE_PATH] = old[ENVELOPE_PATH].replace(
+        line, f"_ERROR_RESPONSE_BASELINE = {json.dumps(pinned)}", 1
+    )
+    with _history(old, moved={GENERATED_PATH}):
+        found = guard.failures(base="synthetic-base")
+    assert _any(found, "_ERROR_RESPONSE_BASELINE moved"), found
+
+
+def test_an_unchanged_literal_needs_no_artifact_move() -> None:
+    """The door is not a tripwire: a baseline that did not move says nothing."""
+    with _history(_tree(), moved=set()):
+        found = guard.failures(base="synthetic-base")
+    assert found == [], found
+
+
+def test_a_shallow_clone_without_an_old_source_is_not_a_failure() -> None:
+    """No old source means no history to compare; door 2 steps aside."""
+    with _history({}, moved=set()):
+        found = guard.failures(base="synthetic-base")
+    assert found == [], found
 
 
 def _run_all() -> int:
