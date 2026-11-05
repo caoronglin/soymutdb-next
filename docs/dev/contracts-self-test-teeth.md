@@ -4,7 +4,7 @@
 
 `scripts/smoke.sh` wires the contracts layer through two mechanisms: a
 `local tests=( ... )` array collected by pytest, and standalone
-`"${PYTHON_BIN}" scripts/check_*.py ... || rc=$?` calls. Seventeen of those
+`"${PYTHON_BIN}" scripts/check_*.py ... || rc=$?` calls. Fifteen of those
 standalone calls carry `--self-test` and no plain invocation: the guard's
 `check()` never runs in this layer. Only its self-test does.
 
@@ -73,8 +73,6 @@ the signature floor: a body gutted to `print(<pinned signature>); return 0`
 still satisfies `_SIGNATURES` — the marker is a string a mutator can write —
 so the case asserts **both** that the signature check stays green (or the case
 proves nothing) and that the drift probe catches the same body.
-
-`scripts/test_contracts_self_test_teeth.py` (11 cases) is the second file:
 
 `scripts/test_contracts_self_test_teeth.py` (14 cases) is the second file:
 it pins the wiring into `smoke.sh`, the `REQUIRED_GUARD_CALLS` floor, status

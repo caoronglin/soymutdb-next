@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every wired ``--self-test`` guard must still execute its mutation cases.
 
-Twelve guards are wired into ``smoke_contracts()`` through ``--self-test``
+Fifteen guards are wired into ``smoke_contracts()`` through ``--self-test``
 alone: their plain ``check()`` is never invoked in the contracts layer. The
 registry guard (``check_contracts_registry_collection.py``) pins that each
 call *exists* and is listed in ``REQUIRED_GUARD_CALLS`` -- it does not read

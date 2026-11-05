@@ -427,7 +427,7 @@ smoke_contracts() {
   # make this a dead guard -- it would pass while the real source regressed.
   "${PYTHON_BIN}" scripts/check_variant_summary_assembly_consistency.py --self-test || rc=$?
   "${PYTHON_BIN}" scripts/check_variant_summary_assembly_consistency.py || rc=$?
-  # Twelve guards are wired here through --self-test alone. If one of
+  # Fifteen guards are wired here through --self-test alone. If one of
   # their self_test bodies is replaced with `return 0`, the call is still
   # present, still pinned and still green: this guard runs each one as a
   # real process and requires its pinned evidence of mutation cases.
