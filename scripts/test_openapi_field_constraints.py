@@ -734,15 +734,18 @@ def test_door_eight_adds_no_new_wiring() -> None:
     source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
     assert "generated @example values disagree" in source
     assert not (ROOT / "scripts" / "check_openapi_published_examples.py").exists()
-    import subprocess
-
+    # A fresh single-branch CI checkout has no ``origin/main`` ref to diff
+    # against: shelling out to ``git show origin/main:...`` produces one false
+    # failure there for the wrong reason. Assert instead that the three hot
+    # wiring files carry none of this door's identities -- no new guard call,
+    # no new suite row, no new teeth signature. Same load-bearing claim, no
+    # git dependency.
     for relative in (
         "scripts/smoke.sh",
         "scripts/check_contracts_registry_collection.py",
         "scripts/check_contracts_self_test_teeth.py",
     ):
-        ours = (ROOT / relative).read_bytes()
-        main = subprocess.check_output(
-            ["git", "show", f"origin/main:{relative}"], cwd=ROOT
-        )
-        assert ours == main, relative
+        text = (ROOT / relative).read_text(encoding="utf-8")
+        assert "example_value_cases" not in text, relative
+        assert "door_eight" not in text, relative
+        assert "check_openapi_published_examples" not in text, relative
