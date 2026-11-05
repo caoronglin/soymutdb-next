@@ -397,5 +397,46 @@ class SecuritySchemeDescriptionPinTests(unittest.TestCase):
             self.assertIn(f'"{kind}"', src)
 
 
+class ExtensionKeySetSecondDoorTests(unittest.TestCase):
+    """Second-file assertion that the behavior suite still owns its x-* pin.
+
+    A single-file edit to ``test_openapi_behavior_contracts.py`` must not be
+    able to delete the independent literal and both count doors. This suite is
+    collected by the same contracts layer and reads the guarded file's bytes.
+    """
+
+    BEHAVIOR = ROOT / "scripts" / "test_openapi_behavior_contracts.py"
+
+    def test_the_independent_literal_and_all_doors_are_still_in_source(self):
+        src = self.BEHAVIOR.read_text(encoding="utf-8")
+        for needle in (
+            "_EXTENSION_SURFACE_DIGEST = (",
+            "actual != _EXTENSION_SURFACE_DIGEST",
+            "_EXPECTED_OPERATION_EXTENSION_ROWS",
+            "_EXPECTED_EXTENSION_KEYS",
+            "_EXPECTED_TOP_EXTENSION_KEYS",
+            "found.extend(_extension_key_errors(document))",
+        ):
+            self.assertIn(needle, src)
+
+    def test_a_phantom_extension_is_rejected_by_the_committed_suite(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "behavior_contracts_second_door", self.BEHAVIOR
+        )
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        document, generated, main, smoke = module._load()
+        assert not module._extension_key_errors(document)
+        key = next(k for k in sorted(module._operations(document)))
+        document["paths"][key[0]][key[1]]["x-audit-anchor"] = "reviewed"
+        found = module._extension_key_errors(document)
+        self.assertTrue(any("_EXTENSION_SURFACE_DIGEST" in f for f in found), found)
+        self.assertTrue(
+            any("_EXPECTED_OPERATION_EXTENSION_ROWS" in f for f in found), found
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
