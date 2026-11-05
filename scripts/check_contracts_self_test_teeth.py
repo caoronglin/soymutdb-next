@@ -26,6 +26,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ast
 import re
 import subprocess
 import sys
@@ -283,6 +284,98 @@ def probe(
     return out
 
 
+def _declared_cases(path: Path, function: str, mapping: str) -> int | None:
+    """Count the entries of ``mapping`` inside ``function``; None if unreadable.
+
+    Only half the evidence: a ``cases`` dict survives an edit that empties the
+    ``for ... in cases.items()`` loop around it, so a count read here can agree
+    with a success line no case produced. :func:`_loop_consumes` covers the
+    other half.
+    """
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return None
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef) or node.name != function:
+            continue
+        for inner in ast.walk(node):
+            if isinstance(inner, ast.Assign):
+                targets, value = inner.targets, inner.value
+            elif isinstance(inner, ast.AnnAssign) and inner.value is not None:
+                targets, value = [inner.target], inner.value
+            else:
+                continue
+            if not any(isinstance(t, ast.Name) and t.id == mapping for t in targets):
+                continue
+            if not isinstance(value, ast.Dict):
+                continue
+            return len(value.keys)
+        return 0
+    return None
+
+
+def _loop_consumes(path: Path, function: str, mapping: str) -> bool:
+    """True when some ``for`` in ``function`` iterates ``mapping`` itself.
+
+    The forgery this rejects is an edit inside the guard: keep the ``cases``
+    dict, replace the loop iterable with an empty literal, and print a count
+    the guard computes itself. The dict is then dead weight that no printed
+    signature can see, so the iterable is required to *name* the mapping.
+    """
+    try:
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+    except (OSError, SyntaxError):
+        return False
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.FunctionDef) or node.name != function:
+            continue
+        for inner in ast.walk(node):
+            if isinstance(inner, ast.For) and any(
+                isinstance(n, ast.Name) and n.id == mapping for n in ast.walk(inner.iter)
+            ):
+                return True
+        return False
+    return False
+
+
+# Guards whose self-test must still *reach* its declared ablations. A signature
+# pins the shape of one printed line, and a guard that prints that shape from a
+# number it computes itself forges it -- measured on the #256 tree: empting the
+# loop and printing ``len(cases)`` still emitted ``(12 negative cases + clean
+# tree)``, rc=0, this probe green. The evidence no print can fake is in the
+# guard's own source, so read it there. Reviewed floor, like
+# ``_WIRED_SELF_TESTS``: an entry without the declared shape fails closed.
+_CASE_FLOOR: dict[str, tuple[str, str, int]] = {
+    # guard -> (function, local mapping name, minimum declared entries)
+    "scripts/check_error_code_catalog.py": ("self_test", "cases", 5),
+}
+
+
+def declared_case_errors(root: Path = ROOT) -> list[str]:
+    """Fail closed when a pinned self-test no longer reaches its own ablations."""
+    problems: list[str] = []
+    for guard_path, (function, mapping, floor) in sorted(_CASE_FLOOR.items()):
+        if guard_path not in _WIRED_SELF_TESTS:
+            problems.append(f"case floor {guard_path!r} is pinned but no guard is wired")
+            continue
+        declared = _declared_cases(root / guard_path, function, mapping)
+        if declared is None:
+            problems.append(f"{guard_path} declares no {function}()/{mapping} to audit")
+        elif declared < floor:
+            problems.append(
+                f"{guard_path} {function}() declares {declared} planted mutation "
+                f"case(s), below the pinned floor of {floor}"
+            )
+        elif not _loop_consumes(root / guard_path, function, mapping):
+            problems.append(
+                f"{guard_path} {function}() no longer iterates its {mapping} "
+                "mapping: the declared cases are unreachable, so the success "
+                "line reports a count nothing produced"
+            )
+    return problems
+
+
 def teeth_errors(
     wired: dict[str, list[str]], results: dict[str, tuple[int, str]]
 ) -> list[str]:
@@ -314,7 +407,7 @@ def check(
         wired = wired_self_tests(text)
     except ValueError as exc:
         return [str(exc)]
-    problems = floor_errors(wired) + drift_floor_errors()
+    problems = floor_errors(wired) + drift_floor_errors() + declared_case_errors(root)
     if results is None:
         results = probe(wired, root=root)
     if drift_results is None:
