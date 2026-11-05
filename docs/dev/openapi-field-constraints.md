@@ -472,6 +472,15 @@ Extend the same already-registered guard; `smoke.sh` / registry / teeth /
   in the same commit is named first, so door 12 stands down and the coordinated
   value goes unnamed. Resolve the decoy and door 12 re-arms; revert the commit
   and nothing ships. Delayed, not permanent — a resolution-order effect.
+* **Precedence: replacement, not addition.** `_GENERATED_EXAMPLE_VALUE_DIGEST`
+  *replaces* the generated-half reference door 12 would otherwise derive from
+  `generated_example_rows()` — it does not sit beside it. Door 11 still reads
+  `example_projection(document)`, the snapshot it guards. That conjunction is
+  what makes the shape deterministic: a coordinated both-halves move lands on a
+  reference door 11 also trusts, so door 11 stays silent and is never
+  pre-empted, and only the literal names the value; a concurrent decoy gives
+  door 11 a real disagreement to name first, so door 12 defers instead of
+  closing over it.
 * A reviewed regenerate now re-pins **two** literals in the same commit as
   both artifacts, with a reason. Re-pinning only `_EXAMPLE_DIGEST` (the shape
   the topology used to bless) no longer agrees; that off-control is planted.
