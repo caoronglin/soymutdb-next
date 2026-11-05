@@ -11,10 +11,18 @@ but the operator was not told which body moved. Two distinct causes:
   precondition likewise have no message, and ``AssertionError`` is **truthy**
   even when empty, so ``f"...: {exc or 'assertion failed'}"`` never falls back.
 
-This suite pins both halves from a second file, so a one-file edit that
-reintroduces either shape fails the contracts layer instead of shipping a
-silent red. It reads committed sources (AST, stdlib only) and does not need
-pytest's fixtures, a 3.15 venv, an API import or a workspace install.
+A third shape is quieter than both: a runner may *call* ``describe_assertion``
+and still discard its return value, restoring a dead ``{exc or ...}`` fallback
+in the report line. The existing pins only see that the helper is imported and
+called somewhere in the file (or, for the inline-``str`` shape, that a reviewed
+substring is present), so such a runner stays green while its red line prints
+nothing after the colon. This suite also pins that every wired runner renders
+the cause it computes, from the real ``FAIL:`` f-string inside its
+``except AssertionError`` handler -- a quoted spelling in a docstring or an
+ablation fixture cannot stand in for the report line.
+
+It reads committed sources (AST, stdlib only) and does not need pytest's
+fixtures, a 3.15 venv, an API import or a workspace install.
 
 Run directly or collect with pytest:
     python3 scripts/test_named_guard_diagnostics.py
@@ -292,6 +300,104 @@ def test_the_pinned_runner_list_actually_covers_the_wired_runners() -> None:
     )
 
 
+def _rendered_exceptions(source: str, filename: str) -> list[tuple[int, ast.expr]]:
+    """The expressions a runner actually formats into its ``FAIL:`` line.
+
+    Only f-strings inside a handler that catches ``AssertionError`` count --
+    a quoted fallback spelling in a docstring or an ablation fixture is not a
+    report line. ``_runner_uses_helper`` sees a *call* anywhere in the file and
+    ``inline_str_fallback`` sees a *substring* anywhere in the file, so a runner
+    that calls the helper but discards its result (or keeps the old spelling in
+    a comment while reverting to a dead fallback) stays green while its red
+    line prints nothing after the colon.
+    """
+    tree = ast.parse(source, filename=filename)
+    rendered: list[tuple[int, ast.expr]] = []
+    for handler in ast.walk(tree):
+        if not isinstance(handler, ast.ExceptHandler) or handler.type is None:
+            continue
+        names = (
+            [handler.type]
+            if not isinstance(handler.type, ast.Tuple)
+            else list(handler.type.elts)
+        )
+        if not any(
+            isinstance(node, ast.Name) and node.id == "AssertionError"
+            for node in names
+        ):
+            continue
+        for node in ast.walk(handler):
+            if isinstance(node, ast.JoinedStr):
+                for value in node.values:
+                    if isinstance(value, ast.FormattedValue):
+                        rendered.append((node.lineno, value.value))
+    return rendered
+
+
+EXCEPTION_NAMES = frozenset({"exc", "error", "e"})
+
+
+def _renders_the_helper_result(expr: ast.expr) -> bool:
+    return (
+        isinstance(expr, ast.Call)
+        and isinstance(expr.func, ast.Name)
+        and expr.func.id == GUARD
+    )
+
+
+def _renders_the_exception_object(expr: ast.expr) -> bool:
+    """The dead shape: the exception object itself, not its ``str()``.
+
+    ``{exc or 'assertion failed'}`` and a bare ``{exc}`` are dead because
+    ``AssertionError`` is truthy even when ``str(exc) == ''``. The reviewed
+    ``{str(exc) or 'assertion failed'}`` shape is *not* dead -- converting the
+    exception first makes the fallback reachable -- so a Name nested inside a
+    ``str()`` call must not be counted.
+    """
+    if isinstance(expr, ast.Name) and expr.id in EXCEPTION_NAMES:
+        return True
+    if isinstance(expr, ast.BoolOp) and any(
+        isinstance(value, ast.Name) and value.id in EXCEPTION_NAMES
+        for value in expr.values
+    ):
+        return True
+    return False
+
+
+def _scanner_problems(relative: str, source: str) -> list[str]:
+    problems: list[str] = []
+    rendered = _rendered_exceptions(source, relative)
+    if not rendered:
+        return [f"{relative} renders no cause from its caught AssertionError"]
+    if relative in HELPER_RUNNERS and not any(
+        _renders_the_helper_result(expr) for _, expr in rendered
+    ):
+        problems.append(
+            f"{relative} calls {GUARD} but never renders its return value "
+            "into the FAIL line"
+        )
+    for lineno, expr in rendered:
+        if _renders_the_exception_object(expr):
+            problems.append(
+                f"{relative}:{lineno} renders the exception object directly; "
+                "the fallback is dead and the cause is empty"
+            )
+    return problems
+
+
+def rendered_cause_errors() -> list[str]:
+    problems: list[str] = []
+    for relative in RUNNERS:
+        problems.extend(_scanner_problems(relative, _source(relative)))
+    return problems
+
+
+def test_every_runner_renders_the_cause_it_computes() -> None:
+    """A red gate must print the named cause, not just compute it."""
+    found = rendered_cause_errors()
+    assert not found, found
+
+
 def test_the_regression_pins_are_load_bearing() -> None:
     """Both scanners must go red on the exact shapes they forbid."""
     # (1) drop the helper import + call from one runner's bytes: the AST
@@ -349,10 +455,48 @@ def test_the_regression_pins_are_load_bearing() -> None:
     else:
         raise AssertionError("a missing pinned runner was not rejected")
 
-    # (4) the committed bytes pass both scanners -- the pins reject the
-    # regression, not the fix itself.
+    # (4) a runner that computes the cause but never prints it must be
+    # rejected. The helper pin and the wired-runner equality only see that
+    # ``describe_assertion`` is called somewhere in the file.
+    host = "scripts/test_mcp_openapi_parity.py"
+    original = _source(host)
+    discarding = original.replace(
+        'print(f"FAIL self-test: {fn.__name__}: {describe_assertion(exc, fn)}")',
+        'describe_assertion(exc, fn)\n'
+        '            print(f"FAIL self-test: {fn.__name__}: '
+        "{exc or 'assertion failed'}\")",
+        1,
+    )
+    assert discarding != original, "render ablation did not change the bytes"
+    assert any(
+        "never renders its return value" in problem
+        for problem in _scanner_problems(host, discarding)
+    ), "a discarded helper result was not detected"
+
+    # (5) an inline-str runner reverted to the dead object fallback while
+    # keeping the reviewed spelling in a comment must also be named. The
+    # substring-based ``inline_str_fallback`` cannot see this.
+    inline_host = "scripts/test_openapi_snapshot_body_integrity.py"
+    inline_original = _source(inline_host)
+    dead = inline_original.replace(
+        'problems.append(f"{test.__name__}: '
+        "{str(exc) or 'assertion failed'}\")",
+        "# reviewed spelling: {str(exc) or 'assertion failed'}\n"
+        '            problems.append(f"{test.__name__}: '
+        "{exc or 'assertion failed'}\")",
+        1,
+    )
+    assert dead != inline_original, "dead-fallback ablation did not change the bytes"
+    assert any(
+        "renders the exception object directly" in problem
+        for problem in _scanner_problems(inline_host, dead)
+    ), "a dead fallback hidden behind a comment was not detected"
+
+    # (6) the committed bytes pass all three scanners -- the pins reject the
+    # regressions, not the fix itself.
     assert _runner_uses_helper() == []
     assert _empty_list_asserts_are_messaged() == []
+    assert rendered_cause_errors() == []
 
 
 def _run() -> int:
