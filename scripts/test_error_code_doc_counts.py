@@ -82,6 +82,56 @@ class TestErrorCodeDocCounts(unittest.TestCase):
             finally:
                 module.CLAIMS = saved
 
+    def test_duplicate_claim_sentence_is_refused(self) -> None:
+        """A second sentence with the claim's shape must not shadow the real one.
+
+        ``re.search`` takes the first hit, so a decoy carrying the correct
+        number would let the documenting sentence go stale with a green guard.
+        Here the decoy is correct and the real sentence is broken: only a
+        multiplicity check catches it, a value check cannot.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp) / "repo"
+            for rel in (
+                module.VOCAB_GUARD, module.CATALOG_GUARD, module.CONTRACT_GUARD,
+                module.VOCAB_TESTS, module.CATALOG_TESTS, *DOCS,
+            ):
+                dest = tree / rel.relative_to(ROOT)
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(ROOT / rel, dest)
+
+            doc = tree / DOCS[1].relative_to(ROOT)
+            original = doc.read_text(encoding="utf-8")
+            real = "regression suite: 14\npytest cases"
+            self.assertIn(real, original)
+
+            decoy = "regression suite: 14 pytest cases"
+            broken_real = "regression suite: 15\npytest cases"
+            shadowed = original.replace(real, decoy + "\n\n" + broken_real, 1)
+            doc.write_text(shadowed, encoding="utf-8")
+
+            problems = module.check(tree)
+            self.assertTrue(
+                any("catalog_pytest" in p and "ambiguous" in p for p in problems),
+                problems,
+            )
+
+    def test_value_check_alone_would_miss_the_shadow(self) -> None:
+        """Pin the reason the multiplicity check exists.
+
+        With the decoy first, the first match still reads 14 -- the correct
+        value -- so a ``search``-only guard reports clean while the sentence
+        that documents the suite says 15.
+        """
+        pattern = next(pat for _, pat, key in module.CLAIMS if key == "catalog_pytest")
+        shadowed = (
+            "regression suite: 14 pytest cases\n\nregression suite: 15\npytest cases"
+        )
+        first = pattern.search(shadowed)
+        self.assertIsNotNone(first)
+        self.assertEqual(first.group("num"), "14")
+        self.assertEqual(len(pattern.findall(shadowed)), 2)
+
     def test_stale_number_in_a_doc_is_rejected(self) -> None:
         """The decisive plant: bump one prose number, guard must go red."""
         with tempfile.TemporaryDirectory() as tmp:
