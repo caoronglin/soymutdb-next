@@ -28,9 +28,17 @@ This guard reads committed bytes only (``json`` + ``re`` + stdlib): no Python
 * ``_EXPECTED_OPERATION_COUNT`` -- the exact number of published operations
   (a second, count-level door that cannot be satisfied by a same-count
   permutation alone);
+* ``_PATH_ORDER_DIGEST`` / ``_CLIENT_PATH_ORDER_DIGEST`` -- two hand-written
+  sha256 literals over the ``index|path`` rows IN DOCUMENT ORDER, one per
+  artifact. Every other fixed point here is sorted, so a coordinated swap of
+  two whole path blocks (same pair set, same counts, same bytes, provenance
+  blobs honestly re-pinned) moves none of them; ``openapi-typescript`` prints
+  paths in document order, so the emitted interface sequence is itself a
+  client-visible shape. ``_EXPECTED_PATH_COUNT`` is the exact count door;
 * three-way agreement: snapshot map == generated ``paths`` -> ``operations``
-  reference map == generated ``operations`` interface key set. A one-sided
-  edit (only the snapshot, or only one of the two generated surfaces) is named.
+  reference map == generated ``operations`` interface key set, plus a named
+  per-index path-order agreement. A one-sided edit (only the snapshot, or
+  only one of the two generated surfaces) is named.
 
 Uniqueness and identifier shape are checked too: two operations sharing one
 ``operationId`` collapse the generated client's type table, and a symbol that
@@ -38,10 +46,12 @@ is not a valid TypeScript property name breaks the emitted ``.d.ts``.
 
 A legitimate rename must move the digest in the same commit as the two
 artifacts and say why, exactly like ``_ERROR_RESPONSE_BASELINE`` /
-``_SNAPSHOT_FLOOR`` / ``_BODY_PAIR_DIGEST``. Re-deriving the digest from the
+``_SNAPSHOT_FLOOR`` / ``_BODY_PAIR_DIGEST``. Re-deriving any digest from the
 artifacts under guard would make the pin self-referential, which is the whole
-failure this file replaces. ``--self-test`` injects one-sided drifts into
-copies of the bytes and asserts each is caught; the clean tree must pass.
+failure this file replaces. ``--self-test`` injects one-sided drifts and a
+coordinated same-count path-block swap into copies of the bytes and asserts
+each is caught, with both order literals honestly re-pinned in the one green
+shape; the clean tree must pass.
 
 Usage:
     python3 scripts/check_openapi_operation_id_floor.py
@@ -75,6 +85,29 @@ METHODS = frozenset(
 # the same commit, with a reason.
 _OPERATION_ID_DIGEST = "1f55857d26bba0210cdb9d0b8dc73b8a5d42f33ddac8d55cba3a68681d491673"
 _EXPECTED_OPERATION_COUNT = 268
+
+# Independent fixed points on the published PATH DECLARATION ORDER. The
+# operationId digest above walks a *sorted* (METHOD path, operationId) pair
+# set, and every other landed digest on this family is sorted too. A
+# permutation that swaps two whole path blocks in both artifacts preserves
+# the pair set, the path count, every body/response/parameter/enum/title row
+# and the export normalizer's byte fixed point; openapi-typescript prints
+# ``paths`` in the snapshot's own document order, so the emitted interface's
+# sequence is itself a client-visible shape (IDE completion order, object key
+# enumeration). The only landed order reader
+# (``test_openapi_snapshot_contract.py``) compares the two halves to each
+# other, which a coordinated co-revert satisfies.
+#
+# Two hand-written sha256 literals, read from nowhere, over the canonical
+# ``index|path`` rows IN DOCUMENT ORDER -- the snapshot's ``paths`` keys and
+# the generated ``export interface paths`` keys separately. A sorted multiset
+# would be blind to a same-count rotation; re-pinning only one side cannot
+# silence the other. Regenerate with _path_order_digest() after an
+# intentional, reviewed reorder and update in the same commit as both
+# artifacts, with a reason.
+_PATH_ORDER_DIGEST = "086901ee36ea25318728b5486aa311968568e7633e255b72fa4701fe68a1bcd2"
+_CLIENT_PATH_ORDER_DIGEST = "baabc2c7606dafb7dbbf10b54292007ceaefe105c072c394460ec524f014a7e7"
+_EXPECTED_PATH_COUNT = 238
 
 PATH_LINE = re.compile(r'^    "(/[^"]*)": \{$')
 OP_REF = re.compile(
@@ -132,6 +165,34 @@ def _interface_keys(generated: str) -> set[str]:
     return set(INTERFACE_KEY.findall(generated.split(marker, 1)[1]))
 
 
+def _snapshot_paths(document: dict[str, Any]) -> list[str]:
+    """The snapshot's ``paths`` keys in DOCUMENT ORDER."""
+    return [path for path in document.get("paths", {})]
+
+
+def _paths_interface(generated: str) -> str:
+    """The body of the generated ``export interface paths`` block."""
+    marker = "export interface paths {"
+    if marker not in generated:
+        raise ValueError("generated client declares no paths interface")
+    body = generated.split(marker, 1)[1]
+    # Only a top-level declaration ends the block; docstring prose such as
+    # "export job (vcf/...)" must not truncate it.
+    end = re.search(r"^export (?:type|interface) ", body, re.M)
+    return body[: end.start()] if end else body
+
+
+def _generated_paths(generated: str) -> list[str]:
+    """The generated ``paths`` interface keys in DOCUMENT ORDER."""
+    return re.findall(r'^    "(/[^"]*)": \{$', _paths_interface(generated), re.M)
+
+
+def _path_order_digest(paths: list[str], tag: str) -> str:
+    """sha256 over ``index|path`` rows, in order -- not a sorted multiset."""
+    blob = "\n".join([tag, *(f"{index}|{path}" for index, path in enumerate(paths))])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def _digest(operation_ids: dict[str, str]) -> str:
     blob = "\n".join(
         ["soymutdb-operation-ids/v1"]
@@ -147,6 +208,9 @@ def failures(
     smoke: str | None = None,
     digest: str | None = None,
     expected_count: int | None = None,
+    path_order_digest: str | None = None,
+    client_path_order_digest: str | None = None,
+    expected_path_count: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -158,15 +222,24 @@ def failures(
         smoke = SMOKE.read_text(encoding="utf-8")
     pinned_digest = _OPERATION_ID_DIGEST if digest is None else digest
     pinned_count = _EXPECTED_OPERATION_COUNT if expected_count is None else expected_count
+    pinned_order = _PATH_ORDER_DIGEST if path_order_digest is None else path_order_digest
+    pinned_client_order = (
+        _CLIENT_PATH_ORDER_DIGEST
+        if client_path_order_digest is None
+        else client_path_order_digest
+    )
+    pinned_paths = _EXPECTED_PATH_COUNT if expected_path_count is None else expected_path_count
 
     try:
         document = json.loads(snapshot)
         snap = _snapshot_map(document)
+        snap_paths = _snapshot_paths(document)
     except (ValueError, TypeError) as exc:
         return [f"cannot read published operationIds from snapshot: {exc}"]
     try:
         path_map = _generated_path_map(generated)
         keys = _interface_keys(generated)
+        gen_paths = _generated_paths(generated)
     except ValueError as exc:
         return [f"cannot read generated client operations: {exc}"]
 
@@ -187,6 +260,56 @@ def failures(
             f"published operation count is {len(snap)}, _EXPECTED_OPERATION_COUNT "
             f"pins {pinned_count}: an operation was added or dropped without "
             "moving the fixed point"
+        )
+
+    # Door 1b -- the path declaration ORDER, in both halves independently.
+    # Every other fixed point on this surface is sorted, so a coordinated
+    # swap of two whole path blocks (same pair set, same counts, same bytes,
+    # provenance blobs honestly re-pinned) moves none of them. Two separate
+    # literals: re-pinning only the snapshot side cannot silence the client
+    # door, and a co-revert that makes both halves agree still moves both.
+    actual_order = _path_order_digest(snap_paths, "soymutdb-snapshot-path-order/v1")
+    if actual_order != pinned_order:
+        found.append(
+            f"published snapshot path order drifted: _PATH_ORDER_DIGEST pins "
+            f"{pinned_order} but the snapshot derives {actual_order}. Path "
+            "order is a client-visible shape the generator reproduces in "
+            "document order -- re-pin both literals in the same commit as "
+            "both artifacts, with a reason."
+        )
+    actual_client_order = _path_order_digest(gen_paths, "soymutdb-client-path-order/v1")
+    if actual_client_order != pinned_client_order:
+        found.append(
+            f"generated client path order drifted: _CLIENT_PATH_ORDER_DIGEST "
+            f"pins {pinned_client_order} but the generated client derives "
+            f"{actual_client_order}. A one-sided reorder or a coordinated "
+            "co-revert of both halves must not ship silently."
+        )
+    if len(snap_paths) != pinned_paths:
+        found.append(
+            f"published path count is {len(snap_paths)}, _EXPECTED_PATH_COUNT "
+            f"pins {pinned_paths}: a path was added or dropped without moving "
+            "the order fixed points"
+        )
+    if len(gen_paths) != len(snap_paths):
+        found.append(
+            f"generated client declares {len(gen_paths)} paths, the snapshot "
+            f"declares {len(snap_paths)}: the two halves no longer agree"
+        )
+    if snap_paths != gen_paths:
+        first = next(
+            (
+                index
+                for index, (a, b) in enumerate(zip(snap_paths, gen_paths))
+                if a != b
+            ),
+            min(len(snap_paths), len(gen_paths)),
+        )
+        found.append(
+            f"generated paths interface order disagrees with the snapshot at "
+            f"index {first}: snapshot has {snap_paths[first:first + 1]}, "
+            f"client has {gen_paths[first:first + 1]}. openapi-typescript "
+            "prints paths in document order, so both halves must move together."
         )
 
     # Door 2 -- the three surfaces must name the same symbols. A one-sided
@@ -342,6 +465,67 @@ def self_test() -> int:
             ),
         )
     )
+    # 11. The decisive ORDER drift: swap the first two whole path blocks in
+    #     BOTH halves. Every other fixed point here is sorted, so the pair
+    #     set, the operation count, the path count and the two-artifact
+    #     agreement all stay identical; only the two sequence literals move.
+    def swap_first_two_paths(text: str) -> str:
+        starts = list(re.finditer(r'^    "(/[^"]+)": \{$', text, re.M))
+        a, b, c = starts[0].start(), starts[1].start(), starts[2].start()
+        return text[:a] + text[b:c] + text[a:b] + text[c:]
+
+    swapped_snapshot = swap_first_two_paths(snapshot)
+    swapped_generated = swap_first_two_paths(generated)
+    cases.append(
+        (
+            "a coordinated path-block swap in both halves",
+            dict(snapshot=swapped_snapshot, generated=swapped_generated),
+        )
+    )
+    # 11b. The same co-revert with BOTH order literals honestly re-pinned in
+    #      the same commit stays green -- the reviewed action, not a whitelist.
+    swapped_doc = json.loads(swapped_snapshot)
+    cases.append(
+        (
+            "a coordinated path-block swap with both order digests re-pinned",
+            dict(
+                snapshot=swapped_snapshot,
+                generated=swapped_generated,
+                path_order_digest=_path_order_digest(
+                    _snapshot_paths(swapped_doc), "soymutdb-snapshot-path-order/v1"
+                ),
+                client_path_order_digest=_path_order_digest(
+                    _generated_paths(swapped_generated), "soymutdb-client-path-order/v1"
+                ),
+                expect_clean=True,
+            ),
+        )
+    )
+    # 11c. Re-pinning only ONE side cannot silence the other.
+    cases.append(
+        (
+            "a path-block swap with only the snapshot order digest re-pinned",
+            dict(
+                snapshot=swapped_snapshot,
+                generated=swapped_generated,
+                path_order_digest=_path_order_digest(
+                    _snapshot_paths(swapped_doc), "soymutdb-snapshot-path-order/v1"
+                ),
+            ),
+        )
+    )
+    # 12. A one-sided reorder (snapshot only) is named by the order door.
+    cases.append(
+        ("a snapshot-only path-block swap", dict(snapshot=swapped_snapshot)),
+    )
+    # 13. A one-sided reorder (generated only) is named by the order door.
+    cases.append(
+        ("a generated-only path-block swap", dict(generated=swapped_generated)),
+    )
+    # 14. A hand-bumped path count.
+    cases.append(("a hand-bumped path count", dict(expected_path_count=999)))
+    # 15. A hand-bumped order digest (the baseline-sync escape hatch).
+    cases.append(("a hand-bumped path order digest", dict(path_order_digest="0" * 64)))
 
     results = 0
     failures_seen = 0
@@ -379,7 +563,8 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(
         f"openapi-operation-id-floor: OK "
-        f"({_EXPECTED_OPERATION_COUNT} published operationIds pinned)"
+        f"({_EXPECTED_OPERATION_COUNT} published operationIds and "
+        f"{_EXPECTED_PATH_COUNT} path order rows pinned)"
     )
     return 0
 

@@ -142,7 +142,7 @@ def test_wiring_cannot_be_dropped_silently() -> None:
 
 
 def test_self_test_mutation_cases_all_pass() -> None:
-    """The 10 in-file ablations must stay load-bearing under collection."""
+    """The in-file ablations must stay load-bearing under collection."""
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         rc = guard.self_test()
@@ -189,6 +189,125 @@ def test_the_co_revert_re_pin_pair_is_load_bearing() -> None:
     assert not fresh, fresh
     stale = guard.failures(snapshot=snapshot, generated=generated)
     assert any("drifted" in problem for problem in stale), stale
+
+
+def _swap_first_two_paths(text: str) -> str:
+    """Swap the first two whole top-level path blocks, preserving all bytes."""
+    import re
+
+    starts = list(re.finditer(r'^    "(/[^"]+)": \{$', text, re.M))
+    a, b, c = starts[0].start(), starts[1].start(), starts[2].start()
+    return text[:a] + text[b:c] + text[a:b] + text[c:]
+
+
+def test_committed_path_orders_match_both_independent_literals() -> None:
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    snap_paths = guard._snapshot_paths(document)
+    gen_paths = guard._generated_paths(guard.GENERATED.read_text(encoding="utf-8"))
+    assert snap_paths == gen_paths
+    assert len(snap_paths) == guard._EXPECTED_PATH_COUNT
+    assert (
+        guard._path_order_digest(snap_paths, "soymutdb-snapshot-path-order/v1")
+        == guard._PATH_ORDER_DIGEST
+    )
+    assert (
+        guard._path_order_digest(gen_paths, "soymutdb-client-path-order/v1")
+        == guard._CLIENT_PATH_ORDER_DIGEST
+    )
+
+
+def test_the_order_literals_are_module_level_strings() -> None:
+    tree = ast.parse(Path(guard.__file__).read_text(encoding="utf-8"))
+    assigned = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    assigned[target.id] = node.value
+    for name in ("_PATH_ORDER_DIGEST", "_CLIENT_PATH_ORDER_DIGEST"):
+        assert name in assigned, name
+        value = ast.literal_eval(assigned[name])
+        assert isinstance(value, str) and len(value) == 64
+    assert guard._EXPECTED_PATH_COUNT == 238
+
+
+def test_a_coordinated_path_block_swap_is_rejected() -> None:
+    """The decisive permutation: same pair set, same counts, only order moves."""
+    snapshot = guard.SNAPSHOT.read_text(encoding="utf-8")
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    swapped_snapshot = _swap_first_two_paths(snapshot)
+    swapped_generated = _swap_first_two_paths(generated)
+    found = guard.failures(
+        snapshot=swapped_snapshot, generated=swapped_generated
+    )
+    assert any("_PATH_ORDER_DIGEST" in problem for problem in found), found
+    assert any("_CLIENT_PATH_ORDER_DIGEST" in problem for problem in found), found
+    # The sorted operationId digest and the three-way agreement stay silent:
+    # this drift is invisible to every non-sequence door.
+    assert not any("operationId surface drifted" in p for p in found), found
+    assert not any("does not reference" in p for p in found), found
+
+
+def test_a_coordinated_path_swap_with_both_digests_re_pinned_stays_green() -> None:
+    snapshot = guard.SNAPSHOT.read_text(encoding="utf-8")
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    swapped_snapshot = _swap_first_two_paths(snapshot)
+    swapped_generated = _swap_first_two_paths(generated)
+    document = json.loads(swapped_snapshot)
+    found = guard.failures(
+        snapshot=swapped_snapshot,
+        generated=swapped_generated,
+        path_order_digest=guard._path_order_digest(
+            guard._snapshot_paths(document), "soymutdb-snapshot-path-order/v1"
+        ),
+        client_path_order_digest=guard._path_order_digest(
+            guard._generated_paths(swapped_generated),
+            "soymutdb-client-path-order/v1",
+        ),
+    )
+    assert not found, found
+
+
+def test_re_pinning_only_one_order_digest_stays_red() -> None:
+    snapshot = guard.SNAPSHOT.read_text(encoding="utf-8")
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    swapped_snapshot = _swap_first_two_paths(snapshot)
+    swapped_generated = _swap_first_two_paths(generated)
+    document = json.loads(swapped_snapshot)
+    found = guard.failures(
+        snapshot=swapped_snapshot,
+        generated=swapped_generated,
+        path_order_digest=guard._path_order_digest(
+            guard._snapshot_paths(document), "soymutdb-snapshot-path-order/v1"
+        ),
+    )
+    assert any("_CLIENT_PATH_ORDER_DIGEST" in problem for problem in found), found
+
+
+def test_one_sided_path_reorders_are_named() -> None:
+    snapshot = guard.SNAPSHOT.read_text(encoding="utf-8")
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    snap_only = guard.failures(snapshot=_swap_first_two_paths(snapshot))
+    gen_only = guard.failures(generated=_swap_first_two_paths(generated))
+    assert any("order disagrees" in p for p in snap_only), snap_only
+    assert any("order disagrees" in p for p in gen_only), gen_only
+
+
+def test_path_order_count_and_digest_doors_are_load_bearing() -> None:
+    assert any("path count" in p for p in guard.failures(expected_path_count=999))
+    assert any("_PATH_ORDER_DIGEST" in p for p in guard.failures(path_order_digest="0" * 64))
+    assert any(
+        "_CLIENT_PATH_ORDER_DIGEST" in p
+        for p in guard.failures(client_path_order_digest="0" * 64)
+    )
+
+
+def test_the_path_order_self_test_plants_are_load_bearing() -> None:
+    source = Path(guard.__file__).read_text(encoding="utf-8")
+    assert "a coordinated path-block swap in both halves" in source
+    assert "with both order digests re-pinned" in source
+    assert "only the snapshot order digest re-pinned" in source
+    assert 'kwargs.pop("expect_clean", False)' in source
 
 
 def _run_all() -> int:

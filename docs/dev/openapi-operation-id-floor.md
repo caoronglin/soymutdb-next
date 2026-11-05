@@ -43,6 +43,42 @@ no workspace install) and pins three doors:
 3. Shape invariants: uniqueness (two operations sharing a symbol collapse
    the generated type table) and valid TypeScript property names.
 
+## Phase 2 — the path declaration order (a permutation, not a retype)
+
+Every fixed point above walks a **sorted** row set, and
+``test_openapi_snapshot_contract.py``'s path-order reader compares the two
+artifacts to each other. ``openapi-typescript`` prints ``paths`` in the
+snapshot's own document order, so the generated interface's key sequence is
+client-visible (IDE completion order, object key enumeration). Swapping two
+whole path blocks in **both** artifacts -- byte-preserving, same pair set,
+same 268 operations, same 238 paths, same normalized export bytes, both
+``_PINNED_ARTIFACTS`` blob ids honestly re-pinned -- leaves all twelve wired
+``check_openapi_*`` guards ``rc=0`` and the whole contracts layer
+``SMOKE PASS``. This is the same-count rotation shape that a sorted digest
+cannot see: no value changed, only the sequence.
+
+The guard adds two more independent literals, read from nowhere:
+
+- ``_PATH_ORDER_DIGEST`` -- sha256 over the snapshot's ``index|path`` rows in
+  document order;
+- ``_CLIENT_PATH_ORDER_DIGEST`` -- a second sha256 over the generated
+  ``export interface paths`` key sequence, so re-pinning only the snapshot
+  side cannot silence the client door;
+- ``_EXPECTED_PATH_COUNT`` (238) -- exact count door;
+- a named per-index agreement: a one-sided reorder reports the first index
+  where the two halves disagree.
+
+``--self-test`` grows 11 → 18 cases: the decisive coordinated swap, the same
+swap with **both** literals re-pinned (the one green shape), re-pinning only
+one side (still red), both one-sided reorders, and the count/digest doors.
+``scripts/test_openapi_operation_id_floor.py`` grows 13 → 20 cases, asserting
+both literals are module-level strings, that the swap is named by both doors
+while the sorted digest and three-way agreement stay silent, and that the
+self-test plants are load-bearing from a second file. The teeth guard's
+``_CASE_FLOOR`` moves 11 → 18 in the same commit. Zero wiring churn: the guard
+and its companion were already collected, so ``smoke.sh`` /
+``PINNED_SUITES`` / ``REQUIRED_GUARD_CALLS`` are byte-identical.
+
 Re-deriving the digest from the artifacts under guard would make the pin
 self-referential — the exact failure this replaces. A legitimate rename must
 move the digest in the same commit as both artifacts and say why, the same
@@ -64,3 +100,8 @@ ablations stay load-bearing under pytest collection.
 Both entry points are covered: `--self-test` runs before any suite is
 collected, and the collected suite asserts the wiring from a second file.
 Dropping either leaves a named red, not a green `SMOKE PASS`.
+
+Phase 2 adds no new caller: it extends the already-wired guard and its
+already-collected companion. The teeth guard's reviewed case floor is the
+only third file that moves, because the guard's `--self-test` gained seven
+new ablation cases.
