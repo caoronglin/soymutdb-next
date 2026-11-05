@@ -237,9 +237,9 @@ def _digest_client_title(lines: list[str]) -> str:
 # ``client_titles()`` keeps a *sorted* digest, so it cannot see two
 # same-count title lines swap places: the multiset is unchanged. That is a
 # real client-visible drift -- the label an IDE shows for one field lands on
-# another -- and it survives every other door on this surface. Pin the
-# positional triple instead: the component, the field name and the prose,
-# read from the generated client only.
+# another -- and it survives every other door on this surface. Door 8 pins
+# that position; Door 7's digest is the independent ledger a coordinated
+# co-revert still has to move.
 _SCHEMA_BLOCK = re.compile(
     r"^        (?P<name>\w+): \{\n(?P<body>.*?)^        \};$", re.M | re.S
 )

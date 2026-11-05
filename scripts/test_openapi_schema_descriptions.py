@@ -330,23 +330,52 @@ def test_guard_source_pins_both_title_doors() -> None:
     assert "_SYNTHETIC_CLIENT_TITLE_COMPONENTS" in source
 
 
-def _generated_with_client_rotation(source: str) -> str:
-    """Swap two same-count leading title lines in the generated client."""
-    lines = [
-        "* Summary En",
-        "* Summary Zh",
-        "* Title En",
-        "* Title Zh",
+_ROTATION_COMPONENT = "AboutContentResponse"
+
+
+def _rotated_client_block(block: str) -> str:
+    """Swap the leading title lines of two fields in one JSDoc block.
+
+    Both fields keep their multi-line shape, so the number of JSDoc lines,
+    the multiset of title lines and every count door are unchanged. Only the
+    position moves -- which is precisely the drift Door 7 exists to catch.
+    """
+    fields = [
+        match
+        for match in guard._FIELD_DOC.finditer(block)
+        if "\n" in match.group("doc").strip()
+        and guard._first_plain_line(match.group("doc")) is not None
     ]
-    for first in lines:
-        for second in lines:
-            if first == second:
-                continue
-            if source.count(first) and source.count(second):
-                return source.replace(first, "* ROTATED", 1).replace(
-                    second, first, 1
-                ).replace("* ROTATED", second, 1)
-    raise AssertionError("no rotatable pair found")
+    assert len(fields) >= 2, block
+    first, second = fields[0], fields[1]
+    first_title = guard._first_plain_line(first.group("doc"))
+    second_title = guard._first_plain_line(second.group("doc"))
+    assert first_title != second_title
+    rotated = block.replace(
+        first.group(0), first.group(0).replace(first_title, "\x00", 1)
+    )
+    rotated = rotated.replace(
+        second.group(0), second.group(0).replace(second_title, first_title, 1)
+    )
+    return rotated.replace("\x00", second_title, 1)
+
+
+def _generated_with_client_rotation() -> str:
+    """Rotate two title lines inside one component's generated JSDoc block."""
+    holder = {}
+    block = guard._COMPONENT_SCHEMAS.search(_GENERATED)
+    assert block is not None
+    for schema in guard._SCHEMA_BLOCK.finditer(block.group("body")):
+        if schema.group("name") == _ROTATION_COMPONENT:
+            holder["block"] = schema.group("body")
+            break
+    assert "block" in holder, _ROTATION_COMPONENT
+    original = holder["block"]
+    rotated_block = _rotated_client_block(original)
+    assert rotated_block != original
+    rotated = _GENERATED.replace(original, rotated_block, 1)
+    assert rotated != _GENERATED
+    return rotated
 
 
 def test_client_only_title_rotation_is_rejected() -> None:
@@ -357,18 +386,21 @@ def test_client_only_title_rotation_is_rejected() -> None:
     and both digests intact: every door above stayed green while the IDE
     showed a caller the wrong label. Door 7 carries the field name.
     """
-    rotated = _generated_with_client_rotation(_GENERATED)
-    assert rotated != _GENERATED
+    rotated = _generated_with_client_rotation()
     original_rows = guard.client_title_rows(_GENERATED)
     rotated_rows = guard.client_title_rows(rotated)
     assert len(original_rows) == len(rotated_rows)
     assert Counter(t for _, _, t in original_rows) == Counter(
         t for _, _, t in rotated_rows
     )
+    # The pre-existing doors stay blind to it; that is the whole point.
+    assert guard._digest_client_title(
+        guard.client_titles(rotated)
+    ) == guard._CLIENT_TITLE_DIGEST
     found = guard.failures(snapshot=_SNAPSHOT, generated=rotated)
     assert any("_CLIENT_TITLE_ROWS_DIGEST" in f for f in found), found
     assert any(
-        "generated client title for " in f for f in found
+        f"generated client title for {_ROTATION_COMPONENT}." in f for f in found
     ), found
 
 
