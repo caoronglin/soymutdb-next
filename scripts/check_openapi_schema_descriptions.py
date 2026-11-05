@@ -2,7 +2,7 @@
 """Pin published component-schema ``description`` and ``title`` prose to literals.
 
 ``openapi.json`` publishes 257 ``description`` strings on component-schema
-property nodes across 169 schemas, and 2320 ``title`` strings across all 362
+property nodes across 169 schemas, and 2327 ``title`` strings across all 362
 schemas. ``openapi-typescript`` renders each one as
 an ``@description`` line in the generated ``components["schemas"]`` JSDoc, so
 the prose is client-visible: it is what an IDE shows a caller hovering a field.
@@ -54,11 +54,15 @@ This guard reads committed bytes only (``json`` + ``re`` + stdlib): no Python
 The ``title`` half is a second, independent fixed point over its own rows:
 
 * ``_SCHEMA_TITLE_DIGEST`` -- a hand-written sha256 over canonical sorted
-  ``(schema path, title)`` rows, read from nowhere;
+  ``(schema path, title)`` rows, read from nowhere. The walker recurses into
+  the ``title`` key itself: seven schemas publish a property literally named
+  ``title`` whose value is ``"Title"``, and skipping that key left those rows
+  unpinned (a snapshot-only rewrite of one stayed green). They are published
+  values, not synthetic generator lines;
 * ``_EXPECTED_TITLE_ROWS`` / ``_EXPECTED_TITLE_SCHEMAS`` -- exact count doors;
 * the generated client's JSDoc first-prose-line multiset, checked against the
   *pinned* title values. The generator emits a JSDoc block only for annotated
-  nodes (1232 of 2320 titles render) plus exactly one synthetic ``Title``
+  nodes (1232 of 2327 titles render) plus exactly one synthetic ``Title``
   line, so the check is a sub-multiset of the pins, not an equality. A
   co-revert of both halves still changes the published digest.
 
@@ -107,30 +111,16 @@ _SYNTHETIC_CLIENT_DESCRIPTION = (
 #   sorted(f"{path}|{title}")) over every string `title` on a component-schema
 #   node. Regenerate with _digest_title() after an intentional prose change.
 _SCHEMA_TITLE_DIGEST = (
-    "6ae50ade675d97306a73d4e8f9294097dbe9b4aec57274d0753c6887f4015829"
+    "6ad9c8cd12ceb3508a25ce934509716405b9b326eac5afdfc9e9c37ff6ddaec0"
 )
-_EXPECTED_TITLE_ROWS = 2320
+_EXPECTED_TITLE_ROWS = 2327
 _EXPECTED_TITLE_SCHEMAS = 362
 
-# openapi-typescript emits exactly one JSDoc title that is not in the snapshot
-# (PublicationUpdate.title has no published title of its own). Pinned so a
-# generator change to this line is a reviewed edit, not a silent extra row.
+# Of the 1232 multi-line JSDoc blocks client_titles() reads, exactly one has
+# "Title" as its first prose line. The seven published "Title" rows are on
+# single-line JSDoc blocks, which this reader does not collect; that line is
+# pinned here so a generator change is a reviewed edit, not a silent extra row.
 _SYNTHETIC_CLIENT_TITLE = "Title"
-
-# The components that legitimately render their own schema name as the
-# leading line of their ``title`` property. Reviewed, hand-listed: a change
-# here is a reviewed edit, and Door 8 still names any other mismatch.
-_SYNTHETIC_CLIENT_TITLE_COMPONENTS = frozenset(
-    {
-        "AdminPublicationResponse",
-        "ExternalArticlePreviewResponse",
-        "LiteratureRecord",
-        "NotificationResponse",
-        "PublicationCreate",
-        "PublicationUpdate",
-        "app__schemas__content__PublicationResponse",
-    }
-)
 
 # Second independent fixed point: the generated client's JSDoc first-prose
 # lines. A digest over these lines, read from nowhere, catches a coordinated
@@ -198,7 +188,7 @@ def title_rows(document: dict[str, Any]) -> list[tuple[str, str]]:
             if isinstance(value, str):
                 out.append((path, value))
             for name, child in node.items():
-                if name == "title" or not isinstance(child, (dict, list)):
+                if not isinstance(child, (dict, list)):
                     continue
                 walk(child, f"{path}/{name}")
         elif isinstance(node, list):
@@ -473,12 +463,6 @@ def failures(
         if len(path.split("/")) == 3 and path.split("/")[1] == "properties"
     }
     for component, field, title in client_title_triples:
-        if field == "title" and title == _SYNTHETIC_CLIENT_TITLE:
-            # Documented exception: a published schema whose *own* name is
-            # rendered as the leading line of its ``title`` property. Listed
-            # by name below so a new one cannot join silently.
-            if component in _SYNTHETIC_CLIENT_TITLE_COMPONENTS:
-                continue
         expected = published_titles.get((component, field))
         if expected is None:
             found.append(
