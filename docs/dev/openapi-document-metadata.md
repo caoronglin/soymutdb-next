@@ -88,3 +88,74 @@ on CPython 3.11 without the API venv. The real 3.15 export lane, full
 API/worker pytest, turbo, Playwright E2E and OCI are CI's authority; they are
 not signed here. A new golden file is committed, so `generate:api-client` must
 not overwrite it (it is not an output of the generator).
+
+## The tag catalog is both an invariant and a derived quantity
+
+`info.title` / `info.version` / `info.description` are **invariants**: their
+value *is* the contract, so the golden lock is the right authority. The tag
+catalog's **completeness** is a different kind of fact: it is a derived
+quantity that moves whenever a router is added, removed, or retagged.
+
+A lock can freeze the six names it was written with. It cannot notice a
+seventh router showed up — the stale lock stays green, and a
+`declared-but-unused` entry is invisible too. This is the same argument as
+`#162`: freezing a derived expectation by copying its current value produces a
+table that rots. So the guard asserts an **invariant**, not a value:
+
+    every tag a router emits (``tags=[...]`` in ``APIRouter(...)`` / route
+    decorators) == every tag the published operations carry
+    (``paths.*.*.tags[]``) == the declared catalog (top-level ``tags[]``)
+
+Both sides are read from committed bytes. Router source is upstream of the
+export and the operation tags are downstream of it, so this is an authority
+that does not move with the catalog. Three consequences:
+
+- **The bless channel is closed for tags.** Before this invariant, editing
+  `main.py` + `openapi.json` + the golden to agree on an *invented* tag made
+  the guard green (the three-way lock is green by design). Now it fails with
+  `phantom entries: made-up`, because no router emits that name. A legitimate
+  `description` prose edit still uses the documented three-way path.
+- **Blessing the golden cannot move this invariant.** It reads no golden
+  content. A stale or edited lock is caught by checks 1–3; an incomplete
+  catalog is caught here. The two failure modes are independent.
+- **A frozen name table is not used.** Adding a real router plus a catalog
+  entry in source + golden + snapshot stays green (a positive control in the
+  self-test), which is exactly what a hand-maintained constant table would
+  break.
+
+### Measurement that motivated this cut
+
+On the tree before this change the published catalog declared **6** tags while
+operations carried **49** distinct names (`undeclared = 43`). The 49 operation
+tags were *exactly* the `tags=[...]` literals in router source, confirming the
+catalog — not the routers — was the stale side. Note that the `admin-*` family
+is **not** an existing taxonomy rule: nothing in committed bytes names it, and
+none of the 97 `admin-*` operations also carried the declared `admin` rollup.
+So the invariant is plain `emitted ∪ used ⊆ declared ⊆ emitted ∪ used`, with
+no prefix exception invented for the sake of making today's tree pass.
+
+### Legitimate change: adding or retiring a router
+
+1. Add/remove/retag the router in `apps/api/app/**` (the real source).
+2. Update `OPENAPI_TAGS` in `apps/api/app/main.py` **and**
+   `openapi-document-metadata.golden.json` **and** regenerate
+   `packages/api-client/openapi.json` (the snapshot's top-level `tags` come
+   from `create_app(..., openapi_tags=OPENAPI_TAGS)`).
+3. Keep the three in agreement — the golden edit is the reviewable act, as
+   above. The guard then proves the catalog is complete against router source.
+
+A router whose tag is not declared fails with `tag catalog is incomplete`
+naming the tag. A declared tag no router emits fails with `phantom entries`
+naming it. Neither requires anyone to edit a constant table of tag names.
+
+### Guard scope / not claimed
+
+The router-side reader restricts itself to `APIRouter(...)` and route-decorator
+calls with a literal `tags=[...]`, so unrelated `tags=` kwargs (e.g.
+`bleach.clean(..., tags=[...])`) cannot be mistaken for a declaration. A
+non-literal `tags=` expression is a pass-through and is deliberately skipped.
+It is a stdlib `ast` read of committed bytes, not an import of the app: no
+Python 3.15 venv, no FastAPI, no service. That also means it cannot prove a
+router is *registered* on the app — it proves the published tag set and the
+declared catalog track the router source that owns them. Registration remains
+the runtime export lane's job (`check-contract.sh`).
