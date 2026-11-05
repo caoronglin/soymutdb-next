@@ -140,6 +140,9 @@ smoke_contracts() {
     # test file that matches it: vitest stayed green (2/2) and no contract gate
     # reads frontend source. This suite proves the guard fails on that pair.
     scripts/test_variant_row_key_contract.py
+    # PR #117 doubled /api/v1 in every sequence URL; this suite proves the
+    # base-path guard fails on that exact shape and on weaker variants.
+    scripts/test_api_client_base_path_guard.py
     # The committed OpenAPI snapshot is an export, not a source file. A hand
     # edit to it (4975dbd inlined a hoisted type alias and deleted its
     # component) surfaces in CI only as "CONTRACT DEBT" from the frontend gate,
