@@ -196,3 +196,41 @@ After the fix, the same co-revert gives `SMOKE FAIL / 1 failed` with
 5685ec6b... but the snapshot derives ...`; restoring the bytes returns
 `SMOKE PASS`. Re-pin the literal in the same commit as an intentional contract
 change, with a reason — do not make the guard agree with itself.
+
+## The generated half's independent literal
+
+Every fixed point above walks the **snapshot**. Doors 2/3 compare the two
+halves to each other, so they prove self-consistency, not truth. On live
+`9a7c3e52`, a byte-preserving coordinated co-revert — retype one `200`
+response description in both `openapi.json` and `openapi.d.ts` — plus one
+honest re-pin of `_RESPONSE_SURFACE_DIGEST` to the new rows (the guard's own
+documented "one deliberate reviewed action") leaves **nothing** to object:
+
+- Door 1 is silent because its literal was re-pinned to the drifted rows;
+- Doors 2/3 agree because both halves moved together;
+- the four other digest literals (summary / request body / response header /
+  inline body) never read response `description` or `content` presence;
+- all twelve wired `check_openapi_*` guards and the whole contracts layer
+  stay `rc=0` / `SMOKE PASS / 1103 + 41 + 10 / 0`.
+
+A client-visible `@description Successful Response` line changed to `OK` with
+one reviewed edit and no independent fixed point left to name it. This is the
+same genus #320 closed one column over for component-schema `@description`
+lines, applied to the operation-level response surface.
+
+`_CLIENT_RESPONSE_SURFACE_DIGEST` closes it: a hand-written sha256 over the
+canonical sorted `(symbol, status, has_content, description)` rows of the
+**generated** `operations` interface, read from nowhere. A one-sided client
+retype moves it; a coordinated co-revert moves it even when the snapshot
+digest is honestly re-pinned. A legitimate regenerate must now re-pin **both**
+digest literals, move both artifacts, and say why — one reviewed edit is no
+longer enough. `_EXPECTED_CLIENT_RESPONSE_ENTRIES` (808) is the exact count
+door, named even when the digest is re-pinned.
+
+Zero new wiring: the guard, its companion and its `--self-test` call are
+already collected by `smoke_contracts()` and pinned by the registry and teeth
+guards. The companion grows 29 -> 36 cases (decisive one-re-pin co-revert,
+both-digests-must-move, one-sided client retype, independence from a second
+file, count door, weakening control, source plant); the in-file `--self-test`
+grows 19 -> 22 cases plus a positive control proving an honest double re-pin
+is the reviewed regenerate and stays green.

@@ -472,3 +472,150 @@ def test_response_header_doors_and_cases_are_pinned_from_a_second_file() -> None
         "declared response header dropped",
     ):
         assert f'cases["{label}"]' in source, f"{label} ablation is missing"
+
+
+_CLIENT_LIVE_PATH = "/api/v1/health/live"
+_CLIENT_SYMBOL = "liveness_api_v1_health_live_get"
+
+
+def _client_response_co_revert() -> tuple[str, str, str]:
+    """Retype one response description in BOTH halves; return bytes + re-pin.
+
+    This is the decisive shape: both artifacts agree, every count door is
+    unchanged, and the snapshot digest can be honestly re-pinned in one
+    reviewed edit. Only an independent fixed point on the GENERATED half can
+    still object.
+    """
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    document["paths"][_CLIENT_LIVE_PATH]["get"]["responses"]["200"][
+        "description"
+    ] = "OK"
+    start = generated.find(f"    {_CLIENT_SYMBOL}: {{")
+    assert start >= 0
+    block = generated[start : start + 1600]
+    changed = block.replace(
+        "/** @description Successful Response */", "/** @description OK */", 1
+    )
+    assert changed != block
+    drifted_generated = generated[:start] + changed + generated[start + 1600 :]
+    snapshot = json.dumps(document, indent=2)
+    honest_digest = guard._digest(guard._snapshot_rows(document))
+    return snapshot, drifted_generated, honest_digest
+
+
+def test_client_response_surface_literal_is_independent() -> None:
+    """The new pin must be a module-level string literal, recomputable, not derived."""
+    source = (ROOT / "scripts" / "check_openapi_response_surface.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    assigned = [
+        node
+        for node in tree.body
+        if isinstance(node, (ast.Assign, ast.AnnAssign))
+        and any(
+            isinstance(target, ast.Name)
+            and target.id == "_CLIENT_RESPONSE_SURFACE_DIGEST"
+            for target in (
+                node.targets if isinstance(node, ast.Assign) else [node.target]
+            )
+        )
+    ]
+    assert len(assigned) == 1
+    value = ast.literal_eval(assigned[0].value)
+    assert isinstance(value, str) and len(value) == 64
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    rows = guard.client_response_surface_rows(
+        guard._generated_operations(generated)
+    )
+    assert value == guard._client_response_surface_digest(rows)
+    assert "_CLIENT_RESPONSE_SURFACE_DIGEST = _client_response_surface_digest" not in source
+
+
+def test_decisive_co_revert_with_an_honest_snapshot_repin_is_rejected() -> None:
+    """One reviewed re-pin cannot silence both digest doors."""
+    snapshot, generated, honest_digest = _client_response_co_revert()
+    found = guard.failures(
+        snapshot=snapshot, generated=generated, digest=honest_digest
+    )
+    assert any("_CLIENT_RESPONSE_SURFACE_DIGEST" in f for f in found), found
+    # doors that must stay silent on this shape: the snapshot digest was
+    # re-pinned honestly and the two halves agree with each other.
+    assert not any(f.startswith("published response surface drifted:") for f in found), found
+    assert not any("disagrees with the generated client" in f for f in found), found
+
+
+def test_both_response_surface_digests_must_move_together() -> None:
+    """Re-pinning only the client literal leaves the snapshot door red."""
+    snapshot, generated, honest_digest = _client_response_co_revert()
+    client_digest = guard._client_response_surface_digest(
+        guard.client_response_surface_rows(guard._generated_operations(generated))
+    )
+    assert guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        client_response_surface_digest=client_digest,
+    ), "re-pinning only the client literal must stay red"
+    both = guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        digest=honest_digest,
+        client_response_surface_digest=client_digest,
+    )
+    assert not any(f.startswith("published response surface drifted:") for f in both), both
+    assert not any("_CLIENT_RESPONSE_SURFACE_DIGEST" in f for f in both), both
+
+
+def test_one_sided_generated_response_retype_is_named_by_both_doors() -> None:
+    """A client-only drift moves the client digest and the agreement door."""
+    snapshot, generated, _ = _client_response_co_revert()
+    clean = guard.SNAPSHOT.read_text(encoding="utf-8")
+    found = guard.failures(snapshot=clean, generated=generated)
+    assert any("_CLIENT_RESPONSE_SURFACE_DIGEST" in f for f in found), found
+    assert any("disagrees with the generated client" in f for f in found), found
+
+
+def test_client_response_count_door_is_load_bearing() -> None:
+    found = guard.failures(
+        expected_client_response_entries=guard._EXPECTED_CLIENT_RESPONSE_ENTRIES + 1
+    )
+    assert any("_EXPECTED_CLIENT_RESPONSE_ENTRIES" in f for f in found), found
+
+
+def test_weakening_the_client_door_lets_the_co_revert_walk_through() -> None:
+    """The comparison is non-vacuous: weakening it returns the ablation to green."""
+    snapshot, generated, honest_digest = _client_response_co_revert()
+    client_digest = guard._client_response_surface_digest(
+        guard.client_response_surface_rows(guard._generated_operations(generated))
+    )
+    # Both literals honestly re-pinned: the reviewed regenerate is green.
+    assert not guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        digest=honest_digest,
+        client_response_surface_digest=client_digest,
+    )
+    # Without the door's literal the same one-re-pin ablation was green. Pin it
+    # from the second file so a source weakening cannot hide in one file only.
+    source = (ROOT / "scripts" / "check_openapi_response_surface.py").read_text(
+        encoding="utf-8"
+    )
+    assert "if actual_client_digest != pinned_client_response_surface_digest:" in source
+    assert "generated client response surface drifted:" in source
+    assert "if len(client_rows) != pinned_client_response_entries:" in source
+
+
+def test_client_doors_and_cases_are_pinned_from_a_second_file() -> None:
+    """Gutting a door or deleting an ablation cannot hide in one file only."""
+    source = (ROOT / "scripts" / "check_openapi_response_surface.py").read_text(
+        encoding="utf-8"
+    )
+    assert "client_rows = client_response_surface_rows(gen_ops)" in source
+    assert "generated client response entry count is" in source
+    for label in (
+        "coordinated description co-revert with an honest snapshot re-pin",
+        "one-sided generated response description retype",
+        "generated client response count door",
+    ):
+        assert f'cases["{label}"]' in source, f"{label} ablation is missing"
