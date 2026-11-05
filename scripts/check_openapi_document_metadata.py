@@ -110,6 +110,18 @@ WIRED_AS = "scripts/test_openapi_document_metadata_guard.py"
 LOCKED_KEYS = ("title", "version", "description", "tags")
 REQUIRED_TAG_KEYS = ("name", "description")
 
+# Independent, hand-written fixed point on the published ``info`` key set. The
+# golden lock above pins four *values*; it never says which keys ``info`` is
+# allowed to carry. A regenerate that adds one client-visible key (``license``,
+# ``contact``, ``termsOfService``, ...) with the four reviewed values untouched
+# and both provenance blob ids honestly re-pinned leaves every wired gate green:
+# the byte lock agrees, the source lock agrees, and the generated client drops
+# ``info`` entirely. Issue #1 forbids fabricating a license, so the shape is a
+# contract. Read from nowhere; re-pin in the same commit as an intentional
+# metadata change, with a reason.
+_INFO_KEYS = frozenset({"title", "version", "description"})
+_EXPECTED_INFO_KEYS = 3
+
 METHODS = frozenset(
     {"get", "put", "post", "patch", "delete", "options", "head", "trace"}
 )
@@ -461,6 +473,33 @@ def failures(
     if not published:
         return ["openapi.json has no `info` object"]
 
+    # 0. Published ``info`` SHAPE. The golden lock below compares four values;
+    #    it cannot see an extra key. An exact set + count door are both needed:
+    #    a same-count substitution keeps the count green but moves the set.
+    info = document.get("info")
+    if not isinstance(info, dict):
+        found.append("openapi.json has no `info` object")
+    else:
+        actual_info_keys = frozenset(info)
+        if actual_info_keys != _INFO_KEYS:
+            extra = sorted(actual_info_keys - _INFO_KEYS)
+            missing = sorted(_INFO_KEYS - actual_info_keys)
+            found.append(
+                "published info key set drifted: _INFO_KEYS pins "
+                f"{sorted(_INFO_KEYS)} but the snapshot publishes "
+                f"{sorted(actual_info_keys)} "
+                f"(extra={extra}, missing={missing}). The four locked values "
+                "are unchanged, so no golden/source/byte gate can see this. "
+                "Re-pin the literal in the same commit as the snapshot, with "
+                "a reason."
+            )
+        if len(info) != _EXPECTED_INFO_KEYS:
+            found.append(
+                f"openapi.json info carries {len(info)} key(s), "
+                f"_EXPECTED_INFO_KEYS pins {_EXPECTED_INFO_KEYS}: a key was "
+                "added or dropped without moving the fixed point"
+            )
+
     # 1. Published == golden. This is the authority a co-revert cannot move:
     #    changing main.py + re-exporting the snapshot keeps them agreeing with
     #    each other, but not with the reviewed lock.
@@ -704,6 +743,10 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
     def drop_tags(document):
         document["tags"] = []
 
+    def invented_info_key(document):
+        """A client-visible key the four golden values know nothing about."""
+        document["info"]["license"] = {"name": "CC0-1.0"}
+
     def reorder_tags(document):
         document["tags"] = list(reversed(document["tags"]))
 
@@ -861,6 +904,11 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
         ("tag order changed", edit_snapshot(reorder_tags), "no longer matches the golden lock"),
         ("tag hollowed", edit_snapshot(hollow_tag), "no longer matches the golden lock"),
         ("tag invented", edit_snapshot(invented_tag), "no longer matches the golden lock"),
+        (
+            "phantom info key added",
+            edit_snapshot(invented_info_key),
+            "published info key set drifted",
+        ),
         (
             "operation tag assignment permuted",
             edit_snapshot(permute_operation_tags),

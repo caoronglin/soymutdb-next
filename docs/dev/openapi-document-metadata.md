@@ -263,3 +263,39 @@ digest, so the existing "legitimate new router" control re-pins it too.
 On the fix tree the same permutation makes the layer `SMOKE FAIL / 6 failed,
 887 passed` while every sibling OpenAPI guard stays `rc=0`; restore is
 `SMOKE PASS / 893 passed` (+1 net, the one new second-file case).
+
+## Follow-up: the published `info` key set is a shape, not a value lock
+
+The golden lock freezes four *values* (`title`, `version`, `description`,
+`tags`). It never says which keys the published `info` object may carry.
+`openapi-typescript` drops `info` entirely, so the generated client has no
+second half to disagree, and `check-contract.sh`'s export==snapshot diff is
+satisfied by a coordinated co-revert of `main.py` + the snapshot.
+
+Decisive ablation on live `9a7c3e52`: inject one client-visible
+`info.license` object (a fabricated license, which Issue #1 forbids) with the
+four reviewed values untouched and both `_PINNED_ARTIFACTS` blob ids honestly
+re-pinned. Every wired `check_*` / `test_*` guard, the guard's own 28
+ablations, its companion suite and the whole contracts layer stayed `rc=0`.
+The byte lock agrees, the source lock agrees, the generated half is silent.
+The published shape had no fixed point.
+
+`_INFO_KEYS` is a hand-written frozenset literal over the reviewed key set,
+plus `_EXPECTED_INFO_KEYS` as an exact count door. Both are read from
+nowhere: re-deriving the expected set from the `info` object under guard is
+the self-agreeing failure this whole family of guards exists to kill. A
+same-count substitution (swap one key for another) keeps the count green but
+moves the set; an extra key moves both. The guard names `extra=` and
+`missing=` in the failure so the cause is readable.
+
+The `--self-test` gains one ablation (`phantom info key added`) that injects
+the key into a copy of the committed snapshot; the companion suite pins,
+from a second file, that (a) the literal is hand-written in the guard source,
+(b) the ablation is driven by its named mutator, (c) stripping only the shape
+door makes the drifted tree green again, and (d) re-pinning both literals in
+one reviewed act stays green. The exact ablation count is pinned at 29, so
+deleting a case cannot quietly restore an older count.
+
+Zero wiring churn: `smoke.sh`, `REQUIRED_GUARD_CALLS`, `_WIRED_SELF_TESTS`,
+`PINNED_SUITES` and `_CASE_FLOOR` are untouched. The guard and its companion
+are already collected by the contracts layer.
