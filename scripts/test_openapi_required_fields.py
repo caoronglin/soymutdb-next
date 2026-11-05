@@ -630,3 +630,82 @@ def test_self_test_carries_the_type_plants() -> None:
     assert "one-sided client property type retype" in source
     assert "only the snapshot type digest re-pinned stays red" in source
     assert "same-count property type rotation" in source
+    assert "coordinated retype of a property named type (both halves)" in source
+
+
+def test_type_named_property_rows_are_pinned() -> None:
+    """A property literally named ``type`` is a published row, not a keyword.
+
+    The old walker skipped any child key named ``type`` after consuming the
+    scalar keyword, so six published rows never entered the snapshot digest:
+    five component schemas (``FieldError``, ``ImportCreateRequest``,
+    ``MultipartStartRequest``, ``NotificationResponse``, ``ValidationError``)
+    and one nested ``ValidationErrorResponse/$defs/FieldError`` copy. A
+    byte-preserving retype of one such row in BOTH halves with the client
+    literal re-pinned stayed completely green. The walker now recurses into
+    the dict child and pins all six by path.
+    """
+    document = json.loads(_SNAPSHOT)
+    rows = guard.schema_type_rows(document)
+    named = sorted(p for p, value in rows if p.endswith("/properties/type"))
+    assert named == [
+        "FieldError/properties/type",
+        "ImportCreateRequest/properties/type",
+        "MultipartStartRequest/properties/type",
+        "NotificationResponse/properties/type",
+        "ValidationError/properties/type",
+        "ValidationErrorResponse/$defs/FieldError/properties/type",
+    ], named
+    assert guard._EXPECTED_SCHEMA_TYPE_ROWS == len(rows) == 3050
+    assert guard._SCHEMA_TYPE_DIGEST == guard._schema_type_digest(rows)
+
+    target = document["components"]["schemas"]["FieldError"]["properties"]["type"]
+    assert target["type"] == "string"
+    target["type"] = "integer"
+    snapshot = json.dumps(document, indent=2)
+    drifted = guard._schema_type_digest(guard.schema_type_rows(json.loads(snapshot)))
+    assert drifted != guard._SCHEMA_TYPE_DIGEST
+    found = guard.failures(snapshot=snapshot, generated=_GENERATED)
+    assert any("_SCHEMA_TYPE_DIGEST pins" in item for item in found), found
+    assert any("type distribution changed" in item for item in found), found
+
+
+def test_type_named_property_co_revert_is_caught_with_client_repin() -> None:
+    """The decisive residual: both halves drift AND the client literal moves.
+
+    Before the walker fix, re-pinning only the independent client digest
+    silenced the one red door and the whole tree passed. With the six rows in
+    the census, the snapshot digest and the distribution door still fire.
+    """
+
+    def change(schemas: dict) -> None:
+        prop = schemas["FieldError"]["properties"]["type"]
+        assert prop["type"] == "string"
+        prop["type"] = "integer"
+
+    snapshot = _mutate(change)
+    fe_start = _GENERATED.index("        FieldError: {\n")
+    fe_end = _GENERATED.index("\n        };", fe_start)
+    fe_original = _GENERATED[fe_start:fe_end]
+    fe_retyped = fe_original.replace(
+        "            type: string;", "            type: number;", 1
+    )
+    assert fe_retyped != fe_original
+    generated = _GENERATED[:fe_start] + fe_retyped + _GENERATED[fe_end:]
+    found = guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        client_type_digest=guard._client_property_type_digest(
+            guard.client_property_types(generated)
+        ),
+    )
+    assert any("_SCHEMA_TYPE_DIGEST pins" in item for item in found), found
+    assert any("type distribution changed" in item for item in found), found
+
+
+def test_walker_recurses_into_type_named_children() -> None:
+    """The skip is on the child's VALUE, not on the key's NAME."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert 'if name == "type" or not isinstance(child, (dict, list)):' not in source
+    assert "if not isinstance(child, (dict, list)):" in source
+    assert "coordinated retype of a property named type (both halves)" in source

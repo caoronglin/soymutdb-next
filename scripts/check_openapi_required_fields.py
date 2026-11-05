@@ -224,10 +224,19 @@ _EXPECTED_CLIENT_SCHEMA_REF_ROWS = 229
 # while the generated client silently retypes a numeric metric. Two literals
 # (snapshot rows and generated property declarations) are the fix: re-pinning
 # only one side cannot silence the other, and a co-revert still moves both.
+#
+# The walker recurses into a child named ``type`` when its value is a dict:
+# five component schemas (``FieldError``, ``ImportCreateRequest``,
+# ``MultipartStartRequest``, ``NotificationResponse``, ``ValidationError``)
+# plus one nested ``ValidationErrorResponse/$defs/FieldError`` copy publish a
+# property literally named ``type``. Skipping that key left those six rows out
+# of the snapshot digest, so a retype of one in BOTH halves with the client
+# literal re-pinned stayed entirely green. They are published values, not
+# keywords.
 _SCHEMA_TYPE_DIGEST = (
-    "66dbb4fc04d3bdba6f2040db6d1f5d75d25113a80e1646b6ed78b6e6a8f7b78b"
+    "5c4fca252f24cd641d638e89cd55939c13b11f28509b5bcb3c0a1cb090126997"
 )
-_EXPECTED_SCHEMA_TYPE_ROWS = 3044
+_EXPECTED_SCHEMA_TYPE_ROWS = 3050
 _EXPECTED_SCHEMA_TYPE_BY_TYPE: dict[str, int] = {
     "array": 156,
     "boolean": 116,
@@ -235,7 +244,7 @@ _EXPECTED_SCHEMA_TYPE_BY_TYPE: dict[str, int] = {
     "null": 634,
     "number": 53,
     "object": 406,
-    "string": 1209,
+    "string": 1215,
 }
 _CLIENT_PROPERTY_TYPE_DIGEST = (
     "b53a0832a63f0b13b0a7c448ecc1fe745f63e876fae0338f315884722cd6790b"
@@ -530,7 +539,11 @@ def schema_type_rows(document: dict[str, Any]) -> list[tuple[str, str]]:
             if isinstance(value, str):
                 out.append((path, value))
             for name, child in node.items():
-                if name == "type" or not isinstance(child, (dict, list)):
+                # A ``type`` keyword has a scalar value; a *property* named
+                # ``type`` is a dict child and must be walked into. Skipping
+                # the key left six published rows unpinned (five component
+                # schemas plus one nested ``$defs`` copy).
+                if not isinstance(child, (dict, list)):
                     continue
                 walk(child, f"{path}/{name}")
         elif isinstance(node, list):
@@ -1206,6 +1219,28 @@ def self_test() -> int:
     cases["same-count property type rotation"] = (
         json.dumps(doc12, indent=2),
         generated,
+    )
+
+    # A property literally named ``type``: retype it in BOTH halves. The old
+    # walker skipped the key by name, so the snapshot digest, the row count
+    # and the type distribution were all blind; only the client literal saw
+    # it, and re-pinning that one literal made the whole tree green.
+    doc13 = copy.deepcopy(document)
+    field_error = doc13["components"]["schemas"]["FieldError"]["properties"]
+    assert field_error["type"]["type"] == "string"
+    field_error["type"]["type"] = "integer"
+    fe_start = generated.index("        FieldError: {\n")
+    fe_end = generated.index("\n        };", fe_start)
+    fe_original = generated[fe_start:fe_end]
+    fe_retyped = fe_original.replace(
+        "            type: string;", "            type: number;", 1
+    )
+    assert fe_retyped != fe_original
+    ts13 = generated[:fe_start] + fe_retyped + generated[fe_end:]
+    assert ts13 != generated
+    cases["coordinated retype of a property named type (both halves)"] = (
+        json.dumps(doc13, indent=2),
+        ts13,
     )
 
     failures_count = 0
