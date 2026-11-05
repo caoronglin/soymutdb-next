@@ -245,6 +245,10 @@ smoke_contracts() {
     # reports that co-revert and every one-sided drift.
     scripts/test_openapi_operation_id_floor.py
     scripts/test_openapi_operation_parameter_floor.py
+    # The per-operation response surface (status codes + content presence)
+    # is client-visible but unread by every body digest for content-less
+    # responses. This suite proves the independent literal pins it.
+    scripts/test_openapi_response_surface.py
     scripts/test_contracts_layer_self_containment.py
     # The error-code gate wiring guard judges its co-rename probe by the copied
     # tree's exit status. A clean control must be green first, or an incomplete
@@ -362,6 +366,12 @@ smoke_contracts() {
   # interface. A coordinated rename in both artifacts, with re-pinned
   # provenance blob ids, kept every wired guard and SMOKE PASS green.
   "${PYTHON_BIN}" scripts/check_openapi_operation_parameter_floor.py --self-test || rc=$?
+  # Every published operation declares a set of response codes, and all 12
+  # declared 204 responses are content-less -- invisible to every body
+  # digest and outside the 4xx/5xx error baseline. A coordinated
+  # 204 -> 205 rename in both halves with re-pinned provenance blobs
+  # kept every wired OpenAPI guard green. Pin the whole surface.
+  "${PYTHON_BIN}" scripts/check_openapi_response_surface.py --self-test || rc=$?
   # The visible-text budget may fall but never rise; new hardcoded strings fail.
   "${PYTHON_BIN}" scripts/check_visible_i18n.py --self-test || rc=$?
   # nginx security-header fragments and the locations that must re-include
