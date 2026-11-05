@@ -38,6 +38,23 @@ is a second literal, keyed by generated operation name, pinning each inline
 body to its own operation. Both halves now have an independent per-operation
 fixed point; the shape bag stays as a cheap cross-check.
 
+The inline schemas carry one more published column that this guard's own
+``_label()`` deliberately discards: 68 ``title`` strings on the non-``$ref``
+``application/json`` response bodies, named per operation by the exporter
+(``Response Liveness Api V1 Health Live Get``, ...). They are published in
+``openapi.json`` but ``openapi-typescript`` drops them entirely, so there is no
+generated half to disagree -- the same shape as the ``securitySchemes``
+descriptions (#315). ``_strip_title()`` removes them before shape
+classification on purpose (folding them into ``_INLINE_BODY_BASELINE`` would
+churn 75 reviewed entries), but nothing else pins their *values*. A
+byte-preserving rewrite of one title in the snapshot, with the provenance blob
+id honestly re-pinned, leaves all 12 wired ``check_openapi_*`` guards ``rc=0``
+and the whole contracts layer ``SMOKE PASS / 1103 passed`` on live ``9a7c3e52``.
+``_INLINE_TITLE_DIGEST`` is a hand-written sha256 over the canonical sorted
+``(operation, media, title)`` rows, read from nowhere, plus an exact count
+door. A legitimate retype re-pins the literal in the same commit as the
+snapshot, with a reason.
+
 Reads committed bytes only: stdlib, no API venv, no Python 3.15, no wheel, no
 PostgreSQL, no ``node_modules``. Run directly, collect with pytest, or run the
 in-file ablations with ``--self-test``.
@@ -45,6 +62,7 @@ in-file ablations with ``--self-test``.
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import re
@@ -233,6 +251,19 @@ CLIENT_INLINE = re.compile(r'"application/json":\s*\{\n(.*?)\n\s*\}(\[\])?;', re
 NON_JSON_MEDIA = ("image/svg+xml", "text/html")
 
 
+# Independent fixed point for the published inline-body ``title`` column.
+# sha256 of "\n".join(["soymutdb-inline-body-titles/v1"] +
+#   sorted(f"{operation}|{media}|{title}")). Read from the committed snapshot
+# only, never derived from the artifact under guard. openapi-typescript drops
+# these titles, so there is no second half to co-revert; the literal is the
+# only anchor. Regenerate with _inline_title_digest() after an intentional,
+# reviewed retype and update in the same commit as the snapshot, with a reason.
+_INLINE_TITLE_DIGEST = (
+    "afe5dc90f2adc78be9818694ec2827376de152a4544b784ed15fe6842ee3cc6b"
+)
+_EXPECTED_INLINE_TITLES = 68
+
+
 def _strip_title(node):
     if isinstance(node, dict):
         return {k: _strip_title(v) for k, v in node.items() if k != "title"}
@@ -270,6 +301,29 @@ def _operations(document: dict):
         for method, operation in item.items():
             if method in METHODS and isinstance(operation, dict):
                 yield method.upper(), path, operation
+
+
+def inline_title_rows(document: dict) -> list[tuple[str, str, str]]:
+    """Canonical ``(operation, media, title)`` rows for inline body titles."""
+    out: list[tuple[str, str, str]] = []
+    for method, path, operation in _operations(document):
+        for code, response in (operation.get("responses") or {}).items():
+            for media, value in (response.get("content") or {}).items():
+                schema = (value or {}).get("schema") or {}
+                if isinstance(schema, dict) and isinstance(schema.get("title"), str):
+                    out.append((f"{method} {path} {code}", media, schema["title"]))
+        request = operation.get("requestBody") or {}
+        for media, value in (request.get("content") or {}).items():
+            schema = (value or {}).get("schema") or {}
+            if isinstance(schema, dict) and isinstance(schema.get("title"), str):
+                out.append((f"{method} {path} requestBody", media, schema["title"]))
+    return out
+
+
+def _inline_title_digest(rows: list[tuple[str, str, str]]) -> str:
+    canonical = sorted("|".join(row) for row in rows)
+    blob = "\n".join(["soymutdb-inline-body-titles/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
 def _snapshot_inline(document: dict) -> dict[str, str]:
@@ -350,9 +404,15 @@ def failures(
     *,
     baseline: dict[str, str] | None = None,
     client_baseline: dict[str, list[str]] | None = None,
+    title_digest: str | None = None,
+    expected_titles: int | None = None,
 ) -> list[str]:
     found: list[str] = []
     pinned = _INLINE_BODY_BASELINE if baseline is None else baseline
+    pinned_title = _INLINE_TITLE_DIGEST if title_digest is None else title_digest
+    pinned_title_count = (
+        _EXPECTED_INLINE_TITLES if expected_titles is None else expected_titles
+    )
     client_pinned = (
         _CLIENT_INLINE_BASELINE if client_baseline is None else client_baseline
     )
@@ -408,6 +468,26 @@ def failures(
         found.append(
             f"the generated client's non-JSON media are {client_media}, not the "
             f"pinned {_CLIENT_MEDIA}"
+        )
+
+    # Door 4 -- independent fixed point on the published inline-body titles.
+    # _label() strips title on purpose, so no shape/baseline door sees this
+    # column; openapi-typescript drops it, so no generated half disagrees.
+    title_rows = inline_title_rows(document)
+    actual_title = _inline_title_digest(title_rows)
+    if actual_title != pinned_title:
+        found.append(
+            "published inline body titles drifted: _INLINE_TITLE_DIGEST pins "
+            f"{pinned_title} but the snapshot derives {actual_title}. Re-pin "
+            "the literal in the same commit as the snapshot, with a reason; "
+            "re-deriving it from the artifact under guard would make the pin "
+            "agree with itself."
+        )
+    if len(title_rows) != pinned_title_count:
+        found.append(
+            f"published inline body title count is {len(title_rows)}, "
+            f"_EXPECTED_INLINE_TITLES pins {pinned_title_count}: a title was "
+            "added or dropped without moving the fixed point"
         )
 
     if f"scripts/{SELF}" not in smoke:
@@ -537,6 +617,75 @@ def test_repinning_the_client_baseline_alone_is_rejected() -> None:
     assert any("per-operation" in failure for failure in found)
 
 
+def _retype_one_inline_title() -> dict:
+    """The decisive drift: one published inline-body title, snapshot only."""
+    document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+    schema = document["paths"]["/api/v1/health/live"]["get"]["responses"]["200"][
+        "content"
+    ]["application/json"]["schema"]
+    assert schema["title"] == "Response Liveness Api V1 Health Live Get"
+    schema["title"] = "Response Liveness X"
+    return document
+
+
+def test_the_committed_inline_title_digest_is_an_independent_literal() -> None:
+    """The literal is a module-level hand-written sha256, not a derivation."""
+    source = Path(__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    assigned = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(t, ast.Name) and t.id == "_INLINE_TITLE_DIGEST"
+            for t in node.targets
+        )
+    ]
+    assert len(assigned) == 1
+    value = ast.literal_eval(assigned[0].value)
+    assert isinstance(value, str) and len(value) == 64
+    assert value == _INLINE_TITLE_DIGEST
+
+
+def test_a_coordinated_inline_title_rewrite_is_rejected() -> None:
+    """Snapshot-only drift, provenance blob re-pinned: still named."""
+    document = _retype_one_inline_title()
+    found = failures(document, GENERATED.read_text(encoding="utf-8"), SMOKE.read_text(encoding="utf-8"))
+    assert any("_INLINE_TITLE_DIGEST" in problem for problem in found), found
+
+
+def test_the_title_digest_is_load_bearing_not_the_count_door() -> None:
+    """A same-count rewrite leaves every count door silent."""
+    document = _retype_one_inline_title()
+    rows = inline_title_rows(document)
+    assert len(rows) == _EXPECTED_INLINE_TITLES
+    found = failures(document, GENERATED.read_text(encoding="utf-8"), SMOKE.read_text(encoding="utf-8"))
+    assert any("_INLINE_TITLE_DIGEST" in problem for problem in found), found
+
+
+def test_repinning_the_title_digest_from_the_drifted_tree_is_not_enough() -> None:
+    """A derived expectation would agree with itself; the literal must stay."""
+    document = _retype_one_inline_title()
+    derived = _inline_title_digest(inline_title_rows(document))
+    assert derived != _INLINE_TITLE_DIGEST
+    found = failures(document, GENERATED.read_text(encoding="utf-8"), SMOKE.read_text(encoding="utf-8"), title_digest=derived)
+    # with the literal re-derived the door is silent: that is exactly why the
+    # pinned value must be a reviewed hand-written constant, not a computation.
+    assert not any("_INLINE_TITLE_DIGEST" in problem for problem in found), found
+
+
+def test_the_title_count_door_is_load_bearing() -> None:
+    found = failures(*_load(), expected_titles=_EXPECTED_INLINE_TITLES + 1)
+    assert any("inline body title count is" in problem for problem in found), found
+
+
+def test_the_guard_source_carries_the_title_plants() -> None:
+    """A single-file edit cannot delete a plant and its own assertion."""
+    source = Path(__file__).read_text(encoding="utf-8")
+    assert "_INLINE_TITLE_DIGEST = (" in source
+    assert "test_a_coordinated_inline_title_rewrite_is_rejected" in source
+
+
 def _self_test() -> int:
     tests = [
         value
@@ -568,7 +717,10 @@ def main() -> int:
         for problem in found:
             print(f"openapi-inline-bodies: FAIL: {problem}", file=sys.stderr)
         return 1
-    print(f"openapi-inline-bodies: OK ({len(_INLINE_BODY_BASELINE)} pinned bodies)")
+    print(
+        f"openapi-inline-bodies: OK ({len(_INLINE_BODY_BASELINE)} pinned "
+        f"bodies, {_EXPECTED_INLINE_TITLES} inline body titles pinned)"
+    )
     return 0
 
 
