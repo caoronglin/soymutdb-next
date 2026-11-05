@@ -76,7 +76,17 @@ describe("capabilities API", () => {
         genetic_codes: [1],
         coordinate_system_internal: "0-based-half-open",
         coordinate_system_public: "1-based-inclusive",
-        programs: ["reverse-complement", "match", "align", "stats", "orfs", "translate", "kmers"],
+        programs: [
+          "reverse-complement",
+          "match",
+          "align",
+          "stats",
+          "orfs",
+          "translate",
+          "kmers",
+          "inspect",
+          "intervals/overlap",
+        ],
         formats: ["fasta", "fastq", "bed"],
       },
     };

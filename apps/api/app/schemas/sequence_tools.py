@@ -209,6 +209,8 @@ class SequenceCapabilitiesResponse(BaseModel):
             "orfs",
             "translate",
             "kmers",
+            "inspect",
+            "intervals/overlap",
         ]
     )
     formats: list[str] = Field(default_factory=lambda: ["fasta", "fastq", "bed"])

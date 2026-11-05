@@ -45,11 +45,20 @@ def test_guard_self_test_passes(guard: ModuleType) -> None:
 
 
 def test_guard_does_not_hardcode_the_program_surface(guard: ModuleType) -> None:
-    """The advertised set must be derived from routes, not a fixed whitelist."""
+    """The implemented set must be derived from the served document.
+
+    Not from ``@router.post``: that derivation carried the router's own blind
+    spot, so a path served by another module (``/tools/intervals/overlap``) and
+    a path the router filtered out (``inspect``) could both drop off the roster
+    while this guard stayed green.
+    """
     assert not hasattr(guard, "PROGRAM_BINDING"), (
         "a fixed program map would reject a legitimate new route"
     )
-    assert hasattr(guard, "route_programs")
+    assert hasattr(guard, "served_programs")
+    assert not hasattr(guard, "route_programs"), (
+        "deriving from the router inherits the router's blind spot"
+    )
 
 
 @pytest.mark.parametrize(
@@ -58,7 +67,7 @@ def test_guard_does_not_hardcode_the_program_surface(guard: ModuleType) -> None:
         ("SCHEMA_PY", '            "kmers",\n', ""),
         ("SCHEMA_PY", '"fasta", "fastq", "bed"', '"fasta", "fastq"'),
         ("SCHEMA_PY", '            "kmers",\n', '            "kmers",\n            "phantom",\n'),
-        ("ROUTES_PY", '@router.post("/kmers", response_model=s.KmerResponse)\nasync def sequence_kmers(payload: s.KmerRequest) -> s.KmerResponse:\n    return await service.kmers(payload)\n', ""),
+        ("OPENAPI", '"/api/v1/tools/sequence/kmers"', '"/api/v1/tools/sequence/renamed"'),
         ("BINDINGS_RS", "    m.add_function(wrap_pyfunction!(kmer_counts, m)?)?;\n", ""),
         ("BINDINGS_RS", "    m.add_function(wrap_pyfunction!(validate_bed, m)?)?;\n", ""),
         ("INSPECT_PY", '        "bed": "validate_bed",\n', ""),

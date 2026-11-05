@@ -226,7 +226,9 @@ def pydantic_programs(schema_py: str) -> list[str]:
     )
     if match is None:
         raise ValueError("programs: Pydantic default list not found")
-    return re.findall(r'"([a-z][a-z0-9-]*)"', match.group(1))
+    # Labels are path segments: hyphens and slashes both occur
+    # (``reverse-complement``, ``intervals/overlap``).
+    return re.findall(r'"([a-z][a-z0-9/-]*)"', match.group(1))
 
 
 # --- Kernel ----------------------------------------------------------------
@@ -340,8 +342,13 @@ def check(sources: dict[str, str]) -> list[str]:
     served = served_paths(doc)
     # programs name the segment after the router prefix ("kmers",
     # "reverse-complement"), which is what a client appends to /tools/sequence/.
+    # Everything else drops the ``tools/`` router prefix only, so
+    # ``/tools/intervals/overlap`` compares as ``intervals/overlap`` — the
+    # namespace is part of the label, not noise to be stripped.
     served = {
-        name.rsplit("/", 1)[-1] if name.startswith("tools/sequence/") else name
+        name.removeprefix("tools/sequence/")
+        if name.startswith("tools/sequence/")
+        else name.removeprefix("tools/")
         for name in served
     }
     if not advertised or not served:
@@ -500,18 +507,7 @@ def load_sources() -> dict[str, str]:
 #: one cannot hide behind them and this entry cannot survive a fix silently.
 #: Removing the cause must therefore also remove the entry: ``--self-test``
 #: asserts the baseline reproduces exactly.
-KNOWN_DRIFT: tuple[tuple[str, str], ...] = (
-    (
-        "program 'inspect'",
-        "served and schematised under /tools but absent from programs, "
-        "so a client enumerating programs cannot discover it",
-    ),
-    (
-        "program 'tools/intervals/overlap'",
-        "served and schematised under /tools but absent from programs, "
-        "so a client enumerating programs cannot discover it",
-    ),
-)
+KNOWN_DRIFT: tuple[tuple[str, str], ...] = ()
 
 
 def _known(error: str) -> bool:
