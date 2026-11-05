@@ -222,6 +222,11 @@ smoke_contracts() {
     # A clean checkout must be able to run this layer without a sibling stage's
     # node_modules; the guard's own ablations prove the wiring stays in place.
     scripts/test_contracts_layer_self_containment.py
+    # The error-code gate wiring guard judges its co-rename probe by the copied
+    # tree's exit status. A clean control must be green first, or an incomplete
+    # copy (a missing export_contract.py used to do exactly that) reads as a
+    # caught co-rename. This suite pins that differential from a second file.
+    scripts/test_error_code_gate_wiring.py
   )
   # Suites that need an interpreter or service this smoke layer does not own
   # (worker source analysis runs under the API virtualenv; tunnel/compose drift

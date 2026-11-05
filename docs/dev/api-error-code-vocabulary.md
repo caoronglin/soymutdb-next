@@ -75,9 +75,15 @@ backend with the API venv, so the guards are also consumed by
 `scripts/smoke.sh --profile contracts` — the contracts layer that runs on a
 clean checkout without an API venv — as standalone `|| rc=$?` calls.
 `scripts/check_error_code_gate_wiring.py` pins those two wires (dropping or
-neutralising either must fail) and its `--self-test` plants the decisive
-co-rename to prove the wired guard still has a real signal. The wires are also
-part of `REQUIRED_GUARD_CALLS` in
+neutralising either must fail). Its `--self-test` plants the decisive co-rename
+as a **differential** probe: a complete clean copy of the tree must print
+`OK` and exit 0, and only then is the co-renamed copy judged red — with named
+`FAIL:` lines and no traceback. A bare exit-status check was a false positive
+here: the vocabulary guard reads `export_contract.py` unconditionally, so a
+copy that omitted it crashed on the clean control too and looked like a caught
+co-rename. `scripts/test_error_code_gate_wiring.py` pins that shape from a
+second, collected file (including an ablation that drops `EXPORT` from the
+copied-tree manifest). The wires are also part of `REQUIRED_GUARD_CALLS` in
 `scripts/check_contracts_registry_collection.py`, the independent floor pin.
 
 The guard is runnable standalone from a developer machine:
