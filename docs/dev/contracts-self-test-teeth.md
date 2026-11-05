@@ -4,7 +4,7 @@
 
 `scripts/smoke.sh` wires the contracts layer through two mechanisms: a
 `local tests=( ... )` array collected by pytest, and standalone
-`"${PYTHON_BIN}" scripts/check_*.py ... || rc=$?` calls. Fifteen of those
+`"${PYTHON_BIN}" scripts/check_*.py ... || rc=$?` calls. Sixteen of those
 standalone calls carry `--self-test` and no plain invocation: the guard's
 `check()` never runs in this layer. Only its self-test does.
 
@@ -34,6 +34,16 @@ collectible" cell: registered, collectible, invoked — and vacuous.
   `N cases, 0 failures`). Counts are deliberately not pinned: a legitimate new
   ablation changes `OK (11 checks)` to `OK (12 checks)` and must stay green.
   A no-op `return 0` prints nothing and matches none of them.
+- `_DRIFT_PLANTS` — the guards whose signature a one-line gut **can** fake
+  (those that print a single summary line) also get a drift plant: a source
+  edit that disables the guard's detection entry point. `drift_probe()`
+  applies the plant to the real tree, runs the wired `--self-test`, and
+  requires a non-zero exit. A gutted body that reproduces the pinned marker
+  (`print("... self-test passed"); return 0`) stays green on the signature
+  check and goes red here. Guards that print per-case evidence
+  (`ok: planted 'x' -> caught`) cannot be faked by a summary line and are
+  listed in `_EVIDENCE_PER_CASE` instead. Every wired guard must be in exactly
+  one of the two sets or `drift_floor_errors()` fails closed.
 - `probe()` runs each wired guard as a real subprocess with `cwd=ROOT` and
   requires `rc == 0` plus a signature match. A gutted self-test, a failing
   self-test and an empty-output self-test are each named.
@@ -45,6 +55,12 @@ signature and no other guard is collateral. Planting the mutation in a
 partial temp tree made all 15 probes fail to open, so the case passed
 vacuously — the first-hit trap this repo keeps paying for. The control
 assertion is what keeps it honest.
+
+Its own `--self-test` runs six cases. The sixth pins the gap one layer below
+the signature floor: a body gutted to `print(<pinned signature>); return 0`
+still satisfies `_SIGNATURES` — the marker is a string a mutator can write —
+so the case asserts **both** that the signature check stays green (or the case
+proves nothing) and that the drift probe catches the same body.
 
 `scripts/test_contracts_self_test_teeth.py` (11 cases) is the second file:
 it pins the wiring into `smoke.sh`, the `REQUIRED_GUARD_CALLS` floor, status
@@ -60,6 +76,9 @@ change, per #223's set-equality rule:
 1. the standalone call in `smoke_contracts()` with `|| rc=$?`;
 2. an entry in `REQUIRED_GUARD_CALLS`;
 3. an entry in `_WIRED_SELF_TESTS` **and** a signature in `_SIGNATURES`;
+   a guard that prints only a summary line also needs an entry in
+   `_DRIFT_PLANTS`; one that prints per-case evidence goes in
+   `_EVIDENCE_PER_CASE`;
 4. the doc line below.
 
 The companion suite is a normal `tests=()` row; `PINNED_SUITES` is a floor,
