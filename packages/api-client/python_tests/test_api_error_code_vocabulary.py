@@ -70,6 +70,22 @@ class ApiErrorVocabularyTests(unittest.TestCase):
         golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
         self.assertEqual(set(golden), self.guard.source_codes(ROOT))
 
+    def test_http_fallback_is_frozen_and_source_grounded(self) -> None:
+        """PR #152 publishes http_error without a SoyMutDBError subclass."""
+        golden = json.loads(GOLDEN.read_text(encoding="utf-8"))
+        self.assertIn("http_error", golden)
+        self.assertIn("http_error", self.guard.source_codes(ROOT))
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = self._tree(Path(tmp))
+            p = tree / EXCEPTIONS.relative_to(ROOT)
+            p.write_text(
+                p.read_text().replace(
+                    'HTTP_ERROR_CODE = "http_error"',
+                    'HTTP_ERROR_CODE = "http_error_renamed"',
+                )
+            )
+            self.assertNotEqual(self.guard.check(tree), [])
+
     def test_coordinated_rename_still_fails(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             tree = self._tree(Path(tmp))

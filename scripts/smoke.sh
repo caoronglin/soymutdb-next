@@ -292,6 +292,18 @@ smoke_contracts() {
   # Read the committed service bytes: the pytest suite exercises behaviour,
   # this guard catches the ordering being moved back at the source level.
   "${PYTHON_BIN}" scripts/check_interval_visibility_order.py || rc=$?
+  # The published error-code vocabulary is frozen against a hand-written lock:
+  # a coordinated source + artifact co-revert stays green under every
+  # consistency check. The catalog guard re-derives the runtime catalog from
+  # source. Both ran only in check-contract.sh (behind the frontend gate's
+  # export), so a failing guard or a co-rename never reddened the contracts
+  # layer that actually runs on a clean checkout. Consume them here too.
+  "${PYTHON_BIN}" scripts/check_api_error_code_vocabulary.py || rc=$?
+  "${PYTHON_BIN}" scripts/check_error_code_catalog.py || rc=$?
+  # Pin those two wires: dropping or neutralising either lets the layer stay
+  # green while the guard's failure is swallowed. --self-test plants the
+  # decisive co-rename and proves the wired guard still has a real signal.
+  "${PYTHON_BIN}" scripts/check_error_code_gate_wiring.py --self-test || rc=$?
   "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?
   echo
   echo "-- environment-bound contract suites (reported, not gating here) --"

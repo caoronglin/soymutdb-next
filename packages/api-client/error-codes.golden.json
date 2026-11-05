@@ -2,6 +2,7 @@
   "authentication_failed": "",
   "conflict": "",
   "forbidden": "",
+  "http_error": "Generic HTTPException fallback; see x-error-status for the statuses that use it.",
   "internal_error": "Base class for all SoyMutDB domain errors.",
   "not_found": "",
   "plugin_disabled": "A deployed plugin exists but is intentionally hidden/disabled.",

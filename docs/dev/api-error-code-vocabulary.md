@@ -5,7 +5,9 @@
 `packages/api-client/error-codes.golden.json` is a hand-written lock of the
 public `error.code` values the API can emit, with their client-facing
 descriptions. It covers the twelve codes derived from the `SoyMutDBError`
-hierarchy in `apps/api/app/core/exceptions.py`.
+hierarchy in `apps/api/app/core/exceptions.py` plus the `http_error` fallback
+that `error_code_catalog()` publishes for the generic `HTTPException` handler
+(PR #152), which has no `SoyMutDBError` subclass of its own.
 
 The lock is **not** an input or output of any generator.
 `generate-api-client.sh` writes exactly three artifacts from
@@ -48,15 +50,17 @@ API import, no Python 3.15 venv, no wheel, no database. It asserts:
   artifact without a failing gate;
 - `error-codes.json` and `openapi.json`'s `x-error-codes` match the lock exactly:
   no missing codes, no extra codes, no changed descriptions;
-- every `error_code` literal declared in the exception hierarchy is frozen, and
-  every frozen code is still declared.
+- every `error_code` literal declared in the exception hierarchy **and** the
+  module-level `HTTP_ERROR_CODE` fallback is frozen, and every frozen code is
+  still declared.
 
-`--self-test` plants seven independent defects (coordinated rename, dropped
+`--self-test` plants eight independent defects (coordinated rename, dropped
 code, changed description, lock turned into a generated artifact, invented
-source code, empty lock, duplicate key) and proves each is caught.
+source code, renamed `http_error` fallback, empty lock, duplicate key) and
+proves each is caught.
 
 `packages/api-client/python_tests/test_api_error_code_vocabulary.py` provides
-seven `unittest` regressions, including the killing mutation: a rename applied
+eight `unittest` regressions, including the killing mutation: a rename applied
 to the source **and** both published artifacts still fails, because the lock is
 not one of them.
 
@@ -64,12 +68,22 @@ not one of them.
 
 `packages/api-client/scripts/check-contract.sh` runs the guard and the
 regression suite at the end of the frontend contract gate, on both CNB and the
-GitHub mirror (the job bodies are shared scripts). The guard is also runnable
-standalone from a developer machine:
+GitHub mirror (the job bodies are shared scripts). That gate re-exports the
+backend with the API venv, so the guards are also consumed by
+`scripts/smoke.sh --profile contracts` — the contracts layer that runs on a
+clean checkout without an API venv — as standalone `|| rc=$?` calls.
+`scripts/check_error_code_gate_wiring.py` pins those two wires (dropping or
+neutralising either must fail) and its `--self-test` plants the decisive
+co-rename to prove the wired guard still has a real signal. The wires are also
+part of `REQUIRED_GUARD_CALLS` in
+`scripts/check_contracts_registry_collection.py`, the independent floor pin.
+
+The guard is runnable standalone from a developer machine:
 
 ```bash
 python3 scripts/check_api_error_code_vocabulary.py
 python3 scripts/check_api_error_code_vocabulary.py --self-test
+python3 scripts/check_error_code_gate_wiring.py --self-test
 python3 -m unittest discover -s packages/api-client/python_tests -p 'test_*.py'
 ```
 
