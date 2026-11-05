@@ -84,13 +84,25 @@ hunk context. The guard asserts its own registration; a dropped entry is a loud
 failure. It runs in the dependency-free contracts layer (`smoke.sh --profile
 contracts`), which is what CI's "Contract suites" stage invokes.
 
+The pytest face pins the ablation table by **exact count and case label**, not
+a `>=` floor: an older-world floor (`ablations >= 22`) stays green when the
+one case that catches the AST-vs-substring wiring regression is deleted
+together with the guard it protects, because the count merely returns to the
+old value. `self_test()` returns the registered case labels alongside the
+counts, `test_every_ablation_is_caught` asserts `== 23` and that
+`description/tags unwired with decoy comment` is present and driven by its
+mutator, and `test_ablation_count_pin_is_not_vacuous` materializes the exact
+revert-and-delete regression to prove the pin itself would go red. A count
+written into an assert grows its own tree; the pin must name what it guards.
+
 ## Verification / not claimed
 
-Stdlib guard + 17 in-file ablations (including the coordinated co-revert) run
-on CPython 3.11 without the API venv. The real 3.15 export lane, full
-API/worker pytest, turbo, Playwright E2E and OCI are CI's authority; they are
-not signed here. A new golden file is committed, so `generate:api-client` must
-not overwrite it (it is not an output of the generator).
+Stdlib guard + 23 self-test ablations (including the coordinated co-revert and
+the decoy-comment wiring case) run on CPython 3.11 without the API venv. The
+real 3.15 export lane, full API/worker pytest, turbo, Playwright E2E and OCI
+are CI's authority; they are not signed here. A new golden file is committed,
+so `generate:api-client` must not overwrite it (it is not an output of the
+generator).
 
 ## The tag catalog is both an invariant and a derived quantity
 
