@@ -107,6 +107,13 @@ comm -13 <(git diff --name-only origin/main...HEAD | sort) \
 `JSON.stringify([...])`、且回归用例保留「null 与空串分开」「同键同桶」两组；任一缺失即失败。
 它挂在 `verify-frontend-artifacts.sh` 与 `smoke.sh --profile contracts` 两层，
 `scripts/test_variant_row_key_contract.py` 用合成树证明每个负例真的会红。
+
+行键有两种合法拼法，守卫两种都读：内联 JSX 箭头 `rowKey={(row) => ...}`，以及
+具名 `const rowKey = (row) => ...` 配 `rowKey={rowKey}`。PR #99 把注释搬出 JSX
+属性区时改成了后者，而守卫当时只读内联形式，于是**行键本身正确、门禁却在活 main
+上变红**：`rowKey={rowKey}` 这个引用里并没有 `JSON.stringify`。改守卫而不是改行键
+是关键——把具名函数塞回 JSX 只为迁就正则，等于让门禁反过来决定源码结构。
+`--self-test` 钉住两种正例与三种回归形状。
 `scripts/test_ci_job_contracts.py` 再断言这两处接线不会被悄悄摘掉。
 
 教训：凡是「契约由源码 + 配套测试共同表达」的地方，必须有一层读源码字节的守卫，
