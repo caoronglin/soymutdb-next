@@ -77,6 +77,38 @@ def test_one_sided_generated_status_rename_is_rejected() -> None:
     assert any("response codes disagree" in problem for problem in found), found
 
 
+def test_coordinated_description_co_revert_is_rejected() -> None:
+    """#260 shipped a digest with no description column; this closes it."""
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    document["paths"]["/api/v1/health/live"]["get"]["responses"]["200"][
+        "description"
+    ] = "OK"
+    key = "    liveness_api_v1_health_live_get: {"
+    start = generated.find(key)
+    assert start >= 0
+    block = generated[start : start + 1600]
+    changed = block.replace(
+        "/** @description Successful Response */", "/** @description OK */", 1
+    )
+    assert changed != block
+    found = guard.failures(
+        snapshot=json.dumps(document, indent=2),
+        generated=generated[:start] + changed + generated[start + 1600 :],
+    )
+    assert any("drifted" in problem for problem in found), found
+
+
+def test_the_digest_covers_the_description_column() -> None:
+    """A description-only change must move the independent fixed point."""
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    original = guard._digest(guard._snapshot_rows(document))
+    document["paths"]["/api/v1/health/live"]["get"]["responses"]["200"][
+        "description"
+    ] = "OK"
+    assert guard._digest(guard._snapshot_rows(document)) != original
+
+
 def test_coordinated_content_drop_is_rejected() -> None:
     document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
     generated = guard.GENERATED.read_text(encoding="utf-8")
