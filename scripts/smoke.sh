@@ -222,6 +222,11 @@ smoke_contracts() {
   # rule did exactly that to packages/shared/src/build/) leaves every local
   # build green while a clean clone has no source for the import at all.
   "${PYTHON_BIN}" scripts/check_workspace_exports.py || rc=$?
+  # The published OpenAPI auth surface (both security schemes + the per-op
+  # HTTPBearer requirement on admin routes) is client-visible, but a co-revert
+  # of main.py + openapi.json keeps check-contract.sh green. Pin it against
+  # committed bytes; stdlib-only, no API import needed.
+  "${PYTHON_BIN}" scripts/check_openapi_auth_surface.py --self-test || rc=$?
   # The app shells must declare a favicon that resolves in source and in the
   # built tree; the admin console shipped without one and 404'd every load.
   "${PYTHON_BIN}" scripts/check_app_shell_assets.py --self-test || rc=$?
