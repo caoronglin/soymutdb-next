@@ -136,6 +136,15 @@ const submittedBodies = () =>
     .map((call) => (call[1] as { json: { idempotency_key: string; filename: string } }).json);
 
 describe("import submission dialog", () => {
+  // The assertions below are synchronous invariants (a second click in the same
+  // tick must not start a second upload), but reaching them mounts the real
+  // dialog: the capabilities query, the antd Modal and the import table. In CI
+  // that filesystem-and-contention cost, not the behaviour under test, is what
+  // decides whether 5s is enough. Give all four cases room so a busy box cannot
+  // be reported as a defect; keep the hook budget alone, so a hung module still
+  // fails fast.
+  const CASE_TIMEOUT_MS = 30_000;
+
   it("starts one upload for two clicks in the same tick", async () => {
     submitStub();
     uploadModuleFileMock.mockResolvedValue({ object_key: "data/1/genes.tsv", sha256: "a".repeat(64) });
@@ -152,7 +161,7 @@ describe("import submission dialog", () => {
 
     await waitFor(() => expect(uploadModuleFileMock).toHaveBeenCalledTimes(1));
     expect(submittedBodies()).toHaveLength(1);
-  });
+  }, CASE_TIMEOUT_MS);
 
   it("retries a failed submission without uploading the same file again", async () => {
     submitStub({ submit: () => Promise.reject(new Error("boom")) });
@@ -170,7 +179,7 @@ describe("import submission dialog", () => {
     const bodies = submittedBodies();
     expect(bodies).toHaveLength(2);
     expect(bodies[1].idempotency_key).toBe(bodies[0].idempotency_key);
-  });
+  }, CASE_TIMEOUT_MS);
 
   it("rotates the idempotency key when the operator changes the file after a failure", async () => {
     submitStub({ submit: () => Promise.reject(new Error("boom")) });
@@ -189,7 +198,7 @@ describe("import submission dialog", () => {
     expect(bodies).toHaveLength(2);
     expect(bodies[1].idempotency_key).not.toBe(bodies[0].idempotency_key);
     expect(uploadModuleFileMock).toHaveBeenCalledTimes(2);
-  });
+  }, CASE_TIMEOUT_MS);
 
   it("does not carry a previously chosen file into a new dialog session", async () => {
     submitStub();
@@ -206,5 +215,5 @@ describe("import submission dialog", () => {
 
     await waitFor(() => expect(screen.getByText("Choose a local file")).toBeInTheDocument());
     expect(screen.queryAllByText(/genes\.tsv/)).toHaveLength(0);
-  });
+  }, CASE_TIMEOUT_MS);
 });
