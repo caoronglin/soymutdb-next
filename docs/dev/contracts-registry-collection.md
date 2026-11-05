@@ -105,10 +105,67 @@ An independent second door lives in `scripts/test_ci_job_contracts.py`:
 directly. Deleting the CI-side `--self-test` line used to leave the whole
 collected contracts suite green (95 passed), because no assertion in that file
 named the guard. Those three checks stay red even if this guard is edited to
-lie about itself. The regression suite itself is deliberately **not** added to
-`smoke.sh`'s `tests[]`: that array is a shared insertion slot (four live PR
-heads collide with a one-line addition there), so the guard's own
-`--self-test` and the independent file are the collected coverage instead.
+lie about itself.
+
+The regression suite **is** a collected `tests=()` row (see "The companion
+suite is a collected row" below). An earlier rationale kept it out on the
+grounds that "the guard's `--self-test` already provides the mutation
+coverage"; that was wrong in the one direction that matters: the self-test
+*emits* the pin evidence, but nothing *read* the output. The door reads the
+same slice the guard reads — `smoke_contracts()` up to `environment_bound=(`
+— and requires an active bare row there. A whole-file search is satisfied by
+a row parked in the non-gating `environment_bound=()` array, where the
+companion's red is reported but cannot turn the layer red.
+
+## The companion suite is a collected row
+
+`scripts/test_contracts_registry_collection.py` — the guard's own regression
+suite — **is** a row in `smoke.sh`'s `tests=()`, pinned in `PINNED_SUITES`
+like any other. Measured on live `main` before this landed (`ebfa4c5f`),
+weakening the dedicated "fails for the pin alone" report from
+`len(unpinned_found) == 1 and "not pinned in PINNED_SUITES" in
+unpinned_found[0]` to a bare `any("not pinned in PINNED_SUITES" in f for f in
+unpinned_found)` left four doors green: `--self-test` `46 cases, 0
+failure(s)`, plain `OK (59 gating suites, 32 guard calls)`, teeth `OK (20
+wired guards probed)`, and `smoke.sh --profile contracts` **SMOKE PASS**. The
+guard is not in the teeth guard's `_WIRED_SELF_TESTS` (its success signature
+says `cases`, not `mutations`), and the companion was not collected, so no
+wired reader could turn red: the evidence chain was one file deep.
+
+Two things were fixed together, and neither alone is enough:
+
+1. **The row**, so the existing assertion actually runs. With the string
+   weakened, `test_the_unpinned_probe_fails_for_the_pin_only` now fails and
+   the whole layer reports `SMOKE FAIL`.
+2. **The second door**, so the row cannot be retired quietly. Deleting the row
+   and its `PINNED_SUITES` entry in one commit is self-consistent for this
+   guard — `PINNED_SUITES == set(registry())` compares two sides that move
+   together, so it prints `OK`. The independent door goes red.
+
+### The row must be in the gating array, not just anywhere in `smoke.sh`
+
+`smoke_contracts()` has two arrays: `tests=()` (handed to the gating pytest
+call, whose result decides `SMOKE PASS`/`SMOKE FAIL`) and
+`environment_bound=()` (reported separately, explicitly "not gating here").
+A second door that searches the whole file for the companion path — even with
+a "bare active path" regex — is satisfied by a row parked in
+`environment_bound=()`, where pytest still runs it but its failure cannot
+redden the layer. Measured on the #292 head (`67a91ec2`): move the row from
+`tests=()` to `environment_bound=()`, drop its `PINNED_SUITES` entry so the
+guard stays self-consistent, and weaken the dedicated report to `any(...)`:
+
+| Gate | Reading |
+| --- | --- |
+| guard plain / `--self-test` | `OK (59 gating suites, 32 guard calls)` / `46 cases, 0 failure(s)` |
+| `check_contracts_self_test_teeth.py` | `OK (20 wired guards probed)` |
+| second door (whole-file search) | green |
+| `smoke.sh --profile contracts` | **SMOKE PASS** (companion's red is reported, not gating) |
+
+So the door must read the same slice the guard reads: the body of
+`smoke_contracts()` up to `environment_bound=(`, and assert the companion is
+an **active bare path** inside `tests=()` there.
+`test_registry_companion_row_must_be_in_the_gating_array` plants the
+`environment_bound` shape as a regression against the real reader.
 
 ## A tests=() row must be a bare path
 
