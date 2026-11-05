@@ -82,8 +82,8 @@ python3 -m unittest discover -s packages/bio-core/python_tests -p 'test_kernel_e
 
 ## 本轮 CI 的真实状态（不是判据转红）
 
-`verify` 流水线（`cnb-i0m-1k6kr0ilc`）在 `Prepare` 阶段就结束了，八个验证 stage
-全部 `skipped`（0ms），没有任何门禁运行：
+`verify` 流水线（`cnb-i7r-1k6ksbjmm`）在 `Prepare` 阶段就结束了，**七个**验证
+stage 全部 `skipped`（0ms），没有任何门禁运行：
 
 ```
 Pipeline prepare error: Root Group's events CPU core-hours are insufficient
@@ -91,14 +91,50 @@ for pre-freezing (Freezing time: 10.00 min, equivalent to 2.67 core-hours).
 Contact the root group administrator to extend.
 ```
 
-`2.67 核时 = 16 cpus × 10 min / 60`，来自 `.cnb.yml` 的 `runner.cpus: 16`——
-本 PR 未改该文件（只新增 4 个文件）。同一时间窗内 #160、#163 等无关 PR 的
-`verify` 以**完全相同**的 Prepare 报错结束，属于根组织云原生构建 CPU 配额耗尽，
-不是本轮改动引起，也无法在仓库里修：本分支没有 `api_trigger` 配置，自动重跑
-不可用；上调配额后重跑即可。这与 #160 同日同因的处理一致。
+这不是「某条判据转红」，也不是「绿灯」：Prepare 在拉起任何容器之前就终止了构建，
+`Frontend verification` / `Rust bio-core` / `API + Worker verification` /
+`Contract suites` / `Dependency governance` / `Database A/B harness` /
+`Compiler prerequisites` 七条全都没跑。
 
-所以「预期 / 实跑证据」全部来自本机，**没有一条是 CI 代签的**：这既不是判据
-转红，也不能读成绿灯。本机只读项：`--self-test` 16/16、回归 6 例 OK、
-`check_bio_core_wheel.py --static` OK、`test_ci_job_contracts.py` 92 OK、
-`check-toolchain-pins` OK、`py_compile` / `json.tool` / `git diff --check` 全清。
-CI 终态以平台为准。
+### 根因：根组织云原生构建 CPU 配额耗尽（仓库外）
+
+CNB 官方 [定价](https://docs.cnb.cool/zh/pricing.md) 口径：云原生构建-CPU 免费额度
+**160 核时/月**、月底清零；构建启动后按 `节点规格 × 预冻结时长` 预留额度，
+**可用额度不足即立即终止任务**。本流水线 `runner.cpus: 16`，预冻结 10 min，
+`16 × 10 / 60 = 2.67 核时`——与报错逐字吻合。这是根组织的「events」额度池，
+不是本 PR 引入的：本 PR 只新增 4 个文件，未改 `.cnb.yml` 或任何共享脚本。
+
+用 `cnb build start-build` 在同一时间窗做了最小探针（config 内联、不落仓库），
+逐档核实 `cpus` 与预冻结核时的线性关系：
+
+| `runner.cpus` | 预冻结核时 | Prepare 结果 |
+| --- | --- | --- |
+| 16 | 2.67 | error（配额不足） |
+| 8  | 1.33 | error（配额不足） |
+| 4  | 0.67 | error（配额不足） |
+| 2  | 0.33 | error（配额不足） |
+| 1  | 0.17 | success（仅此档还能挤进剩余余额） |
+
+所以**调低 `runner.cpus` 不是修法**：它只是把「额度不足」的门槛往下挪，且当前
+剩余余额连 2 核都预冻结不了；把全量 `verify` 从 16 核降到 1 核既跑不动 pnpm
+turbo 全链，也是对既有容量规划的倒退。同一时间窗内 #160、#163、#164 等无关 PR
+的 `verify`（含 #160 自己改成 8 核的分支）以**完全相同**的 Prepare 报错结束，
+与改动无关。`Contact the root group administrator to extend` 的字面含义就是：
+需要根组织管理员在「组织 → 设置 → 用量管理」绑定预算、提升上限后重跑。
+
+### 配额恢复前能拿到的证据（都不是 CI 代签）
+
+1. **本机只读项全绿**：守卫 plain `10 codes frozen`、`--self-test` 16/16、回归
+   6 例 OK、`test_ci_job_contracts.py` 92 OK、`check_bio_core_wheel.py --static`
+   OK、`test_site_artifact_isolation` 11 OK、`check-toolchain-pins.py` OK、
+   `py_compile` / `json.tool` / `git diff --check` 全清。
+2. **平台侧部分验证**（`cnb-b5q-1k6ktcj14`，`api_trigger` 一次性探针，1 核 +
+   `python:3.15` 镜像，配置内联不落仓库）：在 CI 的 **Python 3.15.2** 上实跑
+   本 PR 四个新文件，守卫 plain、`--self-test` 16/16、回归 6 例、`py_compile`、
+   `json.tool` 全部 `PASS`。这只覆盖新增字节，不覆盖 wheel / Rust / API / PG /
+   前端全链，**不能读成 `verify` 终态**。
+3. 自动重跑不可用：本分支没有 `api_trigger` 正式配置（`CONFIG_EVENT_EMPTY`），
+   上面那条是临时内联探针，不构成可重复入口。
+
+**结论**：代码本身没有可修的 CI 红灯；七个验证 stage 从未运行。CI 终态一律以
+平台为准，配额恢复后直接重跑 `verify` 并回填，本节届时删除。
