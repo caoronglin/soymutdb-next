@@ -52,15 +52,30 @@ def test_the_committed_tree_reconciles_all_three_declarations() -> None:
     assert set(limiters) == {"GLOBAL_LIMITER", "SUBMIT_LIMITER"}
 
 
+def _gene_by_id_params(server: str) -> tuple[str, str]:
+    """Split ``gene_by_id``'s parameter block into (before, after) the last line.
+
+    Anchoring an ablation on one exact formatting of the signature rots the
+    moment someone adds a parameter or reflows the line (PR #175 did both), and
+    the ``assert mutated != server`` guard then fires before the ablation ever
+    runs. Read the block by structure instead: the ``def`` line opens it and the
+    ``) -> ...:`` line closes it.
+    """
+    lines = server.splitlines(keepends=True)
+    start = next(
+        i for i, line in enumerate(lines) if line.startswith("async def gene_by_id(")
+    )
+    end = next(
+        i for i in range(start + 1, len(lines)) if lines[i].lstrip().startswith(")")
+    )
+    return "".join(lines[:end]), "".join(lines[end:])
+
+
 def test_a_parameter_the_manifest_never_publishes_is_rejected() -> None:
     manifest, server, _, _ = _sources()
     # gene_by_id gains a keyword in server.py only: clients cannot discover it.
-    mutated = server.replace(
-        "    gene_id: str, assembly_id: int | None = None, ctx: Context | None = None",
-        "    gene_id: str,\n    assembly_id: int | None = None,\n"
-        "    include_neighbours: bool = False,\n    ctx: Context | None = None",
-        1,
-    )
+    head, tail = _gene_by_id_params(server)
+    mutated = f"{head}    include_neighbours: bool = False,\n{tail}"
     assert mutated != server
     failures = _failures(server=mutated)
     assert any(
@@ -71,11 +86,8 @@ def test_a_parameter_the_manifest_never_publishes_is_rejected() -> None:
 
 def test_a_published_input_the_server_dropped_is_rejected() -> None:
     manifest, server, _, _ = _sources()
-    mutated = server.replace(
-        "    gene_id: str, assembly_id: int | None = None, ctx: Context | None = None",
-        "    gene_id: str, ctx: Context | None = None",
-        1,
-    )
+    dropped = "assembly_id: int | None = None,\n"
+    mutated = server.replace(dropped, "", 1)
     assert mutated != server
     failures = _failures(server=mutated)
     assert any(

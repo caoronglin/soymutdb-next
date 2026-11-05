@@ -196,7 +196,12 @@ smoke_contracts() {
     # while the MCP tool 404s. It also pins the release scoping: the tools that
     # can read a data release must forward X-SoyMutDB-Release, or MCP answers
     # are computed against a different release than the caller asked for.
-    scripts/check_mcp_release_binding.py --self-test
+    #
+    # The `--self-test` invocation of check_mcp_release_binding.py is NOT a
+    # pytest path: this array is expanded verbatim into `pytest "${tests[@]}"`,
+    # so a guard call here reaches pytest as an argument and the whole layer
+    # dies with "unrecognized arguments: --self-test". It lives with the other
+    # guard calls below instead.
     scripts/test_mcp_release_binding_wiring.py
     # /tools/sequence/inspect must validate the client payload before requiring
     # the kernel; this suite proves each ordering ablation is caught.
@@ -244,6 +249,10 @@ smoke_contracts() {
   # Self-test mode, like the guards above, so this is one line here instead of
   # a row in the shared `tests[]` array.
   "${PYTHON_BIN}" scripts/check_mcp_manifest_reconcile.py --self-test || rc=$?
+  # The release pin must survive the MCP tool layer: _api_request used to send a
+  # fixed header set, so X-SoyMutDB-Release never left the process and MCP
+  # answers were computed against a different release than the caller asked for.
+  "${PYTHON_BIN}" scripts/check_mcp_release_binding.py --self-test || rc=$?
   # Rust kernel: the crate pins + CI job + wheel-install gate must exist even
   # when this layer has no compiled extension available.
   "${PYTHON_BIN}" scripts/check_bio_core_wheel.py --static || rc=$?
