@@ -197,8 +197,9 @@ cargo-audit 抬到 0.22.2、并让失败路径打印证据；`2649f71f` 把 carg
 ## OpenAPI contract hardening — re-phased slices (2026-11-05, cont.)
 
 Each slice is one PR, cut by file ownership so no two parallel agents write the
-same bytes. All are on base `05a1d4bb`; links are to the PR that carries the
-passing test, not to a design note.
+same bytes. A1–A4 were cut on `05a1d4bb`; A5 and later are re-anchored on the
+live tree (A5 re-anchored twice during the session) — a phase's base must be re-read, not inherited.
+Links are to the PR that carries the passing test, not to a design note.
 
 | Phase | PR | Content | Verification |
 | --- | --- | --- | --- |
@@ -206,6 +207,7 @@ passing test, not to a design note.
 | A2 | #193 | A pinned baseline may only move together with the artifacts it pins | 15 checks, SMOKE PASS |
 | A3 | #199 | Pin published `x-pagination` values to an independent floor; kill the co-revert that kept the old guard green | SMOKE PASS 640+5+10, negative control |
 | A4 | (this PR) | Pin the **non-admin** protected OpenAPI operations to a reviewed literal floor: the old `protected < len(admin)` bound was vacuous (admin ⊆ protected), so stripping `security` from all 48 non-admin ops stayed green. See [`../dev/openapi-auth-surface-nonadmin-floor.md`](../dev/openapi-auth-surface-nonadmin-floor.md) | 7 pytest, guard 10 ablations, SMOKE PASS 640+5+10, 4 negative controls |
+| A5 | (this PR) | Pin the inlined enum-class exemption to a reviewed literal: `inline_classes` was derived from absence in the very artifact being guarded, so dropping a real enum component stayed green. See [`../dev/openapi-published-enum-inline-floor.md`](../dev/openapi-published-enum-inline-floor.md) | 11 ablations, 4 negative controls, layer consumed, landing tree green |
 | E1 | #196 / #201 | Freeze `http_error` and wire both error-code guards into the gate (the two guards are `rc=1` on live main and unconsumed by any `scripts/*.sh`) | in flight |
 
 The recurring lesson across A1–A4: `check-contract.sh` proves
