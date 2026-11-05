@@ -121,3 +121,39 @@ covers the builder that produces them.
   `pnpm --filter @soymutdb/api-client generate:api-client` / `check:contract`,
   full API pytest, runtime smoke, E2E and images were not run here — CI is the
   authority, do not sign them on the strength of this document.
+
+## The third defect: nothing counted success bodies
+
+Both guards above pin error responses. Neither counts a `2xx` body, so three
+defects stayed green against the pair — reproduced on live `6d6c32b9`:
+
+| Regression | 422 guard | Snapshot guard | Body guard |
+| --- | --- | --- | --- |
+| Delete one operation's `200` content from `openapi.json` | GREEN | GREEN (path and schema floors still hold) | **FAIL** |
+| Retype a `200` from `GeneListResponse` to another existing schema | GREEN | GREEN | **FAIL** |
+| Client regenerated from a newer backend than the snapshot | GREEN | GREEN (field-set check is per schema, not per response) | **FAIL** |
+
+The envelope guard cannot see the first two because it only iterates
+`4xx`/`5xx`, and `_ERROR_RESPONSE_BASELINE` pins *status codes*, not bodies.
+The snapshot guard's `_SNAPSHOT_FLOOR` is a count of paths and schemas — a
+`200` that keeps its path is above the floor either way.
+
+`scripts/test_openapi_snapshot_body_integrity.py` closes it: for every
+component a path operation references, the snapshot's declared count and the
+generated client's printed count must agree, and the client may not reference
+a component the snapshot does not define. Two independent fixed points —
+per-component equality and `_CLIENT_BODY_TOTAL` — so a coordinated edit to
+both halves is still caught, the same shape of pin as
+`_ERROR_RESPONSE_BASELINE` and `_SNAPSHOT_FLOOR`.
+
+`_CLIENT_BODY_TOTAL` (800) is larger than the snapshot's 716 component response
+bodies because the pinned generator also prints request bodies (81 components,
+84 occurrences). The invariant is therefore one-sided — the client must not
+declare *fewer* of anything the snapshot declares — with the surplus pinned
+separately so a body appearing or vanishing on either side is a failure rather
+than an absorbed difference.
+
+Verified on the committed tree: 9 checks, `OK`, rc=0, collected by pytest (9
+passed). Ablations each go red and restore green: client drops a body / client
+gains a body / client references an undeclared component / smoke wiring
+removed / a `200` retyped to another schema / snapshot loses a `200`'s content.
