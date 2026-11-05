@@ -17,18 +17,22 @@ things and either one alone has a blind spot:
   committed" case that door 1 cannot see because the tree *is* consistent.
 
 Door 1 cases inject the tree through ``failures(tree=...)``. That injection has
-no parent commit, so it skips door 2 by construction -- which is why this suite
-also injects the *history*: ``show`` (old source), ``changed_in`` (artifact
-diff) and ``resolve`` (HEAD) are replaced for the duration of a case, while the
-new sources and both artifacts still come from the committed tree. Nothing here
-writes to the repository or needs a real commit.
+no parent commit, so it skips door 2 by construction. Door 2 cases instead
+build a *real* parent commit in a temporary object directory: the guard's own
+``resolve``, ``show`` and ``changed_in`` run unmodified against it, so ``moved``
+is a real ``git diff`` between two real commits, never a set of paths a test
+handed the guard. New sources and both artifacts still come from the committed
+working tree. No ref, index or object of the repository is written.
 """
 
 from __future__ import annotations
 
 import contextlib
 import json
+import os
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -151,87 +155,203 @@ def test_the_suite_has_teeth() -> None:
     deleting the whole history door leaves this suite green.
     """
     cases = [name for name in globals() if name.startswith("test_")]
-    assert len(cases) >= 13, cases
+    assert len(cases) >= 14, cases
     assert guard.failures(tree=_tree()) == []
 
 
+def _source_with_total(value: int) -> str:
+    """The body guard's real source with only ``_CLIENT_BODY_TOTAL`` moved."""
+    total = guard.pinned_literal(guard.BODY_GUARD, "_CLIENT_BODY_TOTAL")
+    source = (ROOT / BODY_PATH).read_text(encoding="utf-8")
+    moved = source.replace(
+        f"_CLIENT_BODY_TOTAL = {total}", f"_CLIENT_BODY_TOTAL = {value}", 1
+    )
+    assert moved != source
+    return moved
+
+
+def _source_with_bumped_error_baseline() -> str:
+    """The envelope guard's real source with only the 500 count moved."""
+    source = (ROOT / ENVELOPE_PATH).read_text(encoding="utf-8")
+    pinned = guard.pinned_literal(guard.ENVELOPE_GUARD, "_ERROR_RESPONSE_BASELINE")
+    was = json.dumps(pinned, sort_keys=True)
+    pinned["500"] = pinned["500"] + 1
+    line = f"_ERROR_RESPONSE_BASELINE = {was}"
+    assert line in source
+    return source.replace(
+        line, f"_ERROR_RESPONSE_BASELINE = {json.dumps(pinned)}", 1
+    )
+
+
+def _artifact_with_a_newline(path: str) -> str:
+    """Real artifact bytes that differ from HEAD without changing any pin."""
+    return (ROOT / path).read_text(encoding="utf-8") + "\n"
+
+
 @contextlib.contextmanager
-def _history(old_sources: dict[str, str], moved: set[str]):
-    """Inject only the readers door 2 uses, so it runs without a real commit.
+def _real_history(changes: dict[str, str | None], *, empty_tree: bool = False):
+    """Yield a real parent commit whose tree differs from HEAD by ``changes``.
 
-    ``failures(base=...)`` takes its new sources and both artifacts from the
-    working tree; git is asked for three things only: the old source
-    (``show``), the artifact diff (``changed_in``) and the HEAD id
-    (``resolve``). Replacing those three is enough to build every history case
-    on the committed tree itself. Restored in ``finally`` so no case leaks.
+    The commit and its blobs live in a temporary object directory, with the
+    repository's own objects as an alternate. ``guard.git`` is redirected at
+    that store for the duration of the case, so ``resolve``, ``show`` and
+    ``changed_in`` remain the production readers: ``moved`` is a real ``git
+    diff`` between two real commits, never a set of paths a test handed the
+    guard. No ref, index or object of the repository is written, and the
+    working tree is untouched. ``empty_tree`` models a shallow clone where
+    the old source is unavailable.
     """
-    saved = (guard.resolve, guard.show, guard.changed_in)
-    guard.resolve = lambda _ref: "synthetic-head"
-    guard.show = lambda _commit, path: old_sources.get(path)
-    guard.changed_in = lambda _commit, _since, _paths: set(moved)
-    try:
-        yield
-    finally:
-        guard.resolve, guard.show, guard.changed_in = saved
 
+    def fixture_git(*args: str, env: dict[str, str], stdin: str | None = None) -> str:
+        result = subprocess.run(
+            ["git", "-c", "commit.gpgsign=false", *args],
+            cwd=ROOT, env=env, input=stdin, capture_output=True, text=True, check=False,
+        )
+        if result.returncode:
+            raise AssertionError(
+                f"history fixture: git {' '.join(args)}: {result.stderr.strip()}"
+            )
+        return result.stdout
 
-def _old_sources_with_total(value: int) -> dict[str, str]:
-    tree = _tree()
-    _set_total(tree, value)
-    return tree
+    _, out = guard.git("rev-parse", "--path-format=absolute", "--git-path", "objects")
+    objects = out.strip()
+    alternates = [objects]
+    info = Path(objects) / "info" / "alternates"
+    if info.exists():
+        alternates += [
+            line.strip()
+            for line in info.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        store = Path(tmp) / "objects"
+        store.mkdir()
+        env = dict(
+            os.environ,
+            GIT_OBJECT_DIRECTORY=str(store),
+            GIT_ALTERNATE_OBJECT_DIRECTORIES=":".join(alternates),
+            GIT_INDEX_FILE=str(Path(tmp) / "index"),
+            GIT_AUTHOR_NAME="baseline-sync-fixture",
+            GIT_AUTHOR_EMAIL="fixture@invalid",
+            GIT_COMMITTER_NAME="baseline-sync-fixture",
+            GIT_COMMITTER_EMAIL="fixture@invalid",
+        )
+        head = fixture_git("rev-parse", "HEAD", env=env).strip()
+        if empty_tree:
+            tree = fixture_git("mktree", env=env, stdin="").strip()
+        else:
+            fixture_git("read-tree", head, env=env)
+            for path, text in changes.items():
+                if text is None:
+                    fixture_git("update-index", "--force-remove", path, env=env)
+                else:
+                    blob = fixture_git(
+                        "hash-object", "-w", "--stdin", env=env, stdin=text
+                    ).strip()
+                    fixture_git(
+                        "update-index", "--cacheinfo", f"100644,{blob},{path}", env=env
+                    )
+            tree = fixture_git("write-tree", env=env).strip()
+        base = fixture_git(
+            "commit-tree", tree, "-p", head, "-m", "synthetic baseline history", env=env
+        ).strip()
+
+        real_git = guard.git
+
+        def redirected(*args: str) -> tuple[int, str]:
+            result = subprocess.run(
+                ["git", "-c", "commit.gpgsign=false", *args],
+                cwd=ROOT, env=env, capture_output=True, text=True, check=False,
+            )
+            return result.returncode, result.stdout
+
+        guard.git = redirected
+        try:
+            yield base
+        finally:
+            guard.git = real_git
 
 
 def test_a_literal_moved_without_the_artifacts_is_rejected() -> None:
     """Door 2, the one edit door 1 cannot see.
 
-    The old source pins 808 and the committed tree pins 807; each agrees with
-    its own artifacts, so the semantic door is silent. Only the history says
-    the pin was bumped while neither artifact changed.
+    The real parent commit pins 808 and HEAD pins 807; each agrees with its own
+    artifacts, so the semantic door is silent. Only a real ``git diff`` between
+    the two commits says no artifact moved with the pin.
     """
     total = guard.pinned_literal(guard.BODY_GUARD, "_CLIENT_BODY_TOTAL")
-    with _history(_old_sources_with_total(total + 1), moved=set()):
-        found = guard.failures(base="synthetic-base")
+    with _real_history({BODY_PATH: _source_with_total(total + 1)}) as base:
+        found = guard.failures(base=base)
     assert _any(found, "_CLIENT_BODY_TOTAL moved"), found
     assert _any(found, "but none of"), found
     assert not _any(found, "committed artifacts"), found
 
 
 def test_a_literal_moved_with_the_artifacts_passes() -> None:
-    """The door is satisfiable: a regenerate moving pin + artifacts is green."""
+    """The door is satisfiable: a regenerate moving pin + artifacts is green.
+
+    Both artifacts are really changed in the parent commit, so the guard's own
+    ``changed_in`` reports them. The green is earned by git, not injected.
+    """
     total = guard.pinned_literal(guard.BODY_GUARD, "_CLIENT_BODY_TOTAL")
-    with _history(_old_sources_with_total(total + 1),
-                  moved={SNAPSHOT_PATH, GENERATED_PATH}):
-        found = guard.failures(base="synthetic-base")
+    with _real_history(
+        {
+            BODY_PATH: _source_with_total(total + 1),
+            SNAPSHOT_PATH: _artifact_with_a_newline(SNAPSHOT_PATH),
+            GENERATED_PATH: _artifact_with_a_newline(GENERATED_PATH),
+        }
+    ) as base:
+        found = guard.failures(base=base)
     assert found == [], found
 
 
 def test_the_history_door_respects_each_gates_own_artifacts() -> None:
     """The error baseline pins the snapshot; moving only the client is not enough."""
-    old = _tree()
-    pinned = guard.pinned_literal(guard.ENVELOPE_GUARD, "_ERROR_RESPONSE_BASELINE")
-    was = json.dumps(pinned, sort_keys=True)
-    pinned["500"] = pinned["500"] + 1
-    line = f"_ERROR_RESPONSE_BASELINE = {was}"
-    assert line in old[ENVELOPE_PATH]
-    old[ENVELOPE_PATH] = old[ENVELOPE_PATH].replace(
-        line, f"_ERROR_RESPONSE_BASELINE = {json.dumps(pinned)}", 1
-    )
-    with _history(old, moved={GENERATED_PATH}):
-        found = guard.failures(base="synthetic-base")
+    with _real_history(
+        {
+            ENVELOPE_PATH: _source_with_bumped_error_baseline(),
+            GENERATED_PATH: _artifact_with_a_newline(GENERATED_PATH),
+        }
+    ) as base:
+        found = guard.failures(base=base)
     assert _any(found, "_ERROR_RESPONSE_BASELINE moved"), found
+
+
+def test_a_reader_that_invents_artifact_moves_is_rejected() -> None:
+    """The suite fails closed when the *real* ``changed_in`` stops reading git.
+
+    The previous suite overrode ``changed_in`` with a planted set in every
+    history case, so replacing the production reader with ``return set(paths)``
+    left all 13 checks green: a pin-only edit would pass as if a regenerate had
+    happened. With real commits behind every case, that ablation must be RED.
+    The positive control restores the reader and shows the same commit is RED
+    again, proving the green came from git and not from a stubbable helper.
+    """
+    total = guard.pinned_literal(guard.BODY_GUARD, "_CLIENT_BODY_TOTAL")
+    with _real_history({BODY_PATH: _source_with_total(total + 1)}) as base:
+        assert _any(guard.failures(base=base), "_CLIENT_BODY_TOTAL moved")
+        saved = guard.changed_in
+        guard.changed_in = lambda _commit, _since, paths: set(paths)
+        try:
+            found = guard.failures(base=base)
+        finally:
+            guard.changed_in = saved
+        assert found == [], found
+        assert _any(guard.failures(base=base), "_CLIENT_BODY_TOTAL moved")
 
 
 def test_an_unchanged_literal_needs_no_artifact_move() -> None:
     """The door is not a tripwire: a baseline that did not move says nothing."""
-    with _history(_tree(), moved=set()):
-        found = guard.failures(base="synthetic-base")
+    with _real_history({}) as base:
+        found = guard.failures(base=base)
     assert found == [], found
 
 
 def test_a_shallow_clone_without_an_old_source_is_not_a_failure() -> None:
     """No old source means no history to compare; door 2 steps aside."""
-    with _history({}, moved=set()):
-        found = guard.failures(base="synthetic-base")
+    with _real_history({}, empty_tree=True) as base:
+        found = guard.failures(base=base)
     assert found == [], found
 
 
