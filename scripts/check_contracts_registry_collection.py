@@ -18,7 +18,10 @@ disappearance is silent. This guard reads both files' committed bytes.
 The same function invokes a floor of stdlib guards as separate
 ``${PYTHON_BIN} scripts/check_*.py ... || rc=$?`` calls. That is a second
 wiring mechanism: a merge can drop one without touching the array, and the
-layer stays green because the remaining guards still pass.
+layer stays green because the remaining guards still pass. Every call in that
+floor is pinned in ``REQUIRED_GUARD_CALLS``; ``check()`` fails closed on a
+wired call the floor does not name, so adding a guard and forgetting its pin
+cannot silently reopen the hole.
 
 This guard reads committed bytes only. It does not run pytest, import the
 suites, need Python 3.15, a wheel, a database or a workspace install, so it
@@ -111,13 +114,16 @@ GUARD_CALL = re.compile(
 )
 
 # A dropped guard call is invisible to a validator that only checks paths:
-# "fewer calls" and "intentionally removed" look identical. Pin the known
-# floor explicitly. Adding a new guard call does not require editing this
-# list (the check only requires these to still be present); removing one does.
+# "fewer calls" and "intentionally removed" look identical. Pin every guard
+# call the layer actually runs: adding a new guard call without adding it
+# here leaves that guard removable with a green SMOKE PASS. `check()` rejects
+# wired-but-unpinned calls, so the floor must be kept in step with the layer;
+# the regression suite asserts the two sets agree on the committed bytes.
 REQUIRED_GUARD_CALLS: frozenset[str] = frozenset(
     {
         "scripts/check-toolchain-pins.py",
         "scripts/check_bio_core_wheel.py",
+        "scripts/check_bio_core_wheel_abi.py",
         "scripts/check_workspace_exports.py",
         "scripts/check_app_shell_assets.py",
         "scripts/check_visible_i18n.py",
@@ -126,6 +132,14 @@ REQUIRED_GUARD_CALLS: frozenset[str] = frozenset(
         "scripts/check_error_code_catalog.py",
         "scripts/check_error_code_gate_wiring.py",
         "scripts/check_error_code_doc_counts.py",
+        "scripts/check_format_inspect_validation_order.py",
+        "scripts/check_interval_visibility_order.py",
+        "scripts/check_mcp_manifest_reconcile.py",
+        "scripts/check_mcp_release_binding.py",
+        "scripts/check_openapi_auth_surface.py",
+        "scripts/check_openapi_baseline_sync.py",
+        "scripts/check_openapi_inline_body_integrity.py",
+        "scripts/check_openapi_published_enums.py",
     }
 )
 
@@ -359,6 +373,15 @@ def check(
         errors.append("could not read any standalone guard calls")
     for relative in sorted(REQUIRED_GUARD_CALLS - calls):
         errors.append(f"standalone guard call {relative!r} was dropped")
+    # Judge the invariant by ALL wired calls, not a hardcoded subset: a guard
+    # added to smoke_contracts() without being pinned here could otherwise be
+    # dropped again with a green SMOKE PASS (its only wiring check may live in
+    # the dropped call itself). Keep the floor in step with the layer.
+    for relative in sorted(calls - REQUIRED_GUARD_CALLS):
+        errors.append(
+            f"standalone guard call {relative!r} is wired but not pinned in "
+            "REQUIRED_GUARD_CALLS"
+        )
     for relative in sorted(calls):
         if relative not in files:
             errors.append(f"standalone guard call {relative!r} does not exist")
@@ -449,6 +472,17 @@ def self_test() -> int:
     )
     cases.append(("a standalone guard call is dropped", smoke5, dict(files), ci_steps))
 
+    # Same shape on a guard that landed after the original floor: dropping
+    # the inline-body pin used to leave the whole layer green (its only
+    # wiring check lives inside the dropped call itself).
+    inline_call = (
+        '  "${PYTHON_BIN}" scripts/check_openapi_inline_body_integrity.py '
+        '--self-test || rc=$?\n'
+    )
+    assert inline_call in smoke, "self-test could not locate the inline-body guard call"
+    smoke_inline = smoke.replace(inline_call, "", 1)
+    cases.append(("the inline-body guard call is dropped", smoke_inline, dict(files), ci_steps))
+
     mutant6 = dict(files)
     mutant6.pop("scripts/check_nginx_security_headers.py", None)
     cases.append(("a called guard disappears from disk", smoke, mutant6, ci_steps))
@@ -511,7 +545,9 @@ def self_test() -> int:
     cases.append(("the contracts layer call is dropped from the CI job",
                   smoke, dict(files), ci_no_layer))
 
-    # Positive control: adding a NEW guard call must not require an edit here.
+    # A newly wired guard must be pinned in the same change. This used to be
+    # a positive control ("no allowlist edit needed"); it is now the exact
+    # drift the guard must catch, plus a control showing a pinned add is fine.
     extra = "scripts/check_extra_wiring_probe.py"
     smoke7 = smoke.replace(
         '  "${PYTHON_BIN}" scripts/check_nginx_security_headers.py || rc=$?\n',
@@ -531,9 +567,22 @@ def self_test() -> int:
         )
     fresh = check(smoke7, mutant7, ci_steps)
     report(
-        not fresh,
-        "PASS self-test: adding a new guard call needs no allowlist edit",
-        f"FAIL self-test: adding a new guard call was rejected: {fresh}",
+        bool(fresh) and any("is wired but not pinned" in f for f in fresh),
+        "PASS self-test: a new guard call outside the floor is caught",
+        f"FAIL self-test: a new guard call outside the floor was accepted: {fresh}",
+    )
+    # Positive control: pinning the new call in the same change stays green,
+    # so the guard rejects *unpinned* additions, not additions in general.
+    original_floor = REQUIRED_GUARD_CALLS
+    globals()["REQUIRED_GUARD_CALLS"] = original_floor | {extra}
+    try:
+        pinned = check(smoke7, mutant7, ci_steps)
+    finally:
+        globals()["REQUIRED_GUARD_CALLS"] = original_floor
+    report(
+        not pinned,
+        "PASS self-test: pinning a new guard call alongside the wire is accepted",
+        f"FAIL self-test: pinning a new guard call was rejected: {pinned}",
     )
 
     # Indentation was previously *accepted* for any width, on the reading that

@@ -17,7 +17,8 @@ committed `smoke.sh` bytes and asserts:
 - every active array row is a **bare path** (no flags/arguments),
   because the array is expanded verbatim into the ``pytest`` argv;
 - no array entry is duplicated;
-- the known floor of standalone guard calls is still present;
+- the pinned standalone guard calls are still present, and no wired call
+  sits outside `REQUIRED_GUARD_CALLS`;
 - every called guard still exists on disk;
 - the driver-level invocation registers its failure in `FAILED`, so a failing
   guard cannot print `SMOKE PASS` (see below).
@@ -146,10 +147,15 @@ different assertion. It deliberately does not enumerate every
 One-to-one *set equality* would therefore be wrong; the pinned direction is
 "everything registered must really collect something".
 
-`REQUIRED_GUARD_CALLS` is a floor, not an allowlist: adding a new guard call
-needs no edit here (verified by `--self-test`), removing one fails. The list
-must be updated only when a guard call is intentionally retired from this
-layer.
+`REQUIRED_GUARD_CALLS` is pinned to exactly the set of standalone calls in
+`smoke_contracts()`: `check()` reports both a wired call missing from the set
+and a set member no longer wired. This is deliberate. A guard added to the
+layer without being pinned here can be dropped later with a green `SMOKE PASS`
+-- its only wiring probe may live inside the very call that was dropped, as
+with the inline-body guard. `--self-test` plants an unpinned addition and
+asserts it is caught, plus a control showing a same-change pin stays green.
+Retire a call and remove its pin in the same commit; set-equality fails
+closed on drift in either direction.
 
 The `--self-test` summary is counted from the result lines it actually emits,
 not from a hardcoded `len(cases) + N`: that constant drifts the moment a probe
@@ -185,9 +191,11 @@ is kept for direct runs and editor integration.
 
 - Adding a suite: put the path in `tests=()`, keep at least one `test_*`
   name. No edit to this guard.
-- Adding a standalone guard: add the `|| rc=$?` call. No edit to this guard.
-- Retiring a suite or a called guard: remove the entry/call **and** update
-  `REQUIRED_GUARD_CALLS` if it was in the floor. A green `SMOKE PASS` after
-  deleting a guard file must not be possible.
+- Adding a standalone guard: add the `|| rc=$?` call **and** its path to
+  `REQUIRED_GUARD_CALLS` in the same change. The guard rejects an unpinned
+  addition; `--self-test` proves it.
+- Retiring a suite or a called guard: remove the entry/call **and** its pin
+  from `REQUIRED_GUARD_CALLS`. A green `SMOKE PASS` after deleting a guard
+  file must not be possible.
 - Never change the driver's guard call back to `|| rc=$?`; `--self-test`
   fails on that mutation.
