@@ -61,6 +61,19 @@ API import, no wheel, no database, no workspace install. It pins:
   is a hand-written literal over the snapshot, and door 8 stands down when
   that digest does not match, so a snapshot-side drift is named by door 1
   with full failure resolution instead of being double-counted.
+* door 11 -- the **field** each generated ``@example`` tag is printed under.
+  Door 8 compares a flat, unlabelled value sequence; two doc blocks publishing
+  the same value can exchange a tag without moving that sequence. Dropping the
+  tag from ``LoginRequest.username`` and adding a second one to
+  ``LoginRequest.email`` keeps all 7 tags, leaves the snapshot and both count
+  doors intact, and -- with ``generated_blob`` honestly re-pinned -- passed the
+  whole layer ``SMOKE PASS``. ``generated_example_rows()`` labels each tag
+  with its component and field (``finditer``, so a second tag in one block is
+  seen), and ``example_projection()`` reads the digest-pinned snapshot the
+  same way. Compared per field, values in order: a dropped tag names one field
+  instead of shifting blame onto every later one. Door 11 stands down when the
+  snapshot digest or the tag cardinality drifts, and door 8 stands down when
+  door 11 is on, so a drift is named once with full resolution.
 * a one-sided drop, add, retype or move of any single constraint/example is
   named by its path, so the failure says which field changed.
 
@@ -333,6 +346,113 @@ def generated_examples(generated: str | None = None) -> list[str]:
     ]
 
 
+# ``finditer``, not ``search``: one property doc block may carry more than one
+# ``@example`` tag, and every one is a published value. A reader that quietly
+# reads less is the same failure mode as a guard that quietly checks less.
+_EXAMPLE_TAG = re.compile(r"^\s*\* @example (?P<value>.*?)\s*$", re.MULTILINE)
+
+
+def generated_example_rows(
+    generated: str | None = None,
+) -> list[tuple[str, str, str]]:
+    """``(component, field, value)`` rows for every generated ``@example`` tag.
+
+    ``generated_examples()`` is a flat, unlabelled list: enough for the count
+    door, not enough to say *which* field a tag belongs to. These rows keep
+    the component and field the tag is printed under, so the generated half can
+    be compared to the snapshot per field instead of by position.
+    """
+    if generated is None:
+        generated = _GENERATED.read_text(encoding="utf-8")
+    region = _SCHEMAS_REGION.search(generated)
+    if region is None:
+        return []
+    out: list[tuple[str, str, str]] = []
+    for block in _COMPONENT_BLOCK.finditer(region.group("body")):
+        name = block.group("name")
+        for prop in _PROPERTY_DOC.finditer(block.group("body")):
+            for tag in _EXAMPLE_TAG.finditer(prop.group("doc")):
+                out.append((name, prop.group("field"), tag.group("value")))
+    return out
+
+
+def example_projection(
+    document: dict[str, Any],
+) -> list[tuple[str, str, str]]:
+    """Document-order ``(component, field, value)`` rows of published examples.
+
+    ``properties`` keeps document order, which is the order the generator
+    prints the tags in. Same schema-marker rule as ``example_rows()``: a
+    property literally named ``examples`` is not the keyword itself.
+    """
+    out: list[tuple[str, str, str]] = []
+    schemas = document.get("components", {}).get("schemas", {})
+    for name, schema in schemas.items():
+        if not isinstance(schema, dict):
+            continue
+        for field, node in (schema.get("properties") or {}).items():
+            if not isinstance(node, dict):
+                continue
+            if not any(marker in node for marker in _SCHEMA_MARKERS):
+                continue
+            values = node.get("examples")
+            if not isinstance(values, list):
+                continue
+            for value in values:
+                out.append((name, field, str(value)))
+    return out
+
+
+def _values_by_field(
+    rows_: list[tuple[str, str, str]],
+) -> dict[tuple[str, str], list[str]]:
+    """Group ordered ``(component, field, value)`` rows into per-field lists."""
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for name, field, value in rows_:
+        grouped.setdefault((name, field), []).append(value)
+    return grouped
+
+
+def example_field_drift(
+    published: list[tuple[str, str, str]],
+    printed: list[tuple[str, str, str]],
+) -> list[str]:
+    """One failure per field whose published ``@example`` values disagree.
+
+    Values within a field are compared as an ordered list, so a same-count
+    permutation inside one field is caught too. Per field rather than by
+    position: a dropped tag shifts every later tag, and an index-wise compare
+    would name six innocent neighbours before the real one.
+    """
+    want = _values_by_field(published)
+    have = _values_by_field(printed)
+    out: list[str] = []
+    for field in sorted(set(want) | set(have)):
+        if want.get(field) == have.get(field):
+            continue
+        label = f"{field[0]}.{field[1]}"
+        if field not in have:
+            out.append(
+                f"generated @example tags missing for {label}: the snapshot "
+                f"publishes {want[field]!r} but openapi.d.ts prints none"
+            )
+        elif field not in want:
+            out.append(
+                f"generated @example tags invented for {label}: openapi.d.ts "
+                f"prints {have[field]!r} but the snapshot publishes no "
+                "examples for it"
+            )
+        else:
+            out.append(
+                f"generated @example values disagree for {label}: the "
+                f"snapshot publishes {want[field]!r} but openapi.d.ts prints "
+                f"{have[field]!r}. A tag relocated between two doc blocks "
+                "leaves the flat value sequence and both count doors "
+                "unchanged."
+            )
+    return out
+
+
 # ``openapi-typescript`` prints component schemas at 8-space indent, their
 # property doc blocks at 12, and the property declaration right below the
 # block. Restrict to the ``schemas`` region so ``parameters`` / ``responses``
@@ -518,6 +638,7 @@ def failures(
     client_additional_digest: str | None = None,
     expected_additional: int | None = None,
     expected_client_additional: int | None = None,
+    pin_example_fields: bool = True,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -699,10 +820,14 @@ def failures(
     # a snapshot-side drift is named by door 1, a dropped/added tag by the
     # count door, and only a value/order drift in the generated half lands
     # here. Comparing in order (not as a multiset) also catches a same-count
-    # permutation that moves one tag's value onto another field.
+    # permutation that moves one tag's value onto another field. Door 11 is
+    # strictly stronger (per field, values in order), so when it is wired on,
+    # door 8 stands down: a value drift must be named once, not twice. The
+    # --self-test off-control keeps door 8 load-bearing by disabling door 11.
     snapshot_example_values = tuple(value for _, _, value in example_rows_)
     if (
-        actual_example_digest == pinned_example_digest
+        not pin_example_fields
+        and actual_example_digest == pinned_example_digest
         and len(gen_examples) == pinned_generated
         and tuple(gen_examples) != snapshot_example_values
     ):
@@ -714,6 +839,29 @@ def failures(
             "snapshot projection. A one-sided rewrite of one @example value "
             "keeps all 7 tags and, once generated_blob is re-pinned, leaves "
             "every other door silent."
+        )
+
+    # Door 11 -- the *field* each generated ``@example`` tag is printed under.
+    # Door 8 compares a flat, unlabelled value sequence. Two doc blocks that
+    # publish the same value can exchange a tag without moving that sequence:
+    # drop the tag from LoginRequest.username, add a second one to
+    # LoginRequest.email, keep all 7 tags, leave the snapshot and both count
+    # doors intact, honestly re-pin generated_blob -- live main stayed
+    # SMOKE PASS / 1103 passed. The generator prints tags *under a property*,
+    # so field identity is a published fact, not an implementation detail.
+    #
+    # Stands down when the snapshot digest itself has drifted, so a snapshot-
+    # side rewrite stays door 5's failure alone and is never double-counted.
+    # Also stands down on a cardinality drift, so the count door names it once.
+    if (
+        pin_example_fields
+        and actual_example_digest == pinned_example_digest
+        and len(gen_examples) == pinned_generated
+    ):
+        found.extend(
+            example_field_drift(
+                example_projection(document), generated_example_rows(generated)
+            )
         )
     # Door 9 -- independent fixed point on the published
     # ``additionalProperties`` surface. Both artifacts are exports of one
@@ -1094,6 +1242,112 @@ def self_test() -> int:
         else:
             print(f"PASS self-test: {name!r} is caught -> {len(found)} failure(s)")
 
+    # Door 11 -- field identity of each generated @example tag. A flat value
+    # comparison cannot see a tag relocated between two doc blocks that publish
+    # the same value: the sequence, both count doors and _EXAMPLE_DIGEST all
+    # survive. These plants also prove the reader is not quietly reading less
+    # (a second tag on one field must be seen) and that door 8 stays silent.
+    example_field_cases: dict[str, tuple[str, str]] = {}
+
+    relocated_block = """            /**
+             * Username
+             * @description Email address or username
+             * @default null
+             */
+            username: string | null;
+            /**
+             * Email
+             * @description Email address (alternative to ``username``)
+             * @default null
+             * @example researcher@univ.edu
+             * @example researcher@univ.edu
+             */"""
+    original_block = """            /**
+             * Username
+             * @description Email address or username
+             * @default null
+             * @example researcher@univ.edu
+             */
+            username: string | null;
+            /**
+             * Email
+             * @description Email address (alternative to ``username``)
+             * @default null
+             * @example researcher@univ.edu
+             */"""
+    assert generated.count(original_block) == 1
+    relocated = generated.replace(original_block, relocated_block, 1)
+    assert relocated != generated
+    assert generated_examples(relocated) == generated_examples(generated)
+    example_field_cases["one @example tag relocated between two fields"] = (
+        snapshot_clean,
+        relocated,
+    )
+
+    # A stray second tag on ONE field is a cardinality drift: the count door
+    # must name it first and door 11 stands down. The reader itself is pinned
+    # separately -- finditer, not search, so two tags in one doc block are two
+    # published values. A reader that quietly reads less is the same failure
+    # mode as a guard that quietly checks less.
+    stray = generated.replace(
+        "             * @example Jane Doe\n",
+        "             * @example Jane Doe\n             * @example Jane Doe\n",
+        1,
+    )
+    assert stray != generated
+    stray_rows = [
+        row
+        for row in generated_example_rows(stray)
+        if row[:2] == ("UserCreate", "full_name")
+    ]
+    if len(stray_rows) != 2:
+        print("SELF-TEST FAIL: stray second @example tag was not read")
+        failures_count += 1
+    else:
+        print("PASS self-test: a stray second @example tag is read")
+    stray_found = failures(snapshot=snapshot_clean, generated=stray)
+    if not any("tag count is 8" in f for f in stray_found) or any(
+        "disagree for" in f for f in stray_found
+    ):
+        print(f"SELF-TEST FAIL: stray tag not resolved by the count door: {stray_found}")
+        failures_count += 1
+    else:
+        print("PASS self-test: stray tag is resolved by the count door alone")
+
+    for name, (snapshot, gen) in example_field_cases.items():
+        found = failures(snapshot=snapshot, generated=gen)
+        field_named = [
+            f for f in found if "for LoginRequest." in f or "for UserCreate." in f
+        ]
+        if not field_named:
+            print(f"SELF-TEST FAIL: {name!r} was NOT caught by door 11")
+            failures_count += 1
+        else:
+            print(f"PASS self-test: {name!r} is caught -> {len(found)} failure(s)")
+
+    # Control: with door 11 disabled, the relocated bytes are silent again.
+    # The plants are load-bearing, not decorative.
+    if failures(
+        snapshot=snapshot_clean, generated=relocated, pin_example_fields=False
+    ):
+        print("SELF-TEST FAIL: door 11 off should leave the relocation silent")
+        failures_count += 1
+    else:
+        print("PASS self-test: door 11 off leaves the relocation silent")
+
+    # Mirror control: a snapshot-side rewrite stays door 5's alone. Door 11
+    # stands down when _EXAMPLE_DIGEST has drifted, so no double-counting.
+    snap_only = copy.deepcopy(document)
+    snap_only["components"]["schemas"]["UserCreate"]["properties"][
+        "full_name"
+    ]["examples"] = ["John Roe"]
+    mirror = failures(snapshot=json.dumps(snap_only, indent=2))
+    if len(mirror) != 1 or "_EXAMPLE_DIGEST" not in mirror[0]:
+        print(f"SELF-TEST FAIL: snapshot drift not resolved by door 5 alone: {mirror}")
+        failures_count += 1
+    else:
+        print("PASS self-test: snapshot drift stays door 5's alone")
+
     # Door 9/10 plants: additionalProperties is a schema shape, not one of
     # ``_KEYS``, and a ``false`` node renders no client line at all. Keep them
     # in their own dict so the teeth guard's pinned case probes stay put.
@@ -1185,8 +1439,9 @@ def self_test() -> int:
         + len(default_tag_cases)
         + len(default_value_cases)
         + len(example_value_cases)
+        + len(example_field_cases)
         + len(additional_cases)
-        + 1  # the same-commit re-pin positive control prints its own line
+        + 5  # stray reader, stray count door, door-11 off, mirror, re-pin
     )
     print(f"self-test: {total} cases, {failures_count} failure(s)")
     return 1 if failures_count else 0

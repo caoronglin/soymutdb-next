@@ -352,3 +352,70 @@ Extend the already-wired guard; `smoke.sh` / registry / teeth untouched:
 
 A legitimate change re-pins **both** literals (and the client count when the
 line count moves) in the same commit as both artifacts and says why.
+
+## Phase 6 — the field a generated `@example` tag is printed under (door 11)
+
+Phase 5 / door 8 pins the generated half's **values**, but it compares a flat,
+unlabelled sequence of the 7 `@example` values against the snapshot's values
+in document order. Field identity is not part of that comparison. The generator
+prints each tag *inside a property's doc block*, so which field carries the tag
+is itself a published fact — and door 8 cannot see it.
+
+**Decisive ablation on live `9a7c3e52`**: drop the `@example` tag from
+`LoginRequest.username` and add a second identical tag to
+`LoginRequest.email`. Both fields publish `researcher@univ.edu`, so the flat
+value sequence is unchanged; all 7 tags survive, the snapshot is untouched,
+both count doors and `_EXAMPLE_DIGEST` stay green. Re-pin `generated_blob`
+honestly (the generated file really did change) and the result is **all 12
+wired `check_openapi_*` guards `rc=0`, companion 53 passed, whole contracts
+layer `SMOKE PASS / 1103 passed + 41 subtests / 0 failed`**. A tag relocated
+between two doc blocks shipped silently. This is the shape a flat positional
+comparison is structurally blind to, and it is one layer deeper than the
+"count is not a value" residual Phase 5 closed.
+
+### The fix (zero new wiring, one ledger)
+
+Extend the same already-registered guard; `smoke.sh` / registry / teeth /
+`REQUIRED_GUARD_CALLS` / `_WIRED_SELF_TESTS` untouched:
+
+* `generated_example_rows()` — reads the generated `@example` tags labelled
+  with their `(component, field)`. Uses `finditer`, not `search`: a doc block
+  may carry two tags, and a reader that quietly reads less is the same failure
+  mode as a guard that quietly checks less.
+* `example_projection()` — reads the snapshot's published examples per field
+  in document order. Compared against the **digest-pinned** snapshot rather
+  than a second hand-written literal, so the generated half inherits
+  `_EXAMPLE_DIGEST`'s reviewed re-pin contract and there is no new number to
+  keep in sync.
+* Compared **per field, values in order**: a dropped tag names the one field
+  that lost it instead of shifting every later tag and naming six innocent
+  neighbours; ordered values within a field still catch a same-count
+  permutation.
+* Door 11 stands down when `_EXAMPLE_DIGEST` has drifted (a snapshot-side
+  rewrite stays door 5's alone) or when the tag cardinality moved (the count
+  door names it once). Door 8 stands down when door 11 is wired on — door 11
+  is strictly stronger, so a value drift is reported once, not twice. The
+  `--self-test` off-control (`pin_example_fields=False`) proves both halves
+  are load-bearing.
+
+`--self-test` **27 → 32 cases**, companion **53 → 60 passed** (7 new cases
+from a second file: relocation named per field, off-control silent,
+`finditer` reader, stray tag resolved by the count door alone, mirror control,
+zero-new-wiring, plants registered). `openapi.json` / `openapi.d.ts`
+byte-for-byte unchanged — this adds a reader, it touches neither artifact.
+
+### Division of labour (positive controls)
+
+| drift | fires |
+| --- | --- |
+| one tag relocated between two same-value fields | door 11 only, both fields named |
+| one generated value rewritten | door 11 only (`UserCreate.full_name`) |
+| two distinct values swapped | door 11 only, both fields named |
+| a stray second tag on one field | count door only; door 11 stands down |
+| a snapshot-side example value rewrite | `_EXAMPLE_DIGEST` only; door 11 silent |
+| with door 11 disabled | the relocation is silent again |
+
+A legitimate regenerate that moves a tag between fields must move the
+snapshot's `examples` in the same commit with a reason; no literal re-pin is
+needed for door 11 itself, because its authority is the digest-pinned
+snapshot projection.

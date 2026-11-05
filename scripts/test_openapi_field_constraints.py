@@ -652,7 +652,10 @@ def test_zero_new_wiring_for_door_seven() -> None:
 
 
 def test_a_one_sided_generated_value_rewrite_is_named_only_by_door_eight() -> None:
-    """The residual: rewrite one @example value, keep all 7 tags."""
+    """The residual: rewrite one @example value, keep all 7 tags.
+
+    Door 11 names the field; door 8 stands down so the drift is reported once.
+    """
     gen = _generated().replace("@example Jane Doe", "@example John Roe", 1)
     assert len(guard.generated_examples(gen)) == guard._EXPECTED_GENERATED_EXAMPLES
     found = guard.failures(
@@ -661,6 +664,7 @@ def test_a_one_sided_generated_value_rewrite_is_named_only_by_door_eight() -> No
     )
     assert len(found) == 1, found
     assert "generated @example values disagree" in found[0], found
+    assert "UserCreate.full_name" in found[0], found
     assert "_EXAMPLE_DIGEST" not in found[0], found
     assert "tag count" not in found[0].lower(), found
 
@@ -680,8 +684,10 @@ def test_a_same_count_generated_value_permutation_is_named() -> None:
         snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
         generated=gen,
     )
-    assert len(found) == 1, found
-    assert "generated @example values disagree" in found[0], found
+    assert len(found) == 2, found
+    assert all("generated @example values disagree" in f for f in found), found
+    assert "UserCreate.full_name" in found[0], found
+    assert "UserCreate.role_name" in found[1], found
 
 
 def test_the_snapshot_side_drift_is_named_only_by_door_five() -> None:
@@ -877,3 +883,126 @@ def test_additional_properties_self_test_cases_are_registered() -> None:
     source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
     assert "coordinated additionalProperties false->true" in source
     assert "same-commit re-pin stays green" in source
+
+
+# ---------------------------------------------------------------------------
+# Door 11 -- the field each generated @example tag is printed under.
+# ---------------------------------------------------------------------------
+
+_LOGIN_USERNAME_BLOCK = """            /**
+             * Username
+             * @description Email address or username
+             * @default null
+             * @example researcher@univ.edu
+             */
+            username: string | null;
+            /**
+             * Email
+             * @description Email address (alternative to ``username``)
+             * @default null
+             * @example researcher@univ.edu
+             */"""
+
+_LOGIN_RELOCATED_BLOCK = """            /**
+             * Username
+             * @description Email address or username
+             * @default null
+             */
+            username: string | null;
+            /**
+             * Email
+             * @description Email address (alternative to ``username``)
+             * @default null
+             * @example researcher@univ.edu
+             * @example researcher@univ.edu
+             */"""
+
+
+def _relocated() -> str:
+    gen = _generated()
+    assert gen.count(_LOGIN_USERNAME_BLOCK) == 1
+    return gen.replace(_LOGIN_USERNAME_BLOCK, _LOGIN_RELOCATED_BLOCK, 1)
+
+
+def test_a_tag_relocated_between_two_fields_is_named() -> None:
+    """The flat door 8 sequence survives a same-value tag relocation."""
+    gen = _relocated()
+    assert guard.generated_examples(gen) == guard.generated_examples(_generated())
+    found = guard.failures(
+        snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
+        generated=gen,
+    )
+    assert len(found) == 2, found
+    assert any("LoginRequest.username" in f for f in found), found
+    assert any("LoginRequest.email" in f for f in found), found
+
+
+def test_door_eleven_off_leaves_the_relocation_silent() -> None:
+    """Without door 11, live main's flat comparison cannot see the drift."""
+    found = guard.failures(
+        snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
+        generated=_relocated(),
+        pin_example_fields=False,
+    )
+    assert not found, found
+
+
+def test_the_example_tag_reader_uses_finditer() -> None:
+    """Two @example tags in one doc block are two published values, not one."""
+    gen = _generated().replace(
+        "             * @example Jane Doe\n",
+        "             * @example Jane Doe\n             * @example Jane Doe\n",
+        1,
+    )
+    rows = [
+        row
+        for row in guard.generated_example_rows(gen)
+        if row[:2] == ("UserCreate", "full_name")
+    ]
+    assert len(rows) == 2, rows
+
+
+def test_a_stray_tag_is_resolved_by_the_count_door_alone() -> None:
+    """Cardinality drift is door 5's; door 11 stands down, no double report."""
+    gen = _generated().replace(
+        "             * @example Jane Doe\n",
+        "             * @example Jane Doe\n             * @example Jane Doe\n",
+        1,
+    )
+    found = guard.failures(
+        snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
+        generated=gen,
+    )
+    assert len(found) == 1, found
+    assert "tag count is 8" in found[0], found
+
+
+def test_door_eleven_stands_down_on_a_snapshot_drift() -> None:
+    """A snapshot-side rewrite stays door 5's alone, never counted twice."""
+
+    def change(doc: dict) -> None:
+        doc["components"]["schemas"]["UserCreate"]["properties"]["full_name"][
+            "examples"
+        ] = ["John Roe"]
+
+    found = guard.failures(snapshot=_example_doc(change))
+    assert len(found) == 1, found
+    assert "_EXAMPLE_DIGEST" in found[0], found
+
+
+def test_door_eleven_adds_no_new_wiring() -> None:
+    """One guard, one ledger: no new guard file or wiring row."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "def generated_example_rows(" in source
+    assert "def example_projection(" in source
+    assert not (ROOT / "scripts" / "check_openapi_example_fields.py").exists()
+    for text in (SMOKE, REGISTRY, TEETH):
+        assert "example_field_cases" not in text
+        assert "check_openapi_example_fields" not in text
+
+
+def test_door_eleven_self_test_plants_are_registered() -> None:
+    """From a second file: the ablation exists and is consumed."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "one @example tag relocated between two fields" in source
+    assert "pin_example_fields=False" in source
