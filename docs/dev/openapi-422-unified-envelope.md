@@ -104,7 +104,10 @@ covers the builder that produces them.
 
 ## Verification (record it, don't round it)
 
-- `python3 scripts/test_openapi_422_unified_envelope.py` — 16 checks OK.
+- `python3 scripts/test_openapi_422_unified_envelope.py` — 22 checks OK.
+  Six of them pin the failure-message contract: no bare
+  `assert failures(...) == []` and no dead `exc or` fallback may return,
+  and a planted drift must produce a non-empty `FAIL:` reason.
 - `python3 scripts/test_openapi_snapshot_contract.py` — 19 checks OK, with a
   real `__main__` runner; removing it reproduces the old silent rc=0.
 - On the unmodified live tree, the three regressions above are GREEN against

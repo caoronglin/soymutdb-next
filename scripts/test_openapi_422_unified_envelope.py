@@ -56,7 +56,6 @@ from __future__ import annotations
 
 import json
 import sys
-from named_guard_diagnostics import describe_assertion
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -253,8 +252,7 @@ def _load() -> tuple[dict, str, str, str]:
 
 
 def test_committed_tree_advertises_the_runtime_error_envelopes() -> None:
-    found = failures(*_load())
-    assert not found, found
+    assert not (found := failures(*_load())), found
 
 
 def test_a_framework_422_is_rejected() -> None:
@@ -413,6 +411,203 @@ def test_a_one_sided_added_error_response_is_rejected() -> None:
     assert any("not the pinned" in f for f in found), found
 
 
+
+# ---------------------------------------------------------------------------
+# Failure-message contract (PR #176 continued)
+#
+# A guard that fails is only half a gate: it must also say *why*. Two byte
+# shapes used to make every one of these OpenAPI guards go silent on a real
+# drift:
+#
+#   * ``assert failures(...) == []`` -- a bare assert raises
+#     ``AssertionError()`` whose ``args == ()`` and ``str`` is ``''``. The
+#     ``failures()`` result (the actual reason) is discarded completely; it is
+#     NOT recoverable from ``e.args[0]``.
+#   * ``f"...: {exc or 'assertion failed'}"`` -- ``bool(AssertionError())`` is
+#     True (exceptions define no ``__bool__``/``__len__``), so the fallback is
+#     dead and ``f"{exc}"`` prints ``str(exc) == ''``. The line ends in a
+#     colon and a space: ``FAIL: test_x:``.
+#
+# #176 fixed the runner of THIS file (``str(exc)``). This suite pins the whole
+# surface: every bare ``== []`` assert replaced by a message-bearing form, and
+# every remaining in-file runner using ``str(exc)``.
+# ---------------------------------------------------------------------------
+
+# Every in-file runner that catches AssertionError and formats it. All eight
+# must convert ``exc`` with ``str`` before applying the fallback.
+_RUNNERS: tuple[str, ...] = (
+    "scripts/check_openapi_inline_body_integrity.py",
+    "scripts/test_contracts_layer_self_containment.py",
+    "scripts/test_openapi_422_unified_envelope.py",
+    "scripts/test_openapi_baseline_sync.py",
+    "scripts/test_openapi_behavior_contracts.py",
+    "scripts/test_openapi_operation_id_floor.py",
+    "scripts/test_openapi_snapshot_body_integrity.py",
+    "scripts/test_openapi_snapshot_contract.py",
+)
+
+# This file's own source contains the defective byte shapes inside docstrings
+# and ablation fixtures. Exclude it from the "committed tree" scans; its runner
+# is still checked by ``test_every_runner_uses_str_on_the_exception`` through
+# the live ``_str_fallback_count`` call below.
+_SELF = Path(__file__).name
+
+
+def _sources() -> dict[str, str]:
+    return {rel: (ROOT / rel).read_text(encoding="utf-8") for rel in _RUNNERS}
+
+
+def _bare_assert_count(source: str) -> int:
+    """Count ``assert <call> == []`` lines that carry no message."""
+    import ast
+
+    count = 0
+    for node in ast.walk(ast.parse(source)):
+        if not isinstance(node, ast.Assert) or node.msg is not None:
+            continue
+        if not isinstance(node.test, ast.Compare):
+            continue
+        left = node.test.left
+        if not isinstance(left, ast.Call):
+            continue
+        func = left.func
+        if isinstance(func, ast.Name) and func.id == "failures":
+            count += 1
+    return count
+
+
+def _report_line(source: str) -> str | None:
+    """The real ``problems.append`` reporting line of an in-file runner."""
+    import re
+
+    match = re.search(
+        r'problems\.append\(f"\{test\.__name__\}: [^"]*exc[^"]*"\)|'
+        r'problems\.append\(f"\{case\.__name__\}: [^"]*exc[^"]*"\)',
+        source,
+    )
+    return match.group(0) if match else None
+
+
+def _dead_fallback_count(source: str) -> int:
+    """Count reporting lines that format the exception object directly."""
+    line = _report_line(source)
+    return 1 if line and "{str(exc)" not in line and "{exc " in line else 0
+
+
+def _str_fallback_count(source: str) -> int:
+    """Count reporting lines that convert the exception with ``str``."""
+    line = _report_line(source)
+    return 1 if line and "{str(exc)" in line else 0
+
+
+def test_no_bare_failure_asserts_remain() -> None:
+    """The committed tree must not discard any ``failures()`` reason."""
+    sources = _sources()
+    offenders = [
+        rel for rel, src in sources.items()
+        if rel != _SELF and _bare_assert_count(src)
+    ]
+    assert not offenders, f"bare assert failures(...) == [] still present: {offenders}"
+
+
+def test_no_dead_assertion_fallback_remains() -> None:
+    """No runner may format the exception object directly."""
+    sources = _sources()
+    offenders = [
+        rel for rel, src in sources.items()
+        if rel != _SELF and _dead_fallback_count(src)
+    ]
+    assert not offenders, f"dead 'exc or' fallback still present: {offenders}"
+
+
+def test_every_runner_uses_str_on_the_exception() -> None:
+    """All eight in-file runners must make their fallback reachable."""
+    sources = _sources()
+    missing = [
+        rel for rel, src in sources.items() if not _str_fallback_count(src)
+    ]
+    assert not missing, f"runner missing str(exc) fallback: {missing}"
+    # The live source of this runner itself must carry exactly one reachable
+    # fallback and zero dead ones (its own docstring/ablations aside).
+    live = (ROOT / "scripts" / _SELF).read_text(encoding="utf-8")
+    assert _str_fallback_count(live) == 1, "this runner lost its str(exc) fallback"
+    assert _dead_fallback_count(live) == 0, "this runner regressed to exc or"
+
+
+def test_a_bare_assert_is_caught() -> None:
+    """Reintroducing one bare assert must turn the pin red."""
+    sources = _sources()
+    host = "scripts/test_openapi_422_unified_envelope.py"
+    mutant = sources[host].replace(
+        "assert not (found := failures(*_load())), found",
+        "assert failures(*_load()) == []",
+        1,
+    )
+    assert mutant != sources[host]
+    assert _bare_assert_count(mutant) == 1
+
+
+def test_a_dead_fallback_is_caught() -> None:
+    """Reintroducing the ``exc or`` object fallback must turn the pin red."""
+    sources = _sources()
+    host = "scripts/test_openapi_422_unified_envelope.py"
+    line = _report_line(sources[host])
+    assert line is not None
+    dead = line.replace("{str(exc) or 'assertion failed'}", "{exc or 'assertion failed'}")
+    mutant = sources[host].replace(line, dead, 1)
+    assert mutant != sources[host]
+    assert _dead_fallback_count(mutant) == 1
+
+
+def test_a_drift_report_is_not_empty() -> None:
+    """A real drift must produce a non-empty failure message.
+
+    Copy the guard and its three inputs into a temporary tree, inject a
+    ``GeneDetail -> GeneListResponse`` retype there, and assert the runner's
+    ``FAIL:`` line carries the reason. The working tree is never mutated.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+
+    guard = "scripts/test_openapi_snapshot_body_integrity.py"
+    inputs = (
+        guard,
+        "packages/api-client/openapi.json",
+        "packages/api-client/src/generated/openapi.d.ts",
+        "scripts/smoke.sh",
+    )
+    with tempfile.TemporaryDirectory() as tmp:
+        tree = Path(tmp)
+        for rel in inputs:
+            dest = tree / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / rel, dest)
+        cmd = [sys.executable, str(tree / guard)]
+
+        clean = subprocess.run(
+            cmd, cwd=tree, capture_output=True, text=True, timeout=180, check=False
+        )
+        assert clean.returncode == 0, clean.stderr
+
+        generated = tree / "packages/api-client/src/generated/openapi.d.ts"
+        original = generated.read_text(encoding="utf-8")
+        assert "GeneDetail" in original
+        generated.write_text(
+            original.replace("GeneDetail", "GeneListResponse", 1), encoding="utf-8"
+        )
+        drift = subprocess.run(
+            cmd, cwd=tree, capture_output=True, text=True, timeout=180, check=False
+        )
+
+    assert drift.returncode == 1
+    lines = [ln for ln in drift.stderr.splitlines() if "FAIL:" in ln]
+    assert lines, "drift produced no FAIL line"
+    for line in lines:
+        reason = line.split("FAIL:", 1)[1].split(": ", 1)[-1].strip()
+        assert reason, f"empty failure message: {line!r}"
+
+
 def main() -> int:
     tests = [
         value
@@ -424,7 +619,7 @@ def main() -> int:
         try:
             test()
         except AssertionError as exc:
-            problems.append(f"{test.__name__}: {describe_assertion(exc, test)}")
+            problems.append(f"{test.__name__}: {str(exc) or 'assertion failed'}")
     if problems:
         for problem in problems:
             print(f"openapi-error-envelope: FAIL: {problem}", file=sys.stderr)

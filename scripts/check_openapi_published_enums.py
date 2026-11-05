@@ -1154,8 +1154,7 @@ def main(argv: list[str] | None = None) -> int:
 def test_committed_tree_matches_the_independent_enum_pin() -> None:
     """The literal must be an exact, type-exact description of the snapshot."""
     document, constraints = _load(REPO_ROOT)
-    found = failures(document, constraints)[0]
-    assert not found, found
+    assert not (found := failures(document, constraints)[0]), found
 
 
 def test_path_parameter_domains_are_pinned_too() -> None:
@@ -1255,8 +1254,7 @@ def test_a_repin_in_the_same_commit_stays_green() -> None:
     constraints[target][field] = list(constraints[target][field]) + ["__legitimate__"]
     globals()["_PUBLISHED_ENUM_BASELINE"] = _published_domains(document)
     try:
-        found = failures(document, constraints)[0]
-        assert not found, found
+        assert not (found := failures(document, constraints)[0]), found
     finally:
         globals()["_PUBLISHED_ENUM_BASELINE"] = saved
 

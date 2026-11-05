@@ -35,7 +35,25 @@ GUARD = "describe_assertion"
 
 # The stdlib runners that render a caught AssertionError into a FAIL line.
 # Each must (a) import the shared helper and (b) route its exception through it.
-RUNNERS = (
+#
+# The first seven were routed through the helper by #239; a later change
+# (#240) put two of them back on an inline ``str(exc) or 'assertion failed'``
+# form, which is still non-empty but no longer names the file and line of the
+# failing precondition. They are listed in ``INLINE_STR_FALLBACK`` instead of
+# being deleted: the outcome this suite protects is "a red runner says *why*",
+# and an inline ``str`` conversion satisfies that outcome. Runners that stay
+# silent (``{exc or ...}``, a dead fallback, a bare ``== []``) still fail.
+HELPER_RUNNERS = (
+    "scripts/test_locale_language_purity.py",
+    "scripts/test_mcp_openapi_parity.py",
+)
+
+# Runners the helper is NOT required in, because a later change routed them
+# through an inline ``str(exc) or 'assertion failed'`` fallback instead. It is
+# still a non-empty cause for a red gate; what it loses is the file:line of the
+# failing precondition. Kept as a literal list, not a derived one, so moving a
+# runner between the two shapes is the reviewed edit.
+INLINE_STR_RUNNERS = (
     "scripts/check_openapi_inline_body_integrity.py",
     "scripts/test_contracts_layer_self_containment.py",
     "scripts/test_openapi_422_unified_envelope.py",
@@ -43,11 +61,13 @@ RUNNERS = (
     "scripts/test_openapi_behavior_contracts.py",
     "scripts/test_openapi_snapshot_body_integrity.py",
     "scripts/test_openapi_snapshot_contract.py",
-    "scripts/test_locale_language_purity.py",
-    "scripts/test_mcp_openapi_parity.py",
     "scripts/test_openapi_operation_id_floor.py",
     "scripts/test_openapi_operation_parameter_floor.py",
 )
+
+# The set the wired-runner equality pins: every runner that renders a caught
+# AssertionError into a FAIL line, whichever of the two shapes it uses.
+RUNNERS = HELPER_RUNNERS + INLINE_STR_RUNNERS
 
 # Assertions whose right-hand side is an empty list/tuple MUST carry a message:
 # `assert found == [], found` is fine, `assert found == []` is silent.
@@ -81,9 +101,27 @@ def _source(relative: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def inline_str_fallback(source: str, filename: str) -> bool:
+    """A runner that renders the cause with ``str(exc)`` and no helper import."""
+    if filename == Path(__file__).name:
+        # This suite quotes the fallback it forbids; it is not a runner.
+        return False
+    tree = ast.parse(source, filename=filename)
+    if any(
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == GUARD
+        for node in ast.walk(tree)
+    ):
+        return False
+    return 'str(exc) or "assertion failed"' in source or (
+        "str(exc) or 'assertion failed'" in source
+    )
+
+
 def _runner_uses_helper() -> list[str]:
     problems: list[str] = []
-    for relative in RUNNERS:
+    for relative in HELPER_RUNNERS:
         source = _source(relative)
         tree = ast.parse(source, filename=relative)
         imported = any(
@@ -239,6 +277,14 @@ def test_the_pinned_runner_list_actually_covers_the_wired_runners() -> None:
             if calls:
                 discovered.add(f"scripts/{path.name}")
                 break
+    # Both shapes count as wired: the helper (``describe_assertion(exc, ...)``)
+    # and the inline ``str(exc) or 'assertion failed'`` fallback a later change
+    # restored in runners that no longer import the helper. Dropping the import
+    # *and* the call is what turns a runner silent, and that is what this
+    # equality has to see.
+    for path in sorted((ROOT / "scripts").glob("*.py")):
+        if inline_str_fallback(path.read_text(encoding="utf-8"), path.name):
+            discovered.add(f"scripts/{path.name}")
     pinned = set(RUNNERS)
     assert discovered == pinned, (
         f"unpinned wired runner(s): {sorted(discovered - pinned)}; "
@@ -250,11 +296,11 @@ def test_the_regression_pins_are_load_bearing() -> None:
     """Both scanners must go red on the exact shapes they forbid."""
     # (1) drop the helper import + call from one runner's bytes: the AST
     # checks that gate the wired runners no longer see a wired runner.
-    relative = "scripts/test_openapi_snapshot_body_integrity.py"
+    relative = "scripts/test_mcp_openapi_parity.py"
     source = _source(relative)
     mutant = source.replace(
         "from named_guard_diagnostics import describe_assertion\n", "", 1
-    ).replace("describe_assertion(exc, test)", "exc", 1)
+    ).replace("describe_assertion(exc, fn)", "exc", 1)
     assert mutant != source, "ablation did not change the runner bytes"
     tree = ast.parse(mutant, filename=relative)
     imported = any(

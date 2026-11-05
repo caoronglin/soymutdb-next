@@ -15,7 +15,6 @@ import json
 import sys
 from pathlib import Path
 
-from named_guard_diagnostics import describe_assertion
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
@@ -174,7 +173,7 @@ def _run_all() -> int:
         try:
             case()
         except AssertionError as exc:
-            problems.append(f"{case.__name__}: {describe_assertion(exc, case)}")
+            problems.append(f"{case.__name__}: {str(exc) or 'assertion failed'}")
     if problems:
         for problem in problems:
             print(f"openapi-operation-id-floor-tests: FAIL: {problem}", file=sys.stderr)

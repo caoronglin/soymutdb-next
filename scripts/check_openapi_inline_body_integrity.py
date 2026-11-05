@@ -49,7 +49,6 @@ import hashlib
 import json
 import re
 import sys
-from named_guard_diagnostics import describe_assertion
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -430,8 +429,7 @@ def _load():
 
 
 def test_committed_tree_has_pinned_inline_bodies() -> None:
-    found = failures(*_load())
-    assert not found, found
+    assert not (found := failures(*_load())), found
 
 
 def test_coordinated_inline_drift_is_rejected() -> None:
@@ -550,7 +548,7 @@ def _self_test() -> int:
         try:
             test()
         except AssertionError as exc:
-            problems.append(f"{test.__name__}: {describe_assertion(exc, test)}")
+            problems.append(f"{test.__name__}: {str(exc) or 'assertion failed'}")
     if problems:
         for problem in problems:
             print(f"openapi-inline-bodies: FAIL self-test: {problem}", file=sys.stderr)
