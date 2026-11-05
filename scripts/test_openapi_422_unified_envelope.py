@@ -30,10 +30,23 @@ bytes only (stdlib, no API venv, no 3.15, no PostgreSQL) and asserts:
 * every other declared 4xx/5xx response uses ``ErrorResponse``;
 * the generated client contains exactly as many ``ErrorResponse`` and
   ``ValidationErrorResponse`` response bodies as the snapshot declares, so a
-  client that drops, adds or retypes one cannot hide behind the JSON half;
+  client that drops, retypes or one-sidedly adds one cannot hide behind the
+  JSON half;
+* the declared error-response distribution is pinned to an exact baseline, so
+  a *coordinated* edit to both artifacts (drop OR add) is also caught;
 * the builder overrides rather than ``setdefault``s the 422, still registers
   all four handlers, and still declares both schemas;
 * the guard is wired into ``smoke.sh --profile contracts``.
+
+The equality check is self-referential: ``expected`` is recomputed from
+whichever JSON is supplied, so a snapshot and client edited together still
+agree. ``_ERROR_RESPONSE_BASELINE`` is independent of both halves and is the
+fixed point that closes that blind spot -- the same idiom as the snapshot
+guard's ``_SNAPSHOT_FLOOR``, but exact in both directions because an error
+status the runtime never sends is as wrong as a dropped one. It pins the
+*declared surface*, not the set of operations: adding an endpoint legitimately
+adds its 422/500, so the baseline must be updated in that same commit with a
+reason.
 
 Each branch is mutation-tested in-file. Run directly or collect with pytest:
     python3 scripts/test_openapi_422_unified_envelope.py
@@ -58,10 +71,33 @@ FRAMEWORK = "#/components/schemas/HTTPValidationError"
 METHODS = {"get", "put", "post", "patch", "delete", "options", "head", "trace"}
 
 # Exact response-body spellings the pinned openapi-typescript emits. Counting
-# these (rather than looking for a banned string) is what makes a dropped,
-# added or retyped body visible even when the JSON half was reverted with it.
+# these (rather than looking for a banned string) is what makes a dropped or
+# retyped body visible even when the JSON half was reverted with it. A body
+# ADDED to both halves keeps expected == actual; the baseline below catches it.
 VALIDATION_BODY = '"application/json": components["schemas"]["ValidationErrorResponse"];'
 ENVELOPE_BODY = '"application/json": components["schemas"]["ErrorResponse"];'
+
+# Exact declared error-response surface (code -> number of operations declaring
+# it), measured on the live snapshot: 266 operations x {422, 500}, plus 3 x 409
+# and 1 x 429. This is an independent fixed point, NOT derived from the supplied
+# document. Equality of expected-vs-actual cannot see a coordinated edit to
+# both artifacts -- a dropped 500 or an invented 418 added on both sides -- so
+# the distribution itself is pinned. Update it in the same commit as an
+# intentional change to the error surface and say why.
+_ERROR_RESPONSE_BASELINE = {"409": 3, "422": 266, "429": 1, "500": 266}
+
+
+def _error_code_counts(document: dict) -> dict[str, int]:
+    """How many operations declare each 4xx/5xx status."""
+    counts: dict[str, int] = {}
+    for path, ops in document.get("paths", {}).items():
+        for method, op in ops.items():
+            if method not in METHODS or not isinstance(op, dict):
+                continue
+            for code in op.get("responses", {}):
+                if code.startswith("4") or code.startswith("5"):
+                    counts[code] = counts.get(code, 0) + 1
+    return counts
 
 
 def _operations(document: dict) -> set[tuple[str, str]]:
@@ -143,9 +179,9 @@ def failures(document: dict, generated: str, main: str, smoke: str) -> list[str]
                 )
 
     # The generated TypeScript client must contain exactly as many bodies of
-    # each shape as the snapshot declares. A single retyped, dropped or added
-    # body changes the count, so a co-reverted snapshot + client pair cannot
-    # hide behind each other and neither can a shape the guard never named.
+    # each shape as the snapshot declares. A retyped or dropped body breaks the
+    # equality even when both artifacts were reverted together. A body ADDED to
+    # both keeps the equality, so the independent baseline is checked too.
     expected = _expected_bodies(document)
     actual = {
         ENVELOPE: generated.count(ENVELOPE_BODY),
@@ -157,6 +193,15 @@ def failures(document: dict, generated: str, main: str, smoke: str) -> list[str]
                 f"generated client declares {actual[ref]} "
                 f"{ref.split('/')[-1]} response body(s); snapshot declares {want}"
             )
+
+    declared = _error_code_counts(document)
+    if declared != _ERROR_RESPONSE_BASELINE:
+        found.append(
+            f"snapshot declares error responses {dict(sorted(declared.items()))}, "
+            f"not the pinned {dict(sorted(_ERROR_RESPONSE_BASELINE.items()))}: a "
+            "coordinated edit to both artifacts cannot be seen by comparing "
+            "them to each other"
+        )
     framework_body = (
         '"application/json": components["schemas"]["HTTPValidationError"];'
     )
@@ -323,6 +368,42 @@ def test_a_client_with_an_extra_error_body_is_rejected() -> None:
     assert injected != generated
     assert any("response body(s); snapshot declares" in f
                for f in failures(document, injected, main, smoke))
+
+
+def test_a_coordinated_added_error_response_is_rejected() -> None:
+    """The blind spot: adding a 418 to BOTH halves keeps expected == actual."""
+    document, generated, main_src, smoke = _load()
+    key = next(iter(_operations(document)))
+    responses = document["paths"][key[0]][key[1]]["responses"]
+    responses["418"] = json.loads(json.dumps(responses["500"]))
+    injected = generated.replace(
+        ENVELOPE_BODY, ENVELOPE_BODY + "\n" + ENVELOPE_BODY, 1
+    )
+    assert injected != generated
+    found = failures(document, injected, main_src, smoke)
+    assert any("not the pinned" in f for f in found), found
+
+
+def test_a_coordinated_dropped_error_response_is_rejected() -> None:
+    """Dropping a 500 from BOTH halves is caught by the baseline too."""
+    document, generated, main_src, smoke = _load()
+    key = next(iter(_operations(document)))
+    del document["paths"][key[0]][key[1]]["responses"]["500"]
+    stripped = generated.replace(ENVELOPE_BODY, "", 1)
+    assert stripped != generated
+    found = failures(document, stripped, main_src, smoke)
+    assert any("not the pinned" in f for f in found), found
+
+
+def test_a_one_sided_added_error_response_is_rejected() -> None:
+    """A 418 declared in JSON only breaks both the equality and the baseline."""
+    document, generated, main_src, smoke = _load()
+    key = next(iter(_operations(document)))
+    responses = document["paths"][key[0]][key[1]]["responses"]
+    responses["418"] = json.loads(json.dumps(responses["500"]))
+    found = failures(document, generated, main_src, smoke)
+    assert any("response body(s); snapshot declares" in f for f in found), found
+    assert any("not the pinned" in f for f in found), found
 
 
 def main() -> int:

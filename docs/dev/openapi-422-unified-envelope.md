@@ -66,16 +66,35 @@ the runtime does not send.
 2. every other declared 4xx/5xx response uses `ErrorResponse`;
 3. the generated client contains **exactly as many** `ErrorResponse` and
    `ValidationErrorResponse` response bodies as the snapshot declares — so a
-   dropped, added or retyped body changes a count instead of hiding behind a
-   banned-name check, and a co-reverted snapshot + client pair cannot pass;
-4. `main.py` overrides rather than `setdefault`s the 422, still registers all
+   dropped, retyped or *one-sidedly* added body changes a count instead of
+   hiding behind a banned-name check;
+4. the declared error-response distribution (`422`/`500` on every operation,
+   plus `409` x3 and `429` x1) is pinned to an exact baseline. The equality
+   check is self-referential: `expected` is recomputed from the supplied JSON,
+   so a snapshot and client edited **together** still agree. A coordinated
+   drop OR add (e.g. inventing a `418` on both halves) is caught only by this
+   independent fixed point, the same idiom as `_SNAPSHOT_FLOOR`;
+5. `main.py` overrides rather than `setdefault`s the 422, still registers all
    four handlers, and both declared schemas are defined in the document;
-5. the guard is wired into `smoke.sh --profile contracts`.
+6. the guard is wired into `smoke.sh --profile contracts`.
 
 It keeps its original file name (and therefore its existing wiring), so this
-change adds no entry to the shared `tests[]` array that a dozen in-flight PRs
-are editing. 13 in-file mutation cases cover every branch, including the three
-regressions above.
+change adds no entry to the shared `tests[]` array that dozens of in-flight PRs
+are editing. 16 in-file mutation cases cover every branch, including the three
+regressions above and the coordinated add/drop blind spot.
+
+The adjacent `scripts/test_openapi_snapshot_contract.py` had no `__main__`
+block: a direct run printed nothing and exited 0, which reads as a pass to
+anything that only checks the exit code. This PR gives it a standalone runner
+and a self-test that pins the runner. Keeping that check inside the snapshot
+guard itself (not in the envelope guard) avoids making the 6 in-flight owners
+of this file turn red on a file they do not own.
+
+The baseline pins the **declared error surface**, not the endpoint count: a
+legitimate new endpoint adds its own 422/500, so `_ERROR_RESPONSE_BASELINE`
+must be updated in that same commit with a reason. An exact pin in both
+directions is deliberate — an error status the runtime never sends is as wrong
+as a dropped one.
 
 `apps/api/tests/test_error_envelope_openapi_floor.py` pins the same contract on
 the schema built from the live `app.main:app` in the 3.15 pytest lane, with a
@@ -85,15 +104,20 @@ covers the builder that produces them.
 
 ## Verification (record it, don't round it)
 
-- `python3 scripts/test_openapi_422_unified_envelope.py` — 13 checks OK.
-- `pytest scripts/test_openapi_422_unified_envelope.py -q` — 13 passed.
+- `python3 scripts/test_openapi_422_unified_envelope.py` — 16 checks OK.
+- `python3 scripts/test_openapi_snapshot_contract.py` — 19 checks OK, with a
+  real `__main__` runner; removing it reproduces the old silent rc=0.
 - On the unmodified live tree, the three regressions above are GREEN against
-  the old guard and RED against the new one.
-- The invariant was checked against all 68 open PR heads: snapshot-derived
-  body counts equal the generated client's body counts on every one, and no
-  head changes the envelope key set. No new merge conflict is introduced.
+  the old guard and RED against the new one. A coordinated add of a `418` to
+  **both** artifacts — GREEN against the unpatched count guard — is RED now.
+- Checked against **73** open PR heads: 7 carry the guard (this PR + 6 valid
+  owners #160/#162/#164/#165/#166/#167), all GREEN; the other 66 forked before
+  #154 and never owned the file (their `deleted file` diff is stale, not a
+  conflict). `merge-tree --write-tree` over the full 73-head matrix: 0 new
+  conflicts, 0 resolved.
 - `apps/api/tests/test_error_envelope_openapi_floor.py` needs the Python 3.15
-  API venv; it was not executed in the CPython 3.11 sandbox. A real
+  API venv; it was **not** executed in the CPython 3.11 sandbox and is not
+  counted in any local pass number. A real
   `pnpm --filter @soymutdb/api-client generate:api-client` / `check:contract`,
   full API pytest, runtime smoke, E2E and images were not run here — CI is the
   authority, do not sign them on the strength of this document.
