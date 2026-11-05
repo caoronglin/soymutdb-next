@@ -112,6 +112,17 @@ SNAPSHOT = ROOT / "packages" / "api-client" / "openapi.json"
 GENERATED = ROOT / "packages" / "api-client" / "src" / "generated" / "openapi.d.ts"
 SELF = Path(__file__).name
 
+_SCHEMAS_REGION = re.compile(r"^    schemas: \{\n(?P<body>.*?)^    \};$", re.M | re.S)
+_COMPONENT_BLOCK = re.compile(
+    r"^        (?P<name>[A-Za-z_][A-Za-z0-9_]*): \{\n(?P<body>.*?)^        \};$",
+    re.M | re.S,
+)
+_PROPERTY_DECL = re.compile(
+    r"^            (?P<field>[A-Za-z_][A-Za-z0-9_]*)\??\s*:\s*"
+    r"(?P<type>.*?);",
+    re.M | re.S,
+)
+
 # Reviewed, hand-written fixed point on the whole published required surface.
 # sha256 of "\n".join(["soymutdb-required-fields/v1"] +
 #   sorted(f"{path}|{field}")) over every `required` array in
@@ -192,6 +203,44 @@ _CLIENT_SCHEMA_REF_DIGEST = (
     "5f08c6ae449843991de05c9a230b5160f4555708435eb4ea040dd5884b7bb8c1"
 )
 _EXPECTED_CLIENT_SCHEMA_REF_ROWS = 229
+
+
+# Independent fixed point on the published scalar ``type`` assignment of every
+# schema node (component root, property, anyOf/oneOf branch, items, nested
+# ``$defs`` copy). ``openapi-typescript`` turns a property's ``integer`` into a
+# ``number`` declaration and its ``string`` into a ``string``, so this column is
+# the TypeScript a consumer compiles against. No landed fixed point reads it:
+# ``_FIELD_CONSTRAINT_DIGEST`` walks constraint keywords, ``_REQUIRED_FIELD_DIGEST``
+# walks required-field names, ``_VALUE_DIGEST`` walks positional/cardinality
+# keywords, the enum baseline walks value domains, the response/operation pins
+# walk paths, and ``test_openapi_snapshot_contract.py`` checks key order and
+# field sets but never the type value. ``_PINNED_ARTIFACTS`` is a provenance
+# blob id: re-pinning both beside a regenerate is the documented reviewed act.
+#
+# Decisive ablation on live bytes: byte-preserving ``integer -> string`` rewrite
+# of ``AdminDashboardStats.totalUsers`` in BOTH artifacts with both blob ids
+# honestly re-pinned leaves every wired ``check_openapi_*`` guard, every
+# ``test_openapi_*`` suite and ``smoke.sh --profile contracts`` ``SMOKE PASS``
+# while the generated client silently retypes a numeric metric. Two literals
+# (snapshot rows and generated property declarations) are the fix: re-pinning
+# only one side cannot silence the other, and a co-revert still moves both.
+_SCHEMA_TYPE_DIGEST = (
+    "66dbb4fc04d3bdba6f2040db6d1f5d75d25113a80e1646b6ed78b6e6a8f7b78b"
+)
+_EXPECTED_SCHEMA_TYPE_ROWS = 3044
+_EXPECTED_SCHEMA_TYPE_BY_TYPE: dict[str, int] = {
+    "array": 156,
+    "boolean": 116,
+    "integer": 470,
+    "null": 634,
+    "number": 53,
+    "object": 406,
+    "string": 1209,
+}
+_CLIENT_PROPERTY_TYPE_DIGEST = (
+    "b53a0832a63f0b13b0a7c448ecc1fe745f63e876fae0338f315884722cd6790b"
+)
+_EXPECTED_CLIENT_PROPERTY_ROWS = 2083
 
 
 def rows(document: dict[str, Any]) -> list[tuple[str, str]]:
@@ -471,6 +520,62 @@ def _ref_multiset(rows_: list[tuple[str, str, str]]) -> dict[tuple[str, str], in
         out[(owner, target)] = out.get((owner, target), 0) + 1
     return out
 
+def schema_type_rows(document: dict[str, Any]) -> list[tuple[str, str]]:
+    """Canonical (schema path, scalar type) rows, using rows()'s path grammar."""
+    out: list[tuple[str, str]] = []
+
+    def walk(node: Any, path: str) -> None:
+        if isinstance(node, dict):
+            value = node.get("type")
+            if isinstance(value, str):
+                out.append((path, value))
+            for name, child in node.items():
+                if name == "type" or not isinstance(child, (dict, list)):
+                    continue
+                walk(child, f"{path}/{name}")
+        elif isinstance(node, list):
+            for index, child in enumerate(node):
+                walk(child, f"{path}/{index}")
+
+    for name, schema in document.get("components", {}).get("schemas", {}).items():
+        walk(schema, name)
+    return out
+
+
+def _schema_type_digest(rows_: list[tuple[str, str]]) -> str:
+    canonical = sorted(f"{path}|{value}" for path, value in rows_)
+    blob = "\n".join(["soymutdb-schema-type-assignment/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _by_type(rows_: list[tuple[str, str]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for _, value in rows_:
+        counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
+def client_property_types(generated: str) -> list[tuple[str, str, str]]:
+    """Canonical (component, field, TS type) rows from component blocks."""
+    region = _SCHEMAS_REGION.search(generated)
+    if region is None:
+        return []
+    out: list[tuple[str, str, str]] = []
+    for block in _COMPONENT_BLOCK.finditer(region.group("body")):
+        name = block.group("name")
+        for match in _PROPERTY_DECL.finditer(block.group("body")):
+            out.append(
+                (name, match.group("field"), " ".join(match.group("type").split()))
+            )
+    return out
+
+
+def _client_property_type_digest(rows_: list[tuple[str, str, str]]) -> str:
+    canonical = sorted(f"{name}|{field}|{value}" for name, field, value in rows_)
+    blob = "\n".join(["soymutdb-client-property-types/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def failures(
     *,
     snapshot: str | None = None,
@@ -487,6 +592,11 @@ def failures(
     expected_ref_owners: int | None = None,
     expected_ref_targets: int | None = None,
     expected_client_ref_rows: int | None = None,
+    schema_type_digest: str | None = None,
+    expected_schema_type_rows: int | None = None,
+    schema_type_by_type: dict[str, int] | None = None,
+    client_type_digest: str | None = None,
+    expected_client_property_rows: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -542,6 +652,31 @@ def failures(
     )
     ref_rows_ = schema_ref_rows(document)
     client_ref_rows_ = client_schema_ref_rows(generated)
+    pinned_type_digest = (
+        _SCHEMA_TYPE_DIGEST if schema_type_digest is None else schema_type_digest
+    )
+    pinned_type_rows = (
+        _EXPECTED_SCHEMA_TYPE_ROWS
+        if expected_schema_type_rows is None
+        else expected_schema_type_rows
+    )
+    pinned_by_type = (
+        _EXPECTED_SCHEMA_TYPE_BY_TYPE
+        if schema_type_by_type is None
+        else schema_type_by_type
+    )
+    pinned_client_type_digest = (
+        _CLIENT_PROPERTY_TYPE_DIGEST
+        if client_type_digest is None
+        else client_type_digest
+    )
+    pinned_client_property_rows = (
+        _EXPECTED_CLIENT_PROPERTY_ROWS
+        if expected_client_property_rows is None
+        else expected_client_property_rows
+    )
+    type_rows_ = schema_type_rows(document)
+    client_type_rows_ = client_property_types(generated)
 
     # Door 1 -- independent fixed point over the whole surface.
     actual = _digest(rows_)
@@ -725,6 +860,49 @@ def failures(
                 f"{snap_pos.get(key, 0)}, generated client publishes "
                 f"{cli_pos.get(key, 0)}"
             )
+
+    # Door 9 -- independent fixed points on the published scalar ``type``
+    # assignment. The snapshot digest catches a coordinated co-revert of both
+    # halves; the client digest is a second, separately hand-written literal so
+    # re-pinning only the snapshot side cannot silence a retyped declaration.
+    actual_type_digest = _schema_type_digest(type_rows_)
+    if actual_type_digest != pinned_type_digest:
+        found.append(
+            f"published schema types drifted: _SCHEMA_TYPE_DIGEST pins "
+            f"{pinned_type_digest} but the snapshot derives "
+            f"{actual_type_digest}. Re-pin the literal in the same commit as "
+            "both artifacts, with a reason."
+        )
+    if len(type_rows_) != pinned_type_rows:
+        found.append(
+            f"published schema type row count is {len(type_rows_)}, "
+            f"_EXPECTED_SCHEMA_TYPE_ROWS pins {pinned_type_rows}: a typed "
+            "schema node was added or dropped without moving the fixed point"
+        )
+    observed_types = _by_type(type_rows_)
+    if observed_types != pinned_by_type:
+        found.append(
+            "published schema type distribution changed: "
+            f"_EXPECTED_SCHEMA_TYPE_BY_TYPE pins {pinned_by_type} but the "
+            f"snapshot derives {observed_types}: a same-count retype is not "
+            "allowed without moving both literals in the same commit"
+        )
+    actual_client_type_digest = _client_property_type_digest(client_type_rows_)
+    if actual_client_type_digest != pinned_client_type_digest:
+        found.append(
+            "generated client property types drifted: "
+            f"_CLIENT_PROPERTY_TYPE_DIGEST pins "
+            f"{pinned_client_type_digest} but the generated client derives "
+            f"{actual_client_type_digest}. A one-sided retype is named here; "
+            "re-pin both literals in the same commit as both artifacts."
+        )
+    if len(client_type_rows_) != pinned_client_property_rows:
+        found.append(
+            f"generated client property row count is {len(client_type_rows_)}, "
+            f"_EXPECTED_CLIENT_PROPERTY_ROWS pins "
+            f"{pinned_client_property_rows}: a generated property was added "
+            "or dropped without moving the fixed point"
+        )
 
     return found
 
@@ -968,6 +1146,68 @@ def self_test() -> int:
         ts9,
     )
 
+    # --- Door 9: published scalar ``type`` assignment. -------------------
+
+    # The decisive co-revert: retype one numeric property in BOTH halves. The
+    # snapshot digest and the independent client digest both move; no
+    # provenance-blob re-pin can make the guard agree with itself.
+    doc11 = copy.deepcopy(document)
+    prop = doc11["components"]["schemas"]["AdminDashboardStats"]["properties"][
+        "totalUsers"
+    ]
+    assert prop["type"] == "integer"
+    prop["type"] = "string"
+    ts11 = generated.replace(
+        "            totalUsers: number;", "            totalUsers: string;", 1
+    )
+    assert ts11 != generated
+    cases["coordinated property type retype (both halves)"] = (
+        json.dumps(doc11, indent=2),
+        ts11,
+    )
+
+    # One-sided: snapshot alone retypes the property. The client digest names it.
+    cases["one-sided snapshot property type retype"] = (
+        json.dumps(doc11, indent=2),
+        generated,
+    )
+
+    # One-sided: client alone retypes the declaration. The snapshot digest and
+    # the type-distribution door stay green; only the client literal sees it.
+    cases["one-sided client property type retype"] = (
+        json.dumps(document, indent=2),
+        ts11,
+    )
+
+    # Re-pinning ONLY the snapshot digest must not turn the co-revert green:
+    # the independent client literal stays red.
+    found_type_one = failures(
+        snapshot=json.dumps(doc11, indent=2),
+        generated=ts11,
+        schema_type_digest=_schema_type_digest(schema_type_rows(doc11)),
+    )
+    assert any("_CLIENT_PROPERTY_TYPE_DIGEST" in item for item in found_type_one), (
+        found_type_one
+    )
+    cases["only the snapshot type digest re-pinned stays red"] = (
+        json.dumps(doc11, indent=2),
+        ts11,
+    )
+
+    # A same-count rotation: swap two scalar types between sibling properties.
+    # The row count and type distribution are unchanged, so only the positional
+    # digest sees it.
+    doc12 = copy.deepcopy(document)
+    stats = doc12["components"]["schemas"]["AdminDashboardStats"]["properties"]
+    assert stats["totalUsers"]["type"] == "integer"
+    assert stats["queryP95Ms"]["type"] == "number"
+    stats["totalUsers"]["type"] = "number"
+    stats["queryP95Ms"]["type"] = "integer"
+    cases["same-count property type rotation"] = (
+        json.dumps(doc12, indent=2),
+        generated,
+    )
+
     failures_count = 0
     for name, (snap, gen) in cases.items():
         found = failures(snapshot=snap, generated=gen)
@@ -997,7 +1237,8 @@ def main(argv: list[str] | None = None) -> int:
         f"{_EXPECTED_VALUE_ROWS} tuple/map keyword rows pinned, "
         f"{_EXPECTED_SCHEMA_REF_ROWS} component $ref rows pinned across "
         f"{_EXPECTED_SCHEMA_REF_OWNERS} owners / "
-        f"{_EXPECTED_SCHEMA_REF_TARGETS} targets)"
+        f"{_EXPECTED_SCHEMA_REF_TARGETS} targets, "
+        f"{_EXPECTED_SCHEMA_TYPE_ROWS} published schema types pinned)"
     )
     return 0
 

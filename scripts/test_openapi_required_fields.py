@@ -246,6 +246,15 @@ def test_the_digest_alone_catches_it_and_the_agreement_door_is_silent() -> None:
         snapshot=snapshot,
         generated=_retype_client_tuple(),
         value_digest=new_digest,
+        schema_type_digest=guard._schema_type_digest(
+            guard.schema_type_rows(json.loads(snapshot))
+        ),
+        schema_type_by_type=guard._by_type(
+            guard.schema_type_rows(json.loads(snapshot))
+        ),
+        client_type_digest=guard._client_property_type_digest(
+            guard.client_property_types(_retype_client_tuple())
+        ),
     )
     assert not found, found
 
@@ -435,6 +444,9 @@ def test_repinning_only_one_ref_digest_stays_red() -> None:
         generated=swapped,
         schema_ref_digest=snap_digest,
         client_ref_digest=cli_digest,
+        client_type_digest=guard._client_property_type_digest(
+            guard.client_property_types(swapped)
+        ),
     )
     assert not both, both
 
@@ -496,3 +508,125 @@ def test_the_guard_source_carries_the_ref_plants() -> None:
     assert "_CLIENT_SCHEMA_REF_DIGEST = (" in source
     assert "coordinated schema $ref swap (both halves)" in source
     assert "only the snapshot digest re-pinned stays red" in source
+
+
+def test_clean_tree_passes_the_schema_type_doors() -> None:
+    found = guard.failures(snapshot=_SNAPSHOT, generated=_GENERATED)
+    assert not any("schema types drifted" in p for p in found), found
+    assert not any("generated client property types drifted" in p for p in found), found
+
+
+def test_schema_type_digest_is_independent_and_load_bearing() -> None:
+    """_SCHEMA_TYPE_DIGEST is a literal, not the artifact's own digest."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "_SCHEMA_TYPE_DIGEST = (" in source
+    assert "_SCHEMA_TYPE_DIGEST = _schema_type_digest" not in source
+    assert guard._SCHEMA_TYPE_DIGEST == guard._schema_type_digest(
+        guard.schema_type_rows(json.loads(_SNAPSHOT))
+    )
+    drift = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=_GENERATED,
+        schema_type_digest="0" * 64,
+    )
+    assert any("_SCHEMA_TYPE_DIGEST pins" in p for p in drift), drift
+
+
+def test_client_type_digest_is_independent_and_load_bearing() -> None:
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "_CLIENT_PROPERTY_TYPE_DIGEST = (" in source
+    assert "_CLIENT_PROPERTY_TYPE_DIGEST = _client_property_type_digest" not in source
+    assert guard._CLIENT_PROPERTY_TYPE_DIGEST == guard._client_property_type_digest(
+        guard.client_property_types(_GENERATED)
+    )
+    drift = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=_GENERATED,
+        client_type_digest="0" * 64,
+    )
+    assert any("_CLIENT_PROPERTY_TYPE_DIGEST pins" in p for p in drift), drift
+
+
+def test_coordinated_property_type_retype_is_rejected() -> None:
+    """Both halves move together: the snapshot AND client literals must fire."""
+    def change(schemas: dict) -> None:
+        prop = schemas["AdminDashboardStats"]["properties"]["totalUsers"]
+        assert prop["type"] == "integer"
+        prop["type"] = "string"
+
+    snapshot = _mutate(change)
+    generated = _GENERATED.replace(
+        "            totalUsers: number;", "            totalUsers: string;", 1
+    )
+    assert generated != _GENERATED
+    found = guard.failures(snapshot=snapshot, generated=generated)
+    assert any("_SCHEMA_TYPE_DIGEST pins" in p for p in found), found
+    assert any("_CLIENT_PROPERTY_TYPE_DIGEST pins" in p for p in found), found
+
+
+def test_one_sided_property_type_retypes_are_named_by_half() -> None:
+    def change(schemas: dict) -> None:
+        schemas["AdminDashboardStats"]["properties"]["totalUsers"]["type"] = "string"
+
+    snapshot = _mutate(change)
+    generated = _GENERATED.replace(
+        "            totalUsers: number;", "            totalUsers: string;", 1
+    )
+    snapshot_only = guard.failures(snapshot=snapshot, generated=_GENERATED)
+    assert any("published schema types drifted" in p for p in snapshot_only), (
+        snapshot_only
+    )
+    client_only = guard.failures(snapshot=_SNAPSHOT, generated=generated)
+    assert any("generated client property types drifted" in p for p in client_only), (
+        client_only
+    )
+    assert not any("published schema types drifted" in p for p in client_only)
+
+
+def test_repinning_only_the_snapshot_type_digest_stays_red() -> None:
+    def change(schemas: dict) -> None:
+        schemas["AdminDashboardStats"]["properties"]["totalUsers"]["type"] = "string"
+
+    snapshot = _mutate(change)
+    generated = _GENERATED.replace(
+        "            totalUsers: number;", "            totalUsers: string;", 1
+    )
+    found = guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        schema_type_digest=guard._schema_type_digest(
+            guard.schema_type_rows(json.loads(snapshot))
+        ),
+    )
+    assert any("_CLIENT_PROPERTY_TYPE_DIGEST pins" in p for p in found), found
+
+
+def test_type_count_and_distribution_doors_are_load_bearing() -> None:
+    found = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=_GENERATED,
+        expected_schema_type_rows=guard._EXPECTED_SCHEMA_TYPE_ROWS + 1,
+    )
+    assert any("schema type row count is" in p for p in found), found
+    found = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=_GENERATED,
+        expected_client_property_rows=guard._EXPECTED_CLIENT_PROPERTY_ROWS + 1,
+    )
+    assert any("generated client property row count is" in p for p in found), found
+    skewed = dict(guard._EXPECTED_SCHEMA_TYPE_BY_TYPE)
+    skewed["string"] += 1
+    skewed["integer"] -= 1
+    found = guard.failures(
+        snapshot=_SNAPSHOT, generated=_GENERATED, schema_type_by_type=skewed
+    )
+    assert any("type distribution changed" in p for p in found), found
+
+
+def test_self_test_carries_the_type_plants() -> None:
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "coordinated property type retype (both halves)" in source
+    assert "one-sided snapshot property type retype" in source
+    assert "one-sided client property type retype" in source
+    assert "only the snapshot type digest re-pinned stays red" in source
+    assert "same-count property type rotation" in source
