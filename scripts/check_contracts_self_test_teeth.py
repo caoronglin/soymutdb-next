@@ -336,8 +336,8 @@ _SELF_TEST_GUTS: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "scripts/check_error_code_catalog.py",
-        '    clean = check_tree(ROOT)\n',
-        '    clean = []  # planted drift: the plain run stops reading the real tree\n',
+        '    problems = check_tree(args.root.resolve())\n',
+        '    problems = []  # planted drift: the plain run stops reading the real tree\n',
     ),
     (
         "scripts/check_error_code_doc_counts.py",
@@ -376,8 +376,8 @@ _SELF_TEST_GUTS: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "scripts/check_openapi_required_fields.py",
-        "    clean = failures()\n",
-        "    clean = []  # planted drift: the plain run reads nothing\n",
+        "    found = failures()\n",
+        "    found = []  # planted drift: the plain run reads nothing\n",
     ),
     (
         "scripts/check_openapi_inline_body_integrity.py",
@@ -816,6 +816,7 @@ def check(
         + drift_floor_errors()
         + evidence_floor_errors()
         + declared_case_errors(root)
+        + gut_anchor_errors(root)
     )
     if results is None:
         results = probe(wired, root=root)
@@ -948,6 +949,47 @@ def gut_errors(
             problems.append(
                 f"{path} still failed its plain run after the entry point stopped "
                 "reading the real tree, so the plant proved nothing"
+            )
+    return problems
+
+
+def gut_anchor_errors(root: Path = ROOT) -> list[str]:
+    """A registered gut anchor must sit on the plain-run path, not in self_test().
+
+    ``gut_probe()`` only compares exit codes: a plant that never reaches the
+    plain run keeps ``plain_rc == 0`` and is indistinguishable from one the
+    guard survived. The docstring claim "stop the plain run reading the tree"
+    is a property of the source, so check the source. Adding a wire whose gut
+    lands inside ``self_test()`` is now named instead of silently passing.
+    """
+    problems: list[str] = []
+    for path, fragment, _replacement in _SELF_TEST_GUTS:
+        source_path = root / path
+        try:
+            source = source_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            problems.append(f"could not read {path}: {exc}")
+            continue
+        needle = fragment.splitlines()[0].strip()
+        lines = [i + 1 for i, line in enumerate(source.splitlines()) if needle in line]
+        if not lines:
+            problems.append(f"gut anchor {needle!r} is missing from {path}")
+            continue
+        try:
+            tree = ast.parse(source)
+        except SyntaxError as exc:
+            problems.append(f"could not parse {path}: {exc}")
+            continue
+        owners = {
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            and any(node.lineno <= n <= (node.end_lineno or node.lineno) for n in lines)
+        }
+        if owners != {"main"}:
+            problems.append(
+                f"gut anchor for {path} sits in {sorted(owners) or ['no function']}, "
+                "not in main(): the plant cannot reach the plain run"
             )
     return problems
 

@@ -369,6 +369,32 @@ class TeethGuardContract(unittest.TestCase):
             self.assertIn("with its digest re-pinned", source)
             self.assertIn("expect_clean=True", source)
             self.assertIn('kwargs.pop("expect_clean", False)', source)
+    def test_every_gut_anchor_sits_on_the_plain_run_path(self) -> None:
+        # A gut registered against self_test() cannot reach the plain run, and
+        # gut_probe() only reads exit codes: plain_rc == 0 then means either
+        # "the guard survived" or "the plant never ran". Fail closed on the
+        # source shape so a new wire cannot reintroduce the empty leg silently.
+        self.assertEqual(guard.gut_anchor_errors(), [])
+        for path, _fragment, _replacement in guard._SELF_TEST_GUTS:
+            source = (ROOT / path).read_text(encoding="utf-8")
+            self.assertIn(
+                "def main(", source, f"{path} has no plain-run entry point"
+            )
+
+    def test_a_self_test_scoped_gut_anchor_is_reported_by_name(self) -> None:
+        # From a second file: point one registered anchor back at self_test()
+        # and the structural check must name it, not stay green on exit codes.
+        path = "scripts/check_error_code_catalog.py"
+        original = guard._SELF_TEST_GUTS
+        try:
+            guard._SELF_TEST_GUTS = tuple(
+                (p, "    clean = check_tree(ROOT)\n", r) if p == path else (p, f, r)
+                for p, f, r in original
+            )
+            found = guard.gut_anchor_errors()
+            self.assertTrue(any(path in f and "not in main()" in f for f in found), found)
+        finally:
+            guard._SELF_TEST_GUTS = original
 
     def test_the_guards_own_self_test_has_teeth(self) -> None:
         # The --self-test must actually plant a no-op and catch it. A body that
