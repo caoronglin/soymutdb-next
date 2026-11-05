@@ -141,6 +141,18 @@ METHODS = frozenset(
 # the same commit, with a reason.
 _OPERATION_TAG_DIGEST = "a2753305d5790d8f278a0caa4bd21040125631f0fcec75750c669b0cde25b71c"
 
+# Independent fixed point for the per-operation tag ORDER. The digest above
+# sorts tags inside each row, so swapping two tags on one operation (same
+# multiset, same counts) moves no row and stays green. Swagger UI groups an
+# operation under its first tag and renders the rest in published order, so
+# that sequence is client-visible. This literal reads (METHOD, path, index,
+# tag) in document order from nowhere; re-pin in the same commit as a reviewed
+# reorder, with a reason.
+_OPERATION_TAG_ORDER_DIGEST = (
+    "b8bb675d5b5b96073df47eef40f8df7506a78a99b3be4b4fd353c065ae345b76"
+)
+_EXPECTED_OPERATION_TAG_ROWS = 270
+
 
 def _operation_tag_rows(document: dict[str, Any]) -> list[tuple[str, str, str]]:
     """Canonical (METHOD, path, sorted-tags) rows from the published document."""
@@ -161,6 +173,29 @@ def _operation_tag_rows(document: dict[str, Any]) -> list[tuple[str, str, str]]:
 def _operation_tag_digest(rows: list[tuple[str, str, str]]) -> str:
     blob = "\n".join(
         ["soymutdb-operation-tags/v1"]
+        + ["|".join(row) for row in sorted(rows)]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _operation_tag_order_rows(document: dict[str, Any]) -> list[tuple[str, str, str, str]]:
+    """Canonical (METHOD, path, index, tag) rows in PUBLISHED order."""
+    rows: list[tuple[str, str, str, str]] = []
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for method, operation in item.items():
+            if method not in METHODS or not isinstance(operation, dict):
+                continue
+            for index, tag in enumerate(operation.get("tags") or []):
+                if isinstance(tag, str):
+                    rows.append((method.upper(), path, str(index), tag))
+    return rows
+
+
+def _operation_tag_order_digest(rows: list[tuple[str, str, str, str]]) -> str:
+    blob = "\n".join(
+        ["soymutdb-operation-tag-order/v1"]
         + ["|".join(row) for row in sorted(rows)]
     )
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
@@ -458,6 +493,8 @@ def failures(
     smoke: str,
     routers: dict[str, str],
     tag_digest: str | None = None,
+    tag_order_digest: str | None = None,
+    expected_tag_order_rows: int | None = None,
 ) -> list[str]:
     found: list[str] = []
     try:
@@ -694,6 +731,33 @@ def failures(
             "reason -- do not make the guard agree with itself."
         )
 
+    # 8. Per-operation tag ORDER. The set digest above sorts tags inside each
+    #    row, so a same-set reorder on one operation moves nothing it can see.
+    order_rows = _operation_tag_order_rows(document)
+    order_actual = _operation_tag_order_digest(order_rows)
+    order_pinned = (
+        _OPERATION_TAG_ORDER_DIGEST
+        if tag_order_digest is None
+        else tag_order_digest
+    )
+    if order_actual != order_pinned:
+        found.append(
+            "published operation tag order drifted: _OPERATION_TAG_ORDER_DIGEST "
+            f"pins {order_pinned} but the snapshot derives {order_actual}. "
+            "Re-pin the literal in the same commit as the snapshot, with a "
+            "reason -- do not make the guard agree with itself."
+        )
+    expected_rows = (
+        _EXPECTED_OPERATION_TAG_ROWS
+        if expected_tag_order_rows is None
+        else expected_tag_order_rows
+    )
+    if len(order_rows) != expected_rows:
+        found.append(
+            f"published operation tag row count is {len(order_rows)}, "
+            f"_EXPECTED_OPERATION_TAG_ROWS pins {expected_rows}"
+        )
+
     return found
 
 
@@ -809,6 +873,18 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
                     second = operation
         assert first is not None and second is not None
         first["tags"], second["tags"] = second["tags"], first["tags"]
+
+    def reorder_operation_tag_order(document):
+        """Reverse one operation's tag array: same set, changed published order."""
+        for path, item in document["paths"].items():
+            for method, operation in item.items():
+                if method not in METHODS or not isinstance(operation, dict):
+                    continue
+                tags = operation.get("tags") or []
+                if len(tags) > 1:
+                    operation["tags"] = list(reversed(tags))
+                    return
+        raise AssertionError("self-test fixture: no multi-tag operation remains")
 
     def invented_tag(document):
         document["tags"].append({"name": "made-up", "description": "x"})
@@ -1004,6 +1080,11 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
             edit_snapshot(permute_operation_tags),
             "published operation tag assignment drifted",
         ),
+        (
+            "operation tag order reversed",
+            edit_snapshot(reorder_operation_tag_order),
+            "published operation tag order drifted",
+        ),
         ("coordinated co-revert (source+snapshot)", coordinated_co_revert, "no longer matches the golden lock"),
         ("golden edited to bless drift", golden_edited, "no longer matches the golden lock"),
         ("golden hollowed", golden_hollow, "missing the reviewed"),
@@ -1164,6 +1245,8 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
             snapshot, generated, json.dumps(lock, ensure_ascii=False),
             main, config, smoke, routers,
             _operation_tag_digest(_operation_tag_rows(document)),
+            _operation_tag_order_digest(_operation_tag_order_rows(document)),
+            len(_operation_tag_order_rows(document)),
         )
 
     check_clean("legitimate new router + catalog entry", legitimate_new_router)
@@ -1182,9 +1265,13 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
                 continue
             break
         new_digest = _operation_tag_digest(_operation_tag_rows(document))
+        new_order_digest = _operation_tag_order_digest(
+            _operation_tag_order_rows(document)
+        )
         found = failures(
             json.dumps(document, ensure_ascii=False), generated, golden,
             main, config, smoke, routers, tag_digest=new_digest,
+            tag_order_digest=new_order_digest,
         )
         assert not found, found
         return snapshot, generated, golden, main, config, smoke, routers
