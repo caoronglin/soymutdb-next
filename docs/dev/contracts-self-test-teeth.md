@@ -51,7 +51,12 @@ collectible" cell: registered, collectible, invoked — and vacuous.
   untouched tree as clean; only the second half is a signal, and a guard whose
   plain run still fails means the plant proved nothing. Every wired guard has
   one, and `drift_floor_errors()` fails closed unless both sets cover the wire
-  set exactly.
+  set exactly. `gut_anchor_errors()` additionally pins the source shape: each
+  registered anchor must sit inside `main()`, never `self_test()`. An anchor in
+  `self_test()` never reaches the plain run, and `gut_probe()` reads only exit
+  codes, so `plain_rc == 0` cannot tell "the guard survived" from "the plant
+  never ran" — the empty leg would stay green. The pin is structural, so a new
+  wire carrying the same bug is named at registration instead of shipped.
 - `EVIDENCE_MEMBERS` is checked, not just declared. Each member's success line
   states a case count (`N mutations`, `N cases`, `N negative cases`,
   `N ablations`), and the same output must carry at least that many
