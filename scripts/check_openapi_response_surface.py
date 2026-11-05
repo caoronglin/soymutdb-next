@@ -64,6 +64,15 @@ summary equals the snapshot's, so a one-sided edit is named by operation, and
 that the generated operation count matches. Both doors move on a coordinated
 retype only because the literal is independent of the artifacts.
 
+The declared response ``headers`` are the same genus one level deeper: the
+generated client prints each header's ``description`` as a JSDoc comment above
+its property in the status's ``headers`` block. No landed guard reads
+``responses.*.headers``; a coordinated retype of the ``Retry-After`` header in
+both halves, with the provenance blob ids re-pinned, left all ten OpenAPI
+guards, 212 pytest cases and ``SMOKE PASS`` green. ``_RESPONSE_HEADER_SURFACE_DIGEST``
+is a fourth hand-written sha256 over the canonical sorted header rows, read
+from nowhere, with a count door and a per-header cross-artifact agreement door.
+
 Usage:
     python3 scripts/check_openapi_response_surface.py
     python3 scripts/check_openapi_response_surface.py --self-test
@@ -130,6 +139,24 @@ _REQUEST_BODY_SURFACE_DIGEST = (
     "11042ffae3a33f2eaf5e9324e389fe83c587d61bd6977906c7bfa367ea8491c0"
 )
 _EXPECTED_REQUEST_BODY_BEARING_OPERATIONS = 86
+
+# Independent fixed point for declared response headers. ``openapi-typescript``
+# renders a response's ``headers`` entry as a named property in that status's
+# ``headers: { ... }`` block, with the header ``description`` as a JSDoc
+# ``@description`` line above it. That text is client-visible: a regenerate can
+# retype it or move the header to another response while every status, body and
+# count pin stays unchanged. No landed guard reads ``responses.*.headers`` --
+# ``_RESPONSE_SURFACE_DIGEST`` walks (status, description, has_content) only,
+# ``_BODY_PAIR_DIGEST`` sees ``$ref`` bodies, and ``_PINNED_ARTIFACTS`` is a
+# provenance blob id a regenerate re-pins in the same reviewed act.
+#
+# sha256 of "\n".join(["soymutdb-response-headers/v1"] + sorted
+#   "method|path|status|name|description|canonical-schema-json"). Read from
+# nowhere; re-pin in the same commit as an intentional contract change.
+_RESPONSE_HEADER_SURFACE_DIGEST = (
+    "5685ec6bcfa376ed9dcdc38c322371b21d35ff18cde1d41e9b2c7bc935fc369b"
+)
+_EXPECTED_RESPONSE_HEADERS = 1
 
 # The generated ``paths`` interface maps (METHOD, path) -> operations["symbol"].
 PATH_LINE = re.compile(r'^    "(/[^"]*)": \{$')
@@ -417,6 +444,103 @@ def _generated_request_bodies(generated: str) -> dict[str, str]:
     return out
 
 
+# The generated ``headers: { ... }`` block of a response carries each declared
+# header as a named optional property, with its description in a JSDoc line
+# immediately above it. ``[name: string]: unknown;`` is an index signature, not
+# a declared header, and is skipped because it has no quoted name.
+GEN_HEADER = re.compile(
+    r"^                    (?:/\*\* @description (.*?) \*/\n"
+    r"                    )?\"([^\"]+)\"\?: ([^;]+);$",
+    re.MULTILINE,
+)
+
+
+def _snapshot_response_headers(
+    document: dict[str, Any],
+) -> list[tuple[str, str, str, str, str, str]]:
+    """Canonical (METHOD, path, status, name, description, schema) rows."""
+    rows: list[tuple[str, str, str, str, str, str]] = []
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for method, operation in item.items():
+            if method not in METHODS or not isinstance(operation, dict):
+                continue
+            for status, response in (operation.get("responses") or {}).items():
+                headers = response.get("headers") or {}
+                for name, header in headers.items():
+                    if not isinstance(header, dict):
+                        raise ValueError(
+                            f"{method.upper()} {path} {status} header {name!r} "
+                            "is not an object"
+                        )
+                    rows.append(
+                        (
+                            method.upper(),
+                            path,
+                            str(status),
+                            str(name),
+                            str(header.get("description", "")),
+                            json.dumps(
+                                header.get("schema", {}),
+                                sort_keys=True,
+                                ensure_ascii=False,
+                            ),
+                        )
+                    )
+    return rows
+
+
+def _response_header_digest(
+    rows: list[tuple[str, str, str, str, str, str]],
+) -> str:
+    blob = "\n".join(
+        ["soymutdb-response-headers/v1"] + ["|".join(row) for row in sorted(rows)]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _generated_response_headers(
+    generated: str,
+) -> dict[tuple[str, str], dict[str, str]]:
+    """(symbol, status) -> {header name: JSDoc description} from the client."""
+    start = generated.find("export interface operations {")
+    if start < 0:
+        raise ValueError("generated client has no operations interface")
+    block = generated[start:]
+    op_matches = list(OP_DEF.finditer(block))
+    out: dict[tuple[str, str], dict[str, str]] = {}
+    for i, op_match in enumerate(op_matches):
+        symbol = op_match.group(1)
+        body = block[
+            op_match.end() : op_matches[i + 1].start()
+            if i + 1 < len(op_matches)
+            else len(block)
+        ]
+        rstart = body.find("        responses: {")
+        if rstart < 0:
+            continue
+        for status_match in STATUS_KEY.finditer(body, rstart):
+            nxt = STATUS_KEY.search(body, status_match.end())
+            segment = body[
+                status_match.end() : nxt.start() if nxt else len(body)
+            ]
+            hstart = segment.find("                headers: {")
+            if hstart < 0:
+                continue
+            hend = segment.find("\n                };", hstart)
+            hblock = segment[hstart : hend if hend >= 0 else len(segment)]
+            named: dict[str, str] = {}
+            for hit in GEN_HEADER.finditer(hblock):
+                description, name = hit.group(1), hit.group(2)
+                if description is None or name.startswith("["):
+                    continue  # index signature, not a declared header
+                named[name] = description
+            if named:
+                out[(symbol, status_match.group(1))] = named
+    return out
+
+
 def failures(
     *,
     snapshot: str | None = None,
@@ -429,6 +553,8 @@ def failures(
     expected_summary_operations: int | None = None,
     request_body_digest: str | None = None,
     expected_request_body_operations: int | None = None,
+    response_header_digest: str | None = None,
+    expected_response_headers: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -465,6 +591,16 @@ def failures(
         if expected_request_body_operations is None
         else expected_request_body_operations
     )
+    pinned_response_header_digest = (
+        _RESPONSE_HEADER_SURFACE_DIGEST
+        if response_header_digest is None
+        else response_header_digest
+    )
+    pinned_response_headers = (
+        _EXPECTED_RESPONSE_HEADERS
+        if expected_response_headers is None
+        else expected_response_headers
+    )
 
     try:
         document = json.loads(snapshot)
@@ -472,6 +608,7 @@ def failures(
         snap = _snapshot_surface(document)
         summaries = _snapshot_summaries(document)
         request_bodies = _snapshot_request_bodies(document)
+        header_rows = _snapshot_response_headers(document)
     except (ValueError, TypeError) as exc:
         return [f"cannot read published responses from snapshot: {exc}"]
     try:
@@ -479,6 +616,7 @@ def failures(
         gen_ops = _generated_operations(generated)
         gen_summaries = _generated_summaries(generated)
         gen_request_bodies = _generated_request_bodies(generated)
+        gen_headers = _generated_response_headers(generated)
     except ValueError as exc:
         return [f"cannot read generated client responses: {exc}"]
 
@@ -615,6 +753,52 @@ def failures(
                 f"{key[0]} {key[1]}: published requestBody state {state!r} "
                 f"disagrees with generated client {rendered!r}"
             )
+
+    # Door 8 -- independent fixed point on declared response headers. A
+    # coordinated retype of one header's description (or schema) in BOTH halves
+    # moves both artifacts together, so only the literal can name it; the body
+    # baselines and response-surface digest never read ``headers``.
+    actual_header_digest = _response_header_digest(header_rows)
+    if actual_header_digest != pinned_response_header_digest:
+        found.append(
+            f"published response headers drifted: "
+            f"_RESPONSE_HEADER_SURFACE_DIGEST pins "
+            f"{pinned_response_header_digest} but the snapshot derives "
+            f"{actual_header_digest}. Re-pin the literal in the same commit "
+            "as the two artifacts, with a reason -- do not make the guard "
+            "agree with itself."
+        )
+    if len(header_rows) != pinned_response_headers:
+        found.append(
+            f"published response header count is {len(header_rows)}, "
+            f"_EXPECTED_RESPONSE_HEADERS pins {pinned_response_headers}: a "
+            "declared header was added or dropped"
+        )
+
+    # Door 9 -- cross-artifact agreement. The snapshot's declared headers and
+    # the generated ``headers`` blocks are compared as (symbol, status, name,
+    # description) tuples, so a one-sided edit is named. A header moved to a
+    # different response is caught by Door 8 even when the two halves agree.
+    snap_header_set = set()
+    for method, path, status, name, description, _schema in header_rows:
+        symbol = path_map.get((method, path))
+        if symbol is not None:
+            snap_header_set.add((symbol, status, name, description))
+    gen_header_set = {
+        (symbol, status, name, description)
+        for (symbol, status), named in gen_headers.items()
+        for name, description in named.items()
+    }
+    for entry in sorted(snap_header_set - gen_header_set):
+        found.append(
+            f"declared response header {entry[2]!r} on {entry[0]} {entry[1]} "
+            f"is not rendered with description {entry[3]!r} in the client"
+        )
+    for entry in sorted(gen_header_set - snap_header_set):
+        found.append(
+            f"generated client declares response header {entry[2]!r} on "
+            f"{entry[0]} {entry[1]} the snapshot does not publish"
+        )
 
     if f"scripts/{SELF}" not in smoke:
         found.append(f"contracts smoke layer does not invoke {SELF}")
@@ -805,6 +989,61 @@ def self_test() -> int:
         generated,
     )
 
+    # Declared response headers: a coordinated retype of the one ``Retry-After``
+    # header's description in BOTH halves. Before Door 8, all ten OpenAPI guards,
+    # 212 pytest cases and the whole contracts layer stayed green on this shape
+    # (the header text is client-visible JSDoc, not a body or status).
+    old_header = "Seconds until this login attempt may be retried."
+    new_header = "Seconds until this login attempt may be retried (edited)."
+    header_gen_key = "    login_api_v1_auth_login_post: {"
+    header_start = generated.find(header_gen_key)
+    assert header_start >= 0
+    header_slice = generated[header_start : header_start + 1600]
+    assert f"/** @description {old_header} */" in header_slice
+
+    def gen_with_header(text: str) -> str:
+        changed = header_slice.replace(
+            f"/** @description {old_header} */",
+            f"/** @description {text} */",
+            1,
+        )
+        assert changed != header_slice
+        return generated[:header_start] + changed + generated[header_start + 1600 :]
+
+    # One-sided retype: snapshot only. Door 9 names the disagreement.
+    doc12 = copy.deepcopy(document)
+    hdr12 = doc12["paths"]["/api/v1/auth/login"]["post"]["responses"]["429"][
+        "headers"
+    ]["Retry-After"]
+    hdr12["description"] = new_header
+    cases["one-sided snapshot response header retype"] = (
+        json.dumps(doc12, indent=2),
+        generated,
+    )
+
+    # One-sided retype: generated JSDoc only. Door 9 names it too.
+    cases["one-sided generated response header retype"] = (
+        snapshot,
+        gen_with_header(new_header),
+    )
+
+    # Coordinated co-revert of both halves: the decisive drift. Only the
+    # independent header digest can name it; both artifacts still agree with
+    # each other, and re-pinning the provenance blob ids is the documented
+    # reviewed action that accompanies a regenerate.
+    cases["coordinated response header co-revert"] = (
+        json.dumps(doc12, indent=2),
+        gen_with_header(new_header),
+    )
+
+    # A declared header dropped from the snapshot only (count door + Door 9).
+    doc13 = copy.deepcopy(document)
+    del doc13["paths"]["/api/v1/auth/login"]["post"]["responses"]["429"]["headers"]
+    cases["declared response header dropped"] = (
+        json.dumps(doc13, indent=2),
+        generated,
+    )
+
     failures_count = 0
     for name, (snap_text, gen_text) in cases.items():
         found = failures(snapshot=snap_text, generated=gen_text, smoke=smoke)
@@ -834,8 +1073,9 @@ def main(argv: list[str] | None = None) -> int:
         f"openapi-response-surface: OK "
         f"({_EXPECTED_RESPONSE_ENTRIES} declared responses and "
         f"{_EXPECTED_SUMMARY_OPERATIONS} operation summaries and "
-        f"{_EXPECTED_REQUEST_BODY_BEARING_OPERATIONS} request bodies pinned "
-        f"across {_EXPECTED_OPERATION_COUNT} operations)"
+        f"{_EXPECTED_REQUEST_BODY_BEARING_OPERATIONS} request bodies and "
+        f"{_EXPECTED_RESPONSE_HEADERS} declared response header(s) pinned across "
+        f"{_EXPECTED_OPERATION_COUNT} operations)"
     )
     return 0
 

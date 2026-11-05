@@ -149,7 +149,7 @@ blob ids — left **all eight wired OpenAPI guards `rc=0`** and the full
 `smoke.sh --profile contracts` layer green. Dropping the body entirely, and a
 same-count permutation moving a body between operations, were equally silent.
 
-The guard now adds a third independent literal:
+The guard now adds a fourth independent literal:
 
 * `_REQUEST_BODY_SURFACE_DIGEST` — a hand-written sha256 over the canonical
   sorted `(METHOD, path, operationId, state)` rows, `state` being
@@ -165,3 +165,34 @@ grew 17 -> 23 cases and pins the literal, the count door, and both comparisons
 from a second file. No `smoke.sh` / `PINNED_SUITES` / `REQUIRED_GUARD_CALLS` /
 teeth change was needed — the extension lives inside an already-wired guard,
 so it does not contend with the in-flight wiring edits in #272 / #273.
+
+## Declared response headers (fourth independent literal)
+
+`responses.*.headers` is the last operation-level surface with no fixed point.
+`openapi-typescript` renders each declared header as a named optional property
+in that status's `headers: { ... }` block, with the header `description` as a
+JSDoc `@description` line above it. That text is client-visible.
+
+On live bytes (`ebfa4c5f`), a byte-preserving coordinated co-revert — retype
+the one `Retry-After` header's description in both `openapi.json` and
+`openapi.d.ts`, then re-pin both `_PINNED_ARTIFACTS` blob ids as the body
+guard's own docstring instructs — left **all ten OpenAPI guards `rc=0`, 212
+pytest cases passed, and `SMOKE PASS`**. The `_RESPONSE_SURFACE_DIGEST` walks
+`(status, description, has_content)` only; the body baselines see `$ref`
+bodies; `check_openapi_inline_body_integrity` sees inline schemas. None reads
+`headers`.
+
+`_RESPONSE_HEADER_SURFACE_DIGEST` is a hand-written sha256 over the canonical
+sorted `(method, path, status, name, description, schema)` rows, read from
+nowhere. A count door (`_EXPECTED_RESPONSE_HEADERS = 1`) and a cross-artifact
+agreement door (snapshot vs generated `headers` blocks) name one-sided edits.
+Four new `--self-test` cases cover the one-sided retypes, the decisive
+co-revert, and a dropped header; five companion cases pin the digest literal,
+the count door, and the comparison from a second file. Zero new wiring: the
+guard is already registered, pinned and wired into `smoke_contracts()`.
+
+After the fix, the same co-revert gives `SMOKE FAIL / 1 failed` with
+`published response headers drifted: _RESPONSE_HEADER_SURFACE_DIGEST pins
+5685ec6b... but the snapshot derives ...`; restoring the bytes returns
+`SMOKE PASS`. Re-pin the literal in the same commit as an intentional contract
+change, with a reason — do not make the guard agree with itself.

@@ -369,3 +369,106 @@ def test_request_body_comparison_is_load_bearing() -> None:
     snapshot, generated = _co_revert_request_body()
     found = guard.failures(snapshot=snapshot, generated=generated)
     assert any("request bodies drifted" in problem for problem in found), found
+
+
+def _co_revert_response_header() -> tuple[str, str]:
+    """Retype the one declared header's description in both halves."""
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    old = "Seconds until this login attempt may be retried."
+    new = "Seconds until this login attempt may be retried (edited)."
+    header = document["paths"]["/api/v1/auth/login"]["post"]["responses"]["429"][
+        "headers"
+    ]["Retry-After"]
+    assert header["description"] == old, "committed tree already regressed"
+    header["description"] = new
+    assert f"/** @description {old} */" in generated
+    changed = generated.replace(
+        f"/** @description {old} */", f"/** @description {new} */", 1
+    )
+    return json.dumps(document, indent=2), changed
+
+
+def test_coordinated_response_header_co_revert_is_rejected() -> None:
+    """Both halves agree; only the independent header literal can catch it."""
+    snapshot, generated = _co_revert_response_header()
+    found = guard.failures(snapshot=snapshot, generated=generated)
+    assert any("response headers drifted" in problem for problem in found), found
+
+
+def test_one_sided_response_header_retypes_are_rejected() -> None:
+    """Door 9 names a header disagreement on either half alone."""
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    document["paths"]["/api/v1/auth/login"]["post"]["responses"]["429"]["headers"][
+        "Retry-After"
+    ]["description"] = "only the snapshot changed"
+    found = guard.failures(snapshot=json.dumps(document, indent=2))
+    assert any("is not rendered with description" in p for p in found), found
+
+
+def test_response_header_digest_is_an_independent_literal() -> None:
+    """The pin is a module-level literal, not derived from the artifact."""
+    source = (ROOT / "scripts" / "check_openapi_response_surface.py").read_text(
+        encoding="utf-8"
+    )
+    tree = ast.parse(source)
+    target = None
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "_RESPONSE_HEADER_SURFACE_DIGEST"
+            for t in node.targets
+        ):
+            target = node.value
+    assert target is not None, "digest literal is missing"
+    assert isinstance(target, ast.Constant) and isinstance(target.value, str)
+    assert len(target.value) == 64, "digest must be a sha256 hex string"
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    assert target.value == guard._response_header_digest(
+        guard._snapshot_response_headers(document)
+    )
+
+
+def test_response_header_count_door_is_load_bearing() -> None:
+    """Dropping the declared header moves both the digest and the count door."""
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    del document["paths"]["/api/v1/auth/login"]["post"]["responses"]["429"]["headers"]
+    found = guard.failures(
+        snapshot=json.dumps(document, indent=2),
+        expected_response_headers=guard._EXPECTED_RESPONSE_HEADERS - 1,
+    )
+    assert not any("response header count is" in p for p in found), found
+    assert any("response headers drifted" in p for p in found), found
+
+
+def test_response_header_comparison_is_load_bearing() -> None:
+    """A single-file edit cannot remove both doors without the companion."""
+    source = (ROOT / "scripts" / "check_openapi_response_surface.py").read_text(
+        encoding="utf-8"
+    )
+    assert "_RESPONSE_HEADER_SURFACE_DIGEST" in source
+    assert "published response headers drifted" in source
+    assert "if actual_header_digest != pinned_response_header_digest:" in source
+    assert "gen_header_set = {" in source
+    snapshot, generated = _co_revert_response_header()
+    found = guard.failures(snapshot=snapshot, generated=generated)
+    assert any("response headers drifted" in problem for problem in found), found
+
+
+def test_response_header_doors_and_cases_are_pinned_from_a_second_file() -> None:
+    """Gutting a door or deleting an ablation cannot hide in one file only."""
+    source = (ROOT / "scripts" / "check_openapi_response_surface.py").read_text(
+        encoding="utf-8"
+    )
+    assert "if len(header_rows) != pinned_response_headers:" in source
+    assert "published response header count is" in source
+    assert "if actual_header_digest != pinned_response_header_digest:" in source
+    assert "snap_header_set = set()" in source
+    # The four header ablations must remain in the guard's case table; deleting
+    # one leaves the self-test's success line intact but the evidence gone.
+    for label in (
+        "one-sided snapshot response header retype",
+        "one-sided generated response header retype",
+        "coordinated response header co-revert",
+        "declared response header dropped",
+    ):
+        assert f'cases["{label}"]' in source, f"{label} ablation is missing"
