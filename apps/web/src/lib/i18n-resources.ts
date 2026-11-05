@@ -499,7 +499,7 @@ export const TOOLS_RESOURCES: Record<string, Record<string, unknown>> = {
         toastFailed: "富集分析失败",
       },
       exppattern: {
-        title: "Expression Pattern",
+        title: "表达模式",
         cardDesc: "基因 × 条件表达矩阵，支持 Z-score 标准化与行聚类，以热图和表格呈现。",
         subtitle: "表达矩阵、聚类与热图",
         status: "表达模式",

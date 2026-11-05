@@ -232,6 +232,13 @@ smoke_contracts() {
     # `pytest scripts/`, so without this entry only a local hand-run collects
     # it: register it in the gating array so the layer consumes it.
     scripts/test_openapi_auth_surface_floor.py
+    # The console read `common.json` alone, so 87 `tools.sequence.*` keys that
+    # only exist in the portal runtime bundles were reported missing while the
+    # UI was rendered correctly -- and a real defect parked in a runtime bundle
+    # stayed invisible. It now merges the same bundles `lib/i18n.ts` merges.
+    # Registering it here is the point: unregistered, it only ever ran by hand
+    # and its red could neither block nor be noticed.
+    scripts/test_locale_language_purity.py
   )
   # Suites that need an interpreter or service this smoke layer does not own
   # (worker source analysis runs under the API virtualenv; tunnel/compose drift
