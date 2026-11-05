@@ -55,7 +55,9 @@ from __future__ import annotations
 import argparse
 import ast
 import copy
+import hashlib
 import json
+import re
 import sys
 from collections.abc import Iterator
 from pathlib import Path
@@ -64,6 +66,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SNAPSHOT = Path("packages/api-client/openapi.json")
 SCHEMA_ROOT = Path("apps/api/app/schemas")
+GENERATED = Path("packages/api-client/src/generated/openapi.d.ts")
 
 _LITERAL_NAMES = frozenset({"Literal"})
 _ENUM_BASES = frozenset({"str", "int", "Enum", "StrEnum", "IntEnum"})
@@ -113,6 +116,34 @@ INLINED_ENUM_CLASSES = frozenset(
         "_SectionState",
     }
 )
+
+# Independent fixed point on the *generated client's* enum/constant markers.
+# ``openapi-typescript`` emits a JSDoc ``@enum {string}`` above every published
+# multi-member enum and ``@constant`` above every single-member Literal; an IDE
+# shows these tags when a caller hovers the field. No landed guard reads them:
+# this file's own baseline compares source ``Literal``/``Enum`` declarations
+# with the snapshot's ``enum``/``const`` nodes, and the description/title/
+# default/example digests read other JSDoc tags. ``_PINNED_ARTIFACTS`` is a
+# provenance blob id a regenerate re-pins in the same reviewed act.
+#
+# Decisive ablation on live bytes 77ba9a6b: a byte-preserving retype of ONE
+# ``@enum {string}`` marker in openapi.d.ts, with both provenance blob ids
+# honestly re-pinned, left all twelve wired check_openapi_* guards rc=0 and the
+# whole contracts layer SMOKE PASS / 1102 passed + 41 subtests / 0 failed. The
+# hover annotation silently disappears and nothing names it.
+#
+# sha256 over the generated marker rows IN DOCUMENT ORDER, each row being
+# ``name|tag|occurrence-index``. A sorted multiset would be blind to a
+# same-count rotation that moves a marker from one field to another, so the
+# sequence is the pinned object, not a set. Read from nowhere; re-pin in the
+# same commit as both artifacts after an intentional, reviewed regenerate.
+_GENERATED_MARKER_SEQUENCE_DIGEST = (
+    "b2991cbc32a2e40b8e1371cdbe6fd49fe9c4f59470e349cbc7e4086cc29dc1e3"
+)
+_EXPECTED_GENERATED_MARKERS = 136
+_EXPECTED_ENUM_MARKERS = 100
+_EXPECTED_CONSTANT_MARKERS = 36
+
 # Exact published value domains, an independent fixed point.  Read the
 # committed snapshot on both sides of the comparisons below and every
 # coordinated edit is invisible: add, drop or retype a member in the source and
@@ -358,6 +389,58 @@ class _Unresolvable:
 
 
 EnumSpec = list[Any] | _Unresolvable
+
+
+
+
+def generated_marker_rows(generated: str) -> list[str]:
+    """Canonical ``name|tag|occurrence-index`` rows in document order.
+
+    Reads only the ``components`` interface, and only JSDoc blocks that carry
+    an ``@enum {string}`` or ``@constant`` tag. Each marker is paired with the
+    declared name (field or hoisted alias) that follows its block. The
+    occurrence index disambiguates the many fields sharing a name such as
+    ``status`` or ``mode``.
+    """
+    start = generated.find("export interface components {")
+    if start < 0:
+        raise ValueError("generated client has no components interface")
+    lines = generated[start:].splitlines()
+    marker = re.compile(r"^\s*\* (@enum \{string\}|@constant)\s*$")
+    name = re.compile(
+        r'^\s*(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))\??:\s*[^;]+;'
+    )
+    seen: dict[tuple[str, str], int] = {}
+    rows: list[str] = []
+    for index, line in enumerate(lines):
+        match = marker.match(line)
+        if not match:
+            continue
+        for offset in range(index + 1, min(index + 12, len(lines))):
+            candidate = lines[offset].strip()
+            if candidate == "*/" or candidate.startswith("*"):
+                continue
+            named = name.match(lines[offset])
+            if named:
+                field = named.group(1) or named.group(2)
+                tag = match.group(1)
+                key = (field, tag)
+                occurrence = seen.get(key, 0)
+                seen[key] = occurrence + 1
+                rows.append(f"{field}|{tag}|{occurrence}")
+                break
+    return rows
+
+
+def _generated_marker_digest(rows: list[str]) -> str:
+    blob = "\n".join(["soymutdb-generated-enum-markers/v1", *rows])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _marker_counts(generated: str) -> tuple[int, int]:
+    enum_count = len(re.findall(r"^\s*\* @enum \{string\}\s*$", generated, re.M))
+    constant_count = len(re.findall(r"^\s*\* @constant\s*$", generated, re.M))
+    return enum_count, constant_count
 
 
 def _without_none(members: list[Any]) -> list[Any]:
@@ -741,11 +824,52 @@ def _compare(label: str, spec: EnumSpec, published: list[Any]) -> list[str]:
 
 
 def failures(
-    document: dict[str, Any], constraints: dict[str, dict[str, EnumSpec]]
+    document: dict[str, Any],
+    constraints: dict[str, dict[str, EnumSpec]],
+    generated: str | None = None,
 ) -> tuple[list[str], int]:
-    """Return ``(problems, compared_enum_pairs)``."""
+    """Return ``(problems, compared_enum_pairs)``.
+
+    ``generated`` defaults to the committed client bytes; self-test plants pass
+    their own copy. The marker door reads the *generated* half, so a source +
+    snapshot co-revert cannot hide a dropped or rotated hover annotation.
+    """
     found: list[str] = []
     compared = 0
+    if generated is None:
+        generated = (REPO_ROOT / GENERATED).read_text(encoding="utf-8")
+
+    # Generated-client enum/constant markers: an independent sequence literal,
+    # two exact count doors, and a named agreement with the published value
+    # domains. A same-count rotation is caught by the sequence, not the counts.
+    try:
+        marker_rows = generated_marker_rows(generated)
+    except ValueError as exc:
+        found.append(f"cannot read generated enum markers: {exc}")
+        marker_rows = []
+    actual_markers = _generated_marker_digest(marker_rows)
+    if actual_markers != _GENERATED_MARKER_SEQUENCE_DIGEST:
+        found.append(
+            "generated enum/constant marker sequence drifted: "
+            f"_GENERATED_MARKER_SEQUENCE_DIGEST pins "
+            f"{_GENERATED_MARKER_SEQUENCE_DIGEST} but the generated client "
+            f"derives {actual_markers}. A hover annotation is part of the "
+            "client contract -- re-pin the literal in the same commit as both "
+            "artifacts, with a reason."
+        )
+    if len(marker_rows) != _EXPECTED_GENERATED_MARKERS:
+        found.append(
+            f"generated enum/constant marker row count is {len(marker_rows)}, "
+            f"_EXPECTED_GENERATED_MARKERS pins {_EXPECTED_GENERATED_MARKERS}"
+        )
+    enum_count, constant_count = _marker_counts(generated)
+    if enum_count != _EXPECTED_ENUM_MARKERS or constant_count != _EXPECTED_CONSTANT_MARKERS:
+        found.append(
+            f"generated marker counts are @enum={enum_count}, "
+            f"@constant={constant_count}; pins require @enum="
+            f"{_EXPECTED_ENUM_MARKERS}, @constant="
+            f"{_EXPECTED_CONSTANT_MARKERS}"
+        )
     components = document.get("components", {}).get("schemas", {})
     enum_classes = [name for name, fields in constraints.items() if "__enum__" in fields]
     # Exemptions come from a reviewed literal, never from the artifact under
@@ -832,6 +956,7 @@ def _load(root: Path) -> tuple[dict[str, Any], dict[str, dict[str, EnumSpec]]]:
 
 
 def _self_test(document: dict[str, Any], constraints: dict[str, dict[str, EnumSpec]]) -> int:
+    result = 0
     target = None
     components = document["components"]["schemas"]
     for model, fields in sorted(constraints.items()):
@@ -1051,7 +1176,84 @@ def _self_test(document: dict[str, Any], constraints: dict[str, dict[str, EnumSp
         ),
     ]
 
-    result = 0
+    # Generated-client marker door: plants edit the *generated* half, which
+    # the document-only ablation loop above cannot reach. Each plant names the
+    # one door that must catch it, so gutting any single door is reported.
+    generated_bytes = (REPO_ROOT / GENERATED).read_text(encoding="utf-8")
+    marker_cases: list[tuple[str, str, str, bool]] = []
+
+    # One marker retyped in place, byte-preserving width. The tag string
+    # changes, so the count doors AND the sequence digest must both name it.
+    retyped_enum = generated_bytes.replace(
+        "             * @enum {string}\n",
+        "             * @enumX{string}\n",
+        1,
+    )
+    assert retyped_enum != generated_bytes
+    marker_cases.append(
+        ("a generated @enum marker is retyped", retyped_enum, "marker counts", True)
+    )
+    retyped_constant = generated_bytes.replace(
+        "             * @constant\n",
+        "             * @constanX\n",
+        1,
+    )
+    assert retyped_constant != generated_bytes
+    marker_cases.append(
+        ("a generated @constant marker is retyped", retyped_constant, "marker counts", True)
+    )
+
+    # A genuine same-count relocation, built from the committed bytes: swap
+    # which doc block carries which tag. 136/100/36 are unchanged, so the count
+    # doors stay silent and the sequence digest is the ONLY possible catcher.
+    # A multiset or a derived-row permutation cannot stand in for this plant.
+    marker_line = re.compile(r"^\s*\* (@enum \{string\}|@constant)\s*$")
+    marker_lines = generated_bytes.splitlines(keepends=True)
+    enum_index = next(
+        index for index, line in enumerate(marker_lines)
+        if marker_line.match(line) and "@enum" in line
+    )
+    constant_index = next(
+        index for index, line in enumerate(marker_lines)
+        if marker_line.match(line) and "@constant" in line
+    )
+    relocated_lines = marker_lines[:]
+    relocated_lines[enum_index] = "             * @constant\n"
+    relocated_lines[constant_index] = "             * @enum {string}\n"
+    relocated = "".join(relocated_lines)
+    assert relocated != generated_bytes
+    assert len(generated_marker_rows(relocated)) == _EXPECTED_GENERATED_MARKERS
+    assert _marker_counts(relocated) == (
+        _EXPECTED_ENUM_MARKERS,
+        _EXPECTED_CONSTANT_MARKERS,
+    )
+    marker_cases.append(
+        (
+            "a same-count marker relocation between two doc blocks",
+            relocated,
+            "_GENERATED_MARKER_SEQUENCE_DIGEST",
+            False,
+        )
+    )
+
+    for label, planted, needle, counts_must_fire in marker_cases:
+        problems = failures(document, constraints, generated=planted)[0]
+        count_doors = [
+            problem for problem in problems
+            if "row count" in problem or "marker counts" in problem
+        ]
+        if not any(needle in problem for problem in problems):
+            print(f"FAIL: {label} was not caught by {needle}")
+            result = 1
+        elif counts_must_fire and not count_doors:
+            print(f"FAIL: {label} did not move the count doors")
+            result = 1
+        elif not counts_must_fire and count_doors:
+            print(f"FAIL: {label} moved the count doors; the digest was not the sole catcher")
+            result = 1
+        else:
+            print(f"PASS marker ablation: {label} -> {len(problems)} failure(s)")
+
     for label, mutate in cases:
         problems = mutate(copy.deepcopy(document))
         if not problems:
@@ -1257,6 +1459,162 @@ def test_a_repin_in_the_same_commit_stays_green() -> None:
         assert not (found := failures(document, constraints)[0]), found
     finally:
         globals()["_PUBLISHED_ENUM_BASELINE"] = saved
+
+
+# ---------------------------------------------------------------------------
+# Second-file regression coverage for the generated-marker door. These run in
+# the contracts layer once ``check_openapi_published_enums.py`` is a gating
+# tests=() row: a one-file edit to failures() cannot silence them.
+# ---------------------------------------------------------------------------
+
+_MARKER_NEEDLE = "             * @enum {string}\n"
+_CONSTANT_NEEDLE = "             * @constant\n"
+
+
+def _committed_generated() -> str:
+    return (REPO_ROOT / GENERATED).read_text(encoding="utf-8")
+
+
+def test_committed_marker_sequence_matches_the_literal() -> None:
+    generated = _committed_generated()
+    rows = generated_marker_rows(generated)
+    assert len(rows) == _EXPECTED_GENERATED_MARKERS
+    assert _generated_marker_digest(rows) == _GENERATED_MARKER_SEQUENCE_DIGEST
+    document, constraints = _load(REPO_ROOT)
+    assert not failures(document, constraints, generated=generated)[0]
+
+
+def test_the_marker_literal_is_a_module_level_independent_string() -> None:
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    assigned = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(t, ast.Name) and t.id == "_GENERATED_MARKER_SEQUENCE_DIGEST"
+            for t in node.targets
+        )
+    ]
+    assert len(assigned) == 1
+    value = ast.literal_eval(assigned[0].value)
+    assert isinstance(value, str) and len(value) == 64
+    assert value != _PUBLISHED_ENUM_BASELINE  # a dict, not a derived expectation
+
+
+def test_a_retyped_generated_marker_is_rejected() -> None:
+    generated = _committed_generated()
+    assert _MARKER_NEEDLE in generated
+    planted = generated.replace(_MARKER_NEEDLE, "             * @enumX{string}\n", 1)
+    document, constraints = _load(REPO_ROOT)
+    found = failures(document, constraints, generated=planted)[0]
+    assert any("_GENERATED_MARKER_SEQUENCE_DIGEST" in p for p in found), found
+    assert any("marker counts" in p for p in found), found
+
+
+def test_a_retyped_generated_constant_marker_is_rejected() -> None:
+    generated = _committed_generated()
+    assert _CONSTANT_NEEDLE in generated
+    planted = generated.replace(_CONSTANT_NEEDLE, "             * @constanX\n", 1)
+    document, constraints = _load(REPO_ROOT)
+    found = failures(document, constraints, generated=planted)[0]
+    assert any("marker" in p.lower() for p in found), found
+
+
+def test_a_same_count_marker_relocation_from_bytes_is_rejected() -> None:
+    """The sequence literal, not a multiset, must see a moved marker.
+
+    The plant swaps two tag strings between doc blocks in the committed bytes,
+    so all three count doors stay silent and the digest is the sole catcher.
+    Permuting the derived row list would prove nothing about the reader.
+    """
+    generated = _committed_generated()
+    lines = generated.splitlines(keepends=True)
+    marker = re.compile(r"^\s*\* (@enum \{string\}|@constant)\s*$")
+    enum_index = next(
+        i for i, line in enumerate(lines) if marker.match(line) and "@enum" in line
+    )
+    constant_index = next(
+        i for i, line in enumerate(lines) if marker.match(line) and "@constant" in line
+    )
+    lines[enum_index] = "             * @constant\n"
+    lines[constant_index] = "             * @enum {string}\n"
+    planted = "".join(lines)
+    assert planted != generated
+    assert len(generated_marker_rows(planted)) == _EXPECTED_GENERATED_MARKERS
+    assert _marker_counts(planted) == (
+        _EXPECTED_ENUM_MARKERS,
+        _EXPECTED_CONSTANT_MARKERS,
+    )
+    document, constraints = _load(REPO_ROOT)
+    found = failures(document, constraints, generated=planted)[0]
+    assert any("_GENERATED_MARKER_SEQUENCE_DIGEST" in problem for problem in found), found
+    assert not any(
+        "row count" in problem or "marker counts" in problem for problem in found
+    ), found
+
+
+def test_a_marker_repin_in_the_same_commit_stays_green() -> None:
+    """An exact pin moves with both artifacts, not as a whitelist."""
+    generated = _committed_generated()
+    planted = generated.replace(_MARKER_NEEDLE, "             * @enumX{string}\n", 1)
+    saved = globals()["_GENERATED_MARKER_SEQUENCE_DIGEST"]
+    saved_markers = globals()["_EXPECTED_GENERATED_MARKERS"]
+    saved_enums = globals()["_EXPECTED_ENUM_MARKERS"]
+    globals()["_GENERATED_MARKER_SEQUENCE_DIGEST"] = _generated_marker_digest(
+        generated_marker_rows(planted)
+    )
+    globals()["_EXPECTED_GENERATED_MARKERS"] = len(generated_marker_rows(planted))
+    globals()["_EXPECTED_ENUM_MARKERS"] = _marker_counts(planted)[0]
+    try:
+        document, constraints = _load(REPO_ROOT)
+        assert not failures(document, constraints, generated=planted)[0]
+    finally:
+        globals()["_GENERATED_MARKER_SEQUENCE_DIGEST"] = saved
+        globals()["_EXPECTED_GENERATED_MARKERS"] = saved_markers
+        globals()["_EXPECTED_ENUM_MARKERS"] = saved_enums
+
+
+def test_the_guard_source_carries_the_marker_plants() -> None:
+    source = Path(__file__).read_text(encoding="utf-8")
+    assert "_GENERATED_MARKER_SEQUENCE_DIGEST = (" in source
+    assert "a generated @enum marker is retyped" in source
+    assert "a same-count marker relocation between two doc blocks" in source
+    assert "relocated_lines[enum_index]" in source
+    assert "generated_marker_rows(" in source
+
+
+def test_the_self_test_keeps_the_marker_verdict() -> None:
+    """A marker plant that goes uncaught must make --self-test non-zero."""
+    tree = ast.parse(Path(__file__).read_text(encoding="utf-8"))
+    func = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_self_test"
+    )
+    zeroes = [
+        node for node in ast.walk(func)
+        if isinstance(node, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "result" for t in node.targets)
+        and isinstance(node.value, ast.Constant)
+        and node.value.value == 0
+    ]
+    # Exactly one ``result = 0`` (the initialiser), and it must precede the
+    # marker loop. A later reset would discard every marker verdict and let a
+    # gutted door print ``OK (N ablations)`` with rc=0.
+    assert len(zeroes) == 1
+    loop = next(
+        node for node in ast.walk(func)
+        if isinstance(node, ast.For)
+        and isinstance(node.iter, ast.Name)
+        and node.iter.id == "marker_cases"
+    )
+    assert any(
+        isinstance(n, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "result" for t in n.targets)
+        and isinstance(n.value, ast.Constant)
+        and n.value.value == 1
+        for n in ast.walk(loop)
+    )
+    assert zeroes[0].lineno < loop.lineno
 
 
 if __name__ == "__main__":

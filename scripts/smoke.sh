@@ -254,6 +254,7 @@ smoke_contracts() {
     # properties are optional. A coordinated regenerate of both halves with
     # re-pinned provenance blob ids kept every wired OpenAPI guard green.
     scripts/test_openapi_required_fields.py
+    scripts/check_openapi_published_enums.py
     # Component-schema property descriptions are published as generated
     # JSDoc @description lines. A byte-preserving co-revert of one line in
     # both artifacts (with provenance blob ids re-pinned) kept all eleven
