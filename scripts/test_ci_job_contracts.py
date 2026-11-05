@@ -3151,6 +3151,54 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 "provide Python 3.15 from python: via COPY --from",
             )
 
+    def test_openapi_contract_gate_is_never_skipped_in_ci(self) -> None:
+        """No CI caller may mention the flag that bypasses the contract gate.
+
+        ``verify-frontend-artifacts.sh`` ends with
+        ``pnpm --filter @soymutdb/api-client check:contract``, guarded by
+        ``SOYMUTDB_CI_SKIP_CONTRACT``. That gate is the only check that
+        re-exports ``app.main:app`` and diffs the fresh document against the
+        committed snapshot, so setting the flag in a CI caller would hide a
+        stale ``openapi.json`` while every unit guard stays green. Local and
+        build-only callers may still use it; the assertion covers CI configs
+        and the shared job bodies they delegate to.
+
+        The name is forbidden outright rather than matched as an assignment:
+        YAML ``key: "1"``, shell ``key=1`` and ``export key=1`` all have to
+        redden, and a commented-out assignment is one edit away from a real
+        one. Document why it stays unset in the script's header instead.
+
+        The companion assertion in
+        ``test_frontend_stage_can_reach_the_openapi_contract_gate`` pins the
+        opposite direction -- that the flag exists and bypasses only this one
+        gate -- so it must stay.
+        """
+        flag = "SOYMUTDB_CI_SKIP_CONTRACT"
+        configs = list(_cnb_config_files())
+        # LEGACY_WORKFLOWS is the mirror's *dispatch* list, not an inventory of
+        # every workflow file: dependency-lock-candidates.yml is a workflow too,
+        # so enumerate the directory instead of trusting a hand-kept tuple.
+        configs += sorted((ROOT / ".github/workflows").glob("*.yml"))
+        configs.append(ROOT / "scripts/ci-job-steps.sh")
+        self.assertEqual(
+            len(configs),
+            len(set(configs)),
+            "a CI caller is listed twice; check the config inventory",
+        )
+        # A guard over an empty or stale inventory is vacuously green. Pin the
+        # floor so deleting or renaming a config cannot silently shrink it.
+        self.assertGreaterEqual(len(configs), 16, "CI config inventory shrank")
+        for config in configs:
+            self.assertTrue(config.is_file(), f"missing CI caller: {config}")
+            body = config.read_text(encoding="utf-8")
+            self.assertNotIn(
+                flag,
+                body,
+                f"{config.relative_to(ROOT)} mentions {flag}; no CI caller may "
+                "set it, because the OpenAPI contract gate is the only check "
+                "that can see a stale snapshot",
+            )
+
     def test_no_stage_image_is_a_dockerfile_path(self) -> None:
         """A Dockerfile belongs in `docker.build`, never in `image:`.
 
