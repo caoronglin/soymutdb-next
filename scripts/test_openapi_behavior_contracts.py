@@ -179,6 +179,14 @@ def failures(document: dict, generated: str, main: str, smoke: str) -> list[str]
     except (ValueError, SyntaxError) as exc:
         found.append(str(exc))
         rate_limited = None
+    # A source + snapshot whole-set co-revert can empty both sides at once:
+    # zero declared 429s equals an empty RATE_LIMITED_OPERATIONS, so every
+    # set-equality check below is vacuously satisfied. Pin the injection site
+    # and a non-empty constant so the set comparisons cannot pass on nothing.
+    if not re.search(r'responses\.setdefault\(\s*"429"', main):
+        found.append("main.py no longer declares the documented 429 response")
+    if rate_limited is not None and not rate_limited:
+        found.append("main.py declares an empty RATE_LIMITED_OPERATIONS")
     if rate_limited is not None:
         for key in sorted(rate_limited - set(four_twenty_nines)):
             found.append(
@@ -351,6 +359,27 @@ def test_dropping_the_429_constant_is_rejected() -> None:
     assert _any(failures(document, generated, dropped, smoke), "no longer declares RATE_LIMITED_OPERATIONS")
 
 
+def test_a_whole_set_429_co_revert_is_rejected() -> None:
+    """Source + snapshot emptied together must fail, not pass vacuously."""
+    document, generated, main, smoke = _load()
+    for path, ops in document["paths"].items():
+        for method, op in ops.items():
+            if isinstance(op, dict) and "responses" in op:
+                op["responses"].pop("429", None)
+    emptied = re.sub(
+        r"RATE_LIMITED_OPERATIONS = \{[^}]*\}",
+        "RATE_LIMITED_OPERATIONS = set()",
+        main,
+        count=1,
+    )
+    assert emptied != main, "whole-set co-revert already applied to the committed tree; setup is not a control"
+    assert "429" not in str(document), "whole-set co-revert left a declared 429 behind; setup is not a control"
+    assert _any(
+        failures(document, generated, emptied, smoke),
+        "empty RATE_LIMITED_OPERATIONS",
+    )
+
+
 def test_dropping_the_error_code_publication_is_rejected() -> None:
     document, generated, main, smoke = _load()
     dropped = main.replace(
@@ -408,6 +437,22 @@ def test_a_genuinely_new_pagination_contract_stays_green() -> None:
     )
 
 
+def _whole_set_co_revert() -> bool:
+    """Whether the committed tree lost an entire declared response set.
+
+    A source + artifact co-revert empties both sides at once, so the setup
+    assertions of the sampling checks fail for a shared reason rather than
+    reporting new defects. Say so once instead of making each reader infer it.
+    """
+    found = failures(*_load())
+    return any(
+        "no longer declares the documented 429" in f
+        or "empty RATE_LIMITED_OPERATIONS" in f
+        or "declares no 500 response" in f
+        for f in found
+    )
+
+
 def main() -> int:
     tests = [
         value
@@ -423,6 +468,13 @@ def main() -> int:
             # report it as a failed check instead of escaping as a traceback.
             problems.append(f"{test.__name__}: {exc or 'assertion failed'}")
     if problems:
+        if _whole_set_co_revert():
+            print(
+                "openapi-behavior-contracts: whole-set co-revert detected "
+                "(a declared response set or its source constant was emptied); "
+                "the FAILs below are its side effects, not new defects",
+                file=sys.stderr,
+            )
         for problem in problems:
             print(f"openapi-behavior-contracts: FAIL: {problem}", file=sys.stderr)
         return 1
