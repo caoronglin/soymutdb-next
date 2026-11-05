@@ -263,9 +263,14 @@ def _names_cargo(text: str) -> bool:
 def foreign_cargo_analyzers(policy: Path) -> list[str]:
     """Names of governance checks that register a Rust cargo analyzer.
 
-    Reads the policy as JSON and inspects each check's ``name``, ``category``,
-    ``command`` and report/accept paths. An unreadable/malformed policy returns
-    a sentinel so the caller fails closed instead of treating it as clean.
+    Reads the policy as JSON and inspects every command-bearing field of each
+    check: ``name``, ``category``, ``command``, ``mutating_command``,
+    ``normalize_recipe`` and the report/accept paths. ``mutating_command`` and
+    ``normalize_recipe`` are consumed as executable text by
+    ``dependency_governance.py``, so a cargo invocation living only there is
+    still a second finding set. An unreadable/malformed policy returns a
+    sentinel so the caller fails closed instead of treating it as clean; a
+    non-object ``checks[]`` entry is malformed the same way, not a skip.
     """
     try:
         document = json.loads(policy.read_text(encoding="utf-8"))
@@ -279,8 +284,14 @@ def foreign_cargo_analyzers(policy: Path) -> list[str]:
     registered: list[str] = []
     for check in checks:
         if not isinstance(check, dict):
-            continue
-        fields = [check.get("name"), check.get("category"), check.get("accept_file")]
+            return ["<policy has a non-object check>"]
+        fields = [
+            check.get("name"),
+            check.get("category"),
+            check.get("accept_file"),
+            check.get("mutating_command"),
+            check.get("normalize_recipe"),
+        ]
         command = check.get("command")
         if isinstance(command, list):
             fields.extend(command)
