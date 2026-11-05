@@ -13,6 +13,7 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
+import re
 import subprocess
 import sys
 import unittest
@@ -29,6 +30,16 @@ guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
 
 REQUIRED = sorted(guard.REQUIRED_GUARD_CALLS)
+
+# Independent reviewed floor on the guard's own --self-test case count. This
+# is a SECOND file: the guard prints a count measured from emitted results, so
+# a shortened case loop shrinks the number and its evidence together. The teeth
+# guard does not audit this guard (its success signature says ``cases``, not
+# ``mutations``), and the plain run never reads the self-test output. Only a
+# collected, independent literal can name a shrunken loop. Keep in step with
+# ``check_contracts_registry_collection._REVIEWED_CASE_FLOOR``; raise both in
+# one reviewed commit when a case is added, and say why.
+_EXPECTED_SELF_TEST_CASES = 46
 
 
 # Exercises the *process* exit code of the canonical ``--self-test`` entry,
@@ -628,6 +639,145 @@ class RegistryCollectionGuardTests(unittest.TestCase):
             guard.wiring_errors(smoke.replace(call, redirected, 1), files, ci), []
         )
 
+
+    def test_self_test_runs_every_reviewed_case(self) -> None:
+        """The emitted case count must meet an independent reviewed floor.
+
+        ``self_test()`` prints ``N cases`` where N is measured from the result
+        lines it emitted. A ``cases[:8]`` edit keeps that summary honest --
+        8 cases, 8 lines, 0 failures -- while dropping most of the probes.
+        Neither the guard's plain run nor the teeth guard reads this output.
+        The collected companion is the only reader, so the floor lives here,
+        in the second file, not beside the count it judges.
+        """
+        source = GUARD_PATH.read_text(encoding="utf-8")
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = guard.self_test()
+        out = buf.getvalue()
+        reported = [
+            int(line.split()[1])
+            for line in out.splitlines()
+            if line.startswith("self-test: ")
+            and line.split()[1].isdigit()
+            and "cases" in line
+        ]
+        self.assertEqual(len(reported), 1, out)
+        self.assertEqual(rc, 0, out)
+        self.assertGreaterEqual(
+            reported[0],
+            _EXPECTED_SELF_TEST_CASES,
+            f"only {reported[0]} mutation case(s) ran; the reviewed floor is "
+            f"{_EXPECTED_SELF_TEST_CASES}. A shrunken case loop would keep "
+            f"the guard, the teeth guard and the whole layer green: {out}",
+        )
+        self.assertEqual(
+            reported[0],
+            sum(
+                1 for line in out.splitlines()
+                if line.startswith("PASS self-test:")
+                or line.startswith("FAIL self-test:")
+            ),
+            out,
+        )
+        # The floor is a literal in both files, not a number one side derives.
+        self.assertIn(
+            f"_REVIEWED_CASE_FLOOR = {_EXPECTED_SELF_TEST_CASES}",
+            source,
+            "the guard's own reviewed floor drifted from the companion's",
+        )
+
+    def test_the_case_loop_walks_the_full_container(self) -> None:
+        """The loop must consume ``cases`` itself, not a hand-picked slice.
+
+        The reviewed floor counts emitted results, so a ``cases[:8]`` edit is
+        caught by the number alone. This AST assertion names the shape too:
+        ``for ... in cases:`` is the reviewed contract, and a reader that
+        quietly walks fewer cases has the same meaning as a guard that checks
+        less. A legitimate new case needs no edit here.
+        """
+        import ast
+
+        tree = ast.parse(GUARD_PATH.read_text(encoding="utf-8"))
+        loops = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.For)
+            and isinstance(node.target, ast.Tuple)
+            and any(
+                isinstance(elt, ast.Name) and elt.id == "mutated_smoke"
+                for elt in node.target.elts
+            )
+        ]
+        self.assertEqual(len(loops), 1, "the case loop shape changed")
+        self.assertIsInstance(loops[0].iter, ast.Name, "the loop is sliced")
+        self.assertEqual(loops[0].iter.id, "cases", "the loop no longer walks cases")
+
+    def test_a_shrunken_case_loop_is_named_by_the_reviewed_floor(self) -> None:
+        """Decisive ablation: slice the loop, the floor must go red.
+
+        Both limbs matter: the shrunken loop must still print a clean-looking
+        ``0 failure(s)`` summary (or the ablation proves nothing), and the
+        reviewed floor must be the thing that turns it red. The companion is
+        collected, so this runs in the contracts layer.
+        """
+        import types
+
+        source = GUARD_PATH.read_text(encoding="utf-8")
+        # Build the shrunken body from whatever loop shape the committed guard
+        # uses, so this ablation proves the floor's two limbs even when the
+        # real tree is itself drifted (a setup assertion would only be a
+        # noisier third door). The loop-shape test above names a real drift.
+        pattern = re.compile(
+            r"    for label, mutated_smoke, mutated_files, mutated_ci in "
+            r"cases(?:\[:\d+\])?:\n"
+        )
+        match = pattern.search(source)
+        self.assertIsNotNone(match, "the case loop shape changed")
+        shrunken = (
+            source[: match.start()]
+            + "    for label, mutated_smoke, mutated_files, mutated_ci in cases[:8]:\n"
+            + source[match.end() :]
+        )
+        self.assertNotEqual(shrunken, source, "ablation did not apply")
+
+        def run(body: str) -> tuple[int, str]:
+            module = types.ModuleType("guard_shrunken")
+            module.__file__ = str(GUARD_PATH)
+            exec(compile(body, str(GUARD_PATH), "exec"), module.__dict__)
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = module.self_test()
+            return rc, buf.getvalue()
+
+        # Control limb: with the floor itself gutted too, the shrunken loop is
+        # a clean-looking short run -- 33 cases, 33 PASS lines, 0 failures.
+        # Without this limb the ablation could be red for an unrelated reason.
+        no_floor = shrunken.replace(
+            "_REVIEWED_CASE_FLOOR = 46\n",
+            "_REVIEWED_CASE_FLOOR = 0\n",
+            1,
+        )
+        self.assertNotEqual(no_floor, shrunken, "floor ablation did not apply")
+        control_rc, control_out = run(no_floor)
+        self.assertEqual(control_rc, 0, control_out)
+        self.assertIn("0 failure(s)", control_out, control_out)
+        emitted = sum(
+            1 for line in control_out.splitlines()
+            if line.startswith("PASS self-test:")
+        )
+        self.assertLess(emitted, _EXPECTED_SELF_TEST_CASES, control_out)
+
+        # Floor limb: the same bytes with the reviewed floor intact go red,
+        # and the message names the shrunken loop rather than a lost probe.
+        rc, out = run(shrunken)
+        self.assertEqual(rc, 1, out)
+        self.assertIn("below the reviewed floor", out, out)
+        self.assertEqual(
+            sum(1 for line in out.splitlines() if line.startswith("PASS self-test:")),
+            emitted,
+            "the floor must not change which probes run, only judge the count",
+        )
 
 
 if __name__ == "__main__":
