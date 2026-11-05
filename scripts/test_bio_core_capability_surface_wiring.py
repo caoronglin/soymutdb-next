@@ -52,6 +52,24 @@ def test_regression_and_wiring_suites_are_registered() -> None:
     assert REGRESSION.is_file() and WIRING.is_file()
 
 
+def test_smoke_contracts_layer_does_not_claim_the_surface_guard() -> None:
+    """The doc and the wiring agree: smoke.sh owns neither suite.
+
+    Three in-flight PRs already append to the same ``tests=(...)`` tail, so an
+    insertion here is a guaranteed content conflict for no added coverage --
+    both suites already run in verify-bio-core.sh's wheel venv. Pin the
+    deliberate absence so a future "helpful" edit cannot silently move the
+    guard into a layer that has no Rust/3.15 contract to enforce.
+    """
+    smoke = (ROOT / "scripts" / "smoke.sh").read_text(encoding="utf-8")
+    assert "test_bio_core_capability_surface" not in smoke
+    doc = (ROOT / "docs" / "dev" / "bio-core-capability-surface.md").read_text(
+        encoding="utf-8"
+    )
+    assert "scripts/smoke.sh" in doc
+    assert "不" in doc and "tests=(...)" in doc
+
+
 def test_removing_wiring_is_detected() -> None:
     """Negative control: stripping the guard invocations must break the pin."""
     text = (

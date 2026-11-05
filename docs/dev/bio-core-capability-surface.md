@@ -40,16 +40,20 @@
 - `scripts/verify-bio-core.sh`：构建前 `--self-test` + 现树检查；wheel venv 建好
   后跑两份回归套件（那一层才有 pytest）。插入位置在数值 parity 步骤**之前**，
   与在飞 PR 在该文件里的 hunk 不重叠。
-- `scripts/smoke.sh` `--profile contracts` 的 `tests=(...)` 数组末尾收集两份套件，
-  使纯 contracts 层（无 Rust/3.15）也能拦住能力面漂移。
+- 两份回归套件只由 `verify-bio-core.sh` 的 wheel venv 收集：**不**改
+  `scripts/smoke.sh` 的 `tests=(...)` 数组。该数组尾部已有三条在飞 PR 插入守卫，
+  再插一处必然产生内容冲突；把它们留在 bio-core 门禁里，覆盖不丢且不必替别的
+  PR 排 rebase 顺序。纯 contracts 层因此**不**承担能力面漂移的判定，这一点由
+  接线钉住，别照旧文档去 smoke.sh 里找调用。
 - 接线本身由 `scripts/test_bio_core_capability_surface_wiring.py` 钉住：删调用、
-  删收集、删 `--self-test` 都必须转红；该文件只读字节，避开
+  删回归套件收集、删 `--self-test` 都必须转红；该文件只读字节，避开
   `test_ci_job_contracts.py` 这个多 PR 共享热点。
 
 ## 不改的
 
 不碰 `apps/web/**`、`openapi.json` / `openapi.d.ts`、`main.py`、
-`test_ci_job_contracts.py`、`check_bio_core_capability_parity.py`。判定只读源码，
+`test_ci_job_contracts.py`、`check_bio_core_capability_parity.py`、
+`scripts/smoke.sh`。判定只读源码，
 不改变任何端点行为，不新增运行时依赖。真 wheel / `cargo` / 3.15 / PostgreSQL /
 Playwright 的验证仍归各自 CI，本机不代签。
 
