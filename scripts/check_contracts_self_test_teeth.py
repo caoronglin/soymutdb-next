@@ -206,30 +206,204 @@ _DRIFT_PLANTS: tuple[tuple[str, str, str, str], ...] = (
         "    return counts  # planted drift: detection disabled\n",
         "the collector finds no hardcoded strings",
     ),
+    (
+        "scripts/check_api_error_code_vocabulary.py",
+        '    """Return the list of contract violations (empty means the tree is clean)."""\n',
+        '    """Return the list of contract violations (empty means the tree is clean)."""\n'
+        "    return []  # planted drift: detection disabled\n",
+        "the vocabulary check accepts every drift",
+    ),
+    (
+        "scripts/check_error_code_catalog.py",
+        "            problems = check_tree(tree)\n",
+        "            problems = []  # planted drift: the planted trees are never read\n",
+        "the catalog self-test never reads its planted trees",
+    ),
+    (
+        "scripts/check_error_code_doc_counts.py",
+        "    problems: list[str] = []\n    try:\n        counts = measured(root)\n",
+        "    problems: list[str] = []\n    return problems  # planted drift: detection disabled\n"
+        "    try:\n        counts = measured(root)\n",
+        "the doc counts accept every stale number",
+    ),
+    (
+        "scripts/check_error_code_gate_wiring.py",
+        '    problems: list[str] = []\n    body = contracts_body(root)\n',
+        '    problems: list[str] = []\n    return problems  # planted drift: detection disabled\n'
+        "    body = contracts_body(root)\n",
+        "an unwired gate is never reported",
+    ),
+    (
+        "scripts/check_mcp_manifest_reconcile.py",
+        '    """Return named failures; empty means the declarations agree."""\n',
+        '    """Return named failures; empty means the declarations agree."""\n'
+        "    return []  # planted drift: detection disabled\n",
+        "manifest drift is never reported",
+    ),
+    (
+        "scripts/check_mcp_release_binding.py",
+        '    """Return human-readable failures; empty means the contract holds."""\n',
+        '    """Return human-readable failures; empty means the contract holds."""\n'
+        "    return []  # planted drift: detection disabled\n",
+        "release binding drift is never reported",
+    ),
+    (
+        "scripts/check_openapi_field_constraints.py",
+        '    """Return human-readable failures; empty means the contract is pinned."""\n',
+        '    """Return human-readable failures; empty means the contract is pinned."""\n'
+        "    return []  # planted drift: detection disabled\n",
+        "field constraint drift is never reported",
+    ),
+    (
+        "scripts/check_openapi_operation_annotations.py",
+        "    rows = _snapshot_rows(document)\n    found: list[str] = []\n",
+        "    rows = {}  # planted drift: the annotations are never read\n"
+        "    found: list[str] = []\n",
+        "annotation drift is never reported",
+    ),
+    (
+        "scripts/check_openapi_operation_id_floor.py",
+        '    """Return human-readable failures; empty means the contract is pinned."""\n',
+        '    """Return human-readable failures; empty means the contract is pinned."""\n'
+        "    return []  # planted drift: detection disabled\n",
+        "operationId drift is never reported",
+    ),
+    (
+        "scripts/check_openapi_operation_parameter_floor.py",
+        '    """Return human-readable failures; empty means the contract is pinned."""\n',
+        '    """Return human-readable failures; empty means the contract is pinned."""\n'
+        "    return []  # planted drift: detection disabled\n",
+        "parameter drift is never reported",
+    ),
+    (
+        "scripts/check_openapi_response_surface.py",
+        '    """Return human-readable failures; empty means the contract is pinned."""\n',
+        '    """Return human-readable failures; empty means the contract is pinned."""\n'
+        "    return []  # planted drift: detection disabled\n",
+        "response surface drift is never reported",
+    ),
+    (
+        "scripts/check_variant_summary_assembly_consistency.py",
+        "def run(visibility: Path, stats: Path) -> list[str]:\n",
+        "def run(visibility: Path, stats: Path) -> list[str]:\n"
+        "    return []  # planted drift: detection disabled\n",
+        "the cross-assembly exclusion is never reported",
+    ),
 )
 
-# Guards whose self-test prints one line per caught case. The evidence is the
-# N distinguished ``PASS``/``ok`` lines in the real output, matched against the
-# count the same run claims: ``N cases`` / ``N mutations`` / ``N ... cases``.
-# A body gutted to ``print(<pinned summary>); return 0`` keeps the signature and
-# repeats the count -- both are strings a mutator copies -- while printing no
-# per-case line at all. Measured on live main before this row was checked: nine
-# of the ten members kept the whole contracts layer green that way.
-_EVIDENCE_PER_CASE: frozenset[str] = frozenset(
-    {
+# A second plant per wired guard, at the self-test entry point instead of at a
+# check: stop the plain run reading the committed tree. This is the shape the
+# per-case evidence floor cannot see. A guard whose self-test plants its own
+# mutations in memory or on temp copies prints every ``ok: <plant> -> caught``
+# line whether or not the plain run reads anything, so a gutted entry point
+# keeps the signature, keeps the declared count and keeps the evidence lines --
+# while the guard swears the committed tree is clean. Measured on 999a39b3:
+# check_error_code_catalog.self_test with ``problems = []`` before each
+# ``check_tree(tree)`` kept all twelve per-case lines and the whole contracts
+# layer at SMOKE PASS.
+#
+# So every wired guard carries both plants, and the probe requires the wired
+# ``--self-test`` to stay green *and* the plain run to report the untouched tree
+# as clean. Only the second half is a signal.
+#
+# (path, anchor, replacement)
+_SELF_TEST_GUTS: tuple[tuple[str, str, str], ...] = (
+    (
         "scripts/check_api_error_code_vocabulary.py",
+        '    problems = check(args.root)\n',
+        '    problems = []  # planted drift: the plain run stops reading the real tree\n',
+    ),
+    (
+        "scripts/check_app_shell_assets.py",
+        '    failures = run()\n',
+        '    failures = []  # planted drift: the plain run stops reading the real tree\n',
+    ),
+    (
+        "scripts/check_bio_core_wheel_abi.py",
+        '        failures += source_failures()\n',
+        '        failures += []  # planted drift: the plain run stops reading the real tree\n',
+    ),
+    (
         "scripts/check_error_code_catalog.py",
+        '    clean = check_tree(ROOT)\n',
+        '    clean = []  # planted drift: the plain run stops reading the real tree\n',
+    ),
+    (
         "scripts/check_error_code_doc_counts.py",
+        '    problems = check(ROOT)\n',
+        '    problems = []  # planted drift: the plain run stops reading the real tree\n',
+    ),
+    (
         "scripts/check_error_code_gate_wiring.py",
+        '    problems = check(ROOT)\n',
+        '    problems = []  # planted drift: the plain run stops reading the real tree\n',
+    ),
+    (
         "scripts/check_mcp_manifest_reconcile.py",
+        '    failures = check(\n',
+        '    failures = []  # planted drift: the plain run reads nothing\n    check(\n',
+    ),
+    (
         "scripts/check_mcp_release_binding.py",
-        "scripts/check_openapi_operation_id_floor.py",
-        "scripts/check_openapi_operation_parameter_floor.py",
+        '        failures = check(spec, _read(MANIFEST_PY), _read(SERVER_PY))\n',
+        '        failures = []  # planted drift: the plain run stops reading the real tree\n',
+    ),
+    (
+        "scripts/check_openapi_auth_surface.py",
+        '    found = failures(*_load())\n',
+        '    found = []  # planted drift: the plain run stops reading the real tree\n',
+    ),
+    (
+        "scripts/check_openapi_baseline_sync.py",
+        '    problems = failures(ref=args.ref, base=args.base)\n',
+        '    problems = []  # planted drift: the plain run stops reading the real tree\n',
+    ),
+    (
         "scripts/check_openapi_field_constraints.py",
-        "scripts/check_openapi_response_surface.py",
+        "    found = failures()\n",
+        "    found = []  # planted drift: the plain run reads nothing\n",
+    ),
+    (
+        "scripts/check_openapi_inline_body_integrity.py",
+        '    found = failures(*_load())\n',
+        '    found = []  # planted drift: the plain run stops reading the real tree\n',
+    ),
+    (
         "scripts/check_openapi_operation_annotations.py",
+        "    problems = check()\n",
+        "    problems = []  # planted drift: the plain run reads nothing\n",
+    ),
+    (
+        "scripts/check_openapi_operation_id_floor.py",
+        '    found = failures()\n',
+        '    found = []  # planted drift: the plain run stops reading the real tree\n',
+    ),
+    (
+        "scripts/check_openapi_operation_parameter_floor.py",
+        '    found = failures()\n',
+        '    found = []  # planted drift: the plain run stops reading the real tree\n',
+    ),
+    (
+        "scripts/check_openapi_published_enums.py",
+        '    problems, compared = failures(document, constraints)\n',
+        '    problems, compared = [], 0  # planted drift: the plain run reads nothing\n',
+    ),
+    (
+        "scripts/check_openapi_response_surface.py",
+        '    found = failures()\n',
+        '    found = []  # planted drift: the plain run stops reading the real tree\n',
+    ),
+    (
         "scripts/check_variant_summary_assembly_consistency.py",
-    }
+        '    problems = run(args.visibility, args.stats)\n',
+        '    problems = []  # planted drift: the plain run stops reading the real tree\n',
+    ),
+    (
+        "scripts/check_visible_i18n.py",
+        '    counts = collect(ROOT)\n    if args.update_baseline:\n',
+        '    counts = {}  # planted drift: the plain run reads nothing\n'
+        '    if args.update_baseline:\n',
+    ),
 )
 
 # A per-case line for one caught mutation: ``PASS self-test: <case> -> caught``,
@@ -250,6 +424,32 @@ _DECLARED_CASES = re.compile(
 )
 
 _DRIFT_COVERED: frozenset[str] = frozenset(p for p, _, _, _ in _DRIFT_PLANTS)
+_GUT_COVERED: frozenset[str] = frozenset(p for p, _, _ in _SELF_TEST_GUTS)
+
+# Who is audited for per-case evidence: the drift-planted guards whose success
+# line states a case count. The audit is the *second* leg of the design -- a
+# drift plant needs a check to disable, a gutter plant needs a plain run to gut,
+# and a guard with neither is distinguished from a ``print(<summary>); return 0``
+# body only by the per-case lines its output carries. Listed as literals rather
+# than derived from the plants, so a guard cannot be excused by editing the
+# plant table alone. Measured on 999a39b3: every member passes on the committed
+# tree, so membership is a property of the guards, not a favour granted here.
+EVIDENCE_MEMBERS: frozenset[str] = frozenset(
+    {
+        "scripts/check_api_error_code_vocabulary.py",
+        "scripts/check_error_code_catalog.py",
+        "scripts/check_error_code_doc_counts.py",
+        "scripts/check_error_code_gate_wiring.py",
+        "scripts/check_mcp_manifest_reconcile.py",
+        "scripts/check_mcp_release_binding.py",
+        "scripts/check_openapi_field_constraints.py",
+        "scripts/check_openapi_operation_annotations.py",
+        "scripts/check_openapi_operation_id_floor.py",
+        "scripts/check_openapi_operation_parameter_floor.py",
+        "scripts/check_openapi_response_surface.py",
+        "scripts/check_variant_summary_assembly_consistency.py",
+    }
+)
 
 
 def contracts_function(smoke: str) -> str:
@@ -433,15 +633,15 @@ def evidence_errors(results: dict[str, tuple[int, str]]) -> list[str]:
     count at all loses its ``_SIGNATURES`` marker.
     """
     problems: list[str] = []
-    for path in sorted(_EVIDENCE_PER_CASE):
+    for path in sorted(EVIDENCE_MEMBERS):
         rc, output = results.get(path, (1, "guard was not probed"))
         if rc != 0:
             continue  # an unreachable self-test is reported by teeth_errors
         declared, emitted = evidence_lines(output)
         if declared is None:
             problems.append(
-                f"{path} is listed in _EVIDENCE_PER_CASE but its success line "
-                "declares no single case count to measure the evidence against"
+                f"{path} is audited for per-case evidence but its success line "
+                "declares no single case count to measure it against"
             )
         elif emitted < declared:
             problems.append(
@@ -475,7 +675,8 @@ def check(
     smoke: str | None = None,
     results: dict[str, tuple[int, str]] | None = None,
     root: Path = ROOT,
-    drift_results: dict[str, tuple[int, str]] | None = None,
+    drift_results: dict[object, tuple[int, str]] | None = None,
+    gut_results: dict[object, tuple[int, str]] | None = None,
 ) -> list[str]:
     text = smoke if smoke is not None else SMOKE.read_text(encoding="utf-8")
     try:
@@ -487,58 +688,90 @@ def check(
         results = probe(wired, root=root)
     if drift_results is None:
         drift_results = drift_probe(wired, root=root)
+    if gut_results is None:
+        gut_results = gut_probe(wired, root=root)
     return (
         problems
         + teeth_errors(wired, results)
         + evidence_errors(results)
         + drift_errors(wired, drift_results)
+        + gut_errors(wired, gut_results)
     )
+
+
+def _plant(
+    root: Path, path: str, fragment: str, replacement: str, argv: list[str], label: str
+) -> tuple[int, str]:
+    """Apply one plant to the real tree, run ``argv``, restore the bytes."""
+    target = root / path
+    try:
+        original = target.read_text(encoding="utf-8")
+    except OSError as exc:
+        return 1, f"could not read {path}: {exc}"
+    if fragment not in original:
+        return 1, f"{label} anchor missing from {path}"
+    # Sanity: the plant must not be a no-op, or it proves nothing.
+    mutated = original.replace(fragment, replacement, 1)
+    if mutated == original:
+        return 1, f"{label} for {path} changed nothing"
+    try:
+        target.write_text(mutated, encoding="utf-8")
+        try:
+            result = subprocess.run(
+                argv, capture_output=True, text=True, cwd=root, timeout=90, check=False
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return 1, f"could not run {path}: {exc}"
+        return result.returncode, result.stdout + result.stderr
+    finally:
+        target.write_text(original, encoding="utf-8")
 
 
 def drift_probe(
     wired: dict[str, list[str]], root: Path = ROOT, runner: list[str] | None = None
-) -> dict[str, tuple[int, str]]:
+) -> dict[object, tuple[int, str]]:
     """Plant one drift per guard and run its wired ``--self-test``.
 
-    Returns path -> (rc, output) for the *mutated* tree. A guard that detects
-    the plant exits non-zero; a guard that only prints a signature exits 0.
+    Returns (path, "wire") -> (rc, output) for the *mutated* tree. A guard that
+    detects the plant exits non-zero; a guard that only prints a signature
+    exits 0.
     """
     base = runner if runner is not None else [sys.executable]
-    out: dict[str, tuple[int, str]] = {}
+    out: dict[object, tuple[int, str]] = {}
     for path, fragment, replacement, _why in _DRIFT_PLANTS:
         if path not in wired:
             continue
-        target = root / path
-        try:
-            original = target.read_text(encoding="utf-8")
-        except OSError as exc:
-            out[path] = (1, f"could not read {path}: {exc}")
+        out[(path, "wire")] = _plant(
+            root, path, fragment, replacement, base + [path] + wired[path], "drift plant"
+        )
+    return out
+
+
+def gut_probe(
+    wired: dict[str, list[str]], root: Path = ROOT, runner: list[str] | None = None
+) -> dict[object, tuple[int, str]]:
+    """Stop the plain run reading the tree; run the wired call, then the plain one.
+
+    Keys are ``(path, "self-test")`` and ``(path, "plain")``: the same plant,
+    two calls. The first must stay green, the second must report the untouched
+    tree as clean.
+    """
+    base = runner if runner is not None else [sys.executable]
+    out: dict[object, tuple[int, str]] = {}
+    for path, fragment, replacement in _SELF_TEST_GUTS:
+        if path not in wired:
             continue
-        if fragment not in original:
-            out[path] = (1, f"drift plant anchor missing from {path}")
-            continue
-        # Sanity: the plant must not be a no-op, or it proves nothing.
-        mutated = original.replace(fragment, replacement, 1)
-        if mutated == original:
-            out[path] = (1, f"drift plant for {path} changed nothing")
-            continue
-        try:
-            target.write_text(mutated, encoding="utf-8")
-            argv = base + [path] + wired[path]
-            try:
-                result = subprocess.run(
-                    argv, capture_output=True, text=True, cwd=root, timeout=90, check=False
-                )
-                out[path] = (result.returncode, result.stdout + result.stderr)
-            except (OSError, subprocess.TimeoutExpired) as exc:
-                out[path] = (1, f"could not run {path}: {exc}")
-        finally:
-            target.write_text(original, encoding="utf-8")
+        out[(path, "self-test")] = _plant(
+            root, path, fragment, replacement, base + [path] + wired[path], "gut plant"
+        )
+        out[(path, "plain")] = _plant(
+            root, path, fragment, replacement, base + [path], "gut plant"
+        )
     return out
 
 
 def drift_errors(
-    wired: dict[str, list[str]], results: dict[str, tuple[int, str]]
+    wired: dict[str, list[str]], results: dict[object, tuple[int, str]]
 ) -> list[str]:
     problems: list[str] = []
     for path in sorted(_DRIFT_COVERED):
@@ -547,7 +780,7 @@ def drift_errors(
                 f"pinned drift plant {path!r} targets a guard that is not wired"
             )
             continue
-        rc, output = results.get(path, (0, "guard was not probed"))
+        rc, _output = results.get((path, "wire"), (0, "guard was not probed"))
         if rc == 0:
             why = next(w for p, _, _, w in _DRIFT_PLANTS if p == path)
             problems.append(
@@ -557,24 +790,56 @@ def drift_errors(
     return problems
 
 
+def gut_errors(
+    wired: dict[str, list[str]], results: dict[object, tuple[int, str]]
+) -> list[str]:
+    """A gutted entry point keeps the self-test green; the plain run betrays it."""
+    problems: list[str] = []
+    for path in sorted(_GUT_COVERED):
+        if path not in wired:
+            problems.append(
+                f"pinned self-test gut {path!r} targets a guard that is not wired"
+            )
+            continue
+        self_rc, self_output = results.get((path, "self-test"), (0, "guard was not probed"))
+        plain_rc, _plain_output = results.get((path, "plain"), (0, "guard was not probed"))
+        if self_rc != 0:
+            # The gutter has to survive the guard's own --self-test, or
+            # something other than the plain run caught it and the plant says
+            # nothing about the entry point.
+            problems.append(
+                f"{path} --self-test went red on a plant that only stops the plain "
+                f"run reading the real tree: {self_output.strip()[:160]}"
+            )
+        if plain_rc != 0:
+            problems.append(
+                f"{path} still failed its plain run after the entry point stopped "
+                "reading the real tree, so the plant proved nothing"
+            )
+    return problems
+
+
 def drift_floor_errors() -> list[str]:
-    """Every wired guard must be classed as drift-planted or per-case evidence."""
+    """Every wired guard needs both plants; neither set can absorb the other."""
     problems = [
-        f"wired --self-test guard {p!r} has no drift plant in _DRIFT_PLANTS "
-        "and is not listed in _EVIDENCE_PER_CASE"
-        for p in sorted(set(_WIRED_SELF_TESTS) - _DRIFT_COVERED - _EVIDENCE_PER_CASE)
+        f"wired --self-test guard {p!r} has no drift plant in _DRIFT_PLANTS"
+        for p in sorted(set(_WIRED_SELF_TESTS) - _DRIFT_COVERED)
     ]
     problems += [
-        f"guard {p!r} is listed in _EVIDENCE_PER_CASE and also has a drift plant"
-        for p in sorted(_DRIFT_COVERED & _EVIDENCE_PER_CASE)
+        f"drift-planted guard {p!r} has no _SELF_TEST_GUTS entry"
+        for p in sorted(_DRIFT_COVERED - _GUT_COVERED)
     ]
     problems += [
         f"drift plant {p!r} targets a guard that is not wired"
         for p in sorted(_DRIFT_COVERED - set(_WIRED_SELF_TESTS))
     ]
     problems += [
-        f"per-case-evidence guard {p!r} is not wired"
-        for p in sorted(_EVIDENCE_PER_CASE - set(_WIRED_SELF_TESTS))
+        f"self-test gut {p!r} targets a guard that is not wired"
+        for p in sorted(_GUT_COVERED - set(_WIRED_SELF_TESTS))
+    ]
+    problems += [
+        f"self-test gut {p!r} targets a guard with no drift plant"
+        for p in sorted(_GUT_COVERED - _DRIFT_COVERED)
     ]
     return problems
 
@@ -721,13 +986,12 @@ def self_test() -> int:
         )
     )
 
-    # 7. The cell the evidence row exists to close, stated in output form: a
+    # 7. The cell the evidence audit exists to close, stated in output form: a
     # self-test gutted to ``print(<pinned summary>); return 0`` keeps both the
-    # signature and the declared count, because both are strings the mutator
-    # copies. What it cannot copy is the evidence. Asserted directly against a
-    # member -- the thin guard used above has no count to compare -- and the
+    # signature and the declared count, because both are strings a mutator
+    # copies. What it cannot copy is the evidence. Asserted directly, and the
     # negative half is asserted too, or this case would pass on any wiring.
-    member = sorted(_EVIDENCE_PER_CASE)[0]
+    member = sorted(EVIDENCE_MEMBERS)[0]
     forged = "self-test: 12 cases, 0 failure(s)\n"
     caught = evidence_errors({member: (0, forged)})
     cases.append(
@@ -739,6 +1003,31 @@ def self_test() -> int:
             and "printed 0 per-case line(s)" in caught[0]
             and evidence_errors({target: (0, forged)}) == []
             and not evidence_errors(control),
+        )
+    )
+
+    # 8. The cell this guard kept paying for one branch over: a guard whose
+    # self-test plants its own mutations emits every per-case line whether or
+    # not the plain run reads anything, so gutting the entry point keeps the
+    # signature, the count and the evidence. Assert both limbs again -- the
+    # replayed self-test must stay green, and the plain run is what catches it.
+    gutted = "scripts/check_error_code_catalog.py"
+    replayed = (0, "  ok: planted 'extra code' -> caught (1 problem(s))\n"
+                   "error-code catalog self-test passed (12 negative cases + clean tree)\n")
+    self_test_blind = not teeth_errors(wired, {**control, gutted: replayed})
+    plain_caught = any(
+        gutted in f
+        for f in gut_errors(
+            wired,
+            {(gutted, "self-test"): replayed, (gutted, "plain"): (1, "")},
+        )
+    )
+    cases.append(
+        (
+            "an entry point gutted to replay PASS keeps the self-test green "
+            "and is caught by the plain run",
+            gutted,
+            self_test_blind and plain_caught,
         )
     )
 
