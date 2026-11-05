@@ -75,6 +75,22 @@ would make the pin self-referential. ``--self-test`` injects one-sided and
 coordinated drifts into copies of the bytes and asserts each is caught; the
 clean tree must pass.
 
+The component-to-component ``$ref`` wiring is a third surface in the same
+file: 229 property-level refs inside ``components.schemas``, across 145 owner
+schemas and 140 targets. ``openapi-typescript`` renders each as a
+``components["schemas"]["<target>"]`` line in that owner's generated block.
+No landed fixed point reads *which* component a property points at: the
+snapshot contract only checks a ref resolves, the body baselines only read
+``$ref`` bodies under ``paths``, and ``_PINNED_ARTIFACTS`` is re-pinned in the
+same deliberate act as a regenerate. A byte-preserving swap of two array-item
+refs inside ``AdminDashboardSeries`` in BOTH halves, with both blob ids
+honestly re-pinned, left every wired guard and ``SMOKE PASS`` green on live
+``c3e88a49b``. It is a pure permutation: counts, owners, targets and the
+``(owner, target)`` multiset are unchanged, so only a *positional* literal can
+see it. ``_SCHEMA_REF_DIGEST`` (snapshot path rows) and the independent
+``_CLIENT_SCHEMA_REF_DIGEST`` (client field/target rows) are those two fixed
+points; Door 8 names a one-sided edit by owner, field and target.
+
 Usage:
     python3 scripts/check_openapi_required_fields.py
     python3 scripts/check_openapi_required_fields.py --self-test
@@ -142,6 +158,40 @@ _EXPECTED_VALUE_BY_KEYWORD: dict[str, int] = {
 # A to schema B keeps the total and the digest's multiset shape is not enough
 # on its own, so these are checked too. Kept as a literal floor.
 _EXPECTED_BY_SCHEMA_TOP: dict[str, int] = {}  # filled by _by_schema_top() below
+
+# Independent fixed point on the component-to-component ``$ref`` wiring.
+# ``components.schemas`` publishes 229 property-level ``$ref`` nodes across 145
+# owner schemas, naming 140 distinct targets. ``openapi-typescript`` renders
+# each one as a ``components["schemas"]["<target>"]`` line inside that owner's
+# block in the generated client -- the TypeScript a consumer compiles against.
+# No landed fixed point reads *which* component a property points at:
+# ``test_openapi_snapshot_contract.py`` only checks every ref resolves to a
+# defined name, and the body-integrity baselines only pin ``$ref`` bodies under
+# ``paths.*.responses`` / ``requestBody``, never the wiring inside a schema.
+#
+# Decisive ablation on live bytes: swap the two array-item refs inside
+# ``AdminDashboardSeries`` (``ImportThroughputPoint`` <-> ``QueryLatencyPoint``)
+# in BOTH artifacts and honestly re-pin the two provenance blob ids -- every
+# wired ``check_openapi_*`` guard, every ``test_openapi_*`` suite and the whole
+# contracts layer stay ``rc=0`` / green, while the generated client silently
+# types one field as the other model. Two independent literals are the fix:
+# re-pinning only the snapshot side cannot silence the client door, and a
+# co-revert that makes both halves agree still moves both digests.
+_SCHEMA_REF_DIGEST = (
+    "9cf04fbccc712ae8a19fab2af092a60ffba16a8c98016bac0c952b0fa321cbc2"
+)
+_EXPECTED_SCHEMA_REF_ROWS = 229
+_EXPECTED_SCHEMA_REF_OWNERS = 145
+_EXPECTED_SCHEMA_REF_TARGETS = 140
+
+# The generated half is pinned by a *second* independent literal, not derived
+# from the snapshot under guard. sha256 of the canonical sorted
+# ``(owner, target, occurrence index)`` rows of the client's
+# ``components["schemas"]["..."]`` lines. Read from nowhere.
+_CLIENT_SCHEMA_REF_DIGEST = (
+    "5f08c6ae449843991de05c9a230b5160f4555708435eb4ea040dd5884b7bb8c1"
+)
+_EXPECTED_CLIENT_SCHEMA_REF_ROWS = 229
 
 
 def rows(document: dict[str, Any]) -> list[tuple[str, str]]:
@@ -312,6 +362,115 @@ def generated_tuples(generated: str) -> dict[tuple[str, str], tuple[str, ...]]:
     return out
 
 
+def schema_ref_rows(document: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Canonical (owner, dotted path, target) rows for every intra-schema ref.
+
+    Only ``#/components/schemas/...`` refs *inside* ``components.schemas`` are
+    read: the path-level body refs are owned by the body-integrity baselines,
+    and folding them here would make one failure name two different surfaces.
+    """
+    out: list[tuple[str, str, str]] = []
+
+    def walk(node: Any, path: str, owner: str) -> None:
+        if isinstance(node, dict):
+            ref = node.get("$ref")
+            if isinstance(ref, str) and ref.startswith("#/components/schemas/"):
+                out.append((owner, path, ref.split("/")[-1]))
+            for name, value in node.items():
+                if name != "$ref":
+                    walk(value, f"{path}/{name}" if path else name, owner)
+        elif isinstance(node, list):
+            for index, value in enumerate(node):
+                walk(value, f"{path}/{index}", owner)
+
+    for name, schema in document.get("components", {}).get("schemas", {}).items():
+        walk(schema, "", name)
+    return out
+
+
+def _schema_ref_digest(rows_: list[tuple[str, str, str]]) -> str:
+    canonical = sorted(f"{owner}|{path}|{target}" for owner, path, target in rows_)
+    blob = "\n".join(["soymutdb-schema-ref-wiring/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def client_schema_ref_rows(generated: str) -> list[tuple[str, str, str, str]]:
+    """Canonical (owner, field, target, occurrence index) rows from the client.
+
+    Reads only the ``components.schemas`` interface block, so a
+    ``parameters`` / ``responses`` / ``requestBody`` sub-block (also 8-space
+    indented) cannot be mistaken for a component definition. Each ref line's
+    property name is captured, so a same-count *permutation* that swaps two
+    targets between two fields moves the client digest just as it moves the
+    snapshot's positional digest -- a multiset of targets alone would be
+    blind to exactly that drift.
+    """
+    start = generated.find("export interface components {")
+    if start < 0:
+        return []
+    schemas_at = generated.find("    schemas: {", start)
+    if schemas_at < 0:
+        return []
+    lines = generated[schemas_at:].splitlines(keepends=True)
+    close = next(
+        (i for i, line in enumerate(lines) if i > 0 and line.rstrip("\n") == "    };"),
+        len(lines),
+    )
+    block = "".join(lines[:close])
+    defs = list(re.finditer(r"^        ([A-Za-z_][A-Za-z0-9_]*): \{$", block, re.M))
+    # One property line may name the target: "field?: components[...][...];",
+    # "[key: string]: components[...][...];", or a union "T | null;".
+    ref_line = re.compile(
+        r'^[ \t]+(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*)|'
+        r'\[key: string\])\??:[^\n;]*?components\["schemas"\]\["([^"]+)"\]',
+        re.M,
+    )
+    out: list[tuple[str, str, str, str]] = []
+    for i, match in enumerate(defs):
+        end = defs[i + 1].start() if i + 1 < len(defs) else len(block)
+        body = block[match.start() : end]
+        seen: dict[tuple[str, str], int] = {}
+        for prop in ref_line.finditer(body):
+            field = prop.group(1) or prop.group(2) or "[key: string]"
+            target = prop.group(3)
+            key = (field, target)
+            index = seen.get(key, 0)
+            seen[key] = index + 1
+            out.append((match.group(1), field, target, str(index)))
+    return out
+
+
+def _client_schema_ref_digest(rows_: list[tuple[str, str, str, str]]) -> str:
+    canonical = sorted(
+        f"{owner}|{field}|{target}|{index}"
+        for owner, field, target, index in rows_
+    )
+    blob = "\n".join(["soymutdb-client-schema-ref-wiring/v2", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _ref_field(path: str) -> str:
+    """The generated client's field name for a snapshot $ref path.
+
+    ``properties/<field>/...`` maps to ``<field>``; a free-form map's
+    ``properties/<field>/additionalProperties`` renders in the client as an
+    index signature ``[key: string]`` rather than the declared field name.
+    """
+    parts = path.split("/")
+    if len(parts) > 1 and parts[0] == "properties":
+        if "additionalProperties" in parts:
+            return "[key: string]"
+        return parts[1]
+    return path
+
+
+def _ref_multiset(rows_: list[tuple[str, str, str]]) -> dict[tuple[str, str], int]:
+    """(owner, target) -> count, the shape both halves must agree on."""
+    out: dict[tuple[str, str], int] = {}
+    for owner, _path, target in rows_:
+        out[(owner, target)] = out.get((owner, target), 0) + 1
+    return out
+
 def failures(
     *,
     snapshot: str | None = None,
@@ -322,6 +481,12 @@ def failures(
     value_digest: str | None = None,
     expected_value_rows: int | None = None,
     value_by_keyword: dict[str, int] | None = None,
+    schema_ref_digest: str | None = None,
+    client_ref_digest: str | None = None,
+    expected_ref_rows: int | None = None,
+    expected_ref_owners: int | None = None,
+    expected_ref_targets: int | None = None,
+    expected_client_ref_rows: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -349,6 +514,34 @@ def failures(
         _EXPECTED_VALUE_BY_KEYWORD if value_by_keyword is None else value_by_keyword
     )
     value_rows_ = value_rows(document)
+    pinned_ref_digest = (
+        _SCHEMA_REF_DIGEST if schema_ref_digest is None else schema_ref_digest
+    )
+    pinned_client_ref_digest = (
+        _CLIENT_SCHEMA_REF_DIGEST
+        if client_ref_digest is None
+        else client_ref_digest
+    )
+    pinned_ref_rows = (
+        _EXPECTED_SCHEMA_REF_ROWS if expected_ref_rows is None else expected_ref_rows
+    )
+    pinned_ref_owners = (
+        _EXPECTED_SCHEMA_REF_OWNERS
+        if expected_ref_owners is None
+        else expected_ref_owners
+    )
+    pinned_ref_targets = (
+        _EXPECTED_SCHEMA_REF_TARGETS
+        if expected_ref_targets is None
+        else expected_ref_targets
+    )
+    pinned_client_ref_rows = (
+        _EXPECTED_CLIENT_SCHEMA_REF_ROWS
+        if expected_client_ref_rows is None
+        else expected_client_ref_rows
+    )
+    ref_rows_ = schema_ref_rows(document)
+    client_ref_rows_ = client_schema_ref_rows(generated)
 
     # Door 1 -- independent fixed point over the whole surface.
     actual = _digest(rows_)
@@ -461,6 +654,78 @@ def failures(
                 f"generated client renders {component}.{field} as a tuple the "
                 "snapshot does not publish"
             )
+
+    # Door 6 -- independent fixed point on the component-to-component $ref
+    # wiring, read from the snapshot alone. A coordinated regenerate of both
+    # artifacts (with the provenance blob ids honestly re-pinned) still moves
+    # this literal, because it is derived from neither half.
+    actual_ref = _schema_ref_digest(ref_rows_)
+    if actual_ref != pinned_ref_digest:
+        found.append(
+            "published component $ref wiring drifted: _SCHEMA_REF_DIGEST pins "
+            f"{pinned_ref_digest} but the snapshot derives {actual_ref}. "
+            "Re-pin the digest in the same commit as both artifacts, with a "
+            "reason; re-deriving it from the artifact under guard would make "
+            "the pin agree with itself."
+        )
+    if len(ref_rows_) != pinned_ref_rows:
+        found.append(
+            f"published component $ref row count is {len(ref_rows_)}, "
+            f"_EXPECTED_SCHEMA_REF_ROWS pins {pinned_ref_rows}: an intra-schema "
+            "reference was added or dropped without moving the fixed point"
+        )
+    owners = {row[0] for row in ref_rows_}
+    targets = {row[2] for row in ref_rows_}
+    if len(owners) != pinned_ref_owners:
+        found.append(
+            f"component $ref wiring spans {len(owners)} owner schemas, "
+            f"_EXPECTED_SCHEMA_REF_OWNERS pins {pinned_ref_owners}"
+        )
+    if len(targets) != pinned_ref_targets:
+        found.append(
+            f"component $ref wiring names {len(targets)} distinct targets, "
+            f"_EXPECTED_SCHEMA_REF_TARGETS pins {pinned_ref_targets}"
+        )
+
+    # Door 7 -- a *second* independent fixed point, over the generated client's
+    # own ref lines. Re-pinning only the snapshot digest cannot silence this
+    # door, and a co-revert that makes both halves agree still moves both.
+    actual_client_ref = _client_schema_ref_digest(client_ref_rows_)
+    if actual_client_ref != pinned_client_ref_digest:
+        found.append(
+            "generated component $ref wiring drifted: "
+            f"_CLIENT_SCHEMA_REF_DIGEST pins {pinned_client_ref_digest} but the "
+            f"client derives {actual_client_ref}. The two digests must move in "
+            "the same commit as an intentional contract change."
+        )
+    if len(client_ref_rows_) != pinned_client_ref_rows:
+        found.append(
+            f"generated component $ref row count is {len(client_ref_rows_)}, "
+            f"_EXPECTED_CLIENT_SCHEMA_REF_ROWS pins {pinned_client_ref_rows}"
+        )
+
+    # Door 8 -- named positional agreement. The two independent digests above
+    # catch a coordinated co-revert; this door names a one-sided edit by
+    # (owner, field, target) so a reviewer sees which property points at the
+    # wrong model. It compares the *positional* shape, so a same-count swap
+    # between two fields is reported too.
+    snap_pos: dict[tuple[str, str, str], int] = {}
+    for owner, path, target in ref_rows_:
+        key = (owner, _ref_field(path), target)
+        snap_pos[key] = snap_pos.get(key, 0) + 1
+    cli_pos: dict[tuple[str, str, str], int] = {}
+    for owner, field, target, _index in client_ref_rows_:
+        key = (owner, field, target)
+        cli_pos[key] = cli_pos.get(key, 0) + 1
+    for key in sorted(set(snap_pos) | set(cli_pos)):
+        if snap_pos.get(key, 0) != cli_pos.get(key, 0):
+            found.append(
+                f"component $ref target disagrees for "
+                f"{key[0]}.{key[1]} -> {key[2]}: snapshot publishes "
+                f"{snap_pos.get(key, 0)}, generated client publishes "
+                f"{cli_pos.get(key, 0)}"
+            )
+
     return found
 
 
@@ -628,6 +893,81 @@ def self_test() -> int:
         ),
     )
 
+    # --- the component-to-component $ref wiring (Doors 6, 7 and 8). -------
+
+    # The coordinated regenerate this pin is here for: swap two array-item
+    # refs inside AdminDashboardSeries in BOTH halves. Every landed guard
+    # stays green; the generated client silently types one field as the other.
+    doc9 = copy.deepcopy(document)
+    series = doc9["components"]["schemas"]["AdminDashboardSeries"]["properties"]
+    assert series["import_throughput"]["items"]["$ref"].endswith(
+        "ImportThroughputPoint"
+    )
+    assert series["query_latency"]["items"]["$ref"].endswith("QueryLatencyPoint")
+    series["import_throughput"]["items"]["$ref"] = (
+        "#/components/schemas/QueryLatencyPoint"
+    )
+    series["query_latency"]["items"]["$ref"] = (
+        "#/components/schemas/ImportThroughputPoint"
+    )
+    ts9 = generated.replace(
+        '            import_throughput?: components["schemas"]'
+        '["ImportThroughputPoint"][];',
+        '            import_throughput?: components["schemas"]'
+        '["QueryLatencyPoint"][];',
+        1,
+    ).replace(
+        '            query_latency?: components["schemas"]'
+        '["QueryLatencyPoint"][];',
+        '            query_latency?: components["schemas"]'
+        '["ImportThroughputPoint"][];',
+        1,
+    )
+    assert ts9 != generated
+    cases["coordinated schema $ref swap (both halves)"] = (
+        json.dumps(doc9, indent=2),
+        ts9,
+    )
+
+    # One-sided: snapshot alone swaps the two refs. Door 6 and Door 8 name it.
+    cases["one-sided snapshot $ref swap"] = (
+        json.dumps(doc9, indent=2),
+        generated,
+    )
+
+    # One-sided: client alone swaps the two refs. Door 7 and Door 8 name it.
+    cases["one-sided client $ref swap"] = (
+        json.dumps(document, indent=2),
+        ts9,
+    )
+
+    # A same-count rotation that preserves every (owner, target) count: move
+    # one ref to a third, already-referenced target on the same owner and
+    # bring it back on a different property. The multiset is unchanged, so
+    # only the positional snapshot digest can see it.
+    doc10 = copy.deepcopy(document)
+    s10 = doc10["components"]["schemas"]["AdminDashboardSeries"]["properties"]
+    s10["storage_growth"]["items"]["$ref"] = (
+        "#/components/schemas/ImportThroughputPoint"
+    )
+    cases["same-count schema $ref rotation"] = (
+        json.dumps(doc10, indent=2),
+        generated,
+    )
+
+    # Re-pinning only ONE of the two independent digests must not turn a
+    # coordinated drift green: the client door stays red.
+    found_one = failures(
+        snapshot=json.dumps(doc9, indent=2),
+        generated=ts9,
+        schema_ref_digest=_schema_ref_digest(schema_ref_rows(doc9)),
+    )
+    assert any("_CLIENT_SCHEMA_REF_DIGEST" in item for item in found_one), found_one
+    cases["only the snapshot digest re-pinned stays red"] = (
+        json.dumps(doc9, indent=2),
+        ts9,
+    )
+
     failures_count = 0
     for name, (snap, gen) in cases.items():
         found = failures(snapshot=snap, generated=gen)
@@ -654,7 +994,10 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"openapi-required-fields: OK ({_EXPECTED_REQUIRED_ROWS} published "
         f"required fields pinned across {_EXPECTED_SCHEMAS} schemas, "
-        f"{_EXPECTED_VALUE_ROWS} tuple/map keyword rows pinned)"
+        f"{_EXPECTED_VALUE_ROWS} tuple/map keyword rows pinned, "
+        f"{_EXPECTED_SCHEMA_REF_ROWS} component $ref rows pinned across "
+        f"{_EXPECTED_SCHEMA_REF_OWNERS} owners / "
+        f"{_EXPECTED_SCHEMA_REF_TARGETS} targets)"
     )
     return 0
 

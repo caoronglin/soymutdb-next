@@ -320,3 +320,179 @@ def test_the_guard_source_still_carries_both_plants() -> None:
     assert "_VALUE_KEYWORDS: tuple[str, ...] = (" in source
     assert "coordinated tuple slot retype (both halves)" in source
     assert "one-sided client tuple slot retype" in source
+
+
+# --- the component-to-component $ref wiring (Doors 6, 7 and 8) -------------
+
+_REF_OWNER = "AdminDashboardSeries"
+_A_LINE = (
+    '            import_throughput?: components["schemas"]'
+    '["ImportThroughputPoint"][];'
+)
+_B_LINE = (
+    '            query_latency?: components["schemas"]'
+    '["QueryLatencyPoint"][];'
+)
+
+
+def _swap_snapshot(schemas: dict) -> None:
+    series = schemas[_REF_OWNER]["properties"]
+    assert series["import_throughput"]["items"]["$ref"].endswith(
+        "ImportThroughputPoint"
+    )
+    assert series["query_latency"]["items"]["$ref"].endswith(
+        "QueryLatencyPoint"
+    )
+    series["import_throughput"]["items"]["$ref"] = (
+        "#/components/schemas/QueryLatencyPoint"
+    )
+    series["query_latency"]["items"]["$ref"] = (
+        "#/components/schemas/ImportThroughputPoint"
+    )
+
+
+def _swap_client() -> str:
+    swapped = _GENERATED.replace(
+        _A_LINE,
+        _A_LINE.replace("ImportThroughputPoint", "QueryLatencyPoint"),
+        1,
+    ).replace(
+        _B_LINE,
+        _B_LINE.replace("QueryLatencyPoint", "ImportThroughputPoint"),
+        1,
+    )
+    assert swapped != _GENERATED
+    return swapped
+
+
+def test_the_two_ref_literals_are_independent() -> None:
+    assert guard._SCHEMA_REF_DIGEST != guard._REQUIRED_FIELD_DIGEST
+    assert guard._SCHEMA_REF_DIGEST != guard._VALUE_DIGEST
+    assert guard._CLIENT_SCHEMA_REF_DIGEST != guard._SCHEMA_REF_DIGEST
+    document = json.loads(_SNAPSHOT)
+    assert guard._EXPECTED_SCHEMA_REF_ROWS == len(
+        guard.schema_ref_rows(document)
+    )
+    assert guard._EXPECTED_CLIENT_SCHEMA_REF_ROWS == len(
+        guard.client_schema_ref_rows(_GENERATED)
+    )
+    rows_ = guard.schema_ref_rows(document)
+    assert guard._EXPECTED_SCHEMA_REF_OWNERS == len({r[0] for r in rows_})
+    assert guard._EXPECTED_SCHEMA_REF_TARGETS == len({r[2] for r in rows_})
+
+
+def test_a_coordinated_ref_swap_is_rejected() -> None:
+    """The decisive drift: both halves agree, every landed guard stays green."""
+    found = guard.failures(
+        snapshot=_mutate(_swap_snapshot), generated=_swap_client()
+    )
+    assert any("_SCHEMA_REF_DIGEST" in problem for problem in found), found
+    assert any("_CLIENT_SCHEMA_REF_DIGEST" in problem for problem in found), found
+
+
+def test_a_one_sided_snapshot_swap_is_named() -> None:
+    found = guard.failures(
+        snapshot=_mutate(_swap_snapshot), generated=_GENERATED
+    )
+    assert any("target disagrees" in problem for problem in found), found
+
+
+def test_a_one_sided_client_swap_is_named() -> None:
+    found = guard.failures(
+        snapshot=_SNAPSHOT, generated=_swap_client()
+    )
+    assert any("target disagrees" in problem for problem in found), found
+
+
+def test_repinning_only_one_ref_digest_stays_red() -> None:
+    """Two independent fixed points: a single-side re-pin is never green."""
+    snapshot = _mutate(_swap_snapshot)
+    swapped = _swap_client()
+    document = json.loads(snapshot)
+    snap_digest = guard._schema_ref_digest(guard.schema_ref_rows(document))
+    cli_digest = guard._client_schema_ref_digest(
+        guard.client_schema_ref_rows(swapped)
+    )
+    assert snap_digest != guard._SCHEMA_REF_DIGEST
+    assert cli_digest != guard._CLIENT_SCHEMA_REF_DIGEST
+
+    only_snapshot = guard.failures(
+        snapshot=snapshot,
+        generated=swapped,
+        schema_ref_digest=snap_digest,
+    )
+    assert any("_CLIENT_SCHEMA_REF_DIGEST" in p for p in only_snapshot), (
+        only_snapshot
+    )
+    only_client = guard.failures(
+        snapshot=snapshot,
+        generated=swapped,
+        client_ref_digest=cli_digest,
+    )
+    assert any("_SCHEMA_REF_DIGEST" in p for p in only_client), only_client
+    both = guard.failures(
+        snapshot=snapshot,
+        generated=swapped,
+        schema_ref_digest=snap_digest,
+        client_ref_digest=cli_digest,
+    )
+    assert not both, both
+
+
+def test_a_same_count_ref_rotation_is_rejected() -> None:
+    """Move one ref to an already-referenced target: counts unchanged."""
+
+    def change(schemas: dict) -> None:
+        series = schemas[_REF_OWNER]["properties"]
+        series["storage_growth"]["items"]["$ref"] = (
+            "#/components/schemas/ImportThroughputPoint"
+        )
+
+    found = guard.failures(snapshot=_mutate(change), generated=_GENERATED)
+    assert any("_SCHEMA_REF_DIGEST" in problem for problem in found), found
+
+
+def test_the_ref_digests_are_independent_literals() -> None:
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    for name in ("_SCHEMA_REF_DIGEST", "_CLIENT_SCHEMA_REF_DIGEST"):
+        assigned = [
+            node
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(
+                isinstance(t, ast.Name) and t.id == name for t in node.targets
+            )
+        ]
+        assert len(assigned) == 1, name
+        value = ast.literal_eval(assigned[0].value)
+        assert isinstance(value, str) and len(value) == 64, name
+    assert guard._SCHEMA_REF_DIGEST == guard._schema_ref_digest(
+        guard.schema_ref_rows(json.loads(_SNAPSHOT))
+    )
+    assert guard._CLIENT_SCHEMA_REF_DIGEST == guard._client_schema_ref_digest(
+        guard.client_schema_ref_rows(_GENERATED)
+    )
+
+
+def test_the_ref_count_doors_are_load_bearing() -> None:
+    found = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=_GENERATED,
+        expected_ref_rows=guard._EXPECTED_SCHEMA_REF_ROWS + 1,
+    )
+    assert any("row count is" in p for p in found), found
+    found = guard.failures(
+        snapshot=_SNAPSHOT,
+        generated=_GENERATED,
+        expected_client_ref_rows=guard._EXPECTED_CLIENT_SCHEMA_REF_ROWS + 1,
+    )
+    assert any("row count is" in p for p in found), found
+
+
+def test_the_guard_source_carries_the_ref_plants() -> None:
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    assert "_SCHEMA_REF_DIGEST = (" in source
+    assert "_CLIENT_SCHEMA_REF_DIGEST = (" in source
+    assert "coordinated schema $ref swap (both halves)" in source
+    assert "only the snapshot digest re-pinned stays red" in source
