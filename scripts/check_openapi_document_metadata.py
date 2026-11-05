@@ -422,7 +422,7 @@ def run() -> list[str]:
     return failures(*_load())
 
 
-def self_test() -> tuple[list[str], int, int]:
+def self_test() -> tuple[list[str], int, int, frozenset[str]]:
     problems: list[str] = []
     base = _load()
 
@@ -714,7 +714,15 @@ def self_test() -> tuple[list[str], int, int]:
 
     check_clean("legitimate new router + catalog entry", legitimate_new_router)
 
-    return problems, len(ablations) + len(derived) + 1, 1
+    labels = frozenset(
+        [label for label, _, _ in ablations]
+        + [label for label, _, _ in derived]
+        + ["invented tag blessed in all three artifacts"]
+    )
+    count = len(ablations) + len(derived) + 1
+    if len(labels) != count:
+        problems.append("self-test has duplicate case labels")
+    return problems, count, 1, labels
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -723,7 +731,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     if args.self_test:
-        problems, ablations, positives = self_test()
+        problems, ablations, positives, _labels = self_test()
         for problem in problems:
             print(f"openapi-document-metadata: FAIL: {problem}", file=sys.stderr)
         if problems:
