@@ -304,6 +304,11 @@ smoke_contracts() {
     # behaviourally; nothing parses smoke.sh's copy, so deleting an origin
     # there stays green. This suite pins both copies from a second file.
     scripts/test_static_placeholder_scan.py
+    # The external build's routes.json / robots.txt pins live in one guard
+    # file; collecting this suite is what keeps them two-file. Without it a
+    # single edit could weaken the digest comparison, re-arm the literal to
+    # whatever the artifact says, and stay green.
+    scripts/test_published_route_manifest.py
     # Every wired --self-test guard must still execute its mutation cases.
     # The registry guard pins that a call exists, not that the body it
     # reaches survived. A no-op self_test() kept the whole layer green.
@@ -497,6 +502,14 @@ smoke_contracts() {
   # layer's copy can lose an origin with every gate still green. Pin both
   # copies against a reviewed floor; the companion suite plants the drifts.
   "${PYTHON_BIN}" scripts/check_static_placeholder_scan.py || rc=$?
+  # The external build's route manifest and crawl policy are files a deploy
+  # reads, and nothing in the pipeline read them: a metadata flip in
+  # PORTAL_ROUTES (a private route shipped `sitemap: true`, a content route
+  # shipped `prerender: false`) keeps every vitest relation true, and
+  # robots.txt had no reader at all -- reverting `Allow: /` to `Disallow: /`
+  # de-indexes the whole site. Both are pinned to hand-written literals.
+  "${PYTHON_BIN}" scripts/check_published_route_manifest.py --self-test || rc=$?
+  "${PYTHON_BIN}" scripts/check_published_route_manifest.py || rc=$?
   "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?
   echo
   echo "-- environment-bound contract suites (reported, not gating here) --"
