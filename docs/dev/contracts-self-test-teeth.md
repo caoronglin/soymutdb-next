@@ -201,6 +201,26 @@ alone is data, not mechanism: the same one-commit edit can drop the row and the
 call together, so `BOTH_CALLS_SIZE` pins the reviewed cardinality next to the
 literal and fails closed when the floor shrinks.
 
+### Exact printed totals
+
+`_CASE_FLOOR` pins one container's AST declarations. Several guards sum
+several containers plus hand-run controls into the number their success line
+prints, so those are different quantities: on live main
+`check_openapi_field_constraints.py` declared 8 AST rows but printed
+`35 cases`. Deleting a case from a *secondary* container lowers only the
+printed total, while `evidence_errors()` is deliberately one-sided and
+`declared_case_errors()` reads only the primary container. Measured on the
+shipped tree: deleting one `default_tag_cases` row left the guard's
+`--self-test` at `34 cases, 0 failure(s)`, all four in-guard floors `[]`, and
+the full contracts layer at `SMOKE PASS` with zero delta.
+
+`_PRINTED_CASE_TOTAL` is a hand-written exact pin per audited guard, checked by
+`printed_total_errors()` as a separate door so the forged-output ablations stay
+one-sided. It is bidirectionally pinned against `EVIDENCE_MEMBERS`, and re-pin
+it in the same reviewed commit as a guard that adds or removes a case. The
+companion suite pins the literal, its membership symmetry, and the decisive
+deletion; the guard's `--self-test` carries one ablation for the same shape.
+
 The companion suite is a normal `tests=()` row; `PINNED_SUITES` is a floor,
 not an allowlist, so adding a suite needs no edit there (see
 `docs/dev/contracts-registry-collection.md`).
