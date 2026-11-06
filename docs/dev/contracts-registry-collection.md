@@ -415,9 +415,13 @@ Decisive two-tree A/B on `e2bfd2b1`, one drifted byte shape (sha256
   that is the false green being pinned, not a verdict the guard changes.
 
 Restoring the byte returns both entry points to `rc=0`. **Control:** on those
-same drifted bytes the pre-fix reader `unittest_collectible_tests()` still
-counts the method as a healthy case — the plant is load-bearing, not
-decorative. Zero generated-artifact bytes, zero wiring edits.
+same drifted bytes, with the no-op door switched off, the pre-fix reader's
+**verdict** is green (`unittest_plan_errors() == []`) — the drift really was
+silent before the door existed, so the plant is load-bearing. Both the guard's
+`--self-test` plant and the companion case assert that verdict (the latter
+from a second file). An assertion that the old reader merely lists the method
+as collectible would hold on clean bytes too and is not the control. Zero
+generated-artifact bytes, zero wiring edits.
 
 `--self-test` 49 → **50 cases** and companion 39 → **42 passed**; the two
 hand-written floors (`_REVIEWED_CASE_FLOOR` and the companion's

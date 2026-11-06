@@ -909,12 +909,19 @@ class RegistryCollectionGuardTests(unittest.TestCase):
             1,
         )
         self.assertNotEqual(mutated[suite], files[suite])
-        # Pre-fix control: the reader that only counts names still calls these
-        # same bytes healthy. The new plant is therefore load-bearing.
-        self.assertTrue(
-            any("test_clean_tree_has_no_golden_drift" in n
-                for n in guard.unittest_collectible_tests(mutated[suite], suite))
+        # Pre-fix control: on these exact drifted bytes the old reader's
+        # verdict is green. That is what makes the new door load-bearing:
+        # removing it must make the drift silent again, not merely keep a
+        # name on the collectible list. Rebuild the pre-fix reader from the
+        # same source with the no-op door switched off -- asserting the
+        # current reader's collectible name would hold on clean bytes too.
+        pre_fix_spec = importlib.util.spec_from_file_location(
+            "pre_fix_registry_collection", GUARD_PATH
         )
+        pre_fix = importlib.util.module_from_spec(pre_fix_spec)
+        pre_fix_spec.loader.exec_module(pre_fix)
+        pre_fix.unittest_noop_test_methods = lambda _source, _path: []
+        self.assertEqual(pre_fix.unittest_plan_errors(script, mutated), [])
         self.assertTrue(
             any("test_clean_tree_has_no_golden_drift" in n
                 for n in guard.unittest_noop_test_methods(mutated[suite], suite))

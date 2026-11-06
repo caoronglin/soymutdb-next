@@ -1197,9 +1197,10 @@ def self_test() -> int:
 
     # A counted case whose body never runs: an async def test_* on a plain
     # TestCase. The real runner says Ran 1 / OK / rc=0 while the assertion is
-    # skipped. Control: the pre-fix reader (unittest_collectible_tests alone)
-    # counts the method as healthy on these same bytes, so the plant proves
-    # the new door was necessary, not decorative.
+    # skipped. Control: the pre-fix reader (the collectible-name loop alone)
+    # calls these same bytes healthy, so the plant proves the new door was
+    # necessary, not decorative. The companion pins the stronger version --
+    # the pre-fix *verdict* is green -- from a second file.
     async_suite = suite_source.replace(
         "    def test_clean_tree_has_no_golden_drift(self) -> None:",
         "    async def test_clean_tree_has_no_golden_drift(self) -> None:",
