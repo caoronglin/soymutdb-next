@@ -1347,9 +1347,13 @@ def test_the_guard_docstring_names_the_measured_behaviour() -> None:
     # reference, not an addition beside door 11's snapshot reference.
     assert "*replaces*" in doc
     assert "door 11 keeps reading the snapshot" in doc
-    # The three stand-downs are not interchangeable: one is precedence-only.
+    # Words are not the claim: an inverted sentence keeps both and still passes.
+    # Bind both measured shapes from #363, not just the vocabulary.
     assert "precedence" in doc
     assert "firing" in doc
+    assert "cannot make door 12 fire on an in-region ghost" in doc
+    assert "it takes narrowing\n  it and the door-11 clause together" in doc
+    assert "named first by the\n  count door, not by door 11" in doc
 
 
 # ---------------------------------------------------------------------------
