@@ -1188,3 +1188,157 @@ def test_door_twelve_digest_is_load_bearing() -> None:
         snapshot=snapshot, generated=generated, example_digest=new_digest
     )
     assert not any("_GENERATED_EXAMPLE_VALUE_DIGEST" in f for f in found), found
+
+
+def _concurrent_decoy() -> tuple[str, str, str]:
+    """A coordinated both-halves rewrite with a one-sided decoy alongside it.
+
+    The coordinated half moves ``UserCreate.full_name`` to ``John Roe`` in the
+    snapshot and in ``openapi.d.ts`` with ``_EXAMPLE_DIGEST`` honestly
+    re-pinned -- the shape door 12 exists to name. The decoy swaps
+    ``LoginRequest.username``'s tag in the generated half only, so the two
+    halves already disagree when door 12 asks.
+    """
+    snapshot, generated, new_digest = _both_halves_example_rewrite()
+    assert generated.count(_LOGIN_DECOY_BLOCK) == 1
+    decoy = generated.replace(_LOGIN_DECOY_BLOCK, _LOGIN_DECOY_BLOCK_DECOYED, 1)
+    assert decoy != generated
+    return snapshot, decoy, new_digest
+
+
+_LOGIN_DECOY_BLOCK = _LOGIN_USERNAME_BLOCK
+_LOGIN_DECOY_BLOCK_DECOYED = _LOGIN_USERNAME_BLOCK.replace(
+    "             * @example researcher@univ.edu\n"
+    "             */\n"
+    "            username",
+    "             * @example decoy@univ.edu\n"
+    "             */\n"
+    "            username",
+    1,
+)
+assert _LOGIN_DECOY_BLOCK_DECOYED != _LOGIN_DECOY_BLOCK
+
+
+def test_a_concurrent_decoy_defers_door_twelve_onto_door_eleven() -> None:
+    """The measured concurrent shape: the decoy is named, door 12 stands down.
+
+    Door 12 is single-cause. One coordinated both-halves rewrite *plus* one
+    one-sided ``LoginRequest.username`` decoy yields exactly one failure, and
+    it is door 11's named field -- not the independent literal. Both halves of
+    the coordinated move are present and the snapshot digest is re-pinned, so
+    a door that fired concurrently would be naming a value the verified tree
+    cannot yet resolve.
+    """
+    snapshot, generated, new_digest = _concurrent_decoy()
+    found = guard.failures(
+        snapshot=snapshot, generated=generated, example_digest=new_digest
+    )
+    assert len(found) == 1, found
+    assert "LoginRequest.username" in found[0], found
+    assert "_GENERATED_EXAMPLE_VALUE_DIGEST" not in found[0], found
+    # The coordinated value really is present in the generated half: door 12
+    # is silent on a drift it could see, not on an absent one.
+    assert guard._generated_example_value_digest(
+        guard.generated_example_rows(generated)
+    ) != guard._GENERATED_EXAMPLE_VALUE_DIGEST
+
+
+def test_resolving_the_decoy_re_arms_door_twelve() -> None:
+    """Deferred, not permanent: drop the decoy and the literal fires again."""
+    _, _, new_digest = _concurrent_decoy()
+    clean_snapshot, clean_generated, _ = _both_halves_example_rewrite()
+    armed = guard.failures(
+        snapshot=clean_snapshot,
+        generated=clean_generated,
+        example_digest=new_digest,
+    )
+    assert len(armed) == 1, armed
+    assert "_GENERATED_EXAMPLE_VALUE_DIGEST" in armed[0], armed
+    assert "LoginRequest.username" not in armed[0], armed
+    # And reverting the coordinated rewrite ships nothing at all.
+    assert not guard.failures()
+
+
+def test_door_eleven_keeps_the_snapshot_reference_door_twelve_gates_on() -> None:
+    """The precedence, read from the source: replacement, not addition.
+
+    Door 11 still compares the snapshot projection to the printed rows; door
+    12 derives its literal from those same printed rows and gates on the
+    *absence* of door 11's drift. That conjunction is why a coordinated
+    both-halves move leaves door 11 silent and is never pre-empted.
+    """
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    by_name = {
+        node.name: node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef)
+    }
+    compared = [
+        node
+        for node in ast.walk(by_name["failures"])
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "example_field_drift"
+    ]
+    rendered = sorted(ast.unparse(call) for call in compared)
+    assert rendered == [
+        "example_field_drift(example_projection(document), printed_example_rows)",
+        "example_field_drift(example_projection(document), printed_example_rows)",
+    ], rendered
+    # One call is door 11's own comparison, the other is door 12's gate; the
+    # gate is negated, the door is not.
+    gate = guard_source_gate(tree, by_name["failures"])
+    assert gate is not None, "door 12 no longer gates on example_field_drift(...)"
+    # The literal derives from the printed rows, not from the snapshot half.
+    assert (
+        "actual_generated_example_values = _generated_example_value_digest(\n"
+        "        printed_example_rows\n"
+        "    )"
+    ) in source
+
+
+def guard_source_gate(
+    tree: ast.Module, function: ast.FunctionDef
+) -> ast.UnaryOp | None:
+    """The ``not example_field_drift(...)`` operand inside an ``and`` chain."""
+    for node in ast.walk(function):
+        if not isinstance(node, ast.BoolOp) or not isinstance(node.op, ast.And):
+            continue
+        for operand in node.values:
+            if not isinstance(operand, ast.UnaryOp):
+                continue
+            if not isinstance(operand.op, ast.Not):
+                continue
+            call = operand.operand
+            if (
+                isinstance(call, ast.Call)
+                and isinstance(call.func, ast.Name)
+                and call.func.id == "example_field_drift"
+            ):
+                inner = ast.unparse(call)
+                if inner == (
+                    "example_field_drift("
+                    "example_projection(document), printed_example_rows)"
+                ):
+                    return operand
+    return None
+
+
+def test_the_guard_docstring_names_the_measured_behaviour() -> None:
+    """The prose cannot quietly drift back to an unconditional claim."""
+    doc = guard.__doc__ or ""
+    assert isinstance(doc, str) and doc
+    assert "when that\n  rewrite is the only cause" in doc, doc[:400]
+    for phrase in (
+        "deferred, not permanent",
+        "resolve the decoy",
+        "stand down",
+    ):
+        assert phrase in doc, phrase
+    # The old unconditional claim must be gone.
+    assert "It closes the coordinated both-halves\n  cell" not in doc
+    # And the precedence is stated: replacement of the generated-half
+    # reference, not an addition beside door 11's snapshot reference.
+    assert "*replaces*" in doc
+    assert "door 11 keeps reading the snapshot" in doc
