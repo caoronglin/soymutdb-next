@@ -309,17 +309,39 @@ head, byte-identical to the landed guard on `6f9c4219`):
 - **Invocation behind the companion count.** `test_openapi_*.py` mixes
   module-level `def test_*` (pytest-collected) with `unittest.TestCase`
   subclasses. `python3 -m unittest scripts.test_openapi_response_surface`
-  reports `Ran 0 tests` because that file has no `TestCase` subclass — a
-  loader outcome, not a defect. Real collection with
-  `python3 -m pytest scripts/test_openapi_*.py -q` on `b279e4c9` is
-  **404 passed**: 375 module-level `def test_*` plus 29 `TestCase` methods in
-  `test_openapi_auth_surface_floor.py`. The receipt's `375 passed` was a
-  static `grep -c '^def test_'` count labelled as a pass count, which is not
-  the same sentence. On live `6f9c4219` the same invocation is **436 passed**:
-  the later merges grew the module-level suites 375 -> 400 (four files) and
-  the `TestCase` suite 29 -> 36, i.e. +32 cases total; `smoke.sh --profile
-  contracts` is `SMOKE PASS / 1241 passed, 41 subtests` there and
-  `SMOKE PASS / 1196 passed, 41 subtests` on the clean `b279e4c9` tree.
+  prints `Ran 0 tests in 0.000s`, then `OK`, then exits `rc=0`: that file has
+  no `TestCase` subclass, so the loader collects nothing and the runner
+  executes nothing, and the runner still reports `OK` for its empty plan. The
+  reading to pin is the two lines on one screen — not a weaker green light,
+  not "OK but it does not count": with zero cases collected, `OK` is the
+  runner saying `OK` about zero. **No `unittest` run green-lit this file.**
+  Same `Ran 0 tests` / `OK` / `rc=0` on `b279e4c9`, `6f9c4219` and
+  `7ed30279`.
+
+  The real collector is `pytest`: `python3 -m pytest scripts/test_openapi_*.py
+  -q` is **404 passed** on `b279e4c9` (375 module-level `def test_*` plus 29
+  `TestCase` methods, all in `test_openapi_auth_surface_floor.py`) and
+  **436 passed** on `6f9c4219` — the later merges grew the module-level
+  suites 375 -> 400 (four files) and the `TestCase` suite 29 -> 36, +32 cases
+  total. Each figure belongs to the tree named beside it.
+
+  The receipt's `375 passed` was not a stale pass count from that runner
+  either. It was a static `grep -c '^def test_'` count labelled as a pass
+  count — the same 375 the grep prints on `b279e4c9`, a figure from no
+  measurement at all: never collected, never executed, never green. Neither
+  `Ran 0 tests` nor a `grep -c` count is a passing suite.
+
+  Two tip readings, both correct, each pinned to its own tree: the ledger's
+  correction was cut from `4c1cf7be`, where the invocation is **454 passed**
+  (418 module-level + 36 `TestCase`); on that PR's base `7ed30279` it is
+  **455 passed** (419 + 36). The +1 is
+  `test_operation_tag_order_is_an_independent_literal()` in
+  `test_openapi_document_metadata_guard.py`, added by #353 between the two
+  trees. A figure without its tree is not a measurement.
+
+  `smoke.sh --profile contracts` is `SMOKE PASS / 1241 passed, 41 subtests` on
+  `6f9c4219` and `SMOKE PASS / 1196 passed, 41 subtests` on the clean
+  `b279e4c9` tree.
 
 The decisive two-tree A/B survives both corrections: on byte-identical
 drifted artifacts (a coherent swap of the first two status blocks in both
