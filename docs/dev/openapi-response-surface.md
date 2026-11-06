@@ -295,7 +295,13 @@ from a second file so a single-file edit cannot hide it.
 A figure needs a tree, a working directory and an invocation before it is a
 measurement. Two readings carried into the response-status-order receipt were
 taken on trust and are corrected here (measured on `b279e4c9`, the shipped
-head, byte-identical to the landed guard on `6f9c4219`):
+head, byte-identical to the landed guard on `6f9c4219`).
+
+The same rule applies to merge trees: `git merge-tree --write-tree` needs both
+operands pinned, because `origin/main` is a moving ref. `6c7e6af3` / `rc=0`
+is `6f9c4219` x `827638ea` (#351 open, `6f9c4219` an ancestor, so the result
+is the head's own tree); after #351 merged, `7ed30279` x `edd1a5df` is
+`a74aaac3` / `rc=0`. Both are correct, each for the operand pair beside it.
 
 - **Working directory.** `check_openapi_response_surface.py` resolves
   `SNAPSHOT`, `GENERATED` and `SMOKE` from `Path(__file__).resolve().parents[1]`,
@@ -317,6 +323,14 @@ head, byte-identical to the landed guard on `6f9c4219`):
   runner saying `OK` about zero. **No `unittest` run green-lit this file.**
   Same `Ran 0 tests` / `OK` / `rc=0` on `b279e4c9`, `6f9c4219` and
   `7ed30279`.
+
+  `unittest` is not blind to every suite: on the same `7ed30279`,
+  `python3 -m unittest scripts.test_contracts_registry_collection` reports
+  `Ran 35 tests` / `OK` / `rc=0`, because that file is a `unittest.TestCase`
+  subclass. The runner collects only the `TestCase` shape; a class-free suite
+  returns a green `Ran 0 tests`. File shape decides the count, not a defect in
+  the runner. `pytest` collects both shapes, which is why the figures below
+  are pytest counts.
 
   The real collector is `pytest`: `python3 -m pytest scripts/test_openapi_*.py
   -q` is **404 passed** on `b279e4c9` (375 module-level `def test_*` plus 29
