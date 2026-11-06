@@ -231,9 +231,9 @@ _DRIFT_PLANTS: tuple[tuple[str, str, str, str], ...] = (
     ),
     (
         "scripts/check_openapi_published_enums.py",
-        '    """Return ``(problems, compared_enum_pairs)``."""\n    found: list[str] = []',
-        '    """Return ``(problems, compared_enum_pairs)``."""\n    found: list[str] = []\n'
-        "    return found, 0  # planted drift: detection disabled",
+        "    found: list[str] = []\n    compared = 0\n",
+        "    found: list[str] = []\n    compared = 0\n"
+        "    return found, 0  # planted drift: detection disabled\n",
         "published enum drift is never reported",
     ),
     (
@@ -906,8 +906,8 @@ def check(
     smoke: str | None = None,
     results: dict[str, tuple[int, str]] | None = None,
     root: Path = ROOT,
-    drift_results: dict[object, tuple[int, str]] | None = None,
-    gut_results: dict[object, tuple[int, str]] | None = None,
+    drift_results: dict[object, tuple[int | None, str]] | None = None,
+    gut_results: dict[object, tuple[int | None, str]] | None = None,
 ) -> list[str]:
     text = smoke if smoke is not None else SMOKE.read_text(encoding="utf-8")
     try:
@@ -939,19 +939,24 @@ def check(
 
 def _plant(
     root: Path, path: str, fragment: str, replacement: str, argv: list[str], label: str
-) -> tuple[int, str]:
-    """Apply one plant to the real tree, run ``argv``, restore the bytes."""
+) -> tuple[int | None, str]:
+    """Apply one plant to the real tree, run ``argv``, restore the bytes.
+
+    ``rc`` is ``None`` when the plant never ran (unreadable source, missing
+    anchor, no-op replacement, failed subprocess). That is a *probe failure*,
+    not a non-zero exit from the guard: callers must not read it as detection.
+    """
     target = root / path
     try:
         original = target.read_text(encoding="utf-8")
     except OSError as exc:
-        return 1, f"could not read {path}: {exc}"
+        return None, f"could not read {path}: {exc}"
     if fragment not in original:
-        return 1, f"{label} anchor missing from {path}"
+        return None, f"{label} anchor missing from {path}"
     # Sanity: the plant must not be a no-op, or it proves nothing.
     mutated = original.replace(fragment, replacement, 1)
     if mutated == original:
-        return 1, f"{label} for {path} changed nothing"
+        return None, f"{label} for {path} changed nothing"
     try:
         target.write_text(mutated, encoding="utf-8")
         try:
@@ -959,7 +964,7 @@ def _plant(
                 argv, capture_output=True, text=True, cwd=root, timeout=90, check=False
             )
         except (OSError, subprocess.TimeoutExpired) as exc:
-            return 1, f"could not run {path}: {exc}"
+            return None, f"could not run {path}: {exc}"
         return result.returncode, result.stdout + result.stderr
     finally:
         target.write_text(original, encoding="utf-8")
@@ -967,12 +972,12 @@ def _plant(
 
 def drift_probe(
     wired: dict[str, list[str]], root: Path = ROOT, runner: list[str] | None = None
-) -> dict[object, tuple[int, str]]:
+) -> dict[object, tuple[int | None, str]]:
     """Plant one drift per guard and run its wired ``--self-test``.
 
     Returns (path, "wire") -> (rc, output) for the *mutated* tree. A guard that
     detects the plant exits non-zero; a guard that only prints a signature
-    exits 0.
+    exits 0. ``rc is None`` means the plant never ran and proves nothing.
     """
     base = runner if runner is not None else [sys.executable]
     out: dict[object, tuple[int, str]] = {}
@@ -987,7 +992,7 @@ def drift_probe(
 
 def gut_probe(
     wired: dict[str, list[str]], root: Path = ROOT, runner: list[str] | None = None
-) -> dict[object, tuple[int, str]]:
+) -> dict[object, tuple[int | None, str]]:
     """Stop the plain run reading the tree; run the wired call, then the plain one.
 
     Keys are ``(path, "self-test")`` and ``(path, "plain")``: the same plant,
@@ -1018,7 +1023,13 @@ def drift_errors(
                 f"pinned drift plant {path!r} targets a guard that is not wired"
             )
             continue
-        rc, _output = results.get((path, "wire"), (0, "guard was not probed"))
+        rc, output = results.get((path, "wire"), (None, "guard was not probed"))
+        if rc is None:
+            # A plant that never ran is not a detection. Deleting a plant's own
+            # anchor used to return rc=1 and be read as "the guard caught it",
+            # so the injection immunised itself against this probe.
+            problems.append(f"{path} drift plant was not run: {output.strip()[:160]}")
+            continue
         if rc == 0:
             why = next(w for p, _, _, w in _DRIFT_PLANTS if p == path)
             problems.append(
@@ -1039,8 +1050,14 @@ def gut_errors(
                 f"pinned self-test gut {path!r} targets a guard that is not wired"
             )
             continue
-        self_rc, self_output = results.get((path, "self-test"), (0, "guard was not probed"))
-        plain_rc, _plain_output = results.get((path, "plain"), (0, "guard was not probed"))
+        self_rc, self_output = results.get((path, "self-test"), (None, "guard was not probed"))
+        plain_rc, plain_output = results.get((path, "plain"), (None, "guard was not probed"))
+        if self_rc is None or plain_rc is None:
+            problems.append(
+                f"{path} self-test gut plant was not run: "
+                f"{(self_output if self_rc is None else plain_output).strip()[:160]}"
+            )
+            continue
         if self_rc != 0:
             # The gutter has to survive the guard's own --self-test, or
             # something other than the plain run caught it and the plant says
@@ -1254,14 +1271,17 @@ def self_test() -> int:
         wired, {**control, "scripts/check_app_shell_assets.py": poisoned}
     )
     drift_caught = drift_errors(
-        wired, {"scripts/check_app_shell_assets.py": (0, marker + "\n")}
+        wired, {("scripts/check_app_shell_assets.py", "wire"): (0, marker + "\n")}
     )
     cases.append(
         (
             "a marker-preserving gut defeats the signature pin but not the drift probe",
             "check_app_shell_assets.py",
             signature_blind
-            and any("check_app_shell_assets.py" in f for f in drift_caught),
+            and any(
+                "check_app_shell_assets.py" in f and "stayed green on a planted drift" in f
+                for f in drift_caught
+            ),
         )
     )
 
@@ -1359,6 +1379,49 @@ def self_test() -> int:
             and not evidence_errors(control),
         )
     )
+    # 11. A drift plant whose own anchor was deleted returns rc=None (the
+    # probe never ran). It must be reported as a probe failure, not read as
+    # "the guard caught it": that conflation let an injection delete the
+    # anchor of the very plant meant to catch it and stay green. Assert both
+    # limbs -- the pre-fix rc=1 shape is silent, rc=None is named.
+    victim_drift = "scripts/check_error_code_catalog.py"
+    pre_fix = drift_errors(wired, {(victim_drift, "wire"): (1, "anchor missing")})
+    probe_failure = drift_errors(
+        wired, {(victim_drift, "wire"): (None, "drift plant anchor missing")}
+    )
+    cases.append(
+        (
+            "a deleted drift-plant anchor is named as an unrun probe",
+            victim_drift,
+            not any(victim_drift in f for f in pre_fix)
+            and any(
+                victim_drift in f and "drift plant was not run" in f
+                for f in probe_failure
+            ),
+        )
+    )
+
+    # 12. The same channel on the gut leg: a gutter plant that never ran must
+    # fail closed rather than masquerade as a surviving entry point.
+    gutted_path = "scripts/check_error_code_catalog.py"
+    gut_unrun = gut_errors(
+        wired,
+        {
+            (gutted_path, "self-test"): (None, "gut plant anchor missing"),
+            (gutted_path, "plain"): (0, ""),
+        },
+    )
+    cases.append(
+        (
+            "a deleted gut-plant anchor is named as an unrun probe",
+            gutted_path,
+            any(
+                gutted_path in f and "gut plant was not run" in f
+                for f in gut_unrun
+            ),
+        )
+    )
+
     # 11. The residual the floor's third rule cannot see: dropping a
     # BOTH_CALLS row *and* that guard's plain run in the same edit leaves
     # every *membership* rule silent -- no row is left to complain about.
