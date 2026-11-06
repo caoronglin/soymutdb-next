@@ -1347,6 +1347,9 @@ def test_the_guard_docstring_names_the_measured_behaviour() -> None:
     # reference, not an addition beside door 11's snapshot reference.
     assert "*replaces*" in doc
     assert "door 11 keeps reading the snapshot" in doc
+    # The three stand-downs are not interchangeable: one is precedence-only.
+    assert "precedence" in doc
+    assert "firing" in doc
 
 
 # ---------------------------------------------------------------------------
@@ -1533,3 +1536,80 @@ def test_narrowing_the_conjunction_double_reports_a_drift() -> None:
             removed,
             found,
         )
+
+def _narrow(source: str, *removals: str) -> dict:
+    """Compile the guard with one or more conjunction clauses removed."""
+    narrowed = source
+    for removed in removals:
+        assert removed in narrowed, removed
+        narrowed = narrowed.replace(removed, "", 1)
+    assert narrowed != source
+    namespace: dict = {
+        "__name__": "narrowed_guard",
+        "__file__": str(ROOT / "scripts" / guard.SELF),
+    }
+    exec(  # noqa: S102
+        compile(narrowed, str(ROOT / "scripts" / guard.SELF), "exec"),
+        namespace,
+    )
+    return namespace
+
+
+_COUNT_CLAUSE = "        and len(gen_examples) == pinned_generated\n"
+_FIELD_CLAUSE = (
+    "        and not example_field_drift(\n"
+    "            example_projection(document), printed_example_rows\n"
+    "        )\n"
+)
+
+
+def test_an_in_region_ghost_keeps_the_count_clause_precedence_only() -> None:
+    """The receipt's shape: narrowing the count clause cannot re-arm door 12.
+
+    A ghost printed under ``MarkReadRequest.ids`` sits inside the schemas
+    region, so it mutates both ``generated_example_rows`` (the value digest)
+    and ``example_field_drift``. With the other three clauses intact, removing
+    the count clause changes which failure is named first but cannot make
+    door 12 fire; it takes removing the count *and* the field-drift clause.
+    """
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    snapshot, _clean, ghost, new_digest = _generated_side_decoy_rewrite()
+    shape = dict(snapshot=snapshot, generated=ghost, example_digest=new_digest)
+    intact = guard.failures(**shape)
+    assert len(intact) == 1, intact
+    assert "tag count is" in intact[0], intact
+    assert not any("_GENERATED_EXAMPLE_VALUE_DIGEST" in f for f in intact)
+
+    count_only = _narrow(source, _COUNT_CLAUSE)["failures"](**shape)
+    assert not any("_GENERATED_EXAMPLE_VALUE_DIGEST" in f for f in count_only), (
+        count_only
+    )
+    both = _narrow(source, _COUNT_CLAUSE, _FIELD_CLAUSE)["failures"](**shape)
+    assert any("_GENERATED_EXAMPLE_VALUE_DIGEST" in f for f in both), both
+    assert len(both) > len(intact), both
+
+
+def test_an_out_of_region_ghost_keeps_the_count_clause_load_bearing() -> None:
+    """The checked-in shape: a marker outside the schemas region has teeth.
+
+    That stray tag bumps ``generated_examples`` but never reaches
+    ``generated_example_rows``, so the value digest still disagrees while the
+    field drift is empty. Narrowing the count clause alone double-reports.
+    This is why the count clause is precedence, not decoration.
+    """
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    coordinated, generated, _ghost, new_digest = (
+        _generated_side_decoy_rewrite()
+    )
+    stray = generated + "\n/**\n * @example stray_outside_region\n */\n"
+    shape = dict(
+        snapshot=coordinated, generated=stray, example_digest=new_digest
+    )
+    intact = guard.failures(**shape)
+    assert len(intact) == 1, intact
+    assert "tag count is" in intact[0], intact
+    narrowed = _narrow(source, _COUNT_CLAUSE)["failures"](**shape)
+    assert any("_GENERATED_EXAMPLE_VALUE_DIGEST" in f for f in narrowed), (
+        narrowed
+    )
+    assert len(narrowed) > len(intact), narrowed

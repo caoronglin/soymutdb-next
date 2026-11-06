@@ -96,9 +96,17 @@ API import, no wheel, no database, no workspace install. It pins:
   and only this literal names the value. The gate is a three-clause
   conjunction -- the snapshot digest matches (door 5 silent), the generated
   tag count matches (count door silent), and ``example_field_drift(...)`` is
-  empty (door 11 silent) -- so it defers to *any* concurrent drift that owns
-  a door: door 5, the count door, or door 11. A generated-side stray tag
-  (``8 != 7``) is named first by the count door, not by door 11. Resolve the
+  empty (door 11 silent). The three clauses do not play the same role: door 5
+  and door 11 are *firing* clauses (narrowing either one double-reports its own
+  owning shape), while the count clause is a *precedence* clause -- it decides
+  which failure is named first when a ghost rides in the generated half, so
+  the value digest that closes this door moves with that same half. Narrowing
+  it alone cannot make door 12 fire on an in-region ghost; it takes narrowing
+  it and the door-11 clause together. It therefore defers to
+  *any* concurrent drift that owns a door: door 5, the count door, or
+  door 11. A generated-side stray tag (``8 != 7``) is named first by the
+  count door, not by door 11.
+  Resolve the
   concurrent drift and door 12 re-arms on the verified tree; revert the
   commit and nothing ships -- deferred, not permanent. The
   literal *replaces* the generated-half reference door 12 would otherwise
@@ -857,10 +865,15 @@ def failures(
     # both-halves move leaves door 11 silent and is never pre-empted here,
     # and why a decoy defers rather than closes. The gate is a three-clause
     # conjunction (snapshot digest, generated tag count, door 11 field drift
-    # all silent), so ANY concurrent drift that owns a door -- door 5, the
-    # count door, or door 11 -- is named first and this door stands down. A
-    # generated-side stray tag, for instance, trips the count door (``8 !=
-    # 7``) rather than door 11. Deferred, not permanent: resolve the
+    # all silent). The snapshot digest and the field-drift clauses are firing
+    # clauses -- narrowing either double-reports its own shape. The tag-count
+    # clause is a precedence clause: the value digest below reads the same
+    # generated half a ghost would mutate, so narrowing the count clause alone
+    # cannot re-arm this door on an in-region ghost; it takes narrowing it and
+    # the field-drift clause together. ANY concurrent drift that owns a door --
+    # door 5, the count door, or door 11 -- is named first and this door stands
+    # down. A generated-side stray tag, for instance, trips the count door
+    # (``8 != 7``) rather than door 11. Deferred, not permanent: resolve the
     # concurrent drift and this door re-arms on the verified tree; revert and
     # nothing ships.
     actual_generated_example_values = _generated_example_value_digest(

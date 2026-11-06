@@ -471,13 +471,20 @@ Extend the same already-registered guard; `smoke.sh` / registry / teeth /
   **Sound for a single cause, deferred for concurrent ones**: door 12 stands
   down on a three-clause conjunction — the snapshot digest matches (door 5
   silent), the generated tag count matches (count door silent), and
-  `example_field_drift(...)` is empty (door 11 silent). It therefore defers to
-  *any* concurrent drift that owns a door — door 5, the count door, or door 11
-  — not only to a one-sided field drift. A generated-side stray tag, for
-  instance, trips the count door (`8 != 7`) and leaves door 12 unnamed. Resolve
-  the concurrent drift and door 12 re-arms; revert the commit and nothing
-  ships. Delayed, not permanent — a resolution-order effect, and the
-  conjunction's arity is pinned from a second file.
+  `example_field_drift(...)` is empty (door 11 silent). **The three clauses do
+  not play the same role.** The snapshot-digest and field-drift clauses are
+  *firing* clauses: narrowing either one makes door 12 double-report its own
+  owning shape. The tag-count clause is a *precedence* clause: it decides which
+  failure gets named first when a ghost rides in the generated half, and the
+  value digest that closes door 12 reads that same half. Narrowing it alone
+  cannot re-arm door 12 on an in-region ghost — it takes narrowing it and the
+  field-drift clause together. It therefore defers to *any* concurrent drift
+  that owns a door — door 5, the count door, or door 11 — not only to a
+  one-sided field drift. A generated-side stray tag, for instance, trips the
+  count door (`8 != 7`) and leaves door 12 unnamed. Resolve the concurrent
+  drift and door 12 re-arms; revert the commit and nothing ships. Delayed, not
+  permanent — a resolution-order effect. The conjunction's arity, and the
+  precedence/firing distinction, are pinned from a second file.
 * **Precedence: replacement, not addition.** `_GENERATED_EXAMPLE_VALUE_DIGEST`
   *replaces* the generated-half reference door 12 would otherwise derive from
   `generated_example_rows()` — it does not sit beside it. Door 11 still reads
