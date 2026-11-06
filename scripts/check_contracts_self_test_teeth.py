@@ -36,6 +36,7 @@ import re
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -180,6 +181,46 @@ _SIGNATURES: dict[str, re.Pattern[str]] = {
         r"self-test: \d+ cases, 0 failure\(s\)"
     ),
 }
+
+# Guards whose pinned signature is a bare ``\d+``: the shape says "a number was
+# printed here", never "this number". Seven wired guards print a total derived
+# from the container they iterate -- ``len(cases)``, ``len(tests)``,
+# ``len(GATES)``, a ``results`` loop counter -- so deleting one plant lowers the
+# printed number while the signature, every plant, every evidence line and the
+# whole contracts layer stay green. Measured on ``e2bfd2b1``: deleting one
+# ``cases`` row from ``check_openapi_published_enums.py`` turned ``OK (17
+# ablations)`` into ``OK (16 ablations)``, teeth stayed ``OK (23 wired guards
+# probed)``, its ``--self-test`` stayed ``15 cases, 0`` and
+# ``smoke.sh --profile contracts`` stayed ``SMOKE PASS``. The name of the
+# deleted case appeared nowhere.
+#
+# This floor is hand-written and bidirectional against ``_WIRED_SELF_TESTS``: a
+# guard added with a countable success line and no exact pin fails closed,
+# because otherwise it silently opens a new free-deletion cell.
+_NUMERIC_SIGNATURES: frozenset[str] = frozenset(
+    {
+        "scripts/check_api_error_code_vocabulary.py",
+        "scripts/check_contracts_empty_layer_verdict.py",
+        "scripts/check_error_code_catalog.py",
+        "scripts/check_error_code_doc_counts.py",
+        "scripts/check_error_code_gate_wiring.py",
+        "scripts/check_guard_self_test_verdict.py",
+        "scripts/check_mcp_manifest_reconcile.py",
+        "scripts/check_mcp_release_binding.py",
+        "scripts/check_openapi_auth_surface.py",
+        "scripts/check_openapi_baseline_sync.py",
+        "scripts/check_openapi_field_constraints.py",
+        "scripts/check_openapi_inline_body_integrity.py",
+        "scripts/check_openapi_operation_annotations.py",
+        "scripts/check_openapi_operation_id_floor.py",
+        "scripts/check_openapi_operation_parameter_floor.py",
+        "scripts/check_openapi_published_enums.py",
+        "scripts/check_openapi_required_fields.py",
+        "scripts/check_openapi_response_surface.py",
+        "scripts/check_published_route_manifest.py",
+        "scripts/check_variant_summary_assembly_consistency.py",
+    }
+)
 
 # Per-wire drift plants. A success signature is a string a gutted body can
 # also write: ``print("... self-test passed"); return 0`` reproduces every
@@ -860,6 +901,51 @@ def evidence_floor_errors() -> list[str]:
         f"printed-total pin {p!r} targets a guard that is not audited for evidence"
         for p in sorted(set(_PRINTED_CASE_TOTAL) - EVIDENCE_MEMBERS)
     ]
+    # The aux pins (#369 one turn out) own the wired guards the evidence floor
+    # does not reach. Three ways they rot, all fail closed:
+    #   * a pin for a guard that is not wired -- it measures nothing;
+    #   * a pinned guard with no signature -- the pin is the only reader, so a
+    #     gutted self-test would print its number and be believed;
+    #   * a guard in both floors -- two owners for one number, and the reviewed
+    #     row set stops meaning what the docs say it means.
+    # And the direction that keeps the hole from reopening: every wired guard
+    # whose signature is a bare ``\d+`` must land in one of the two exact-total
+    # pins. A new guard carrying ``OK (N cases)`` would otherwise open a fresh
+    # free-deletion cell the moment it is wired.
+    aux_pins = set(_AUX_PRINTED_CASE_TOTAL) | set(_AUX_CHECK_TOTAL)
+    problems += [
+        f"aux printed-total pin {p!r} targets a guard that is not wired"
+        for p in sorted(aux_pins - _WIRED_SELF_TESTS)
+    ]
+    problems += [
+        f"aux printed-total pin {p!r} has no success signature to pair with"
+        for p in sorted(aux_pins - set(_SIGNATURES))
+    ]
+    problems += [
+        f"aux printed-total pin {p!r} also carries an evidence-floor pin"
+        for p in sorted(aux_pins & (EVIDENCE_MEMBERS | set(_PRINTED_CASE_TOTAL)))
+    ]
+    if set(_AUX_PRINTED_CASE_TOTAL) & set(_AUX_CHECK_TOTAL):
+        problems += [
+            f"guard {p!r} is pinned in both aux total tables"
+            for p in sorted(set(_AUX_PRINTED_CASE_TOTAL) & set(_AUX_CHECK_TOTAL))
+        ]
+    exact_totals = aux_pins | set(_PRINTED_CASE_TOTAL)
+    problems += [
+        f"wired guard {p!r} prints a countable success line (its signature is a "
+        "bare \\d+) but no exact printed-total pin owns it: deleting one of its "
+        "plants would lower that number and stay green"
+        for p in sorted(_NUMERIC_SIGNATURES - exact_totals)
+    ]
+    problems += [
+        f"exact printed-total pin {p!r} is not in _NUMERIC_SIGNATURES: a guard "
+        "whose signature is not countable cannot need this pin"
+        for p in sorted(exact_totals - _NUMERIC_SIGNATURES)
+    ]
+    problems += [
+        f"guard {p!r} is in _NUMERIC_SIGNATURES but is not wired"
+        for p in sorted(_NUMERIC_SIGNATURES - _WIRED_SELF_TESTS)
+    ]
     return problems
 
 
@@ -888,9 +974,55 @@ _PRINTED_CASE_TOTAL: dict[str, int] = {
 }
 
 
+# The same fixed point for the wired guards *outside* the evidence floor. Seven
+# guards print an exact total their success line derives from the container they
+# iterate and are not in ``EVIDENCE_MEMBERS``, so #368's pin left them free: the
+# ``\d+`` in ``_SIGNATURES`` matches ``OK (16 ablations)`` as readily as
+# ``OK (17 ablations)``. Hand-written literals, read from nowhere -- re-pin in
+# the same reviewed commit as a guard that adds or removes a plant.
+#
+# Deliberately split from ``_PRINTED_CASE_TOTAL`` rather than merged into it,
+# and kept out of ``EVIDENCE_MEMBERS``: that set owns the per-case-line audit and
+# ``_CASE_FLOOR``, and these seven carry no case rows this guard can count from
+# source (two of them count tests in a *different* file). Extending the evidence
+# set would silently widen its format contract; a separate door does not.
+_AUX_PRINTED_CASE_TOTAL: dict[str, int] = {
+    "scripts/check_contracts_empty_layer_verdict.py": 13,
+    "scripts/check_guard_self_test_verdict.py": 11,
+    "scripts/check_openapi_auth_surface.py": 23,
+    "scripts/check_openapi_published_enums.py": 17,
+    "scripts/check_published_route_manifest.py": 19,
+}
+
+# ``OK (N checks)`` is a fourth noun and ``_DECLARED_CASES`` deliberately does
+# not accept it (widening that regex would change what every
+# ``EVIDENCE_MEMBERS`` row is measured against). So the two guards that print it
+# get their own decoder instead of a change to the shared audit's format.
+_AUX_CHECK_TOTAL: dict[str, int] = {
+    "scripts/check_openapi_baseline_sync.py": 28,
+    "scripts/check_openapi_inline_body_integrity.py": 17,
+}
+
+# ``openapi-baseline-sync-tests: OK (28 checks)`` / ``openapi-inline-bodies: OK
+# (17 checks)``. Anchored at line start and requiring the whole line: the plain
+# run prints ``OK (N baselines)`` and the enums plain run prints
+# ``OK (published value domains pinned, N pair(s) across ...)``, so a looser
+# pattern would measure the wrong entry point's number.
+_AUX_CHECK_LINE = re.compile(
+    r"^[ \t]*[a-z][a-z-]*(?:-[a-z]+)*: OK \((\d+) checks\)[ \t]*$",
+    re.MULTILINE,
+)
+
+
 def _declared_case_count(output: str) -> int | None:
     """The single N the run claims in its success line; None if ambiguous."""
     counts = {int(n) for n in _DECLARED_CASES.findall(output)}
+    return counts.pop() if len(counts) == 1 else None
+
+
+def _aux_check_count(output: str) -> int | None:
+    """The single N an ``OK (N checks)`` success line prints; None if ambiguous."""
+    counts = {int(n) for n in _AUX_CHECK_LINE.findall(output)}
     return counts.pop() if len(counts) == 1 else None
 
 
@@ -980,6 +1112,60 @@ def printed_total_errors(
     return problems
 
 
+def aux_printed_total_errors(
+    results: dict[str, tuple[int, str]]
+) -> list[str]:
+    """Pin the exact total every wired guard *outside* the evidence floor prints.
+
+    ``_PRINTED_CASE_TOTAL`` covers ``EVIDENCE_MEMBERS``. Seven wired guards print
+    a countable success line and are not members, so the ``\\d+`` in their
+    ``_SIGNATURES`` row is the only thing read back -- and it pins the shape of
+    a number, never the number. The total is derived from the container the
+    guard iterates (``len(cases)``, ``len(tests)``, ``len(GATES)``, a ``results``
+    loop counter), so deleting one plant lowers it silently: the signature still
+    matches, no evidence line is owed, and the deleted case is named nowhere.
+    Measured on ``e2bfd2b1``: one ``cases`` row removed from
+    ``check_openapi_published_enums.py`` printed ``OK (16 ablations)`` and the
+    whole contracts layer reported ``SMOKE PASS``.
+
+    A separate door rather than an extension of ``evidence_errors()``: that
+    audit stays one-sided and its format stays as reviewed. A pinned guard that
+    was not probed, or whose success line declares no single total, is named
+    here instead of skipped -- silence would be the same free deletion again.
+    """
+    problems: list[str] = []
+    decoders: dict[str, tuple[int, Callable[[str], int | None]]] = {
+        **{
+            path: (exact, _declared_case_count)
+            for path, exact in _AUX_PRINTED_CASE_TOTAL.items()
+        },
+        **{
+            path: (exact, _aux_check_count)
+            for path, exact in _AUX_CHECK_TOTAL.items()
+        },
+    }
+    for path in sorted(decoders):
+        exact, decode = decoders[path]
+        rc, output = results.get(path, (1, "guard was not probed"))
+        if rc != 0:
+            continue  # an unreachable self-test is reported by teeth_errors
+        declared = decode(output)
+        if declared is None:
+            problems.append(
+                f"{path} carries an exact printed-total pin but its success line "
+                "declares no single total to measure it against"
+            )
+        elif declared != exact:
+            verb = "fewer" if declared < exact else "more"
+            problems.append(
+                f"{path} declares {declared} case(s), {verb} than the exact "
+                f"reviewed printed total of {exact}: a plant in the container its "
+                "success line counts was added or deleted without the same-commit "
+                "literal edit"
+            )
+    return problems
+
+
 def teeth_errors(
     wired: dict[str, list[str]], results: dict[str, tuple[int, str]]
 ) -> list[str]:
@@ -1031,6 +1217,7 @@ def check(
         + teeth_errors(wired, results)
         + evidence_errors(results)
         + printed_total_errors(results)
+        + aux_printed_total_errors(results)
         + drift_errors(wired, drift_results)
         + gut_errors(wired, gut_results)
     )
@@ -1617,6 +1804,71 @@ def self_test() -> int:
             and len(drifted_errors) == 1
             and victim_printed in drifted_errors[0]
             and f"exact reviewed printed total of {exact_printed}" in drifted_errors[0],
+        )
+    )
+
+    # 14. The cell #368 left one turn open: seven wired guards print an exact
+    # total their success line derives from the container they iterate, and none
+    # of them is an ``EVIDENCE_MEMBERS`` guard, so nothing read the number back.
+    # Measured on e2bfd2b1: deleting one ``cases`` row from
+    # check_openapi_published_enums.py printed ``OK (16 ablations)``, teeth stayed
+    # ``OK (23 wired guards probed)``, this self-test stayed ``15 cases, 0`` and
+    # the whole contracts layer stayed ``SMOKE PASS``. Assert both limbs: the
+    # shipped results are quiet, and a total one below its pin -- exactly what a
+    # deleted plant prints -- is named by the guard path and the reviewed number.
+    aux_victim = "scripts/check_openapi_published_enums.py"
+    aux_exact = _AUX_PRINTED_CASE_TOTAL[aux_victim]
+    aux_clean = aux_printed_total_errors(control)
+    drifted_aux = dict(control)
+    aux_rc, aux_output = control[aux_victim]
+    drifted_aux[aux_victim] = (
+        aux_rc,
+        aux_output.replace(
+            f"OK ({aux_exact} ablations)", f"OK ({aux_exact - 1} ablations)", 1
+        ),
+    )
+    aux_found = aux_printed_total_errors(drifted_aux)
+    cases.append(
+        (
+            "a deleted plant outside the evidence floor is named by its exact total",
+            aux_victim,
+            aux_clean == []
+            and drifted_aux[aux_victim][1] != aux_output
+            and len(aux_found) == 1
+            and aux_victim in aux_found[0]
+            and f"exact reviewed printed total of {aux_exact}" in aux_found[0],
+        )
+    )
+
+    # 15. The second shape the same hole took: ``OK (N checks)``. That noun is
+    # deliberately absent from ``_DECLARED_CASES`` -- widening the shared audit's
+    # regex would change what every EVIDENCE_MEMBERS row is measured against --
+    # so these two guards need their own decoder. Both limbs again: the shipped
+    # line decodes to its pin and the clean tree is quiet, while the same line
+    # with one check fewer is named. The plain run of one of them prints
+    # ``OK (N baselines)``, so a decoder that matched any ``OK (...)`` would
+    # measure a number the self-test never printed.
+    check_victim = "scripts/check_openapi_baseline_sync.py"
+    check_exact = _AUX_CHECK_TOTAL[check_victim]
+    check_rc, check_output = control[check_victim]
+    drifted_check = dict(control)
+    drifted_check[check_victim] = (
+        check_rc,
+        check_output.replace(
+            f"OK ({check_exact} checks)", f"OK ({check_exact - 1} checks)", 1
+        ),
+    )
+    check_found = aux_printed_total_errors(drifted_check)
+    cases.append(
+        (
+            "an OK (N checks) total is decoded and pinned, not just shape-matched",
+            check_victim,
+            _aux_check_count(check_output) == check_exact
+            and _aux_check_count("openapi-baseline-sync: OK (4 baselines)\n") is None
+            and check_found != aux_clean
+            and len(check_found) == 1
+            and check_victim in check_found[0]
+            and f"exact reviewed printed total of {check_exact}" in check_found[0],
         )
     )
 
