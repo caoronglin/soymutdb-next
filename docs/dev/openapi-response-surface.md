@@ -343,6 +343,17 @@ head, byte-identical to the landed guard on `6f9c4219`):
   `6f9c4219` and `SMOKE PASS / 1196 passed, 41 subtests` on the clean
   `b279e4c9` tree.
 
+  The `smoke.sh` figure also names an environment prerequisite, not a
+  result: the contracts layer calls `${PYTHON_BIN} -m pytest --version`
+  before it collects anything, and on a box where `pytest` is not
+  importable it prints `pytest is required for the contracts smoke layer`
+  and returns `layer contracts FAILED / passed: 0`. Both figures above
+  were taken with `pytest` installed out-of-repo and `PYTHONPATH` set to
+  that install. A bare repo-root checkout reads the guard fine (it
+  resolves its own tree), but a bare `smoke.sh --profile contracts` is a
+  prerequisite failure, not a pass. Name the interpreter and the runner
+  alongside the tree.
+
 The decisive two-tree A/B survives both corrections: on byte-identical
 drifted artifacts (a coherent swap of the first two status blocks in both
 halves, both `_PINNED_ARTIFACTS` blob ids honestly re-pinned, trees differing
