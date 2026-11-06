@@ -611,6 +611,49 @@ class TeethGuardContract(unittest.TestCase):
         self.assertIn("BOTH_CALLS has", source)
         self.assertIn("membership_blind", source)
 
+    def test_the_printed_total_pins_are_exact_on_the_committed_tree(self) -> None:
+        """Second-file: every audited guard must pin its exact printed total."""
+        self.assertEqual(set(guard._PRINTED_CASE_TOTAL), set(guard.EVIDENCE_MEMBERS))
+        results = _results()
+        for path, exact in guard._PRINTED_CASE_TOTAL.items():
+            rc, output = results[path]
+            self.assertEqual(rc, 0, path)
+            self.assertEqual(guard._declared_case_count(output), exact, path)
+        self.assertEqual(guard.printed_total_errors(results), [])
+
+    def test_the_printed_total_literal_is_not_derived_from_output(self) -> None:
+        """The pin must be a hand-written module-level literal."""
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("_PRINTED_CASE_TOTAL: dict[str, int] = {", source)
+        self.assertIn('"scripts/check_openapi_field_constraints.py": 35', source)
+        self.assertNotIn("len(cases)", source.split("_PRINTED_CASE_TOTAL")[1][:400])
+
+    def test_deleting_a_secondary_case_is_named_by_the_printed_total(self) -> None:
+        """The decisive shape: a deletion from a secondary container."""
+        victim = "scripts/check_openapi_field_constraints.py"
+        results = _results()
+        rc, output = results[victim]
+        exact = guard._PRINTED_CASE_TOTAL[victim]
+        drifted = dict(results)
+        drifted[victim] = (
+            rc,
+            output.replace(
+                f"self-test: {exact} cases",
+                f"self-test: {exact - 1} cases",
+                1,
+            ),
+        )
+        found = guard.printed_total_errors(drifted)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn(f"exact reviewed printed total of {exact}", found[0])
+        self.assertIn(victim, found[0])
+        self.assertEqual(guard.printed_total_errors(results), [])
+
+    def test_the_printed_total_ablation_reaches_the_guards_own_self_test(self) -> None:
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("a deleted secondary case is named by the exact printed total", source)
+        self.assertIn("printed_total_errors(drifted)", source)
+
 
 if __name__ == "__main__":
     unittest.main()

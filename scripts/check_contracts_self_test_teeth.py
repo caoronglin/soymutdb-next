@@ -852,7 +852,40 @@ def evidence_floor_errors() -> list[str]:
         f"case floor {p!r} targets a guard that is not audited for per-case evidence"
         for p in sorted(set(_CASE_FLOOR) - EVIDENCE_MEMBERS)
     ]
+    problems += [
+        f"per-case guard {p!r} is audited for evidence but has no printed-total pin"
+        for p in sorted(EVIDENCE_MEMBERS - set(_PRINTED_CASE_TOTAL))
+    ]
+    problems += [
+        f"printed-total pin {p!r} targets a guard that is not audited for evidence"
+        for p in sorted(set(_PRINTED_CASE_TOTAL) - EVIDENCE_MEMBERS)
+    ]
     return problems
+
+
+# Independent, hand-written fixed point on the *printed* case total. The AST
+# row above pins one container's declarations; several guards sum several
+# containers plus hand-run controls into the number their success line prints,
+# so the AST count and the printed count are different quantities. A deletion
+# from any secondary container lowers only the printed total, and the one-sided
+# ``emitted < floor[3]`` check below leaves every deletion between the stale
+# AST floor and the real total free. This literal is read from nowhere: re-pin
+# it in the same reviewed commit as a guard that adds or removes a case.
+_PRINTED_CASE_TOTAL: dict[str, int] = {
+    "scripts/check_api_error_code_vocabulary.py": 9,
+    "scripts/check_error_code_catalog.py": 12,
+    "scripts/check_error_code_doc_counts.py": 6,
+    "scripts/check_error_code_gate_wiring.py": 11,
+    "scripts/check_mcp_manifest_reconcile.py": 12,
+    "scripts/check_mcp_release_binding.py": 6,
+    "scripts/check_openapi_field_constraints.py": 35,
+    "scripts/check_openapi_operation_annotations.py": 10,
+    "scripts/check_openapi_operation_id_floor.py": 26,
+    "scripts/check_openapi_operation_parameter_floor.py": 24,
+    "scripts/check_openapi_required_fields.py": 24,
+    "scripts/check_openapi_response_surface.py": 32,
+    "scripts/check_variant_summary_assembly_consistency.py": 6,
+}
 
 
 def _declared_case_count(output: str) -> int | None:
@@ -910,6 +943,43 @@ def evidence_errors(results: dict[str, tuple[int, str]]) -> list[str]:
     return problems
 
 
+def printed_total_errors(
+    results: dict[str, tuple[int, str]]
+) -> list[str]:
+    """Pin the exact case total each wired guard prints.
+
+    ``_CASE_FLOOR`` pins one container's AST declarations. Several guards sum
+    several containers plus hand-run controls into the number their success
+    line prints, so the AST count and the printed count are different
+    quantities: on live main ``field_constraints`` was 8 / 35. A deletion from
+    a secondary container lowers only the printed total, and the one-sided
+    ``evidence_errors`` check leaves all 27 of those deletions free. This is a
+    separate door so the forged-output ablations stay one-sided and orthogonal.
+    """
+    problems: list[str] = []
+    for path in sorted(EVIDENCE_MEMBERS):
+        rc, output = results.get(path, (1, "guard was not probed"))
+        if rc != 0:
+            continue
+        declared = _declared_case_count(output)
+        exact = _PRINTED_CASE_TOTAL.get(path)
+        if declared is None:
+            continue  # evidence_errors names an ambiguous count
+        if exact is None:
+            problems.append(
+                f"{path} is audited for per-case evidence but has no pinned "
+                "printed total: deleting one of its cases would be invisible"
+            )
+        elif declared != exact:
+            verb = "fewer" if declared < exact else "more"
+            problems.append(
+                f"{path} declares {declared} case(s), {verb} than the exact "
+                f"reviewed printed total of {exact}: a case in a secondary "
+                "container was added or deleted without the same-commit literal edit"
+            )
+    return problems
+
+
 def teeth_errors(
     wired: dict[str, list[str]], results: dict[str, tuple[int, str]]
 ) -> list[str]:
@@ -960,6 +1030,7 @@ def check(
         problems
         + teeth_errors(wired, results)
         + evidence_errors(results)
+        + printed_total_errors(results)
         + drift_errors(wired, drift_results)
         + gut_errors(wired, gut_results)
     )
@@ -1513,6 +1584,39 @@ def self_test() -> int:
             and victim_case in found[0]
             and f"exact reviewed count of {exact}" in found[0]
             and "fewer" in found[0],
+        )
+    )
+
+    # 13. The one-sided evidence floor leaves free deletion slack. Several
+    # guards sum several case containers into the total their success line
+    # prints; _CASE_FLOOR pins only one container's AST declarations, so
+    # emitted < floor[3] is a stale lower bound. Deleting one case from a
+    # SECONDARY container lowers only the printed total, and every wired floor
+    # stayed silent on the shipped tree. Both limbs: the clean tree is quiet
+    # and one deleted secondary case is named by the exact printed total.
+    victim_printed = "scripts/check_openapi_field_constraints.py"
+    exact_printed = _PRINTED_CASE_TOTAL[victim_printed]
+    clean_results = probe(wired)
+    drifted = dict(clean_results)
+    rc, output = clean_results[victim_printed]
+    drifted[victim_printed] = (
+        rc,
+        output.replace(
+            f"self-test: {exact_printed} cases",
+            f"self-test: {exact_printed - 1} cases",
+            1,
+        ),
+    )
+    drifted_errors = printed_total_errors(drifted)
+    clean_errors = printed_total_errors(clean_results)
+    cases.append(
+        (
+            "a deleted secondary case is named by the exact printed total",
+            victim_printed,
+            clean_errors == []
+            and len(drifted_errors) == 1
+            and victim_printed in drifted_errors[0]
+            and f"exact reviewed printed total of {exact_printed}" in drifted_errors[0],
         )
     )
 
