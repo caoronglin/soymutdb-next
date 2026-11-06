@@ -82,6 +82,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
 import json
 import re
 import subprocess
@@ -97,6 +98,7 @@ BODY_GUARD = ROOT / "scripts/test_openapi_snapshot_body_integrity.py"
 INLINE_GUARD = ROOT / "scripts/check_openapi_inline_body_integrity.py"
 SMOKE = ROOT / "scripts/smoke.sh"
 SELF = Path(__file__).name
+SELF_PATH = Path(__file__).resolve()
 
 METHODS = frozenset({"get", "put", "post", "patch", "delete", "options", "head", "trace"})
 COMPONENT_PREFIX = "#/components/schemas/"
@@ -115,18 +117,47 @@ class Gate:
       distributions are left alone).
     """
 
-    def __init__(self, name: str, path: Path, kind: str, artifacts: tuple[str, ...]) -> None:
+    def __init__(
+        self,
+        name: str,
+        path: Path,
+        kind: str,
+        artifacts: tuple[str, ...],
+        source: Path | None = None,
+    ) -> None:
         self.name = name
+        # ``source`` is the file that must still *declare* the pinned literal.
+        # For every gate so far that is the same file the literal is read from.
+        # The body-pair pin is the exception: the one existing literal over the
+        # same rows lives in the body guard, and a second copy in this file
+        # would be a second hand-maintained number -- so the literal is read
+        # from this guard's own source and checked for presence in the guard
+        # that pins the rows it describes.
         self.path = path
+        self.source = source if source is not None else path
         self.kind = kind
         self.artifacts = artifacts
 
 
+# The component name each published body points at, and the gate that pins it.
+# Every other pin in this table is a count, a distribution over names, or an
+# inline shape: a coherent regenerate that renames one schema -- snapshot,
+# generated client, ``components.schemas`` and every literal that walks them,
+# in one commit -- moves all of those bags by the same amount and leaves every
+# count identical, so the whole contracts layer stays self-consistent. Measured
+# on ``7ed30279``: ``EnrichmentRequest`` -> ``EnrichmentRequestX`` in both
+# artifacts with the twelve moved literals honestly re-pinned leaves
+# ``SMOKE PASS / 1274 passed`` and this guard ``OK (4 baselines)`` on both
+# trees. The name a body points at is the client-visible type a caller imports,
+# so it gets its own equality against committed bytes.
 INLINE_SNAPSHOT_GATE = Gate(
     "_INLINE_BODY_BASELINE", INLINE_GUARD, "inline_snapshot", ("snapshot",)
 )
 INLINE_CLIENT_GATE = Gate(
     "_CLIENT_INLINE_BASELINE", INLINE_GUARD, "inline_client", ("generated",)
+)
+BODY_PAIR_GATE = Gate(
+    "_BODY_PAIR_SET", BODY_GUARD, "body_pairs", ("snapshot",), source=SELF_PATH
 )
 
 GATES = (
@@ -142,6 +173,12 @@ GATES = (
     # disagree about what the artifact says.
     INLINE_SNAPSHOT_GATE,
     INLINE_CLIENT_GATE,
+    # The body-pair set the snapshot publishes: (method, path, where, name) for
+    # every ``$ref`` body and its request half. The inline pin skips exactly
+    # these nodes (it pins the bodies that are NOT ``$ref``s), so between the
+    # two gates every declared body is pinned -- one file for the inline
+    # shapes, this one for the component name each ``$ref`` body points at.
+    BODY_PAIR_GATE,
 )
 
 ARTIFACT_PATHS = {
@@ -211,6 +248,63 @@ def request_bodies(document: dict) -> dict[str, int]:
     return counts
 
 
+# The one thing no count above can say: which component each published body
+# points at. sha256 of "\n".join(["soymutdb-body-pair-set/v1"] + sorted
+# f"{METHOD}|{path}|{where}|{component}"), read from nowhere. ``_REQUEST_BODY_BASELINE``
+# and ``_RESPONSE_BODY_BASELINE`` are distributions over the same names, so a
+# coordinated rename moves both bags by exactly the same amount and every count
+# in this table stays put; ``_BODY_PAIR_DIGEST`` in the body guard is a digest
+# over the same rows and would move, but it is re-pinned in the same reviewed
+# act as the counts, which is precisely the escape hatch this gate closes.
+_BODY_PAIR_SET = {
+    "rows": 807,
+    "digest": "347ca54c41140fd472c577b5229cb44b25f3d8a45eb0eb9ad6478253d7f5000c",
+}
+
+
+def body_pair_set(document: dict) -> dict[str, Any]:
+    """The pinned shape: the body-pair count and the digest over its rows."""
+    pairs = body_pairs(document)
+    blob = "\n".join(["soymutdb-body-pair-set/v1", *sorted(pairs)])
+    return {
+        "rows": len(pairs),
+        "digest": hashlib.sha256(blob.encode("utf-8")).hexdigest(),
+    }
+
+
+def body_pairs(document: dict) -> dict[str, int]:
+    """The ``(METHOD, path, where, component)`` body set, as a serializable map.
+
+    One entry per declared ``$ref`` body: ``where`` is the response status or
+    ``requestBody``. Values count duplicates, so two bodies on one
+    ``(METHOD, path, where)`` pointing at the same component -- two media on one
+    response, say -- cannot collapse into one row and hide behind an equal
+    length.
+
+    The component name is the point. Every other literal in the gate table is a
+    count, a distribution over names, or an inline shape; a coherent regenerate
+    that renames one schema -- snapshot, generated client, ``components.schemas``
+    and every literal that walks them, in one commit -- keeps all of those
+    equal, because the same number of bodies still point at a component. This is
+    the only gate that says *which*.
+    """
+    out: dict[str, int] = {}
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for method, operation in item.items():
+            if method not in METHODS or not isinstance(operation, dict):
+                continue
+            for status, response in (operation.get("responses") or {}).items():
+                for name in ref_bodies(response):
+                    key = f"{method.upper()}|{path}|{status}|{name}"
+                    out[key] = out.get(key, 0) + 1
+            for name in ref_bodies(operation.get("requestBody") or {}):
+                key = f"{method.upper()}|{path}|requestBody|{name}"
+                out[key] = out.get(key, 0) + 1
+    return out
+
+
 def error_statuses(document: dict) -> dict[str, int]:
     counts: dict[str, int] = {}
     for operation in operations(document):
@@ -266,6 +360,8 @@ def recomputed(gate: Gate, document: dict, generated: str) -> Any:
         return inline_guard()._snapshot_inline(document)
     if gate.kind == "inline_client":
         return inline_guard()._client_inline_bodies(generated)
+    if gate.kind == "body_pairs":
+        return body_pair_set(document)
     raise AssertionError(f"unknown gate kind {gate.kind}")
 
 
@@ -321,6 +417,50 @@ def changed_in(commit: str | None, since: str | None, paths: tuple[str, ...]) ->
 # ---------------------------------------------------------------------------
 
 
+def _declares_or_names(source: str, name: str) -> bool:
+    """Whether ``source`` still refers to ``name`` as an identifier.
+
+    A bare substring test is not enough: the pairing constant in the body guard
+    is named ``{name}_OWNER``, so renaming *that* leaves a substring match
+    behind in every comment and identifier that quotes it. An AST scan answers
+    the question the pairing actually asks -- does this file still use the
+    symbol -- and a name that survives only in prose does not count.
+    """
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return False
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and node.id == name:
+            return True
+        if isinstance(node, ast.Attribute) and node.attr == name:
+            return True
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            # An owner constant stores a *path*, so the pairing is recorded as
+            # "<file path containing the pin>" rather than as the pin's own
+            # name. Either spelling counts: the symbol, or a module of this
+            # guard (`<name>.py`, or its path).
+            if node.value.endswith(f"::{name}") or node.value == name:
+                return True
+            if node.value == f"{SELF_PATH.stem}.py" or node.value.endswith(
+                f"/{SELF_PATH.name}"
+            ):
+                return True
+    return False
+
+
+def _gate_source(
+    gate: Gate, tree: dict[str, str | None] | None, sources: dict[str, str | None]
+) -> str | None:
+    """The bytes the gate's pinned literal is read from."""
+    relative = str(gate.source.relative_to(ROOT))
+    if tree is not None:
+        if relative in tree:
+            return tree[relative]
+        return None
+    return gate.source.read_text(encoding="utf-8")
+
+
 def failures(
     *,
     ref: str = "HEAD",
@@ -362,11 +502,19 @@ def failures(
             found.append(f"{gate.path.name} is not readable")
             continue
         try:
-            pinned = pinned_literal(gate.path, gate.name, source)
+            pinned = pinned_literal(
+                gate.source, gate.name, _gate_source(gate, tree, sources)
+            )
         except KeyError:
             found.append(
-                f"{gate.path.name} no longer pins {gate.name}: a baseline that "
+                f"{gate.source.name} no longer pins {gate.name}: a baseline that "
                 "can be deleted is not a fixed point"
+            )
+            continue
+        if gate.source != gate.path and not _declares_or_names(source, gate.name):
+            found.append(
+                f"{gate.path.name} no longer names {gate.name}: the guard that "
+                "pins the rows this literal describes stopped referring to it"
             )
             continue
         actual = recomputed(gate, document, generated)
