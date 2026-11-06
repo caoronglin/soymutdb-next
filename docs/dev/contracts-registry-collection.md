@@ -351,3 +351,33 @@ guard rejects an unpinned addition.
   file must not be possible.
 - Never change the driver's guard call back to `|| rc=$?`; `--self-test`
   fails on that mutation.
+
+## The frontend gate's `unittest` plan
+
+`packages/api-client/scripts/check-contract.sh` runs a third collection plan:
+
+```
+python3 -m unittest discover -s "$PKG_DIR/python_tests" -p "test_*.py"
+```
+
+`unittest.TestLoader` collects only `unittest.TestCase` subclasses. A suite made
+of module-level `def test_*` functions — or a plain class with `test_*` methods —
+is invisible to it: the loader collects 0 cases, the runner executes 0, and the
+process still prints `Ran 0 tests in 0.000s` / `OK` and exits `rc=0`. The green
+verdict is the runner affirming an empty plan, not a passing suite. This is the
+`Ran 0 tests, OK` shape the doc above listed as historical; it now has a reader.
+
+`check_contracts_registry_collection.py` reads the committed `check-contract.sh`
+bytes and the plan's `test_*.py` files. It requires exactly one bare `unittest
+discover` statement (a dropped, chained, redirected, piped, commented or
+re-patterned line is named) and at least one `TestCase` method collected by a
+reader that is deliberately **not** the pytest-shaped `collectible_tests()`.
+
+Both entry points are already wired to this guard and both go through
+`wiring_errors()`: the local contracts layer invokes the plain run from
+`smoke.sh`, and `ci-job-steps.sh` invokes `--self-test` before that layer. The
+companion `scripts/test_contracts_registry_collection.py` pins the two wirings
+from a second file, plants the empty-plan ablation, and asserts the pytest
+reader stays green on the very bytes the unittest reader calls empty. The plain
+run's `OK` line reports the collected unittest case count, so a suite that
+silently loses its `TestCase` base cannot hide behind an unchanged `OK`.

@@ -39,7 +39,7 @@ REQUIRED = sorted(guard.REQUIRED_GUARD_CALLS)
 # collected, independent literal can name a shrunken loop. Keep in step with
 # ``check_contracts_registry_collection._REVIEWED_CASE_FLOOR``; raise both in
 # one reviewed commit when a case is added, and say why.
-_EXPECTED_SELF_TEST_CASES = 46
+_EXPECTED_SELF_TEST_CASES = 49
 
 
 # Exercises the *process* exit code of the canonical ``--self-test`` entry,
@@ -754,7 +754,7 @@ class RegistryCollectionGuardTests(unittest.TestCase):
         # a clean-looking short run -- 33 cases, 33 PASS lines, 0 failures.
         # Without this limb the ablation could be red for an unrelated reason.
         no_floor = shrunken.replace(
-            "_REVIEWED_CASE_FLOOR = 46\n",
+            "_REVIEWED_CASE_FLOOR = 49\n",
             "_REVIEWED_CASE_FLOOR = 0\n",
             1,
         )
@@ -778,6 +778,113 @@ class RegistryCollectionGuardTests(unittest.TestCase):
             emitted,
             "the floor must not change which probes run, only judge the count",
         )
+
+
+    def test_unittest_plan_is_read_by_both_wired_entry_points(self) -> None:
+        """The empty-plan verdict must be reachable from both entry points.
+
+        ``ci-job-steps.sh`` gates the contracts layer with this guard's
+        ``--self-test``; ``smoke.sh`` gates it with the plain run. Both call
+        ``wiring_errors()``, so both must see the frontend gate's unittest
+        plan. Pin the two committed lines from this second file.
+        """
+        ci = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        ci_body = guard.ci_contracts_function(ci)
+        self.assertTrue(
+            any(
+                guard.CI_SELF_TEST.match(line)
+                for line in ci_body.splitlines()
+            ),
+            "the CI entry point no longer invokes the guard's --self-test",
+        )
+        self.assertIsNotNone(
+            guard.driver_propagates(smoke),
+            "the local entry point no longer has the driver-level call",
+        )
+        self.assertTrue(
+            guard.driver_propagates(smoke),
+            "the local entry point no longer propagates the plain run's failure",
+        )
+        # Both wired forms must reach the same composed validator, or one of
+        # them can retire the unittest-plan reader without the other noticing.
+        source = GUARD_PATH.read_text(encoding="utf-8")
+        self.assertIn("wiring_errors(smoke, files, ci_steps)", source)
+        self.assertIn("return self_test()", source)
+
+    def test_empty_unittest_plan_is_named(self) -> None:
+        """Decisive ablation: the reader must use unittest's collection rule.
+
+        Rewriting the suite's ``unittest.TestCase`` base into a plain class
+        keeps every module-level ``def test_*`` name pytest would collect, but
+        ``unittest discover`` collects 0 and still prints ``OK`` / ``rc=0``.
+        A reader reusing ``collectible_tests()`` would stay green.
+        """
+        smoke, ci, files = guard.load_sources()
+        script = files[guard.CONTRACT_SH]
+        suite = "packages/api-client/python_tests/test_api_error_code_vocabulary.py"
+        self.assertEqual(guard.unittest_plan_errors(script, files), [])
+
+        mutated = dict(files)
+        mutated[suite] = files[suite].replace(
+            "class ApiErrorVocabularyTests(unittest.TestCase):",
+            "class ApiErrorVocabularyTests:",
+            1,
+        )
+        failures = guard.wiring_errors(smoke, mutated, ci)
+        self.assertTrue(
+            any("0 TestCase methods" in f for f in failures), failures
+        )
+
+        # The pytest-shaped reader would call the same bytes healthy: this is
+        # what makes the cell real rather than a second copy of the registry
+        # check.
+        self.assertEqual(
+            guard.unittest_collectible_tests(mutated[suite], suite), []
+        )
+        self.assertTrue(
+            any(
+                item.name.startswith("test")
+                for item in __import__("ast").parse(mutated[suite]).body
+                if isinstance(item, (__import__("ast").FunctionDef,))
+            ) is False,
+            "the ablated file should keep its methods inside the class",
+        )
+
+    def test_unittest_plan_is_not_pinned_by_a_derived_reader(self) -> None:
+        """A literal pin, not a value computed from the bytes it audits."""
+        source = GUARD_PATH.read_text(encoding="utf-8")
+        self.assertIn("UNITTEST_DISCOVER = re.compile(", source)
+        self.assertIn('UNITTEST_START = "packages/api-client/python_tests"', source)
+        self.assertIn("def unittest_collectible_tests(", source)
+        self.assertNotIn(
+            "unittest_collectible_tests = collectible_tests",
+            source,
+            "the unittest reader must not alias the pytest-shaped reader",
+        )
+
+    def test_a_neutralised_unittest_discover_line_is_named(self) -> None:
+        """Dropping or chaining the discover call must fail by name."""
+        smoke, ci, files = guard.load_sources()
+        call = (
+            'python3 -m unittest discover -s "$PKG_DIR/python_tests" '
+            '-p "test_*.py"'
+        )
+        script = files[guard.CONTRACT_SH]
+        self.assertIn(call, script)
+        for label, replacement in {
+            "dropped": "",
+            "chained": call + " || true",
+            "redirected": call + " 2>/dev/null",
+            "repatterned": call.replace("test_*.py", "check_*.py"),
+        }.items():
+            with self.subTest(shape=label):
+                mutated = dict(files)
+                mutated[guard.CONTRACT_SH] = script.replace(call, replacement, 1)
+                failures = guard.wiring_errors(smoke, mutated, ci)
+                self.assertTrue(
+                    any("unittest discover" in f for f in failures), failures
+                )
 
 
 if __name__ == "__main__":

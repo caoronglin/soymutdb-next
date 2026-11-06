@@ -15,6 +15,15 @@ contracts layer on both providers. A merge that drops the CI-side line leaves
 ``--self-test`` unreachable while the local layer stays green, so the CI
 disappearance is silent. This guard reads both files' committed bytes.
 
+A third collection plan lives in ``packages/api-client/scripts/check-contract.sh``:
+``python3 -m unittest discover -s "$PKG_DIR/python_tests" -p "test_*.py"`` in
+the frontend gate. ``unittest`` collects only ``TestCase`` subclasses; a suite
+of module-level ``def test_*`` functions makes the loader collect 0 cases, the
+runner execute 0, and still print ``OK`` over ``Ran 0 tests`` with ``rc=0``.
+No other reader audits that plan, so the green verdict verifies nothing. This
+guard reads the script and the plan's committed bytes and requires at least one
+unittest-collectible case, from both wired entry points.
+
 The same function invokes a floor of stdlib guards as separate
 ``${PYTHON_BIN} scripts/check_*.py ... || rc=$?`` calls. That is a second
 wiring mechanism: a merge can drop one without touching the array, and the
@@ -28,8 +37,11 @@ suites, need Python 3.15, a wheel, a database or a workspace install, so it
 can run before the expensive build. It is a *static* proxy for collection:
 pytest's real discovery is richer, but this repository uses only module-level
 ``def test_*`` and ``unittest.TestCase`` subclasses with ``test_*`` methods,
-which the guard checks with the ``ast`` module. ``--self-test`` injects
-one-sided drifts into copies of the sources and asserts each is caught.
+which the guard checks with the ``ast`` module. The ``unittest`` plan is
+audited by a separate reader: ``unittest.TestLoader`` ignores module-level
+``def test_*`` functions, so a pytest-shaped reader would pass an empty plan.
+``--self-test`` injects one-sided drifts into copies of the sources and asserts
+each is caught.
 
 Usage:
     python3 scripts/check_contracts_registry_collection.py --self-test
@@ -48,6 +60,12 @@ ROOT = Path(__file__).resolve().parents[1]
 SMOKE = ROOT / "scripts" / "smoke.sh"
 CI_STEPS = ROOT / "scripts" / "ci-job-steps.sh"
 GUARD_NAME = "check_contracts_registry_collection.py"
+
+# The frontend gate's unittest plan. ``$PKG_DIR`` resolves to
+# ``packages/api-client``; the mapping is hand-written, not derived from the
+# script, so a co-revert of both cannot move the fixed point.
+CONTRACT_SH = "packages/api-client/scripts/check-contract.sh"
+UNITTEST_START = "packages/api-client/python_tests"
 
 # The CI-side wiring: `python3 "${REPO_ROOT}/scripts/<guard>.py" --self-test`
 # inside smoke_contracts_run(). A path/flag change must fail loudly, not drift.
@@ -128,7 +146,7 @@ GUARD_CALL = re.compile(
 # A second, independent copy of this number lives in the collected companion
 # scripts/test_contracts_registry_collection.py. Raise both in one reviewed
 # commit when a case is added, and say why.
-_REVIEWED_CASE_FLOOR = 46
+_REVIEWED_CASE_FLOOR = 49
 
 REQUIRED_GUARD_CALLS: frozenset[str] = frozenset(
     {
@@ -270,6 +288,20 @@ GATING_PYTEST = re.compile(
 )
 
 
+# The frontend gate's ``unittest discover`` call. Anchored to one bare
+# statement: a dropped/indented line, a trailing ``|| true``, a pipe, a
+# redirection, a comment or a pattern that matches no suite all leave the
+# runner free to print ``Ran 0 tests`` / ``OK`` / ``rc=0``. ``set -e`` in
+# check-contract.sh propagates the status only when the line runs bare.
+UNITTEST_DISCOVER = re.compile(
+    r'^python3[ \t]+-m[ \t]+unittest[ \t]+discover[ \t]+-s[ \t]+'
+    r'"\$PKG_DIR/python_tests"[ \t]+-p[ \t]+"test_\*\.py"[ \t]*$',
+    re.MULTILINE,
+)
+
+UNITTEST_SUITE = re.compile(rf"^{re.escape(UNITTEST_START)}/test_[^/]*\.py$")
+
+
 DRIVER_MARKER = "if should_run contracts; then"
 
 
@@ -391,12 +423,19 @@ def wiring_errors(
     fixtures keep their original meaning. The literal-floor check and the
     bare-statement pin describe the *committed* ``scripts/smoke.sh``; both real
     entry points (``main`` and ``self_test``) go through this function.
+    ``files`` carries the committed frontend-gate script under ``CONTRACT_SH``
+    when it was loaded; synthetic fixtures omit it and stay local-only.
     """
-    return (
+    errors = (
         check(smoke, files, ci_steps)
         + pinned_suite_errors(smoke)
         + gating_pytest_errors(smoke)
     )
+    contract_sh = files.get(CONTRACT_SH)
+    if contract_sh is not None:
+        errors += unittest_plan_errors(contract_sh, files)
+    return errors
+
 
 def guard_calls(smoke: str) -> list[str]:
     """Standalone ``check_*.py`` invocations inside smoke_contracts()."""
@@ -512,6 +551,98 @@ def ci_wiring_errors(ci_body: str) -> list[str]:
     return []
 
 
+def _is_testcase(node: ast.ClassDef) -> bool:
+    """Whether a class derives from ``unittest.TestCase`` by name.
+
+    ``unittest.TestLoader`` walks ``dir(module)`` and keeps only subclasses of
+    ``TestCase``; a plain class with ``test_*`` methods is invisible to it.
+    Recognise both ``unittest.TestCase`` and a bare ``TestCase`` import.
+    """
+    for base in node.bases:
+        if isinstance(base, ast.Attribute) and base.attr == "TestCase":
+            return True
+        if isinstance(base, ast.Name) and base.id == "TestCase":
+            return True
+    return False
+
+
+def unittest_collectible_tests(source: str, path: str) -> list[str]:
+    """Names unittest.TestLoader would collect from a module's AST.
+
+    Deliberately NOT ``collectible_tests()``: pytest collects module-level
+    ``def test_*`` functions and methods of any class, while ``unittest
+    discover`` collects only ``unittest.TestCase`` subclasses. A plan made of
+    module-level functions -- or of a plain class with ``test_*`` methods --
+    therefore reads as healthy to the pytest-shaped reader and as an empty
+    plan (``Ran 0 tests`` / ``OK`` / ``rc=0``) to the real runner.
+    """
+    tree = ast.parse(source, filename=path)
+    names: list[str] = []
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef) or not _is_testcase(node):
+            continue
+        for item in node.body:
+            if (
+                isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and item.name.startswith("test")
+            ):
+                names.append(f"{node.name}::{item.name}")
+    return names
+
+
+def unittest_discover_line(script: str) -> str | None:
+    """The one bare ``unittest discover`` statement in check-contract.sh."""
+    matches = UNITTEST_DISCOVER.findall(script)
+    return matches[0] if len(matches) == 1 else None
+
+
+def unittest_plan_errors(
+    script: str, files: dict[str, str]
+) -> list[str]:
+    """Name the shape where the frontend gate's unittest plan goes green over
+    an empty run.
+
+    This guard is already wired from two independent entry points: the local
+    contracts layer calls its plain form in ``smoke.sh``, and the CI entry
+    calls ``--self-test`` in ``ci-job-steps.sh`` before that layer. Both run
+    through ``wiring_errors()``, so the same reader closes the cell in both.
+    The companion pins the two wirings from a second file.
+    """
+    errors: list[str] = []
+    if unittest_discover_line(script) is None:
+        errors.append(
+            "the frontend gate's 'python3 -m unittest discover' invocation is "
+            "not exactly one bare statement in " + CONTRACT_SH + ": a dropped, "
+            "chained, redirected, piped, commented or re-patterned line lets "
+            "an empty plan print OK with rc=0"
+        )
+
+    suites = sorted(
+        relative for relative in files if UNITTEST_SUITE.match(relative)
+    )
+    if not suites:
+        errors.append(
+            f"no '{UNITTEST_START}/test_*.py' suite is committed: unittest "
+            "discover would collect 0 cases and still print OK"
+        )
+    collected = 0
+    for relative in suites:
+        try:
+            collected += len(
+                unittest_collectible_tests(files[relative], relative)
+            )
+        except SyntaxError as exc:
+            errors.append(f"unittest suite {relative!r} does not parse: {exc}")
+    if not errors and collected == 0:
+        errors.append(
+            "the frontend gate's unittest plan defines 0 TestCase methods: "
+            "the loader collects nothing, the runner executes nothing, and "
+            "still prints 'Ran 0 tests' / 'OK' with rc=0 -- a green verdict "
+            "from an empty plan is not a passing suite"
+        )
+    return errors
+
+
 def check(
     smoke: str, files: dict[str, str], ci_steps: str | None = None
 ) -> list[str]:
@@ -585,6 +716,11 @@ def load_sources() -> tuple[str, str, dict[str, str]]:
         | set(guard_calls(smoke))
         | set(REQUIRED_GUARD_CALLS)
         | set(PINNED_SUITES)
+        | {CONTRACT_SH}
+        | {
+            p.relative_to(ROOT).as_posix()
+            for p in (ROOT / UNITTEST_START).glob("test_*.py")
+        }
     )
     files = {
         p: (ROOT / p).read_text(encoding="utf-8")
@@ -956,6 +1092,58 @@ def self_test() -> int:
         "FAIL self-test: a duplicated --self-test line was accepted",
     )
 
+    # The frontend gate runs a THIRD collection plan with ``unittest
+    # discover``. Unlike pytest, its loader collects only TestCase subclasses:
+    # rewriting that suite's classes into module-level ``def test_*`` makes
+    # ``Ran 0 tests`` / ``OK`` / ``rc=0`` with no other reader noticing.
+    contract_sh = files[CONTRACT_SH]
+    suite_path = "packages/api-client/python_tests/test_api_error_code_vocabulary.py"
+    assert suite_path in files, "self-test could not locate the unittest suite"
+    suite_source = files[suite_path]
+
+    pytest_shaped = dict(files)
+    pytest_shaped[suite_path] = suite_source.replace(
+        "class ApiErrorVocabularyTests(unittest.TestCase):",
+        "class ApiErrorVocabularyTests:",
+        1,
+    )
+    report(
+        any("0 TestCase methods" in f for f in unittest_plan_errors(
+            contract_sh, pytest_shaped
+        )),
+        "PASS self-test: an empty unittest plan is named",
+        "FAIL self-test: an empty unittest plan was accepted",
+    )
+
+    no_discover = dict(files)
+    no_discover[CONTRACT_SH] = contract_sh.replace(
+        'python3 -m unittest discover -s "$PKG_DIR/python_tests" -p "test_*.py"',
+        'python3 -m unittest discover -s "$PKG_DIR/python_tests" -p "test_*.py" || true',
+        1,
+    )
+    report(
+        any("not exactly one bare statement" in f for f in unittest_plan_errors(
+            no_discover[CONTRACT_SH], no_discover
+        )),
+        "PASS self-test: a neutralised unittest discover line is named",
+        "FAIL self-test: a neutralised unittest discover line was accepted",
+    )
+
+    # Decisive isolation: on the SAME bytes the pytest-shaped reader still
+    # sees collectible tests while the unittest reader sees an empty plan.
+    # A guard that reused the pytest reader would call this healthy.
+    report(
+        bool(collectible_tests(pytest_shaped[suite_path], suite_path))
+        and not unittest_collectible_tests(pytest_shaped[suite_path], suite_path)
+        and any(
+            "0 TestCase methods" in f
+            for f in unittest_plan_errors(contract_sh, pytest_shaped)
+        ),
+        "PASS self-test: the pytest reader stays green where unittest "
+        "collects zero",
+        "FAIL self-test: the unittest reader did not distinguish the plans",
+    )
+
     if results < _REVIEWED_CASE_FLOOR:
         print(
             f"FAIL self-test: only {results} mutation case(s) ran, below the "
@@ -982,11 +1170,13 @@ def main() -> int:
             print(f"FAIL: {error}", file=sys.stderr)
         print(f"contracts registry collection: {len(errors)} failure(s)")
         return 1
+    suites = [r for r in files if UNITTEST_SUITE.match(r)]
     print(
         f"contracts registry collection: OK "
         f"({len(registry(smoke))} gating suites, "
         f"{len(guard_calls(smoke))} guard calls, "
-        f"CI --self-test wired)"
+        f"{sum(len(unittest_collectible_tests(files[r], r)) for r in suites)} "
+        f"unittest cases, CI --self-test wired)"
     )
     return 0
 
