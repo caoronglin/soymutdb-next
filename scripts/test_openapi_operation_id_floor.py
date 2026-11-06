@@ -12,6 +12,7 @@ import ast
 import contextlib
 import io
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -185,7 +186,16 @@ def test_the_co_revert_re_pin_pair_is_load_bearing() -> None:
         if hasattr(guard, "_snapshot_map")
         else guard._snapshot_parameters(document)
     )
-    fresh = guard.failures(snapshot=snapshot, generated=generated, digest=guard._digest(rows))
+    # A reviewed rename moves a generated ``operations`` member key, so the
+    # declaration-order literal must move in the same commit too.
+    fresh = guard.failures(
+        snapshot=snapshot,
+        generated=generated,
+        digest=guard._digest(rows),
+        client_operation_order_digest=guard._client_operation_order_digest(
+            guard._generated_operation_sequence(generated)
+        ),
+    )
     assert not fresh, fresh
     stale = guard.failures(snapshot=snapshot, generated=generated)
     assert any("drifted" in problem for problem in stale), stale
@@ -380,6 +390,98 @@ def test_method_sequence_digest_is_an_independent_literal() -> None:
     docstring = ast.get_docstring(tree) or ""
     for literal in ("_METHOD_SEQUENCE_DIGEST", "_EXPECTED_METHOD_ROWS"):
         assert literal in docstring, f"guard docstring omits {literal}"
+
+
+def _rotate_two_operation_members(generated: str) -> str:
+    """Byte-preserving rotation of two whole ``operations`` member blocks."""
+    marker = "export interface operations {"
+    start = generated.index(marker)
+    body = generated[start:]
+    end_match = re.search(r"^export (?:type|interface) ", body[20:], re.M)
+    end = start + 20 + end_match.start() if end_match else len(generated)
+    block = generated[start:end]
+    parts = re.split(r"(?=^    [A-Za-z0-9_]+: \{$)", block, flags=re.M)
+    members = parts[1:]
+    assert len(members) == guard._EXPECTED_CLIENT_OPERATION_ROWS
+    members[1], members[60] = members[60], members[1]
+    drifted = generated[:start] + parts[0] + "".join(members) + generated[end:]
+    assert drifted != generated and len(drifted) == len(generated)
+    return drifted
+
+
+def test_generated_operation_member_order_is_pinned_to_a_literal() -> None:
+    """The declaration sequence is a module-level, non-derived sha256 pin."""
+    source = Path(guard.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    assigned = {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    assigned[target.id] = node.value
+    assert "_CLIENT_OPERATION_ORDER_DIGEST" in assigned
+    value = ast.literal_eval(assigned["_CLIENT_OPERATION_ORDER_DIGEST"])
+    assert isinstance(value, str) and len(value) == 64
+    assert "_EXPECTED_CLIENT_OPERATION_ROWS" in assigned
+    assert "_generated_operation_sequence(" in source
+    assert "def _client_operation_order_digest" in source
+    docstring = ast.get_docstring(tree) or ""
+    for literal in (
+        "_CLIENT_OPERATION_ORDER_DIGEST",
+        "_EXPECTED_CLIENT_OPERATION_ROWS",
+    ):
+        assert literal in docstring, f"guard docstring omits {literal}"
+
+
+def test_committed_operation_member_sequence_matches_the_literal() -> None:
+    """The hand-written pin is the real fixed point, not a re-pin of itself."""
+    sequence = guard._generated_operation_sequence(
+        guard.GENERATED.read_text(encoding="utf-8")
+    )
+    assert len(sequence) == guard._EXPECTED_CLIENT_OPERATION_ROWS == 268
+    assert (
+        guard._client_operation_order_digest(sequence)
+        == guard._CLIENT_OPERATION_ORDER_DIGEST
+    )
+
+
+def test_a_coordinated_operation_member_rotation_is_rejected() -> None:
+    """The decisive A/B: same bytes as a multiset, only the sequence moves."""
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    drifted = _rotate_two_operation_members(generated)
+    found = guard.failures(generated=drifted)
+    assert any("_CLIENT_OPERATION_ORDER_DIGEST" in problem for problem in found), found
+
+
+def test_operation_member_rotation_with_honest_repin_stays_green() -> None:
+    """A reviewed reorder re-pins the literal in the same commit."""
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    drifted = _rotate_two_operation_members(generated)
+    found = guard.failures(
+        generated=drifted,
+        client_operation_order_digest=guard._client_operation_order_digest(
+            guard._generated_operation_sequence(drifted)
+        ),
+    )
+    assert not found, found
+
+
+def test_operation_member_count_door_is_load_bearing() -> None:
+    found = guard.failures(expected_client_operation_rows=999)
+    assert any("_EXPECTED_CLIENT_OPERATION_ROWS" in problem for problem in found), found
+
+
+def test_operation_member_order_digest_door_is_load_bearing() -> None:
+    found = guard.failures(client_operation_order_digest="0" * 64)
+    assert any("_CLIENT_OPERATION_ORDER_DIGEST" in problem for problem in found), found
+
+
+def test_the_operation_member_self_test_plants_are_load_bearing() -> None:
+    """Both limbs must exist: a red plant and its green re-pin control."""
+    source = Path(guard.__file__).read_text(encoding="utf-8")
+    assert "a coordinated operations member rotation in the generated client" in source
+    assert "an operations member rotation with its order digest re-pinned" in source
+    assert "rotate_two_operation_members(" in source
 
 
 def _run_all() -> int:

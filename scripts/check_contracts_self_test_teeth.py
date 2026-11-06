@@ -764,7 +764,7 @@ _CASE_FLOOR: dict[str, tuple[str, str, str, int]] = {
         "scripts/check_mcp_release_binding.py", "run_self_test", "cases", 6,
     ),
     "scripts/check_openapi_operation_id_floor.py": (
-        "scripts/check_openapi_operation_id_floor.py", "self_test", "cases", 22,
+        "scripts/check_openapi_operation_id_floor.py", "self_test", "cases", 26,
     ),
     "scripts/check_openapi_operation_parameter_floor.py": (
         "scripts/check_openapi_operation_parameter_floor.py", "self_test", "cases", 13,

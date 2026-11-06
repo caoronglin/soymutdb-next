@@ -148,3 +148,50 @@ both literals. Zero generated-artifact bytes.
 A legitimate reorder must recompute `_METHOD_SEQUENCE_DIGEST` with
 `_method_sequence_digest()` and move it in the **same commit** as the
 snapshot, with a reason.
+
+
+## Door 5 — the generated `operations` interface member order
+
+The four doors above pin the snapshot's symbol set, both `paths` interface
+orders, and the snapshot's HTTP method sequence. Every one of them is either
+a **sorted** pair set or an order *within the `paths` interface*. The generated
+`operations` interface — the 268 TypeScript type members a consumer imports —
+is emitted by `openapi-typescript` in its own declaration order, and no landed
+reader walks that sequence. It is client-visible (object key enumeration, IDE
+completion order) and has exactly one committed half, so a two-artifact
+comparison is structurally incapable of seeing it.
+
+**Decisive A/B on live `7ed30279`.** Rotate two whole `operations` member
+blocks (`readiness_api_v1_health_ready_get` and
+`list_blast_databases_api_v1_blast_databases_get`) — byte-preserving, same 268
+symbols, same 238 path rows, same method sequence, both `_PINNED_ARTIFACTS`
+blob ids honestly re-pinned:
+
+| tree | verdict |
+| --- | --- |
+| all 13 wired `check_openapi_*.py` guards | `rc=0` on the drifted bytes |
+| `check_openapi_baseline_sync.py` (real git tree) | `OK (4 baselines)` |
+| whole contracts layer | `SMOKE PASS / 1274 passed + 41 subtests`/`0 failed` |
+| this guard with Door 5 | `rc=1`, names `_CLIENT_OPERATION_ORDER_DIGEST` |
+
+Restore the clean bytes → `SMOKE PASS` again. Opinion flips on the reader
+alone; zero generated-artifact bytes change.
+
+- `_CLIENT_OPERATION_ORDER_DIGEST` — hand-written sha256 over
+  `index|operationId` rows **in declaration order**, read from nowhere. A
+  same-count rotation moves both rows, so no sorted digest can satisfy it.
+- `_EXPECTED_CLIENT_OPERATION_ROWS` (268) — exact count door.
+
+The guard's `--self-test` grows 22 → **26** cases: the rotation is named, the
+same rotation with the literal honestly re-pinned stays green (both limbs keep
+the door load-bearing), and a bumped count or bumped digest each fail. The
+reviewed case floor in `scripts/check_contracts_self_test_teeth.py` moves
+22 → 26 in the same commit — the one wiring edit. The companion suite grows
+to 31 checks, including a second-file AST assertion that the pin is a real
+string constant, that the docstring names both literals, and that both
+self-test plants exist.
+
+A legitimate reorder must recompute the digest with
+`_client_operation_order_digest()` and move it in the **same commit** as the
+generated client, with a reason. A reviewed `operationId` rename moves a
+member key too, so the co-revert green control re-pins both literals at once.
