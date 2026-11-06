@@ -399,7 +399,18 @@ both `_PINNED_ARTIFACTS` blob ids honestly re-pinned:
   (`pins 1dc54021...` / `derives d00c03b4...`) |
 
 All 12 sibling `check_openapi_*` guards and `check_error_code_contract.py` stay
-`rc=0` on the drifted bytes -- zero collateral, exactly one named failure.
+`rc=0` on the drifted bytes -- zero collateral, exactly one named failure **on
+this branch's own tree**. Live `main` no longer reads that way: #360 landed a
+second reader over the same 268-symbol declaration order
+(`_CLIENT_OPERATION_ORDER_DIGEST` in `check_openapi_operation_id_floor.py`).
+On `c8cbdfb6`, one byte-preserving rotation of two whole member blocks now
+fires **two** named failures, not one (`1dc54021... -> d00c03b4...` here, and
+`dff9419e... -> b512a4ee...` in Door 5 of the operation-id-floor doc); the ten
+remaining `check_openapi_*` siblings stay `rc=0`. The two doors are not two
+independent layers: re-pinning **both** literals to the drifted derivations
+turns both green on the same drifted bytes. A reviewed reorder therefore
+carries two same-commit re-pin obligations, not one. See
+`docs/dev/openapi-operation-id-floor.md` (Door 5).
 
 **The fix (zero wiring churn).** `_OPERATION_SYMBOL_ORDER_DIGEST` is a
 hand-written sha256 over canonical `index|symbol` rows **in declaration order**,

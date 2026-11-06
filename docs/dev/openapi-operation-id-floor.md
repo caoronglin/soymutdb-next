@@ -156,10 +156,14 @@ The four doors above pin the snapshot's symbol set, both `paths` interface
 orders, and the snapshot's HTTP method sequence. Every one of them is either
 a **sorted** pair set or an order *within the `paths` interface*. The generated
 `operations` interface — the 268 TypeScript type members a consumer imports —
-is emitted by `openapi-typescript` in its own declaration order, and no landed
-reader walks that sequence. It is client-visible (object key enumeration, IDE
-completion order) and has exactly one committed half, so a two-artifact
-comparison is structurally incapable of seeing it.
+is emitted by `openapi-typescript` in its own declaration order. This paragraph
+was true on `7ed30279`, where no landed reader walked that sequence. It is
+**no longer a uniqueness claim**: #359 independently pinned the same
+declaration order as `_OPERATION_SYMBOL_ORDER_DIGEST` in
+`check_openapi_response_surface.py`, and both doors are now on live `main`
+(`c8cbdfb6`). It is client-visible (object key enumeration, IDE completion
+order) and has exactly one committed half, so a two-artifact comparison is
+structurally incapable of seeing it.
 
 **Decisive A/B on live `7ed30279`.** Rotate two whole `operations` member
 blocks (`readiness_api_v1_health_ready_get` and
@@ -176,6 +180,15 @@ blob ids honestly re-pinned:
 
 Restore the clean bytes → `SMOKE PASS` again. Opinion flips on the reader
 alone; zero generated-artifact bytes change.
+
+**Post-merge (`c8cbdfb6`).** The row "all 13 wired `check_openapi_*.py` guards
+`rc=0`" was measured before #359 landed; today one byte-preserving rotation
+fires **two** doors (`_CLIENT_OPERATION_ORDER_DIGEST` here and
+`_OPERATION_SYMBOL_ORDER_DIGEST` in `check_openapi_response_surface.py`), with
+the other ten `check_openapi_*` siblings still `rc=0`. Two doors are not two
+layers of defence: re-pinning both literals to the drifted derivations turns
+both green on the same drifted bytes, so a reviewed reorder owes two same-commit
+re-pins, not one. See `docs/dev/openapi-response-surface.md` (Door 6).
 
 - `_CLIENT_OPERATION_ORDER_DIGEST` — hand-written sha256 over
   `index|operationId` rows **in declaration order**, read from nowhere. A
