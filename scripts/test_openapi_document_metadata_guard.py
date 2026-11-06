@@ -52,16 +52,17 @@ MUTATION_MUTATOR = "source_wiring_mutated_in_place"
 UNCOMPILABLE_LABEL = "create_app does not compile under symtable"
 UNRUNNABLE_LABEL = "create_app would not run (compiler rejects it)"
 TAG_ASSIGNMENT_LABEL = "operation tag assignment permuted"
+TAG_ORDER_LABEL = "operation tag order reversed"
 INFO_SHAPE_LABEL = "phantom info key added"
 VERSION_DRIFT_LABEL = "openapi dialect drift"
 VERSION_BLESSED_LABEL = "openapi dialect blessed in snapshot + golden + source"
 VERSION_UNWIRED_LABEL = "get_openapi dialect wiring dropped"
 REQUIRED_ABLATIONS = frozenset(
     (DECOY_LABEL, SHADOW_LABEL, MUTATION_LABEL, UNCOMPILABLE_LABEL,
-     TAG_ASSIGNMENT_LABEL, INFO_SHAPE_LABEL, VERSION_DRIFT_LABEL,
+     TAG_ASSIGNMENT_LABEL, TAG_ORDER_LABEL, INFO_SHAPE_LABEL, VERSION_DRIFT_LABEL,
      VERSION_BLESSED_LABEL, VERSION_UNWIRED_LABEL)
 )
-EXPECTED_ABLATIONS = 32
+EXPECTED_ABLATIONS = 33
 
 
 def _guard(path: Path = GUARD):
@@ -92,6 +93,7 @@ def test_every_ablation_is_caught() -> None:
     assert SHADOW_MUTATOR in source
     assert MUTATION_MUTATOR in source
     assert TAG_ASSIGNMENT_LABEL in labels
+    assert TAG_ORDER_LABEL in labels
 
 
 def test_decoy_wiring_ablation_really_rejects_a_substring_guard() -> None:
@@ -408,6 +410,15 @@ def _regressed_guard_source() -> str:
     )
     assert tag_assignment_block in source, "tag assignment ablation not found"
     source = source.replace(tag_assignment_block, "", 1)
+    tag_order_block = (
+        "        (\n"
+        '            "operation tag order reversed",\n'
+        "            edit_snapshot(reorder_operation_tag_order),\n"
+        '            "published operation tag order drifted",\n'
+        "        ),\n"
+    )
+    assert tag_order_block in source, "tag order ablation not found"
+    source = source.replace(tag_order_block, "", 1)
     info_shape_block = (
         "        (\n"
         '            "phantom info key added",\n'
@@ -668,9 +679,56 @@ def test_operation_tag_assignment_is_an_independent_literal() -> None:
     parts[0] = json.dumps(document, ensure_ascii=False)
     found = guard.failures(*parts, tag_digest=original)
     assert any("published operation tag assignment drifted" in f for f in found), found
-    # A legitimate same-commit re-pin (snapshot + literal moved together) is
-    # green on the same bytes.
-    assert not guard.failures(*parts, tag_digest=moved)
+    # A legitimate same-commit re-pin (snapshot + both literals moved together)
+    # is green on the same bytes. The permutation also reorders tag arrays, so
+    # the order door must be re-pinned in the same reviewed act.
+    moved_order = guard._operation_tag_order_digest(
+        guard._operation_tag_order_rows(document)
+    )
+    assert not guard.failures(
+        *parts, tag_digest=moved, tag_order_digest=moved_order
+    )
+
+
+def test_operation_tag_order_is_an_independent_literal() -> None:
+    """Reversing one operation's tag array must be named, with no count change."""
+    guard = _guard()
+    document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
+    order_rows = guard._operation_tag_order_rows(document)
+    pinned = guard._operation_tag_order_digest(order_rows)
+
+    target = None
+    for item in document["paths"].values():
+        for method, operation in item.items():
+            if method not in guard.METHODS or not isinstance(operation, dict):
+                continue
+            if len(operation.get("tags") or []) > 1:
+                target = operation
+                break
+        if target is not None:
+            break
+    assert target is not None, "fixture: no multi-tag operation remains"
+    target["tags"] = list(reversed(target["tags"]))
+
+    drifted_rows = guard._operation_tag_order_rows(document)
+    assert len(drifted_rows) == len(order_rows) == guard._EXPECTED_OPERATION_TAG_ROWS
+    drifted = guard._operation_tag_order_digest(drifted_rows)
+    assert drifted != pinned, "same-set reorder must move the order literal"
+
+    parts = list(guard._load())
+    parts[0] = json.dumps(document, ensure_ascii=False)
+    found = guard.failures(*parts)
+    assert any("published operation tag order drifted" in f for f in found), found
+    # The set digest is untouched, so no OTHER fixed point fired: this door is
+    # the only thing that sees the reorder.
+    assert not any("published operation tag assignment drifted" in f for f in found), found
+    # A reviewed same-commit re-pin is green; deriving the literal from the
+    # drifted snapshot would make the guard agree with itself, so the source
+    # must still carry the hand-written module-level constant.
+    assert not guard.failures(*parts, tag_order_digest=drifted)
+    source = GUARD.read_text(encoding="utf-8")
+    assert "_OPERATION_TAG_ORDER_DIGEST = (" in source
+    assert "soymutdb-operation-tag-order/v1" in source
 
 
 def test_published_info_shape_is_an_independent_literal() -> None:

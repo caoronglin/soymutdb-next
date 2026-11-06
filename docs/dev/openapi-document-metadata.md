@@ -331,3 +331,23 @@ The fix follows the same idiom as the securityScheme descriptions (`#315`):
 `openapi` is deliberately excluded from the "source == golden" loop: there is
 no module-level constant to compare. Its source-side anchor is the wiring
 check, not a literal.
+
+## Per-operation tag order (added later)
+
+`_OPERATION_TAG_DIGEST` canonicalises each operation's tags with `sorted(...)`,
+so a same-set reorder of one operation's `tags` array moves no row it can see:
+the catalog, the router literals, the golden lock and the name multiset all stay
+put. That sequence is client-visible — Swagger UI groups an operation under its
+first tag and renders the rest in published order.
+
+Measured on live `6f9c4219`: reversing the tag array on the two multi-tag
+operations left all 12 wired `check_openapi_*` guards `rc=0` and the guard's own
+`--self-test` green; the row count (270) is unchanged, so a count door alone
+cannot see it either.
+
+The fix adds a second hand-written literal, `_OPERATION_TAG_ORDER_DIGEST`, over
+canonical `(METHOD, path, index, tag)` rows in document order, plus an exact
+count door `_EXPECTED_OPERATION_TAG_ROWS`. It lives inside the already-wired
+guard with zero `smoke.sh` / `PINNED_SUITES` / `REQUIRED_GUARD_CALLS` churn. The
+ablation is red only on this door; a reviewed reorder must re-pin both digests
+in the same commit, with a reason.
