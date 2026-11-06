@@ -771,3 +771,98 @@ def test_status_order_row_count_door_is_load_bearing() -> None:
         "status order row count" in p
         for p in guard.failures(expected_response_status_order_rows=999)
     )
+
+
+def _swap_adjacent_operation_symbols() -> str:
+    """Swap the first two ``operations`` blocks, each keeping its own body."""
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    start = generated.find("export interface operations {")
+    matches = list(guard.OP_DEF.finditer(generated, start))
+    assert len(matches) >= 2
+    a, b = matches[0], matches[1]
+    end = matches[2].start() if len(matches) > 2 else len(generated)
+    return (
+        generated[: a.start()]
+        + generated[b.start() : end]
+        + generated[a.start() : b.start()]
+        + generated[end:]
+    )
+
+
+def test_operation_symbol_order_is_an_independent_literal() -> None:
+    """The positional digest is hand-written, not derived from the artifact."""
+    source = Path(guard.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    assigned = {
+        t.id
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        for t in node.targets
+        if isinstance(t, ast.Name)
+    }
+    for name in (
+        "_OPERATION_SYMBOL_ORDER_DIGEST",
+        "_EXPECTED_OPERATION_SYMBOLS",
+    ):
+        assert name in assigned, name
+    generated = guard.GENERATED.read_text(encoding="utf-8")
+    rows = guard.operation_symbol_order_rows(generated)
+    assert len(rows) == guard._EXPECTED_OPERATION_SYMBOLS
+    assert guard._operation_symbol_order_digest(rows) == guard._OPERATION_SYMBOL_ORDER_DIGEST
+    assert "def operation_symbol_order_rows(" in source
+    assert '["soymutdb-operation-symbol-order/v1"' in source
+
+
+def test_coordinated_operation_symbol_swap_is_rejected() -> None:
+    """A coherent reorder of two blocks moves only the positional literal."""
+    generated = _swap_adjacent_operation_symbols()
+    found = guard.failures(generated=generated)
+    assert any("_OPERATION_SYMBOL_ORDER_DIGEST" in p for p in found), found
+    # No collateral: every row-set door stays silent on the same bytes.
+    assert len(found) == 1, found
+
+
+def test_operation_symbol_order_positive_control_stays_green() -> None:
+    """An honest, reviewed re-pin beside the reorder is the green shape."""
+    generated = _swap_adjacent_operation_symbols()
+    honest = guard._operation_symbol_order_digest(
+        guard.operation_symbol_order_rows(generated)
+    )
+    found = guard.failures(
+        generated=generated, operation_symbol_order_digest=honest
+    )
+    assert not found, found
+
+
+def test_deriving_the_symbol_literal_from_the_clean_tree_is_caught() -> None:
+    """A self-agreeing literal must not silently bless a reordered artifact."""
+    generated = _swap_adjacent_operation_symbols()
+    clean = guard.GENERATED.read_text(encoding="utf-8")
+    derived = guard._operation_symbol_order_digest(
+        guard.operation_symbol_order_rows(clean)
+    )
+    found = guard.failures(
+        generated=generated, operation_symbol_order_digest=derived
+    )
+    assert any("_OPERATION_SYMBOL_ORDER_DIGEST" in p for p in found), found
+
+
+def test_operation_symbol_count_door_is_load_bearing() -> None:
+    assert any(
+        "operation symbol count" in p
+        for p in guard.failures(expected_operation_symbols=999)
+    )
+
+
+def test_operation_symbol_doors_and_cases_are_pinned_from_a_second_file() -> None:
+    """A single-file edit cannot gut the door and its ablations together."""
+    source = Path(guard.__file__).read_text(encoding="utf-8")
+    assert "if actual_symbol_order != pinned_symbol_order:" in source
+    assert "generated client operation symbol order drifted:" in source
+    for label in (
+        "generated operation symbol order swapped",
+        "generated operation symbol count door",
+        "generated operation symbol order honestly re-pinned",
+        "generated operation symbol order with derived literal",
+    ):
+        assert f'cases["{label}"]' in source, f"{label} ablation is missing"
