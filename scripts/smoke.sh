@@ -23,9 +23,9 @@
 #               Requires a Docker daemon.
 #
 # Usage
-#   bash scripts/smoke.sh                     # every layer that can run here
+#   bash scripts/smoke.sh                    # every layer that can run here
 #   bash scripts/smoke.sh --profile contracts
-#   bash scripts/smoke.sh --profile static --static-dir apps/web/dist/external
+#   bash scripts/smoke.sh --profile static --static-dir apps/web/dist/ext
 #   bash scripts/smoke.sh --list
 #
 # Exit codes
@@ -318,6 +318,10 @@ smoke_contracts() {
     # The teeth guard requires the self-test to stay green under a plant, so
     # it cannot see that shape. This suite pins the guard that reads it.
     scripts/test_guard_self_test_verdict.py
+    # The layer's zero-test verdict: an empty plan must redden on both entry
+    # points (smoke.sh + ci-job-steps.sh). Registered here, its red can block;
+    # unregistered, only a hand-run would ever collect it.
+    scripts/test_contracts_empty_layer_verdict.py
   )
   # Suites that need an interpreter or service this smoke layer does not own
   # (worker source analysis runs under the API virtualenv; tunnel/compose drift
@@ -510,6 +514,14 @@ smoke_contracts() {
   # de-indexes the whole site. Both are pinned to hand-written literals.
   "${PYTHON_BIN}" scripts/check_published_route_manifest.py --self-test || rc=$?
   "${PYTHON_BIN}" scripts/check_published_route_manifest.py || rc=$?
+  # An empty plan is not a pass. The exit status below starts at 0 and this
+  # layer ends by printing ``SMOKE PASS`` whenever the FAILED array is empty,
+  # so a run that collected nothing is indistinguishable from a run where
+  # everything passed. Both entry points are pinned: a bad registry row, a
+  # renamed suite or a hand-merge that drops a guard can leave the layer
+  # executing zero tests while every summary line still reads clean.
+  "${PYTHON_BIN}" scripts/check_contracts_empty_layer_verdict.py --self-test || rc=$?
+  "${PYTHON_BIN}" scripts/check_contracts_empty_layer_verdict.py || rc=$?
   "${PYTHON_BIN}" -m pytest "${tests[@]}" -q || rc=$?
   echo
   echo "-- environment-bound contract suites (reported, not gating here) --"
