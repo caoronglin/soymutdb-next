@@ -203,7 +203,7 @@ class TeethGuardContract(unittest.TestCase):
             target.write_text(text[:start] + "    cases = {}\n" + text[end:], encoding="utf-8")
             found = guard.declared_case_errors(tree)
         self.assertTrue(
-            any("below the pinned floor" in f for f in found),
+            any("exact reviewed count" in f for f in found),
             f"an emptied cases dict must be rejected, got {found}",
         )
 
@@ -370,9 +370,49 @@ class TeethGuardContract(unittest.TestCase):
             target.write_text(deleted, encoding="utf-8")
             found = guard.declared_case_errors(tree)
         self.assertTrue(
-            any("below the pinned floor" in f for f in found),
+            any("exact reviewed count" in f for f in found),
             f"a deleted case must be named, got {found}",
         )
+
+    def test_the_case_count_pins_are_exact_on_the_committed_tree(self) -> None:
+        """A stale lower bound lets a deleted case through: pin equality."""
+        import tempfile
+
+        for guard_path, (source, function, mapping, count) in sorted(
+            guard._CASE_FLOOR.items()
+        ):
+            with self.subTest(guard=guard_path):
+                declared = guard._declared_cases(ROOT / source, function, mapping)
+                self.assertEqual(
+                    declared,
+                    count,
+                    f"{source} declares {declared} case(s) but the reviewed "
+                    f"literal pins {count}: deleting {declared - count} case(s) "
+                    "would stay green under a lower-bound check",
+                )
+
+    def test_a_single_deleted_case_is_named_by_the_exact_pin(self) -> None:
+        """The stale-floor hole, from the second file, on real source bytes."""
+        import tempfile
+
+        victim = "scripts/check_openapi_response_surface.py"
+        count = guard._CASE_FLOOR[victim][3]
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp)
+            for guard_path, (source, _fn, _map, _n) in guard._CASE_FLOOR.items():
+                text = (ROOT / source).read_text(encoding="utf-8")
+                if source == victim:
+                    needle = '    cases["one-sided snapshot status rename"] = ('
+                    start = text.index(needle)
+                    end = text.index("\n    )\n", start) + len("\n    )\n")
+                    text = text[:start] + text[end:]
+                (tree / source).parent.mkdir(parents=True, exist_ok=True)
+                (tree / source).write_text(text, encoding="utf-8")
+            found = guard.declared_case_errors(tree)
+        self.assertEqual(guard.declared_case_errors(ROOT), [])
+        self.assertEqual(len(found), 1, f"one cause, one owner: {found}")
+        self.assertIn(victim, found[0])
+        self.assertIn(f"exact reviewed count of {count}", found[0])
 
     def test_the_case_floor_is_a_literal_not_derived_from_output(self) -> None:
         source = GUARD.read_text(encoding="utf-8")
@@ -381,6 +421,7 @@ class TeethGuardContract(unittest.TestCase):
         self.assertIn("evidence_floor_errors()", source)
         self.assertIn("floor = _CASE_FLOOR.get(path)", source)
         self.assertIn("emitted < floor[3]", source)
+        self.assertIn("declared != floor", source)
 
     def test_the_re_pin_case_is_load_bearing_from_a_second_file(self) -> None:
         """Both limbs of the coordinated retype must live in the case list."""

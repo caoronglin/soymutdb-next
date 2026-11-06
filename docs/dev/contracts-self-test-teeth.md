@@ -120,8 +120,16 @@ literals, `cases.append(...)`, `cases[key] = ...`, or a module-level literal
 such as `CLAIMS`) and requiring some `for` in the same function to name that
 container. A deleted case then names itself. `evidence_floor_errors()` fails
 closed if an audited guard has no row, so adding one is a reviewed edit.
-Both halves are read by `ast`, so no printed number can satisfy them. Counts
-stay a free variable: shifting the printed N by +5 stays green.
+Both halves are read by `ast`, so no printed number can satisfy them. The
+pinned count is an **exact equality** on the declared source rows, not a lower
+bound: on live `6f9c4219` six of the thirteen rows had drifted below the cases
+the guard actually declares (worst 6 vs 24, 10 vs 28, 5 vs 35), so deleting up
+to eighteen cases kept `declared >= floor` true and the whole contracts layer
+at `SMOKE PASS`. `declared_case_errors()` now reports both fewer and more than
+the reviewed count. Adding a legitimate case raises this literal in the same
+reviewed commit as the guard that adds it. The *printed* N from the success
+line is still a free variable for the evidence check (one-sided, extra lines
+stay green), which is the other, orthogonal half.
 
 The guard's own `--self-test` plants a no-op into one guard **in process**
 (import + replace `self_test` with a lambda returning 0 + `sys.argv` patch),
