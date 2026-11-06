@@ -45,6 +45,16 @@ This guard reads committed bytes only (``json`` + ``re`` + stdlib): no Python
   see this -- the snapshot's own method order is the only published record of
   FastAPI's router-registration order, and it is what OpenAPI tooling displays.
   ``_EXPECTED_METHOD_ROWS`` is its exact count door;
+* ``_CLIENT_OPERATION_ORDER_DIGEST`` -- a hand-written sha256 over the
+  ``index|operationId`` rows of the generated ``operations`` interface IN
+  DECLARATION ORDER. The two path-order literals pin the ``paths`` interface,
+  and every other fixed point here is a sorted pair set; a byte-preserving
+  rotation of two whole operation member blocks keeps the symbol set, the
+  count, both path orders, the method sequence, the response/body digests,
+  the golden lock and every three-way agreement door identical. The generated
+  member sequence is client-visible (object key enumeration, IDE completion
+  order) and is the one shape no landed reader walks.
+  ``_EXPECTED_CLIENT_OPERATION_ROWS`` is its exact count door;
 * three-way agreement: snapshot map == generated ``paths`` -> ``operations``
   reference map == generated ``operations`` interface key set, plus a named
   per-index path-order agreement. A one-sided edit (only the snapshot, or
@@ -58,10 +68,11 @@ A legitimate rename must move the digest in the same commit as the two
 artifacts and say why, exactly like ``_ERROR_RESPONSE_BASELINE`` /
 ``_SNAPSHOT_FLOOR`` / ``_BODY_PAIR_DIGEST``. Re-deriving any digest from the
 artifacts under guard would make the pin self-referential, which is the whole
-failure this file replaces. ``--self-test`` injects one-sided drifts and a
-coordinated same-count path-block swap into copies of the bytes and asserts
-each is caught, with both order literals honestly re-pinned in the one green
-shape; the clean tree must pass.
+failure this file replaces. ``--self-test`` injects one-sided drifts, a
+coordinated same-count path-block swap, and a coordinated same-count
+``operations`` member rotation into copies of the bytes and asserts each is
+caught, with the reviewed literals honestly re-pinned in the green shapes;
+the clean tree must pass.
 
 Usage:
     python3 scripts/check_openapi_operation_id_floor.py
@@ -132,6 +143,27 @@ _METHOD_SEQUENCE_DIGEST = (
     "1a3af1165bdd777bead8a38837d1b075b1aee45bd162e77c612daa2b2f5b888b"
 )
 _EXPECTED_METHOD_ROWS = 268
+
+# Independent fixed point on the generated ``operations`` interface MEMBER
+# ORDER. Every literal above walks the snapshot or the ``paths`` interface;
+# the two-artifact agreement doors compare symbol *sets*. openapi-typescript
+# emits the ``operations`` interface in its own declaration order, which is
+# client-visible and has no second half that could disagree: rotating two
+# whole member blocks keeps the same bytes (as a multiset), the same 268
+# symbols, both path orders, the method sequence, every response/body digest
+# and both provenance blob ids once honestly re-pinned. Decisive ablation on
+# live bytes: swap the ``readiness`` and ``list_blast_databases`` member
+# blocks, re-pin the generated blob id, and all 13 wired check_openapi_*
+# guards plus the whole contracts layer stay SMOKE PASS / 0 failed.
+#
+# sha256 of "\n".join(["soymutdb-client-operation-member-order/v1",
+#   *f"{index}|{operationId}"]), read from nowhere. Regenerate with
+# _client_operation_order_digest() in the same commit as an intentional,
+# reviewed reorder, with a reason.
+_CLIENT_OPERATION_ORDER_DIGEST = (
+    "dff9419ef335a2e764859a9dcef93a463bc4168195561527f1d4266b9e7b338d"
+)
+_EXPECTED_CLIENT_OPERATION_ROWS = 268
 
 PATH_LINE = re.compile(r'^    "(/[^"]*)": \{$')
 OP_REF = re.compile(
@@ -211,6 +243,32 @@ def _generated_paths(generated: str) -> list[str]:
     return re.findall(r'^    "(/[^"]*)": \{$', _paths_interface(generated), re.M)
 
 
+def _operations_interface(generated: str) -> str:
+    """The body of the generated ``export interface operations`` block."""
+    marker = "export interface operations {"
+    if marker not in generated:
+        raise ValueError("generated client declares no operations interface")
+    body = generated.split(marker, 1)[1]
+    end = re.search(r"^export (?:type|interface) ", body, re.M)
+    return body[: end.start()] if end else body
+
+
+def _generated_operation_sequence(generated: str) -> list[str]:
+    """The generated ``operations`` interface member keys IN DECLARATION ORDER."""
+    return re.findall(
+        r"^    ([A-Za-z0-9_]+): \{$", _operations_interface(generated), re.M
+    )
+
+
+def _client_operation_order_digest(sequence: list[str]) -> str:
+    """sha256 over ``index|operationId`` rows, in order -- not a sorted set."""
+    blob = "\n".join([
+        "soymutdb-client-operation-member-order/v1",
+        *(f"{index}|{name}" for index, name in enumerate(sequence)),
+    ])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def _path_order_digest(paths: list[str], tag: str) -> str:
     """sha256 over ``index|path`` rows, in order -- not a sorted multiset."""
     blob = "\n".join([tag, *(f"{index}|{path}" for index, path in enumerate(paths))])
@@ -254,6 +312,8 @@ def failures(
     expected_path_count: int | None = None,
     method_sequence_digest: str | None = None,
     expected_method_rows: int | None = None,
+    client_operation_order_digest: str | None = None,
+    expected_client_operation_rows: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -280,6 +340,16 @@ def failures(
     pinned_method_rows = (
         _EXPECTED_METHOD_ROWS if expected_method_rows is None else expected_method_rows
     )
+    pinned_operation_order = (
+        _CLIENT_OPERATION_ORDER_DIGEST
+        if client_operation_order_digest is None
+        else client_operation_order_digest
+    )
+    pinned_client_rows = (
+        _EXPECTED_CLIENT_OPERATION_ROWS
+        if expected_client_operation_rows is None
+        else expected_client_operation_rows
+    )
 
     try:
         document = json.loads(snapshot)
@@ -292,6 +362,7 @@ def failures(
         path_map = _generated_path_map(generated)
         keys = _interface_keys(generated)
         gen_paths = _generated_paths(generated)
+        gen_sequence = _generated_operation_sequence(generated)
     except ValueError as exc:
         return [f"cannot read generated client operations: {exc}"]
 
@@ -385,6 +456,30 @@ def failures(
             "added or dropped without moving the fixed point"
         )
 
+    # Door 1d -- the generated ``operations`` interface MEMBER ORDER. The
+    # path-order literals above walk the ``paths`` interface; the symbol-set
+    # door below compares a sorted bag. A coordinated same-count rotation of
+    # two whole member blocks moves neither, yet the emitted declaration
+    # sequence is client-visible. One hand-written literal, read from nowhere,
+    # so a co-revert that merely agrees with itself cannot silence it.
+    actual_client_seq = _client_operation_order_digest(gen_sequence)
+    if actual_client_seq != pinned_operation_order:
+        found.append(
+            "generated operations interface member order drifted: "
+            f"_CLIENT_OPERATION_ORDER_DIGEST pins {pinned_operation_order} but "
+            f"the generated client derives {actual_client_seq}. Two whole "
+            "member blocks were rotated in place; the symbol set, both path "
+            "orders and every other fixed point stay identical. Re-pin the "
+            "literal in the same commit as the generated client, with a reason."
+        )
+    if len(gen_sequence) != pinned_client_rows:
+        found.append(
+            f"generated operations interface declares {len(gen_sequence)} "
+            f"members, _EXPECTED_CLIENT_OPERATION_ROWS pins "
+            f"{pinned_client_rows}: a member was added or dropped without "
+            "moving the order fixed point"
+        )
+
     # Door 2 -- the three surfaces must name the same symbols. A one-sided
     # edit (snapshot only, or one of the two generated surfaces only) is named.
     if snap != path_map:
@@ -463,6 +558,8 @@ def self_test() -> int:
     #     door is weakened to self-agreement, case 1 stops failing and the
     #     self-test reports it instead of silently passing a green tree.
     re_pinned_digest = _digest(_snapshot_map(json.loads(co_snap)))
+    # A reviewed rename moves a generated ``operations`` member key, so the
+    # declaration-order literal must move in the same commit too.
     cases.append(
         (
             "a coordinated operationId retype with its digest re-pinned",
@@ -470,6 +567,9 @@ def self_test() -> int:
                 snapshot=co_snap,
                 generated=co_gen,
                 digest=re_pinned_digest,
+                client_operation_order_digest=_client_operation_order_digest(
+                    _generated_operation_sequence(co_gen)
+                ),
                 expect_clean=True,
             ),
         )
@@ -648,6 +748,61 @@ def self_test() -> int:
     # 20. A hand-bumped positional literal.
     cases.append(("a hand-bumped method sequence digest", dict(method_sequence_digest="0" * 64)))
 
+    # 21. The decisive generated-side ORDER drift: rotate two whole
+    #     ``operations`` member blocks. The symbol set, all counts, both path
+    #     orders, the method sequence and every sorted digest stay identical;
+    #     only the declaration-order literal can see it.
+    def rotate_two_operation_members(text: str) -> str:
+        marker = "export interface operations {"
+        start = text.index(marker)
+        body = text[start:]
+        end_match = re.search(r"^export (?:type|interface) ", body[20:], re.M)
+        end = start + 20 + end_match.start() if end_match else len(text)
+        block = text[start:end]
+        parts = re.split(r"(?=^    [A-Za-z0-9_]+: \{$)", block, flags=re.M)
+        members = parts[1:]
+        members[1], members[60] = members[60], members[1]
+        return text[:start] + parts[0] + "".join(members) + text[end:]
+
+    rotated_generated = rotate_two_operation_members(generated)
+    assert rotated_generated != generated and len(rotated_generated) == len(generated)
+    cases.append(
+        (
+            "a coordinated operations member rotation in the generated client",
+            dict(generated=rotated_generated),
+        )
+    )
+    # 21b. The same rotation with the literal honestly re-pinned stays green:
+    #      a reviewed reorder, not a whitelist. Both limbs keep the door
+    #      load-bearing -- weaken it to self-agreement and case 21 stops
+    #      failing, which the harness reports.
+    cases.append(
+        (
+            "an operations member rotation with its order digest re-pinned",
+            dict(
+                generated=rotated_generated,
+                client_operation_order_digest=_client_operation_order_digest(
+                    _generated_operation_sequence(rotated_generated)
+                ),
+                expect_clean=True,
+            ),
+        )
+    )
+    # 22. A hand-bumped member count.
+    cases.append(
+        (
+            "a hand-bumped client operation row count",
+            dict(expected_client_operation_rows=999),
+        )
+    )
+    # 23. A hand-bumped order literal (the baseline-sync escape hatch).
+    cases.append(
+        (
+            "a hand-bumped client operation order digest",
+            dict(client_operation_order_digest="0" * 64),
+        )
+    )
+
     results = 0
     failures_seen = 0
     base: dict[str, Any] = dict(snapshot=snapshot, generated=generated, smoke=smoke)
@@ -684,8 +839,10 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(
         f"openapi-operation-id-floor: OK "
-        f"({_EXPECTED_OPERATION_COUNT} published operationIds and "
-        f"{_EXPECTED_PATH_COUNT} path order rows pinned)"
+        f"({_EXPECTED_OPERATION_COUNT} published operationIds, "
+        f"{_EXPECTED_PATH_COUNT} path order rows and "
+        f"{_EXPECTED_CLIENT_OPERATION_ROWS} generated operation members "
+        "pinned in order)"
     )
     return 0
 
