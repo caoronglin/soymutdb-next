@@ -781,7 +781,7 @@ _CASE_FLOOR: dict[str, tuple[str, str, str, int]] = {
         "scripts/check_openapi_field_constraints.py", "self_test", "cases", 8,
     ),
     "scripts/check_openapi_response_surface.py": (
-        "scripts/check_openapi_response_surface.py", "self_test", "cases", 28,
+        "scripts/check_openapi_response_surface.py", "self_test", "cases", 32,
     ),
     "scripts/check_openapi_required_fields.py": (
         "scripts/check_openapi_required_fields.py", "self_test", "cases", 24,
