@@ -106,8 +106,9 @@ independent digests close it:
 * `_CLIENT_TITLE_DIGEST` — sha256 over the 1232 generated JSDoc first-prose
   lines, read from nowhere. A co-revert of both halves moves **both**, so
   re-pinning one still trips the other;
-* `_EXPECTED_TITLE_ROWS` (2327) / `_EXPECTED_TITLE_SCHEMAS` (362) /
-  `_EXPECTED_CLIENT_TITLE_LINES` (1232) — exact count doors.
+* `_EXPECTED_TITLE_ROWS` (2327) / `_EXPECTED_TITLE_SCHEMAS` (362) — exact
+  count doors. `_EXPECTED_CLIENT_TITLE_LINES` (1232) counts the same walk but
+  belongs to the positional sequence door below.
 
 The companion asserts both digests remain independent literals in the guard
 source (second-file plant), so a one-file edit cannot retire the evidence.
@@ -144,6 +145,34 @@ recurses into the `title` key itself, the census is 2327, and the positional
 cross-artifact door needs no exception list — those rows are published values,
 not synthetic generator lines. The companion pins the seven by path.
 
+## The sequence half
+
+Every door above is order-insensitive on the title surface. Door 6 pins a
+*sorted* digest, Door 7 pins *sorted* `component|field|title` rows, and the
+cross-artifact door looks a title up by `(component, field)`. Door 4 sorts the
+snapshot's own title rows the same way. So two rotations that keep every
+multiset, every count and every pinned row intact were unowned:
+
+1. **declaration-only swap** — move two adjacent property *declaration lines*
+   inside one generated component block, leaving each `/**` block where it is.
+   The label a reader sees above a field changes; nothing above fires.
+2. **component definition order** — swap two adjacent entries of
+   `components.schemas`. Content is byte-identical, only the definition order
+   moves, and both the description and title multisets are unchanged.
+
+Two independent positional literals close them, one per artifact half:
+
+* `_CLIENT_TITLE_SEQUENCE_DIGEST` — sha256 over the 1232 generated JSDoc title
+  lines in **document order**;
+* `_ORDER_SNAPSHOT_TITLE_SEQUENCE_DIGEST` — sha256 over the snapshot's own
+  `title` lines in **insertion order**;
+* `_EXPECTED_CLIENT_TITLE_LINES` (1232) — count door on the same walk.
+
+They are separate ledgers on purpose: a declaration-only swap moves the client
+literal and leaves the snapshot literal alone, so re-pinning one cannot silence
+the other. A reviewed reorder re-pins the literal for the half that actually
+moved, in the same commit as both artifacts, with a reason.
+
 ## Wiring
 
 `scripts/test_openapi_schema_descriptions.py` is listed in `smoke.sh`'s
@@ -154,8 +183,10 @@ unchanged — this phase adds **zero wiring**. The companion suite is both a
 pytest target and a standalone stdlib runner; it proves the decisive co-revert
 on both surfaces, one-sided edits on each half, count-door teeth, same-count
 rotations, each digest's independence, the reviewed synthetic line, the seven
-`title`-named rows, the description sequence literal's independence, and the
-second-file source plant.
+`title`-named rows, the description sequence literal's independence, the
+second-file source plant, and the two positional sequence literals (a
+declaration-only swap and a component-definition reorder, each proven invisible
+to every sorted door above).
 
 ## Boundaries
 
