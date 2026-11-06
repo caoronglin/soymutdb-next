@@ -491,6 +491,11 @@ smoke_contracts_run() {
   # that boundary from regressing (issue #125).
   ensure_contracts_python
   python3 "${REPO_ROOT}/scripts/check_contracts_registry_collection.py" --self-test
+  # The registry guard proves the *suites* are collectible; it cannot see a
+  # layer that answers an empty plan with exit 0. Pin that verdict before the
+  # layer runs, so the Contract suites stage cannot report a green gate that
+  # collected nothing.
+  python3 "${REPO_ROOT}/scripts/check_contracts_empty_layer_verdict.py" --self-test
   bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts
 }
 

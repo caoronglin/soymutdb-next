@@ -60,6 +60,7 @@ _WIRED_SELF_TESTS: frozenset[str] = frozenset(
         "scripts/check_api_error_code_vocabulary.py",
         "scripts/check_app_shell_assets.py",
         "scripts/check_bio_core_wheel_abi.py",
+        "scripts/check_contracts_empty_layer_verdict.py",
         "scripts/check_error_code_catalog.py",
         "scripts/check_error_code_doc_counts.py",
         "scripts/check_error_code_gate_wiring.py",
@@ -94,13 +95,14 @@ BOTH_CALLS: frozenset[str] = frozenset(
         "scripts/check_error_code_catalog.py",
         "scripts/check_variant_summary_assembly_consistency.py",
         "scripts/check_published_route_manifest.py",
+        "scripts/check_contracts_empty_layer_verdict.py",
     }
 )
 # Membership alone is data, not mechanism: dropping one row *and* that guard's
 # plain run in the same edit makes every rule below agree with the edited tree
 # (nothing is left to complain about). The reviewed cardinality turns it into a
-# counted floor. A fourth both-calls pair needs the same reviewed edit here.
-BOTH_CALLS_SIZE = 4
+# counted floor. A fifth both-calls pair needs the same reviewed edit here.
+BOTH_CALLS_SIZE = 5
 
 # Pinned success signatures. Counts are deliberately not pinned: a legitimate
 # new ablation changes "OK (11 checks)" to "OK (12 checks)" and must stay
@@ -116,6 +118,11 @@ _SIGNATURES: dict[str, re.Pattern[str]] = {
     ),
     "scripts/check_bio_core_wheel_abi.py": re.compile(
         r"self-test / ledger \+ source contract\]: PASS"
+    ),
+    # A gutted self_test prints nothing; an emptied layer of mutation cases
+    # prints "self-test: 0 cases, 0 failure(s)". Require a non-zero count.
+    "scripts/check_contracts_empty_layer_verdict.py": re.compile(
+        r"self-test: [1-9]\d* cases, 0 failure\(s\)"
     ),
     "scripts/check_error_code_catalog.py": re.compile(
         r"error-code catalog self-test passed \([1-9]\d* negative cases \+ clean tree\)"
@@ -194,6 +201,13 @@ _SIGNATURES: dict[str, re.Pattern[str]] = {
 #
 # (path, anchor, replacement, why the plant is a drift)
 _DRIFT_PLANTS: tuple[tuple[str, str, str, str], ...] = (
+    (
+        "scripts/check_contracts_empty_layer_verdict.py",
+        "def wiring_errors(smoke: str, ci_steps: str) -> list[str]:\n",
+        "def wiring_errors(smoke: str, ci_steps: str) -> list[str]:\n"
+        "    return []  # planted drift: detection disabled\n",
+        "the empty-layer verdict accepts every wiring drift",
+    ),
     (
         "scripts/check_app_shell_assets.py",
         '    """Check Umi\'s icon declaration and every built tree that exists."""\n',
@@ -367,6 +381,11 @@ _DRIFT_PLANTS: tuple[tuple[str, str, str, str], ...] = (
 #
 # (path, anchor, replacement)
 _SELF_TEST_GUTS: tuple[tuple[str, str, str], ...] = (
+    (
+        "scripts/check_contracts_empty_layer_verdict.py",
+        '    errors = wiring_errors(smoke, ci_steps)\n',
+        '    errors = []  # planted drift: the plain run stops reading the real tree\n',
+    ),
     (
         "scripts/check_api_error_code_vocabulary.py",
         '    problems = check(args.root)\n',
