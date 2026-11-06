@@ -45,6 +45,7 @@ GENERATED_PATH = guard.ARTIFACT_PATHS["generated"]
 ENVELOPE_PATH = str(guard.ENVELOPE_GUARD.relative_to(ROOT))
 BODY_PATH = str(guard.BODY_GUARD.relative_to(ROOT))
 INLINE_PATH = str(guard.INLINE_GUARD.relative_to(ROOT))
+GUARD_PATH = str(guard.SELF_PATH.relative_to(ROOT))
 SMOKE_PATH = str(guard.SMOKE.relative_to(ROOT))
 
 BODY_LINE = '"application/json": components["schemas"]["%s"];'
@@ -59,6 +60,7 @@ def _tree() -> dict[str, str]:
         BODY_PATH: (ROOT / BODY_PATH).read_text(encoding="utf-8"),
         INLINE_PATH: (ROOT / INLINE_PATH).read_text(encoding="utf-8"),
         SMOKE_PATH: (ROOT / SMOKE_PATH).read_text(encoding="utf-8"),
+        GUARD_PATH: (ROOT / GUARD_PATH).read_text(encoding="utf-8"),
     }
 
 
@@ -299,6 +301,165 @@ def test_each_inline_gate_is_a_single_explicit_pairing() -> None:
     assert pairs.count(("_INLINE_BODY_BASELINE", "inline_snapshot", ("snapshot",))) == 1
     assert pairs.count(("_CLIENT_INLINE_BASELINE", "inline_client", ("generated",))) == 1
     assert len(pairs) == len(set(pairs)), pairs
+
+
+# ---------------------------------------------------------------------------
+# The component name each body points at -- the hole a *rename* walks through
+# ---------------------------------------------------------------------------
+#
+# Every literal above is a count, a distribution over component names, or an
+# inline shape. A coherent regenerate that renames one schema -- snapshot,
+# generated client, ``components.schemas`` and every literal that walks them,
+# in one commit -- keeps all of them equal: the same number of bodies still
+# point at *a* component, and re-pinning the moved numbers is the documented
+# reviewed act. Neither artifact can name the drift, because both halves agreed
+# all along. Measured on ``7ed30279``: ``EnrichmentRequest`` ->
+# ``EnrichmentRequestX`` with all twelve moved literals honestly re-pinned
+# leaves this guard ``OK (4 baselines)`` and the whole contracts layer green.
+
+RENAMED = "EnrichmentRequestX"
+ORIGINAL = "EnrichmentRequest"
+
+
+def _rename_a_body_component(tree: dict[str, str]) -> str:
+    """Rename one component's body reference in both artifacts, coherently.
+
+    ``return``-free on purpose: the caller asserts the rename landed, so an
+    ablation that silently failed to edit anything cannot read as a caught
+    drift.
+    """
+    tree[SNAPSHOT_PATH] = tree[SNAPSHOT_PATH].replace(
+        f'"#/components/schemas/{ORIGINAL}"', f'"#/components/schemas/{RENAMED}"'
+    )
+    tree[GENERATED_PATH] = tree[GENERATED_PATH].replace(
+        f'components["schemas"]["{ORIGINAL}"]',
+        f'components["schemas"]["{RENAMED}"]',
+    )
+    assert RENAMED in tree[SNAPSHOT_PATH]
+    assert RENAMED in tree[GENERATED_PATH]
+    return RENAMED
+
+
+def test_a_coordinated_component_rename_with_untouched_pin_is_rejected() -> None:
+    """Both halves move together and agree; only the body-pair literal objects.
+
+    This is the decisive shape: the artifacts are self-consistent, the counts
+    did not move, and the inline pins do not see ``$ref`` nodes at all.
+    """
+    tree = _tree()
+    _rename_a_body_component(tree)
+    found = guard.failures(tree=tree)
+    assert _any(found, "_BODY_PAIR_SET"), found
+
+
+def test_a_coordinated_rename_with_every_moved_literal_repinned_stays_green() -> None:
+    """The reviewed regenerate: the pin moves *with* the artifacts.
+
+    The gate exists to stop a rename nobody looked at, not to stop a rename.
+    Re-pinning the literal in the same commit is the act that records it, so
+    this tree must be clean -- otherwise the gate would be unlandable and the
+    next person would delete it.
+    """
+    tree = _tree()
+    _rename_a_body_component(tree)
+    document = json.loads(tree[SNAPSHOT_PATH])
+    body_pairs = guard.body_pair_set(document)
+    tree[GUARD_PATH] = _replace_literal(
+        tree[GUARD_PATH],
+        "_BODY_PAIR_SET",
+        json.dumps(body_pairs, indent=4, sort_keys=True),
+    )
+    found = guard.failures(tree=tree)
+    assert not _any(found, "_BODY_PAIR_SET"), found
+
+
+def test_a_bumped_body_pair_pin_with_untouched_artifacts_is_rejected() -> None:
+    """Door 1 alone: the literal says a name the artifacts do not."""
+    tree = _tree()
+    pinned = guard.pinned_literal(guard.SELF_PATH, "_BODY_PAIR_SET")
+    moved = dict(pinned)
+    moved["digest"] = "0" * 64
+    tree[GUARD_PATH] = _replace_literal(
+        tree[GUARD_PATH], "_BODY_PAIR_SET", json.dumps(moved, indent=4, sort_keys=True)
+    )
+    found = guard.failures(tree=tree)
+    assert _any(found, "_BODY_PAIR_SET"), found
+    assert _any(found, "committed artifacts"), found
+
+
+def test_the_body_pair_pin_disappearing_is_rejected() -> None:
+    tree = _tree()
+    source = guard.SELF_PATH.read_text(encoding="utf-8")
+    renamed = source.replace("_BODY_PAIR_SET = {", "_BODY_PAIR_SET_OLD = {", 1)
+    assert renamed != source
+    tree[str(guard.SELF_PATH.relative_to(ROOT))] = renamed
+    found = guard.failures(tree=tree)
+    assert _any(found, "no longer pins _BODY_PAIR_SET"), found
+
+
+def test_the_body_pair_owner_must_still_name_the_pin() -> None:
+    """Renaming the owner constant in the body guard is what this catches."""
+    """A pin the body guard stopped referring to is a pin nobody maintains.
+
+    The literal lives in this guard, so deleting it from ``BODY_PATH`` leaves
+    door 1 reading a value that still agrees with the artifacts. The pairing is
+    what has to survive: the file whose rows the literal describes must name it.
+    """
+    tree = _tree()
+    # Rename the *constant* the pairing is recorded through, not just its value:
+    # the door asks whether the body guard still names the file that owns the
+    # pin, so removing the constant is the honest ablation. Leaving the string
+    # value in place under another name would still name the owner.
+    source = tree[BODY_PATH]
+    renamed = source.replace("_BODY_PAIR_SET_OWNER", "_OWNER_RENAMED_AWAY")
+    assert renamed != source
+    tree[BODY_PATH] = renamed.replace("check_openapi_baseline_sync.py", "elsewhere.py")
+    found = guard.failures(tree=tree)
+    assert _any(found, "no longer names _BODY_PAIR_SET"), found
+
+
+def test_the_body_pair_reader_counts_both_halves_of_a_body() -> None:
+    """Response bodies and request bodies are one set, not two.
+
+    A reader that walked only responses would leave the 86 request bodies
+    unpinned by name, which is exactly the half BLAST's catalogs live in.
+    """
+    document = json.loads((ROOT / SNAPSHOT_PATH).read_text(encoding="utf-8"))
+    pairs = guard.body_pairs(document)
+    assert any("|requestBody|" in key for key in pairs), "request bodies are missing"
+    assert any("|requestBody|" not in key for key in pairs), "response bodies are missing"
+    assert len(pairs) == guard.pinned_literal(guard.SELF_PATH, "_BODY_PAIR_SET")["rows"]
+
+
+def test_the_body_pair_pin_is_an_independent_literal() -> None:
+    """Read from source, never recomputed from the artifact under guard."""
+    pinned = guard.pinned_literal(guard.SELF_PATH, "_BODY_PAIR_SET")
+    assert isinstance(pinned, dict), pinned
+    assert set(pinned) == {"rows", "digest"}, pinned
+    assert isinstance(pinned["rows"], int) and pinned["rows"] > 0
+    assert len(pinned["digest"]) == 64
+    document = json.loads((ROOT / SNAPSHOT_PATH).read_text(encoding="utf-8"))
+    assert pinned == guard.body_pair_set(document)
+
+
+def _replace_literal(source: str, name: str, value: str) -> str:
+    """Replace one module-level literal assignment with ``value``."""
+    lines = source.splitlines(keepends=True)
+    start = next(i for i, line in enumerate(lines) if line.startswith(f"{name} = "))
+    depth = 0
+    end = start
+    while True:
+        opened = lines[end].count("{") + lines[end].count("(")
+        closed = lines[end].count("}") + lines[end].count(")")
+        depth += opened - closed
+        if depth <= 0 and end > start or (depth <= 0 and lines[end].rstrip().endswith("}")):
+            break
+        end += 1
+        if end >= len(lines):
+            raise AssertionError(f"{name} never closes")
+    replaced = "".join(lines[:start]) + f"{name} = {value}\n" + "".join(lines[end + 1 :])
+    assert replaced != source
+    return replaced
 
 
 def test_client_total_reader_is_anchored_to_the_body_line() -> None:

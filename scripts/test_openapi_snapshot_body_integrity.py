@@ -354,6 +354,30 @@ _PINNED_ARTIFACTS = {
 # intentionally changed contract and update in the same commit, with a reason.
 _BODY_PAIR_DIGEST = "f3382283236a34ddf96d10ce984a36bc6266f87d2c63de13aa066f54611a3ecc"
 
+# The same rows, pinned by the *other* half of the contract: the component name
+# each published body points at. ``_RESPONSE_BODY_BASELINE`` /
+# ``_REQUEST_BODY_BASELINE`` are distributions over those names and
+# ``_BODY_PAIR_DIGEST`` is a digest over the same rows, so a coherent regenerate
+# that renames one schema moves all three *in the same reviewed act* -- and
+# re-pinning them is the documented escape hatch. Neither artifact can name the
+# drift: both halves agreed all along, and the counts never moved. The independent
+# pin lives in ``scripts/check_openapi_baseline_sync.py::_BODY_PAIR_SET``, which
+# is the guard allowed to name what the escape hatch may not touch; this constant
+# records which of the two files owns it, so the pairing cannot be re-invented.
+#
+# The two files are paired by name in both directions: ``check_openapi_baseline_sync``
+# pins ``check_openapi_baseline_sync.py::_BODY_PAIR_SET`` and requires this file to
+# mention it; this constant requires that file to still declare it. Renaming
+# either half reddens the other.
+_BODY_PAIR_SET_OWNER = "scripts/check_openapi_baseline_sync.py"
+# Read by the test below, not just declared: a constant nothing uses is a
+# comment. The sync guard's pairing door looks for this *name* in this file, so
+# renaming it here is the ablation that door is meant to catch -- the path
+# string alone would still name the owner file.
+_BODY_PAIR_SET_OWNER_IS_A_SOURCE = _BODY_PAIR_SET_OWNER.endswith(
+    "_baseline_sync.py"
+)
+
 
 def _operations(document: dict) -> list[tuple[str, str, dict]]:
     out: list[tuple[str, str, dict]] = []
@@ -654,6 +678,25 @@ def test_coordinated_response_body_permutation_is_rejected() -> None:
     found = failures(document, generated, smoke)
     assert _response_bodies(document) == _RESPONSE_BODY_BASELINE
     assert _any(found, "_BODY_PAIR_DIGEST"), found
+
+
+def test_the_body_pair_pin_lives_in_the_sync_guard() -> None:
+    """Third-file assertion for the pin's ownership.
+
+    ``check_openapi_baseline_sync._BODY_PAIR_SET`` is the literal over the rows
+    this file publishes, and this file is where a rename is most likely to be
+    "fixed" by re-pinning the digest. The constant names the owner so a reader
+    looking here finds it, and this test proves the constant is not decoration:
+    the named file must exist and must still declare the literal.
+    """
+    assert _BODY_PAIR_SET_OWNER_IS_A_SOURCE, _BODY_PAIR_SET_OWNER
+    owner = ROOT / _BODY_PAIR_SET_OWNER
+    # A sibling that is not checked out is not a failure: the body guard runs
+    # from a throwaway copy of this file in the envelope suite, where ``ROOT``
+    # is a temp dir holding nothing but the guard's own source.
+    if not owner.is_file():
+        return
+    assert "_BODY_PAIR_SET = {" in owner.read_text(encoding="utf-8")
 
 
 def test_committed_tree_has_matching_response_bodies() -> None:
