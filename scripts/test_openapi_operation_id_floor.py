@@ -309,6 +309,78 @@ def test_the_path_order_self_test_plants_are_load_bearing() -> None:
     assert "only the snapshot order digest re-pinned" in source
     assert 'kwargs.pop("expect_clean", False)' in source
 
+def _swap_two_methods() -> str:
+    """Byte-preserving swap of two adjacent methods under one path."""
+    from collections import OrderedDict
+
+    document = json.loads(
+        guard.SNAPSHOT.read_text(encoding="utf-8"), object_pairs_hook=OrderedDict
+    )
+    victim = next(
+        path
+        for path, item in document["paths"].items()
+        if sum(1 for key in item if key in guard.METHODS) >= 2
+    )
+    order = [key for key in document["paths"][victim] if key in guard.METHODS]
+    first, second = order[0], order[1]
+    rebuilt: "OrderedDict[str, object]" = OrderedDict()
+    for key, value in document["paths"][victim].items():
+        if key == first:
+            rebuilt[second] = document["paths"][victim][second]
+        elif key == second:
+            rebuilt[first] = document["paths"][victim][first]
+        else:
+            rebuilt[key] = value
+    document["paths"][victim] = rebuilt
+    drifted = json.dumps(document, indent=2)
+    assert drifted != guard.SNAPSHOT.read_text(encoding="utf-8")
+    return drifted
+
+
+def test_method_swap_is_rejected() -> None:
+    """The decisive drift: every sorted pair door stays silent on a reorder."""
+    found = guard.failures(snapshot=_swap_two_methods())
+    assert any("_METHOD_SEQUENCE_DIGEST" in problem for problem in found), found
+
+
+def test_method_swap_with_honest_repin_stays_green() -> None:
+    """A reviewed reorder re-pins the positional literal in the same commit."""
+    drifted = _swap_two_methods()
+    rows = guard.method_sequence_rows(json.loads(drifted))
+    fresh = guard.failures(
+        snapshot=drifted,
+        method_sequence_digest=guard._method_sequence_digest(rows),
+    )
+    assert not fresh, fresh
+    stale = guard.failures(snapshot=drifted)
+    assert any("_METHOD_SEQUENCE_DIGEST" in problem for problem in stale), stale
+
+
+def test_method_row_count_door_is_load_bearing() -> None:
+    found = guard.failures(expected_method_rows=999)
+    assert any("_EXPECTED_METHOD_ROWS" in problem for problem in found), found
+
+
+def test_method_sequence_digest_is_an_independent_literal() -> None:
+    """The pin must be a module-level string constant, not a derived value."""
+    source = Path(guard.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    names: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    names.add(target.id)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+    assert "_METHOD_SEQUENCE_DIGEST" in names
+    assert "_EXPECTED_METHOD_ROWS" in names
+    assert "method_sequence_rows(" in source
+    assert "def _method_sequence_digest" in source
+    docstring = ast.get_docstring(tree) or ""
+    for literal in ("_METHOD_SEQUENCE_DIGEST", "_EXPECTED_METHOD_ROWS"):
+        assert literal in docstring, f"guard docstring omits {literal}"
+
 
 def _run_all() -> int:
     cases = [

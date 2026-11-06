@@ -105,3 +105,46 @@ Phase 2 adds no new caller: it extends the already-wired guard and its
 already-collected companion. The teeth guard's reviewed case floor is the
 only third file that moves, because the guard's `--self-test` gained seven
 new ablation cases.
+
+## Door 4 — the snapshot's own HTTP method order
+
+The three doors above are all **sorted sets** of `(METHOD path)` pairs. A
+byte-preserving swap of two adjacent methods under one path leaves every pair
+intact, so the digest, the count and all three agreement doors stay green.
+What changes is the snapshot's own method sequence — the published record of
+FastAPI's router-registration order, which OpenAPI tooling displays. On live
+`c7f41448c`, swapping `post`/`get` under `/api/v1/blast/jobs` and honestly
+re-pinning both `_PINNED_ARTIFACTS` blob ids left all twelve wired
+`check_openapi_*.py` guards, every `--self-test` suite and the whole contracts
+layer `SMOKE PASS / 1190 passed + 41 subtests + 10 env-bound / 0 failed`.
+
+`openapi-typescript` emits the `paths` interface's methods in a **fixed**
+order (`get, put, post, delete, ...`) regardless of the snapshot, so there is
+no generated half to compare against. The path-order test in
+`test_openapi_snapshot_contract.py` compares path *keys*, not method order.
+A two-artifact check is structurally incapable of seeing this drift; a
+hand-written literal is the only possible fixed point.
+
+- `_METHOD_SEQUENCE_DIGEST` — sha256 over canonical sorted
+  `(path, index, METHOD)` rows, where `index` is the method's position in that
+  path's insertion order. Swapping two methods changes both rows, so a
+  same-count rotation cannot satisfy it. Read from nowhere.
+- `_EXPECTED_METHOD_ROWS` (268) — exact count door.
+
+The guard's `--self-test` grows from 18 to **22** cases: the swap is named, the
+same swap with the literal honestly re-pinned stays green (both limbs keep the
+door load-bearing), and a bumped count or bumped digest each fail. The teeth
+guard's reviewed case floor (`_CASE_FLOOR` in
+`scripts/check_contracts_self_test_teeth.py`) moves 18 → 22 in the same
+commit — the one wiring edit, and it is what makes the four new cases
+load-bearing rather than decorative. The section
+above calls the path-order phase "zero wiring churn"; that was true of #342
+itself. This phase is the first on this guard that must move the floor,
+because it is the first to add self-test cases after #342 raised it to 18.
+The companion suite grows to 24 checks, including a module-level AST
+assertion that the pin is a real string constant and that the docstring names
+both literals. Zero generated-artifact bytes.
+
+A legitimate reorder must recompute `_METHOD_SEQUENCE_DIGEST` with
+`_method_sequence_digest()` and move it in the **same commit** as the
+snapshot, with a reason.

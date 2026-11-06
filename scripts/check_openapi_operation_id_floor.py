@@ -35,6 +35,16 @@ This guard reads committed bytes only (``json`` + ``re`` + stdlib): no Python
   blobs honestly re-pinned) moves none of them; ``openapi-typescript`` prints
   paths in document order, so the emitted interface sequence is itself a
   client-visible shape. ``_EXPECTED_PATH_COUNT`` is the exact count door;
+* ``_METHOD_SEQUENCE_DIGEST`` -- a hand-written sha256 over canonical sorted
+  ``(path, index, METHOD)`` rows of the snapshot's HTTP methods **in document
+  order**. The operationId digest above is a sorted pair *set*: swapping two
+  adjacent methods under one path keeps every ``(METHOD path, operationId)``
+  pair intact, so the digest, the count and all three agreement doors stay
+  green. ``openapi-typescript`` prints the ``paths`` interface's methods in a
+  fixed order regardless of the snapshot, so no two-artifact comparison can
+  see this -- the snapshot's own method order is the only published record of
+  FastAPI's router-registration order, and it is what OpenAPI tooling displays.
+  ``_EXPECTED_METHOD_ROWS`` is its exact count door;
 * three-way agreement: snapshot map == generated ``paths`` -> ``operations``
   reference map == generated ``operations`` interface key set, plus a named
   per-index path-order agreement. A one-sided edit (only the snapshot, or
@@ -62,6 +72,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+from collections import OrderedDict
 import hashlib
 import json
 import re
@@ -108,6 +119,19 @@ _EXPECTED_OPERATION_COUNT = 268
 _PATH_ORDER_DIGEST = "086901ee36ea25318728b5486aa311968568e7633e255b72fa4701fe68a1bcd2"
 _CLIENT_PATH_ORDER_DIGEST = "baabc2c7606dafb7dbbf10b54292007ceaefe105c072c394460ec524f014a7e7"
 _EXPECTED_PATH_COUNT = 238
+# Reviewed, hand-written fixed point on the snapshot's HTTP method sequence.
+# sha256 of "\n".join(["soymutdb-published-method-sequence/v1"] +
+#   sorted(f"{path}|{index}|{METHOD}")) over every method of every path, where
+# `index` is the method's position in that path's insertion order. A sorted
+# set of (METHOD path) pairs cannot see that "post" and "get" traded places,
+# but the positional row changes for both. openapi-typescript emits a fixed
+# method order in openapi.d.ts, so there is no generated half to compare
+# against -- this literal is the only anchor. Read from nowhere; re-pin in the
+# same commit as the snapshot after an intentional, reviewed reorder.
+_METHOD_SEQUENCE_DIGEST = (
+    "1a3af1165bdd777bead8a38837d1b075b1aee45bd162e77c612daa2b2f5b888b"
+)
+_EXPECTED_METHOD_ROWS = 268
 
 PATH_LINE = re.compile(r'^    "(/[^"]*)": \{$')
 OP_REF = re.compile(
@@ -201,6 +225,23 @@ def _digest(operation_ids: dict[str, str]) -> str:
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+def method_sequence_rows(document: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Canonical (path, index, METHOD) rows of the snapshot's method order."""
+    out: list[tuple[str, str, str]] = []
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for index, method in enumerate(k for k in item if k in METHODS):
+            out.append((path, str(index), method.upper()))
+    return out
+
+
+def _method_sequence_digest(rows: list[tuple[str, str, str]]) -> str:
+    canonical = sorted(f"{p}|{i}|{m}" for p, i, m in rows)
+    blob = "\n".join(["soymutdb-published-method-sequence/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
 def failures(
     *,
     snapshot: str | None = None,
@@ -211,6 +252,8 @@ def failures(
     path_order_digest: str | None = None,
     client_path_order_digest: str | None = None,
     expected_path_count: int | None = None,
+    method_sequence_digest: str | None = None,
+    expected_method_rows: int | None = None,
 ) -> list[str]:
     """Return human-readable failures; empty means the contract is pinned."""
     found: list[str] = []
@@ -229,11 +272,20 @@ def failures(
         else client_path_order_digest
     )
     pinned_paths = _EXPECTED_PATH_COUNT if expected_path_count is None else expected_path_count
+    pinned_method_digest = (
+        _METHOD_SEQUENCE_DIGEST
+        if method_sequence_digest is None
+        else method_sequence_digest
+    )
+    pinned_method_rows = (
+        _EXPECTED_METHOD_ROWS if expected_method_rows is None else expected_method_rows
+    )
 
     try:
         document = json.loads(snapshot)
         snap = _snapshot_map(document)
         snap_paths = _snapshot_paths(document)
+        method_rows = method_sequence_rows(document)
     except (ValueError, TypeError) as exc:
         return [f"cannot read published operationIds from snapshot: {exc}"]
     try:
@@ -310,6 +362,27 @@ def failures(
             f"index {first}: snapshot has {snap_paths[first:first + 1]}, "
             f"client has {gen_paths[first:first + 1]}. openapi-typescript "
             "prints paths in document order, so both halves must move together."
+        )
+
+    # Door 1c -- the snapshot's own HTTP method order. Every other literal in
+    # this guard is a sorted set of (METHOD path) pairs, so two adjacent
+    # methods trading places under one path moves none of them; the generated
+    # client prints its methods in a fixed order and cannot expose the swap.
+    # The positional row is the only published record of that order.
+    actual_method_digest = _method_sequence_digest(method_rows)
+    if actual_method_digest != pinned_method_digest:
+        found.append(
+            "published HTTP method sequence drifted: _METHOD_SEQUENCE_DIGEST "
+            f"pins {pinned_method_digest} but the snapshot derives "
+            f"{actual_method_digest}. Methods were reordered under a path; "
+            "re-pin the literal in the same commit as the snapshot, with a "
+            "reason."
+        )
+    if len(method_rows) != pinned_method_rows:
+        found.append(
+            f"published HTTP method row count is {len(method_rows)}, "
+            f"_EXPECTED_METHOD_ROWS pins {pinned_method_rows}: a method was "
+            "added or dropped without moving the fixed point"
         )
 
     # Door 2 -- the three surfaces must name the same symbols. A one-sided
@@ -526,6 +599,54 @@ def self_test() -> int:
     cases.append(("a hand-bumped path count", dict(expected_path_count=999)))
     # 15. A hand-bumped order digest (the baseline-sync escape hatch).
     cases.append(("a hand-bumped path order digest", dict(path_order_digest="0" * 64)))
+    # 18. Two adjacent methods trading places under one path. Every other
+    #     door in this guard is a sorted (METHOD path) pair set, so without
+    #     the positional literal this is the decisive silent drift.
+    swapped = json.loads(snapshot, object_pairs_hook=OrderedDict)
+    victim = next(
+        path
+        for path, item in swapped["paths"].items()
+        if sum(1 for k in item if k in METHODS) >= 2
+    )
+    order = [k for k in swapped["paths"][victim] if k in METHODS]
+    first, second = order[0], order[1]
+    rebuilt: "OrderedDict[str, Any]" = OrderedDict()
+    for key, value in swapped["paths"][victim].items():
+        if key == first:
+            rebuilt[second] = swapped["paths"][victim][second]
+        elif key == second:
+            rebuilt[first] = swapped["paths"][victim][first]
+        else:
+            rebuilt[key] = value
+    swapped["paths"][victim] = rebuilt
+    swap_snap = json.dumps(swapped, indent=2)
+    cases.append(
+        (
+            "two adjacent HTTP methods swapped under one path",
+            dict(snapshot=swap_snap),
+        )
+    )
+    # 18b. The same swap with the positional literal honestly re-pinned in the
+    #      same commit. Both limbs keep the door load-bearing: weaken it to
+    #      self-agreement and case 11 stops failing, which the harness reports.
+    cases.append(
+        (
+            "a method swap with its sequence digest re-pinned",
+            dict(
+                snapshot=swap_snap,
+                method_sequence_digest=_method_sequence_digest(
+                    method_sequence_rows(json.loads(swap_snap))
+                ),
+                expect_clean=True,
+            ),
+        )
+    )
+    # 19. A hand-bumped method row count.
+    cases.append(
+        ("a hand-bumped method row count", dict(expected_method_rows=999))
+    )
+    # 20. A hand-bumped positional literal.
+    cases.append(("a hand-bumped method sequence digest", dict(method_sequence_digest="0" * 64)))
 
     results = 0
     failures_seen = 0
