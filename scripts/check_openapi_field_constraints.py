@@ -93,11 +93,14 @@ API import, no wheel, no database, no workspace install. It pins:
   ``example_field_drift(example_projection(document), printed_example_rows)``
   -- the snapshot it guards. So a coordinated both-halves move lands on a
   reference door 11 also trusts: door 11 stays silent, is never pre-empted,
-  and only this literal names the value. A concurrent one-sided drift in the
-  same commit (say ``LoginRequest.username``) is named *first* by door 11,
-  which is what makes door 12 stand down, and the coordinated value goes
-  unnamed. That is deferred, not permanent: resolve the decoy and door 12
-  re-arms on the verified tree; revert the commit and nothing ships. The
+  and only this literal names the value. The gate is a three-clause
+  conjunction -- the snapshot digest matches (door 5 silent), the generated
+  tag count matches (count door silent), and ``example_field_drift(...)`` is
+  empty (door 11 silent) -- so it defers to *any* concurrent drift that owns
+  a door: door 5, the count door, or door 11. A generated-side stray tag
+  (``8 != 7``) is named first by the count door, not by door 11. Resolve the
+  concurrent drift and door 12 re-arms on the verified tree; revert the
+  commit and nothing ships -- deferred, not permanent. The
   literal *replaces* the generated-half reference door 12 would otherwise
   derive from ``printed_example_rows`` -- it is not an addition beside it,
   and it does not displace the ``example_projection(document)`` snapshot
@@ -852,10 +855,13 @@ def failures(
     # beside it, and door 11 still reads ``example_projection(document)`` --
     # the snapshot it guards. That conjunction is why a coordinated
     # both-halves move leaves door 11 silent and is never pre-empted here,
-    # and why a decoy defers rather than closes. A concurrent one-sided drift
-    # (``LoginRequest.username``) is named first by door 11, this door stands
-    # down, and the coordinated value goes unnamed -- deferred, not permanent:
-    # resolve the decoy and it re-arms on the verified tree; revert and
+    # and why a decoy defers rather than closes. The gate is a three-clause
+    # conjunction (snapshot digest, generated tag count, door 11 field drift
+    # all silent), so ANY concurrent drift that owns a door -- door 5, the
+    # count door, or door 11 -- is named first and this door stands down. A
+    # generated-side stray tag, for instance, trips the count door (``8 !=
+    # 7``) rather than door 11. Deferred, not permanent: resolve the
+    # concurrent drift and this door re-arms on the verified tree; revert and
     # nothing ships.
     actual_generated_example_values = _generated_example_value_digest(
         printed_example_rows

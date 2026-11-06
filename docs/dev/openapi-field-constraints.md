@@ -468,10 +468,16 @@ Extend the same already-registered guard; `smoke.sh` / registry / teeth /
   door. What is left is the coordinated shape: both halves publish the same
   *new* value, all counts hold, and the snapshot digest has been honestly
   re-pinned — every two-artifact door is silent and only this literal names it.
-  **Sound for a single cause, deferred for concurrent ones**: a one-sided drift
-  in the same commit is named first, so door 12 stands down and the coordinated
-  value goes unnamed. Resolve the decoy and door 12 re-arms; revert the commit
-  and nothing ships. Delayed, not permanent — a resolution-order effect.
+  **Sound for a single cause, deferred for concurrent ones**: door 12 stands
+  down on a three-clause conjunction — the snapshot digest matches (door 5
+  silent), the generated tag count matches (count door silent), and
+  `example_field_drift(...)` is empty (door 11 silent). It therefore defers to
+  *any* concurrent drift that owns a door — door 5, the count door, or door 11
+  — not only to a one-sided field drift. A generated-side stray tag, for
+  instance, trips the count door (`8 != 7`) and leaves door 12 unnamed. Resolve
+  the concurrent drift and door 12 re-arms; revert the commit and nothing
+  ships. Delayed, not permanent — a resolution-order effect, and the
+  conjunction's arity is pinned from a second file.
 * **Precedence: replacement, not addition.** `_GENERATED_EXAMPLE_VALUE_DIGEST`
   *replaces* the generated-half reference door 12 would otherwise derive from
   `generated_example_rows()` — it does not sit beside it. Door 11 still reads
@@ -499,6 +505,7 @@ is unchanged.
 | same-value tag relocated between two fields | door 11 only, both fields named |
 | snapshot-side value rewrite | `_EXAMPLE_DIGEST` only; door 12 silent |
 | a stray second tag | count door only; door 12 stands down |
+| coordinated rewrite + generated-side stray tag | count door only; door 12 silent |
 | reviewed regenerate re-pins both literals | green |
 | regenerate re-pins only `_EXAMPLE_DIGEST` | door 12 |
 
