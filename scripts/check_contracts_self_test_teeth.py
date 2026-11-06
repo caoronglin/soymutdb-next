@@ -35,6 +35,7 @@ import ast
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -743,7 +744,14 @@ def _loop_consumes(path: Path, function: str, mapping: str) -> bool:
 # a loop that names the container. A deleted case then names itself. Adding a
 # member without a row fails closed (:func:`evidence_floor_errors`).
 #
-# (guard, source file holding self_test, function, case container, floor)
+# The reviewed count is an EXACT equality pin, not a lower bound: on live main
+# six of the thirteen rows had drifted below the number of cases the guard
+# actually declares (worst: 6 pinned vs 24 declared, 10 vs 28, 5 vs 35), so
+# deleting up to eighteen cases kept ``declared >= floor`` true and the whole
+# contracts layer at SMOKE PASS. A legitimate new case raises this literal in
+# the same reviewed commit as the guard that adds it.
+#
+# (guard, source file holding self_test, function, case container, exact count)
 _CASE_FLOOR: dict[str, tuple[str, str, str, int]] = {
     "scripts/check_api_error_code_vocabulary.py": (
         "scripts/check_api_error_code_vocabulary.py", "_self_test", "cases", 9,
@@ -767,19 +775,19 @@ _CASE_FLOOR: dict[str, tuple[str, str, str, int]] = {
         "scripts/check_openapi_operation_id_floor.py", "self_test", "cases", 22,
     ),
     "scripts/check_openapi_operation_parameter_floor.py": (
-        "scripts/check_openapi_operation_parameter_floor.py", "self_test", "cases", 13,
+        "scripts/check_openapi_operation_parameter_floor.py", "self_test", "cases", 24,
     ),
     "scripts/check_openapi_field_constraints.py": (
-        "scripts/check_openapi_field_constraints.py", "self_test", "cases", 5,
+        "scripts/check_openapi_field_constraints.py", "self_test", "cases", 8,
     ),
     "scripts/check_openapi_response_surface.py": (
-        "scripts/check_openapi_response_surface.py", "self_test", "cases", 10,
+        "scripts/check_openapi_response_surface.py", "self_test", "cases", 28,
     ),
     "scripts/check_openapi_required_fields.py": (
-        "scripts/check_openapi_required_fields.py", "self_test", "cases", 6,
+        "scripts/check_openapi_required_fields.py", "self_test", "cases", 24,
     ),
     "scripts/check_openapi_operation_annotations.py": (
-        "scripts/check_openapi_operation_annotations.py", "self_test", "cases", 7,
+        "scripts/check_openapi_operation_annotations.py", "self_test", "cases", 10,
     ),
     "scripts/check_variant_summary_assembly_consistency.py": (
         "scripts/check_variant_summary_assembly_consistency.py", "self_test", "cases", 6,
@@ -798,11 +806,12 @@ def declared_case_errors(root: Path = ROOT) -> list[str]:
         declared = _declared_cases(target, function, mapping)
         if declared is None:
             problems.append(f"{source} declares no {function}()/{mapping} to audit")
-        elif declared < floor:
+        elif declared != floor:
+            verb = "fewer" if declared < floor else "more"
             problems.append(
                 f"{source} {function}() declares {declared} mutation case(s), "
-                f"below the pinned floor of {floor}: a case was deleted without "
-                "a reviewed edit"
+                f"{verb} than the exact reviewed count of {floor}: a case was "
+                "added or deleted without the same-commit literal edit"
             )
         elif not _loop_consumes(target, function, mapping):
             problems.append(
@@ -1454,6 +1463,39 @@ def self_test() -> int:
         )
     finally:
         globals()["BOTH_CALLS"] = original_floor
+
+    # 12. The stale-floor cell: six _CASE_FLOOR rows on live main pinned a
+    # lower bound far below the cases the guard actually declares (worst 6 vs
+    # 24, 10 vs 28, 5 vs 35), so deleting one case kept ``declared >= floor``
+    # true and the whole layer at SMOKE PASS. The exact equality pin makes a
+    # single deleted case name itself. Both limbs: the clean tree is quiet and
+    # one deleted row from a formerly-stale guard is reported.
+    victim_case = "scripts/check_openapi_response_surface.py"
+    exact = _CASE_FLOOR[victim_case][3]
+    with tempfile.TemporaryDirectory() as tmp:
+        tree = Path(tmp)
+        for guard_path, (source, _fn, _map, _n) in _CASE_FLOOR.items():
+            text = (ROOT / source).read_text(encoding="utf-8")
+            if source == victim_case:
+                needle = '    cases["one-sided snapshot status rename"] = ('
+                start = text.index(needle)
+                end = text.index("\n    )\n", start) + len("\n    )\n")
+                text = text[:start] + text[end:]
+            (tree / source).parent.mkdir(parents=True, exist_ok=True)
+            (tree / source).write_text(text, encoding="utf-8")
+        found = declared_case_errors(tree)
+    clean_tree = declared_case_errors(ROOT)
+    cases.append(
+        (
+            "a single deleted case is named by the exact reviewed count",
+            victim_case,
+            clean_tree == []
+            and len(found) == 1
+            and victim_case in found[0]
+            and f"exact reviewed count of {exact}" in found[0]
+            and "fewer" in found[0],
+        )
+    )
 
     for label, target_name, caught in cases:
         print(f"PASS self-test: {label} -> {target_name}")
