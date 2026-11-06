@@ -1332,13 +1332,204 @@ def test_the_guard_docstring_names_the_measured_behaviour() -> None:
     assert "when that\n  rewrite is the only cause" in doc, doc[:400]
     for phrase in (
         "deferred, not permanent",
-        "resolve the decoy",
-        "stand down",
+        "Resolve the\n  concurrent drift",
+        "Door 12 stands down whenever",
+        "three-clause\n  conjunction",
+        "*any* concurrent drift",
+        "the count door",
     ):
         assert phrase in doc, phrase
+    # The old door-11-specific overstatement must be gone.
+    assert "A concurrent one-sided drift" not in doc
     # The old unconditional claim must be gone.
     assert "It closes the coordinated both-halves\n  cell" not in doc
     # And the precedence is stated: replacement of the generated-half
     # reference, not an addition beside door 11's snapshot reference.
     assert "*replaces*" in doc
     assert "door 11 keeps reading the snapshot" in doc
+
+
+# ---------------------------------------------------------------------------
+# Door 12 -- the stand-down is a three-clause conjunction, not one clause.
+# ---------------------------------------------------------------------------
+
+_MARK_READ_IDS_BLOCK = """            /**
+             * Ids
+             * @default null
+             */
+            ids: string[] | null;"""
+_MARK_READ_IDS_DECOYED = """            /**
+             * Ids
+             * @default null
+             * @example decoy_ghost
+             */
+            ids: string[] | null;"""
+
+
+def _generated_side_decoy_rewrite() -> tuple[str, str, str, str]:
+    """Coordinated both-halves rewrite PLUS one generated-side decoy.
+
+    ``UserCreate.full_name`` moves to ``John Roe`` in both halves with
+    ``_EXAMPLE_DIGEST`` honestly re-derived; a stray ``* @example `` tag is
+    then printed under ``MarkReadRequest.ids``, a field whose snapshot
+    publishes no examples at all. The count door owns the ghost (``8 != 7``),
+    door 11 stands down on the cardinality drift, and door 12 must defer --
+    it is a conjunction of three stand-downs, not just door 11's field drift.
+    """
+    snapshot, generated, new_digest = _both_halves_example_rewrite()
+    assert generated.count(_MARK_READ_IDS_BLOCK) == 1
+    decoy = generated.replace(_MARK_READ_IDS_BLOCK, _MARK_READ_IDS_DECOYED, 1)
+    assert decoy != generated
+    return snapshot, generated, decoy, new_digest
+
+
+def test_door_twelve_defers_to_a_generated_side_decoy() -> None:
+    """The count door, not door 11, owns a stray tag; door 12 stays silent."""
+    snapshot, generated, decoy, new_digest = _generated_side_decoy_rewrite()
+    assert len(guard.generated_examples(decoy)) == (
+        guard._EXPECTED_GENERATED_EXAMPLES + 1
+    )
+    resolved = guard.failures(
+        snapshot=snapshot, generated=generated, example_digest=new_digest
+    )
+    assert len(resolved) == 1, resolved
+    assert "_GENERATED_EXAMPLE_VALUE_DIGEST" in resolved[0], resolved
+    found = guard.failures(
+        snapshot=snapshot, generated=decoy, example_digest=new_digest
+    )
+    assert len(found) == 1, found
+    assert "tag count is" in found[0], found
+    assert all("_GENERATED_EXAMPLE_VALUE_DIGEST" not in f for f in found), found
+    assert all("generated @example tags" not in f for f in found), found
+
+
+def test_the_generated_side_decoy_owns_the_count_door_not_door_eleven() -> None:
+    """A strict marker outside the schemas region is also count-door only."""
+    snapshot, generated, _decoy, new_digest = _generated_side_decoy_rewrite()
+    stray = generated + "\n/**\n * @example stray_outside_region\n */\n"
+    assert len(guard.generated_example_rows(stray)) == (
+        guard._EXPECTED_GENERATED_EXAMPLE_VALUE_ROWS
+    )
+    found = guard.failures(
+        snapshot=snapshot, generated=stray, example_digest=new_digest
+    )
+    assert len(found) == 1, found
+    assert "tag count is" in found[0], found
+    assert all("_GENERATED_EXAMPLE_VALUE_DIGEST" not in f for f in found), found
+
+
+def test_resolving_the_generated_side_decoy_re_arms_door_twelve() -> None:
+    """Deferred, not permanent: remove the ghost and the value is named."""
+    snapshot, generated, decoy, new_digest = _generated_side_decoy_rewrite()
+    assert not any(
+        "_GENERATED_EXAMPLE_VALUE_DIGEST" in f
+        for f in guard.failures(
+            snapshot=snapshot, generated=decoy, example_digest=new_digest
+        )
+    )
+    found = guard.failures(
+        snapshot=snapshot, generated=generated, example_digest=new_digest
+    )
+    assert len(found) == 1, found
+    assert "_GENERATED_EXAMPLE_VALUE_DIGEST" in found[0], found
+    assert guard.failures() == []
+
+
+def test_door_twelve_defers_to_the_snapshot_digest_clause() -> None:
+    """Door 5 is a stand-down too: no honest re-pin, no door 12."""
+    snapshot, generated, _decoy, _new_digest = _generated_side_decoy_rewrite()
+    found = guard.failures(snapshot=snapshot, generated=generated)
+    assert len(found) == 1, found
+    assert "_EXAMPLE_DIGEST" in found[0], found
+    assert all("_GENERATED_EXAMPLE_VALUE_DIGEST" not in f for f in found), found
+
+
+def test_door_twelve_defers_to_the_door_eleven_clause() -> None:
+    """Door 11 is the third stand-down: a one-sided rewrite stays its own."""
+    generated = _generated().replace("@example Jane Doe", "@example John Roe", 1)
+    found = guard.failures(
+        snapshot=json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2),
+        generated=generated,
+    )
+    assert len(found) == 1, found
+    assert "UserCreate.full_name" in found[0], found
+    assert all("_GENERATED_EXAMPLE_VALUE_DIGEST" not in f for f in found), found
+
+
+def test_the_stand_down_conjunction_has_three_clauses() -> None:
+    """From a second file: narrowing the conjunction to one clause is red."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    gates = [
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name)
+            and target.id == "example_value_drift"
+            for target in node.targets
+        )
+    ]
+    assert len(gates) == 1
+    gate = gates[0]
+    assert isinstance(gate, ast.BoolOp) and isinstance(gate.op, ast.And)
+    clauses = [ast.unparse(value) for value in gate.values]
+    assert clauses[:3] == [
+        "actual_example_digest == pinned_example_digest",
+        "len(gen_examples) == pinned_generated",
+        "not example_field_drift(example_projection(document), printed_example_rows)",
+    ], clauses
+    assert len(clauses) == 4, clauses
+
+
+def test_narrowing_the_conjunction_double_reports_a_drift() -> None:
+    """Each stand-down is load-bearing, exposed by a distinct shape."""
+    source = (ROOT / "scripts" / guard.SELF).read_text(encoding="utf-8")
+    coordinated, generated, _decoy, new_digest = _generated_side_decoy_rewrite()
+    clean_snapshot = json.dumps(json.loads(guard.SNAPSHOT.read_text()), indent=2)
+    one_sided = _generated().replace("@example Jane Doe", "@example John Roe", 1)
+    stray = generated + "\n/**\n * @example stray_outside_region\n */\n"
+    # Removing a clause must make its own owning shape double-report.
+    cases = (
+        (
+            "        actual_example_digest == pinned_example_digest\n        and ",
+            "        ",
+            dict(snapshot=coordinated, generated=generated),
+        ),
+        (
+            "        and len(gen_examples) == pinned_generated\n",
+            "",
+            dict(
+                snapshot=coordinated,
+                generated=stray,
+                example_digest=new_digest,
+            ),
+        ),
+        (
+            "        and not example_field_drift(\n"
+            "            example_projection(document), printed_example_rows\n"
+            "        )\n",
+            "",
+            dict(snapshot=clean_snapshot, generated=one_sided),
+        ),
+    )
+    for removed, replacement, shape in cases:
+        narrowed = source.replace(removed, replacement, 1)
+        assert narrowed != source
+        namespace: dict = {
+            "__name__": "narrowed_guard",
+            "__file__": str(ROOT / "scripts" / guard.SELF),
+        }
+        exec(  # noqa: S102
+            compile(narrowed, str(ROOT / "scripts" / guard.SELF), "exec"),
+            namespace,
+        )
+        intact = guard.failures(**shape)
+        assert not any(
+            "_GENERATED_EXAMPLE_VALUE_DIGEST" in f for f in intact
+        ), (removed, intact)
+        found = namespace["failures"](**shape)
+        assert any("_GENERATED_EXAMPLE_VALUE_DIGEST" in f for f in found), (
+            removed,
+            found,
+        )
