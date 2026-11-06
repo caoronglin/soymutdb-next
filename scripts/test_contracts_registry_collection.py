@@ -38,8 +38,9 @@ REQUIRED = sorted(guard.REQUIRED_GUARD_CALLS)
 # ``mutations``), and the plain run never reads the self-test output. Only a
 # collected, independent literal can name a shrunken loop. Keep in step with
 # ``check_contracts_registry_collection._REVIEWED_CASE_FLOOR``; raise both in
-# one reviewed commit when a case is added, and say why.
-_EXPECTED_SELF_TEST_CASES = 49
+# one reviewed commit when a case is added, and say why. 49 -> 50: one
+# decisive plant for the async-``TestCase`` no-op green.
+_EXPECTED_SELF_TEST_CASES = 50
 
 
 # Exercises the *process* exit code of the canonical ``--self-test`` entry,
@@ -751,10 +752,10 @@ class RegistryCollectionGuardTests(unittest.TestCase):
             return rc, buf.getvalue()
 
         # Control limb: with the floor itself gutted too, the shrunken loop is
-        # a clean-looking short run -- 33 cases, 33 PASS lines, 0 failures.
+        # a clean-looking short run -- 34 cases, 34 PASS lines, 0 failures.
         # Without this limb the ablation could be red for an unrelated reason.
         no_floor = shrunken.replace(
-            "_REVIEWED_CASE_FLOOR = 49\n",
+            "_REVIEWED_CASE_FLOOR = 50\n",
             "_REVIEWED_CASE_FLOOR = 0\n",
             1,
         )
@@ -885,6 +886,80 @@ class RegistryCollectionGuardTests(unittest.TestCase):
                 self.assertTrue(
                     any("unittest discover" in f for f in failures), failures
                 )
+
+
+    def test_async_testcase_noop_green_is_named(self) -> None:
+        """A counted async test method whose body never runs must fail closed.
+
+        ``unittest.TestLoader`` counts ``async def test_*`` on a plain
+        ``TestCase`` and the runner prints ``Ran 1 test`` / ``OK`` / ``rc=0``
+        while the coroutine is never awaited. The old reader sees a healthy
+        plan; the new door must name the method from committed bytes.
+        """
+        smoke, ci, files = guard.load_sources()
+        script = files[guard.CONTRACT_SH]
+        suite = "packages/api-client/python_tests/test_api_error_code_vocabulary.py"
+        self.assertEqual(guard.unittest_plan_errors(script, files), [])
+        self.assertEqual(guard.unittest_noop_test_methods(files[suite], suite), [])
+
+        mutated = dict(files)
+        mutated[suite] = files[suite].replace(
+            "    def test_clean_tree_has_no_golden_drift(self) -> None:",
+            "    async def test_clean_tree_has_no_golden_drift(self) -> None:",
+            1,
+        )
+        self.assertNotEqual(mutated[suite], files[suite])
+        # Pre-fix control: the reader that only counts names still calls these
+        # same bytes healthy. The new plant is therefore load-bearing.
+        self.assertTrue(
+            any("test_clean_tree_has_no_golden_drift" in n
+                for n in guard.unittest_collectible_tests(mutated[suite], suite))
+        )
+        self.assertTrue(
+            any("test_clean_tree_has_no_golden_drift" in n
+                for n in guard.unittest_noop_test_methods(mutated[suite], suite))
+        )
+        failures = guard.wiring_errors(smoke, mutated, ci)
+        self.assertTrue(
+            any("async test methods whose bodies never run" in f
+                for f in failures), failures
+        )
+        # Both wired entry points go through wiring_errors(); assert the plain
+        # guard call reddens too, not just an in-process helper.
+        self.assertTrue(guard.unittest_plan_errors(script, mutated))
+
+    def test_asyncio_testcase_async_tests_are_not_flagged(self) -> None:
+        """IsolatedAsyncioTestCase awaits async tests legitimately.
+
+        A blanket "no async test methods" ban would reject a valid suite.
+        The reader recognises only ``TestCase`` by name, so an
+        ``IsolatedAsyncioTestCase`` class is deliberately out of scope.
+        """
+        source = (
+            "import unittest\n"
+            "class LiveTests(unittest.IsolatedAsyncioTestCase):\n"
+            "    async def test_awaited(self):\n"
+            "        raise AssertionError('boom')\n"
+        )
+        self.assertEqual(
+            guard.unittest_noop_test_methods(source, "synthetic.py"), []
+        )
+        self.assertEqual(
+            guard.unittest_collectible_tests(source, "synthetic.py"), []
+        )
+
+    def test_async_plant_is_registered_in_the_guard_self_test(self) -> None:
+        """The decisive plant must be wired into the guard's own self-test."""
+        source = GUARD_PATH.read_text(encoding="utf-8")
+        self.assertIn("def unittest_noop_test_methods(", source)
+        self.assertIn(
+            "async def test_clean_tree_has_no_golden_drift(self) -> None:",
+            source,
+            "the self-test plant for the async no-op green is missing",
+        )
+        self.assertIn(
+            "PASS self-test: an async TestCase no-op green is named", source
+        )
 
 
 if __name__ == "__main__":

@@ -24,6 +24,15 @@ No other reader audits that plan, so the green verdict verifies nothing. This
 guard reads the script and the plan's committed bytes and requires at least one
 unittest-collectible case, from both wired entry points.
 
+A second shape on that same plan is a green verdict over a suite that **ran
+nothing**: an ``async def test_*`` method on a plain ``unittest.TestCase``
+subclass. ``TestLoader`` counts it (``countTestCases() == 1``) and the runner
+reports ``Ran 1 test`` / ``OK`` / ``rc=0``, but the coroutine is never awaited
+(only a ``RuntimeWarning``), so the body -- including every assertion -- never
+executes. ``unittest.IsolatedAsyncioTestCase`` awaits async tests legitimately;
+a plain ``TestCase`` does not. ``unittest_noop_test_methods()`` names those
+methods from the committed bytes, and both wired entry points reject them.
+
 The same function invokes a floor of stdlib guards as separate
 ``${PYTHON_BIN} scripts/check_*.py ... || rc=$?`` calls. That is a second
 wiring mechanism: a merge can drop one without touching the array, and the
@@ -145,8 +154,9 @@ GUARD_CALL = re.compile(
 # not audit it (its ``--self-test`` is wired in ci-job-steps.sh, not smoke.sh).
 # A second, independent copy of this number lives in the collected companion
 # scripts/test_contracts_registry_collection.py. Raise both in one reviewed
-# commit when a case is added, and say why.
-_REVIEWED_CASE_FLOOR = 49
+# commit when a case is added, and say why. 49 -> 50: one decisive plant for
+# the async-``TestCase`` no-op green (a counted case whose body never runs).
+_REVIEWED_CASE_FLOOR = 50
 
 REQUIRED_GUARD_CALLS: frozenset[str] = frozenset(
     {
@@ -592,6 +602,31 @@ def unittest_collectible_tests(source: str, path: str) -> list[str]:
     return names
 
 
+def unittest_noop_test_methods(source: str, path: str) -> list[str]:
+    """``async def test_*`` methods on a plain ``TestCase`` subclass.
+
+    ``unittest.TestLoader`` collects these by name, but ``TestCase.run`` calls
+    the method without awaiting it: the body never executes, the runner still
+    prints ``Ran N tests`` / ``OK`` / ``rc=0``, and only a ``RuntimeWarning``
+    reaches stderr. A counted case whose assertions cannot fail is the same
+    false green as an empty plan, one layer up. ``IsolatedAsyncioTestCase``
+    awaits async tests and is deliberately not flagged: ``_is_testcase()``
+    recognises only ``TestCase`` by name, so those classes are out of scope.
+    """
+    tree = ast.parse(source, filename=path)
+    names: list[str] = []
+    for node in tree.body:
+        if not isinstance(node, ast.ClassDef) or not _is_testcase(node):
+            continue
+        for item in node.body:
+            if (
+                isinstance(item, ast.AsyncFunctionDef)
+                and item.name.startswith("test")
+            ):
+                names.append(f"{node.name}::{item.name}")
+    return names
+
+
 def unittest_discover_line(script: str) -> str | None:
     """The one bare ``unittest discover`` statement in check-contract.sh."""
     matches = UNITTEST_DISCOVER.findall(script)
@@ -628,13 +663,27 @@ def unittest_plan_errors(
             "discover would collect 0 cases and still print OK"
         )
     collected = 0
+    noops: list[str] = []
     for relative in suites:
         try:
             collected += len(
                 unittest_collectible_tests(files[relative], relative)
             )
+            noops.extend(
+                f"{relative}:{name}"
+                for name in unittest_noop_test_methods(files[relative], relative)
+            )
         except SyntaxError as exc:
             errors.append(f"unittest suite {relative!r} does not parse: {exc}")
+    if noops:
+        errors.append(
+            "the frontend gate's unittest plan counts async test methods whose "
+            "bodies never run: " + ", ".join(sorted(noops)) + ". A plain "
+            "unittest.TestCase does not await an async def test_*; TestLoader "
+            "still counts it and the runner still prints 'OK' / rc=0 with "
+            "the assertion skipped (use IsolatedAsyncioTestCase for async "
+            "tests, or make the method synchronous)"
+        )
     if not errors and collected == 0:
         errors.append(
             "the frontend gate's unittest plan defines 0 TestCase methods: "
@@ -1144,6 +1193,29 @@ def self_test() -> int:
         "PASS self-test: the pytest reader stays green where unittest "
         "collects zero",
         "FAIL self-test: the unittest reader did not distinguish the plans",
+    )
+
+    # A counted case whose body never runs: an async def test_* on a plain
+    # TestCase. The real runner says Ran 1 / OK / rc=0 while the assertion is
+    # skipped. Control: the pre-fix reader (unittest_collectible_tests alone)
+    # counts the method as healthy on these same bytes, so the plant proves
+    # the new door was necessary, not decorative.
+    async_suite = suite_source.replace(
+        "    def test_clean_tree_has_no_golden_drift(self) -> None:",
+        "    async def test_clean_tree_has_no_golden_drift(self) -> None:",
+        1,
+    )
+    assert async_suite != suite_source, "async plant anchor drifted"
+    async_files = dict(files)
+    async_files[suite_path] = async_suite
+    report(
+        any("async test methods whose bodies never run" in f
+            for f in unittest_plan_errors(contract_sh, async_files))
+        and bool(unittest_collectible_tests(async_suite, suite_path))
+        and any("test_clean_tree_has_no_golden_drift" in n
+                for n in unittest_noop_test_methods(async_suite, suite_path)),
+        "PASS self-test: an async TestCase no-op green is named",
+        "FAIL self-test: an async TestCase no-op green was accepted",
     )
 
     if results < _REVIEWED_CASE_FLOOR:

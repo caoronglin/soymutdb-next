@@ -330,7 +330,7 @@ with `--self-test`), so it gates both entry points before any suite is
 collected. The regression file **is** collected by `tests=()`. The guard's
 `--self-test` is a single file: a one-file edit can weaken its dedicated
 "fails for the pin alone" report to a generic `any(...)` and still print
-`46 cases, 0 failure(s)` while the whole contracts layer stays green,
+`50 cases, 0 failure(s)` while the whole contracts layer stays green,
 because nothing else reads that report. Only the second-file assertions in
 `scripts/test_contracts_registry_collection.py` name the `len == 1` and
 `in[0]` clauses, so collecting them is what makes the pin two-file. Add the
@@ -381,3 +381,44 @@ from a second file, plants the empty-plan ablation, and asserts the pytest
 reader stays green on the very bytes the unittest reader calls empty. The plain
 run's `OK` line reports the collected unittest case count, so a suite that
 silently loses its `TestCase` base cannot hide behind an unchanged `OK`.
+
+### A counted case whose body never runs
+
+An empty plan is not the only green verdict over zero assertions. An
+`async def test_*` method on a **plain** `unittest.TestCase` subclass is
+collected by name (`countTestCases() == 1`), but `TestCase.run()` calls it
+without awaiting: the coroutine is discarded, the body — including every
+`assert` — never executes, and the runner still prints `Ran 1 test` / `OK` /
+`rc=0` (only a `RuntimeWarning: coroutine ... was never awaited` reaches
+stderr). Verified on CPython 3.11 with the committed suite: one `def test_*`
+→ `async def test_*` gives `Ran 10 tests` / `OK` / `rc=0` with the assertion
+skipped. This is the same false green one layer up: a plan that *looks*
+populated and cannot fail.
+
+`unittest.IsolatedAsyncioTestCase` does await async tests (an `AssertionError`
+there correctly fails the run), so a blanket ban on async test methods would
+reject a valid suite. `_is_testcase()` recognises only `TestCase` by name, so
+`unittest_noop_test_methods()` flags async methods on plain `TestCase` classes
+only. This is a **separate door** in `unittest_plan_errors()` — it reports its
+own named failure and leaves the existing `0 TestCase methods` door's meaning
+intact — and both wired entry points go through it.
+
+Decisive two-tree A/B on `e2bfd2b1`, one drifted byte shape (sha256
+`d79ff742ef51d4ec…` on the suite file), only the guard differs:
+
+- plain run (local layer): old `rc=0 OK` → this **`rc=1`**, naming
+  `ApiErrorVocabularyTests::test_clean_tree_has_no_golden_drift`;
+- `--self-test` (CI side): old `rc=0`, `49 cases, 0` → this **`rc=1`**,
+  naming the no-op plan;
+- `smoke.sh --profile contracts` on the drifted tree: **SMOKE FAIL**;
+- real `unittest discover` on the same bytes: `Ran 10 / OK / rc=0` on both —
+  that is the false green being pinned, not a verdict the guard changes.
+
+Restoring the byte returns both entry points to `rc=0`. **Control:** on those
+same drifted bytes the pre-fix reader `unittest_collectible_tests()` still
+counts the method as a healthy case — the plant is load-bearing, not
+decorative. Zero generated-artifact bytes, zero wiring edits.
+
+`--self-test` 49 → **50 cases** and companion 39 → **42 passed**; the two
+hand-written floors (`_REVIEWED_CASE_FLOOR` and the companion's
+`_EXPECTED_SELF_TEST_CASES`) are raised together in the same reviewed commit.
