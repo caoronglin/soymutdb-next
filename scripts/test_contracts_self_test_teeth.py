@@ -655,5 +655,146 @@ class TeethGuardContract(unittest.TestCase):
         self.assertIn("printed_total_errors(drifted)", source)
 
 
+    # --- Aux exact printed totals (7): the seven wired guards whose success
+    # line prints a total derived from the container they iterate and which are
+    # not ``EVIDENCE_MEMBERS``, so #368's pin did not reach them.
+
+    def test_the_aux_total_literals_are_hand_written(self) -> None:
+        """Both tables are literals, and neither is read back from the guards."""
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("_AUX_PRINTED_CASE_TOTAL: dict[str, int] = {", source)
+        self.assertIn("_AUX_CHECK_TOTAL: dict[str, int] = {", source)
+        for table in ("_AUX_PRINTED_CASE_TOTAL", "_AUX_CHECK_TOTAL"):
+            tail = source.split(table + ": dict[str, int] = {", 1)[1][:900]
+            tail = tail.split("\n}\n", 1)[0]
+            for derived in ("len(cases", "len(tests", "len(GATES", "results"):
+                self.assertNotIn(derived, tail, f"{table} row is derived: {derived}")
+        self.assertEqual(len(guard._AUX_PRINTED_CASE_TOTAL), 5)
+        self.assertEqual(len(guard._AUX_CHECK_TOTAL), 2)
+
+    def test_the_committed_tree_prints_exactly_the_aux_totals(self) -> None:
+        """The committed tree must print the reviewed numbers, not merely match shape."""
+        results = _results()
+        for path, exact in guard._AUX_PRINTED_CASE_TOTAL.items():
+            rc, output = results[path]
+            self.assertEqual(rc, 0, path)
+            self.assertEqual(guard._declared_case_count(output), exact, path)
+        for path, exact in guard._AUX_CHECK_TOTAL.items():
+            rc, output = results[path]
+            self.assertEqual(rc, 0, path)
+            self.assertEqual(guard._aux_check_count(output), exact, path)
+        self.assertEqual(guard.aux_printed_total_errors(results), [])
+
+    def test_the_aux_pins_are_disjoint_from_the_evidence_floor(self) -> None:
+        """Two owners for one number makes the reviewed row set meaningless."""
+        aux = set(guard._AUX_PRINTED_CASE_TOTAL) | set(guard._AUX_CHECK_TOTAL)
+        self.assertEqual(aux & guard.EVIDENCE_MEMBERS, set())
+        self.assertEqual(aux & set(guard._PRINTED_CASE_TOTAL), set())
+        self.assertFalse(
+            set(guard._AUX_PRINTED_CASE_TOTAL) & set(guard._AUX_CHECK_TOTAL)
+        )
+        self.assertEqual(guard.evidence_floor_errors(), [])
+
+    def test_every_countable_signature_is_owned_by_an_exact_total(self) -> None:
+        """A new wired guard with a bare ``d+`` would open a fresh free cell."""
+        aux = set(guard._AUX_PRINTED_CASE_TOTAL) | set(guard._AUX_CHECK_TOTAL)
+        exact = aux | set(guard._PRINTED_CASE_TOTAL)
+        wired = guard.wired_self_tests(_smoke())
+        self.assertEqual(guard._NUMERIC_SIGNATURES - exact, set())
+        self.assertEqual(exact - guard._NUMERIC_SIGNATURES, set())
+        self.assertEqual(guard._NUMERIC_SIGNATURES - set(wired), set())
+        original = guard._NUMERIC_SIGNATURES
+        guard._NUMERIC_SIGNATURES = original | {"scripts/check_new_guard.py"}
+        try:
+            found = guard.evidence_floor_errors()
+        finally:
+            guard._NUMERIC_SIGNATURES = original
+        self.assertTrue(
+            any(
+                "check_new_guard.py" in f and "exact printed-total pin" in f
+                for f in found
+            ),
+            found,
+        )
+
+    def test_an_aux_pin_for_an_unwired_or_signatureless_guard_fails_closed(self) -> None:
+        for table, message in (
+            ("_AUX_PRINTED_CASE_TOTAL", "has no success signature"),
+            ("_AUX_CHECK_TOTAL", "has no success signature"),
+        ):
+            with self.subTest(table=table):
+                original = getattr(guard, table)
+                setattr(guard, table, {**original, "scripts/check_unwired.py": 1})
+                try:
+                    found = guard.evidence_floor_errors()
+                finally:
+                    setattr(guard, table, original)
+                self.assertTrue(
+                    any("check_unwired.py" in f and message in f for f in found),
+                    found,
+                )
+                # Wired, but its signature row removed: the pin would then be
+                # the only reader of a number a gutted body can write.
+                victim = "scripts/check_visible_i18n.py"
+                saved = guard._SIGNATURES
+                guard._SIGNATURES = {
+                    k: v for k, v in saved.items() if k != victim
+                }
+                setattr(guard, table, {**original, victim: 1})
+                try:
+                    found = guard.evidence_floor_errors()
+                finally:
+                    setattr(guard, table, original)
+                    guard._SIGNATURES = saved
+                self.assertTrue(
+                    any(victim in f and message in f for f in found), found
+                )
+
+    def test_a_deleted_plant_outside_the_evidence_floor_is_named(self) -> None:
+        """The decisive shape, from the second file, on the real printed line."""
+        victim = "scripts/check_openapi_published_enums.py"
+        self.assertNotIn(victim, guard.EVIDENCE_MEMBERS, "setup is not a control")
+        results = _results()
+        rc, output = results[victim]
+        exact = guard._AUX_PRINTED_CASE_TOTAL[victim]
+        drifted = dict(results)
+        drifted[victim] = (
+            rc,
+            output.replace(f"OK ({exact} ablations)", f"OK ({exact - 1} ablations)", 1),
+        )
+        found = guard.aux_printed_total_errors(drifted)
+        self.assertEqual(len(found), 1, f"one cause, one owner: {found}")
+        self.assertIn(victim, found[0])
+        self.assertIn(f"exact reviewed printed total of {exact}", found[0])
+        self.assertEqual(guard.aux_printed_total_errors(results), [])
+
+    def test_the_ok_checks_decoder_does_not_measure_the_plain_run(self) -> None:
+        """``OK (N baselines)`` is a different entry point, not a second total."""
+        self.assertIsNone(
+            guard._aux_check_count("openapi-baseline-sync: OK (4 baselines)\n")
+        )
+        self.assertIsNone(
+            guard._aux_check_count(
+                "openapi-inline-bodies: OK (75 pinned bodies, 60 inline body "
+                "titles pinned)\n"
+            )
+        )
+        self.assertEqual(
+            guard._aux_check_count("openapi-inline-bodies: OK (17 checks)\n"), 17
+        )
+        victim = "scripts/check_openapi_baseline_sync.py"
+        results = _results()
+        rc, output = results[victim]
+        exact = guard._AUX_CHECK_TOTAL[victim]
+        drifted = dict(results)
+        drifted[victim] = (
+            rc,
+            output.replace(f"OK ({exact} checks)", f"OK ({exact - 1} checks)", 1),
+        )
+        found = guard.aux_printed_total_errors(drifted)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn(f"exact reviewed printed total of {exact}", found[0])
+
+
 if __name__ == "__main__":
     unittest.main()

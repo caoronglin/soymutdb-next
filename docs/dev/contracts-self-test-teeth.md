@@ -189,7 +189,10 @@ change (a fifth, mandatory for every `EVIDENCE_MEMBERS` guard, is its
 
    A guard audited for per-case evidence belongs in `EVIDENCE_MEMBERS` **and**
    gets a `_CASE_FLOOR` row (guard, source file, function, case container,
-   minimum declared rows).
+   minimum declared rows). A guard whose success line prints a countable total
+   but is *not* an evidence member gets a row in `_AUX_PRINTED_CASE_TOTAL` (or
+   `_AUX_CHECK_TOTAL` for `OK (N checks)`) **and** an entry in
+   `_NUMERIC_SIGNATURES`; wiring one without them fails closed.
 
 A guard that must also read the committed tree needs a **second** plain call in
 `smoke_contracts()` and a matching row in `BOTH_CALLS`. The registry floor pins
@@ -220,6 +223,67 @@ one-sided. It is bidirectionally pinned against `EVIDENCE_MEMBERS`, and re-pin
 it in the same reviewed commit as a guard that adds or removes a case. The
 companion suite pins the literal, its membership symmetry, and the decisive
 deletion; the guard's `--self-test` carries one ablation for the same shape.
+
+### Exact printed totals outside the evidence floor
+
+`_PRINTED_CASE_TOTAL` only reaches `EVIDENCE_MEMBERS`. Seven wired guards print
+an exact total and are **not** members, so their `_SIGNATURES` row — a bare
+`\d+` — was the only thing read back, and it pins the shape of a number, never
+the number. Each total is derived from the container the guard iterates
+(`len(cases)`, `len(tests)`, `len(GATES)`, a `results` loop counter), so deleting
+one plant lowers it while every signature, every plant and the whole layer stay
+green. Measured on live `e2bfd2b1`, bytes otherwise clean: deleting one `cases`
+row from `check_openapi_published_enums.py` turned `OK (17 ablations)` into
+`OK (16 ablations)`, teeth stayed `OK (23 wired guards probed)`, its `--self-test`
+stayed `15 cases, 0`, the companion stayed `48 passed` and
+`smoke.sh --profile contracts` reported `SMOKE PASS / 1325 passed + 58 subtests /
+0 failed`. The name of the deleted case appeared nowhere. This is #364's
+"empty unittest plan" one layer out: the reader that should have named the
+deletion is the guard's own success line, and its number comes from the thing
+that was deleted.
+
+Two hand-written tables, read from nowhere:
+
+- `_AUX_PRINTED_CASE_TOTAL` — the five guards whose success line carries a
+  case/ablation noun (`self-test: N cases, 0 failure(s)`,
+  `OK (N ablations)`), decoded by the existing `_declared_case_count()`.
+- `_AUX_CHECK_TOTAL` — the two guards printing `OK (N checks)`. That noun is
+  deliberately **not** added to `_DECLARED_CASES`: widening the shared audit's
+  regex would silently change what every `EVIDENCE_MEMBERS` row is measured
+  against. They get `_AUX_CHECK_LINE`, a whole-line anchor, because
+  `check_openapi_baseline_sync.py`'s *plain* run prints `OK (N baselines)` and
+  `check_openapi_inline_body_integrity.py`'s prints `OK (N pinned bodies, ...)`
+  — a looser pattern would measure a number the self-test never printed.
+
+`aux_printed_total_errors()` is a separate door in `check()`, not an extension
+of `evidence_errors()`: that audit stays one-sided (extra per-case lines stay
+green) and its format stays as reviewed. A pinned guard that was not probed, or
+whose success line declares no single total, is named rather than skipped.
+
+`evidence_floor_errors()` now also carries the ownership rules, all failing
+closed:
+
+- an aux pin for a guard that is not wired — it measures nothing;
+- an aux pin whose guard has no `_SIGNATURES` row — the pin would be the only
+  reader of a number a gutted body can write;
+- a guard pinned in both aux tables, or an aux pin overlapping
+  `EVIDENCE_MEMBERS` / `_PRINTED_CASE_TOTAL` — two owners for one number;
+- and the direction that keeps the cell from reopening: every member of
+  `_NUMERIC_SIGNATURES` (the wired guards whose signature is a bare `\d+`) must
+  land in one of the two exact-total pins, and every exact-total pin must be in
+  `_NUMERIC_SIGNATURES`. A new guard wired with `OK (N cases)` would otherwise
+  open a fresh free-deletion cell the moment it is wired.
+
+Zero new wiring: `smoke.sh`, `ci-job-steps.sh`, `.cnb.yml`,
+`REQUIRED_GUARD_CALLS`, `PINNED_SUITES`, `_WIRED_SELF_TESTS`, `_SIGNATURES` and
+both artifacts are untouched by this pin. The guard's own `--self-test` went
+`15 → 17` cases (one per shape: a case/ablation total and an `OK (N checks)`
+total), each asserting both limbs — the shipped results are quiet, and a total
+one below its pin is named by guard path and reviewed number. The companion
+suite went `48 → 55`, pinning the two literals, the committed totals, the
+disjointness, the countable-signature coverage, the fail-closed ownership
+directions, both deletion shapes, and that the `OK (N checks)` decoder does not
+measure the plain run.
 
 The companion suite is a normal `tests=()` row; `PINNED_SUITES` is a floor,
 not an allowlist, so adding a suite needs no edit there (see
