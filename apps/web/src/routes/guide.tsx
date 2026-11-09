@@ -9,13 +9,13 @@
  * scrolling.
  */
 import * as React from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import XMarkdown, { type ComponentProps as MarkdownComponentProps } from "@ant-design/x-markdown";
 import { useSiteContent } from "../lib/site-content-react";
 import { http, ApiError } from "@soymutdb/api-client";
-import { Button, Card, Skeleton, Tag, Typography } from "../lib/antd";
+import { Button, Result, Skeleton, Tag } from "../lib/antd";
 import {
     AimOutlined as Microscope,
     ArrowLeftOutlined as ArrowLeft,
@@ -242,7 +242,7 @@ function GuideComponent() {
             <FadeUp>
                 <Link
                     to="/"
-                    className="link-underline inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                    className="link-underline inline-flex items-center gap-1.5 py-1 text-sm text-muted-foreground hover:text-foreground"
                 >
                     <ArrowLeft className="size-4" aria-hidden />
                     {t("common.back")}
@@ -252,7 +252,10 @@ function GuideComponent() {
             {query.isLoading ? (
                 <GuideSkeleton />
             ) : query.isError || !page ? (
-                <GuideError error={query.error} onRetry={() => query.refetch()} />
+                <>
+                    <h1 className="sr-only">{get("nav.guide", t("nav.guide"))}</h1>
+                    <GuideError error={query.error} onRetry={() => query.refetch()} />
+                </>
             ) : (
                 <>
                     <FadeUp>
@@ -368,26 +371,38 @@ function GuideSkeleton() {
 
 function GuideError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
     const { t } = useTranslation();
-    const message =
-        error instanceof ApiError
-            ? `${error.message} (${error.status})`
-            : error instanceof Error
-              ? error.message
-              : t("common.errorDescription");
+    const navigate = useNavigate();
+    const notPublished = error instanceof ApiError && error.status === 404;
+    if (notPublished) {
+        return (
+            <Result
+                status="info"
+                className="mt-8 max-w-2xl"
+                title={t("guide.notPublishedTitle")}
+                subTitle={t("guide.notPublishedDesc")}
+                extra={
+                    <Button variant="outlined" onClick={() => void navigate({ to: "/" })}>
+                        {t("common.back")}
+                    </Button>
+                }
+            />
+        );
+    }
     return (
-        <Card className="mt-8 max-w-2xl">
-            <div>
-                <Typography.Title className="flex items-center gap-2">
-                    <FileText className="size-5 text-destructive" aria-hidden />
-                    {t("common.error")}
-                </Typography.Title>
-            </div>
-            <div className="space-y-4">
-                <p className="text-sm text-muted-foreground">{message}</p>
+        <Result
+            status="error"
+            className="mt-8 max-w-2xl"
+            title={t("guide.loadErrorTitle")}
+            subTitle={
+                error instanceof ApiError
+                    ? `${error.message} (${error.status})`
+                    : t("guide.loadErrorDesc")
+            }
+            extra={
                 <Button variant="outlined" onClick={onRetry}>
                     {t("common.retry")}
                 </Button>
-            </div>
-        </Card>
+            }
+        />
     );
 }

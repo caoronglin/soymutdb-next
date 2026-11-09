@@ -14,7 +14,7 @@
  * the snapshot (e.g. visibility-window articles) fall back to the normal
  * API load.
  */
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -57,6 +57,7 @@ interface PreviewSearch {
 
 function NewsDetailComponent() {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { slug } = Route.useParams();
   const { preview, exp } = Route.useSearch({ select: (s) => s as PreviewSearch });
@@ -128,7 +129,7 @@ function NewsDetailComponent() {
       <Link
         to="/news"
         search={{ category: undefined, page: undefined }}
-        className="link-underline inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+        className="link-underline inline-flex items-center gap-1.5 py-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ArrowLeftOutlined className="text-xs" aria-hidden />
         {t("news.backToList")}
@@ -146,9 +147,14 @@ function NewsDetailComponent() {
           title={t("news.articleNotFound")}
           subTitle={t("news.articleNotFoundHint")}
           extra={
-            <Link to="/news" search={{ category: undefined, page: undefined }}>
-              <Button type="primary">{t("news.backToList")}</Button>
-            </Link>
+            <Button
+              type="primary"
+              onClick={() =>
+                void navigate({ to: "/news", search: { category: undefined, page: undefined } })
+              }
+            >
+              {t("news.backToList")}
+            </Button>
           }
         />
       ) : !article ? (

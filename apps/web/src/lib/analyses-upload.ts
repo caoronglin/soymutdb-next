@@ -13,7 +13,6 @@
 import * as React from "react";
 import { requestUpload, submitAnalysis, type AnalysisType } from "@soymutdb/api-client";
 import { useToast } from "./toast";
-import { recordRecentJob } from "./analyses-local";
 import { IncrementalSha256, SHA256_CHUNK_BYTES } from "./incremental-sha256";
 
 export type UploadPhase = "idle" | "uploading" | "submitting" | "done";
@@ -227,7 +226,6 @@ export function useAnalysisUpload(opts: {
           inputObjects: objectKeys,
           params,
         });
-        recordRecentJob(res.job_id);
         setState({ phase: "done", progress: 100, error: null });
         onSubmitted(res.job_id);
       } catch (err) {

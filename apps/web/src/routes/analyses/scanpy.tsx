@@ -94,7 +94,7 @@ function ScanpyComponent() {
           <div className="flex items-start gap-3.5">
             <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm"><ScanOutlined /></span>
             <div>
-              <Typography.Title level={2} style={{ margin: 0 }}>{t("analyses.scanpy.title")}</Typography.Title>
+              <Typography.Title level={1} style={{ margin: 0 }}>{t("analyses.scanpy.title")}</Typography.Title>
               <Typography.Paragraph type="secondary" style={{ margin: 0 }}>{t("analyses.scanpy.subtitleLong")}</Typography.Paragraph>
             </div>
           </div>

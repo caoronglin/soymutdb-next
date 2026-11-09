@@ -296,11 +296,24 @@
 }
 
 @media (max-width: 767px) {
-    .site-header-control.ant-btn {
-        width: 40px;
-        min-width: 40px;
+    /* AntD injects `.ant-btn.ant-btn-sm` height at runtime, after this file,
+       so a matching-specificity rule loses. Scope through the real <header>
+       element to win (the sticky bar carries no `.site-header` class). */
+    header .site-header-control.ant-btn {
+        width: 44px;
+        min-width: 44px;
         height: 44px;
     }
+}
+
+/* Breadcrumb and tab labels shrink to text height (~22px), below the WCAG
+   2.5.8 24px pointer minimum. Grow the hit area without changing the box
+   the surrounding layout sees. */
+.ant-breadcrumb a,
+.ant-tabs-tab-btn {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
 }
 
 /* ----------------------------------------------------------------------------
@@ -463,6 +476,23 @@
         line-height: var(--text-body--line-height);
         font-feature-settings: "cv11", "ss01";
         min-height: 100vh;
+    }
+
+    /* antd-mobile is imported per component (Popup/NavBar) so its global
+       stylesheet — which would restate html/body fonts, link colours and the
+       page background — is not loaded. Map the few variables its component CSS
+       reads onto the site tokens, and keep the scroll-lock class it toggles. */
+    :root {
+        --adm-color-background: var(--background);
+        --adm-color-weak: var(--muted-foreground);
+        --adm-font-size-7: 0.9375rem;
+        --adm-font-size-10: 1.0625rem;
+        --adm-popup-z-index: 60;
+        --adm-mask-z-index: 55;
+    }
+
+    body.adm-overflow-hidden {
+        overflow: hidden !important;
     }
 
     h1, h2, h3, h4, h5, h6 {
@@ -959,6 +989,28 @@
     min-height: 24px;
     height: 24px;
     border-radius: 999px;
+}
+
+/* The carousel and the news card share one row. Without an explicit height
+   chain the carousel keeps only its content height and the two panels end at
+   different baselines once the news list grows. */
+.home-photo-carousel {
+    display: flex;
+    flex-direction: column;
+    min-height: 320px;
+}
+
+.home-photo-carousel > .ant-carousel {
+    flex: 1;
+    min-height: 0;
+}
+
+.home-photo-carousel .slick-slider,
+.home-photo-carousel .slick-list,
+.home-photo-carousel .slick-track,
+.home-photo-carousel .slick-slide,
+.home-photo-carousel .slick-slide > div {
+    height: 100%;
 }
 
 /* Compact controls are still required to expose a comfortable hit area. */

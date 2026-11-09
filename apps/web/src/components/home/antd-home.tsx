@@ -139,8 +139,11 @@ function LatestNewsPanel() {
   const items: NewsSummary[] = query.data?.featured.slice(0, 5) ?? [];
   if (items.length === 0) {
     return (
-      <div data-testid="home-news-empty">
-        <Empty description={t("home.noNews")} />
+      <div
+        data-testid="home-news-empty"
+        className="flex min-h-56 items-center justify-center"
+      >
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("home.noNews")} />
       </div>
     );
   }
@@ -266,12 +269,12 @@ function DatabaseOverview() {
             }
           />
         ) : (
-          <Row gutter={[16, 16]}>
+          <Row gutter={[16, 16]} align="stretch">
             {tiles.length === 0
               ? [0, 1, 2, 3].map((slot) => (
                   <Col key={slot} xs={12} md={6}>
                     <Card
-                      className="rounded-xl border border-border bg-card shadow-sm"
+                      className="h-full rounded-xl border border-border bg-card shadow-sm"
                       styles={{ body: { padding: 20 } }}
                     >
                       <Skeleton
@@ -285,7 +288,7 @@ function DatabaseOverview() {
               : tiles.map((tile) => (
                   <Col key={tile.key} xs={12} md={6}>
                     <Card
-                      className="rounded-xl border border-border bg-card shadow-sm"
+                      className="h-full rounded-xl border border-border bg-card shadow-sm"
                       styles={{ body: { padding: 20 } }}
                     >
                       <Text className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -371,16 +374,27 @@ export function AntdHome() {
             </Card>
           </Col>
 
-          {/* Photo carousel (滚动照片) — 3-6 brand slides. */}
+          {/* Photo carousel (滚动照片) — 3-6 brand slides. The heading row
+              mirrors the news column so both panels start on the same
+              baseline; the height chain is completed by `.home-photo-carousel`
+              in index.css, which keeps the carousel as tall as the news card. */}
           <Col xs={24} lg={15} className="flex flex-col">
-            <div className="flex-1">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <Title level={3} className="font-bold" style={{ margin: 0 }}>
+                {t("home.researchHighlights")}
+              </Title>
+              <Link to="/search" className="home-section-link shrink-0 text-primary" style={{ fontWeight: 500 }}>
+                {t("home.openTool")} →
+              </Link>
+            </div>
+            <div className="home-photo-carousel flex-1" style={{ minHeight: 320 }}>
               <Carousel autoplay={!reduced} autoplaySpeed={5200} effect="fade" className="h-full">
                 {HERO_SLIDES.map((slide, i) => (
                   <div key={slide.titleKey} className="h-full">
                     <FluidGradient
                       reduced={reduced}
                       colors={HERO_PALETTES[i % HERO_PALETTES.length]}
-                      style={{ minHeight: 340, height: "100%", borderRadius: "var(--radius-xl)" }}
+                      style={{ minHeight: 320, height: "100%", borderRadius: "var(--radius-xl)" }}
                     >
                       <div
                         style={{
@@ -412,7 +426,7 @@ export function AntdHome() {
       </div>
 
       {/* ---------------------------------------------------------------- */}
-      {/* BOTTOM: 收索工具 — five first-level directory buttons in a row.    */}
+      {/* BOTTOM: 收索工具 — four first-level directory buttons in a row.    */}
       {/* ---------------------------------------------------------------- */}
       <div className="container-prose pb-20 pt-4 md:pt-6">
         <div className="mb-5 flex items-baseline justify-between gap-3">
@@ -442,9 +456,9 @@ export function AntdHome() {
                   >
                     <Card
                       className="h-full rounded-xl border border-border bg-card shadow-sm transition-colors hover:border-primary/40"
-                      styles={{ body: { padding: 18, height: "100%" } }}
+                      styles={{ body: { padding: 18 } }}
                     >
-                      <div className="flex h-full flex-col items-center justify-start gap-3 text-center">
+                      <div className="flex flex-col items-center justify-start gap-3 text-center">
                         <div className="flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded-lg bg-accent text-accent-foreground">
                           {image ? <img src={image} alt={label} loading="lazy" className="h-full w-full object-cover" /> : tool.icon}
                         </div>

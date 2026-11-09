@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { getSiteFooter } from "@soymutdb/api-client";
 import { SITE_VARIANT } from "../lib/site-variant";
-import { FooterNavigation } from "./footer-navigation";
 
 const FALLBACK_ADDRESS = "地址: 南京市玄武区钟灵街50号 邮编210014";
 const PHONE_RE = /^\+?[0-9][0-9 .()-]{0,30}$/;
@@ -45,15 +44,16 @@ export function SiteFooter() {
 
   return (
     <footer className="mt-auto border-t border-border/80 bg-muted/20">
-      <div className="container-prose space-y-8 py-8">
-        <FooterNavigation groups={site?.navigation ?? []} />
-        <div className="grid gap-4 break-words text-sm text-muted-foreground sm:grid-cols-2">
-          <div className="space-y-1">
-            {person ? <p>{t("footer.contactPerson")}: {person}</p> : null}
-            {phone ? <p>{t("footer.phone")}: {phoneLink ? <a className="hover:text-foreground" href={phoneLink}>{phone}</a> : phone}</p> : null}
-            {email ? <p>{t("footer.email")}: {emailLink ? <a className="hover:text-foreground" href={emailLink}>{email}</a> : email}</p> : null}
-          </div>
-          <div className="text-left sm:text-right"><p>{copyright}</p><p className="mt-1">{address}</p></div>
+      <div className="container-prose flex flex-col gap-4 py-6 text-sm text-muted-foreground sm:flex-row sm:items-start sm:justify-between sm:gap-8">
+        <div className="min-w-0 space-y-1 break-words">
+          <p className="font-semibold tracking-tight text-foreground">SoyMutDB</p>
+          {person ? <p>{t("footer.contactPerson")}: {person}</p> : null}
+          {phone ? <p>{t("footer.phone")}: {phoneLink ? <a className="inline-block py-1 hover:text-foreground" href={phoneLink}>{phone}</a> : phone}</p> : null}
+          {email ? <p>{t("footer.email")}: {emailLink ? <a className="inline-block py-1 hover:text-foreground" href={emailLink}>{email}</a> : email}</p> : null}
+        </div>
+        <div className="min-w-0 space-y-1 break-words text-left sm:text-right">
+          <p>{copyright}</p>
+          <p>{address}</p>
         </div>
       </div>
     </footer>

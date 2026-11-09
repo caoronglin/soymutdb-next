@@ -1,10 +1,10 @@
 /**
  * Analyses index — recent analysis jobs for the current user.
  *
- * Data source: `GET /analyses?limit=50` (own jobs, newest first — added
- * alongside the Wave-1 single-job endpoints). When that endpoint is not yet
- * deployed (404), the page falls back to the browser's localStorage record
- * of submitted job ids and resolves each via `getAnalysis(jobId)`.
+ * Data source: `GET /analyses?limit=50` (own jobs, newest first). The endpoint
+ * is the only source: a browser-side job-id cache previously shadowed an empty
+ * or failed response, which could show another account's jobs on a shared
+ * browser and hide backend errors.
  */
 
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -13,11 +13,10 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { ExperimentOutlined, ScanOutlined, ArrowRightOutlined, FolderOpenOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, Result, Skeleton, Tag, Typography } from "@/lib/antd";
-import { getAnalysis, type AnalysesJobResponse, type AnalysisJobStatus } from "@soymutdb/api-client";
+import { type AnalysesJobResponse, type AnalysisJobStatus } from "@soymutdb/api-client";
 import { DataTable, type DataTableColumn } from "../../components/data-table";
 import { ResearcherGate } from "../../components/analyses/researcher-gate";
 import { secureHttp } from "../../lib/api";
-import { readRecentJobs, forgetRecentJob } from "../../lib/analyses-local";
 import { formatDate } from "../../lib/format";
 
 export const Route = createFileRoute("/analyses/")({
@@ -120,30 +119,10 @@ function AnalysesJobList() {
   const jobsQuery = useQuery({
     queryKey: ["analysis-jobs"],
     queryFn: async (): Promise<AnalysisJobRow[]> => {
-      // Preferred: backend list endpoint (own jobs, newest first).
-      try {
-        const res = await secureHttp.get<AnalysisJobListResponse>("/analyses", {
-          params: { limit: 50 },
-        });
-        if (res && Array.isArray(res.items) && res.items.length > 0) return res.items;
-        // Empty server list is authoritative when the endpoint exists — but
-        // we can't distinguish "endpoint missing" from "empty" on 200, so an
-        // empty response still falls through to the local record below.
-      } catch {
-        // Endpoint not deployed yet — fall back to the local record.
-      }
-      // Fallback: localStorage recent job ids resolved individually.
-      // TODO: remove once `GET /analyses` ships everywhere (local record
-      // stays useful for cross-device anonymous previews).
-      const jobs: AnalysisJobRow[] = [];
-      for (const jobId of readRecentJobs()) {
-        try {
-          jobs.push(await getAnalysis(jobId));
-        } catch {
-          forgetRecentJob(jobId);
-        }
-      }
-      return jobs;
+      const res = await secureHttp.get<AnalysisJobListResponse>("/analyses", {
+        params: { limit: 50 },
+      });
+      return res.items;
     },
     staleTime: 30_000,
     retry: false,

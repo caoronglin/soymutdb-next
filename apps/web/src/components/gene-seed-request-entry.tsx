@@ -14,7 +14,7 @@
  *   ordinary link carrying the accession in the query string.
  */
 import * as React from "react";
-import { Link } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { SendOutlined } from "@ant-design/icons";
@@ -47,6 +47,7 @@ export function GeneSeedRequestEntry({
   className,
 }: GeneSeedRequestEntryProps) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { token } = theme.useToken();
 
   const statsQuery = useQuery({
@@ -71,11 +72,13 @@ export function GeneSeedRequestEntry({
     <Card className={className} size="small" data-testid="gene-seed-request">
       <Flex align="center" justify="space-between" wrap gap={token.marginMD}>
         <Space size={token.marginXS} wrap>
-          <Link to="/seed-request" search={{ genes: geneId }}>
-            <Button type="primary" icon={<SendOutlined />}>
-              {t("genes.seedRequest.action")}
-            </Button>
-          </Link>
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
+            onClick={() => void navigate({ to: "/seed-request", search: { genes: geneId } })}
+          >
+            {t("genes.seedRequest.action")}
+          </Button>
           <Tooltip
             title={t("genes.seedRequest.availableHint", { count: availableSiteCount })}
           >

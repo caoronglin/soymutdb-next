@@ -468,8 +468,11 @@ function GeneIdSearchComponent() {
               own control, `gap={20}` separates the two groups. With a single
               gap the "基因 ID" label sat 12px from the assembly Select and read
               as that control's caption. */}
-          <Flex wrap align="center" gap={20}>
-            <Flex wrap align="center" gap={8} className="w-full min-w-0 sm:w-auto">
+          {/* Desktop keeps the single control row; below `sm` the groups and
+              their labels stack, because an inline label next to a textarea
+              reads as a separate control at 375px. */}
+          <Flex wrap gap={20} className="flex-col items-stretch sm:flex-row sm:items-center">
+            <Flex wrap gap={8} className="w-full min-w-0 flex-col items-start sm:w-auto sm:flex-row sm:items-center">
               <label
                 htmlFor="genes-assembly"
                 className="whitespace-nowrap text-sm text-muted-foreground"
@@ -502,11 +505,12 @@ function GeneIdSearchComponent() {
             </Flex>
             <Flex
               wrap
-              align="center"
               gap={8}
               // The group takes the leftover row width, so the identifier field
-              // tracks the viewport instead of stopping at a fixed 560px.
-              style={{ flex: "1 1 360px", minWidth: 0 }}
+              // tracks the viewport instead of stopping at a fixed 560px. The
+              // basis is only applied from `sm` up: in the stacked mobile
+              // column a flex-basis would stretch the group's height.
+              className="w-full min-w-0 flex-col items-start sm:w-auto sm:flex-[1_1_360px] sm:flex-row sm:items-center"
             >
               <span className="whitespace-nowrap text-sm text-muted-foreground">
                 {get("search.genes.geneId", t("search.genes.geneId"))}
@@ -524,12 +528,11 @@ function GeneIdSearchComponent() {
                   }
                 }}
                 placeholder={get("search.genes.geneIdPlaceholder", t("search.genes.geneIdPlaceholder"))}
-                className="font-mono"
+                className="w-full min-w-0 font-mono sm:w-auto sm:flex-[1_1_220px]"
                 autoSize={{ minRows: 2, maxRows: 6 }}
                 // Grows into the leftover row space, but never below a width
                 // that still shows a full accession; wraps to its own line when
                 // the row runs out.
-                style={{ flex: "1 1 220px", minWidth: 0 }}
                 data-testid="search-genes-input"
                 aria-label={get("search.genes.geneId", t("search.genes.geneId"))}
               />
@@ -538,6 +541,7 @@ function GeneIdSearchComponent() {
               type="primary"
               size="large"
               onClick={submit}
+              className="w-full sm:w-auto"
               data-testid="search-genes-submit"
               icon={<SearchOutlined aria-hidden />}
               loading={resultsQuery.isFetching}

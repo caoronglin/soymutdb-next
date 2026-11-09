@@ -197,7 +197,7 @@ function JobResultComponent() {
             <Breadcrumb items={[{ title: <Link to="/analyses">{t("analyses.title")}</Link> }, { title: t("analyses.job.breadcrumb") }]} />
             <div className="flex items-start gap-3.5">
               <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm"><ExperimentOutlined className="size-5" aria-hidden /></span>
-              <Typography.Title level={2} style={{ margin: 0 }}>{t("analyses.job.title")}</Typography.Title>
+              <Typography.Title level={1} style={{ margin: 0 }}>{t("analyses.job.title")}</Typography.Title>
             </div>
           </header>
           <Spin description={t("analyses.job.loading")} className="py-24" />
@@ -214,7 +214,7 @@ function JobResultComponent() {
             <Breadcrumb items={[{ title: <Link to="/analyses">{t("analyses.title")}</Link> }, { title: t("analyses.job.breadcrumb") }]} />
             <div className="flex items-start gap-3.5">
               <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm"><ExperimentOutlined className="size-5" aria-hidden /></span>
-              <Typography.Title level={2} style={{ margin: 0 }}>{t("analyses.job.title")}</Typography.Title>
+              <Typography.Title level={1} style={{ margin: 0 }}>{t("analyses.job.title")}</Typography.Title>
             </div>
           </header>
           <Result
@@ -246,7 +246,7 @@ function JobResultComponent() {
                 {isFastp ? <ExperimentOutlined className="size-5" aria-hidden /> : <ScanOutlined className="size-5" aria-hidden />}
               </span>
               <div>
-                <Typography.Title level={2} style={{ margin: 0 }}>
+                <Typography.Title level={1} style={{ margin: 0 }}>
                   {isFastp ? t("analyses.job.toolFastp") : t("analyses.job.toolScanpy")} {t("analyses.job.titleSuffix")}
                 </Typography.Title>
                 <Typography.Paragraph type="secondary" style={{ margin: 0 }}>

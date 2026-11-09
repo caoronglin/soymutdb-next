@@ -94,7 +94,7 @@ function FastpComponent() {
           <div className="flex items-start gap-3.5">
             <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm"><ExperimentOutlined /></span>
             <div>
-              <Typography.Title level={2} style={{ margin: 0 }}>{t("analyses.fastp.title")}</Typography.Title>
+              <Typography.Title level={1} style={{ margin: 0 }}>{t("analyses.fastp.title")}</Typography.Title>
               <Typography.Paragraph type="secondary" style={{ margin: 0 }}>{t("analyses.fastp.subtitleLong")}</Typography.Paragraph>
             </div>
           </div>

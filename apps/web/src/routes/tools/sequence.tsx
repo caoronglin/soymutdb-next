@@ -186,7 +186,7 @@ function SequenceToolComponent() {
             <ThunderboltOutlined className="size-5" aria-hidden />
           </span>
           <div>
-            <Typography.Title level={2} style={{ margin: 0 }}>
+            <Typography.Title level={1} style={{ margin: 0 }}>
               {t("tools.sequence.title")}
             </Typography.Title>
             <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
@@ -199,7 +199,7 @@ function SequenceToolComponent() {
       {capabilitiesQuery.isLoading ? (
         <Skeleton active paragraph={{ rows: 3 }} className="mt-8" />
       ) : (
-        <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+        <div className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
           <Card
             title={t("tools.sequence.inputTitle")}
             extra={
@@ -213,20 +213,22 @@ function SequenceToolComponent() {
             }
           >
             <div className="flex flex-col gap-4">
-              <Segmented
-                aria-label={t("tools.sequence.operationAria")}
-                block
-                value={operation}
-                onChange={(value) => {
-                  setOperation(value as Operation);
-                  setResult(null);
-                  mutation.reset();
-                }}
-                options={OPERATIONS.map((op) => ({
-                  value: op,
-                  label: t(`tools.sequence.op.${op}`),
-                }))}
-              />
+              <div className="-mx-1 min-w-0 overflow-x-auto px-1 pb-1">
+                <Segmented
+                  aria-label={t("tools.sequence.operationAria")}
+                  block
+                  value={operation}
+                  onChange={(value) => {
+                    setOperation(value as Operation);
+                    setResult(null);
+                    mutation.reset();
+                  }}
+                  options={OPERATIONS.map((op) => ({
+                    value: op,
+                    label: t(`tools.sequence.op.${op}`),
+                  }))}
+                />
+              </div>
 
               {!kernelAvailable ? (
                 <Alert

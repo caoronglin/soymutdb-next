@@ -137,7 +137,7 @@ function SeqFetchInner() {
             <DeploymentUnitOutlined className="size-5" aria-hidden />
           </span>
           <div>
-            <Typography.Title level={2} style={{ margin: 0 }}>
+            <Typography.Title level={1} style={{ margin: 0 }}>
               {t("tools.seqfetch.title")}
             </Typography.Title>
             <Typography.Paragraph type="secondary" style={{ margin: 0 }}>

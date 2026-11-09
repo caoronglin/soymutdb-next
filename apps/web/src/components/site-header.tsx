@@ -40,6 +40,12 @@ import {
 } from "@ant-design/icons";
 import { cn } from "../lib/cn";
 import { Affix, Button, Input, Menu } from "@/lib/antd";
+// Per-component deep imports: the package root also imports antd-mobile's
+// global stylesheet, which would override the site's html/body font, link
+// colours and background. The component entry points only pull their own
+// `.adm-*`-scoped CSS.
+import Popup from "antd-mobile/es/components/popup";
+import NavBar from "antd-mobile/es/components/nav-bar";
 import { useTheme } from "../lib/theme-provider";
 import { useI18n, type SupportedLanguage } from "../lib/i18n";
 
@@ -247,7 +253,6 @@ export function SiteHeader() {
   const headerRef = React.useRef<HTMLElement | null>(null);
   const navRef = React.useRef<HTMLElement | null>(null);
   const menuButtonRef = React.useRef<HTMLButtonElement | null>(null);
-  const firstMobileLinkRef = React.useRef<HTMLAnchorElement | null>(null);
 
   // Scroll-reactive header: RAF-throttled for 60fps
   React.useEffect(() => {
@@ -273,20 +278,32 @@ export function SiteHeader() {
     setOpenMenu(null);
   }, [currentPath]);
 
+  // The drawer has no reason to stay open once the desktop nav is available.
+  React.useEffect(() => {
+    if (isDesktop) setMobileOpen(false);
+  }, [isDesktop]);
+
+  const closeMobileMenu = React.useCallback(() => {
+    setMobileOpen(false);
+    // Return focus to the toggle when the drawer is dismissed explicitly
+    // (mask, close button, Escape); the popup portal unmounts after the
+    // closing animation and would otherwise drop focus to <body>.
+    menuButtonRef.current?.focus();
+  }, []);
+
   // Escape closes the mobile menu / dropdown and returns focus to the toggle
   React.useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (mobileOpen) {
-        setMobileOpen(false);
-        menuButtonRef.current?.focus();
+        closeMobileMenu();
       } else if (openMenu) {
         setOpenMenu(null);
       }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [mobileOpen, openMenu]);
+  }, [mobileOpen, openMenu, closeMobileMenu]);
 
   // Close an open dropdown when clicking outside the desktop nav
   React.useEffect(() => {
@@ -300,9 +317,23 @@ export function SiteHeader() {
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [openMenu]);
 
-  // Focus the first link when the mobile menu opens
+  // Move focus into the drawer once it is in the DOM. The popup mounts its
+  // portal content in a follow-up render, so the drawer can still be missing
+  // when this effect first runs; retry on the next frame instead of dropping
+  // focus to <body>.
   React.useEffect(() => {
-    if (mobileOpen) firstMobileLinkRef.current?.focus();
+    if (!mobileOpen) return;
+    let raf = 0;
+    const focusFirstLink = () => {
+      const firstLink = document.querySelector<HTMLAnchorElement>("#mobile-nav a");
+      if (firstLink) {
+        firstLink.focus();
+        return;
+      }
+      raf = requestAnimationFrame(focusFirstLink);
+    };
+    focusFirstLink();
+    return () => cancelAnimationFrame(raf);
   }, [mobileOpen]);
 
   const onSearchSubmit = (e: React.FormEvent) => {
@@ -346,11 +377,11 @@ export function SiteHeader() {
         scrolled && "site-header--scrolled",
       )}
     >
-      <div className="container-prose flex h-16 items-center gap-2 px-4 sm:gap-4 sm:px-6">
+      <div className="container-prose flex h-16 items-center gap-2 sm:gap-4">
         {/* Logo */}
         <Link
           to="/"
-          className="flex shrink-0 items-center gap-2 rounded-md outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex min-h-11 shrink-0 items-center gap-2 rounded-md outline-none transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={t("common.home")}
         >
           {brandIcon ? (
@@ -555,6 +586,7 @@ export function SiteHeader() {
               desktop next to the full navigation. */}
           <div className="lg:hidden">
             <Button
+              ref={menuButtonRef}
               type="text"
               size="small"
               className="site-header-control"
@@ -568,13 +600,55 @@ export function SiteHeader() {
         </div>
       </div>
 
-      {/* Mobile drawer — sectioned two-level menu */}
-      {mobileOpen ? (
+      {/* Mobile drawer — antd-mobile Popup + NavBar shell around the same
+          sectioned two-level menu as before. The popup portals to <body>, so
+          it is not clipped by the sticky header's backdrop-filter containing
+          block. */}
+      <Popup
+        visible={mobileOpen}
+        position="right"
+        onMaskClick={closeMobileMenu}
+        onClose={closeMobileMenu}
+        destroyOnClose
+        bodyStyle={{
+          width: "min(88vw, 384px)",
+          height: "100dvh",
+          backgroundColor: "var(--background)",
+          color: "var(--foreground)",
+        }}
+      >
         <div
           id="mobile-nav"
-          className="mobile-menu-enter max-h-[calc(100dvh-4rem)] overflow-y-auto overscroll-contain border-t bg-background/95 backdrop-blur-xl lg:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label={t("nav.mobileNavigation")}
+          className="flex h-full flex-col"
         >
-          <div className="container-prose flex flex-col py-5">
+          <NavBar
+            back={null}
+            className="shrink-0"
+            style={
+              {
+                "--height": "56px",
+                "--border-bottom": "1px solid var(--border)",
+              } as React.CSSProperties
+            }
+            right={
+              <button
+                type="button"
+                onClick={closeMobileMenu}
+                aria-label={t("nav.closeMenu")}
+                className="flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <CloseOutlined aria-hidden />
+              </button>
+            }
+          >
+            {t("nav.mobileNavigation")}
+          </NavBar>
+
+          <div className="flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
+            <div className="flex flex-col px-4 py-5">
             <form onSubmit={onSearchSubmit} role="search" className="mb-5 md:hidden">
               <Input
                 allowClear
@@ -605,7 +679,7 @@ export function SiteHeader() {
                         href={group.to}
                         target="_blank"
                         rel="noopener noreferrer"
-                        onClick={() => setMobileOpen(false)}
+                        onClick={closeMobileMenu}
                         className={directClass}
                       >
                         {label}
@@ -616,10 +690,7 @@ export function SiteHeader() {
                     <Link
                       key={group.key}
                       to={group.to}
-                      onClick={() => setMobileOpen(false)}
-                      ref={(el: HTMLAnchorElement | null) => {
-                        if (el && !firstMobileLinkRef.current) firstMobileLinkRef.current = el;
-                      }}
+                      onClick={closeMobileMenu}
                       className={directClass}
                     >
                       {label}
@@ -642,7 +713,7 @@ export function SiteHeader() {
                             href={child.href}
                             target="_blank"
                             rel="noopener noreferrer"
-                            onClick={() => setMobileOpen(false)}
+                            onClick={closeMobileMenu}
                             className="flex items-center rounded-xl px-4 py-3 text-[15px] font-medium text-foreground/80 outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             {navLabel(child)}
@@ -651,10 +722,7 @@ export function SiteHeader() {
                           <Link
                             key={child.href}
                             to={child.href}
-                            onClick={() => setMobileOpen(false)}
-                            ref={(el: HTMLAnchorElement | null) => {
-                              if (el && !firstMobileLinkRef.current) firstMobileLinkRef.current = el;
-                            }}
+                            onClick={closeMobileMenu}
                             className={cn(
                               "flex items-center rounded-xl px-4 py-3 text-[15px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                               isRouteActive(child.href)
@@ -671,9 +739,10 @@ export function SiteHeader() {
                 );
               })}
             </nav>
+            </div>
           </div>
         </div>
-      ) : null}
+      </Popup>
     </header>
   );
 

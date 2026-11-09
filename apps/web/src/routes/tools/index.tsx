@@ -99,7 +99,7 @@ function ToolsIndexComponent() {
               <DeploymentUnitOutlined className="size-5" aria-hidden />
             </span>
             <div>
-              <Typography.Title level={2} style={{ margin: 0 }}>{t("tools.title")}</Typography.Title>
+              <Typography.Title level={1} style={{ margin: 0 }}>{t("tools.title")}</Typography.Title>
               <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
                 {t("tools.subtitle")}
               </Typography.Paragraph>
