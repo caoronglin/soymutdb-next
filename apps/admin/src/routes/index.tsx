@@ -1,10 +1,8 @@
 import { TeamOutlined, BranchesOutlined, AimOutlined, ClockCircleOutlined, DeploymentUnitOutlined, ExperimentOutlined, ArrowRightOutlined } from "@ant-design/icons";
-import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Link } from "@tanstack/react-router";
-import { http } from "@soymutdb/api-client";
-import { fetchHomepageStats } from "@soymutdb/api-client";
 import { formatNumber } from "../lib/format";
+import { useDashboardData } from "../lib/dashboard";
 import { Alert, Button, PageContainer } from "@/lib/antd";
 import { StatCard } from "../components/stat-card";
 import { lazy, Suspense } from "react";
@@ -13,53 +11,11 @@ const ImportThroughputChart = lazy(() => import("../components/charts/import-thr
 const QueryLatencyChart = lazy(() => import("../components/charts/query-latency").then((m) => ({ default: m.QueryLatencyChart })));
 const StorageGrowthChart = lazy(() => import("../components/charts/storage-growth").then((m) => ({ default: m.StorageGrowthChart })));
 
-interface ImportThroughputDataPoint { date: string; imported: number; failed: number }
-interface QueryLatencyDataPoint { date: string; p50: number; p95: number; p99: number }
-interface StorageGrowthDataPoint { date: string; bytes: number }
-
-/** Dashboard system overview statistics. */
-interface DashboardStats {
-  totalUsers: number;
-  activeReleases: number;
-  totalVariants: number;
-  queryP95Ms: number;
-  usersChange: number;
-  releasesChange: number;
-  variantsChange: number;
-  queryP95Change: number;
-}
-
-interface DashboardSeriesResponse {
-  import_throughput?: ImportThroughputDataPoint[];
-  query_latency?: QueryLatencyDataPoint[];
-  storage_growth?: StorageGrowthDataPoint[];
-  importThroughput?: ImportThroughputDataPoint[];
-  queryLatency?: QueryLatencyDataPoint[];
-  storageGrowth?: StorageGrowthDataPoint[];
-}
-
 export default function DashboardPage() {
   const { t } = useTranslation();
-  const homepageStatsQuery = useQuery({
-    queryKey: ["homepage-stats"],
-    queryFn: fetchHomepageStats,
-  });
-  const homepageStats = homepageStatsQuery.data;
-
-  const dashboardStatsQuery = useQuery<DashboardStats>({
-    queryKey: ["admin-dashboard-stats"],
-    queryFn: () => http.get<DashboardStats>("/admin/dashboard-stats"),
-  });
-  const dashboardStats = dashboardStatsQuery.data;
-
-  const { data: dashboardSeries, isLoading: seriesLoading, isError: seriesError, refetch: refetchSeries } = useQuery<DashboardSeriesResponse>({
-    queryKey: ["admin-dashboard-series"],
-    queryFn: () => http.get<DashboardSeriesResponse>("/admin/dashboard-series"),
-  });
-
-  const importData = dashboardSeries?.import_throughput ?? dashboardSeries?.importThroughput ?? [];
-  const latencyData = dashboardSeries?.query_latency ?? dashboardSeries?.queryLatency ?? [];
-  const storageData = dashboardSeries?.storage_growth ?? dashboardSeries?.storageGrowth ?? [];
+  const { homepage, stats, series, importThroughput, queryLatency, storageGrowth } = useDashboardData();
+  const homepageStats = homepage.data;
+  const dashboardStats = stats.data;
 
   return (
     <PageContainer
@@ -95,7 +51,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {homepageStatsQuery.isError || dashboardStatsQuery.isError ? (
+        {homepage.isError || stats.isError ? (
           <Alert
             type="error"
             showIcon
@@ -108,8 +64,8 @@ export default function DashboardPage() {
                 size="small"
                 data-testid="dashboard-stats-retry"
                 onClick={() => {
-                  void homepageStatsQuery.refetch();
-                  void dashboardStatsQuery.refetch();
+                  void homepage.refetch();
+                  void stats.refetch();
                 }}
               >
                 {t("admin.dashboard.retry", { defaultValue: "Retry" })}
@@ -127,11 +83,11 @@ export default function DashboardPage() {
         <div
           className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
           data-testid="dashboard-stats"
-          data-pending={String(homepageStatsQuery.isPending || dashboardStatsQuery.isPending)}
+          data-pending={String(homepage.isPending || stats.isPending)}
         >
           <StatCard
             label={t("admin.dashboard.totalTeam", { defaultValue: "Total Team" })}
-            value={dashboardStatsQuery.isPending ? "…" : dashboardStatsQuery.isError ? "—" : formatNumber(dashboardStats?.totalUsers ?? 0)}
+            value={stats.isPending ? "…" : stats.isError ? "—" : formatNumber(dashboardStats?.totalUsers ?? 0)}
             icon={<TeamOutlined className="size-5" />}
             trend={dashboardStats?.usersChange !== undefined
               ? { value: `${dashboardStats.usersChange >= 0 ? "+" : ""}${dashboardStats.usersChange.toFixed(1)}%`, positive: dashboardStats.usersChange >= 0 }
@@ -139,7 +95,7 @@ export default function DashboardPage() {
           />
           <StatCard
             label={t("admin.activeReleases", { defaultValue: "Active Releases" })}
-            value={homepageStatsQuery.isPending || dashboardStatsQuery.isPending ? "…" : homepageStatsQuery.isError || dashboardStatsQuery.isError ? "—" : formatNumber(homepageStats?.release_count ?? dashboardStats?.activeReleases ?? 0)}
+            value={homepage.isPending || stats.isPending ? "…" : homepage.isError || stats.isError ? "—" : formatNumber(homepageStats?.release_count ?? dashboardStats?.activeReleases ?? 0)}
             icon={<BranchesOutlined className="size-5" />}
             trend={dashboardStats?.releasesChange !== undefined
               ? { value: `${dashboardStats.releasesChange >= 0 ? "+" : ""}${dashboardStats.releasesChange.toFixed(1)}%`, positive: dashboardStats.releasesChange >= 0 }
@@ -147,7 +103,7 @@ export default function DashboardPage() {
           />
           <StatCard
             label={t("admin.totalVariants", { defaultValue: "Total Variants" })}
-            value={homepageStatsQuery.isPending || dashboardStatsQuery.isPending ? "…" : homepageStatsQuery.isError || dashboardStatsQuery.isError ? "—" : formatNumber(homepageStats?.total_variants ?? dashboardStats?.totalVariants ?? 0)}
+            value={homepage.isPending || stats.isPending ? "…" : homepage.isError || stats.isError ? "—" : formatNumber(homepageStats?.total_variants ?? dashboardStats?.totalVariants ?? 0)}
             icon={<AimOutlined className="size-5" />}
             trend={dashboardStats?.variantsChange !== undefined
               ? { value: `${dashboardStats.variantsChange >= 0 ? "+" : ""}${dashboardStats.variantsChange.toFixed(1)}%`, positive: dashboardStats.variantsChange >= 0 }
@@ -155,7 +111,7 @@ export default function DashboardPage() {
           />
           <StatCard
             label={t("admin.dashboard.queryP95", { defaultValue: "Query P95" })}
-            value={dashboardStatsQuery.isPending ? "…" : dashboardStatsQuery.isError ? "—" : `${dashboardStats?.queryP95Ms ?? 0} ms`}
+            value={stats.isPending ? "…" : stats.isError ? "—" : `${dashboardStats?.queryP95Ms ?? 0} ms`}
             icon={<ClockCircleOutlined className="size-5" />}
             trend={dashboardStats?.queryP95Change !== undefined
               ? { value: `${dashboardStats.queryP95Change >= 0 ? "+" : ""}${dashboardStats.queryP95Change.toFixed(1)}%`, positive: dashboardStats.queryP95Change < 0 }
@@ -163,10 +119,67 @@ export default function DashboardPage() {
           />
         </div>
 
+        {/* Route shortcuts into the data surfaces operators act on. The
+            dashboard answers "how is the platform doing"; these cards answer
+            "where do I go next" without a detour through the sidebar tree. */}
+        <section aria-labelledby="dashboard-quick-links-heading">
+          <h2 id="dashboard-quick-links-heading" className="text-base font-semibold">
+            {t("admin.dashboard.quickLinks", { defaultValue: "Data management shortcuts" })}
+          </h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("admin.dashboard.quickLinksHint", { defaultValue: "Jump straight to the workflows behind the numbers above." })}
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              {
+                key: "releases",
+                to: "/releases",
+                icon: <BranchesOutlined className="size-5" aria-hidden />,
+                title: t("admin.dashboard.shortcuts.releases.title", { defaultValue: "Releases" }),
+                description: t("admin.dashboard.shortcuts.releases.description", { defaultValue: "Versions, publication status and record counts." }),
+              },
+              {
+                key: "imports",
+                to: "/imports",
+                icon: <ExperimentOutlined className="size-5" aria-hidden />,
+                title: t("admin.dashboard.shortcuts.imports.title", { defaultValue: "Data imports" }),
+                description: t("admin.dashboard.shortcuts.imports.description", { defaultValue: "Upload module data and track running tasks." }),
+              },
+              {
+                key: "data-views",
+                to: "/data-views",
+                icon: <DeploymentUnitOutlined className="size-5" aria-hidden />,
+                title: t("admin.dashboard.shortcuts.dataViews.title", { defaultValue: "Multi-dimensional views" }),
+                description: t("admin.dashboard.shortcuts.dataViews.description", { defaultValue: "Saved grid, kanban and gallery views over the data." }),
+              },
+              {
+                key: "media",
+                to: "/media",
+                icon: <AimOutlined className="size-5" aria-hidden />,
+                title: t("admin.dashboard.shortcuts.media.title", { defaultValue: "Media library" }),
+                description: t("admin.dashboard.shortcuts.media.description", { defaultValue: "Portal images and files used by the public site." }),
+              },
+            ].map((link) => (
+              <Link
+                key={link.key}
+                to={link.to}
+                className="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/40 hover:bg-accent/40"
+              >
+                <div className="flex items-center gap-2 text-primary">
+                  {link.icon}
+                  <span className="text-sm font-medium text-foreground">{link.title}</span>
+                  <ArrowRightOutlined className="ml-auto size-3.5 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">{link.description}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+
         {/* Charts. `dashboard-trends` + `data-pending` mirrors `dashboard-stats`
             for /admin/dashboard-series, which fails independently of the metric
             snapshot above. */}
-        {seriesError ? (
+        {series.isError ? (
           <Alert
             type="error"
             showIcon
@@ -175,16 +188,16 @@ export default function DashboardPage() {
               defaultValue: "Dashboard trend data unavailable.",
             })}
             action={
-              <Button type="link" size="small" data-testid="dashboard-series-retry" onClick={() => void refetchSeries()}>
+              <Button type="link" size="small" data-testid="dashboard-series-retry" onClick={() => void series.refetch()}>
                 {t("admin.dashboard.retry", { defaultValue: "Retry" })}
               </Button>
             }
           />
         ) : null}
-        <div data-testid="dashboard-trends" data-pending={String(seriesLoading)}>
+        <div data-testid="dashboard-trends" data-pending={String(series.isPending)}>
           <div className="grid gap-4 lg:grid-cols-2">
-            <Suspense fallback={<ChartLoading />}><ImportThroughputChart data={seriesLoading ? [] : importData} /></Suspense>
-            <Suspense fallback={<ChartLoading />}><QueryLatencyChart data={seriesLoading ? [] : latencyData} /></Suspense>
+            <Suspense fallback={<ChartLoading />}><ImportThroughputChart data={series.isPending ? [] : importThroughput} /></Suspense>
+            <Suspense fallback={<ChartLoading />}><QueryLatencyChart data={series.isPending ? [] : queryLatency} /></Suspense>
           </div>
 
           {/* `GET /admin/dashboard-series` returns `storage_growth: []` on
@@ -194,29 +207,34 @@ export default function DashboardPage() {
               "No chart data" panel on the dashboard, which reads as a broken
               widget rather than as a metric that is not measured. The card is
               rendered only when there is something to show. */}
-          {!seriesLoading && storageData.length === 0 ? null : (
-            <Suspense fallback={<ChartLoading />}><StorageGrowthChart data={seriesLoading ? [] : storageData} /></Suspense>
+          {!series.isPending && storageGrowth.length === 0 ? null : (
+            <Suspense fallback={<ChartLoading />}><StorageGrowthChart data={series.isPending ? [] : storageGrowth} /></Suspense>
           )}
         </div>
 
-        {/* Quick stats footer */}
-        <div className="grid gap-4 sm:grid-cols-3">
-          <StatCard
-            label={t("admin.dashboard.genes", { defaultValue: "Genes" })}
-            value={homepageStatsQuery.isPending ? "…" : homepageStatsQuery.isError ? "—" : (homepageStats?.gene_count ?? 0).toLocaleString()}
-            icon={<DeploymentUnitOutlined className="size-5" />}
-          />
-          <StatCard
-            label={t("admin.dashboard.mutantLines", { defaultValue: "Mutant Lines" })}
-            value={homepageStatsQuery.isPending ? "…" : homepageStatsQuery.isError ? "—" : (homepageStats?.mutant_line_count ?? 0).toLocaleString()}
-            icon={<ExperimentOutlined className="size-5" />}
-          />
-          <StatCard
-            label={t("admin.dashboard.seedAccessions", { defaultValue: "Seed Accessions" })}
-            value={homepageStatsQuery.isPending ? "…" : homepageStatsQuery.isError ? "—" : (homepageStats?.seed_accessions ?? 0).toLocaleString()}
-            icon={<ExperimentOutlined className="size-5" />}
-          />
-        </div>
+        {/* Database content snapshot */}
+        <section aria-labelledby="dashboard-content-heading">
+          <h2 id="dashboard-content-heading" className="text-base font-semibold">
+            {t("admin.dashboard.contentOverview", { defaultValue: "Database content" })}
+          </h2>
+          <div className="mt-3 grid gap-4 sm:grid-cols-3">
+            <StatCard
+              label={t("admin.dashboard.genes", { defaultValue: "Genes" })}
+              value={homepage.isPending ? "…" : homepage.isError ? "—" : (homepageStats?.gene_count ?? 0).toLocaleString()}
+              icon={<DeploymentUnitOutlined className="size-5" />}
+            />
+            <StatCard
+              label={t("admin.dashboard.mutantLines", { defaultValue: "Mutant Lines" })}
+              value={homepage.isPending ? "…" : homepage.isError ? "—" : (homepageStats?.mutant_line_count ?? 0).toLocaleString()}
+              icon={<ExperimentOutlined className="size-5" />}
+            />
+            <StatCard
+              label={t("admin.dashboard.seedAccessions", { defaultValue: "Seed Accessions" })}
+              value={homepage.isPending ? "…" : homepage.isError ? "—" : (homepageStats?.seed_accessions ?? 0).toLocaleString()}
+              icon={<ExperimentOutlined className="size-5" />}
+            />
+          </div>
+        </section>
       </div>
     </PageContainer>
   );

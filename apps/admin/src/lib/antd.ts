@@ -35,6 +35,7 @@ export {
   ModalForm,
   Menu,
   PageContainer,
+  ProLayout,
   ProCard,
   ProDescriptions,
   ProForm,

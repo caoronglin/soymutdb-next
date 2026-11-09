@@ -24,4 +24,12 @@ export const PRO_LIST_SHELL = {
   tableAlertRender: false,
   /** The page owns its container; a second card is redundant chrome. */
   cardBordered: false,
+  /**
+   * A 6+ column list cannot fit a 390 px viewport. Without an explicit scroll
+   * width antd lets the table push the whole document sideways; `max-content`
+   * keeps the width at the natural column total and moves the overflow into
+   * antd's own horizontal scroll container. Pages that need a fixed x override
+   * this with their own `scroll` prop.
+   */
+  scroll: { x: "max-content" },
 } as const;

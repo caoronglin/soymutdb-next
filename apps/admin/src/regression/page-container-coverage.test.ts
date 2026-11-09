@@ -83,6 +83,8 @@ const NOT_A_FEATURE_PAGE: Record<string, string> = {
  */
 const PAGE_CONTAINER_OWNER: Record<string, string> = {
   "routes/index.tsx": "routes/index.tsx",
+  "routes/dashboard/analysis.tsx": "routes/dashboard/analysis.tsx",
+  "routes/dashboard/monitor.tsx": "routes/dashboard/monitor.tsx",
   "routes/usage-guide.tsx": "routes/usage-guide.tsx",
   "routes/releases.tsx": "routes/releases.tsx",
   "routes/instances.tsx": "routes/instances.tsx",

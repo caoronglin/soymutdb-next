@@ -15,7 +15,10 @@ function hostOf(value: string | null | undefined): string {
 export function InstanceContextBadge() {
   const { t } = useTranslation();
   const { currentInstance, isRemote, isLoading } = useInstanceContext();
-  const releaseId = import.meta.env.VITE_SOYMUTDB_RELEASE_ID ?? "active";
+  const configuredReleaseId = import.meta.env.VITE_SOYMUTDB_RELEASE_ID as string | undefined;
+  const releaseId =
+    configuredReleaseId ||
+    t("admin.status.releaseActive", { defaultValue: "Active" });
   const instanceLabel = currentInstance
     ? `${currentInstance.name} (${currentInstance.code})`
     : isLoading

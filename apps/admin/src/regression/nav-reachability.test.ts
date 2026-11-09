@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { NAV_SECTIONS } from "../components/admin-sidebar";
+import { NAV_SECTIONS, type NavItem } from "../components/admin-sidebar";
 import { COMMANDS } from "../components/admin-command-palette";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -33,8 +33,15 @@ function routerPaths(): string[] {
   return [...paths].sort();
 }
 
+/** Depth-first walk over the sidebar tree; submenus carry no path of their own. */
+function navEntries(items: NavItem[]): NavItem[] {
+  return items.flatMap((item) => [item, ...(item.children ? navEntries(item.children) : [])]);
+}
+
+const NAV_ITEMS = NAV_SECTIONS.flatMap((section) => navEntries(section.items));
+
 /** Paths an operator reaches from the sidebar today. */
-const NAV_PATHS = new Set(NAV_SECTIONS.flatMap((section) => section.items.map((item) => item.path)));
+const NAV_PATHS = new Set(NAV_ITEMS.map((item) => item.path).filter((path): path is string => Boolean(path)));
 
 /**
  * Routes that are intentionally not sidebar entries: the login screen (no console
@@ -152,13 +159,27 @@ describe("admin navigation reachability", () => {
 
   it("has no duplicate sidebar entries", () => {
     const seen: string[] = [];
-    for (const section of NAV_SECTIONS) {
-      for (const item of section.items) {
-        if (item.path === "/") continue; // the dashboard is allowed once per section list
-        seen.push(item.path);
-      }
+    for (const item of NAV_ITEMS) {
+      if (item.path === "/") continue; // the dashboard is allowed once per section list
+      if (item.path) seen.push(item.path);
     }
     expect(seen.filter((path, index) => seen.indexOf(path) !== index)).toEqual([]);
+  });
+
+  it("renders multi-level navigation without placeholder parents", () => {
+    // A submenu exists to group destinations, so it must have children and no
+    // path of its own; a leaf must have a path and no children.
+    const broken: string[] = [];
+    for (const item of NAV_ITEMS) {
+      if (item.children?.length && item.path) broken.push(`${item.label}: submenu with a path`);
+      if (!item.children?.length && !item.path) broken.push(`${item.label}: leaf without a path`);
+    }
+    expect(broken).toEqual([]);
+    expect(
+      NAV_SECTIONS.some((section) =>
+        section.items.some((item) => (item.children?.length ?? 0) > 0),
+      ),
+    ).toBe(true);
   });
 
   it("fails when a shipped destination is dropped from the sidebar (ablation)", () => {

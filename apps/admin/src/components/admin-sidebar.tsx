@@ -1,26 +1,45 @@
-import { DashboardOutlined, CloudUploadOutlined, FileTextOutlined, ReadOutlined, SnippetsOutlined, SettingOutlined, CheckOutlined, BarChartOutlined, EnvironmentOutlined, RiseOutlined, PictureOutlined, ExperimentOutlined, AppstoreOutlined, LayoutOutlined } from "@ant-design/icons";
+import {
+  AppstoreOutlined,
+  BarChartOutlined,
+  CheckOutlined,
+  CloudUploadOutlined,
+  DashboardOutlined,
+  DeleteOutlined,
+  EnvironmentOutlined,
+  ExperimentOutlined,
+  FileAddOutlined,
+  FileTextOutlined,
+  FundOutlined,
+  HomeOutlined,
+  LayoutOutlined,
+  MonitorOutlined,
+  PictureOutlined,
+  ReadOutlined,
+  RiseOutlined,
+  SettingOutlined,
+  SnippetsOutlined,
+} from "@ant-design/icons";
 import type { ComponentType } from "react";
 
 /**
  * The console's navigation data, and nothing else.
  *
- * This module used to also export an `AdminSidebar` React component.
- * `AdminShell` renders the navigation with antd `Layout`/`Menu` from the very
- * same list, so that component was never rendered by a route, a test, or an
- * entry point -- a second navigation renderer that only looked live. It
- * outlived its role because the regression tests import `NAV_SECTIONS` from
- * here. The console's one navigation renderer lives in `admin-shell.tsx`.
+ * `AdminShell` renders it with ProLayout, and the reachability and render
+ * regression tests read the same list. An entry without a `path` is a submenu
+ * whose destinations are its children, so a top-level label never has to point
+ * at a placeholder page just to stay clickable.
  */
-interface NavItem {
-  path: string;
+export interface NavItem {
+  path?: string;
   label: string;
   labelKey: string;
-  icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  icon?: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
   /** Optional badge count. */
   badge?: number;
+  children?: NavItem[];
 }
 
-interface NavSection {
+export interface NavSection {
   label: string;
   labelKey: string;
   items: NavItem[];
@@ -41,7 +60,16 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Overview",
     labelKey: "admin.shell.overview",
     items: [
-      { path: "/", label: "Dashboard", labelKey: "admin.dashboard.title", icon: DashboardOutlined },
+      {
+        label: "Dashboards",
+        labelKey: "admin.shell.dashboards",
+        icon: DashboardOutlined,
+        children: [
+          { path: "/", label: "Welcome", labelKey: "admin.dashboard.welcome", icon: HomeOutlined },
+          { path: "/dashboard/analysis", label: "Analysis", labelKey: "admin.dashboard.analysis", icon: FundOutlined },
+          { path: "/dashboard/monitor", label: "Monitor", labelKey: "admin.dashboard.monitor", icon: MonitorOutlined },
+        ],
+      },
       { path: "/guide", label: "Usage guide", labelKey: "admin.usage.title", icon: ReadOutlined },
     ],
   },
@@ -49,7 +77,15 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Data Management",
     labelKey: "admin.shell.dataManagement",
     items: [
-      { path: "/imports", label: "Imports", labelKey: "admin.shell.imports", icon: CloudUploadOutlined },
+      {
+        label: "Imports",
+        labelKey: "admin.shell.imports",
+        icon: CloudUploadOutlined,
+        children: [
+          { path: "/imports", label: "All imports", labelKey: "admin.shell.allImports", icon: SnippetsOutlined },
+          { path: "/imports/new", label: "New import", labelKey: "admin.shell.newImport", icon: FileAddOutlined },
+        ],
+      },
       { path: "/releases", label: "Releases", labelKey: "admin.releases", icon: RiseOutlined },
       { path: "/data-views", label: "Data views", labelKey: "admin.shell.dataViews", icon: LayoutOutlined },
       { path: "/instances", label: "Instances", labelKey: "admin.instances.title", icon: EnvironmentOutlined },
@@ -62,9 +98,24 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { path: "/site-control", label: "Site control", labelKey: "admin.siteControl.title", icon: AppstoreOutlined },
       { path: "/page-builder", label: "Page Builder", labelKey: "admin.pageBuilder.title", icon: LayoutOutlined },
-      { path: "/content/pages", label: "Pages", labelKey: "admin.shell.pages", icon: FileTextOutlined },
-      { path: "/content/legacy", label: "Legacy Pages", labelKey: "admin.shell.legacyPages", icon: FileTextOutlined },
-      { path: "/news", label: "News", labelKey: "admin.shell.news", icon: ReadOutlined },
+      {
+        label: "Pages",
+        labelKey: "admin.shell.pagesGroup",
+        icon: FileTextOutlined,
+        children: [
+          { path: "/content/pages", label: "Pages", labelKey: "admin.shell.pages", icon: FileTextOutlined },
+        ],
+      },
+      {
+        label: "News",
+        labelKey: "admin.shell.newsGroup",
+        icon: ReadOutlined,
+        children: [
+          { path: "/news", label: "All news", labelKey: "admin.shell.news", icon: ReadOutlined },
+          { path: "/news/new", label: "New article", labelKey: "admin.shell.newArticle", icon: FileAddOutlined },
+          { path: "/news/trash", label: "Trash", labelKey: "admin.shell.newsTrash", icon: DeleteOutlined },
+        ],
+      },
       { path: "/publications", label: "Publications", labelKey: "admin.shell.publications", icon: SnippetsOutlined },
       { path: "/media", label: "Media Library", labelKey: "admin.shell.media", icon: PictureOutlined },
     ],
@@ -74,8 +125,20 @@ export const NAV_SECTIONS: NavSection[] = [
     labelKey: "admin.shell.administration",
     items: [
       { path: "/audit", label: "Audit Logs", labelKey: "admin.auditLogs", icon: SnippetsOutlined },
-      { path: "/settings", label: "Settings", labelKey: "admin.shell.settings", icon: SettingOutlined },
-      { path: "/settings/brand", label: "Site branding", labelKey: "admin.brand.title", icon: PictureOutlined },
+      {
+        label: "Settings",
+        labelKey: "admin.shell.settings",
+        icon: SettingOutlined,
+        children: [
+          { path: "/settings", label: "Overview", labelKey: "admin.shell.settingsOverview", icon: SettingOutlined },
+          { path: "/settings/brand", label: "Site branding", labelKey: "admin.brand.title", icon: PictureOutlined },
+          { path: "/settings/appearance", label: "Appearance", labelKey: "admin.settings.appearance", icon: AppstoreOutlined },
+          { path: "/settings/integrations", label: "Integrations", labelKey: "admin.settings.integrations", icon: SnippetsOutlined },
+          { path: "/settings/security", label: "Security", labelKey: "admin.settings.security", icon: CheckOutlined },
+          { path: "/settings/localization", label: "Localization", labelKey: "admin.settings.localization", icon: ReadOutlined },
+          { path: "/settings/advanced", label: "Advanced", labelKey: "admin.settings.advanced", icon: ExperimentOutlined },
+        ],
+      },
       { path: "/table-templates", label: "Table templates", labelKey: "admin.tableViews.title", icon: FileTextOutlined },
       { path: "/features", label: "Feature Flags", labelKey: "admin.shell.featureFlags", icon: CheckOutlined },
       { path: "/analytics-settings", label: "Analytics", labelKey: "admin.shell.analytics", icon: BarChartOutlined },

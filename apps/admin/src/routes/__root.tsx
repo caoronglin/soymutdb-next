@@ -1,7 +1,9 @@
 import * as React from "react";
 import type { ReactNode } from "react";
+import { useLocation } from "@tanstack/react-router";
 import { AdminHeader } from "../components/admin-header";
 import { AdminShell } from "../components/admin-shell";
+import { AdminPageTransition } from "../components/page-transition";
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -19,11 +21,14 @@ interface AdminLayoutProps {
  * is now the single owner: the title lives with the page that owns the content.
  */
 export default function AdminLayout({ children }: AdminLayoutProps) {
+  const { pathname } = useLocation();
   return (
     <AdminShell>
       {(toggleNavigation) => <div className="w-full min-w-0 space-y-6">
         <AdminHeader onToggleSidebar={toggleNavigation} />
-        <div className="w-full min-w-0 space-y-6">{children}</div>
+        <AdminPageTransition motionKey={pathname} className="w-full min-w-0 space-y-6">
+          {children}
+        </AdminPageTransition>
       </div>}
     </AdminShell>
   );

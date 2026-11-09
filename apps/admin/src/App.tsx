@@ -23,6 +23,8 @@ import {
 
 // Lazy-loaded route components (code-splitting per route).
 const DashboardPage = lazy(() => import("./routes/index"));
+const DashboardAnalysisPage = lazy(() => import("./routes/dashboard/analysis"));
+const DashboardMonitorPage = lazy(() => import("./routes/dashboard/monitor"));
 const UsageGuidePage = lazy(() => import("./routes/usage-guide"));
 const LegacyUnavailablePage = lazy(() => import("./routes/legacy-unavailable"));
 const ReleasesPage = lazy(() => import("./routes/releases"));
@@ -39,7 +41,6 @@ const NewsNewPage = lazy(() => import("./routes/news/new"));
 const NewsTrashPage = lazy(() => import("./routes/news/trash"));
 const NewsEditPage = lazy(() => import("./routes/news/$id"));
 const AuditPage = lazy(() => import("./routes/audit"));
-const SettingsLegacyPage = lazy(() => import("./routes/settings"));
 const SettingsOverviewPage = lazy(() => import("./routes/settings/index"));
 const SettingsAppearancePage = lazy(() => import("./routes/settings/appearance"));
 const SettingsIntegrationsPage = lazy(() => import("./routes/settings/integrations"));
@@ -138,6 +139,18 @@ const dashboardRoute = createRoute({
   component: () => withSuspense(DashboardPage),
 });
 
+const dashboardAnalysisRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/dashboard/analysis",
+  component: () => withSuspense(DashboardAnalysisPage),
+});
+
+const dashboardMonitorRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/dashboard/monitor",
+  component: () => withSuspense(DashboardMonitorPage),
+});
+
 const usageGuideRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/guide",
@@ -211,13 +224,6 @@ const contentPageDetailRoute = createRoute({
   },
 });
 
-const contentLegacyRoute = createRoute({
-  getParentRoute: () => authLayoutRoute,
-  path: "/content/legacy",
-  validateSearch: parseContentPageSearch,
-  component: () => withSuspense(ContentPage),
-});
-
 const mediaRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/media",
@@ -263,7 +269,9 @@ const settingsRoute = createRoute({
 const settingsLegacyRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/settings/legacy",
-  component: () => withSuspense(SettingsLegacyPage),
+  beforeLoad: () => {
+    throw redirect({ to: "/settings" });
+  },
 });
 
 const settingsBrandRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "/settings/brand", component: () => withSuspense(SiteBrandPage) });
@@ -366,6 +374,8 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   authLayoutRoute.addChildren([
     dashboardRoute,
+    dashboardAnalysisRoute,
+    dashboardMonitorRoute,
     usageGuideRoute,
     releasesRoute,
     instancesRoute,
@@ -377,7 +387,6 @@ const routeTree = rootRoute.addChildren([
     contentRoute,
     contentPagesRoute,
     contentPageDetailRoute,
-    contentLegacyRoute,
     mediaRoute,
     newsRoute,
     newsNewRoute,
