@@ -58,18 +58,18 @@ import { useTranslation } from "react-i18next";
 const DATABASE_KINDS = [
   {
     value: "genome",
-    label: "Genome / mutant database",
-    description: "Genes, variants, mutants, genome browser and comparative genomics.",
+    labelKey: "admin.siteControl.dbKind.genome",
+    descriptionKey: "admin.siteControl.dbKind.genomeDescription",
   },
   {
     value: "gene_ontology",
-    label: "Gene ontology database",
-    description: "GO terms, ontology relationships and functional enrichment workflows.",
+    labelKey: "admin.siteControl.dbKind.geneOntology",
+    descriptionKey: "admin.siteControl.dbKind.geneOntologyDescription",
   },
   {
     value: "transcription_factor",
-    label: "Transcription factor database",
-    description: "TF families, binding sites, regulons and expression programmes.",
+    labelKey: "admin.siteControl.dbKind.transcriptionFactor",
+    descriptionKey: "admin.siteControl.dbKind.transcriptionFactorDescription",
   },
 ] as const;
 
@@ -111,17 +111,19 @@ function destinationTarget(href: string): HeaderNavLink["target"] {
   return href.startsWith("https://") ? "external" : "internal";
 }
 
-function destinationError(link: HeaderNavLink): string | null {
+type Translate = (key: string, options?: Record<string, unknown>) => string;
+
+function destinationError(link: HeaderNavLink, t: Translate): string | null {
   const href = link.href;
-  if (!href) return `Link '${link.label_en}' needs a destination`;
+  if (!href) return t("admin.siteControl.nav.error.noDestination", { label: link.label_en });
   if (href !== href.trim() || /\s/.test(href) || href.includes("\\")) {
-    return `Destination for '${link.label_en}' cannot contain whitespace or a backslash`;
+    return t("admin.siteControl.nav.error.whitespace", { label: link.label_en });
   }
   if (href.startsWith("//")) {
-    return `Destination for '${link.label_en}' cannot be protocol-relative`;
+    return t("admin.siteControl.nav.error.protocolRelative", { label: link.label_en });
   }
   if (!href.startsWith("/") && !href.startsWith("https://")) {
-    return `Destination for '${link.label_en}' must start with / or https://`;
+    return t("admin.siteControl.nav.error.prefix", { label: link.label_en });
   }
   return null;
 }
@@ -171,6 +173,7 @@ function SortableGroupCard({
   onRemove: () => void;
   canRemove: boolean;
 }) {
+  const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: group.id });
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
@@ -213,25 +216,25 @@ function SortableGroupCard({
               {...attributes}
               {...listeners}
               className="cursor-grab touch-none text-muted-foreground"
-              aria-label={`Reorder ${group.title_en}`}
+              aria-label={t("admin.siteControl.nav.reorderGroup", { name: group.title_en })}
             >
               <HolderOutlined />
             </span>
             <Input
-              aria-label={`Group ${index + 1} English title`}
+              aria-label={t("admin.siteControl.nav.groupEnTitleAria", { index: index + 1 })}
               value={group.title_en}
               maxLength={80}
               onChange={(event) => onChange({ ...group, title_en: event.target.value })}
               style={{ width: 200 }}
             />
             <Input
-              aria-label={`Group ${index + 1} Chinese title`}
+              aria-label={t("admin.siteControl.nav.groupZhTitleAria", { index: index + 1 })}
               value={group.title_zh}
               maxLength={80}
               onChange={(event) => onChange({ ...group, title_zh: event.target.value })}
               style={{ width: 160 }}
             />
-            <Tag>{group.links.length} links</Tag>
+            <Tag>{t("admin.siteControl.nav.linkCount", { count: group.links.length })}</Tag>
           </Space>
         }
         extra={
@@ -239,8 +242,8 @@ function SortableGroupCard({
             <Switch
               checked={group.enabled}
               onChange={(enabled) => onChange({ ...group, enabled })}
-              checkedChildren="On"
-              unCheckedChildren="Off"
+              checkedChildren={t("admin.siteControl.nav.on")}
+              unCheckedChildren={t("admin.siteControl.nav.off")}
             />
             <Button
               danger
@@ -289,7 +292,7 @@ function SortableGroupCard({
           disabled={group.links.length >= MAX_HEADER_LINKS}
           onClick={() => onChange({ ...group, links: [...group.links, emptyLink(group.links.length)] })}
         >
-          Add link
+          {t("admin.siteControl.nav.addLink")}
         </Button>
       </ProCard>
     </div>
@@ -311,6 +314,7 @@ function SortableLinkRow({
   onChange: (patch: Partial<HeaderNavLink>) => void;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: link.id,
   });
@@ -328,29 +332,29 @@ function SortableLinkRow({
         {...attributes}
         {...listeners}
         className="col-span-1 cursor-grab touch-none text-muted-foreground"
-        aria-label={`Reorder ${link.label_en}`}
+        aria-label={t("admin.siteControl.nav.reorderLink", { name: link.label_en })}
       >
         <HolderOutlined />
       </span>
       <Input
         className="col-span-2"
-        aria-label={`Link ${index + 1} English label (${groupId})`}
+        aria-label={t("admin.siteControl.nav.linkEnLabelAria", { index: index + 1, group: groupId })}
         value={link.label_en}
         maxLength={80}
         onChange={(event) => onChange({ label_en: event.target.value })}
       />
       <Input
         className="col-span-2"
-        aria-label={`Link ${index + 1} Chinese label (${groupId})`}
+        aria-label={t("admin.siteControl.nav.linkZhLabelAria", { index: index + 1, group: groupId })}
         value={link.label_zh}
         maxLength={80}
         onChange={(event) => onChange({ label_zh: event.target.value })}
       />
       <AutoComplete
         className="col-span-3"
-        aria-label={`Link ${index + 1} destination (${groupId})`}
+        aria-label={t("admin.siteControl.nav.linkDestinationAria", { index: index + 1, group: groupId })}
         value={link.href}
-        placeholder="/path, /path/:id or https://…"
+        placeholder={t("admin.siteControl.nav.destinationPlaceholder")}
         options={(DESTINATION_PRESETS.includes(link.href)
           ? DESTINATION_PRESETS
           : [link.href, ...DESTINATION_PRESETS]
@@ -373,15 +377,15 @@ function SortableLinkRow({
       />
       <Select
         className="col-span-2"
-        aria-label={`Link ${index + 1} feature gate (${groupId})`}
+        aria-label={t("admin.siteControl.nav.linkGateAria", { index: index + 1, group: groupId })}
         allowClear
-        placeholder="No gate"
+        placeholder={t("admin.siteControl.nav.noGate")}
         value={link.feature ?? undefined}
         options={featureKeys.map((key) => ({ value: key, label: key }))}
         onChange={(feature) => onChange({ feature: feature ?? null })}
       />
       <Switch
-        aria-label={`Link ${index + 1} enabled (${groupId})`}
+        aria-label={t("admin.siteControl.nav.linkEnabledAria", { index: index + 1, group: groupId })}
         size="small"
         checked={link.enabled}
         onChange={(enabled) => onChange({ enabled })}
@@ -459,15 +463,15 @@ function VariantNavigationEditor({ variant }: { variant: SiteVariant }) {
 
   const save = useMutation({
     mutationFn: () => {
-      if (!settings.data || baseVersion === null) throw new Error("Settings not loaded");
+      if (!settings.data || baseVersion === null) throw new Error(t("admin.siteControl.nav.error.notLoaded"));
       const total = countHeaderLinks(document);
-      if (document.groups.length > MAX_HEADER_GROUPS) throw new Error("Too many groups");
-      if (total > MAX_HEADER_LINKS) throw new Error("Too many links");
+      if (document.groups.length > MAX_HEADER_GROUPS) throw new Error(t("admin.siteControl.nav.error.tooManyGroups"));
+      if (total > MAX_HEADER_LINKS) throw new Error(t("admin.siteControl.nav.error.tooManyLinks"));
       for (const group of document.groups) {
-        if (!isHeaderSlug(group.id)) throw new Error(`Invalid group id '${group.id}'`);
+        if (!isHeaderSlug(group.id)) throw new Error(t("admin.siteControl.nav.error.invalidGroupId", { id: group.id }));
         for (const link of group.links) {
-          if (!isHeaderSlug(link.id)) throw new Error(`Invalid link id '${link.id}'`);
-          const error = destinationError(link);
+          if (!isHeaderSlug(link.id)) throw new Error(t("admin.siteControl.nav.error.invalidLinkId", { id: link.id }));
+          const error = destinationError(link, t);
           // Throwing a string would collapse into the generic "Save failed"
           // branch below; wrap it so the admin sees the actual reason.
           if (error) throw new Error(error);
@@ -480,19 +484,17 @@ function VariantNavigationEditor({ variant }: { variant: SiteVariant }) {
     onSuccess: (updated) => {
       setBaseVersion(updated.version);
       setDirty(false);
-      message.success(`${variant} navigation saved`);
+      message.success(t("admin.siteControl.nav.saved", { variant: t(`admin.siteControl.${variant}`) }));
       void queryClient.invalidateQueries({ queryKey: ["admin-settings", section] });
       void queryClient.invalidateQueries({ queryKey: ["site-navigation"] });
     },
     onError: (error: unknown) => {
       if (error instanceof ApiError && error.status === 409) {
-        message.warning(
-          "Navigation was changed in another session. The latest version has been loaded; review your edits and save again.",
-        );
+        message.warning(t("admin.siteControl.nav.conflict"));
         void queryClient.invalidateQueries({ queryKey: ["admin-settings", section] });
         return;
       }
-      message.error(error instanceof Error ? error.message : "Save failed");
+      message.error(error instanceof Error ? error.message : t("admin.siteControl.saveFailed"));
     },
   });
 
@@ -513,7 +515,7 @@ function VariantNavigationEditor({ variant }: { variant: SiteVariant }) {
   };
 
   if (settings.isError) {
-    return <Alert type="error" message="Unable to load navigation settings" />;
+    return <Alert type="error" message={t("admin.siteControl.nav.loadError")} />;
   }
 
   const featureKeys = (features.data as AdminFeaturesResponse | undefined)?.features.map(
@@ -525,7 +527,7 @@ function VariantNavigationEditor({ variant }: { variant: SiteVariant }) {
       <Alert
         type="info"
         showIcon
-        message="Drag groups and links to reorder. A link with a feature gate disappears from the public site while that feature flag is off."
+        message={t("admin.siteControl.nav.dragHint")}
       />
       <DndContext
         sensors={sensors}
@@ -575,7 +577,7 @@ function VariantNavigationEditor({ variant }: { variant: SiteVariant }) {
             setDirty(true);
           }}
         >
-          Add group
+          {t("admin.siteControl.nav.addGroup")}
         </Button>
         <Button
           type="primary"
@@ -584,10 +586,13 @@ function VariantNavigationEditor({ variant }: { variant: SiteVariant }) {
           disabled={!dirty || settings.isLoading || baseVersion === null}
           onClick={() => save.mutate()}
         >
-          Save {variant} navigation
+          {t("admin.siteControl.nav.save", { variant: t(`admin.siteControl.${variant}`) })}
         </Button>
         <Typography.Text type="secondary">
-          {countHeaderLinks(document)} / {MAX_HEADER_LINKS} links
+          {t("admin.siteControl.nav.linksUsed", {
+            count: countHeaderLinks(document),
+            max: MAX_HEADER_LINKS,
+          })}
         </Typography.Text>
       </Space>
       <Typography.Text type="secondary">
@@ -601,6 +606,7 @@ function VariantNavigationEditor({ variant }: { variant: SiteVariant }) {
 }
 
 function DatabaseKindCard() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const settings = useQuery({
@@ -618,42 +624,44 @@ function DatabaseKindCard() {
 
   const save = useMutation({
     mutationFn: () => {
-      if (!settings.data) throw new Error("Settings not loaded");
+      if (!settings.data) throw new Error(t("admin.siteControl.nav.error.notLoaded"));
       return adminSettingsApi.patch("general", settings.data.version, { databaseKind: kind });
     },
     onSuccess: () => {
-      message.success("Database type saved");
+      message.success(t("admin.siteControl.dbType.saved"));
       void queryClient.invalidateQueries({ queryKey: ["admin-settings", "general"] });
       void queryClient.invalidateQueries({ queryKey: ["site-profile"] });
       void queryClient.invalidateQueries({ queryKey: ["site-branding"] });
     },
     onError: (error: unknown) => {
       if (error instanceof ApiError && error.status === 409) {
-        message.warning(
-          "Settings were changed in another session. The latest version has been loaded; save again.",
-        );
+        message.warning(t("admin.siteControl.conflict"));
         void queryClient.invalidateQueries({ queryKey: ["admin-settings", "general"] });
         return;
       }
-      message.error(error instanceof Error ? error.message : "Save failed");
+      message.error(error instanceof Error ? error.message : t("admin.siteControl.saveFailed"));
     },
   });
 
   const selected = DATABASE_KINDS.find((entry) => entry.value === kind);
   return (
-    <ProCard title="Database type">
+    <ProCard title={t("admin.siteControl.dbType.cardTitle")}>
       <Typography.Paragraph type="secondary">
-        Selects the biological profile this deployment presents. It is stored as a
-        server-owned enum and surfaced to the web client through GET /site/profile.
+        {t("admin.siteControl.dbType.description")}
       </Typography.Paragraph>
       <Space direction="vertical" size="middle" style={{ width: "100%" }}>
         <Segmented
           block
           value={kind}
-          options={DATABASE_KINDS.map((entry) => ({ value: entry.value, label: entry.label }))}
+          options={DATABASE_KINDS.map((entry) => ({
+            value: entry.value,
+            label: t(entry.labelKey),
+          }))}
           onChange={(value) => setKind(value as DatabaseKind)}
         />
-        <Typography.Text type="secondary">{selected?.description}</Typography.Text>
+        <Typography.Text type="secondary">
+          {selected ? t(selected.descriptionKey) : null}
+        </Typography.Text>
         <Button
           type="primary"
           icon={<SaveOutlined />}
@@ -661,7 +669,7 @@ function DatabaseKindCard() {
           disabled={settings.isLoading}
           onClick={() => save.mutate()}
         >
-          Save database type
+          {t("admin.siteControl.dbType.save")}
         </Button>
       </Space>
     </ProCard>
@@ -669,6 +677,7 @@ function DatabaseKindCard() {
 }
 
 function FeatureAvailabilityCard() {
+  const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { message } = App.useApp();
   const features = useQuery({
@@ -687,19 +696,19 @@ function FeatureAvailabilityCard() {
   const save = useMutation({
     mutationFn: () => capabilitiesApi.adminUpdate(draft),
     onSuccess: () => {
-      message.success("Feature availability saved");
+      message.success(t("admin.siteControl.features.saved"));
       void queryClient.invalidateQueries({ queryKey: ["admin-features"] });
       void queryClient.invalidateQueries({ queryKey: ["site-navigation"] });
       void queryClient.invalidateQueries({ queryKey: ["site-profile"] });
     },
     onError: (error: unknown) => {
-      message.error(error instanceof Error ? error.message : "Save failed");
+      message.error(error instanceof Error ? error.message : t("admin.siteControl.saveFailed"));
     },
   });
 
   return (
     <ProCard
-      title="Feature availability"
+      title={t("admin.siteControl.features.cardTitle")}
       extra={
         <Button
           type="primary"
@@ -707,22 +716,26 @@ function FeatureAvailabilityCard() {
           disabled={features.isLoading || features.data === undefined}
           onClick={() => save.mutate()}
         >
-          Save features
+          {t("admin.siteControl.features.save")}
         </Button>
       }
     >
       <Typography.Paragraph type="secondary">
-        Toggling a feature also hides its gated navigation links from the public site.
+        {t("admin.siteControl.features.description")}
       </Typography.Paragraph>
       <Flex vertical gap={8}>
         {features.data?.features.map((feature) => (
           <Flex key={feature.key} align="center" justify="space-between" gap={12}>
             <Flex vertical>
               <Typography.Text strong>{feature.key}</Typography.Text>
-              <Typography.Text type="secondary">{feature.description}</Typography.Text>
+              <Typography.Text type="secondary">
+                {t(`admin.siteControl.features.${feature.key.replace(/\./g, "_")}`, {
+                  defaultValue: feature.description,
+                })}
+              </Typography.Text>
             </Flex>
             <Switch
-              aria-label={`Enable ${feature.key}`}
+              aria-label={t("admin.siteControl.features.enableAria", { feature: feature.key })}
               checked={draft[feature.key] ?? feature.enabled}
               onChange={(enabled) => setDraft({ ...draft, [feature.key]: enabled })}
             />
@@ -734,25 +747,26 @@ function FeatureAvailabilityCard() {
 }
 
 export default function SiteControlPage() {
+  const { t } = useTranslation();
   return (
     <PageContainer
-      title="Site control"
-      subTitle="Database type, primary navigation and feature availability for the public portal"
+      title={t("admin.siteControl.title")}
+      subTitle={t("admin.siteControl.subtitle")}
     >
       <Flex vertical gap={16}>
         <DatabaseKindCard />
         <FeatureAvailabilityCard />
-        <ProCard title="Primary navigation">
+        <ProCard title={t("admin.siteControl.nav.cardTitle")}>
           <Tabs
             items={[
               {
                 key: "external",
-                label: "External site",
+                label: t("admin.siteControl.external"),
                 children: <VariantNavigationEditor variant="external" />,
               },
               {
                 key: "internal",
-                label: "Internal site",
+                label: t("admin.siteControl.internal"),
                 children: <VariantNavigationEditor variant="internal" />,
               },
             ]}

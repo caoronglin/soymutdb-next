@@ -16,10 +16,6 @@ import { isLayoutContainer } from "@soymutdb/shared";
 
 export type NodePath = number[];
 
-export function pathKey(path: NodePath): string {
-  return path.length === 0 ? "root" : path.join(".");
-}
-
 export function pathEquals(a: NodePath | null, b: NodePath | null): boolean {
   if (a === null || b === null) return a === b;
   return a.length === b.length && a.every((value, index) => value === b[index]);

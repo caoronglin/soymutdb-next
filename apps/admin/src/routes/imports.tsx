@@ -1,7 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { Link } from "@tanstack/react-router";
 import { CloudUploadOutlined, FileExcelOutlined, DatabaseOutlined, RedoOutlined, CloseCircleOutlined, CheckCircleOutlined, LoadingOutlined, DownloadOutlined } from "@ant-design/icons";
-import { Skeleton, Badge, Button, Input, PageContainer, Select, Typography, App } from "@/lib/antd";
+import { formatDate } from "@soymutdb/shared/format";
+import { Skeleton, Badge, Button, Input, PageContainer, Select, Tag, Typography, App } from "@/lib/antd";
 import { StatCard } from "../components/stat-card";
 import { ConfirmDialog } from "../components/confirm-dialog";
 import { useState, useEffect, useCallback, useMemo } from "react";
@@ -281,11 +282,11 @@ export default function ImportsPage() {
     setRetryTarget({ id: task.id, filename: task.filename });
   }
 
-  /** DownloadOutlined a module starter template in the selected format. */
+  /** Download a module starter template in the selected format. */
   async function handleTemplateDownload() {
     const key = templateModuleKey.trim();
     if (!key) {
-      setTemplateError("Module key is required.");
+      setTemplateError(t("admin.importPage.moduleKeyRequired", { defaultValue: "Module key is required." }));
       return;
     }
     setTemplateDownloading(true);
@@ -307,7 +308,7 @@ export default function ImportsPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(downloadUrl);
     } catch (err) {
-      setTemplateError(err instanceof Error ? err.message : "Template download failed.");
+      setTemplateError(err instanceof Error ? err.message : t("admin.importPage.templateDownloadFailed", { defaultValue: "Template download failed." }));
     } finally {
       setTemplateDownloading(false);
     }
@@ -320,7 +321,7 @@ export default function ImportsPage() {
   const columns: DataTableColumn<ImportTask>[] = [
     {
       key: "filename",
-      header: "File",
+      header: t("admin.importPage.columns.file", { defaultValue: "File" }),
       sortable: true,
       sortAccessor: (t) => t.filename,
       cell: (task) => {
@@ -340,7 +341,7 @@ export default function ImportsPage() {
     },
     {
       key: "status",
-      header: "Status",
+      header: t("admin.importPage.columns.status", { defaultValue: "Status" }),
       sortable: true,
       sortAccessor: (t) => t.status,
       cell: (task) => {
@@ -350,7 +351,7 @@ export default function ImportsPage() {
     },
     {
       key: "progress",
-      header: "Progress",
+      header: t("admin.importPage.columns.progress", { defaultValue: "Progress" }),
       cell: (task) => {
         const t = enrichTask(task);
         const isRunning = t.status === "running" || t.status === "queued";
@@ -383,7 +384,7 @@ export default function ImportsPage() {
     },
     {
       key: "submitted_by",
-      header: "Submitted By",
+      header: t("admin.importPage.columns.submittedBy", { defaultValue: "Submitted by" }),
       cell: (task) => {
         const t = enrichTask(task);
         return <span className="text-sm">{t.submitted_by}</span>;
@@ -391,72 +392,72 @@ export default function ImportsPage() {
     },
     {
       key: "submitted_at",
-      header: "Submitted",
+      header: t("admin.importPage.columns.submitted", { defaultValue: "Submitted" }),
       sortable: true,
       sortAccessor: (t) => t.submitted_at,
       cell: (task) => {
         const t = enrichTask(task);
         return (
           <span className="text-sm text-muted-foreground">
-            {t.submitted_at}
+            {formatDate(t.submitted_at)}
           </span>
         );
       },
     },
     {
       key: "actions",
-      header: "Actions",
+      header: t("admin.importPage.columns.actions", { defaultValue: "Actions" }),
       align: "right",
       cell: (task) => {
-        const t = enrichTask(task);
-        if (t.status === "failed") {
+        const row = enrichTask(task);
+        if (row.status === "failed") {
           return (
             <div className="flex items-center gap-1">
-              {t.error_message ? (
+              {row.error_message ? (
                 <Badge
                   color="red"
-                  title={t.error_message}
+                  title={row.error_message}
                   className="cursor-help"
                 >
-                  View Error
+                  {t("admin.importPage.viewError", { defaultValue: "View error" })}
                 </Badge>
               ) : null}
               <Button
                 type="text"
                 size="small"
                 data-testid="imports-retry-task"
-                onClick={() => handleRetry(t)}
+                onClick={() => handleRetry(row)}
                 disabled={retryMutation.isPending}
               >
                 <RedoOutlined className="size-3.5" />
-                Retry
+                {t("common.retry", { defaultValue: "Retry" })}
               </Button>
             </div>
           );
         }
-        if (t.status === "running" || t.status === "queued") {
+        if (row.status === "running" || row.status === "queued") {
           return (
             <Button
               type="text"
               size="small"
               data-testid="imports-cancel-task"
-              onClick={() => handleCancel(t)}
+              onClick={() => handleCancel(row)}
               disabled={cancelMutation.isPending}
               className="text-destructive hover:text-destructive"
             >
               <CloseCircleOutlined className="size-3.5" />
-              Cancel
+              {t("common.cancel", { defaultValue: "Cancel" })}
             </Button>
           );
         }
         return (
-              <Button type="text" size="small">
-                {/* The task detail route reads /admin/imports/{id}; the control
-                    used to have no handler at all, so a finished task had no
-                    reachable detail view. */}
-                <Link to="/imports/$taskId" params={{ taskId: String(t.id) }}>
-                  Details
-                </Link>
+          <Button type="text" size="small">
+            {/* The task detail route reads /admin/imports/{id}; the control
+                used to have no handler at all, so a finished task had no
+                reachable detail view. */}
+            <Link to="/imports/$taskId" params={{ taskId: String(row.id) }}>
+              {t("admin.importPage.details", { defaultValue: "Details" })}
+            </Link>
           </Button>
         );
       },
@@ -484,7 +485,7 @@ export default function ImportsPage() {
       <div className="space-y-6">
         {capabilitiesQuery.isPending ? (
           <p role="status" className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-            Loading import capabilities…
+            {t("admin.importPage.capabilitiesLoading", { defaultValue: "Loading import capabilities…" })}
           </p>
         ) : null}
         {capabilitiesQuery.isError ? (
@@ -493,69 +494,14 @@ export default function ImportsPage() {
             aria-label={t("admin.importPage.capabilitiesUnavailable")}
             className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive"
           >
-            Unable to load import capabilities. Import actions remain unavailable.
+            {t("admin.importPage.capabilitiesError", { defaultValue: "Unable to load import capabilities. Import actions remain unavailable." })}
           </p>
         ) : null}
         {capabilitiesQuery.isSuccess && moduleImportState === "disabled" ? (
           <p className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">
-            Module imports are disabled.
+            {t("admin.importPage.moduleImportsDisabled", { defaultValue: "Module imports are disabled." })}
           </p>
         ) : null}
-
-        {/* Module template download */}
-        <div className="rounded-lg border bg-card p-4">
-          <div className="mb-3 flex items-center gap-2">
-            <DatabaseOutlined className="size-4 text-muted-foreground" />
-            <span className="text-sm font-medium">{t("admin.importPage.templateDownload")}</span>
-          </div>
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1.5">
-              <label htmlFor="template-module-key">{t("admin.importPage.moduleKey")}</label>
-              <Input
-                id="template-module-key"
-                value={templateModuleKey}
-                onChange={(e) => setTemplateModuleKey(e.target.value)}
-                className="w-40"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label htmlFor="template-format">{t("admin.importPage.format")}</label>
-              <Select
-                value={templateFormat}
-                onChange={setTemplateFormat}
-                options={MODULE_TEMPLATE_FORMATS.map((f) => ({
-                  value: f.value,
-                  label: f.label,
-                  disabled: f.value === "xlsx" && !xlsxImportEnabled,
-                }))}
-              />
-            </div>
-            <Button
-              type="default"
-              size="small"
-              onClick={handleTemplateDownload}
-              disabled={
-                templateDownloading ||
-                !templateModuleKey.trim() ||
-                !moduleImportEnabled
-              }
-            >
-              {templateDownloading ? (
-                <LoadingOutlined className="size-4 animate-spin" />
-              ) : (
-                <DownloadOutlined className="size-4" />
-              )}
-              DownloadOutlined
-            </Button>
-          </div>
-          {templateError ? (
-            <p className="mt-2 text-sm text-destructive">{templateError}</p>
-          ) : null}
-          <p className="mt-2 text-xs text-muted-foreground">
-            Starter template for a module schema (genes). Format: TSV / CSV / XLSX.
-            {" "}{xlsxImportState === "disabled" ? "XLSX is currently disabled by an administrator." : ""}
-          </p>
-        </div>
 
         {/* Stats */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -577,7 +523,16 @@ export default function ImportsPage() {
             {resumeDraftQuery.data ? (
               <div className="text-sm">
                 <Typography.Text strong>{resumeDraftQuery.data.filename}</Typography.Text>
-                <Typography.Text type="secondary" className="ml-2">{resumeDraftQuery.data.status} · {resumeDraftQuery.data.row_count} rows · {resumeDraftQuery.data.column_count} columns · {resumeDraftQuery.data.field_mapping.length} mapped fields</Typography.Text>
+                <Typography.Text type="secondary" className="ml-2">
+                  {t(`admin.importDraft.status.${resumeDraftQuery.data.status}`, { defaultValue: resumeDraftQuery.data.status })}
+                  {" · "}
+                  {t("admin.importDraft.summary", {
+                    defaultValue: "{{rows}} rows · {{columns}} columns · {{fields}} mapped fields",
+                    rows: resumeDraftQuery.data.row_count,
+                    columns: resumeDraftQuery.data.column_count,
+                    fields: resumeDraftQuery.data.field_mapping.length,
+                  })}
+                </Typography.Text>
                 <ImportDraftEditor
                   draft={resumeDraftQuery.data}
                   onUpdated={() => {
@@ -596,8 +551,9 @@ export default function ImportsPage() {
               <Typography.Title id="import-drafts-heading" level={5} className="!mb-0">{t("admin.importPage.savedDrafts")}</Typography.Title>
               <Typography.Text type="secondary">{t("admin.importPage.savedDraftsHint")}</Typography.Text>
             </div>
-            <Button size="small" onClick={() => draftsQuery.refetch()} loading={draftsQuery.isFetching}>{t("common.retry")}</Button>
+            <Button size="small" onClick={() => draftsQuery.refetch()} loading={draftsQuery.isFetching}>{t("common.refresh", { defaultValue: "Refresh" })}</Button>
           </div>
+          {draftsQuery.isPending ? <Skeleton active paragraph={{ rows: 2 }} className="mt-3" /> : null}
           {draftsQuery.isError ? <Typography.Text type="danger">{t("admin.importPage.savedDraftsUnavailable")}</Typography.Text> : null}
           {draftsQuery.data?.length ? (
             <ul className="mt-3 space-y-2" aria-label={t("admin.importPage.savedDrafts")}>
@@ -605,6 +561,9 @@ export default function ImportsPage() {
                 <li key={draft.id} className="flex items-center justify-between gap-3 rounded border p-2">
                   <div>
                     <Typography.Text strong>{draft.filename}</Typography.Text>
+                    <Tag className="ml-2">
+                      {t(`admin.importDraft.status.${draft.status}`, { defaultValue: draft.status })}
+                    </Tag>
                     <Typography.Text type="secondary" className="ml-2 text-xs">
                       {t("admin.importPage.draftCounts", {
                         defaultValue: "{{rows}} rows · {{columns}} columns",
@@ -651,10 +610,80 @@ export default function ImportsPage() {
             pageSize={20}
             total={data?.total ?? 0}
             onPageChange={setPage}
-            emptyTitle={t("admin.importPage.emptyTitle", { defaultValue: "No import tasks" })}
-            emptyDescription={t("admin.importPage.emptyDescription", { defaultValue: "Submit a new import to get started." })}
+            emptyTitle={
+              search.trim()
+                ? t("admin.importPage.emptySearchTitle", { defaultValue: "No matching import tasks" })
+                : t("admin.importPage.emptyTitle", { defaultValue: "No import tasks" })
+            }
+            emptyDescription={
+              search.trim()
+                ? t("admin.importPage.emptySearchDescription", { defaultValue: "Clear the search to see every import task." })
+                : t("admin.importPage.emptyDescription", { defaultValue: "Submit a new import to get started." })
+            }
           />
         )}
+        </div>
+
+        {/* Module template download */}
+        <div className="rounded-lg border bg-card p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <DatabaseOutlined className="size-4 text-muted-foreground" />
+            <span className="text-sm font-medium">{t("admin.importPage.templateDownload")}</span>
+          </div>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="space-y-1.5">
+              <label htmlFor="template-module-key">{t("admin.importPage.moduleKey")}</label>
+              <Input
+                id="template-module-key"
+                value={templateModuleKey}
+                onChange={(e) => setTemplateModuleKey(e.target.value)}
+                className="w-40"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label htmlFor="template-format">{t("admin.importPage.format")}</label>
+              <Select
+                value={templateFormat}
+                onChange={setTemplateFormat}
+                options={MODULE_TEMPLATE_FORMATS.map((f) => ({
+                  value: f.value,
+                  label: f.label,
+                  disabled: f.value === "xlsx" && !xlsxImportEnabled,
+                }))}
+              />
+            </div>
+            <Button
+              type="default"
+              size="small"
+              onClick={handleTemplateDownload}
+              disabled={
+                templateDownloading ||
+                !templateModuleKey.trim() ||
+                !moduleImportEnabled
+              }
+            >
+              {templateDownloading ? (
+                <LoadingOutlined className="size-4 animate-spin" />
+              ) : (
+                <DownloadOutlined className="size-4" />
+              )}
+              {t("admin.importPage.downloadTemplate", { defaultValue: "Download template" })}
+            </Button>
+          </div>
+          {templateError ? (
+            <p className="mt-2 text-sm text-destructive">{templateError}</p>
+          ) : null}
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t("admin.importPage.templateHint", {
+              defaultValue: "Starter template for a module schema (genes). Formats: TSV / CSV / XLSX.",
+            })}
+            {" "}
+            {xlsxImportState === "disabled"
+              ? t("admin.importPage.xlsxDisabled", {
+                  defaultValue: "XLSX is currently disabled by an administrator.",
+                })
+              : ""}
+          </p>
         </div>
 
         {/* Cancel confirmation */}

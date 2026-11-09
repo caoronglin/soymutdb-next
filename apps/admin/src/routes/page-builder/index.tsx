@@ -203,13 +203,17 @@ export default function PageBuilderListPage() {
                 "Lowercase path such as /downloads or / for the homepage. Reserved prefixes (/admin, /api, /blast, /browser) are rejected by the server.",
             })}
             rules={[
-              { required: true, message: "Route is required" },
+              { required: true, message: t("admin.pageBuilder.routeRequired", { defaultValue: "Route is required" }) },
               {
                 validator: (_, value: string | undefined) =>
                   !value || isRoute(value)
                     ? Promise.resolve()
                     : Promise.reject(
-                        new Error("Use / for the homepage or a lowercase path like /downloads"),
+                        new Error(
+                          t("admin.pageBuilder.routeInvalid", {
+                            defaultValue: "Use / for the homepage or a lowercase path like /downloads",
+                          }),
+                        ),
                       ),
               },
             ]}
@@ -219,7 +223,12 @@ export default function PageBuilderListPage() {
           <Form.Item
             name="title_key"
             label={t("admin.pageBuilder.titleKey", { defaultValue: "Title key" })}
-            rules={[{ required: true, message: "Title key is required" }]}
+            rules={[
+              {
+                required: true,
+                message: t("admin.pageBuilder.titleKeyRequired", { defaultValue: "Title key is required" }),
+              },
+            ]}
           >
             <Input placeholder="page.downloads.title" />
           </Form.Item>

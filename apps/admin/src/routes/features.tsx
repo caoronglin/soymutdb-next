@@ -104,8 +104,10 @@ export default function FeaturesPage() {
                     <code className="text-sm">{feature.key}</code>
                     {feature.public ? <Tag color="default">{t("admin.ops.badgePublic", { defaultValue: "public" })}</Tag> : <Tag color="default">{t("admin.ops.badgeInternal", { defaultValue: "internal" })}</Tag>}
                   </div>
-                  <p className="mt-1 text-sm text-muted-foreground">{feature.description}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{t("admin.ops.disableBehavior", { defaultValue: "disable: {{behavior}}", behavior: feature.disable_behavior })}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {t(`admin.siteControl.features.${feature.key.replace(/\./g, "_")}`, { defaultValue: feature.description })}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">{t("admin.ops.disableBehavior", { defaultValue: "disable: {{behavior}}", behavior: t(`admin.ops.disableBehaviorValue.${feature.disable_behavior}`, { defaultValue: feature.disable_behavior }) })}</p>
                 </div>
                 <Button
                   type={feature.enabled ? "primary" : "default"}

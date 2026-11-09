@@ -34,9 +34,6 @@ export default function SettingsOverviewPage() {
             );
           })}
         </div>
-        <Link data-testid="settings-legacy-link" to="/settings/legacy" className="text-sm text-primary hover:underline">
-          {t("admin.settings.completeForm", { defaultValue: "Open the complete settings form" })}
-        </Link>
       </div>
     </PageContainer>
   );

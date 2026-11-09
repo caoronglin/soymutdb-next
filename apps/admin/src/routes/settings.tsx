@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { http, type SiteVariant } from "@soymutdb/api-client";
 import { Alert, Badge, Button, ColorPicker, Flex, Form, Input, PageContainer, ProCard, Select, Typography } from "@/lib/antd";
 import { ConfirmDialog } from "../components/confirm-dialog";
+import { MediaPicker } from "../components/media-picker";
 import { RichEditor } from "../components/rich-editor/rich-editor";
 import {
   ANTD_PRIMARY_HEX,
@@ -1036,6 +1037,24 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
                             value={siteContent[field.key] ?? ""}
                             onChange={(e) => setSiteContent({ ...siteContent, [field.key]: e.target.value })}
                           />
+                        ) : field.key.endsWith(".image") ? (
+                          <div className="space-y-2">
+                            <MediaPicker
+                              value={siteContent[field.key] || null}
+                              previewUrl={siteContent[field.key] || null}
+                              previewAlt={field.key}
+                              purpose={null}
+                              onChange={(asset) =>
+                                setSiteContent({ ...siteContent, [field.key]: asset?.public_url ?? "" })
+                              }
+                            />
+                            <Input
+                              id={`content-${field.key}`}
+                              value={siteContent[field.key] ?? ""}
+                              placeholder="https://…"
+                              onChange={(e) => setSiteContent({ ...siteContent, [field.key]: e.target.value })}
+                            />
+                          </div>
                         ) : (
                           <Input
                             id={`content-${field.key}`}

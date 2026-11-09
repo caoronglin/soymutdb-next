@@ -61,6 +61,7 @@ import {
   Typography,
 } from "@/lib/antd";
 import { adminPageBuilderApi } from "@soymutdb/api-client";
+import { MediaPicker } from "@/components/media-picker";
 import {
   isLayoutContainer,
   normalizePageDefinition,
@@ -408,6 +409,8 @@ function JsonField({
   );
 }
 
+const IMAGE_FIELD_NAMES = new Set(["image", "image_url", "src", "poster", "icon_url", "logo_url", "cover_url"]);
+
 function SchemaFieldEditor({
   field,
   value,
@@ -467,6 +470,25 @@ function SchemaFieldEditor({
         autoSize={{ minRows: 3, maxRows: 10 }}
         onChange={(event) => onChange(event.target.value)}
       />
+    );
+  }
+  if (IMAGE_FIELD_NAMES.has(field.name)) {
+    const url = typeof value === "string" ? value : "";
+    return (
+      <div className="space-y-2">
+        <MediaPicker
+          value={url || null}
+          previewUrl={url || null}
+          previewAlt={field.name}
+          purpose={null}
+          onChange={(asset) => onChange(asset?.public_url ?? "")}
+        />
+        <Input
+          value={url}
+          placeholder="https://…"
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </div>
     );
   }
   return (
@@ -747,7 +769,7 @@ export default function PageBuilderEditorPage() {
   if (!pageId) {
     return (
       <PageContainer>
-        <Alert type="error" message="Missing page id" />
+        <Alert type="error" message={t("admin.pageBuilder.missingPageId", { defaultValue: "Missing page id" })} />
       </PageContainer>
     );
   }
@@ -877,7 +899,7 @@ export default function PageBuilderEditorPage() {
         title={t("admin.pageBuilder.previewTitle", { defaultValue: "Preview (validated definition)" })}
         open={previewDefinition !== null}
         onCancel={() => setPreviewDefinition(null)}
-        footer={<Button onClick={() => setPreviewDefinition(null)}>Close</Button>}
+        footer={<Button onClick={() => setPreviewDefinition(null)}>{t("common.close", { defaultValue: "Close" })}</Button>}
         width={900}
         destroyOnHidden
       >

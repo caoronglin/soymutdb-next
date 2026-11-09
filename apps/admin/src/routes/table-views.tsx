@@ -399,7 +399,7 @@ export default function TableViewsPage() {
       title: t("admin.tableViews.local"),
       key: "is_local",
       editable: false,
-      render: (_, row) => (row.is_local ? <Tag color="green">local</Tag> : null),
+      render: (_, row) => (row.is_local ? <Tag color="green">{t("admin.tableViews.localTag", { defaultValue: "local" })}</Tag> : null),
     },
     {
       title: t("admin.tableViews.actions"),
@@ -490,8 +490,14 @@ export default function TableViewsPage() {
                 aria-label={t("admin.tableViews.siteVariant", { defaultValue: "Site variant" })}
                 style={{ width: 140 }}
                 options={[
-                  { value: "external", label: "external" },
-                  { value: "internal", label: "internal" },
+                  {
+                    value: "external",
+                    label: t("admin.tableViews.siteVariantExternal", { defaultValue: "External" }),
+                  },
+                  {
+                    value: "internal",
+                    label: t("admin.tableViews.siteVariantInternal", { defaultValue: "Internal" }),
+                  },
                 ]}
                 onChange={(value: "external" | "internal") => setSiteVariant(value)}
               />
@@ -704,13 +710,22 @@ export default function TableViewsPage() {
               <Form.Item name="species" label={t("admin.tableViews.instanceSpecies")} rules={[{ required: true }]}>
                 <Input placeholder="Glycine max" />
               </Form.Item>
-              <Form.Item name="api_base_url" label="API origin" rules={[{ required: true }]}>
+              <Form.Item
+                name="api_base_url"
+                label={t("admin.tableViews.apiOrigin", { defaultValue: "API origin" })}
+               rules={[{ required: true }]}>
                 <Input placeholder="https://api.example.org" />
               </Form.Item>
-              <Form.Item name="jbrowse_base_url" label="JBrowse origin">
+              <Form.Item
+                name="jbrowse_base_url"
+                label={t("admin.tableViews.jbrowseOrigin", { defaultValue: "JBrowse origin" })}
+              >
                 <Input placeholder="https://jbrowse.example.org" />
               </Form.Item>
-              <Form.Item name="portal_base_url" label="Portal origin">
+              <Form.Item
+                name="portal_base_url"
+                label={t("admin.tableViews.portalOrigin", { defaultValue: "Portal origin" })}
+              >
                 <Input placeholder="https://portal.example.org" />
               </Form.Item>
               <Form.Item name="is_local" label={t("admin.tableViews.instanceLocal")} valuePropName="checked">

@@ -132,7 +132,7 @@ describe("imports page resume flow", () => {
 
     renderPage();
 
-    expect(await screen.findByLabelText("Field mapping JSON")).toBeInTheDocument();
+    expect(await screen.findByLabelText("Field mapping (JSON array)")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "admin.importPage.resumeDraft" }),
     ).toBeInTheDocument();

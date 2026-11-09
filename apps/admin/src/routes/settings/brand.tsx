@@ -9,6 +9,7 @@ import {
   type SiteVariant,
 } from "@soymutdb/api-client";
 import { Alert, Button, Form, Input, PageContainer, ProCard, Segmented, Space, Typography } from "@/lib/antd";
+import { MediaPicker } from "@/components/media-picker";
 import { useTranslation } from "react-i18next";
 
 const VARIANTS: readonly SiteVariant[] = ["external", "internal"];
@@ -23,6 +24,7 @@ export default function SiteBrandSettingsPage() {
   const queryClient = useQueryClient();
   const [form] = Form.useForm<BrandFormValues>();
   const iconValue = Form.useWatch("icon_url", form);
+  const nameEnValue = Form.useWatch("name_en", form);
   const [variant, setVariant] = React.useState<SiteVariant>("external");
   const [iconDirty, setIconDirty] = React.useState(false);
   const [noticeMessage, setNoticeMessage] = React.useState("");
@@ -85,8 +87,6 @@ export default function SiteBrandSettingsPage() {
     },
   });
 
-  const savedIcon = query.data?.variant === variant ? query.data.values.icon_url : null;
-
   return (
     <PageContainer
       title={t("admin.brand.title", { defaultValue: "Site branding" })}
@@ -147,36 +147,19 @@ export default function SiteBrandSettingsPage() {
             <Form.Item label={t("admin.brand.iconUrl")} name="icon_url" rules={[{ type: "url" }]}>
               <Input data-testid="brand-icon-url" />
             </Form.Item>
+            <MediaPicker
+              value={iconValue || null}
+              previewUrl={iconValue || null}
+              previewAlt={nameEnValue || t("admin.brand.preview")}
+              purpose={null}
+              onChange={(asset) => {
+                form.setFieldValue("icon_url", asset?.public_url ?? "");
+                setIconDirty(true);
+              }}
+            />
             <Typography.Text type="secondary" className="mb-3 block text-xs">
               {t("admin.brand.iconHelp")}
             </Typography.Text>
-
-            <Space align="center" style={{ marginBottom: 16 }}>
-              {savedIcon ? (
-                <img
-                  src={savedIcon}
-                  alt={t("admin.brand.preview")}
-                  width={40}
-                  height={40}
-                  className="rounded-md border border-border object-contain"
-                  data-testid="brand-icon-preview"
-                />
-              ) : (
-                <Typography.Text type="secondary" data-testid="brand-icon-empty">{t("admin.brand.noIcon")}</Typography.Text>
-              )}
-              <Button
-                htmlType="button"
-                size="small"
-                disabled={!iconValue}
-                data-testid="brand-icon-clear"
-                onClick={() => {
-                  form.setFieldValue("icon_url", "");
-                  setIconDirty(true);
-                }}
-              >
-                {t("admin.brand.clearIcon")}
-              </Button>
-            </Space>
 
             <Space orientation="vertical" size="small" style={{ display: "flex", marginBottom: 16 }}>
               {noticeMessage ? <Alert type="success" showIcon title={noticeMessage} data-testid="brand-notice" /> : null}

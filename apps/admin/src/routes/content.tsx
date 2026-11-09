@@ -1,14 +1,12 @@
 import { ReadOutlined, FileTextOutlined } from "@ant-design/icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { useRouterState } from "@tanstack/react-router";
-import { PageContainer, Tabs, Typography } from "@/lib/antd";
+import { PageContainer, Tabs } from "@/lib/antd";
 import { PagesTab } from "./content/pages-tab";
 import { PageFormDialog } from "./content/page-form-dialog";
 import { VersionHistoryDialog } from "./content/version-history-dialog";
 import { VersionDetail } from "./content/version-detail";
 import { NewsPublicationTab } from "./content/news-publication-tab";
-import { StaticPageMigrationReport } from "./content/static-page-migration-report";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -38,8 +36,6 @@ const TYPE_CONFIG: Record<ContentType, { label: string; labelKey: string; icon: 
 
 export default function ContentPage() {
   const { t } = useTranslation();
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  const isLegacyRoute = pathname === "/content/legacy";
   const [tab, setTab] = React.useState<ContentType>("page");
 
   return (
@@ -48,26 +44,13 @@ export default function ContentPage() {
       subTitle={t("admin.content.subtitle", { defaultValue: "Manage static pages, news articles, and publications with full version history." })}
     >
       <div className="space-y-6">
-        {isLegacyRoute ? (
-          <>
-            <div className="rounded-lg border border-border bg-muted/30 px-4 py-3">
-              <span className="mr-2 rounded-full bg-muted px-2 py-1 text-xs font-medium">{t("admin.content.legacyBadge")}</span>
-              <Typography.Text type="secondary">
-                {t("admin.content.legacyHint")}
-              </Typography.Text>
-            </div>
-            <StaticPageMigrationReport />
-          </>
-        ) : (
-          /* antd Tabs supplies the roving focus and ARIA semantics the
-             hand-rolled tablist only imitated. */
-          <Tabs
-            data-testid="content-tabs"
-            activeKey={tab}
-            onChange={(key) => setTab(key as ContentType)}
-            items={(Object.keys(TYPE_CONFIG) as ContentType[]).map((typeKey) => {
-              const Icon = TYPE_CONFIG[typeKey].icon;
-              return {
+        <Tabs
+          data-testid="content-tabs"
+          activeKey={tab}
+          onChange={(key) => setTab(key as ContentType)}
+          items={(Object.keys(TYPE_CONFIG) as ContentType[]).map((typeKey) => {
+            const Icon = TYPE_CONFIG[typeKey].icon;
+            return {
                 key: typeKey,
                 label: (
                   <span
@@ -91,7 +74,6 @@ export default function ContentPage() {
               };
             })}
           />
-        )}
       </div>
     </PageContainer>
   );
