@@ -32,6 +32,7 @@
     "@tanstack/react-router": "^1.170.44",
     "@umijs/max": "catalog:",
     "antd": "catalog:",
+    "antd-mobile": "catalog:",
     "dayjs": "^1.11.23",
     "dompurify": "^3.4.17",
     "highlight.js": "^11.12.0",

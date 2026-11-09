@@ -39,6 +39,7 @@ dist-internal/
 !packages/shared/src/build/
 .turbo/
 **/.umi*/
+**/.dumi*/
 target/
 *.tsbuildinfo
 *.pyc
@@ -120,12 +121,14 @@ test-results-*/
 # Deepwork session state (local OpenCode context, never commit)
 .slim/deepwork/
 .opencode/
+.qoder/
 
 # ---------------------------------------------------------------------------
 # Hermes runtime (NOT project code)
 # ---------------------------------------------------------------------------
 .hermes/
 skills/
+skills-lock.json
 .agent-loop-runner.cjs
 .cursor-openai-bridge.cjs
 .ark-crowdtest-display-prompt.txt

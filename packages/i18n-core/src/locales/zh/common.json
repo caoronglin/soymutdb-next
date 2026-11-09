@@ -1179,7 +1179,83 @@
   },
   "admin": {
     "siteControl": {
-      "navHint": "内部站点与外部站点各自维护独立的导航文档；API 不会把一个变体的导航复制到另一个变体。"
+      "title": "站点控制",
+      "navHint": "内部站点与外部站点各自维护独立的导航文档；API 不会把一个变体的导航复制到另一个变体。",
+      "subtitle": "公共门户的数据库类型、主导航与功能开放设置",
+      "external": "外部站点",
+      "internal": "内部站点",
+      "saveFailed": "保存失败",
+      "conflict": "设置已在其他会话中被修改，已加载最新版本，请重新保存。",
+      "dbKind": {
+        "genome": "基因组 / 突变体数据库",
+        "genomeDescription": "基因、变异、突变体、基因组浏览器与比较基因组学。",
+        "geneOntology": "基因本体数据库",
+        "geneOntologyDescription": "GO 条目、本体关系与功能富集分析流程。",
+        "transcriptionFactor": "转录因子数据库",
+        "transcriptionFactorDescription": "转录因子家族、结合位点、调控子与表达程序。"
+      },
+      "dbType": {
+        "cardTitle": "数据库类型",
+        "description": "选择本部署对外呈现的生物学档案。该值以服务端枚举存储，并通过 GET /site/profile 提供给前端。",
+        "save": "保存数据库类型",
+        "saved": "数据库类型已保存。"
+      },
+      "features": {
+        "cardTitle": "功能开放",
+        "description": "关闭某项功能后，公共站点上受该功能开关控制的导航链接也会一并隐藏。",
+        "save": "保存功能设置",
+        "saved": "功能开放设置已保存。",
+        "enableAria": "启用 {{feature}}",
+        "page_builder": "渲染已发布的页面组件。",
+        "imports_module_tsv": "启用基于模式定义的模块导入。",
+        "imports_module_xlsx": "启用 XLSX 模块导入。",
+        "imports_local_upload": "启用浏览器直传的分片上传。",
+        "imports_fasta": "启用 FASTA 参考序列导入（写入器尚未完成）。",
+        "imports_gff3": "启用 GFF3 基因模型导入（写入器尚未完成）。",
+        "imports_vcf": "启用 VCF 变异导入（写入器尚未完成）。",
+        "imports_blast_db": "启用 BLAST 数据库导入（写入器尚未完成）。",
+        "imports_seed_data": "启用种子数据导入（写入器尚未完成）。",
+        "imports_expression_csv": "启用表达量 CSV 导入（按组装版本持久化）。",
+        "imports_homolog_csv": "启用同源基因 CSV 导入（按组装版本持久化）。",
+        "publication_github_pages": "启用 GitHub Pages 发布目标。",
+        "publication_cloudflare_pages": "启用 Cloudflare Pages 发布目标。"
+      },
+      "nav": {
+        "cardTitle": "主导航",
+        "dragHint": "拖拽分组和链接即可排序。受功能开关控制的链接会在对应功能关闭时从公共站点隐藏。",
+        "addGroup": "添加分组",
+        "addLink": "添加链接",
+        "save": "保存{{variant}}导航",
+        "saved": "{{variant}}导航已保存",
+        "loadError": "无法加载导航设置",
+        "conflict": "导航已在其他会话中被修改，已加载最新版本，请检查编辑内容后重新保存。",
+        "linksUsed": "{{count}} / {{max}} 个链接",
+        "linkCount": "{{count}} 个链接",
+        "on": "开",
+        "off": "关",
+        "noGate": "无功能门控",
+        "destinationPlaceholder": "/路径、/路径/:id 或 https://…",
+        "reorderGroup": "拖拽排序 {{name}}",
+        "reorderLink": "拖拽排序 {{name}}",
+        "groupEnTitleAria": "分组 {{index}} 英文标题",
+        "groupZhTitleAria": "分组 {{index}} 中文标题",
+        "linkEnLabelAria": "链接 {{index}} 英文标签（{{group}}）",
+        "linkZhLabelAria": "链接 {{index}} 中文标签（{{group}}）",
+        "linkDestinationAria": "链接 {{index}} 目标地址（{{group}}）",
+        "linkGateAria": "链接 {{index}} 功能门控（{{group}}）",
+        "linkEnabledAria": "链接 {{index}} 启用状态（{{group}}）",
+        "error": {
+          "noDestination": "链接“{{label}}”需要填写目标地址",
+          "whitespace": "链接“{{label}}”的目标地址不能包含空白或反斜杠",
+          "protocolRelative": "链接“{{label}}”的目标地址不能是协议相对地址",
+          "prefix": "链接“{{label}}”的目标地址必须以 / 或 https:// 开头",
+          "notLoaded": "设置未加载",
+          "tooManyGroups": "分组数量超出上限",
+          "tooManyLinks": "链接数量超出上限",
+          "invalidGroupId": "分组 ID“{{id}}”无效",
+          "invalidLinkId": "链接 ID“{{id}}”无效"
+        }
+      }
     },
     "pageBuilder": {
       "layouts": "布局",
@@ -1227,7 +1303,11 @@
       "routeHelp": "小写路径，例如 /downloads，首页为 /。保留前缀（/admin、/api、/blast、/browser）会被服务器拒绝。",
       "template": "从模板开始",
       "blankCanvas": "空白画布",
-      "draftNote": "已创建草稿 v1。使用编辑器添加组件、预览并发布。"
+      "draftNote": "已创建草稿 v1。使用编辑器添加组件、预览并发布。",
+      "missingPageId": "缺少页面 ID",
+      "routeRequired": "请填写路由",
+      "routeInvalid": "首页请使用 /，其他页面请使用 /downloads 这样的小写路径",
+      "titleKeyRequired": "请填写标题键"
     },
     "title": "管理后台",
     "brand": {
@@ -1362,6 +1442,9 @@
     },
     "dashboard": {
       "title": "仪表盘",
+      "welcome": "欢迎",
+      "analysis": "分析",
+      "monitor": "监控",
       "systemOverview": "系统总览",
       "totalTeam": "团队成员",
       "activeReleases": "活跃发布版本",
@@ -1379,7 +1462,28 @@
       "pipelineDesc": "从真实的运维流程开始，而不是装饰性的管理页面。",
       "openImports": "打开导入",
       "openAnalytics": "访问统计配置",
-      "trendUnavailable": "仪表盘趋势数据暂不可用。"
+      "trendUnavailable": "仪表盘趋势数据暂不可用。",
+      "quickLinks": "数据管理快捷入口",
+      "quickLinksHint": "直接进入各项数据工作流，无需在侧栏中逐级查找。",
+      "contentOverview": "数据库内容",
+      "shortcuts": {
+        "releases": {
+          "title": "发布数据库",
+          "description": "管理数据版本、发布状态与记录统计。"
+        },
+        "imports": {
+          "title": "数据导入",
+          "description": "上传模块数据并跟踪运行中的任务。"
+        },
+        "dataViews": {
+          "title": "多维数据视图",
+          "description": "已保存的网格、看板与画廊视图。"
+        },
+        "media": {
+          "title": "媒体库",
+          "description": "公共门户使用的图片与文件资源。"
+        }
+      }
     },
     "dashboardStats": {
       "analyticsHeading": "访问统计",
@@ -1428,74 +1532,74 @@
         }
       },
       "appearanceForm": {
-      "title": "外观",
-      "description": "配置管理员界面的主色调。",
-      "loading": "正在加载外观设置…",
-      "loadError": "无法加载外观设置。",
-      "primaryColor": "主色",
-      "primaryColorHelp": "控制 Ant Design 的按钮、链接、标签与选中态。",
-      "save": "保存外观",
-      "saveError": "无法保存外观设置。",
-      "saved": "外观已保存。"
-    },
-    "localizationForm": {
-      "title": "本地化",
-      "description": "配置公开站点使用的默认语言。",
-      "loading": "正在加载本地化设置…",
-      "loadError": "无法加载本地化设置。",
-      "defaultLanguage": "默认语言",
-      "save": "保存本地化",
-      "saveError": "无法保存本地化设置。",
-      "saved": "本地化设置已保存。"
-    },
-    "securityForm": {
-      "title": "安全",
-      "description": "认证与访问控制设置。",
-      "loading": "正在加载安全设置…",
-      "loadError": "无法加载安全设置。",
-      "sessionTimeout": "会话超时（分钟）",
-      "maxLoginAttempts": "最大登录尝试次数",
-      "passwordMinLength": "密码最小长度",
-      "twoFactor": "两步验证",
-      "required": "必须",
-      "optional": "可选",
-      "toggle": "切换",
-      "save": "保存安全设置",
-      "saveError": "无法保存安全设置。",
-      "saved": "安全设置已保存。"
-    },
-    "siteForm": {
-      "title": "站点信息",
-      "description": "配置公开站点的标识与默认语言。",
-      "loading": "正在加载站点设置…",
-      "loadError": "无法加载站点设置。",
-      "siteName": "站点名称",
-      "defaultLanguage": "默认语言",
-      "siteDescription": "站点描述",
-      "save": "保存站点信息",
-      "saveError": "无法保存站点设置。",
-      "saved": "站点信息已保存。"
-    },
-    "sectionsLabel": "设置分区",
-    "contentArea": {
-      "hero": "首屏",
-      "tools": "工具卡片",
-      "search": "检索页",
-      "blast": "BLAST",
-      "help": "帮助",
-      "generic": "通用界面"
-    },
-    "section": {
-      "general": "常规设置",
-      "about": "关于设置",
-      "home": "首页欢迎设置",
-      "data": "数据与存储",
-      "email": "邮件与通知",
-      "security": "安全设置",
-      "filePreview": "文件预览设置",
-      "footer": "页脚设置",
-      "content": "站点内容设置"
-    },
+        "title": "外观",
+        "description": "配置管理员界面的主色调。",
+        "loading": "正在加载外观设置…",
+        "loadError": "无法加载外观设置。",
+        "primaryColor": "主色",
+        "primaryColorHelp": "控制 Ant Design 的按钮、链接、标签与选中态。",
+        "save": "保存外观",
+        "saveError": "无法保存外观设置。",
+        "saved": "外观已保存。"
+      },
+      "localizationForm": {
+        "title": "本地化",
+        "description": "配置公开站点使用的默认语言。",
+        "loading": "正在加载本地化设置…",
+        "loadError": "无法加载本地化设置。",
+        "defaultLanguage": "默认语言",
+        "save": "保存本地化",
+        "saveError": "无法保存本地化设置。",
+        "saved": "本地化设置已保存。"
+      },
+      "securityForm": {
+        "title": "安全",
+        "description": "认证与访问控制设置。",
+        "loading": "正在加载安全设置…",
+        "loadError": "无法加载安全设置。",
+        "sessionTimeout": "会话超时（分钟）",
+        "maxLoginAttempts": "最大登录尝试次数",
+        "passwordMinLength": "密码最小长度",
+        "twoFactor": "两步验证",
+        "required": "必须",
+        "optional": "可选",
+        "toggle": "切换",
+        "save": "保存安全设置",
+        "saveError": "无法保存安全设置。",
+        "saved": "安全设置已保存。"
+      },
+      "siteForm": {
+        "title": "站点信息",
+        "description": "配置公开站点的标识与默认语言。",
+        "loading": "正在加载站点设置…",
+        "loadError": "无法加载站点设置。",
+        "siteName": "站点名称",
+        "defaultLanguage": "默认语言",
+        "siteDescription": "站点描述",
+        "save": "保存站点信息",
+        "saveError": "无法保存站点设置。",
+        "saved": "站点信息已保存。"
+      },
+      "sectionsLabel": "设置分区",
+      "contentArea": {
+        "hero": "首屏",
+        "tools": "工具卡片",
+        "search": "检索页",
+        "blast": "BLAST",
+        "help": "帮助",
+        "generic": "通用界面"
+      },
+      "section": {
+        "general": "常规设置",
+        "about": "关于设置",
+        "home": "首页欢迎设置",
+        "data": "数据与存储",
+        "email": "邮件与通知",
+        "security": "安全设置",
+        "filePreview": "文件预览设置",
+        "footer": "页脚设置",
+        "content": "站点内容设置"
+      },
       "overview": "设置概览",
       "sections": {
         "general": "常规",
@@ -1601,7 +1705,12 @@
       "settingsSavedDesc": "{{section}} 设置已成功更新。",
       "ok": "确定",
       "placeholderAboutContentChinese": "页面内容（中文，富文本 / Markdown 均可）",
-      "saveFailed": "无法保存 {{section}} 设置，页面上的值未被修改。"
+      "saveFailed": "无法保存 {{section}} 设置，页面上的值未被修改。",
+      "appearance": "外观",
+      "integrations": "集成",
+      "security": "安全",
+      "localization": "本地化",
+      "advanced": "高级"
     },
     "analyticsSettings": {
       "title": "分析设置",
@@ -1740,16 +1849,16 @@
       "deleteContentTitle": "删除内容",
       "deleteContentConfirm": "确定要删除吗？",
       "unknownError": "发生未知错误",
-    "type": {
-      "news": "新闻",
-      "publication": "论文",
-      "page": "静态页面"
-    },
-    "status": {
-      "draft": "草稿",
-      "published": "已发布",
-      "archived": "已归档"
-    },
+      "type": {
+        "news": "新闻",
+        "publication": "论文",
+        "page": "静态页面"
+      },
+      "status": {
+        "draft": "草稿",
+        "published": "已发布",
+        "archived": "已归档"
+      },
       "editPageTitle": "编辑页面",
       "newPage": "新建页面",
       "editPageDesc": "正在编辑",
@@ -2177,7 +2286,13 @@
       "instanceUpdateFailed": "无法更新实例“{{name}}”。",
       "instanceDeleteFailed": "无法注销实例“{{name}}”。",
       "loadError": "无法加载表格视图模板。",
-      "instancesLoadError": "无法加载物种实例。"
+      "instancesLoadError": "无法加载物种实例。",
+      "apiOrigin": "API 源地址",
+      "jbrowseOrigin": "JBrowse 源地址",
+      "portalOrigin": "门户源地址",
+      "localTag": "本地",
+      "siteVariantExternal": "外网",
+      "siteVariantInternal": "内网"
     },
     "dataViews": {
       "title": "多维数据视图",
@@ -2392,7 +2507,7 @@
       "purposes": {
         "news": "新闻",
         "editor": "编辑器",
-        "about": "关于我们"
+        "about": "关于"
       },
       "uploadPurpose": "上传用途",
       "filterPurpose": "按用途筛选",
@@ -2439,11 +2554,6 @@
         "selectedImage": "已选图片",
         "noAltText": "请填写替代文本",
         "missingAlt": "缺少替代文本"
-      },
-      "purposes": {
-        "news": "新闻",
-        "editor": "编辑器",
-        "about": "关于"
       }
     },
     "shell": {
@@ -2493,7 +2603,15 @@
       "publications": "论文",
       "settings": "设置",
       "featureFlags": "功能开关",
-      "analytics": "访问分析"
+      "analytics": "访问分析",
+      "dashboards": "仪表盘",
+      "allImports": "全部导入",
+      "newImport": "新建导入",
+      "pagesGroup": "页面",
+      "newsGroup": "新闻",
+      "newArticle": "新建文章",
+      "newsTrash": "回收站",
+      "settingsOverview": "设置总览"
     },
     "commandPalette": {
       "dialogLabel": "命令面板",
@@ -2620,7 +2738,27 @@
       "cancelSucceeded": "导入任务已取消。",
       "retrySucceeded": "导入任务已重新排队。",
       "loadError": "无法加载导入任务。",
-      "cancelTaskConfirmLabel": "取消任务"
+      "cancelTaskConfirmLabel": "取消任务",
+      "columns": {
+        "file": "文件",
+        "status": "状态",
+        "progress": "进度",
+        "submittedBy": "提交人",
+        "submitted": "提交时间",
+        "actions": "操作"
+      },
+      "viewError": "查看错误",
+      "details": "详情",
+      "capabilitiesLoading": "正在加载导入能力…",
+      "capabilitiesError": "无法加载导入能力，导入操作暂不可用。",
+      "moduleImportsDisabled": "模块导入已被停用。",
+      "downloadTemplate": "下载模板",
+      "templateHint": "模块结构（基因）的起始模板，格式：TSV / CSV / XLSX。",
+      "xlsxDisabled": "XLSX 当前已被管理员停用。",
+      "templateDownloadFailed": "模板下载失败。",
+      "moduleKeyRequired": "请填写模块键。",
+      "emptySearchTitle": "没有匹配的导入任务",
+      "emptySearchDescription": "清空搜索即可查看全部导入任务。"
     },
     "charts": {
       "imported": "已导入",
@@ -2639,6 +2777,39 @@
       "storage": "存储",
       "storageGrowth": "存储增长",
       "storageGrowthAria": "存储增长图表"
+    },
+    "analysis": {
+      "title": "分析",
+      "subtitle": "导入吞吐量与查询性能的时间趋势。",
+      "date": "日期",
+      "imported": "已导入",
+      "failed": "失败",
+      "totalImported": "累计导入记录",
+      "totalFailed": "失败记录",
+      "importThroughput": "导入吞吐量",
+      "queryLatency": "查询延迟",
+      "storageGrowth": "存储增长",
+      "throughputDetail": "导入吞吐明细"
+    },
+    "monitor": {
+      "title": "监控",
+      "subtitle": "每 30 秒刷新一次的流水线与查询健康状态。",
+      "file": "文件",
+      "type": "类型",
+      "status": "状态",
+      "records": "记录数",
+      "submitted": "提交时间",
+      "activeReleases": "活跃发布版本",
+      "activeImports": "进行中的导入",
+      "services": "服务状态",
+      "healthy": "正常",
+      "degraded": "降级",
+      "checking": "检查中",
+      "apiHealthy": "指标 API 响应正常",
+      "apiDown": "指标 API 无响应",
+      "apiChecking": "正在检查指标 API…",
+      "apiHint": "控制台会自动刷新；点击“刷新”可立即获取快照。",
+      "recentImports": "最近的导入任务"
     },
     "confirm": {
       "confirm": "确认",
@@ -2670,6 +2841,9 @@
       "badgePublic": "公开",
       "badgeInternal": "内网",
       "disableBehavior": "停用方式：{{behavior}}",
+      "disableBehaviorValue": {
+        "reject_new_requests": "拒绝新请求，不中断运行中的任务"
+      },
       "toggleFeatureAria": "{{action}} {{key}}",
       "disable": "停用",
       "enable": "启用",
@@ -2716,6 +2890,65 @@
       "strong": "很强",
       "failed": "登录失败，请重试。",
       "invalidCredentials": "邮箱或密码不正确。"
+    },
+    "importDraft": {
+      "operationFailed": "草稿操作失败。",
+      "intro": "字段映射、数据补丁、校验与发布均针对此已持久化的草稿执行；不可变的源元数据与行数不在此处编辑。",
+      "committedLocked": "该草稿已提交，所有编辑控件均已锁定。",
+      "publishableLocked": "该草稿状态为 {{status}}；映射、补丁与校验已锁定，可在下方执行发布。",
+      "readOnlyLocked": "该草稿状态为 {{status}}；映射、补丁、校验与发布均不可用。",
+      "fieldMapping": "字段映射（JSON 数组）",
+      "dataPatches": "数据补丁（JSON 数组）",
+      "saveMapping": "保存映射",
+      "mappingSaved": "映射已保存到草稿。",
+      "savePatches": "保存补丁",
+      "patchesSaved": "补丁已保存到草稿。",
+      "validate": "校验已持久化草稿",
+      "validationCompleted": "草稿校验完成。",
+      "validationState": "校验状态：{{state}}",
+      "publicationTitle": "显式发布确认",
+      "publicationSourceId": "发布源 ID",
+      "publicationSourceIdPlaceholder": "源 ID",
+      "publicationKind": "发布类型",
+      "publicationKindPlaceholder": "发布类型",
+      "publicationConfig": "发布配置 JSON",
+      "publishConfirm": "发布此已校验草稿？该操作是显式的，且无法从草稿编辑器撤销。",
+      "committed": "草稿提交成功。",
+      "confirmCommit": "确认并提交草稿",
+      "status": {
+        "draft": "草稿",
+        "validated": "已校验",
+        "ready": "待发布",
+        "committed": "已提交"
+      },
+      "summary": "{{rows}} 行 · {{columns}} 列 · {{fields}} 个已映射字段",
+      "fieldMappingLabel": "字段映射",
+      "dataPatchesLabel": "数据补丁",
+      "publicationConfigLabel": "发布配置"
+    },
+    "newsForm": {
+      "externalSourceUrlAria": "外部文章来源地址",
+      "externalSourcePlaceholder": "未关联外部来源"
+    },
+    "releasesEmpty": {
+      "title": "暂无数据版本",
+      "description": "一个数据版本归集同一组装版本导入的数据。请先在导入流程中创建版本，再将其发布以对外提供查询。",
+      "openImports": "前往数据导入",
+      "openSiteControl": "站点控制"
+    },
+    "releasesSummary": {
+      "total": "版本总数",
+      "published": "已发布",
+      "draft": "草稿",
+      "active": "活跃版本",
+      "activeVariants": "对外提供 {{count}} 条变异",
+      "noActive": "尚未设置活跃版本指针"
+    },
+    "releasesFilter": {
+      "search": "按名称、版本或 ID 搜索",
+      "status": "按状态筛选",
+      "matching": "{{shown}} / {{total}} 条匹配",
+      "empty": "没有符合当前筛选条件的数据版本。"
     }
   },
   "news": {
@@ -2855,6 +3088,12 @@
       "a": "新版本与发布日期会在新闻和下载页面公布。本帮助页面不承诺固定更新周期。"
     },
     "supportEmail": "support@soymutdb.org"
+  },
+  "guide": {
+    "notPublishedTitle": "指南尚未发布",
+    "notPublishedDesc": "编辑在后台发布后，NCBI 数据库使用指南会显示在这里。",
+    "loadErrorTitle": "指南加载失败",
+    "loadErrorDesc": "请检查网络连接后重试。"
   },
   "tools": {
     "title": "工具",
@@ -3959,25 +4198,28 @@
       }
     }
   },
-    "errors": {
-      "pageUnavailable": "页面暂时不可用",
-      "notFound": "页面不存在",
-      "pageUnavailableHint": "页面加载失败，请稍后重试。",
-      "notFoundHint": "请检查地址，或使用搜索查找记录。"
-    },
-    "pageBuilder": {
-      "newsUnavailable": "新闻暂时不可用",
-      "noNews": "暂无新闻",
-      "assembliesUnavailable": "基因组版本暂时不可用",
-      "selectAssembly": "选择基因组版本",
-      "openJbrowse": "打开 JBrowse 2",
-      "openBlast": "运行 BLAST",
-      "graphUnavailable": "本体关系图暂时不可用",
-      "ontologyGraph": "本体关系图",
-      "graphTruncated": "关系图已按配置的节点/边上限截断。"
-    },
-    "ui": {
-      "searchButton": "搜索",
-      "noResults": "未找到结果"
-    }
+  "errors": {
+    "pageUnavailable": "页面暂时不可用",
+    "notFound": "页面不存在",
+    "pageUnavailableHint": "页面加载失败，请稍后重试。",
+    "notFoundHint": "请检查地址，或使用搜索查找记录。"
+  },
+  "pageBuilder": {
+    "pageNavigation": "页面导航",
+    "geneIdPlaceholder": "输入基因 ID",
+    "buttonFallback": "按钮",
+    "newsUnavailable": "新闻暂时不可用",
+    "noNews": "暂无新闻",
+    "assembliesUnavailable": "基因组版本暂时不可用",
+    "selectAssembly": "选择基因组版本",
+    "openJbrowse": "打开 JBrowse 2",
+    "openBlast": "运行 BLAST",
+    "graphUnavailable": "本体关系图暂时不可用",
+    "ontologyGraph": "本体关系图",
+    "graphTruncated": "关系图已按配置的节点/边上限截断。"
+  },
+  "ui": {
+    "searchButton": "搜索",
+    "noResults": "未找到结果"
+  }
 }

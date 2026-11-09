@@ -41,6 +41,7 @@
     "dompurify": "^3.4.17",
     "i18next": "^26.4.7",
     "mammoth": "^1.13.0",
+    "rc-tween-one": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-i18next": "^17.0.21",

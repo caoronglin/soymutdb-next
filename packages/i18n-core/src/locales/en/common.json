@@ -1179,7 +1179,83 @@
   },
   "admin": {
     "siteControl": {
-      "navHint": "Internal and external sites keep separate navigation documents; the API never copies one variant into the other."
+      "title": "Site control",
+      "navHint": "Internal and external sites keep separate navigation documents; the API never copies one variant into the other.",
+      "subtitle": "Database type, primary navigation and feature availability for the public portal",
+      "external": "External site",
+      "internal": "Internal site",
+      "saveFailed": "Save failed",
+      "conflict": "Settings were changed in another session. The latest version has been loaded; save again.",
+      "dbKind": {
+        "genome": "Genome / mutant database",
+        "genomeDescription": "Genes, variants, mutants, genome browser and comparative genomics.",
+        "geneOntology": "Gene ontology database",
+        "geneOntologyDescription": "GO terms, ontology relationships and functional enrichment workflows.",
+        "transcriptionFactor": "Transcription factor database",
+        "transcriptionFactorDescription": "TF families, binding sites, regulons and expression programmes."
+      },
+      "dbType": {
+        "cardTitle": "Database type",
+        "description": "Selects the biological profile this deployment presents. It is stored as a server-owned enum and surfaced to the web client through GET /site/profile.",
+        "save": "Save database type",
+        "saved": "Database type saved."
+      },
+      "features": {
+        "cardTitle": "Feature availability",
+        "description": "Toggling a feature also hides its gated navigation links from the public site.",
+        "save": "Save features",
+        "saved": "Feature availability saved.",
+        "enableAria": "Enable {{feature}}",
+        "page_builder": "Render published PageDefinition components.",
+        "imports_module_tsv": "Enable schema-driven module imports.",
+        "imports_module_xlsx": "Enable XLSX module imports.",
+        "imports_local_upload": "Enable browser-direct multipart uploads.",
+        "imports_fasta": "Enable FASTA reference imports (writer not yet closed).",
+        "imports_gff3": "Enable GFF3 gene-model imports (writer not yet closed).",
+        "imports_vcf": "Enable VCF variant imports (writer not yet closed).",
+        "imports_blast_db": "Enable BLAST database imports (writer not yet closed).",
+        "imports_seed_data": "Enable Seed data imports (writer not yet closed).",
+        "imports_expression_csv": "Enable Expression CSV imports (assembly-scoped durable writer).",
+        "imports_homolog_csv": "Enable Homolog CSV imports (assembly-scoped durable writer).",
+        "publication_github_pages": "Enable GitHub Pages publication target.",
+        "publication_cloudflare_pages": "Enable Cloudflare Pages publication target."
+      },
+      "nav": {
+        "cardTitle": "Primary navigation",
+        "dragHint": "Drag groups and links to reorder. A link with a feature gate disappears from the public site while that feature flag is off.",
+        "addGroup": "Add group",
+        "addLink": "Add link",
+        "save": "Save {{variant}} navigation",
+        "saved": "{{variant}} navigation saved",
+        "loadError": "Unable to load navigation settings",
+        "conflict": "Navigation was changed in another session. The latest version has been loaded; review your edits and save again.",
+        "linksUsed": "{{count}} / {{max}} links",
+        "linkCount": "{{count}} links",
+        "on": "On",
+        "off": "Off",
+        "noGate": "No gate",
+        "destinationPlaceholder": "/path, /path/:id or https://…",
+        "reorderGroup": "Reorder {{name}}",
+        "reorderLink": "Reorder {{name}}",
+        "groupEnTitleAria": "Group {{index}} English title",
+        "groupZhTitleAria": "Group {{index}} Chinese title",
+        "linkEnLabelAria": "Link {{index}} English label ({{group}})",
+        "linkZhLabelAria": "Link {{index}} Chinese label ({{group}})",
+        "linkDestinationAria": "Link {{index}} destination ({{group}})",
+        "linkGateAria": "Link {{index}} feature gate ({{group}})",
+        "linkEnabledAria": "Link {{index}} enabled ({{group}})",
+        "error": {
+          "noDestination": "Link '{{label}}' needs a destination",
+          "whitespace": "Destination for '{{label}}' cannot contain whitespace or a backslash",
+          "protocolRelative": "Destination for '{{label}}' cannot be protocol-relative",
+          "prefix": "Destination for '{{label}}' must start with / or https://",
+          "notLoaded": "Settings not loaded",
+          "tooManyGroups": "Too many groups",
+          "tooManyLinks": "Too many links",
+          "invalidGroupId": "Invalid group id '{{id}}'",
+          "invalidLinkId": "Invalid link id '{{id}}'"
+        }
+      }
     },
     "pageBuilder": {
       "layouts": "Layout",
@@ -1227,7 +1303,11 @@
       "routeHelp": "Lowercase path such as /downloads or / for the homepage. Reserved prefixes (/admin, /api, /blast, /browser) are rejected by the server.",
       "template": "Start from template",
       "blankCanvas": "Blank canvas",
-      "draftNote": "A draft v1 is created. Use the editor to add components, preview and publish."
+      "draftNote": "A draft v1 is created. Use the editor to add components, preview and publish.",
+      "missingPageId": "Missing page id",
+      "routeRequired": "Route is required",
+      "routeInvalid": "Use / for the homepage or a lowercase path like /downloads",
+      "titleKeyRequired": "Title key is required"
     },
     "title": "Admin Console",
     "brand": {
@@ -1362,6 +1442,9 @@
     },
     "dashboard": {
       "title": "Dashboard",
+      "welcome": "Welcome",
+      "analysis": "Analysis",
+      "monitor": "Monitor",
       "systemOverview": "System Overview",
       "totalTeam": "Team Members",
       "activeReleases": "Active Releases",
@@ -1379,7 +1462,28 @@
       "pipelineDesc": "Start from the real operational workflows instead of decorative management pages.",
       "openImports": "Open imports",
       "openAnalytics": "Visitor analytics",
-      "trendUnavailable": "Dashboard trend data is unavailable."
+      "trendUnavailable": "Dashboard trend data is unavailable.",
+      "quickLinks": "Data management shortcuts",
+      "quickLinksHint": "Jump straight to the workflows behind the numbers above.",
+      "contentOverview": "Database content",
+      "shortcuts": {
+        "releases": {
+          "title": "Releases",
+          "description": "Versions, publication status and record counts."
+        },
+        "imports": {
+          "title": "Data imports",
+          "description": "Upload module data and track running tasks."
+        },
+        "dataViews": {
+          "title": "Multi-dimensional views",
+          "description": "Saved grid, kanban and gallery views over the data."
+        },
+        "media": {
+          "title": "Media library",
+          "description": "Portal images and files used by the public site."
+        }
+      }
     },
     "dashboardStats": {
       "analyticsHeading": "Visitor analytics",
@@ -1428,74 +1532,74 @@
         }
       },
       "appearanceForm": {
-      "title": "Appearance",
-      "description": "Configure the administrator interface primary colour.",
-      "loading": "Loading appearance settings…",
-      "loadError": "Unable to load appearance settings.",
-      "primaryColor": "Primary color",
-      "primaryColorHelp": "Controls Ant Design buttons, links, tags, and selected states.",
-      "save": "Save appearance",
-      "saveError": "Unable to save appearance settings.",
-      "saved": "Appearance saved."
-    },
-    "localizationForm": {
-      "title": "Localization",
-      "description": "Configure the default language used by the public site.",
-      "loading": "Loading localization settings…",
-      "loadError": "Unable to load localization settings.",
-      "defaultLanguage": "Default Language",
-      "save": "Save localization",
-      "saveError": "Unable to save localization settings.",
-      "saved": "Localization saved."
-    },
-    "securityForm": {
-      "title": "Security",
-      "description": "Authentication and access-control settings.",
-      "loading": "Loading security settings…",
-      "loadError": "Unable to load security settings.",
-      "sessionTimeout": "Session Timeout (minutes)",
-      "maxLoginAttempts": "Max Login Attempts",
-      "passwordMinLength": "Password Min Length",
-      "twoFactor": "Two-Factor Auth",
-      "required": "Required",
-      "optional": "Optional",
-      "toggle": "Toggle",
-      "save": "Save security",
-      "saveError": "Unable to save security settings.",
-      "saved": "Security settings saved."
-    },
-    "siteForm": {
-      "title": "Site information",
-      "description": "Configure the public site identity and default language.",
-      "loading": "Loading site settings…",
-      "loadError": "Unable to load site settings.",
-      "siteName": "Site Name",
-      "defaultLanguage": "Default Language",
-      "siteDescription": "Site Description",
-      "save": "Save site information",
-      "saveError": "Unable to save site settings.",
-      "saved": "Site information saved."
-    },
-    "sectionsLabel": "Settings sections",
-    "contentArea": {
-      "hero": "Hero",
-      "tools": "Tool cards",
-      "search": "Search pages",
-      "blast": "BLAST",
-      "help": "Help",
-      "generic": "Generic UI"
-    },
-    "section": {
-      "general": "General settings",
-      "about": "About settings",
-      "home": "Homepage welcome settings",
-      "data": "Data & Storage settings",
-      "email": "Email & Notifications settings",
-      "security": "Security settings",
-      "filePreview": "File Preview settings",
-      "footer": "Footer settings",
-      "content": "Site content settings"
-    },
+        "title": "Appearance",
+        "description": "Configure the administrator interface primary colour.",
+        "loading": "Loading appearance settings…",
+        "loadError": "Unable to load appearance settings.",
+        "primaryColor": "Primary color",
+        "primaryColorHelp": "Controls Ant Design buttons, links, tags, and selected states.",
+        "save": "Save appearance",
+        "saveError": "Unable to save appearance settings.",
+        "saved": "Appearance saved."
+      },
+      "localizationForm": {
+        "title": "Localization",
+        "description": "Configure the default language used by the public site.",
+        "loading": "Loading localization settings…",
+        "loadError": "Unable to load localization settings.",
+        "defaultLanguage": "Default Language",
+        "save": "Save localization",
+        "saveError": "Unable to save localization settings.",
+        "saved": "Localization saved."
+      },
+      "securityForm": {
+        "title": "Security",
+        "description": "Authentication and access-control settings.",
+        "loading": "Loading security settings…",
+        "loadError": "Unable to load security settings.",
+        "sessionTimeout": "Session Timeout (minutes)",
+        "maxLoginAttempts": "Max Login Attempts",
+        "passwordMinLength": "Password Min Length",
+        "twoFactor": "Two-Factor Auth",
+        "required": "Required",
+        "optional": "Optional",
+        "toggle": "Toggle",
+        "save": "Save security",
+        "saveError": "Unable to save security settings.",
+        "saved": "Security settings saved."
+      },
+      "siteForm": {
+        "title": "Site information",
+        "description": "Configure the public site identity and default language.",
+        "loading": "Loading site settings…",
+        "loadError": "Unable to load site settings.",
+        "siteName": "Site Name",
+        "defaultLanguage": "Default Language",
+        "siteDescription": "Site Description",
+        "save": "Save site information",
+        "saveError": "Unable to save site settings.",
+        "saved": "Site information saved."
+      },
+      "sectionsLabel": "Settings sections",
+      "contentArea": {
+        "hero": "Hero",
+        "tools": "Tool cards",
+        "search": "Search pages",
+        "blast": "BLAST",
+        "help": "Help",
+        "generic": "Generic UI"
+      },
+      "section": {
+        "general": "General settings",
+        "about": "About settings",
+        "home": "Homepage welcome settings",
+        "data": "Data & Storage settings",
+        "email": "Email & Notifications settings",
+        "security": "Security settings",
+        "filePreview": "File Preview settings",
+        "footer": "Footer settings",
+        "content": "Site content settings"
+      },
       "overview": "Settings overview",
       "sections": {
         "general": "General",
@@ -1601,7 +1705,12 @@
       "settingsSavedDesc": "The {{section}} settings have been updated successfully.",
       "ok": "OK",
       "placeholderAboutContentChinese": "Full page content in Chinese (rich text / Markdown supported)",
-      "saveFailed": "The {{section}} settings could not be saved. The values on screen are unchanged."
+      "saveFailed": "The {{section}} settings could not be saved. The values on screen are unchanged.",
+      "appearance": "Appearance",
+      "integrations": "Integrations",
+      "security": "Security",
+      "localization": "Localization",
+      "advanced": "Advanced"
     },
     "analyticsSettings": {
       "title": "Analytics Settings",
@@ -1740,16 +1849,16 @@
       "deleteContentTitle": "Delete Content",
       "deleteContentConfirm": "Are you sure you want to delete ",
       "unknownError": "An unknown error occurred",
-    "type": {
-      "news": "News",
-      "publication": "Publications",
-      "page": "Pages"
-    },
-    "status": {
-      "draft": "Draft",
-      "published": "Published",
-      "archived": "Archived"
-    },
+      "type": {
+        "news": "News",
+        "publication": "Publications",
+        "page": "Pages"
+      },
+      "status": {
+        "draft": "Draft",
+        "published": "Published",
+        "archived": "Archived"
+      },
       "editPageTitle": "Edit Page",
       "newPage": "New Page",
       "editPageDesc": "Editing ",
@@ -2177,7 +2286,13 @@
       "instanceUpdateFailed": "The instance \"{{name}}\" could not be updated.",
       "instanceDeleteFailed": "The instance \"{{name}}\" could not be unregistered.",
       "loadError": "The table-view templates could not be loaded.",
-      "instancesLoadError": "The species instances could not be loaded."
+      "instancesLoadError": "The species instances could not be loaded.",
+      "apiOrigin": "API origin",
+      "jbrowseOrigin": "JBrowse origin",
+      "portalOrigin": "Portal origin",
+      "localTag": "local",
+      "siteVariantExternal": "External",
+      "siteVariantInternal": "Internal"
     },
     "dataViews": {
       "title": "Data views",
@@ -2439,11 +2554,6 @@
         "selectedImage": "Selected image",
         "noAltText": "Enter alt text",
         "missingAlt": "Missing alt text"
-      },
-      "purposes": {
-        "news": "News",
-        "editor": "Editor",
-        "about": "About"
       }
     },
     "shell": {
@@ -2493,7 +2603,15 @@
       "publications": "Publications",
       "settings": "Settings",
       "featureFlags": "Feature Flags",
-      "analytics": "Analytics"
+      "analytics": "Analytics",
+      "dashboards": "Dashboards",
+      "allImports": "All imports",
+      "newImport": "New import",
+      "pagesGroup": "Pages",
+      "newsGroup": "News",
+      "newArticle": "New article",
+      "newsTrash": "Trash",
+      "settingsOverview": "Settings overview"
     },
     "commandPalette": {
       "dialogLabel": "Command palette",
@@ -2620,7 +2738,27 @@
       "cancelSucceeded": "The import task was cancelled.",
       "retrySucceeded": "The import task was queued for a retry.",
       "loadError": "The import tasks could not be loaded.",
-      "cancelTaskConfirmLabel": "Cancel task"
+      "cancelTaskConfirmLabel": "Cancel task",
+      "columns": {
+        "file": "File",
+        "status": "Status",
+        "progress": "Progress",
+        "submittedBy": "Submitted by",
+        "submitted": "Submitted",
+        "actions": "Actions"
+      },
+      "viewError": "View error",
+      "details": "Details",
+      "capabilitiesLoading": "Loading import capabilities…",
+      "capabilitiesError": "Unable to load import capabilities. Import actions remain unavailable.",
+      "moduleImportsDisabled": "Module imports are disabled.",
+      "downloadTemplate": "Download template",
+      "templateHint": "Starter template for a module schema (genes). Formats: TSV / CSV / XLSX.",
+      "xlsxDisabled": "XLSX is currently disabled by an administrator.",
+      "templateDownloadFailed": "Template download failed.",
+      "moduleKeyRequired": "Module key is required.",
+      "emptySearchTitle": "No matching import tasks",
+      "emptySearchDescription": "Clear the search to see every import task."
     },
     "charts": {
       "imported": "Imported",
@@ -2639,6 +2777,39 @@
       "storage": "Storage",
       "storageGrowth": "Storage Growth",
       "storageGrowthAria": "Storage growth chart"
+    },
+    "analysis": {
+      "title": "Analysis",
+      "subtitle": "Import throughput and query performance over time.",
+      "date": "Date",
+      "imported": "Imported",
+      "failed": "Failed",
+      "totalImported": "Records imported",
+      "totalFailed": "Failed records",
+      "importThroughput": "Import throughput",
+      "queryLatency": "Query latency",
+      "storageGrowth": "Storage growth",
+      "throughputDetail": "Import throughput detail"
+    },
+    "monitor": {
+      "title": "Monitor",
+      "subtitle": "Live pipeline and query health, refreshed every 30 seconds.",
+      "file": "File",
+      "type": "Type",
+      "status": "Status",
+      "records": "Records",
+      "submitted": "Submitted",
+      "activeReleases": "Active releases",
+      "activeImports": "Active imports",
+      "services": "Service state",
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "checking": "Checking",
+      "apiHealthy": "Metrics API is responding",
+      "apiDown": "Metrics API is not responding",
+      "apiChecking": "Checking metrics API…",
+      "apiHint": "The console refreshes automatically; use Refresh for an immediate snapshot.",
+      "recentImports": "Recent import tasks"
     },
     "confirm": {
       "confirm": "Confirm",
@@ -2665,6 +2836,9 @@
       "badgePublic": "public",
       "badgeInternal": "internal",
       "disableBehavior": "disable: {{behavior}}",
+      "disableBehaviorValue": {
+        "reject_new_requests": "reject new requests; running jobs continue"
+      },
       "toggleFeatureAria": "{{action}} {{key}}",
       "disable": "Disable",
       "enable": "Enable",
@@ -2716,6 +2890,65 @@
       "selectFile": "Select a file",
       "sizeExceeded": "The file is too large",
       "uploadFailed": "Upload failed"
+    },
+    "importDraft": {
+      "operationFailed": "The draft operation failed.",
+      "intro": "Mapping, patches, validation, and publication operate on this persisted draft. Immutable source metadata and row counts are not editable here.",
+      "committedLocked": "This draft is committed; all editing controls are locked.",
+      "publishableLocked": "This draft is {{status}}; mapping, patches, and validation are locked. Publication is available below.",
+      "readOnlyLocked": "This draft is {{status}}; mapping, patches, validation, and publication are unavailable.",
+      "fieldMapping": "Field mapping (JSON array)",
+      "dataPatches": "Data patches (JSON array)",
+      "saveMapping": "Save mapping",
+      "mappingSaved": "Mapping saved to the draft.",
+      "savePatches": "Save patches",
+      "patchesSaved": "Patches saved to the draft.",
+      "validate": "Validate persisted draft",
+      "validationCompleted": "Draft validation completed.",
+      "validationState": "Validation state: {{state}}",
+      "publicationTitle": "Explicit publication confirmation",
+      "publicationSourceId": "Publication source id",
+      "publicationSourceIdPlaceholder": "Source ID",
+      "publicationKind": "Publication kind",
+      "publicationKindPlaceholder": "Publication kind",
+      "publicationConfig": "Publication config JSON",
+      "publishConfirm": "Publish this validated draft? This action is explicit and cannot be undone from the draft editor.",
+      "committed": "Draft committed successfully.",
+      "confirmCommit": "Confirm and commit draft",
+      "status": {
+        "draft": "Draft",
+        "validated": "Validated",
+        "ready": "Ready",
+        "committed": "Committed"
+      },
+      "summary": "{{rows}} rows · {{columns}} columns · {{fields}} mapped fields",
+      "fieldMappingLabel": "Field mapping",
+      "dataPatchesLabel": "Data patches",
+      "publicationConfigLabel": "Publication config"
+    },
+    "newsForm": {
+      "externalSourceUrlAria": "External article source URL",
+      "externalSourcePlaceholder": "No external source is attached"
+    },
+    "releasesEmpty": {
+      "title": "No releases yet",
+      "description": "A release groups the data imported for one assembly version. Create one from the import workflow, then publish it to serve it on the public site.",
+      "openImports": "Open imports",
+      "openSiteControl": "Site control"
+    },
+    "releasesSummary": {
+      "total": "Total releases",
+      "published": "Published",
+      "draft": "Drafts",
+      "active": "Active release",
+      "activeVariants": "{{count}} variants served",
+      "noActive": "No active release pointer"
+    },
+    "releasesFilter": {
+      "search": "Search by name, version, or ID",
+      "status": "Filter by status",
+      "matching": "{{shown}} / {{total}} matching",
+      "empty": "No releases match the current filters."
     }
   },
   "news": {
@@ -2855,6 +3088,12 @@
       "a": "Release versions and publication dates are announced on the News and Downloads pages. SoyMutDB does not promise a fixed release cadence on this Help page."
     },
     "supportEmail": "support@soymutdb.org"
+  },
+  "guide": {
+    "notPublishedTitle": "This guide is not published yet",
+    "notPublishedDesc": "The NCBI retrieval guide will appear here once an editor publishes it in the admin console.",
+    "loadErrorTitle": "The guide could not be loaded",
+    "loadErrorDesc": "Check your connection and try again."
   },
   "tools": {
     "title": "Tools",
@@ -3959,25 +4198,28 @@
       }
     }
   },
-    "errors": {
-      "pageUnavailable": "Page temporarily unavailable",
-      "notFound": "Page not found",
-      "pageUnavailableHint": "The page could not be loaded. Please try again later.",
-      "notFoundHint": "Check the address, or use search to find a record."
-    },
-    "pageBuilder": {
-      "newsUnavailable": "News is temporarily unavailable",
-      "noNews": "No news yet",
-      "assembliesUnavailable": "Assemblies are temporarily unavailable",
-      "selectAssembly": "Select a genome assembly",
-      "openJbrowse": "Open JBrowse 2",
-      "openBlast": "Run BLAST",
-      "graphUnavailable": "Ontology graph is temporarily unavailable",
-      "ontologyGraph": "Ontology relationship graph",
-      "graphTruncated": "The graph was truncated to the configured node/edge limits."
-    },
-    "ui": {
-      "searchButton": "Search",
-      "noResults": "No results found"
-    }
+  "errors": {
+    "pageUnavailable": "Page temporarily unavailable",
+    "notFound": "Page not found",
+    "pageUnavailableHint": "The page could not be loaded. Please try again later.",
+    "notFoundHint": "Check the address, or use search to find a record."
+  },
+  "pageBuilder": {
+    "pageNavigation": "Page navigation",
+    "geneIdPlaceholder": "Enter a gene ID",
+    "buttonFallback": "Button",
+    "newsUnavailable": "News is temporarily unavailable",
+    "noNews": "No news yet",
+    "assembliesUnavailable": "Assemblies are temporarily unavailable",
+    "selectAssembly": "Select a genome assembly",
+    "openJbrowse": "Open JBrowse 2",
+    "openBlast": "Run BLAST",
+    "graphUnavailable": "Ontology graph is temporarily unavailable",
+    "ontologyGraph": "Ontology relationship graph",
+    "graphTruncated": "The graph was truncated to the configured node/edge limits."
+  },
+  "ui": {
+    "searchButton": "Search",
+    "noResults": "No results found"
+  }
 }
