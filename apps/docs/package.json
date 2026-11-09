@@ -1,0 +1,29 @@
+{
+  "name": "@soymutdb/docs",
+  "version": "2.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SoyMutDB component documentation and static design-system site (dumi)",
+  "scripts": {
+    "dev": "dumi dev",
+    "docs:build": "dumi build",
+    "docs:preview": "dumi preview",
+    "clean": "rimraf dist .dumi .umi"
+  },
+  "dependencies": {
+    "@ant-design/pro-components": "catalog:",
+    "@soymutdb/charts": "workspace:*",
+    "@soymutdb/genome-view": "workspace:*",
+    "@soymutdb/ui-react": "workspace:*",
+    "antd": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "dumi": "catalog:",
+    "rimraf": "^6.1.3",
+    "typescript": "catalog:"
+  }
+}
