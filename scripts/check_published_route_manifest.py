@@ -72,11 +72,17 @@ MANIFEST_TAG = "soymutdb-published-route-manifest/v1"
 ROBOTS_TAG = "soymutdb-published-robots/v1"
 
 # Reviewed fixed points of the external artifact. Arm them with --derive.
+#
+# Re-pinned 2026-11-09 with the dual-site artifact rebuild: the external
+# artifact now declares its own origin (https://external.soymutdb.invalid)
+# instead of the legacy single-site https://soymutdb.invalid. The route list,
+# order and crawl policy are unchanged; only the origin line moved, so both
+# digests moved together.
 _MANIFEST_DIGEST: str | None = (
-    "e91baf23c382422c019836fb104be4e0761f0a23b79ed23073ed5725718ef60c"
+    "cb91b21c95e8d079dff8594572a02ea96798cfbeb4cfcbae82fae48174e819b0"
 )
 _ROBOTS_DIGEST: str | None = (
-    "253f1daaa8c4bdebfdcb4e23a3b5ed6b761a802375bf247e60c1dda97a7352bb"
+    "270e18bf22e414c7aec477741c0dc91c754859b81a25ca6f263dc843eaf7f4a2"
 )
 
 # Second, independent doors: a permutation is only caught by the digests above,

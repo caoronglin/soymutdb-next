@@ -60,6 +60,7 @@ export function VariantExportControls({
     exportId,
     exportStatus,
     exportErrorMessage,
+    statusUnavailable,
     downloadError,
     pollExpired,
     requestExport,
@@ -117,13 +118,15 @@ export function VariantExportControls({
       {exportId ? (
         <div className="mt-3 flex flex-wrap items-center gap-3" data-testid="variant-export-progress">
           <Typography.Text type="secondary" data-testid="variant-export-state">
-            {exportStatus === "succeeded"
-              ? t("variants.exportReady")
-              : exportStatus === "failed"
-                ? t("variants.exportFailed")
-                : exportStatus === "running"
-                  ? t("variants.exportRunning")
-                  : t("variants.exportPending")}
+            {statusUnavailable
+              ? t("variants.exportUnavailable")
+              : exportStatus === "succeeded"
+                ? t("variants.exportReady")
+                : exportStatus === "failed"
+                  ? t("variants.exportFailed")
+                  : exportStatus === "running"
+                    ? t("variants.exportRunning")
+                    : t("variants.exportPending")}
           </Typography.Text>
           {exportStatus === "succeeded" ? (
             <Button
@@ -144,15 +147,15 @@ export function VariantExportControls({
               {downloadError}
             </Typography.Text>
           ) : null}
-          {pollExpired ? (
-            <>
-              <Typography.Text type="secondary" data-testid="variant-export-poll-expired">
-                {t("variants.exportTakingLong")}
-              </Typography.Text>
-              <Button size="small" onClick={checkAgain} data-testid="variant-export-check-again">
-                {t("variants.exportCheckAgain")}
-              </Button>
-            </>
+          {pollExpired && !statusUnavailable ? (
+            <Typography.Text type="secondary" data-testid="variant-export-poll-expired">
+              {t("variants.exportTakingLong")}
+            </Typography.Text>
+          ) : null}
+          {pollExpired || statusUnavailable ? (
+            <Button size="small" onClick={checkAgain} data-testid="variant-export-check-again">
+              {t("variants.exportCheckAgain")}
+            </Button>
           ) : null}
         </div>
       ) : null}

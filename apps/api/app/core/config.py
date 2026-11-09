@@ -121,6 +121,10 @@ class Settings(BaseSettings):
     db_pool_timeout: int = 30
     db_pool_recycle: int = 1800
     db_pool_pre_ping: bool = True
+    #: LIFO checkout keeps a small hot set of server connections in use and
+    #: lets the rest age out, instead of round-robining every pooled
+    #: connection through PostgreSQL on each burst.
+    db_pool_use_lifo: bool = True
     # Process topology is consumed by the container entrypoint. Keep these
     # values in Settings so validation/docs share one canonical contract.
     api_workers: int = Field(default=2, ge=1, le=16)
@@ -132,6 +136,14 @@ class Settings(BaseSettings):
     #: reference (geekblogs) was unavailable, so this follows the general
     #: PostgreSQL/asyncpg best practice of a bounded statement_timeout.
     db_statement_timeout: int = 30
+    #: PostgreSQL JIT compilation.  Measured on the isolated 200k-variant
+    #: baseline, the stats aggregate triggered JIT and spent ~500 ms of a
+    #: ~640 ms statement inside the JIT (generation/inlining/optimization/
+    #: emission), while execution without JIT took ~130 ms.  Aggregates and
+    #: index lookups are not the long-running analytical queries JIT targets,
+    #: so it is off by default; enable per deployment if a real workload
+    #: profile shows a win.
+    db_jit_enabled: bool = False
 
     # ------------------------------------------------------------ ClickHouse
     clickhouse_host: str = "localhost"
@@ -150,7 +162,6 @@ class Settings(BaseSettings):
 
     # ----------------------------------------------------------------- Redis
     redis_url: str = "redis://localhost:6379/0"
-    cache_ttl_seconds: int = 3600
 
     # ----------------------------------------------------------- Rate limits
     # The global inbound request limiter lives in ``app/core/middleware.py``
@@ -197,6 +208,10 @@ class Settings(BaseSettings):
     #: instead of hanging the request path.
     redis_socket_timeout: float = 2.0
     redis_socket_connect_timeout: float = 2.0
+    #: Upper bound on pooled Redis connections per API process.  redis-py's
+    #: default pool is unbounded, so a slow Redis plus concurrent requests
+    #: could open sockets without limit; checkout then blocks instead.
+    redis_max_connections: int = Field(default=64, ge=1)
 
     # ----------------------------------------------------------- S3 / MinIO
     s3_endpoint: str = "http://localhost:9000"
@@ -268,9 +283,6 @@ class Settings(BaseSettings):
     #: the worker itself is idempotent on top of this).
     blast_max_attempts: int = 3
 
-    # ---------------------------------------------------------------- GWAS
-    #: Maximum delivery attempts per GWAS job (broker-level retries only).
-
     # --------------------------------------------------------------- Outbox
     # Transactional outbox: API writes events inside business transactions;
     # a background dispatcher forwards them to Celery.  Disable only for
@@ -287,7 +299,6 @@ class Settings(BaseSettings):
     outbox_retention_days: int = 30
     outbox_cleanup_interval_seconds: float = 3600.0
 
-    # ----------------------------------------------------- OpenTelemetry
     # --------------------------------------------------------------- Admin
     admin_email: str = "admin@soymutdb.local"
     admin_password: str = "admin123"
@@ -302,7 +313,6 @@ class Settings(BaseSettings):
     # They are redacted from API responses and audit logs by
     # ``services.publication_targets``.
     publication_local_root: str | None = None
-    publication_artifact_bucket: str = "static-publications"
     github_pages_token: str | None = None
     github_pages_repo: str | None = None
     github_repository: str | None = None

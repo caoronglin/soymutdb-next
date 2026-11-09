@@ -363,6 +363,7 @@ async def test_anonymous_track_surfaces_return_only_public_tracks(monkeypatch) -
 
     listed = await service.list_tracks(
         _TrackSession([public, private, project]),
+        release_id=7,
         user_id=None,
         user_roles=[],
     )
@@ -381,9 +382,43 @@ async def test_anonymous_track_surfaces_return_only_public_tracks(monkeypatch) -
         await service.get_track(
             _TrackSession([private]),
             private.id,
+            release_id=7,
             user_id=None,
             user_roles=[],
         )
+
+
+async def test_track_surfaces_fail_closed_for_other_and_unpinned_releases() -> None:
+    """A track outside the selected release is hidden, not silently adopted.
+
+    ``tracks.release_id`` is nullable for legacy rows; treating those (or rows
+    pinned to another release) as members of the active release would let a
+    list hand out track ids that JBrowse itself refuses to render.
+    """
+    current = _make_track(40, TrackVisibility.PUBLIC)
+    other = _make_track(41, TrackVisibility.PUBLIC)
+    other.release_id = 8
+    unpinned = _make_track(42, TrackVisibility.PUBLIC)
+    unpinned.release_id = None
+    service = TrackService()
+
+    listed = await service.list_tracks(
+        _TrackSession([current, other, unpinned]),
+        release_id=7,
+        user_id=None,
+        user_roles=[],
+    )
+    assert [track["id"] for track in listed] == ["40"]
+
+    for hidden in (other, unpinned):
+        with pytest.raises(NotFoundError):
+            await service.get_track(
+                _TrackSession([hidden]),
+                hidden.id,
+                release_id=7,
+                user_id=None,
+                user_roles=[],
+            )
 
 
 async def test_non_management_track_surfaces_return_only_ready_tracks() -> None:
@@ -397,6 +432,7 @@ async def test_non_management_track_surfaces_return_only_ready_tracks() -> None:
 
     listed = await service.list_tracks(
         _TrackSession([ready, pending]),
+        release_id=7,
         user_id=None,
         user_roles=[],
     )
@@ -406,6 +442,7 @@ async def test_non_management_track_surfaces_return_only_ready_tracks() -> None:
         await service.get_track(
             _TrackSession([pending]),
             pending.id,
+            release_id=7,
             user_id=None,
             user_roles=[],
         )
@@ -423,6 +460,7 @@ async def test_public_track_surfaces_do_not_expose_pending_to_manager() -> None:
 
     assert await service.list_tracks(
         _TrackSession([pending]),
+        release_id=7,
         user_id=uuid.uuid4(),
         user_roles=roles,
     ) == []
@@ -430,6 +468,7 @@ async def test_public_track_surfaces_do_not_expose_pending_to_manager() -> None:
         await service.get_track(
             _TrackSession([pending]),
             pending.id,
+            release_id=7,
             user_id=uuid.uuid4(),
             user_roles=roles,
         )
@@ -452,6 +491,7 @@ async def test_track_detail_does_not_expose_storage_keys() -> None:
     detail = await TrackService().get_track(
         _TrackSession([track]),
         track.id,
+        release_id=7,
         user_id=None,
         user_roles=[],
     )
@@ -506,6 +546,7 @@ async def test_track_owner_and_project_member_can_view_their_tracks(monkeypatch)
 
     listed = await service.list_tracks(
         _TrackSession([owned, project, unrelated], project_ids={77}),
+        release_id=7,
         user_id=user_id,
         user_roles=[RoleName.VIEWER.value],
     )
@@ -514,6 +555,7 @@ async def test_track_owner_and_project_member_can_view_their_tracks(monkeypatch)
     detail = await service.get_track(
         _TrackSession([project], project_ids={77}),
         project.id,
+        release_id=7,
         user_id=user_id,
         user_roles=[RoleName.VIEWER.value],
     )
@@ -600,6 +642,7 @@ async def test_only_track_manager_or_administrator_can_bypass_track_ownership() 
 
     denied = await service.list_tracks(
         _TrackSession([private]),
+        release_id=7,
         user_id=uuid.uuid4(),
         user_roles=[RoleName.SEED_MANAGER.value],
     )
@@ -608,6 +651,7 @@ async def test_only_track_manager_or_administrator_can_bypass_track_ownership() 
     for role in (RoleName.TRACK_MANAGER, RoleName.ADMINISTRATOR):
         visible = await service.list_tracks(
             _TrackSession([private]),
+            release_id=7,
             user_id=uuid.uuid4(),
             user_roles=[role.value],
         )
@@ -631,6 +675,7 @@ async def test_track_routes_forward_optional_user_access_context(monkeypatch) ->
         db=db,
         assembly_id=None,
         category_id=None,
+        release_context=_release_context(),
         current_user=None,
     )
     assert list_response.headers["Vary"] == "Authorization"
@@ -650,7 +695,11 @@ async def test_track_routes_forward_optional_user_access_context(monkeypatch) ->
     owner = _make_user(RoleName.VIEWER)
     detail_response = Response()
     await track_routes.get_track(
-        track_id=5, response=detail_response, db=db, current_user=owner
+        track_id=5,
+        response=detail_response,
+        db=db,
+        release_context=_release_context(),
+        current_user=owner,
     )
     # An authenticated projection (owner/visibility) is never shareable.
     assert detail_response.headers["Cache-Control"] == "private, no-store"
@@ -660,6 +709,7 @@ async def test_track_routes_forward_optional_user_access_context(monkeypatch) ->
         db,
         assembly_id=None,
         category_id=None,
+        release_id=7,
         user_id=None,
         user_roles=[],
     )
@@ -673,6 +723,7 @@ async def test_track_routes_forward_optional_user_access_context(monkeypatch) ->
     mocked_service.get_track.assert_awaited_once_with(
         db,
         5,
+        release_id=7,
         user_id=owner.id,
         user_roles=[RoleName.VIEWER.value],
     )

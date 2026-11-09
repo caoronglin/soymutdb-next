@@ -155,6 +155,13 @@ describe("injectPageHead shell fallback", () => {
     expect(html).toContain("<h1>Expression — SoyMutDB</h1>");
     expect(html).toContain("<p>Browse released expression libraries.</p>");
     expect(html).toContain("<noscript>");
+    // The fallback must not participate in document flow: it is removed once
+    // the app mounts, and a static block at the top caused a measured 0.09 CLS.
+    expect(html).toContain(".soymutdb-shell-fallback{position:absolute;");
+    expect(html).toContain("body:has(#root > *) .soymutdb-shell-fallback{display:none}");
+    // Default UA body margin is replaced by the app stylesheet only after boot,
+    // which shifted the whole document; reset it in the document itself.
+    expect(html).toContain("html,body{margin:0;padding:0}");
   });
 
   it("keeps the mount container empty so react can own it", () => {

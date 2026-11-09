@@ -24,7 +24,7 @@ import { queryKeys } from "../lib/query-keys";
 import { SITE_VARIANT } from "../lib/site-variant";
 import { useReleaseId } from "../lib/release-scope";
 import { assembliesQueryOptions } from "../lib/query-options";
-import { assemblyOptionLabel, resolveAssemblyParam } from "../lib/assembly-selection";
+import { assemblyOptionLabel, resolveAssemblyParam, toAssemblyIdParam } from "../lib/assembly-selection";
 
 /** Result types the API accepts; unknown `?types=` values are ignored. */
 const SEARCH_RESULT_TYPES: readonly SearchResultType[] = [
@@ -64,20 +64,6 @@ export const Route = createFileRoute("/search")({
 
 function isCatalogSearch(data: SearchResponse | InternalSearchResponse): data is SearchResponse {
   return "results" in data;
-}
-
-/**
- * Canonical numeric assembly id for the API's `assembly_id` parameter.
- *
- * The catalogue identity is the stable numeric id (see
- * `lib/assembly-selection.ts`); a genome *name* is a display label and may
- * match several assemblies. Converting a name with `Number()` produced `NaN`
- * and the API rejected the request with 422, so the conversion is guarded
- * here and the caller treats a missing id as an unresolved context.
- */
-function toAssemblyIdParam(raw: string | number): number | undefined {
-  const value = typeof raw === "number" ? raw : Number(String(raw).trim());
-  return Number.isInteger(value) && value >= 1 ? value : undefined;
 }
 
 /**

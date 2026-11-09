@@ -239,7 +239,7 @@ function LocationSearchComponent() {
       ),
     },
     {
-      title: get("search.genes.colGbrowse", t("search.location.colGbrowse")),
+      title: get("search.location.colGbrowse", t("search.location.colGbrowse")),
       key: "jbrowse",
       width: 140,
       render: (_, row, index) => (

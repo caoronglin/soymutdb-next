@@ -51,10 +51,10 @@ vi.mock("@soymutdb/api-client", async (importOriginal) => ({
   getGeneExpression: api.getGeneExpression,
   getGeneHomologs: api.getGeneHomologs,
   listTestDataPreviewMutationSitesForGene: api.listTestDataPreviewMutationSitesForGene,
-  getReleaseId: () => "5",
 }));
 vi.mock("../../lib/query-options", () => ({ assembliesQueryOptions: () => ({ queryKey: ["assemblies"], queryFn: vi.fn() }) }));
 vi.mock("../../lib/site-variant", () => ({ SITE_VARIANT: "external" }));
+vi.mock("../../lib/release-scope", () => ({ useReleaseId: () => "5" }));
 vi.mock("../../components/gene-genome-view", () => ({ GeneGenomeView: () => null }));
 vi.mock("../../components/gene-seed-request-entry", () => ({ GeneSeedRequestEntry: () => null }));
 

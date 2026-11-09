@@ -129,11 +129,16 @@ _PROPERTY_DECL = re.compile(
 #   components.schemas, including nested $defs copies. Regenerate with
 # _digest() after an intentional contract change and update in the same commit,
 # with a reason.
+# Re-pinned 2026-11-09 for the site-control + multi-view contract slice: three
+# GET /site/* operations and the five /admin/data-views operations add
+# AdminDataViewCreate/Update/ListResponse/Response, DataViewSourceListResponse,
+# SiteNavigationResponse and SiteProfileResponse, which carry 32 new required
+# rows across 9 new component schemas (1076/282 -> 1108/291).
 _REQUIRED_FIELD_DIGEST = (
-    "2e190b58340d795b673704d4cdab0e1b0a54d20b53b77abb505b533d2f82dccc"
+    "384fd46d43038203967f88ecd9ad1887ad7dee2cb44f2bd708ec32c8f0c7fb12"
 )
-_EXPECTED_REQUIRED_ROWS = 1076
-_EXPECTED_SCHEMAS = 282
+_EXPECTED_REQUIRED_ROWS = 1108
+_EXPECTED_SCHEMAS = 291
 
 # Reviewed, hand-written fixed point on the published positional/cardinality
 # surface. sha256 of "\n".join(["soymutdb-tuple-and-map-bounds/v1"] +
@@ -171,8 +176,8 @@ _EXPECTED_VALUE_BY_KEYWORD: dict[str, int] = {
 _EXPECTED_BY_SCHEMA_TOP: dict[str, int] = {}  # filled by _by_schema_top() below
 
 # Independent fixed point on the component-to-component ``$ref`` wiring.
-# ``components.schemas`` publishes 229 property-level ``$ref`` nodes across 145
-# owner schemas, naming 140 distinct targets. ``openapi-typescript`` renders
+# ``components.schemas`` publishes 234 property-level ``$ref`` nodes across 150
+# owner schemas, naming 145 distinct targets. ``openapi-typescript`` renders
 # each one as a ``components["schemas"]["<target>"]`` line inside that owner's
 # block in the generated client -- the TypeScript a consumer compiles against.
 # No landed fixed point reads *which* component a property points at:
@@ -189,20 +194,20 @@ _EXPECTED_BY_SCHEMA_TOP: dict[str, int] = {}  # filled by _by_schema_top() below
 # re-pinning only the snapshot side cannot silence the client door, and a
 # co-revert that makes both halves agree still moves both digests.
 _SCHEMA_REF_DIGEST = (
-    "9cf04fbccc712ae8a19fab2af092a60ffba16a8c98016bac0c952b0fa321cbc2"
+    "897c87832972107478532976aad8c93a7d2689fb5844908aa436be114d32b83f"
 )
-_EXPECTED_SCHEMA_REF_ROWS = 229
-_EXPECTED_SCHEMA_REF_OWNERS = 145
-_EXPECTED_SCHEMA_REF_TARGETS = 140
+_EXPECTED_SCHEMA_REF_ROWS = 234
+_EXPECTED_SCHEMA_REF_OWNERS = 150
+_EXPECTED_SCHEMA_REF_TARGETS = 145
 
 # The generated half is pinned by a *second* independent literal, not derived
 # from the snapshot under guard. sha256 of the canonical sorted
 # ``(owner, target, occurrence index)`` rows of the client's
 # ``components["schemas"]["..."]`` lines. Read from nowhere.
 _CLIENT_SCHEMA_REF_DIGEST = (
-    "5f08c6ae449843991de05c9a230b5160f4555708435eb4ea040dd5884b7bb8c1"
+    "e7ea768f2b7b9f321a164d2a7871c4f104b4010a0831268d3ce838d23877ee94"
 )
-_EXPECTED_CLIENT_SCHEMA_REF_ROWS = 229
+_EXPECTED_CLIENT_SCHEMA_REF_ROWS = 234
 
 
 # Independent fixed point on the published scalar ``type`` assignment of every
@@ -234,22 +239,22 @@ _EXPECTED_CLIENT_SCHEMA_REF_ROWS = 229
 # literal re-pinned stayed entirely green. They are published values, not
 # keywords.
 _SCHEMA_TYPE_DIGEST = (
-    "5c4fca252f24cd641d638e89cd55939c13b11f28509b5bcb3c0a1cb090126997"
+    "9d8df3a9049a1b6c29279b9e38845540be0fa5ab09967b015a884aa2fcedaa46"
 )
-_EXPECTED_SCHEMA_TYPE_ROWS = 3050
+_EXPECTED_SCHEMA_TYPE_ROWS = 3156
 _EXPECTED_SCHEMA_TYPE_BY_TYPE: dict[str, int] = {
-    "array": 156,
-    "boolean": 116,
-    "integer": 470,
-    "null": 634,
+    "array": 166,
+    "boolean": 122,
+    "integer": 477,
+    "null": 656,
     "number": 53,
-    "object": 406,
-    "string": 1215,
+    "object": 420,
+    "string": 1262,
 }
 _CLIENT_PROPERTY_TYPE_DIGEST = (
-    "b53a0832a63f0b13b0a7c448ecc1fe745f63e876fae0338f315884722cd6790b"
+    "520cde4325bc799c8fb4b0d9955122353f34f140538b775f521d98d78fa35307"
 )
-_EXPECTED_CLIENT_PROPERTY_ROWS = 2083
+_EXPECTED_CLIENT_PROPERTY_ROWS = 2147
 
 
 def rows(document: dict[str, Any]) -> list[tuple[str, str]]:

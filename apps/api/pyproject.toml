@@ -65,16 +65,9 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-asyncio_mode = "auto"
-python_files = "test_*.py"
-python_classes = "Test*"
-python_functions = "test_*"
-filterwarnings = [
-    "ignore::DeprecationWarning",
-    "ignore::PendingDeprecationWarning",
-]
+# Pytest configuration lives in `pytest.ini`; pytest ignores
+# `[tool.pytest.ini_options]` whenever that file exists, so duplicating it
+# here would be dead configuration.
 
 [tool.ruff]
 target-version = "py315"

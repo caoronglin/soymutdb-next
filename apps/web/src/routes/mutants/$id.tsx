@@ -2,10 +2,11 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { Alert, Descriptions, Empty, Skeleton, Table, type TableColumnsType } from "@/lib/antd";
-import { getMutantLine, getMutantLinePhenotypes, getReleaseId, isMutantLineId, type PhenotypeResponse } from "@soymutdb/api-client";
+import { getMutantLine, getMutantLinePhenotypes, isMutantLineId, type PhenotypeResponse } from "@soymutdb/api-client";
 import { isMutantLineDetailRecord } from "../../lib/api-contract-guards";
 import { FadeUp } from "../../components/route-motion";
 import { queryKeys } from "../../lib/query-keys";
+import { useReleaseId } from "../../lib/release-scope";
 import { SITE_VARIANT } from "../../lib/site-variant";
 import { phenotypeRowKey } from "../phenotypes/$lineId";
 
@@ -22,7 +23,9 @@ function displayValue(value: string | null | undefined) {
 function MutantDetail() {
   const { t } = useTranslation();
   const { id } = Route.useParams();
-  const releaseId = getReleaseId();
+  // A release switch must invalidate this page's cached detail and phenotypes,
+  // so the release is read as reactive state, not a render-time snapshot.
+  const releaseId = useReleaseId();
   const mutantLineId = isMutantLineId(id) ? id : null;
   const lineQuery = useQuery({
     queryKey: mutantLineId ? queryKeys.mutants.detail(mutantLineId, releaseId, SITE_VARIANT) : ["mutant-line", null],

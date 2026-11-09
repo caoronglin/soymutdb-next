@@ -138,10 +138,14 @@ INLINED_ENUM_CLASSES = frozenset(
 # sequence is the pinned object, not a set. Read from nowhere; re-pin in the
 # same commit as both artifacts after an intentional, reviewed regenerate.
 _GENERATED_MARKER_SEQUENCE_DIGEST = (
-    "b2991cbc32a2e40b8e1371cdbe6fd49fe9c4f59470e349cbc7e4086cc29dc1e3"
+    "754477bbd741e0a3ecc7dc8d37427da1d49606f5a931f3adaaab962bdeffab56"
 )
-_EXPECTED_GENERATED_MARKERS = 136
-_EXPECTED_ENUM_MARKERS = 100
+# Re-pinned 2026-11-09 with the site-control + multi-view slice: the three
+# GET /site/* operations and the five /admin/data-views operations add nine
+# generated @enum markers (source, view_type, sort_dir, database_kind,
+# navigation target), taking 101/36 -> 110/36 markers (137 -> 146).
+_EXPECTED_GENERATED_MARKERS = 146
+_EXPECTED_ENUM_MARKERS = 110
 _EXPECTED_CONSTANT_MARKERS = 36
 
 # Exact published value domains, an independent fixed point.  Read the
@@ -156,6 +160,14 @@ _EXPECTED_CONSTANT_MARKERS = 36
 # Keys are the schema path to the ``enum`` / ``const`` holder; values are the
 # ordered domain lists.  ``_same`` compares types recursively as well as values.
 _PUBLISHED_ENUM_BASELINE: dict[str, list[list[Any]]] = {
+    'AdminDataViewCreate.properties.sort_dir.anyOf': [['asc', 'desc']],
+    'AdminDataViewCreate.properties.source': [['genes', 'variants', 'mutant_lines']],
+    'AdminDataViewCreate.properties.view_type': [['grid', 'kanban', 'gallery']],
+    'AdminDataViewResponse.properties.sort_dir.anyOf': [['asc', 'desc']],
+    'AdminDataViewResponse.properties.source': [['genes', 'variants', 'mutant_lines']],
+    'AdminDataViewResponse.properties.view_type': [['grid', 'kanban', 'gallery']],
+    'AdminDataViewUpdate.properties.sort_dir.anyOf': [['asc', 'desc']],
+    'AdminDataViewUpdate.properties.view_type.anyOf': [['grid', 'kanban', 'gallery']],
     'AdminSiteBrandResponse.properties.variant': [['external', 'internal']],
     'AnalysesSubmitResponse.properties.status': [['queued']],
     'AnalysesUploadResponse.properties.upload_method': [['POST']],
@@ -170,6 +182,7 @@ _PUBLISHED_ENUM_BASELINE: dict[str, list[list[Any]]] = {
     'ArtifactRequest.properties.artifact_type': [['msa', 'tree']],
     'ArtifactResponse.properties.artifact_type': [['msa', 'tree']],
     'ArtifactResponse.properties.state': [['pending', 'running', 'succeeded', 'failed']],
+    'AssemblyMetricReason': [['no_genes', 'no_chromosomes', 'no_linked_downloads']],
     'BlastDatabaseResponse.properties.build_status': [
         ['pending', 'building', 'validating', 'publishing', 'published', 'failed', 'ready'],
     ],
@@ -219,6 +232,7 @@ _PUBLISHED_ENUM_BASELINE: dict[str, list[list[Any]]] = {
     'DataPatchItem.properties.patch_type': [['set', 'clear', 'format']],
     'DatabaseCapabilitiesResponse.properties.analytics.anyOf': [['postgresql']],
     'DatabaseCapabilitiesResponse.properties.authoritative': [['postgresql']],
+    'DataViewSourceInfo.properties.source': [['genes', 'variants', 'mutant_lines']],
     'EnrichmentGseaResponse.properties.mode': [['gsea']],
     'EnrichmentGseaResponse.properties.ontology': [['go', 'kegg']],
     'EnrichmentRequest.properties.mode': [['ora', 'gsea']],
@@ -243,6 +257,7 @@ _PUBLISHED_ENUM_BASELINE: dict[str, list[list[Any]]] = {
     'GwasFileType': [['snp', 'other']],
     'GwasJobStatus': [['pending', 'running', 'completed', 'failed', 'cancelled']],
     'GwasMethod': [['emmax', 'gemma']],
+    'HeaderNavigationLink.properties.target': [['internal', 'external']],
     'HomologRecord.properties.homolog_type': [['ortholog', 'paralog']],
     'HomologRecord.properties.kind': [
         ['experimental', 'curated', 'predicted', 'transferred', 'imported', 'unknown'],
@@ -342,6 +357,11 @@ _PUBLISHED_ENUM_BASELINE: dict[str, list[list[Any]]] = {
     'SettingsSchemaResponse.properties.version': [[1]],
     'SettingsValidateResponse.properties.valid': [[True]],
     'SiteBrandResponse.properties.variant': [['external', 'internal']],
+    'SiteNavigationResponse.properties.variant': [['external', 'internal']],
+    'SiteProfileResponse.properties.database_kind': [
+        ['genome', 'gene_ontology', 'transcription_factor'],
+    ],
+    'SiteProfileResponse.properties.variant': [['external', 'internal']],
     'SiteVariant': [['external', 'internal']],
     'SpeciesCoverageResponse.properties.state': [['available', 'no_data', 'not_imported']],
     'SpeciesInstanceHealthResponse.properties.connection_state': [
@@ -374,6 +394,9 @@ _PUBLISHED_ENUM_BASELINE: dict[str, list[list[Any]]] = {
     ],
     'app__schemas__seed__SeedRequestStatus': [
         ['pending', 'approved', 'shipped', 'completed', 'rejected'],
+    ],
+    'paths./api/v1/admin/data-views.get.parameters.schema.anyOf': [
+        ['genes', 'variants', 'mutant_lines'],
     ],
     'paths./api/v1/table-views/{kind}.get.parameters.schema': [
         ['mutation_sites', 'variants', 'genes', 'mutant_lines'],

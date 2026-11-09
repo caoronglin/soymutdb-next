@@ -50,6 +50,12 @@ PLATFORM_CATALOG = {
     "antd": "6.6.6",
     "@ant-design/pro-components": "3.1.15-2",
     "@ant-design/plots": "2.6.8",
+    # Design-system unification (#16): icons, X-Markdown renderer, the mobile
+    # shell, and Ant Design's own source linter all resolve through the catalog.
+    "@ant-design/icons": "6.3.4",
+    "@ant-design/x-markdown": "2.10.0",
+    "antd-mobile": "5.43.0",
+    "@ant-design/cli": "6.7.0",
     "vitest": "5.0.5",
     "tailwindcss": "4.3.3",
     "@tailwindcss/vite": "4.3.3",

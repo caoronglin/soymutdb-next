@@ -1,4 +1,188 @@
-# SoyMutDB 项目状态（2026-10-17 追加验收）
+# SoyMutDB 项目状态（2026-11-08 更新）
+
+## 2026-11-08 当前状态
+
+工作树基于 `main@a2da8a23`，起始为 clean。本轮复跑门禁、修复真实失败，并做连接池/Redis 池配置优化与后端性能基线（统计聚合关闭 JIT，p50 约 4× 改善）。仓库改名为 `rlcao-mutdb` 仍是待执行任务，本文档暂沿用旧名，改名落地时统一替换。
+
+| 范围 | 本轮证据 |
+| --- | --- |
+| 工作区门禁 | Turbo 36/36 任务成功（exit 0，29 cached）；Vitest 合计 1474 tests，JBrowse node 71/71 |
+| API 全量（修复前） | 2953 passed / 40 skipped / **9 failed**（Python 3.15 + 本机 PostgreSQL，`tests -q`） |
+| API 全量（修复后） | **2968 passed / 40 skipped / 0 failed**，229.96 s，exit 0（新增 4 项回归；`env -u PYTHONPATH` 实测，无需外部 PYTHONPATH） |
+| Ruff | 变更文件 `app/services/{assembly,gene}_service.py`、`tests/test_{db_pool_config,gene_service}.py` 全部通过 |
+
+### 修复的真实缺陷（失败 → 通过）
+
+| # | 缺陷 | 失败证据 | 处理 |
+| --- | --- | --- | --- |
+| 1 | `AssemblyService._empty_statistics()` 引用已删除的 `NO_TRANSCRIPTS`，任何走到空统计的分支直接 `NameError` | 7 项 API 失败 | 改用 `NO_GENES`；契约测试明确禁止 `no_transcripts` 原因码，注释说明转录本在无基因时只能是 `no_genes` |
+| 2 | 序列能力校验脚本要求 `programs == POST - {inspect}`，与仓库已定稿的字段账本冲突（`inspect` 与 `intervals/overlap` 都是公告操作） | 2 项契约/自测失败 | 改为子集校验：所有在线 POST 必须被公告，`inspect` 必须存在于路由；反方向由 openapi 推导的守卫覆盖 |
+| 3 | `test_pool_use_lifo_is_configurable` 断言构造器从不保存的 `_use_lifo` 属性，必然 `AttributeError` | 1 项失败 | 改为断言 SQLAlchemy 实际存储位置 `pool._pool.use_lifo`（`AsyncAdaptedQueue`），并在测试内注明 |
+| 4 | `GET /assemblies` 只按 `release_id` 过滤，把同一已发布 release 内、仅导入元数据的 staged 装配连同 id 一并列出 | `test_listing_omits_an_unpublished_assembly_in_the_same_release`（期望 2 行，实得 3 行） | schema 没有 per-assembly 发布列，发布状态取自数据本身：列表要求装配至少有一条基因行（关联 `EXISTS`）。`/genes/assemblies` 同步加同一守卫，避免另一个列表继续发 id。按合并契约，详情按 id 访问对“确实为空”的装配仍返回 0 统计，不清空 |
+| 5 | 基因服务测试替身按 SQL 文本子串分派，装配查询新增基因 `EXISTS` 后命中了 `FROM genes` 分支 | 1 项失败 | 先判断外层 `FROM assemblies`；注释说明分派依据是外层 select |
+| 6 | 基因详情表型区只过滤 `MutantLine.is_public`：软删除行、或被本 release 的 `VariantSummary` 引用但固定到其它/未固定 release 的行，仍可经公开基因页发布表型 | `test_phenotypes_are_reached_through_public_mutant_lines`（哨兵表型泄漏） | 查询补齐 `MutantLine.release_id == 解析 release` 与 `is_deleted = false`；回归测试加入 soft-deleted / foreign-release / 非公开三条哨兵行，并断言公开响应体不含其 trait 文本 |
+| 7 | 跨版本链接解析只校验 crosswalk 的 release，未校验被链接基因所在装配的 release：`release_id IS NULL` 的通用行可把未发布 release 装配里的基因/装配版本带进公开搜索结果 | `test_opt01_null_release_is_generic_and_foreign_release_is_skipped`（`Glyma.09G000900` 出现在链接中） | 链接查询对源/目标装配的 release 分别加 `JOIN releases`，只接受“解析 release 或另一已发布 release”，未发布与未固定 release 一律 fail closed；ASM-04 的 v4/v5 跨两个已发布 release 的既有契约保持不变 |
+| 8 | `/search` 的 `release_id` 查询参数描述与真实行为不符（描述为忽略，实际由 `get_release_context` 强制解析为已发布 release） | OpenAPI 文档漂移 | 改为“必须指向已发布 release，省略时使用 active published release”；参数保留（`test_search_contract` 固定签名） |
+
+### 连接池 / 会话 / Redis 池
+
+- PostgreSQL 引擎新增 `db_pool_use_lifo`（默认 `True`），LIFO 复用热点连接，避免每次突发把整池连接轮转一遍。
+- Redis 客户端新增 `redis_max_connections`（默认 64，`ge=1`）：redis-py `from_url` 的默认池无上限，慢 Redis 叠加并发会无限开 socket；现在超限时排队。
+- Redis 开启 `socket_keepalive=True`，与既有 `socket_timeout`/`socket_connect_timeout=2s`、`health_check_interval=30` 一起约束长连接故障探测。
+- 新增/修正单测覆盖上述三项；Worker 的 `create_engine(pool_size=1, max_overflow=0)` 显式预算保持不变。
+
+### 后端性能基线与 JIT 修复（任务 #13）
+
+隔离基线：PG 17.11（`127.0.0.1:55432/soymutdb_perf_r2`，迁移 head 0056），300k genes / 200k variant_facts / 20k mutant lines / 5k publications / 40k crosswalks；Redis 故意不可达以强制走 SQL。临时证据在 `.cache/perf/`（不提交）。
+
+| 观测 | 修复前 | 修复后 |
+| --- | --- | --- |
+| stats.homepage（进程内 30 轮，5+5 池） | p50 603.3 ms / p95 719.8 ms | **p50 149.5 ms / p95 204.2 ms**（4.0×） |
+| stats.dashboard（同上） | p50 576.7 ms | **p50 146.1 ms**（3.9×） |
+| stats.homepage（HTTP 50 轮） | JIT 开关对照：586.6 ms（连接级 jit=on） | **p50 168.0 ms / p95 205.5 ms** |
+| search.global_search（HTTP 50 轮） | p50 61.6 ms | p50 63.9 ms（不受 JIT 影响） |
+
+- **根因**：`variant_facts` 达到 200k 行后，统计聚合触发 PostgreSQL JIT，`EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)` 记录编译约 500 ms（generation 2.7 + inlining 101.8 + optimization 234.1 + emission 162.0），占 640 ms 语句的大头；`jit=off` 后执行降到 130.9 ms。聚合与索引点查并非 JIT 面向的长分析查询。
+- **修复**：`Settings.db_jit_enabled`（默认 `False`，环境变量 `SOYMUTDB_DB_JIT_ENABLED`）在 `get_engine()` 里并入 asyncpg `server_settings`。必须是**连接级**设置：统计路径的变体聚合由变体服务另开会话执行，`SET LOCAL` 只作用于请求会话，此前验证因此无效果。
+- **搜索瓶颈在 SQL 而非 Python**：5 条查询合计约 42 ms（基因 12.3 + mutant 0.14 + publication 17.2 + crosswalk 0.09 + 基因计数 12.2），HTTP 额外 10–15 ms。数据库侧杠杆是索引/缓存，不是把 API 重写成 Go。
+- **连接池**：32 并发下 5+5 吞吐 42.0 rps，20+20 反而 35.1 rps（数据库争用），默认 5+5 保持。
+- **分页**：迁移 0047 的 `ix_variant_facts_assembly_page` 实测 35–41 ms → 0.5–0.8 ms（50–70×）。
+- **导出**：200k 行 326 ms，排序主导；候选复合索引未被验证采用（计划器仍选 hash join + sort，且导出是后台任务），本轮不改索引。
+- **Go 重写评估（任务 #14）**：无可证实的 CPU 热点。富集 700 例 42.9 ms（基线 98.7 ms），模块 schema 流式 100k 行 1.203 s / 峰值 41.8 MiB，导入解析已走 cyvcf2（C 加速）；基准脚本给出的门槛仍是 `needs_real_workload_profile_and_candidate_end_to_end_comparison`。不引入 Go 模块，等真实工作负载画像再开。
+- **k6**：本机无二进制，按仓库 smoke 规则记 **SKIPPED**，不计为通过。
+
+```bash
+cd apps/api
+.venv/bin/python -m pytest tests/test_db_pool_config.py tests/test_stats_contract.py \
+  tests/test_homepage_stats_scope.py tests/test_variant_aggregate_perf.py \
+  tests/test_conftest_database_url.py -q
+# -> 46 passed, 2 skipped
+```
+
+### 设计系统与依赖统一（任务 #16）
+
+catalog（`pnpm-workspace.yaml`）新增/统一了 Ant Design 系列 pin，消费方一律用 `catalog:`，不再散落区间版本：
+
+| 包 | pin | 状态 |
+| --- | --- | --- |
+| `@ant-design/x-markdown` | 2.10.0 | 已接入 web 文件预览与 admin Markdown 预览 |
+| `@ant-design/icons` | 6.3.4 | web/admin 由 `^6.3.4` 改为 `catalog:` |
+| `typescript` | 5.9.3 | `packages/{api-client,genome-view-model,i18n-core,query-keys,shared}` 由区间/精确值改为 `catalog:` |
+| `antd-mobile` | 5.43.0 | 仅 catalog pin，窄视口站点在任务 #18 接入 |
+| `rc-tween-one` | 3.0.6 | 仅 catalog pin，动效在任务 #18 接入 |
+
+- **取代手写 marked 管线**：web/admin 删除 `marked ^18.1.1`；`apps/web/src/components/file-viewer/markdown-viewer.tsx` 改为动态 `import("@ant-design/x-markdown")`，`apps/admin/src/components/rich-editor/markdown-mode.tsx` 改为 `lazy` + `Suspense` 预览。X-Markdown 内部用 marked 解析、DOMPurify 清洗，因此 `dompurify` 仍作为其他 8 处调用的直接依赖保留。
+- **不可信内容的默认信任级别不变或更严**：文件预览传 `escapeRawHtml`（内嵌 HTML 按文本显示）+ `openLinksInNewTab`（链接带 `rel="noopener noreferrer"`）；admin 预览保留 `USE_PROFILES: { html: true }` 与 `FORBID_TAGS`/`FORBID_ATTR` 拒绝 script/style/iframe/事件处理器。新增 `apps/web/src/components/file-viewer/markdown-viewer.test.tsx`（4 项）与 `apps/admin/src/components/rich-editor/markdown-mode.test.tsx`（2 项）钉住这些行为，包括 `javascript:` href 被丢弃。
+- **决策记录**：`@ant-design/web3`（1.26.1）不引入——钱包/链上 UI 不适用于科研数据库，只采纳设计语言；`@ant-design/motion` 在 npm 不存在，motion.ant.design 文档对应 `rc-tween-one` 的 TweenOne，故按后者 pin。
+- **验证**：`pnpm install` 干净；web `79 files / 665 tests`、admin `35 files / 235 tests` 全绿；两端 typecheck 与 eslint 通过；`pnpm peers check` 只剩既有 Umi peer 警告。web 双变体构建、admin 构建均成功，X-Markdown 落在异步共享块（web `ui.*.async.js` 约 725 KB，admin `3588.*.async.js` 约 103 KB），未进入阻塞入口。
+- **admin 构建前置**：`max build` 需要 `SOYMUTDB_ADMIN_API_URL`（或 `VITE_API_BASE_URL`）；本地 http 预览需 `SOYMUTDB_LOCAL_TEST_PREVIEW_ENABLED=true`。这是既有部署要求，本轮只是在本机复现确认。
+
+### 后台站点控制面与 Page Builder（任务 #27–#30）
+
+**后台站点控制面（#27）**
+
+- 新增 `general.databaseKind` 有界枚举（`genome` / `gene_ontology` / `transcription_factor`），用于声明站点呈现的数据库类型；不携带 DSN、凭据或拓扑，因此设置注册表的「禁止连接类键」守卫为其增加精确豁免并在安全默认值表中钉住，而不是放宽整条守卫。
+- 头部导航落库为按站点变体隔离的 JSON 文档（schema 版本、分组/链接上限、`feature` 绑定）；`/site-control` 管理页支持分组与链接的新增、删除、启停、中英文标签、功能开关绑定以及 dnd-kit 拖拽排序。
+- 公共站点头部改由 `getSiteNavigation(SITE_VARIANT)` 驱动，导航链接、开放功能和数据库类型均可在后台调整，无需改前端代码；外站/内站产物仍各自读取自己的变体键。
+
+**Page Builder 后台（#28）**
+
+- 恢复 `/page-builder` 列表与 `/page-builder/$pageId` 编辑器：组件面板来自服务端 `COMPONENT_REGISTRY`（19 个受控组件），`columns` / `tabs` 容器内可拖拽排序与增删；属性面板按注册表 schema 渲染，富文本仍由服务端清洗。
+- 状态机保持 draft → preview（不可变快照）→ publish（显式发布）；非 draft 版本只读，发布必须填写原因。保存、预览、发布分别调用独立端点，预览快照不会自动进入公开读路径。
+- 新增 `packages/api-client/src/admin-page-builder.ts`，后台所有读写走类型化客户端，不手拼 URL。
+
+**公开站点渲染（#29）**
+
+- `apps/web/src/lib/page-definitions.tsx` 提供 `usePublishedPageDefinition(route)` 与 `usePublishedPageRoutes()`；仅使用公开的 `{route, version, status, definition}` 载荷，404 视为「无覆盖」并回退静态页面，非 404 错误照常暴露。
+- 首页仅在存在已发布定义时替换静态 `AntdHome`；`/$` 兜底路由承担后台发布的自定义路径，加载中显示骨架，无发布定义时返回 404/500 Result。`routeTree.gen.ts` 手动登记 splat 路由（仓库未安装生成器）。
+- 渲染器覆盖全部 19 个注册键。所有 href 经 `safeHref` 二次校验，只允许 `http(s)` / `mailto` / `tel` / 站内相对路径，拒绝 `javascript:` / `data:` / `vbscript:` / `file:`；图片 URL 同样过滤。`rich_text` 走 DOMPurify，`notice` 只按纯文本渲染；基因/位置/装配链接显式携带 assembly，不暴露内部标识。
+
+**回归证据（#30）**
+
+- **Page Builder 并发与状态机修复**：`create_page` 的唯一路由竞争、`update_draft` 的版本竞争现在都把数据库 `IntegrityError` 映射为 409 `ConflictError`（草稿竞争返回胜者版本号），不再泄漏 500。`publish_request` / `publish_now` 用 `with_for_update(of=PageDefinitionVersion)` 行锁并 `populate_existing` 重读；`PageDefinitionVersion.page` 是 `lazy="joined"`，不加 `of=` 会触发 PostgreSQL 的 `FOR UPDATE cannot be applied to the nullable side of an outer join`。发布请求不会再被并发提交把 `PUBLISHED` 退回 `REQUESTED`，也不会重复写 outbox。
+- **Admin 预览不再污染编辑态**：预览端点只校验、不落库，编辑器不再采纳预览返回的版本号，`base_version`/脏标记保持不变；否则下一次保存必然 409 且未保存修改会被误标为已保存。
+- **导航编辑可自由填写目标地址**：`/site-control` 的目的地由固定下拉改为 `AutoComplete`（可自由输入，保留常用预设），按 `https://` 自动推导 `target`（此前外部链接因 target 仍为 internal 被服务端拒绝），失焦自动 trim，保存前用与后端同构的规则做本地校验；409 时提示并刷新最新版本但不丢弃本地编辑。数据库类型卡片同样在 409 时刷新而非报死。
+- **首页可由后台接管**：服务端 `validate_route` 与 Admin 路由校验现在接受根路由 `/`（唯一无路径段的路由，仍拒绝 `/admin`、`/api`、`/blast`、`/browser` 及其子路径），因此后台可以创建并发布首页覆盖定义，公开站 `usePublishedPageDefinition("/")` 的读路径此前已就绪。新增 `test_homepage_route_is_editable` 钉住。
+- **发布态基础版本与按钮语义修复**：从有未保存修改的编辑器直接发布时，发布 mutation 先保存草稿并返回新版本号，`onSuccess` 采纳为新的 `base_version`；否则下一次保存会用发布前的基准并必然 409。已发布且无本地修改时 Publish 按钮禁用（服务端会拒绝重复发布），编辑后才重新可发布。站点控制的本地校验错误改为 `throw new Error(...)`，不再被通用 “Save failed” 吞掉。
+- **数据库类型与品牌已真正进入公开站**：新增 `apps/web/src/lib/site-identity.ts` 消费 `GET /site/profile` 与 `GET /site/branding`（均按显式 `SITE_VARIANT` 请求，失败时回退到原有静态身份）。后台选择的 `gene_ontology` / `transcription_factor` 会在页头显示双语标识；品牌名称替换页头字标，`SoyMutDB` 仍保留原有渐变强调；图标 URL 先经 `safeExternalUrl` 校验再渲染。`databaseKindLabelKey` / `brandWordmarkParts` 有单元测试钉住。
+- **登录页同样采纳后台品牌**：`/login` 的桌面品牌面板与移动端页头都改用 `useSiteIdentity()` + `brandWordmarkParts()`，品牌图标同样先过 `safeExternalUrl`；API 未就绪或失败时回退到静态 `SoyMutDB` 字标，登录页不再是与页头脱节的硬编码品牌。`login.test.tsx` 的 `useQuery` / `i18n.language` mock 已同步更新。
+- **功能开关保存后的缓存一致性**：`/site-control` 的功能开关保存成功后同时失效 `["admin-features"]`、`["site-navigation"]`、`["site-profile"]`，关闭某功能会立刻反映到导航过滤与公开站 `features` 投影，而不是等 60s staleTime；功能数据未加载完成前 Save 按钮禁用，避免用空状态覆盖服务端配置。
+
+| 门禁 | 命令 | 结果 |
+| --- | --- | --- |
+| Admin Vitest | `pnpm --filter @soymutdb/admin test` | 35 files / **239 passed** |
+| Admin typecheck / lint | `pnpm --filter @soymutdb/admin typecheck` / `lint` | 均 exit 0 |
+| Web Vitest | `pnpm exec vitest run --pool=threads --maxWorkers=1` | 87 files / **716 passed**（默认 forks 池在本机沙箱会卡住，需该参数） |
+| 登录页定向回归 | `pnpm exec vitest run src/routes/login.test.tsx src/lib/site-identity.test.ts` | 2 files / **4 passed** |
+| 公开站双站构建 | `pnpm --filter @soymutdb/web build`（`build-sites.ts`） | `[sites] external and internal artifacts built`，exit 0 |
+| i18n 键一致性 | `pnpm --filter @soymutdb/i18n-core test` | 1 file / **11 passed**（en/zh 键完全对齐） |
+| Page Builder 定向后端回归 | `pytest tests/test_page_builder_registry.py tests/test_admin_page_builder.py tests/test_page_definition_public.py -q` | **64 passed**（真实 PostgreSQL） |
+| Worker 全量（真实 PostgreSQL） | `env $(bash scripts/with-postgres-service.sh --print-exports) .venv/bin/python -m pytest tests -q` | **892 passed / 22 skipped / 0 errors** |
+| API 全量（真实 PostgreSQL） | `SOYMUTDB_TEST_DATABASE_URL=… SOYMUTDB_RUN_POSTGRES_INTEGRATION=1 pytest tests -q` | **3012 passed / 14 skipped / 0 failed**（238.35 s） |
+| 工作区 typecheck | `pnpm typecheck` | exit 0 |
+| Page 注册表 | `python3 scripts/check_page_registry.py` | 19 keys synchronized |
+| 内容键 | `python3 scripts/check_content_key_contract.py` | 123 consumers / 123 registered |
+| 发布路由清单 | `python3 scripts/check_published_route_manifest.py` | 33 routes / 25 indexable |
+| OpenAPI 内联体 | `python3 scripts/check_openapi_inline_body_integrity.py` | 75 pinned bodies / 68 titles |
+| Ant Design 扫描 | `node scripts/check-antd-design.mjs` | 0 findings（web + admin） |
+| 内容键守卫自测 | `python3 -m unittest scripts.test_content_key_contract_guard -v` | 10 passed |
+| 双站制品构建 | `bash scripts/verify-site-variant-artifacts.sh` | external + internal 各 33 documents；分隔值与内站 noindex 校验 **PASS** |
+| 制品头策略 | `python3 scripts/check_artifact_headers.py --require-dual` | 4 files checked，**OK** |
+| 制品构建路径 | `python3 scripts/check_artifact_build_paths.py` | external / internal / admin **OK** |
+| 制品隔离单测 | `python3 -m unittest scripts.test_site_artifact_isolation -v` | **11 passed** |
+| Admin 静态壳浏览器门禁 | `npx playwright test -c playwright-admin-shell.config.ts` | **2 passed**（登录壳 + 全部后台路由挂载，含 `/site-control`） |
+
+> 更正：制品隔离检查器必须带 `--external-root` / `--internal-root` 两个参数；缺参时返回 exit 2 是用法错误，不是隔离失败。正规入口 `scripts/verify-site-variant-artifacts.sh` 本轮 exit 0。浏览器侧已由 admin-shell 门禁验证登录与全部路由挂载；真实后端登录态下的拖拽排序与发布动作仍只有 Vitest 证据，未做人工浏览器冒烟。
+
+### 复现命令
+
+```bash
+# API 全量（本机 PostgreSQL 测试库）。`pytest.ini` 已把仓库根加入 pythonpath，
+# 因此 tests/a0 导入 tools/a0 不再需要外部 PYTHONPATH。
+cd apps/api
+SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://postgres:localonly@127.0.0.1:55434/soymutdb_test' \
+.venv/bin/python -m pytest tests -q
+# -> 2968 passed, 40 skipped in 229.96s（env -u PYTHONPATH 实测）
+
+# 本轮定向回归（身份/装配/跨版本/公开边界）
+SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://postgres:localonly@127.0.0.1:55434/soymutdb_test' \
+.venv/bin/python -m pytest tests/test_gene_detail_sections.py tests/test_opt_crossversion_links.py \
+  tests/test_ablation_assembly_scope_and_crossversion.py tests/test_ablation_seed_public_boundary.py \
+  tests/test_gene_genome_view_endpoint.py tests/test_p0_access_control.py -q
+# -> 88 passed in 5.52s
+
+# 前端设计系统（任务 #16）
+pnpm install --frozen-lockfile
+pnpm --filter @soymutdb/web test
+pnpm --filter @soymutdb/web typecheck && pnpm --filter @soymutdb/web lint
+pnpm --filter @soymutdb/admin test
+pnpm --filter @soymutdb/admin typecheck && pnpm --filter @soymutdb/admin lint
+SOYMUTDB_ADMIN_API_URL=https://admin.soymutdb.test pnpm --filter @soymutdb/admin build
+pnpm --filter @soymutdb/web build
+# -> web 79 files / 665 tests；admin 35 files / 235 tests；构建均成功
+
+# 后台控制面 + Page Builder + 公开渲染（任务 #27–#30，本轮实测）
+pnpm --filter @soymutdb/web test        # 86 files / 713 passed
+pnpm --filter @soymutdb/admin test      # 35 files / 239 passed
+pnpm typecheck                          # 21/21 tasks exit 0
+cd apps/api && SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://postgres@127.0.0.1:55432/soymutdb_api_regress' \
+  SOYMUTDB_RUN_POSTGRES_INTEGRATION=1 PYTHONPATH=/root/webdb-docker \
+  .venv/bin/python -m pytest tests -q   # 3012 passed / 14 skipped
+cd ../worker && env $(bash ../../scripts/with-postgres-service.sh --print-exports) \
+  .venv/bin/python -m pytest tests -q   # 892 passed / 22 skipped
+python3 scripts/check_page_registry.py
+python3 scripts/check_content_key_contract.py
+python3 scripts/check_published_route_manifest.py
+python3 scripts/check_openapi_inline_body_integrity.py
+node scripts/check-antd-design.mjs
+# -> 19 registry keys / 123+123 content keys / 33 routes / 75+68 OpenAPI bodies / 0 findings
+```
+
+### 仍未完成（不冒充完成）
+
+- 仓库改名 `rlcao-mutdb`（任务 #21）仍待执行；本文档暂沿用旧名，改名落地时统一替换包名、制品名与兼容别名。
+- 任务 #27–#30 的后台页面已完成代码、单测与静态壳浏览器门禁（登录 + 全部路由挂载）；真实部署下的登录态人工冒烟（含拖拽排序与发布动作）仍未在本机执行，不能宣称该部分已做浏览器验收。
+- 「本地裸跑 `pytest tests` 会因 `tests/a0` 找不到 `tools` 而 collection error」已修复：`pytest.ini` 设 `pythonpath = ../..`，且三个以子进程执行 `-m tools.a0.rl_collect_runtime_facts` 的用例改为 `cwd=仓库根`；`env -u PYTHONPATH` 全量实测 2968 passed。`apps/api/pyproject.toml` 中被子文件遮蔽的 `[tool.pytest.ini_options]` 死配置已删除。
 
 ## 当前状态（2026-10-17）
 
@@ -682,3 +866,130 @@ export SOYMUTDB_TEST_DATABASE_URL='postgresql+asyncpg://soymutdb@127.0.0.1:55432
                   tests/test_active_release_endpoint.py -q  # 27 passed，无需 DB
 # 全量在本机 OOM（EXIT=137 @ ~47%），需分片或降内存跑法，见「已知红灯」第 4 条
 ```
+
+## 2026-11-08：死代码/孤儿配置清理（任务 #5）
+
+**设置注册表审计**：`SystemSetting` 的全部运行时读取均经由 `registered_keys_for_section`（settings API）、`FeatureFlagService`（`feature.<key>`）、`PluginService`（`plugin.<key>.enabled`）或固定已注册键（`general.siteName`、`about.*`）；无未注册的 `get()` 键。`content.*` 反向守卫与 admin i18n 守卫保持全绿。
+
+**已删除的零消费者配置**（逐项全仓 grep 确认无代码/测试/流水线读取）：
+
+| 项 | 证据 | 处置 |
+|---|---|---|
+| `Settings.cache_ttl_seconds` | 无读取方；生效的是 `redis_cache_default_ttl`（`app/services/cache.py`） | 删除字段；`apps/api/.env.example` 的过期 `SOYMUTDB_CACHE_TTL_SECONDS=3600` 改为 `SOYMUTDB_REDIS_CACHE_DEFAULT_TTL=300` |
+| `Settings.publication_artifact_bucket` | `publication_targets.py` 只消费 `publication_local_root`/`github_pages_*`/`cloudflare_pages_*` | 删除字段；`deploy/.env.example`、`deploy/conda/env.example` 删除「待决策」注释块；`docs/ops/production-security-checklist.md` 删除过期声明 |
+| 孤儿 `# ---- GWAS` 与 `# ---- OpenTelemetry` 注释段 | 段内已无任何字段 | 删除注释；`.env.example` 同步删除 `SOYMUTDB_OTEL_*` 块 |
+
+历史研究/计划文档（`docs/research/2026-08-17-*`、`docs/superpowers/plans/2026-07-19-*`）中的同名锚点按规则保留，未改。
+
+**i18n 键审计（结论：不删，转交待建任务）**：`packages/i18n-core/src/locales/{en,zh}/common.json` 各 3309 键；动态前缀扫描（`t("a."+)`、模板字符串、`labelKey`/`i18nKey`）识别 23 个前缀后，仍有 920 键无任何字面或前缀引用。抽样证明这些不是「删除后无影响的腐化键」，而是**待建 UI 的前置目录**：`admin.importStudio.*` 零引用，因为 Import Studio 路由（`apps/admin/src/routes/imports/*`）正是任务 #6；`search.*`/`variants.*`/`genes.*` 缺口对应任务 #9/#10；`nav.*`/`home.*` 多数由 `apps/web/src/lib/site-content-react.tsx` 的 `SITE_CONTENT_DEFAULTS`（可编辑 `content.*`）承载。因此本轮**不删除**任何目录键，删除动作归属 #6/#9/#10/#16，避免把待建功能的文案目录当死代码清掉。
+
+**验证**（本轮实跑）：
+
+```bash
+python3 scripts/check_content_key_contract.py     # OK (72 literal portal get() keys, 125 registered content keys)
+node scripts/check-admin-i18n-keys.mjs            # OK (2297 literal keys, 23 dynamic prefixes, 3434 keys per catalog)
+node packages/i18n/check-locale-keys.mjs          # Locale key check passed
+cd apps/api && .venv/bin/ruff check app/core/config.py          # All checks passed
+cd apps/api && SOYMUTDB_DATABASE_URL=... .venv/bin/python -m pytest tests/test_config_security.py -q   # 27 passed
+```
+
+## 2026-11-08：内容键双向契约收敛（任务 #11）
+
+**守卫升级**：`scripts/check_content_key_contract.py` 不再只检查「portal 读了未注册的键」，而是双向门禁：注册键无消费者同样失败；动态读取族（`tool.${tool.key}.*`、`help.faq${i + 1}.*`、`site-header.tsx` 的 `labelKey`）从静态源列表展开，未知模板直接 fail-closed。`labelKey` 仅在真正调用 `get(...labelKey...)` 的文件中计为消费者，避免把纯 i18n 常量误报为内容键。
+
+**漂移修复**：
+
+- 真实接线缺陷 4 处：`search.location.colGbrowse` 误读为 `search.genes.colGbrowse`；BLAST 结果表的 `blast.hitProteinCoords`、表单的 `blast.eValue`/`blast.maxHits` 未走 `get()`。
+- 导航文案：`tools/index.tsx`、`tools/sequence.tsx` 面包屑与 `sra.tsx` 标题改走 `get("nav.home")`/`get("nav.sra")`。
+- 删除 11 个无消费者旧键：`tool.primer.{label,desc,image}`、`blast.input`、`blast.inputSequence`、`common.{loading,retry,submit,clear,reset,error}`；`SITE_CONTENT_DEFAULTS` 同步删除。
+- 补齐 9 个经 `get()` 读取但未注册的头部标签：`nav.comparative`/`nav.expression`/`nav.phenotypes`、`search.tabGenes`/`search.tabLocation`/`search.tabGbrowse`、`tools.{seqfetch,enrichment,exppattern}.title`。
+
+**回归测试**：`scripts/test_content_key_contract_guard.py` 重写为 10 个用例，覆盖双向漂移、动态族展开、`labelKey` 作用域与未建模模板 fail-closed。
+
+**验证**（本轮实跑）：
+
+```bash
+python3 scripts/check_content_key_contract.py                  # OK (123 consumers, 123 registered)
+python3 -m unittest scripts.test_content_key_contract_guard -v  # 10 passed
+cd apps/api && .venv/bin/python -m pytest tests/test_settings_registry.py \
+    tests/test_opt4_site_content_overrides.py -q                # 25 passed
+pnpm --filter @soymutdb/web exec vitest run <blast|sra|sequence|location>  # 4 files / 33 passed
+pnpm --filter @soymutdb/web typecheck                           # passed
+pnpm --filter @soymutdb/web exec eslint <changed files>         # passed
+```
+
+## 2026-11-08：前端性能测量与优化（任务 #12）
+
+**测量对象**：真实双变体产物 `apps/web/dist/external`，由 `apps/web/scripts/build-sites.ts` 完整构建（CSP finalize、service worker、release manifest 全链路），不是 dev server，也不冒充生产 RUM。
+
+| 指标 | 移动端 390×844 | 桌面 1440×900 | reduced-motion |
+|---|---|---|---|
+| FCP | 36 ms | 72 ms | 236 ms |
+| LCP | 1388 ms | 952 ms | 1388 ms |
+| CLS | 0.0059 | 0 | 0.0063 |
+| RAF / 秒（稳态） | 56 | 72 | 0 |
+| 横向溢出 | 无（390 = 390） | — | — |
+
+**产物预算**（gzip，真实文件）：
+
+- HTML 直接引用的首屏 JS：163.0 KB（5 个文件），目标 <700 KB。
+- 图表依赖闭包：331,914 B ≤ 378,880 B（370 KiB），余量 46,966 B；首屏闭包仅 4,553 B。
+- 字体：JetBrains Mono 400/500 的 woff2 + woff 合计约 100 KB，目标 <500 KB；实际浏览器只取 woff2，且 `font-display: swap`。
+- Umi 单 chunk 上限 600 KB：最大 `umi-entry` 240 KB；`ui` 197 KB、`charts` 232 KB，均通过。
+
+**测量驱动的修复 1：静态壳占位块造成 0.09 CLS**。`soymutdb-shell-fallback` 以普通块级元素紧随 `#root`，React 挂载后根节点从 0 扩展到整页，把占位块推离视口；同时 UA 默认 `body` margin 在应用样式到达前生效。三连冷启动稳定复现 CLS 0.2084（0.107 文档位移 + 0.0936 占位块 + 0.0076 局部列高）。修复：`injectPageHead` 在带壳回退的文档 head 注入内联样式——`html,body{margin:0;padding:0}`；占位块改为 `position:absolute`，并以 `body:has(#root > *)` 在应用挂载后隐藏。修复后 CLS 降至 0.0059/0/0.0063。内联样式受现有 `style-src 'unsafe-inline'` 允许，不改变脚本 CSP 哈希策略。
+
+**测量驱动的修复 2：reduced-motion 下轮播仍在走**。`FluidGradient` 在 `reduced` 时只画静态帧且不订阅 ticker（实测 RAF=0），但首页 `Carousel autoplay` 仍由 Ant 的 CSS/定时器每 5.2s 切换。现改为 `autoplay={!reduced}`，并在 e2e 中等待 5.6s 断言 `slick-active` 幻灯片文本不变（`slideStable: true`），避免仅凭 RAF 计数误判。
+
+**验证**（本轮实跑）：
+
+```bash
+cd apps/web && pnpm build:sites        # external + internal 均成功（含 chart-closure / CSP / SW）
+cd e2e && npx playwright test -c playwright-web-performance.config.ts  # 2 passed
+cd apps/web && npx vitest run           # 78 files / 661 passed
+cd apps/web && pnpm lint && npx tsc --noEmit                           # passed
+bash scripts/check-bundle-size.sh apps/web/dist/external/assets        # OK；闭包 331914B/378880B
+```
+
+复测报告：`e2e/test-results-web-performance/vitals-report.json`（生成物，不提交）。移动端 LCP 余量约 1.1 s，首屏 JS 余量约 537 KB；未发现需要继续拆包的证据，后续优化应以真实用户 RUM 或网络限速测量再启动。
+
+## 2026-11-09：多维表格后端/前端/验收（任务 #31–#33）
+
+**后端（#31）**：新增 `admin_data_views` 表（迁移 `apps/api/migrations/versions/0058_admin_data_views.py`，含 upgrade/downgrade 与 PostgreSQL 覆盖），以 release 为作用域保存「来源 + 视图类型 + 展示配置」。来源限定 `genes` / `variants` / `mutant_lines`，视图类型 `grid` / `kanban` / `gallery`；读取仍走既有公开发布记录查询（`searchGenes`、`searchVariants`、`listMutantLines`），多维表格只保存呈现配置，不引入第二份权威数据，也不复制内部标识。管理端 CRUD 位于 `/api/v1/admin/data-views`，鉴权与现有 admin 路由一致。
+
+**前端（#32）**：`packages/api-client` 重新生成 `openapi.d.ts` 并提供 data-view 客户端方法；`apps/admin` 新增 `/data-views` 页面（表格列表 + 新建/编辑对话框 + 视图类型切换）。来源字段与视图配置均按服务端枚举渲染，未知值 fail-closed，不推断。
+
+**验收（#33）— OpenAPI 固定点再钉（同日，随产物一起提交）**：
+
+- 契约快照与生成客户端：`openapi.json` blob `de867c3f…`，`openapi.d.ts` blob `a9ca8de9…`。此前会话已重钉 11 个守卫；本轮补齐三处仍停留在旧值的守卫及其回归套件：
+  - `check_openapi_auth_surface.py`：新增可选鉴权端点 `GET /site/navigation`、`GET /site/profile`（`get_optional_user` 会发布 `security`），非 admin protected floor 48→50，projection 170→178，requirement rows 268→276，两个 digest 同步更新。
+  - `test_openapi_behavior_contracts.py`：扩展键面 183→189 行、`x-idempotent` 182→188，`_EXTENSION_SURFACE_DIGEST` 重钉。
+  - `test_openapi_operation_id_floor.py`：路径数 238→244、生成成员数 268→276。
+- `scripts/test_openapi_auth_surface_floor.py` 的期望字面量同步为 50 / 178 / 276。
+- `scripts/check_openapi_baseline_sync.py` 语义门通过；历史门按设计只有在「固定点 + 产物同提交」时才可能变绿，本地未提交树无法通过，未做规避。
+
+**顺带修复的回归**：`scripts.test_ci_job_contracts` 的 i18n 门禁发现 `page-definition-renderer.test.tsx` 与 `login.test.tsx` 仍以每次渲染新建 `t` 的方式 mock `useTranslation`；两处改用共享的 `test/mocks.ts` `mockTranslation`（`stableT`），避免翻译函数身份在渲染间变化。
+
+**i18n 补齐**：`packages/i18n-core/src/locales/{en,zh}/common.json` 增加 admin 站点控制/页面构建器、公共站点错误页与 `pageBuilder`、`ui` 资源，以及 `common.refresh`。两份 JSON 均通过 `json.loads`，双语 key 集合一致；`check-locale-keys.mjs` 通过。
+
+**验证**（本轮实跑）：
+
+```bash
+python3 -m unittest scripts.test_ci_job_contracts                 # 106 OK
+for f in scripts/check_openapi_*.py scripts/test_openapi_*.py; do python3 "$f"; done
+# 除 check/test_openapi_baseline_sync 的历史门外全部 OK（13 个静态守卫 + 回归套件）
+python3 -m unittest discover -s scripts -p 'test_openapi_*.py'    # 36 OK
+apps/api/.venv/bin/python -m pytest scripts/test_locale_language_purity.py -q  # 5 passed
+cd packages/i18n-core && pnpm test                                # 11 passed
+node packages/i18n-core/check-locale-keys.mjs                     # passed
+PATH="$PWD/apps/api/.venv/bin:$PATH" bash scripts/smoke.sh --profile contracts
+# 1332 passed, 5 failed —— 5 个失败全部是未提交产物的历史门级联：
+#   test_openapi_baseline_sync.py::test_an_unchanged_literal_needs_no_artifact_move
+#   test_contracts_self_test_teeth.py 的 4 个 committed-tree/aux-total 用例
+pnpm --filter @soymutdb/web test                                   # 87 files / 716 passed
+pnpm --filter @soymutdb/admin test                                 # 36 files / 247 passed
+pnpm typecheck                                                     # 13 tasks OK
+pnpm lint                                                          # 12 tasks OK
+```
+
+本轮变更与固定点、重新生成的产物由同一次提交携带；历史门及其 5 个级联用例随该提交转绿。这不是代码缺陷，本地不提交就无法、也不应伪造该门通过。

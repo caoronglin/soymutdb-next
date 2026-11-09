@@ -135,16 +135,16 @@ _SEED_SQL: tuple[str, ...] = (
     INSERT INTO mutant_lines (name, species, cultivar, mutagen, description,
                               is_public, release_id, is_deleted, public_id)
     SELECT 'mutant-' || n, 'Glycine max',
-           'Williams' || (n %% 7),
-           (ARRAY['EMS','SA','gamma','Nt','DES'])[1 + (n %% 5)],
+           'Williams' || (n % 7),
+           (ARRAY['EMS','SA','gamma','Nt','DES'])[1 + (n % 5)],
            'Chemical induced mutant line ' || n
              || ' screened for drought tolerance in the field.',
            true, 1, false,
            'SM' || lpad(to_hex(n), 8, '0')
     FROM generate_series(1, 20000) n
-    """
+    """),
     # ---- publications ----------------------------------------------------
-    """
+    ("""
     INSERT INTO publications (title, authors, journal, year, doi, abstract)
     SELECT 'Soybean drought tolerance locus ' || n || ' identified by GWAS',
            'Zhang L; Wang H; Liu Q; et al.', 'The Plant Journal', 2010 + (n % 14),
@@ -165,8 +165,8 @@ _SEED_SQL: tuple[str, ...] = (
     JOIN (SELECT gene_pk, row_number() OVER (ORDER BY gene_pk) AS rn
           FROM genes WHERE assembly_id = 1) v4 USING (rn)
     WHERE v5.rn <= 40000
-    """
-    "ANALYZE"),
+    """),
+    "ANALYZE",
 )
 
 

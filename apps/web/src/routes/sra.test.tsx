@@ -57,6 +57,10 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: resolveKey }),
 }));
 
+vi.mock("../lib/site-content-react", () => ({
+  useSiteContent: () => ({ get: (_key: string, fallback: string) => fallback }),
+}));
+
 // The restored `sra_run` widget fetches /api/v1/widget/sra_run on mount. These
 // tests exercise the rest of the route, so without a stub each one would open a
 // real socket to localhost and depend on nothing listening there. The widget has

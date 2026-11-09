@@ -33,14 +33,21 @@ import {
   Col,
   Empty,
   Row,
+  Skeleton,
   Typography,
 } from "@/lib/antd";
 import { FluidGradient } from "../fluids/fluid-gradient";
 import { useAnimation } from "@/lib/animation-context";
 import DOMPurify from "dompurify";
-import { getFeaturedNews, getSiteHome, type NewsSummary } from "@soymutdb/api-client";
+import {
+  fetchHomepageStats,
+  getFeaturedNews,
+  getSiteHome,
+  type NewsSummary,
+} from "@soymutdb/api-client";
 import { formatDate } from "../../lib/format";
 import { SITE_VARIANT } from "../../lib/site-variant";
+import { useReleaseId } from "../../lib/release-scope";
 import { NEWS_FEATURED_KEY } from "../news-carousel";
 import { pickNewsTitle } from "../news-card";
 
@@ -95,10 +102,10 @@ interface ToolEntry {
 // Design was retired from this surface at the operator's request; its route
 // `/search/primer` stays reachable directly.
 const TOOL_ENTRIES: ToolEntry[] = [
-  { key: "gene", labelKey: "home.toolGeneLabel", label: "基因 ID 检索", descKey: "home.toolGeneDesc", desc: "按基因号查询突变", route: "/search/genes", icon: <IdcardOutlined /> },
-  { key: "location", labelKey: "home.toolLocationLabel", label: "物理位置检索", descKey: "home.toolLocationDesc", desc: "按染色体与位点查询", route: "/search/location", icon: <EnvironmentOutlined /> },
-  { key: "gbrowse", labelKey: "home.toolGbrowseLabel", label: "JBrowse 2", descKey: "home.toolGbrowseDesc", desc: "在 JBrowse 2 中浏览基因组", route: "/search/gbrowse", icon: <GlobalOutlined /> },
-  { key: "blast", labelKey: "home.toolBlastLabel", label: "BLAST 比对", descKey: "home.toolBlastDesc", desc: "序列比对检索同源", route: "/blast", icon: <ThunderboltOutlined /> },
+  { key: "gene", labelKey: "home.toolGeneLabel", label: "基因 ID 检索", descKey: "home.toolGeneDescription", desc: "按基因号查询突变", route: "/search/genes", icon: <IdcardOutlined /> },
+  { key: "location", labelKey: "home.toolLocationLabel", label: "物理位置检索", descKey: "home.toolLocationDescription", desc: "按染色体与位点查询", route: "/search/location", icon: <EnvironmentOutlined /> },
+  { key: "gbrowse", labelKey: "home.toolGbrowseLabel", label: "JBrowse 2", descKey: "home.toolGbrowseDescription", desc: "在 JBrowse 2 中浏览基因组", route: "/search/gbrowse", icon: <GlobalOutlined /> },
+  { key: "blast", labelKey: "home.toolBlastLabel", label: "BLAST 比对", descKey: "home.toolBlastDescription", desc: "序列比对检索同源", route: "/blast", icon: <ThunderboltOutlined /> },
 ];
 
 /**
@@ -196,6 +203,110 @@ function HomeWelcomeBlock() {
   );
 }
 
+/**
+ * DatabaseOverview — the release-scoped headline counts.
+ *
+ * The key carries the pinned release and the site variant, so switching a
+ * release cannot leave counts from the previous one on screen: the release
+ * scope invalidates `homepage-stats` in place. A failed read is not fatal —
+ * the counts are supporting context, so the strip shows a retry instead of
+ * taking the page down.
+ */
+function DatabaseOverview() {
+  const { t, i18n } = useTranslation();
+  const releaseId = useReleaseId();
+  const query = useQuery({
+    queryKey: ["homepage-stats", releaseId, SITE_VARIANT],
+    queryFn: fetchHomepageStats,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const format = (value: number) =>
+    new Intl.NumberFormat(i18n.language || undefined).format(value);
+
+  const tiles = query.data
+    ? [
+        { key: "genes", label: t("home.database.genes"), value: query.data.gene_count },
+        { key: "variants", label: t("home.database.variants"), value: query.data.total_variants },
+        { key: "mutants", label: t("home.database.mutants"), value: query.data.mutant_line_count },
+        { key: "assemblies", label: t("home.assemblies"), value: query.data.assembly_count },
+      ]
+    : [];
+
+  return (
+    <section className="border-b border-border/60 bg-muted/30" data-testid="home-database-overview">
+      <div className="container-prose py-10 md:py-12">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <Title level={3} style={{ margin: 0, fontWeight: 700 }}>
+              {t("home.databaseTitle")}
+            </Title>
+            <Paragraph className="mb-0 mt-1 max-w-2xl text-muted-foreground">
+              {t("home.databaseSubtitle")}
+            </Paragraph>
+          </div>
+          <Link
+            to="/search"
+            className="home-section-link shrink-0 text-primary"
+            style={{ fontWeight: 500 }}
+          >
+            {t("home.databaseSearch")} →
+          </Link>
+        </div>
+
+        {query.isError ? (
+          <Alert
+            type="warning"
+            showIcon
+            title={t("home.statsUnavailable")}
+            action={
+              <Button size="small" onClick={() => void query.refetch()}>
+                {t("common.retry")}
+              </Button>
+            }
+          />
+        ) : (
+          <Row gutter={[16, 16]}>
+            {tiles.length === 0
+              ? [0, 1, 2, 3].map((slot) => (
+                  <Col key={slot} xs={12} md={6}>
+                    <Card
+                      className="rounded-xl border border-border bg-card shadow-sm"
+                      styles={{ body: { padding: 20 } }}
+                    >
+                      <Skeleton
+                        active
+                        paragraph={{ rows: 1, width: "60%" }}
+                        title={{ width: "40%" }}
+                      />
+                    </Card>
+                  </Col>
+                ))
+              : tiles.map((tile) => (
+                  <Col key={tile.key} xs={12} md={6}>
+                    <Card
+                      className="rounded-xl border border-border bg-card shadow-sm"
+                      styles={{ body: { padding: 20 } }}
+                    >
+                      <Text className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        {tile.label}
+                      </Text>
+                      <div
+                        data-testid={`home-stat-${tile.key}`}
+                        className="mt-2 font-display text-2xl font-semibold tabular-nums text-foreground"
+                      >
+                        {format(tile.value)}
+                      </div>
+                    </Card>
+                  </Col>
+                ))}
+          </Row>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function AntdHome() {
   const { t } = useTranslation();
   const { get } = useSiteContent();
@@ -237,6 +348,9 @@ export function AntdHome() {
         </div>
       </section>
 
+      {/* Release-scoped database overview counts. */}
+      <DatabaseOverview />
+
       {/* ---------------------------------------------------------------- */}
       {/* TOP: 最新动态 (left) + 滚动照片 carousel (right).                   */}
       {/* ---------------------------------------------------------------- */}
@@ -260,7 +374,7 @@ export function AntdHome() {
           {/* Photo carousel (滚动照片) — 3-6 brand slides. */}
           <Col xs={24} lg={15} className="flex flex-col">
             <div className="flex-1">
-              <Carousel autoplay autoplaySpeed={5200} effect="fade" className="h-full">
+              <Carousel autoplay={!reduced} autoplaySpeed={5200} effect="fade" className="h-full">
                 {HERO_SLIDES.map((slide, i) => (
                   <div key={slide.titleKey} className="h-full">
                     <FluidGradient

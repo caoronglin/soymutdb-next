@@ -39,6 +39,7 @@
     "verify:artifact-e2e": "bash scripts/verify-artifact-e2e.sh"
   },
   "devDependencies": {
+    "@ant-design/cli": "catalog:",
     "@eslint/js": "^10.0.1",
     "eslint": "^10.13.0",
     "eslint-plugin-react-hooks": "^7.1.1",

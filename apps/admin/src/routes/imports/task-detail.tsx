@@ -65,10 +65,16 @@ export function ImportTaskDetailPage({ taskId }: { taskId: number }) {
           bordered
           dataSource={task}
           columns={[
-            { title: "Type", dataIndex: "type" },
-            { title: "Status", dataIndex: "status" },
             {
-              title: "Progress",
+              title: t("admin.importDetail.type", { defaultValue: "Type" }),
+              dataIndex: "type",
+            },
+            {
+              title: t("admin.importDetail.status", { defaultValue: "Status" }),
+              dataIndex: "status",
+            },
+            {
+              title: t("admin.importDetail.progress", { defaultValue: "Progress" }),
               key: "progress",
               render: (_value, row) => (
                 <span>
@@ -77,16 +83,23 @@ export function ImportTaskDetailPage({ taskId }: { taskId: number }) {
                 </span>
               ),
             },
-            { title: "Submitted", dataIndex: "submitted_at" },
             {
-              title: "Completed",
-              key: "completed_at",
-              render: (_value, row) => row.completed_at ?? "Not completed",
+              title: t("admin.importDetail.submittedAt", { defaultValue: "Submitted" }),
+              dataIndex: "submitted_at",
             },
             {
-              title: "Error",
+              title: t("admin.importDetail.completedAt", { defaultValue: "Completed" }),
+              key: "completed_at",
+              render: (_value, row) =>
+                row.completed_at ??
+                t("admin.importDetail.notCompleted", { defaultValue: "Not completed" }),
+            },
+            {
+              title: t("admin.importDetail.errorMessage", { defaultValue: "Error" }),
               key: "error_message",
-              render: (_value, row) => row.error_message ?? "No error reported.",
+              render: (_value, row) =>
+                row.error_message ??
+                t("admin.importDetail.noError", { defaultValue: "No error reported." }),
             },
           ]}
         />

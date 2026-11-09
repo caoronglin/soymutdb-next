@@ -137,6 +137,7 @@ export function MediaPicker({
             allowClear
             prefix={<SearchOutlined />}
             value={search}
+            aria-label={t("admin.media.picker.searchPlaceholder")}
             placeholder={t("admin.media.picker.searchPlaceholder")}
             onChange={(event) => {
               setSearch(event.target.value);

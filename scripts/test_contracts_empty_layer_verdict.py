@@ -227,6 +227,13 @@ class EmptyPlanIsRedOnBothEntryPoints(unittest.TestCase):
             env["SOYMUTDB_CI_PYTHON_VERSION"] = (
                 f"{sys.version_info.major}.{sys.version_info.minor}"
             )
+            # ci-job-steps.sh resolves ``python3`` from PATH and enforces the
+            # pinned version, so the harness interpreter (used by this test)
+            # must come first; a workstation's system python3 would otherwise
+            # fail the pin before the layer ever runs.
+            env["PATH"] = os.pathsep.join(
+                [str(Path(sys.executable).parent), env.get("PATH", "")]
+            )
             try:
                 result = subprocess.run(
                     ["bash", str(CI_STEPS), "run", "smoke-contracts"],

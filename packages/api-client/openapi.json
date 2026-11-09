@@ -2999,7 +2999,7 @@
             }
           },
           "422": {
-            "description": "Validation Error",
+            "description": "Validation Error. The path parameter is not a well-formed export identifier; the response carries the unified envelope with field-level ``errors``.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6415,7 +6415,7 @@
           "tracks"
         ],
         "summary": "List Tracks",
-        "description": "List tracks (optionally filtered by assembly / category).",
+        "description": "List the selected release's tracks (optionally filtered by assembly/category).",
         "operationId": "list_tracks_api_v1_tracks_get",
         "security": [
           {
@@ -6453,6 +6453,40 @@
                 }
               ],
               "title": "Category Id"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -6648,7 +6682,7 @@
           "tracks"
         ],
         "summary": "Get Track",
-        "description": "Get track detail.",
+        "description": "Get track detail scoped to the selected release.",
         "operationId": "get_track_api_v1_tracks__track_id__get",
         "security": [
           {
@@ -6663,6 +6697,40 @@
             "schema": {
               "type": "integer",
               "title": "Track Id"
+            }
+          },
+          {
+            "name": "release_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Release Id"
+            }
+          },
+          {
+            "name": "X-SoyMutDB-Release",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "X-Soymutdb-Release"
             }
           }
         ],
@@ -8753,14 +8821,14 @@
             }
           },
           "422": {
-            "description": "Validation Error",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
-            }
+            },
+            "description": "Unprocessable Content"
           },
           "500": {
             "description": "Internal Server Error",
@@ -13323,6 +13391,75 @@
         }
       }
     },
+    "/api/v1/admin/page-builder/pages/{page_id}/publish": {
+      "post": {
+        "tags": [
+          "admin-page-builder"
+        ],
+        "summary": "Publish Now",
+        "description": "Publish a version immediately without the asynchronous task round-trip.",
+        "operationId": "publish_now_api_v1_admin_page_builder_pages__page_id__publish_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Page Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishRequestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/admin/plugins": {
       "get": {
         "tags": [
@@ -16751,6 +16888,294 @@
         "x-idempotent": true
       }
     },
+    "/api/v1/admin/data-views/sources": {
+      "get": {
+        "tags": [
+          "admin-data-views"
+        ],
+        "summary": "List Data View Sources",
+        "operationId": "list_data_view_sources_api_v1_admin_data_views_sources_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataViewSourceListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/admin/data-views": {
+      "get": {
+        "tags": [
+          "admin-data-views"
+        ],
+        "summary": "List Data Views",
+        "operationId": "list_data_views_api_v1_admin_data_views_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "source",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "genes",
+                    "variants",
+                    "mutant_lines"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDataViewListResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      },
+      "post": {
+        "tags": [
+          "admin-data-views"
+        ],
+        "summary": "Create Data View",
+        "operationId": "create_data_view_api_v1_admin_data_views_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminDataViewCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDataViewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/data-views/{view_id}": {
+      "put": {
+        "tags": [
+          "admin-data-views"
+        ],
+        "summary": "Update Data View",
+        "operationId": "update_data_view_api_v1_admin_data_views__view_id__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "view_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "View Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminDataViewUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDataViewResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      },
+      "delete": {
+        "tags": [
+          "admin-data-views"
+        ],
+        "summary": "Delete Data View",
+        "operationId": "delete_data_view_api_v1_admin_data_views__view_id__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "view_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "View Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
     "/api/v1/admin/uploads/presign": {
       "post": {
         "tags": [
@@ -18657,6 +19082,124 @@
         "x-idempotent": true
       }
     },
+    "/api/v1/site/navigation": {
+      "get": {
+        "tags": [
+          "site"
+        ],
+        "summary": "Get Site Navigation",
+        "description": "Return the editable primary navigation, filtered by feature flags.",
+        "operationId": "get_site_navigation_api_v1_site_navigation_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SiteVariant",
+              "default": "external"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteNavigationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
+    "/api/v1/site/profile": {
+      "get": {
+        "tags": [
+          "site"
+        ],
+        "summary": "Get Site Profile",
+        "description": "Return the configured database kind and public feature availability.",
+        "operationId": "get_site_profile_api_v1_site_profile_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/SiteVariant",
+              "default": "external"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteProfileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "x-idempotent": true
+      }
+    },
     "/api/v1/site/about": {
       "get": {
         "tags": [
@@ -20117,6 +20660,475 @@
         "title": "AdminDashboardStats",
         "description": "System overview numbers for the admin dashboard.\n\nSerialised with camelCase keys (``totalUsers``, ``activeReleases``, \u2026)\nto match the admin frontend contract."
       },
+      "AdminDataViewCreate": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "genes",
+              "variants",
+              "mutant_lines"
+            ],
+            "title": "Source"
+          },
+          "view_type": {
+            "type": "string",
+            "enum": [
+              "grid",
+              "kanban",
+              "gallery"
+            ],
+            "default": "grid",
+            "title": "View Type"
+          },
+          "visible_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 40,
+            "minItems": 1,
+            "title": "Visible Fields"
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Filters"
+          },
+          "sort_field": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sort Field"
+          },
+          "sort_dir": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "asc",
+                  "desc"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sort Dir"
+          },
+          "group_field": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Group Field"
+          },
+          "title_field": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title Field"
+          },
+          "page_size": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 5.0,
+            "default": 25,
+            "title": "Page Size"
+          },
+          "is_default": {
+            "type": "boolean",
+            "default": false,
+            "title": "Is Default"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "source",
+          "visible_fields"
+        ],
+        "title": "AdminDataViewCreate"
+      },
+      "AdminDataViewListResponse": {
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminDataViewResponse"
+            },
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "AdminDataViewListResponse"
+      },
+      "AdminDataViewResponse": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "genes",
+              "variants",
+              "mutant_lines"
+            ],
+            "title": "Source"
+          },
+          "view_type": {
+            "type": "string",
+            "enum": [
+              "grid",
+              "kanban",
+              "gallery"
+            ],
+            "default": "grid",
+            "title": "View Type"
+          },
+          "visible_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 40,
+            "minItems": 1,
+            "title": "Visible Fields"
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Filters"
+          },
+          "sort_field": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sort Field"
+          },
+          "sort_dir": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "asc",
+                  "desc"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sort Dir"
+          },
+          "group_field": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Group Field"
+          },
+          "title_field": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title Field"
+          },
+          "page_size": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 5.0,
+            "default": 25,
+            "title": "Page Size"
+          },
+          "is_default": {
+            "type": "boolean",
+            "default": false,
+            "title": "Is Default"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Notes"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "name",
+          "source",
+          "visible_fields",
+          "id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AdminDataViewResponse"
+      },
+      "AdminDataViewUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 128,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Name"
+          },
+          "view_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "grid",
+                  "kanban",
+                  "gallery"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "View Type"
+          },
+          "visible_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 40,
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Visible Fields"
+          },
+          "filters": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Filters"
+          },
+          "sort_field": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sort Field"
+          },
+          "sort_dir": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "asc",
+                  "desc"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sort Dir"
+          },
+          "group_field": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Group Field"
+          },
+          "title_field": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 64
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Title Field"
+          },
+          "page_size": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 200.0,
+                "minimum": 5.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page Size"
+          },
+          "is_default": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Is Default"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Notes"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "AdminDataViewUpdate",
+        "description": "Partial update. ``source`` is immutable, so the vocabulary stays fixed."
+      },
       "AdminFeaturesResponse": {
         "properties": {
           "version": {
@@ -21326,19 +22338,28 @@
           "reason": {
             "anyOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/AssemblyMetricReason"
               },
               {
                 "type": "null"
               }
             ],
-            "default": null,
-            "title": "Reason"
+            "default": null
           }
         },
         "type": "object",
         "title": "AssemblyMetric",
         "description": "One assembly-level statistic, with the reason it is unknown.\n\n``value`` is ``None`` whenever the number could not be derived from the\nauthoritative tables, and a machine-readable ``reason`` then says why. It is\nnever defaulted to ``0``: an assembly whose annotation was never imported and\nan assembly that genuinely has no genes are different facts, and once both\nare printed as zero nobody can tell them apart. The two fields are mutually\nexclusive on purpose -- a number with a reason (\"we did not count it, but\nhere it is\") would be a contradiction."
+      },
+      "AssemblyMetricReason": {
+        "type": "string",
+        "enum": [
+          "no_genes",
+          "no_chromosomes",
+          "no_linked_downloads"
+        ],
+        "title": "AssemblyMetricReason",
+        "description": "Why an assembly statistic has no value.\n\nA closed set. The reason reaches the reader as translated text, so it has to\nbe a code the client can look up; a sentence written by the service would be\nshown untranslated and cannot be covered by a locale check. Keeping the set\nclosed on the server is also what stops a new free-text reason from being\nintroduced without a client-side translation."
       },
       "AssemblyResponse": {
         "properties": {
@@ -23339,6 +24360,65 @@
           "column_name"
         ],
         "title": "DataPatchItem"
+      },
+      "DataViewSourceInfo": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "genes",
+              "variants",
+              "mutant_lines"
+            ],
+            "title": "Source"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "Fields"
+          },
+          "filter_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "Filter Fields"
+          },
+          "default_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "Default Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source",
+          "fields",
+          "filter_fields",
+          "default_fields"
+        ],
+        "title": "DataViewSourceInfo",
+        "description": "The vocabulary the console uses to build view editors."
+      },
+      "DataViewSourceListResponse": {
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DataViewSourceInfo"
+            },
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "DataViewSourceListResponse"
       },
       "DatabaseCapabilitiesResponse": {
         "properties": {
@@ -27113,6 +28193,128 @@
         },
         "type": "object",
         "title": "HTTPValidationError"
+      },
+      "HeaderNavigationGroup": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "title": "Id"
+          },
+          "title_en": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title En"
+          },
+          "title_zh": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Title Zh"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Order"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HeaderNavigationLink"
+            },
+            "maxItems": 48,
+            "title": "Links"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "title_en",
+          "title_zh",
+          "enabled",
+          "order",
+          "links"
+        ],
+        "title": "HeaderNavigationGroup",
+        "description": "A bilingual group rendered as one dropdown (or direct link)."
+      },
+      "HeaderNavigationLink": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "title": "Id"
+          },
+          "label_en": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label En"
+          },
+          "label_zh": {
+            "type": "string",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label Zh"
+          },
+          "target": {
+            "type": "string",
+            "enum": [
+              "internal",
+              "external"
+            ],
+            "title": "Target"
+          },
+          "href": {
+            "type": "string",
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Href"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "order": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Order"
+          },
+          "feature": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_.-]*$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Feature"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "id",
+          "label_en",
+          "label_zh",
+          "target",
+          "href",
+          "enabled",
+          "order"
+        ],
+        "title": "HeaderNavigationLink",
+        "description": "One editable, bilingual primary-navigation destination."
       },
       "HomeContentResponse": {
         "properties": {
@@ -35731,6 +36933,66 @@
         "title": "SiteBrandValues",
         "description": "Bilingual display names and a verified media-library icon URL."
       },
+      "SiteNavigationResponse": {
+        "properties": {
+          "variant": {
+            "type": "string",
+            "enum": [
+              "external",
+              "internal"
+            ],
+            "title": "Variant"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HeaderNavigationGroup"
+            },
+            "title": "Groups"
+          }
+        },
+        "type": "object",
+        "required": [
+          "variant"
+        ],
+        "title": "SiteNavigationResponse",
+        "description": "Feature-gated primary navigation for one explicit site variant."
+      },
+      "SiteProfileResponse": {
+        "properties": {
+          "variant": {
+            "type": "string",
+            "enum": [
+              "external",
+              "internal"
+            ],
+            "title": "Variant"
+          },
+          "database_kind": {
+            "type": "string",
+            "enum": [
+              "genome",
+              "gene_ontology",
+              "transcription_factor"
+            ],
+            "title": "Database Kind"
+          },
+          "features": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "title": "Features"
+          }
+        },
+        "type": "object",
+        "required": [
+          "variant",
+          "database_kind"
+        ],
+        "title": "SiteProfileResponse",
+        "description": "Database identity and public feature availability for the web client."
+      },
       "SiteVariant": {
         "type": "string",
         "enum": [
@@ -39757,6 +41019,10 @@
     {
       "name": "admin-content",
       "description": "Administrator content pages and page-builder migration."
+    },
+    {
+      "name": "admin-data-views",
+      "description": "Administrator saved multi-view presentations over public data."
     },
     {
       "name": "admin-features",

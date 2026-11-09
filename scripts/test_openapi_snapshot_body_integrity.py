@@ -108,11 +108,17 @@ BODY = re.compile(r'"application/json": components\["schemas"\]\["(\w+)"\];')
 # say why. (BlastSubmitRequest, ReleaseActionRequest and ImportInspectionRequest
 # each appear twice among the request bodies.)
 
+# Re-pinned 2026-11-09 for the site-control + multi-view slice. Three GET /site/*
+# operations and five /admin/data-views operations add AdminDataViewListResponse,
+# AdminDataViewResponse, DataViewSourceListResponse, SiteNavigationResponse and
+# SiteProfileResponse, and grow the shared error/publish envelopes.
 _RESPONSE_BODY_BASELINE = {
     "AboutContentResponse": 1,
     "ActiveReleaseResponse": 1,
     "AdminDashboardSeries": 1,
     "AdminDashboardStats": 1,
+    "AdminDataViewListResponse": 1,
+    "AdminDataViewResponse": 2,
     "AdminFeaturesResponse": 2,
     "AdminPluginResponse": 2,
     "AdminPluginsResponse": 1,
@@ -137,10 +143,11 @@ _RESPONSE_BODY_BASELINE = {
     "ChromosomeDensity": 1,
     "ContentVersionResponse": 1,
     "DashboardStats": 1,
+    "DataViewSourceListResponse": 1,
     "DatasetVersionResponse": 1,
     "DeletedNewsListResponse": 1,
     "DiversityResponse": 1,
-    "ErrorResponse": 272,
+    "ErrorResponse": 280,
     "ExpPatternResponse": 1,
     "ExportDownloadResponse": 1,
     "ExportManifestResponse": 1,
@@ -201,7 +208,7 @@ _RESPONSE_BODY_BASELINE = {
     "PublicationListResponse": 1,
     "PublicationManifestResponse": 1,
     "PublicationTargetListResponse": 1,
-    "PublishRequestResponse": 1,
+    "PublishRequestResponse": 2,
     "RegionStructureResponse": 1,
     "RegistryResponse": 1,
     "ReleaseResponse": 1,
@@ -221,6 +228,8 @@ _RESPONSE_BODY_BASELINE = {
     "SettingsValidateResponse": 1,
     "SignedUrlResponse": 2,
     "SiteBrandResponse": 1,
+    "SiteNavigationResponse": 1,
+    "SiteProfileResponse": 1,
     "SpeciesInstanceHealthResponse": 1,
     "SpeciesInstanceListResponse": 1,
     "SpeciesInstanceResponse": 2,
@@ -234,7 +243,7 @@ _RESPONSE_BODY_BASELINE = {
     "UnreadCountResponse": 1,
     "UploadPresignResponse": 1,
     "UserResponse": 2,
-    "ValidationErrorResponse": 268,
+    "ValidationErrorResponse": 276,
     "VariantDetail": 1,
     "VariantListResponse": 1,
     "VariantTypeDistribution": 1,
@@ -247,7 +256,12 @@ _RESPONSE_BODY_BASELINE = {
     "app__schemas__seed_request__SeedRequestResponse": 2,
 }
 
+# Re-pinned 2026-11-09 with the response baseline above: the create/update
+# /admin/data-views operations carry AdminDataViewCreate/AdminDataViewUpdate, and
+# PublishRequest is now posted by two operations.
 _REQUEST_BODY_BASELINE = {
+    "AdminDataViewCreate": 1,
+    "AdminDataViewUpdate": 1,
     "AlleleFreqRequest": 1,
     "AnalysesSubmitRequest": 1,
     "AnalysesUploadRequest": 1,
@@ -299,7 +313,7 @@ _REQUEST_BODY_BASELINE = {
     "PublicationRequest": 1,
     "PublicationRollbackRequest": 1,
     "PublicationUpdate": 1,
-    "PublishRequest": 1,
+    "PublishRequest": 2,
     "ReleaseActionRequest": 2,
     "ReleaseCreateRequest": 1,
     "ReleaseReadyRequest": 1,
@@ -334,7 +348,7 @@ _REQUEST_BODY_BASELINE = {
 
 # A loud aggregate pin, redundant with the two baselines above but a one-line
 # "806 not 807" is a better first signal than a 218-component diff.
-_CLIENT_BODY_TOTAL = 807
+_CLIENT_BODY_TOTAL = 833
 
 # What the three distribution literals are a count *of*: the committed artifact
 # blobs they were counted from, by object id. Without this a regenerate moves
@@ -343,8 +357,8 @@ _CLIENT_BODY_TOTAL = 807
 # these from the artifacts would make the pin self-referential again, which is
 # the whole failure this file replaced.
 _PINNED_ARTIFACTS = {
-    "snapshot_blob": "943b9463d9d180d4483936dfa7c81c5afb6e4753",
-    "generated_blob": "5f2c4a407d96083abdac8ac67e44a40f3ed68a89",
+    "snapshot_blob": "de867c3fb3f84c5702db0da58534ea9ff3bec5fb",
+    "generated_blob": "a9ca8de9798fc005249803de132b6e84031ce1d3",
 }
 
 # Strict topology pin. The two baselines above cannot see a permutation of two
@@ -352,7 +366,7 @@ _PINNED_ARTIFACTS = {
 # status|requestBody, component) tuples can. Independent of both artifacts, as
 # literal as the baselines. Regenerate with _body_pair_digest() on an
 # intentionally changed contract and update in the same commit, with a reason.
-_BODY_PAIR_DIGEST = "f3382283236a34ddf96d10ce984a36bc6266f87d2c63de13aa066f54611a3ecc"
+_BODY_PAIR_DIGEST = "2c2bb8b8befc9224d975db1afff40b4529263dcefb3fde16e4bd623ae4fa1e24"
 
 # The same rows, pinned by the *other* half of the contract: the component name
 # each published body points at. ``_RESPONSE_BODY_BASELINE`` /

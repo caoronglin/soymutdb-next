@@ -102,6 +102,15 @@ interface UseVariantExportResult {
   exportStatus: string | undefined;
   /** Why the export failed, when the server said so. */
   exportErrorMessage: string | null | undefined;
+  /**
+   * True when the export record itself could not be read.
+   *
+   * The lookup stops for every reason — a transient failure, an expired link,
+   * or an export that belongs to another account (reported as missing) — so
+   * the state can no longer be trusted. The portal says so instead of showing
+   * an endless "preparing" line for a record that will never resolve.
+   */
+  statusUnavailable: boolean;
   /** Why the download link could not be fetched. */
   downloadError: string | undefined;
   /**
@@ -275,6 +284,7 @@ export function useVariantExport({
     exportId,
     exportStatus,
     exportErrorMessage: exportStatusQuery.data?.error_message,
+    statusUnavailable: Boolean(exportId) && exportStatusQuery.isError,
     downloadError,
     pollExpired,
     requestExport,

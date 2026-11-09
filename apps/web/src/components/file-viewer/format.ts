@@ -8,7 +8,7 @@
  * - fasta:     specialized sequence viewer
  * - pdf:       pdfjs-dist (lazy chunk)
  * - docx:      mammoth (lazy chunk)
- * - markdown:  marked + DOMPurify (lazy chunk)
+ * - markdown:  @ant-design/x-markdown (lazy chunk, DOMPurify inside)
  * - code:      highlight.js (lazy chunk)
  * - text:      plain text fallback
  */

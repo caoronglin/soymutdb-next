@@ -14,6 +14,7 @@ EXPECTED_TASKS = {
     "soymutdb_worker.tasks.blast_index_tasks.check_blast_index_health",
     "soymutdb_worker.tasks.cleanup.cleanup_expired_blast_jobs",
     "soymutdb_worker.tasks.cleanup.cleanup_temp_files",
+    "soymutdb_worker.tasks.comparative.build_artifact",
     "soymutdb_worker.tasks.email.send_seed_request_email",
     "soymutdb_worker.tasks.export.cleanup_old_exports",
     "soymutdb_worker.tasks.export.export_variants",

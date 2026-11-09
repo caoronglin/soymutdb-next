@@ -410,6 +410,7 @@ export default function TableViewsPage() {
           <Switch
             size="small"
             checked={row.is_enabled}
+            aria-label={t("admin.tableViews.toggleInstance", { defaultValue: "Enable {{name}}", name: row.name })}
             loading={instanceToggleMutation.isPending}
             onChange={(checked) => {
               setActionError(null);
@@ -469,12 +470,14 @@ export default function TableViewsPage() {
             <Space>
               <Select
                 value={kind}
+                aria-label={t("admin.tableViews.tableLabel")}
                 style={{ width: 220 }}
                 options={TABLE_KINDS.map((value) => ({ value, label: t(KIND_LABEL_KEYS[value]) }))}
                 onChange={(value: TableKind) => setKind(value)}
               />
               <Select
                 value={species}
+                aria-label={t("admin.tableViews.species")}
                 style={{ width: 160 }}
                 options={[
                   { value: "Glycine max", label: "Glycine max" },
@@ -484,6 +487,7 @@ export default function TableViewsPage() {
               />
               <Select
                 value={siteVariant}
+                aria-label={t("admin.tableViews.siteVariant", { defaultValue: "Site variant" })}
                 style={{ width: 140 }}
                 options={[
                   { value: "external", label: "external" },
@@ -615,12 +619,14 @@ export default function TableViewsPage() {
               <Space>
                 <Switch
                   checked={draftActions.jbrowse}
+                  aria-label="JBrowse 2"
                   checkedChildren="JBrowse 2"
                   unCheckedChildren="JBrowse 2"
                   onChange={(checked) => setDraftActions((previous) => ({ ...previous, jbrowse: checked }))}
                 />
                 <Switch
                   checked={draftActions.genome_preview}
+                  aria-label={t("admin.tableViews.genePreview")}
                   checkedChildren={t("admin.tableViews.genePreview")}
                   unCheckedChildren={t("admin.tableViews.genePreview")}
                   onChange={(checked) =>
@@ -708,7 +714,7 @@ export default function TableViewsPage() {
                 <Input placeholder="https://portal.example.org" />
               </Form.Item>
               <Form.Item name="is_local" label={t("admin.tableViews.instanceLocal")} valuePropName="checked">
-                <Switch />
+                <Switch aria-label={t("admin.tableViews.instanceLocal")} />
               </Form.Item>
               <Form.Item label=" ">
                 <Button type="primary" htmlType="submit" icon={<PlusOutlined />} loading={instanceMutation.isPending}>

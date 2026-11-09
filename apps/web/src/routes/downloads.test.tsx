@@ -14,6 +14,8 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const runtime = vi.hoisted(() => ({
   files: [] as unknown[],
+  filesError: null as Error | null,
+  refetch: vi.fn(),
   assemblies: [
     { id: 1, name: "Wm82.a4.v1", version: "v4", is_default: true },
     { id: 2, name: "Wm82.a2.v1", version: "v5", is_default: false },
@@ -33,6 +35,9 @@ vi.mock("../lib/release-scope", () => ({
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: unknown) => ({ options, useSearch: () => ({}) }),
   useNavigate: () => vi.fn(),
+  Link: ({ to, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { to: string }) => (
+    <a href={to} {...props}>{children}</a>
+  ),
 }));
 vi.mock("react-i18next", () => {
   const translation = { t: (key: string) => key };
@@ -63,7 +68,13 @@ vi.mock("@tanstack/react-query", () => ({
     if (options.queryKey.includes("export")) {
       return { data: options.enabled ? { status: "pending" } : undefined };
     }
-    return { data: runtime.files, isLoading: false, isError: false };
+    return {
+      data: runtime.filesError ? undefined : runtime.files,
+      isLoading: false,
+      isError: Boolean(runtime.filesError),
+      error: runtime.filesError,
+      refetch: runtime.refetch,
+    };
   },
 }));
 vi.mock("@soymutdb/api-client", () => ({
@@ -76,6 +87,26 @@ vi.mock("@soymutdb/api-client", () => ({
   submitExportQuery: async () => ({ export_id: "query-export-1", status: "pending", message: "submitted", format: "tsv", applied_filters: {} }),
 }));
 vi.mock("@/lib/antd", () => ({
+  Alert: ({
+    title,
+    description,
+    action,
+    "data-testid": testId,
+  }: {
+    title?: React.ReactNode;
+    description?: React.ReactNode;
+    action?: React.ReactNode;
+    "data-testid"?: string;
+  }) => (
+    <div role="alert" data-testid={testId}>
+      {title}
+      {description}
+      {action}
+    </div>
+  ),
+  Empty: ({ description, children }: { description?: React.ReactNode; children?: React.ReactNode }) => (
+    <div>{description}{children}</div>
+  ),
   Button: ({ children, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) => (
     <button {...props}>{children}</button>
   ),
@@ -142,6 +173,7 @@ const Page = (Route as unknown as { options: { component: React.ComponentType } 
 beforeEach(() => {
   vi.clearAllMocks();
   runtime.files = [];
+  runtime.filesError = null;
   runtime.isResearcher = true;
   runtime.sessionStatus = "authenticated";
   runtime.createVariantExport.mockResolvedValue({ export_id: "export-1", message: "submitted" });
@@ -216,4 +248,21 @@ it("shows the query builder empty state when the release has no assemblies", asy
   render(<Page />);
   expect(screen.getByTestId("export-query-empty")).toBeTruthy();
   expect(screen.queryByTestId("export-query-form")).toBeNull();
+});
+
+it("offers a retry instead of a dead end when the catalogue fails", () => {
+  runtime.filesError = new Error("catalogue unavailable");
+  render(<Page />);
+  expect(screen.getByTestId("downloads-error")).toBeTruthy();
+  fireEvent.click(screen.getByTestId("downloads-retry"));
+  expect(runtime.refetch).toHaveBeenCalledTimes(1);
+});
+
+it("points an empty catalogue at database search", () => {
+  render(<Page />);
+  const empty = screen.getByTestId("downloads-empty");
+  expect(empty).toBeTruthy();
+  expect(screen.getByText(/home\.databaseSearch/).closest("a")?.getAttribute("href")).toBe(
+    "/search",
+  );
 });

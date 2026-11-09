@@ -1,6 +1,6 @@
 """Regression coverage for ``scripts/check_openapi_field_constraints.py``.
 
-The guard pins the 1712 published field-level values (815 constraints + 897
+The guard pins the 1790 published field-level values (865 constraints + 925
 ``default`` values) plus the published ``examples`` arrays and both generated
 JSDoc projections to hand-written literals. These cases prove each failure
 direction on real committed bytes, that each literal is independent of the
@@ -116,11 +116,11 @@ def test_coordinated_default_retype_is_rejected() -> None:
 def test_default_values_are_pinned_by_the_literal() -> None:
     """``default`` is in the pinned vocabulary, not a decorative keyword."""
     assert "default" in guard._KEYS
-    assert guard._EXPECTED_BY_KEY["default"] == 897
+    assert guard._EXPECTED_BY_KEY["default"] == 925
     document = json.loads(guard.SNAPSHOT.read_text(encoding="utf-8"))
     defaults = [(path, key, value) for path, key, value in guard.rows(document)
                 if key == "default"]
-    assert len(defaults) == 897
+    assert len(defaults) == 925
 
 
 def test_the_default_named_property_is_a_schema_not_a_keyword() -> None:
@@ -544,10 +544,10 @@ def test_a_repin_of_the_tag_digest_alone_stays_green() -> None:
 
 
 def test_generated_default_values_match_the_independent_literal() -> None:
-    """896 named (component, field, value) rows; one bare tag is positional."""
+    """924 named (component, field, value) rows; one bare tag is positional."""
     gen = _generated_defaults()
     rows_ = guard.default_tag_values(gen)
-    assert len(rows_) == guard._EXPECTED_DEFAULT_TAGS == 896
+    assert len(rows_) == guard._EXPECTED_DEFAULT_TAGS == 924
     assert all(name and field for name, field, _ in rows_)
     assert guard._default_tag_value_digest(rows_) == guard._DEFAULT_TAG_VALUE_DIGEST
     bare = [(c, f) for c, f, v in rows_ if v == ""]
@@ -581,7 +581,7 @@ def test_a_retyped_generated_default_value_with_blob_repin_is_rejected() -> None
     """The decisive co-revert: one tag value retyped, generated_blob re-pinned.
 
     #297's Door 6 pins (component, field) presence, so it stays green: the
-    location digest is unchanged and the count door holds. The snapshot's 897
+    location digest is unchanged and the count door holds. The snapshot's 925
     default rows are untouched too. Only Door 7 has to see it.
     """
     gen = _generated_defaults()

@@ -1,5 +1,7 @@
 # SoyMutDB Next 当前状态驱动重构计划（第七轮 · PR #1 收敛版）
 
+> **[历史计划，不是当前任务源]** 本文件记录 2026-09-23 的第七轮重构计划；其 Vue 主线已被 2026-09-27 的 React 19/Umi Max 4/antd 6/ProComponents v3 决策取代。当前基线、门禁结果和任务清单见 [docs/dev/project-status.md](docs/dev/project-status.md)（2026-11-08）。
+
 > 审计日期：2026-09-23
 > Canonical plan：`plan.md`（保持小写，禁止再创建 `PLAN.md` 形成双真源）
 > Base：`main@4ec2fdb768d368585e76a399f202607e578a0ec2`

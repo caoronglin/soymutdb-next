@@ -54,6 +54,7 @@ import {
   type SequenceStatsResponse,
   type TranslateResponse,
 } from "@soymutdb/api-client";
+import { useSiteContent } from "../../lib/site-content-react";
 
 export const Route = createFileRoute("/tools/sequence")({
   component: SequenceToolComponent,
@@ -89,6 +90,7 @@ type SequenceResult =
 
 function SequenceToolComponent() {
   const { t } = useTranslation();
+  const { get } = useSiteContent();
 
   const [operation, setOperation] = React.useState<Operation>("reverseComplement");
   const [sequence, setSequence] = React.useState("");
@@ -174,7 +176,7 @@ function SequenceToolComponent() {
       <header className="flex flex-col gap-4">
         <Breadcrumb
           items={[
-            { title: <Link to="/">{t("nav.home")}</Link> },
+            { title: <Link to="/">{get("nav.home", t("nav.home"))}</Link> },
             { title: <Link to="/tools">{t("tools.title")}</Link> },
             { title: t("tools.sequence.title") },
           ]}

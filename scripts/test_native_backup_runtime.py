@@ -321,6 +321,48 @@ def _tool_bin(tmp_path: Path, *, with_mc: bool = True, with_psql: bool = True) -
     return fake_bin
 
 
+# Commands backup.sh reaches before (and while reporting) the PostgreSQL client
+# check. Only these are linked into the sandbox; the PostgreSQL clients are the
+# one thing it must not find.
+_SANDBOX_TOOLS = (
+    "bash",
+    "dirname",
+    "date",
+    "hostname",
+    "mkdir",
+    "mktemp",
+    "chmod",
+    "mv",
+    "rm",
+    "awk",
+    "sha256sum",
+    "tar",
+    "stat",
+    "find",
+    "sort",
+    "grep",
+    "python3",
+)
+
+
+def _path_without_postgres_clients(tmp_path: Path) -> str:
+    """A PATH that has the script's own tools but no ``psql``/``pg_dump``.
+
+    The case asserts a host without the clients, but a developer machine (or a
+    fat CI image) may ship them in /usr/bin, where they share a directory with
+    bash and coreutils and cannot be excluded by dropping a PATH entry. An
+    empty directory of symlinks gives a deterministic absence on every host.
+    """
+    sandbox = tmp_path / "no-pg-clients"
+    sandbox.mkdir()
+    for name in _SANDBOX_TOOLS:
+        resolved = shutil.which(name)
+        if resolved is None:  # pragma: no cover - premise on exotic hosts
+            raise AssertionError(f"test premise broken: {name} is missing")
+        (sandbox / name).symlink_to(resolved)
+    return str(sandbox)
+
+
 def _seed_source_bucket(store: Path, alias: str = "s3src") -> int:
     objects = 0
     for index, bucket in enumerate(REQUIRED_BUCKETS):
@@ -673,6 +715,7 @@ def test_native_runtime_fails_without_mc_and_never_falls_back_to_docker(
 def test_native_runtime_fails_without_the_host_postgres_clients(tmp_path: Path) -> None:
     fake_bin = _tool_bin(tmp_path, with_psql=False)
     env = _env(tmp_path, fake_bin)
+    env["PATH"] = os.pathsep.join([str(fake_bin), _path_without_postgres_clients(tmp_path)])
     _seed_source_bucket(tmp_path / "mc-store")
 
     result = _run(["bash", str(BACKUP)], env=env)

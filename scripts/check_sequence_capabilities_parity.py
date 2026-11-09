@@ -251,10 +251,18 @@ def check(root: Path = ROOT, texts: dict[str, str] | None = None) -> list[str]:
     eq("capabilities.formats vs kernel validators",
        sorted(caps.get("formats") or []), sorted(validators))
 
-    # 7. Every POST operation is either an advertised program or /inspect
-    # (format inspection, covered by formats above).
-    eq("capabilities.programs", sorted(caps.get("programs") or []),
-       sorted(posts - {"inspect"}))
+    # 7. Every live POST operation must be advertised.  `inspect` is a program
+    # too (the sequence page consumes it as an operation), and
+    # `intervals/overlap` is served by a separate module this router view
+    # cannot see, so this is a subset check; the openapi-derived surface
+    # guard pins the other direction.  An unadvertised live operation means
+    # the client enumerating `programs` cannot discover an endpoint.
+    programs = set(caps.get("programs") or [])
+    unadvertised = sorted(posts - programs)
+    if unadvertised:
+        errors.append(
+            f"capabilities.programs: live POST operations not advertised: {unadvertised}"
+        )
     if "inspect" not in posts:
         errors.append("router /inspect is missing; formats have no live validator")
     if "capabilities" not in gets:

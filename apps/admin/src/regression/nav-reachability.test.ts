@@ -50,7 +50,6 @@ const NOT_IN_NAV = new Set([
   "/settings/site",
   "/settings/legacy",
   "/table-views",
-  "/page-builder",
   "/page-builder/$pageId",
   "/widgets",
   "/widgets/$name",

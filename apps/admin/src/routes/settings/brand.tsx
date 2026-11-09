@@ -8,7 +8,7 @@ import {
   type SiteBrandingPatch,
   type SiteVariant,
 } from "@soymutdb/api-client";
-import { Alert, Button, Form, Input, PageContainer, ProCard, Space, Typography } from "@/lib/antd";
+import { Alert, Button, Form, Input, PageContainer, ProCard, Segmented, Space, Typography } from "@/lib/antd";
 import { useTranslation } from "react-i18next";
 
 const VARIANTS: readonly SiteVariant[] = ["external", "internal"];
@@ -93,20 +93,20 @@ export default function SiteBrandSettingsPage() {
       subTitle={t("admin.brand.description", { defaultValue: "Edit the independently versioned public and internal site identity." })}
       extra={[
         <div key="variants">
-          <div className="flex flex-wrap gap-2" role="tablist" aria-label={t("admin.brand.title")}>
-            {VARIANTS.map((option) => (
-              <Button
-                key={option}
-                type={variant === option ? "primary" : "default"}
-                role="tab"
-                aria-selected={variant === option}
-                data-testid={`brand-variant-${option}`}
-                onClick={() => setVariant(option)}
-              >
-                {option === "external" ? t("admin.brand.variantExternal") : t("admin.brand.variantInternal")}
-              </Button>
-            ))}
-          </div>
+          <Segmented
+            data-testid="brand-variant-switch"
+            aria-label={t("admin.brand.title")}
+            value={variant}
+            onChange={(value) => setVariant(value as SiteVariant)}
+            options={VARIANTS.map((option) => ({
+              value: option,
+              label: (
+                <span data-testid={`brand-variant-${option}`}>
+                  {option === "external" ? t("admin.brand.variantExternal") : t("admin.brand.variantInternal")}
+                </span>
+              ),
+            }))}
+          />
           <Typography.Text type="secondary" className="mt-2 block max-w-xl text-xs">
             {t("admin.brand.variantHint")}
           </Typography.Text>

@@ -15,6 +15,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const runtime = vi.hoisted(() => ({
   queryOptions: null as null | { refetchInterval?: (query: unknown) => number | false },
   data: undefined as { status: string } | undefined,
+  isError: false,
   createVariantExport: vi.fn(),
   getVariantExportStatus: vi.fn(),
   getVariantExportDownload: vi.fn(),
@@ -23,7 +24,7 @@ const runtime = vi.hoisted(() => ({
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (options: { refetchInterval?: (query: unknown) => number | false }) => {
     runtime.queryOptions = options;
-    return { data: runtime.data, refetch: vi.fn() };
+    return { data: runtime.data, isError: runtime.isError, refetch: vi.fn() };
   },
 }));
 vi.mock("../lib/session-context", () => ({
@@ -42,6 +43,7 @@ const pendingQuery = { state: { data: { status: "pending" }, status: "success" }
 beforeEach(() => {
   runtime.queryOptions = null;
   runtime.data = { status: "pending" };
+  runtime.isError = false;
   runtime.createVariantExport.mockReset().mockResolvedValue({ export_id: "export-1" });
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-10-29T12:00:00Z"));
@@ -86,4 +88,29 @@ it("stops polling as soon as the export reaches a final state", async () => {
   const finished = { state: { data: { status: "succeeded" }, status: "success" } };
   expect(runtime.queryOptions?.refetchInterval?.(finished)).toBe(false);
   expect(result.current.pollExpired).toBe(false);
+});
+
+it("reports a status lookup failure as a terminal state, not endless pending", async () => {
+  const { result } = renderHook(() =>
+    useVariantExport({ assemblyKey: "Wm82.a4.v1", pollDeadlineMs: 1000 }),
+  );
+
+  await act(async () => {
+    await result.current.requestExport();
+  });
+  expect(result.current.statusUnavailable).toBe(false);
+
+  // The record is gone (expired, or it belongs to another account): the
+  // lookup stops polling, so the portal has to say the state is unknown
+  // instead of leaving "preparing" on screen for the rest of the window.
+  runtime.isError = true;
+  runtime.data = undefined;
+  const failed = { state: { data: undefined, status: "error" } };
+  expect(runtime.queryOptions?.refetchInterval?.(failed)).toBe(false);
+
+  await act(async () => {
+    vi.advanceTimersByTime(1000);
+  });
+  expect(result.current.statusUnavailable).toBe(true);
+  expect(result.current.exportStatus).toBeUndefined();
 });

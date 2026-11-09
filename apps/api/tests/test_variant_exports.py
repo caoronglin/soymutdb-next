@@ -461,6 +461,86 @@ async def test_another_researcher_cannot_download_somebody_elses_export(
     assert response.status_code == 404, response.text
 
 
+# ---------------------------------------------------------------------------
+# 4. The manifest is the citable provenance of an owned artifact.
+# ---------------------------------------------------------------------------
+
+
+async def test_the_manifest_reports_recorded_provenance(client, db_session):
+    await _published_release(db_session)
+    owner = await _make_user(db_session, RoleName.RESEARCHER.value, "exp-manifest")
+    await db_session.commit()
+
+    payload = await _submit(client, _auth(owner))
+    record = await _finish_export(db_session, payload["export_id"])
+    record.sha256 = "a" * 64
+    record.license = "CC BY 4.0"
+    record.generated_at = datetime.now(UTC)
+    # The worker's join key is internal; a manifest must not echo it even
+    # though it lives in the record's filter document.
+    record.filters = {**record.filters, "mutant_line_name": "private-line"}
+    await db_session.commit()
+
+    response = await client.get(
+        f"/api/v1/variants/export/{payload['export_id']}/manifest",
+        headers=_auth(owner),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["sha256"] == "a" * 64
+    assert body["sha256_state"] == "recorded"
+    assert body["release_key"] == record.release_key
+    assert body["assembly_key"] == EXPORT_ASSEMBLY
+    assert body["record_count"] == 12
+    assert body["license"] == "CC BY 4.0"
+    # Public request filters are echoed; the internal join key is not.
+    assert body["filters"] == {
+        "assembly": EXPORT_ASSEMBLY,
+        "chromosome": "chr01",
+    }
+    assert "private-line" not in response.text
+    # Provenance is owner-scoped, so it must not enter a shared cache.
+    assert response.headers["cache-control"] == "private, no-store"
+
+
+async def test_a_legacy_manifest_does_not_invent_a_digest(client, db_session):
+    """An artifact produced before checksums shipped reports ``not_recorded``."""
+    await _published_release(db_session)
+    owner = await _make_user(db_session, RoleName.RESEARCHER.value, "exp-legacy")
+    await db_session.commit()
+
+    payload = await _submit(client, _auth(owner))
+    await _finish_export(db_session, payload["export_id"])
+
+    response = await client.get(
+        f"/api/v1/variants/export/{payload['export_id']}/manifest",
+        headers=_auth(owner),
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["sha256"] is None
+    assert body["sha256_state"] == "not_recorded"
+
+
+async def test_another_researcher_cannot_read_the_manifest(client, db_session):
+    await _published_release(db_session)
+    owner = await _make_user(db_session, RoleName.RESEARCHER.value, "exp-owner")
+    stranger = await _make_user(db_session, RoleName.RESEARCHER.value, "exp-other")
+    await db_session.commit()
+
+    payload = await _submit(client, _auth(owner))
+    await _finish_export(db_session, payload["export_id"])
+
+    response = await client.get(
+        f"/api/v1/variants/export/{payload['export_id']}/manifest",
+        headers=_auth(stranger),
+    )
+
+    assert response.status_code == 404, response.text
+
+
 async def test_a_failed_export_reports_its_final_state(client, db_session):
     await _published_release(db_session)
     owner = await _make_user(db_session, RoleName.RESEARCHER.value, "exp-failed")
@@ -617,6 +697,86 @@ async def test_an_explicit_assembly_is_the_one_that_is_recorded(client, db_sessi
     record = await _export_record(db_session, payload["export_id"])
     assert record.assembly_key == "Wm82.a5.v1"
     assert record.assembly_key == command_filters["assembly"]
+
+
+async def test_an_export_requested_by_version_reaches_name_keyed_facts(
+    client, db_session
+):
+    """The portal sends the assembly *name*; a version label means the same row.
+
+    Facts may be imported under either label, so an export must resolve the
+    requested label through the assemblies row instead of refusing a
+    namespace that is present under its sibling label.
+    """
+    await _published_release(db_session, "exp-alias-name", assembly="Wm82.a4.v1")
+    researcher = await _make_user(db_session, RoleName.RESEARCHER.value, "exp-alias-name")
+    await db_session.commit()
+
+    payload = await _submit(
+        client,
+        _auth(researcher),
+        filters={"assembly": "v4", "chromosome": "chr01"},
+    )
+
+    command_filters = await _export_command_filters(db_session, payload["export_id"])
+    assert command_filters["assembly"] == "Wm82.a4.v1"
+    record = await _export_record(db_session, payload["export_id"])
+    assert record.assembly_key == "Wm82.a4.v1"
+
+
+async def test_an_export_requested_by_name_reaches_version_keyed_facts(
+    client, db_session
+):
+    """The reverse label direction resolves to the namespace the rows use."""
+    release = await _published_release(
+        db_session, "exp-alias-version", assembly="Wm82.a4.v1"
+    )
+    # Re-key the published fact to the version label: the assemblies row is
+    # now the only explicit link between the name the caller sends and the
+    # key the rows carry.
+    await db_session.execute(
+        variant_facts.update()
+        .where(variant_facts.c.release_id == release.id)
+        .values(assembly_key="v4")
+    )
+    researcher = await _make_user(db_session, RoleName.RESEARCHER.value, "exp-alias-ver")
+    await db_session.commit()
+
+    payload = await _submit(
+        client,
+        _auth(researcher),
+        filters={"assembly": "Wm82.a4.v1", "chromosome": "chr01"},
+    )
+
+    command_filters = await _export_command_filters(db_session, payload["export_id"])
+    assert command_filters["assembly"] == "v4"
+    record = await _export_record(db_session, payload["export_id"])
+    assert record.assembly_key == "v4"
+
+
+async def test_an_ambiguous_assembly_alias_is_refused(client, db_session):
+    """Two assemblies sharing a version label: refuse rather than guess.
+
+    The caller asked for a label that maps to two published namespaces, and
+    one artifact may not span them.
+    """
+    release = await _published_release(db_session, "exp-ambig", assembly="Wm82.a4.v1")
+    await _publish_facts(db_session, release, "Wm82.a5.v1")
+    researcher = await _make_user(db_session, RoleName.RESEARCHER.value, "exp-ambig")
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/v1/variants/export",
+        json={
+            "format": "tsv",
+            "compress": True,
+            "filters": {"assembly": "v4", "chromosome": "chr01"},
+        },
+        headers=_auth(researcher),
+    )
+
+    assert response.status_code == 422, response.text
+    assert (await db_session.execute(select(VariantExport))).scalars().all() == []
 
 
 async def test_an_export_is_refused_when_no_assembly_can_be_resolved(client, db_session):

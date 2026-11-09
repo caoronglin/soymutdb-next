@@ -1,4 +1,15 @@
-# Handoff 检查点 — 2026-10-20（当前，持续开发中）
+# Handoff 检查点 — 2026-11-08（当前）
+
+> 下方 2026-10-20 第 7 轮及更早内容是历史检查点，保留为证据；其测试计数、分支和“当前”判断不代表本轮结论。本轮基线见 `docs/dev/project-status.md` 的「2026-11-08 当前状态」。未提交的修复：`packages/api-client/src/capabilities.ts` 的 `SequenceCapabilities` 重名已改为 `SequenceCapabilitiesSummary`。
+
+## 2026-11-08 任务 #16：设计系统与依赖统一（已完成，未提交）
+
+- `pnpm-workspace.yaml` catalog 新增 `@ant-design/x-markdown@2.10.0`、`antd-mobile@5.43.0`、`rc-tween-one@3.0.6`、`@ant-design/icons@6.3.4`；web/admin 的 icons 与五个 packages 的 typescript 改用 `catalog:`。
+- web/admin 删除 `marked ^18.1.1`。`apps/web/src/components/file-viewer/markdown-viewer.tsx` 动态加载 X-Markdown（`escapeRawHtml` + `openLinksInNewTab`）；`apps/admin/src/components/rich-editor/markdown-mode.tsx` 用 `lazy` + `Suspense` 预览，保留 DOMPurify forbid 列表。`dompurify` 仍为其他 8 处调用的直接依赖。
+- 新增安全回归：web 4 项（原始 HTML 按文本、script/img 不生成、链接 `rel="noopener noreferrer"`、`javascript:` href 丢弃），admin 2 项（预览去事件属性、应用走 TipTap markdown content type）。
+- `@ant-design/web3` 不引入（钱包 UI 不适用，仅采纳设计语言）；`@ant-design/motion` npm 不存在，动效对应 `rc-tween-one`。`antd-mobile`/`rc-tween-one` 本轮只 pin，任务 #18 接入。
+- 证据：pnpm install 干净；web 79 files / 665 tests、admin 35 files / 235 tests；两端 typecheck + eslint 通过；web 双变体构建成功，admin 构建需 `SOYMUTDB_ADMIN_API_URL`（本地 http 预览另需 `SOYMUTDB_LOCAL_TEST_PREVIEW_ENABLED=true`）；X-Markdown 在异步块（web `ui.*.async.js` ~725 KB、admin `3588.*.async.js` ~103 KB），不在入口。
+- 下一步：#18 公共站点主体界面与内容呈现优化（接入 `rc-tween-one` 动效与 `antd-mobile` 窄视口），再 #17/#19/#20，最后 #15 全量回归。
 
 ## 2026-10-20 第 7 轮：坐标搜索稳定 assembly 链接
 
@@ -588,3 +599,13 @@ R1 dev `/api` 代理指向未启动的 8010（端口 8000 是别的项目）；R
 - 红/未验证：`check_visible_i18n_react.mjs` exit 1（39 文件）；API 全量 pytest 本机 OOM（EXIT=137 @ 约 47%）无全量数字；无 Docker -> testcontainers SKIPPED。
 - 复跑：web 20/99 · admin 6/41 · api-client 27/150 · jbrowse 40 · genome-view 43 · genome-data 121 · gvm 23 · shared 49 · charts 5 · query-keys 11 ·
   i18n-core 10 · `pytest scripts` 275 passed/1 skipped · API 消融 149 passed · admin lint+typecheck exit 0。
+
+## [2026-11-08] 任务 #13：后端性能基线 + 统计聚合 JIT 修复
+
+**改动**：`apps/api/app/core/config.py` 新增 `db_jit_enabled`（默认 `False`，`SOYMUTDB_DB_JIT_ENABLED`）；`apps/api/app/core/database.py` 在 `get_engine()` 把它并入 asyncpg `server_settings`（与 `statement_timeout` 共存）。`apps/api/.env.example` 补说明。**必须连接级**：统计路径的变体聚合由变体服务另开会话，`SET LOCAL jit=off` 验证过无效。
+
+**根因/数据**（隔离 PG 17.11 `soymutdb_perf_r2`，200k variant_facts，迁移 head 0056）：EXPLAIN 显示 JIT 编译约 500 ms/640 ms 语句；关闭后执行 130.9 ms。进程内 5+5 池 30 轮：homepage p50 603.3 → 149.5 ms（4.0×），dashboard 576.7 → 146.1 ms（3.9×）。HTTP 50 轮：homepage p50 168.0 ms、dashboard 166.2 ms。搜索 p50 63.9 ms 不变（SQL ~42 ms，非 JIT 相关，Go 重写不成立）。并发 32：5+5 吞吐 42.0 rps > 20+20 的 35.1 rps。k6 无二进制 → SKIPPED。
+
+**测试**：`tests/test_db_pool_config.py` 更新零超时断言并新增 3 项 JIT 断言；定向 5 文件 **46 passed / 2 skipped**。详情与复现命令见 `docs/dev/project-status.md` 的「后端性能基线与 JIT 修复」。
+
+**任务状态**：#13 完成；#14 按基准结论判定“不引入 Go 模块，等真实工作负载画像”，不冒充已重写。

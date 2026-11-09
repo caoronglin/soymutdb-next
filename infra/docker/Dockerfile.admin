@@ -21,6 +21,7 @@ COPY packages/api-client/package.json ./packages/api-client/
 COPY packages/i18n-core/package.json ./packages/i18n-core/
 COPY packages/i18n/package.json ./packages/i18n/
 COPY packages/ui-react/package.json ./packages/ui-react/
+COPY packages/charts/package.json ./packages/charts/
 
 RUN pnpm install --frozen-lockfile
 

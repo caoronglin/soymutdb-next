@@ -463,7 +463,7 @@ function BlastComponent() {
     },
     {
       // Alignment offsets are never used directly as genomic browser targets.
-      title: t("blastSearch.subjectCoordinates"),
+      title: get("blast.hitProteinCoords", t("blastSearch.subjectCoordinates")),
       key: "proteinCoords",
       width: 150,
       render: (_, hit) => (
@@ -660,7 +660,7 @@ function BlastComponent() {
             <Row gutter={[24, 0]}>
               <Col xs={12} md={6}>
                 <Form.Item
-                  label={t("blast.eValue")}
+                  label={get("blast.eValue", t("blast.eValue"))}
                   htmlFor="e_value"
                   help={errors.parameters}
                   validateStatus={errors.parameters ? "error" : undefined}
@@ -676,7 +676,7 @@ function BlastComponent() {
               </Col>
               <Col xs={12} md={6}>
                 <Form.Item
-                  label={t("blast.maxHits")}
+                  label={get("blast.maxHits", t("blast.maxHits"))}
                   htmlFor="max_hits"
                   help={errors.parameters ? " " : undefined}
                   validateStatus={errors.parameters ? "error" : undefined}

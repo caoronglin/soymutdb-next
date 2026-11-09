@@ -43,12 +43,23 @@ class AssemblyService:
     async def list_assemblies(
         self, db: AsyncSession, *, release_id: int
     ) -> list[AssemblySummaryResponse]:
-        """Return this release's assemblies, each with its own counts."""
+        """Return this release's assemblies, each with its own counts.
+
+        There is no per-assembly publication column, so publication is taken
+        from the data itself: at least one gene row. An assembly an operator
+        has staged into a published release but not loaded (name, version and
+        maybe chromosomes only) is not an annotation namespace yet, and naming
+        it here would hand out its id to every client. Detail-by-id stays
+        answerable for a genuinely empty assembly; the list is the surface that
+        must not advertise it.
+        """
+        has_genes = select(Gene.gene_pk).where(Gene.assembly_id == Assembly.id).exists()
         assemblies = list(
             (
                 await db.execute(
                     select(Assembly)
                     .where(Assembly.release_id == release_id)
+                    .where(has_genes)
                     .order_by(Assembly.name)
                 )
             )
@@ -60,7 +71,12 @@ class AssemblyService:
         assembly_ids = [assembly.id for assembly in assemblies]
         statistics = await self._statistics_for(db, assembly_ids)
         return [
-            self._summary(assembly, statistics.get(assembly.id, _empty_statistics()))
+            self._summary(
+                assembly,
+                statistics[assembly.id]
+                if assembly.id in statistics
+                else _empty_statistics(),
+            )
             for assembly in assemblies
         ]
 
@@ -96,7 +112,12 @@ class AssemblyService:
             .scalars()
             .all()
         )
-        summary = self._summary(assembly, statistics.get(assembly.id, _empty_statistics()))
+        summary = self._summary(
+            assembly,
+            statistics[assembly.id]
+            if assembly.id in statistics
+            else _empty_statistics(),
+        )
         return AssemblyDetailResponse(
             **summary.model_dump(),
             chromosomes=[
@@ -206,7 +227,10 @@ def _empty_statistics() -> AssemblyStatistics:
     """
     return AssemblyStatistics(
         gene_count=AssemblyMetric(reason=NO_GENES),
-        transcript_count=AssemblyMetric(reason=NO_TRANSCRIPTS),
+        # Transcripts have no assembly of their own and were never aggregated
+        # here, so without a gene aggregate there is no transcript figure
+        # either; the closed reason set deliberately has no ``no_transcripts``.
+        transcript_count=AssemblyMetric(reason=NO_GENES),
         chromosome_count=AssemblyMetric(reason=NO_CHROMOSOMES),
         total_length=AssemblyMetric(reason=NO_CHROMOSOMES),
         download_count=AssemblyMetric(reason=DOWNLOAD_COUNT_UNAVAILABLE),

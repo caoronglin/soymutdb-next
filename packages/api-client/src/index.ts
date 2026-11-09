@@ -72,6 +72,7 @@ export * from "./admin-plugins";
 export * from "./admin-imports";
 export * from "./admin-import-studio";
 export * from "./admin-settings";
+export * from "./admin-page-builder";
 export * from "./admin-content";
 export * from "./admin-analytics";
 export * from "./page-definitions";
@@ -80,5 +81,6 @@ export * from "./notifications";
 
 export * from "./capabilities";
 export * from "./table-views";
+export * from "./admin-data-views";
 export * from "./ontology";
 export * from "./test-data-preview";

@@ -33,9 +33,13 @@ from sqlalchemy.orm import sessionmaker
 from soymutdb_worker.repositories import EXPORT_CLAIM_LEASE_SECONDS, VariantExportStore
 from soymutdb_worker.tables import variant_exports
 
-MIGRATION = (
+MIGRATION_0049 = (
     Path(__file__).resolve().parents[3]
     / "apps/api/migrations/versions/0049_variant_exports.py"
+)
+MIGRATION_0056 = (
+    Path(__file__).resolve().parents[3]
+    / "apps/api/migrations/versions/0056_download_provenance.py"
 )
 
 
@@ -77,14 +81,20 @@ def export_database():
         with admin.begin() as connection:
             connection.execute(text(f'CREATE SCHEMA "{schema}"'))
         with engine.begin() as connection:
-            # 0049 adds only this FK dependency; no API ORM/create_all shortcut.
+            # 0049 adds only this FK dependency; 0056 also alters download_files.
+            # No API ORM/create_all shortcut.
             connection.execute(text("CREATE TABLE users (id UUID PRIMARY KEY)"))
-            spec = spec_from_file_location("export_claim_migration_0049", MIGRATION)
-            assert spec is not None and spec.loader is not None
-            migration = module_from_spec(spec)
-            spec.loader.exec_module(migration)
-            migration.op = Operations(MigrationContext.configure(connection))
-            migration.upgrade()
+            connection.execute(text("CREATE TABLE download_files (id UUID PRIMARY KEY)"))
+            for module_name, migration_path in (
+                ("export_claim_migration_0049", MIGRATION_0049),
+                ("export_claim_provenance_0056", MIGRATION_0056),
+            ):
+                spec = spec_from_file_location(module_name, migration_path)
+                assert spec is not None and spec.loader is not None
+                migration = module_from_spec(spec)
+                spec.loader.exec_module(migration)
+                migration.op = Operations(MigrationContext.configure(connection))
+                migration.upgrade()
         factory = sessionmaker(engine)
 
         @contextmanager

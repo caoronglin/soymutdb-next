@@ -11,8 +11,8 @@ the old ``protected < len(admin)`` bound green. The literal floor must turn
 that co-revert red, and must stay a hand-written lock (not re-derived from the
 snapshot it checks).
 
-The second half covers ``_SECURITY_PROJECTION_DIGEST``: the *whole* 268-row
-projection, not the 48-row floor. The generated client drops ``security`` by
+The second half covers ``_SECURITY_PROJECTION_DIGEST``: the *whole* 276-row
+projection, not the 50-row floor. The generated client drops ``security`` by
 design, so no other guard can see a snapshot-only edit and no count-preserving
 move between protected and public moves any count at all. These tests pin the
 literal, the count doors, and the non-duplication with the neighbouring
@@ -65,7 +65,7 @@ class NonAdminProtectedFloorTests(unittest.TestCase):
     def test_baseline_is_a_literal_not_derived_from_snapshot(self):
         """A floor re-computed from openapi.json would be self-referential."""
         self.assertIsInstance(guard.NON_ADMIN_PROTECTED, frozenset)
-        self.assertEqual(len(guard.NON_ADMIN_PROTECTED), 48)
+        self.assertEqual(len(guard.NON_ADMIN_PROTECTED), 50)
         # The guard must declare the set as source literals, not json.load it
         # from the very artifact it checks.
         src = GUARD_PATH.read_text(encoding="utf-8")
@@ -140,7 +140,7 @@ class NonAdminProtectedFloorTests(unittest.TestCase):
 
 
 class SecurityProjectionPinTests(unittest.TestCase):
-    """The 268-row projection pin, its count doors and its non-duplication."""
+    """The 276-row projection pin, its count doors and its non-duplication."""
 
     def test_clean_snapshot_passes(self):
         self.assertEqual(guard.failures(*_base()), [])
@@ -220,15 +220,15 @@ class SecurityProjectionPinTests(unittest.TestCase):
         self.assertEqual(len(rows), guard._EXPECTED_PROJECTED + guard._EXPECTED_HIDDEN_OPS)
 
     def test_the_floor_only_covers_non_admin_protected_operations(self):
-        """The two pins must not converge: the floor is 48 rows, the pin is 268."""
-        self.assertEqual(len(guard.NON_ADMIN_PROTECTED), 48)
-        self.assertEqual(guard._EXPECTED_PROJECTED, 170)
+        """The two pins must not converge: the floor is 50 rows, the pin is 276."""
+        self.assertEqual(len(guard.NON_ADMIN_PROTECTED), 50)
+        self.assertEqual(guard._EXPECTED_PROJECTED, 178)
         self.assertEqual(guard._EXPECTED_HIDDEN_OPS, 98)
         doc = json.loads(_base()[0])
         rows = guard._projection_rows(doc)
         admin_rows = [row for row in rows if row[1].startswith("/api/v1/admin/")]
-        # 122 admin + 48 reviewed non-admin = the 170 published requirements.
-        self.assertEqual(len(admin_rows) + 48, guard._EXPECTED_PROJECTED)
+        # 128 admin + 50 reviewed non-admin = the 178 published requirements.
+        self.assertEqual(len(admin_rows) + 50, guard._EXPECTED_PROJECTED)
 
     def test_the_pin_does_not_duplicate_the_response_surface_guard(self):
         """The response-surface guard walks operations and never reads security."""
@@ -263,7 +263,7 @@ class SecurityRequirementPinTests(unittest.TestCase):
     """The published ``security`` requirement *content*, pinned independently.
 
     The projection digest collapses each requirement to a boolean, ``_bearer()``
-    reads only the scheme name, and ``NON_ADMIN_PROTECTED`` pins a 48-row floor.
+    reads only the scheme name, and ``NON_ADMIN_PROTECTED`` pins a 50-row floor.
     A scope injection, an OR-alternative, or a same-count scope rotation changes
     the published contract while all of them stay silent. ``openapi-typescript``
     drops ``security`` entirely, so there is no generated half to disagree.
@@ -279,13 +279,13 @@ class SecurityRequirementPinTests(unittest.TestCase):
             "_requirement_digest(requirement_rows)",
         ):
             self.assertIn(needle, src)
-        self.assertEqual(guard._EXPECTED_SECURITY_REQUIREMENT_ROWS, 268)
-        self.assertEqual(guard._EXPECTED_PROTECTED_REQUIREMENTS, 170)
+        self.assertEqual(guard._EXPECTED_SECURITY_REQUIREMENT_ROWS, 276)
+        self.assertEqual(guard._EXPECTED_PROTECTED_REQUIREMENTS, 178)
 
     def test_the_digest_is_recomputed_from_committed_bytes(self):
         document, _, _, _, _ = _base()
         rows = guard._requirement_rows(json.loads(document))
-        self.assertEqual(len(rows), 268)
+        self.assertEqual(len(rows), 276)
         self.assertEqual(
             guard._requirement_digest(rows), guard._SECURITY_REQUIREMENT_DIGEST
         )

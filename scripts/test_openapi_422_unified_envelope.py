@@ -90,7 +90,10 @@ ENVELOPE_BODY = '"application/json": components["schemas"]["ErrorResponse"];'
 # `GET /api/v1/variants/export/{id}/manifest` each declare both a 422 and a
 # 500, and both now advertise the runtime `ValidationErrorResponse` envelope
 # rather than FastAPI's `HTTPValidationError`. 409 and 429 are unchanged.
-_ERROR_RESPONSE_BASELINE = {"409": 3, "422": 268, "429": 1, "500": 268}
+# 268 -> 276 (2026-11-09, site-control + multi-view): the three GET /site/*
+# operations and five /admin/data-views operations each declare a 422 and a 500
+# carrying ValidationErrorResponse. 409 and 429 are unchanged.
+_ERROR_RESPONSE_BASELINE = {"409": 3, "422": 276, "429": 1, "500": 276}
 
 
 def _error_code_counts(document: dict) -> dict[str, int]:

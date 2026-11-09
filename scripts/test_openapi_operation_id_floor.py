@@ -238,7 +238,7 @@ def test_the_order_literals_are_module_level_strings() -> None:
         assert name in assigned, name
         value = ast.literal_eval(assigned[name])
         assert isinstance(value, str) and len(value) == 64
-    assert guard._EXPECTED_PATH_COUNT == 238
+    assert guard._EXPECTED_PATH_COUNT == 244
 
 
 def test_a_coordinated_path_block_swap_is_rejected() -> None:
@@ -438,7 +438,7 @@ def test_committed_operation_member_sequence_matches_the_literal() -> None:
     sequence = guard._generated_operation_sequence(
         guard.GENERATED.read_text(encoding="utf-8")
     )
-    assert len(sequence) == guard._EXPECTED_CLIENT_OPERATION_ROWS == 268
+    assert len(sequence) == guard._EXPECTED_CLIENT_OPERATION_ROWS == 276
     assert (
         guard._client_operation_order_digest(sequence)
         == guard._CLIENT_OPERATION_ORDER_DIGEST

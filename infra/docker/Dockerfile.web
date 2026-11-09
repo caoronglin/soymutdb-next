@@ -21,6 +21,9 @@ COPY packages/i18n-core/package.json ./packages/i18n-core/
 COPY packages/i18n/package.json ./packages/i18n/
 COPY packages/query-keys/package.json ./packages/query-keys/
 COPY packages/ui-react/package.json ./packages/ui-react/
+COPY packages/charts/package.json ./packages/charts/
+COPY packages/genome-data/package.json ./packages/genome-data/
+COPY packages/genome-view/package.json ./packages/genome-view/
 
 RUN pnpm install --frozen-lockfile
 

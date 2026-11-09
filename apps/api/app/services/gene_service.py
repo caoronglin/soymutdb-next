@@ -634,8 +634,15 @@ class GeneService:
         )
 
     async def list_assemblies(self, db: AsyncSession, *, release_id: int) -> list[AssemblyResponse]:
+        # Same rule as ``AssemblyService.list_assemblies``: an assembly with no
+        # gene rows is staged metadata, not an annotation namespace, so it is
+        # not advertised by a list that hands out ids.
+        has_genes = select(Gene.gene_pk).where(Gene.assembly_id == Assembly.id).exists()
         result = await db.execute(
-            select(Assembly).where(Assembly.release_id == release_id).order_by(Assembly.name)
+            select(Assembly)
+            .where(Assembly.release_id == release_id)
+            .where(has_genes)
+            .order_by(Assembly.name)
         )
         return [
             AssemblyResponse(

@@ -35,9 +35,33 @@ const jbrowseOrigin = jbrowseBaseUrl
       allowInsecureHttp: allowInsecureDevOrigins,
     })
   : undefined;
+// Remote file preview is opt-in per variant. `build-sites.ts` maps only the
+// building variant's non-VITE input into this pair, so neither artifact can
+// carry the other variant's viewer. A viewer without an allowlisted artifact
+// origin stays disabled at runtime (preview-policy.ts fails closed).
+const fileViewerUrl = env.VITE_FILE_VIEWER_URL?.trim() || undefined;
+const fileViewerFrameOrigins = fileViewerUrl
+  ? [
+      requireDeploymentOrigin(fileViewerUrl, "File viewer", {
+        allowInsecureHttp: allowInsecureDevOrigins,
+      }),
+    ]
+  : [];
+const fileViewerArtifactOrigins = (env.VITE_FILE_VIEWER_ARTIFACT_ORIGINS ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter((origin) => origin.length > 0)
+  .map((origin) =>
+    requireDeploymentOrigin(origin, "File viewer artifact", {
+      allowInsecureHttp: allowInsecureDevOrigins,
+    }),
+  );
 const analyticsToken = env.VITE_CLOUDFLARE_ANALYTICS_TOKEN?.trim();
 const configuredDevHosts = resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS);
-const csp = buildCsp({ apiOrigin, jbrowseOrigin }, Boolean(analyticsToken));
+const csp = buildCsp(
+  { apiOrigin, jbrowseOrigin, frameOrigins: fileViewerFrameOrigins },
+  Boolean(analyticsToken),
+);
 const headScripts = analyticsToken
   ? [
       `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='${JSON.stringify({ token: analyticsToken })}'></script>`,
@@ -53,6 +77,8 @@ const viteEnv = {
   VITE_BASE_URL: base,
   VITE_DEMO_MODE: String(deploymentMode === "demo"),
   VITE_DEPLOYMENT_MODE: deploymentMode,
+  VITE_FILE_VIEWER_ARTIFACT_ORIGINS: fileViewerArtifactOrigins.join(","),
+  VITE_FILE_VIEWER_URL: fileViewerUrl || "",
   VITE_JBROWSE_BASE_URL: jbrowseBaseUrl || "",
   VITE_JBROWSE_ENABLED: String(!minimalDeployment),
   VITE_JBROWSE_URL: jbrowseBaseUrl || "",

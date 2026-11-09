@@ -25,6 +25,7 @@ import { Button, Card, Empty, Input, Skeleton, Tag, Typography } from "@/lib/ant
 import { fetchSraRun, fetchSraSamples, type SraRunInfo } from "@soymutdb/api-client";
 import { FadeUp, useReveal } from "../components/route-motion";
 import { SoyMutDbWidget } from "../components/soymutdb-widget";
+import { useSiteContent } from "../lib/site-content-react";
 import { startViewTransition } from "../lib/view-transitions";
 
 // The `sra_run` widget below is the backend's own expanded run view
@@ -103,6 +104,7 @@ export const Route = createFileRoute("/sra")({
 
 function SraBrowser() {
   const { t } = useTranslation();
+  const { get } = useSiteContent();
   const { run: initialRun } = Route.useSearch();
   const navigate = Route.useNavigate();
   const [input, setInput] = React.useState(initialRun || DEFAULT_RUN);
@@ -168,11 +170,11 @@ function SraBrowser() {
 
   return (
     <div ref={rootRef} className="container-prose py-8 md:py-12">
-      <FadeUp stagger={0.05}>
+      <FadeUp>
         <div className="mb-8">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
             <Database className="size-4" aria-hidden />
-            <span>{t("nav.sra")}</span>
+            <span>{get("nav.sra", t("nav.sra"))}</span>
             <span className="text-border">/</span>
             <span>{t("sra.archiveName")}</span>
           </div>
@@ -186,7 +188,7 @@ function SraBrowser() {
       </FadeUp>
 
       {/* Search input */}
-      <FadeUp delay={0.1}>
+      <FadeUp delay={100}>
         <form onSubmit={submit} className="mb-6">
           <div className="flex gap-2 max-w-xl">
             <div className="relative flex-1">
@@ -240,7 +242,7 @@ function SraBrowser() {
         {/* Sidebar — history + curated samples */}
         <div className="space-y-6">
           {/* History */}
-          <FadeUp delay={0.15}>
+          <FadeUp delay={150}>
             <Card>
               <div className="pb-3">
                 <Typography.Title level={2} className="m-0 text-lg flex items-center gap-2">
@@ -284,7 +286,7 @@ function SraBrowser() {
           </FadeUp>
 
           {/* Curated runs — current default species (soybean) */}
-          <FadeUp delay={0.2}>
+          <FadeUp delay={200}>
             <Card>
               <div className="pb-3">
                 <Typography.Title level={2} className="m-0 text-lg flex items-center gap-2">
@@ -348,7 +350,7 @@ function SraBrowser() {
 
       {/* Server-rendered `sra_run` widget: GET /api/v1/widget/sra_run?params={"run":…} */}
       {activeRun && (
-        <FadeUp delay={0.25} className="mt-8">
+        <FadeUp delay={250} className="mt-8">
           <Card>
             <div>
               <Typography.Title level={2} className="m-0 text-lg">{t("sra.widgetTitle")}</Typography.Title>

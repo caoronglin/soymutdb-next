@@ -2,7 +2,7 @@ import { ReadOutlined, FileTextOutlined } from "@ant-design/icons";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useRouterState } from "@tanstack/react-router";
-import { PageContainer, Typography } from "@/lib/antd";
+import { PageContainer, Tabs, Typography } from "@/lib/antd";
 import { PagesTab } from "./content/pages-tab";
 import { PageFormDialog } from "./content/page-form-dialog";
 import { VersionHistoryDialog } from "./content/version-history-dialog";
@@ -59,44 +59,38 @@ export default function ContentPage() {
             <StaticPageMigrationReport />
           </>
         ) : (
-          <>
-            <div
-              role="tablist"
-              data-testid="content-tabs"
-              className="flex items-center gap-1 border-b border-border"
-            >
-              {(Object.keys(TYPE_CONFIG) as ContentType[]).map((typeKey) => {
-                const Icon = TYPE_CONFIG[typeKey].icon;
-                return (
-                  <button
-                    key={typeKey}
-                    type="button"
-                    role="tab"
-                    aria-selected={tab === typeKey}
+          /* antd Tabs supplies the roving focus and ARIA semantics the
+             hand-rolled tablist only imitated. */
+          <Tabs
+            data-testid="content-tabs"
+            activeKey={tab}
+            onChange={(key) => setTab(key as ContentType)}
+            items={(Object.keys(TYPE_CONFIG) as ContentType[]).map((typeKey) => {
+              const Icon = TYPE_CONFIG[typeKey].icon;
+              return {
+                key: typeKey,
+                label: (
+                  <span
                     data-testid={`content-tab-${typeKey}`}
-                    onClick={() => setTab(typeKey)}
-                    className={`flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                      tab === typeKey
-                        ? "border-primary text-primary"
-                        : "border-transparent text-muted-foreground hover:text-foreground"
-                    }`}
+                    className="inline-flex items-center gap-1.5"
                   >
                     <Icon className="size-3.5" />
                     {t(TYPE_CONFIG[typeKey].labelKey, { defaultValue: TYPE_CONFIG[typeKey].label })}
-                  </button>
-                );
-              })}
-            </div>
-            {tab === "page" && (
-              <PagesTab
-                PageFormDialog={PageFormDialog}
-                VersionHistoryDialog={VersionHistoryDialog}
-                VersionDetail={VersionDetail}
-              />
-            )}
-            {tab === "news" && <NewsPublicationTab type="news" />}
-            {tab === "publication" && <NewsPublicationTab type="publication" />}
-          </>
+                  </span>
+                ),
+                children:
+                  typeKey === "page" ? (
+                    <PagesTab
+                      PageFormDialog={PageFormDialog}
+                      VersionHistoryDialog={VersionHistoryDialog}
+                      VersionDetail={VersionDetail}
+                    />
+                  ) : (
+                    <NewsPublicationTab type={typeKey} />
+                  ),
+              };
+            })}
+          />
         )}
       </div>
     </PageContainer>

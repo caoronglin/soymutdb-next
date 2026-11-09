@@ -133,7 +133,7 @@ def test_adapter_without_durable_writer_fails_closed(kind, tmp_path):
         get_adapter(kind).run(ImportContext(1, 2, "r1", str(path), "a1"))
 
 
-@pytest.mark.parametrize("kind", ["seed_data", "expression_csv", "homolog_csv"])
+@pytest.mark.parametrize("kind", ["seed_data"])
 def test_csv_adapter_without_writer_fails_closed(kind, tmp_path):
     path = tmp_path / f"{kind}.csv"
     path.write_text("id,value\n1,example\n")
@@ -142,7 +142,7 @@ def test_csv_adapter_without_writer_fails_closed(kind, tmp_path):
         get_adapter(kind).run(ImportContext(1, 2, "r1", str(path)))
 
 
-@pytest.mark.parametrize("kind", ["seed_data", "expression_csv", "homolog_csv"])
+@pytest.mark.parametrize("kind", ["seed_data"])
 def test_import_task_marks_csv_without_writer_failed_not_ready(kind, tmp_path, monkeypatch):
     from soymutdb_worker.tasks import ingest
 
@@ -166,6 +166,264 @@ def test_import_task_marks_csv_without_writer_failed_not_ready(kind, tmp_path, m
     status_updates = [values for _, values in updates if "status" in values]
     assert [values["status"] for values in status_updates] == ["ingesting", "failed"]
     assert "persistence writer" in status_updates[-1]["error_detail"]
+
+
+class _ScalarResult:
+    def __init__(self, value):
+        self.value = value
+
+    def scalar_one_or_none(self):
+        return self.value
+
+
+class _RecordingSession:
+    """Minimal session for the data-set lock and the final status update."""
+
+    def __init__(self, data_set_type):
+        self.data_set_type = data_set_type
+        self.updates = []
+
+    def execute(self, statement, params=None):
+        rendered = str(statement)
+        if "SELECT data_sets.type" in rendered:
+            return _ScalarResult(self.data_set_type)
+        if rendered.startswith("UPDATE data_sets"):
+            self.updates.append((statement, params))
+            return _ScalarResult(None)
+        pytest.fail(f"unexpected statement: {rendered}")
+
+    def commit(self):
+        return None
+
+
+def _patch_session(monkeypatch, session):
+    from soymutdb_worker.utils import db as worker_db
+
+    @contextmanager
+    def fake_db():
+        yield session
+
+    monkeypatch.setattr(worker_db, "get_db", fake_db)
+    return session
+
+
+def _updated_values(statement):
+    return {
+        getattr(column, "key", str(column)): value.value
+        for column, value in statement._values.items()
+    }
+
+
+@pytest.mark.parametrize(
+    ("kind", "filename", "header", "row"),
+    [
+        (
+            "expression_csv",
+            "expression.csv",
+            "gene_id,library_id,fpkm,tpm,raw_count\n",
+            "G1,3,1.5,2.5,10\n",
+        ),
+        (
+            "homolog_csv",
+            "homolog.csv",
+            "gene_id,homolog_species,homolog_gene_id,homolog_type,source\n",
+            "G1,Glycine soja,GS01,ortholog,phytozome\n",
+        ),
+    ],
+)
+def test_csv_adapters_require_an_explicit_assembly(kind, filename, header, row, tmp_path):
+    path = tmp_path / filename
+    path.write_text(header + row)
+    adapter = get_adapter(kind)
+
+    with pytest.raises(ValueError, match="require an explicit assembly"):
+        adapter.validate(ImportContext(1, 2, "r1", str(path), filename=filename))
+    with pytest.raises(ValueError, match="require an explicit assembly"):
+        adapter.run(ImportContext(1, 2, "r1", str(path), filename=filename))
+
+
+@pytest.mark.parametrize(
+    ("kind", "filename", "header"),
+    [
+        ("expression_csv", "expression.csv", "gene_id,fpkm\nG1,1.0\n"),
+        ("homolog_csv", "homolog.csv", "gene_id,homolog_type\nG1,ortholog\n"),
+    ],
+)
+def test_csv_adapters_reject_missing_columns(kind, filename, header, tmp_path):
+    path = tmp_path / filename
+    path.write_text(header)
+    adapter = get_adapter(kind)
+
+    with pytest.raises(ValueError, match="missing required columns"):
+        adapter.validate(
+            ImportContext(1, 2, "r1", str(path), assembly="v5", filename=filename)
+        )
+
+
+def test_expression_csv_validate_streams_the_stored_bytes(tmp_path):
+    content = (
+        "gene_id,library_id,fpkm,tpm,raw_count\n"
+        "G1,3,1.5,2.5,10\n"
+    )
+    path = tmp_path / "expression.csv"
+    path.write_text(content)
+    expected_checksum = hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+    result = get_adapter("expression_csv").validate(
+        ImportContext(
+            1,
+            2,
+            "r1",
+            str(path),
+            assembly="v5",
+            filename=path.name,
+            checksum=expected_checksum,
+        )
+    )
+
+    assert result == {
+        "kind": "expression_csv",
+        "assembly": "v5",
+        "checksum": expected_checksum,
+        "checksum_verified": True,
+    }
+
+
+def test_expression_csv_run_upserts_assembly_scoped_rows(tmp_path, monkeypatch):
+    from soymutdb_worker.tasks import data_adapters
+
+    path = tmp_path / "expression.csv"
+    path.write_text(
+        "gene_id,library_id,fpkm,tpm,raw_count\n"
+        "G1,3,1.5,2.5,10\n"
+        "G1,3,1.7,2.7,11\n"
+        "# comment,row,is,ignored\n"
+        "\n"
+    )
+    session = _patch_session(monkeypatch, _RecordingSession("expression_csv"))
+    adapter = get_adapter("expression_csv")
+    monkeypatch.setattr(
+        adapter,
+        "_references",
+        lambda _session, assembly: data_adapters._ExpressionReferences(
+            assembly, 7, {"G1": 11}, {3: 7}
+        ),
+    )
+    upserts = []
+    monkeypatch.setattr(
+        adapter,
+        "_upsert",
+        lambda _session, payloads: upserts.append(list(payloads)) or len(payloads),
+    )
+
+    result = adapter.run(
+        ImportContext(1, 2, "r1", str(path), assembly="v5", filename=path.name)
+    )
+
+    # The duplicate natural key keeps the last row and is counted, never sent
+    # twice in one PostgreSQL upsert statement.
+    assert upserts == [
+        [
+            {
+                "gene_id": 11,
+                "library_id": 3,
+                "fpkm": 1.7,
+                "tpm": 2.7,
+                "raw_count": 11,
+            }
+        ]
+    ]
+    assert result.inserted == 1
+    assert result.evidence["rows_seen"] == 2
+    assert result.evidence["rows_duplicate"] == 1
+    assert result.evidence["assembly_id"] == 7
+    values = _updated_values(session.updates[-1][0])
+    assert values["status"] == "ready"
+    assert values["validation_evidence"]["on_conflict"] == "upsert"
+
+
+def test_expression_csv_run_rejects_a_library_from_another_assembly(tmp_path, monkeypatch):
+    from soymutdb_worker.tasks import data_adapters
+
+    path = tmp_path / "expression.csv"
+    path.write_text("gene_id,library_id,fpkm\nG1,3,1.5\n")
+    _patch_session(monkeypatch, _RecordingSession("expression_csv"))
+    adapter = get_adapter("expression_csv")
+    monkeypatch.setattr(
+        adapter,
+        "_references",
+        lambda _session, assembly: data_adapters._ExpressionReferences(
+            assembly, 7, {"G1": 11}, {3: 8}
+        ),
+    )
+    monkeypatch.setattr(
+        adapter, "_upsert", lambda _session, payloads: pytest.fail("must not write")
+    )
+
+    with pytest.raises(ValueError, match="belongs to another assembly"):
+        adapter.run(
+            ImportContext(1, 2, "r1", str(path), assembly="v5", filename=path.name)
+        )
+
+
+def test_homolog_csv_run_fails_closed_on_an_unknown_gene(tmp_path, monkeypatch):
+    from soymutdb_worker.tasks import data_adapters
+
+    path = tmp_path / "homolog.csv"
+    path.write_text(
+        "gene_id,homolog_species,homolog_gene_id,homolog_type\n"
+        "G9,glycine_soja,GS01,ortholog\n"
+    )
+    _patch_session(monkeypatch, _RecordingSession("homolog_csv"))
+    adapter = get_adapter("homolog_csv")
+    monkeypatch.setattr(
+        adapter,
+        "_references",
+        lambda _session, assembly: data_adapters._HomologReferences(
+            assembly, 7, {"G1": 11}
+        ),
+    )
+    monkeypatch.setattr(
+        adapter, "_upsert", lambda _session, payloads: pytest.fail("must not write")
+    )
+
+    with pytest.raises(ValueError, match="unknown gene accession 'G9'"):
+        adapter.run(
+            ImportContext(1, 2, "r1", str(path), assembly="v5", filename=path.name)
+        )
+
+
+@pytest.mark.parametrize(
+    ("kind", "filename", "header"),
+    [
+        (
+            "expression_csv",
+            "expression.csv",
+            "gene_id,library_id,fpkm\nG1,3,1.5\n",
+        ),
+        (
+            "homolog_csv",
+            "homolog.csv",
+            "gene_id,homolog_species,homolog_gene_id,homolog_type\n"
+            "G1,glycine_soja,GS01,ortholog\n",
+        ),
+    ],
+)
+def test_csv_adapters_reject_a_mismatched_data_set_kind(
+    kind, filename, header, tmp_path, monkeypatch
+):
+    path = tmp_path / filename
+    path.write_text(header)
+    _patch_session(monkeypatch, _RecordingSession("module_tsv"))
+    adapter = get_adapter(kind)
+    monkeypatch.setattr(
+        adapter, "_references", lambda _session, assembly: pytest.fail("must not resolve")
+    )
+
+    with pytest.raises(ValueError, match=f"requires a {kind} data set"):
+        adapter.run(
+            ImportContext(1, 2, "r1", str(path), assembly="v5", filename=filename)
+        )
 
 
 def test_duplicate_import_delivery_is_skipped_before_adapter_execution(monkeypatch):

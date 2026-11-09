@@ -1828,7 +1828,7 @@ export interface paths {
         };
         /**
          * List Tracks
-         * @description List tracks (optionally filtered by assembly / category).
+         * @description List the selected release's tracks (optionally filtered by assembly/category).
          */
         get: operations["list_tracks_api_v1_tracks_get"];
         put?: never;
@@ -1895,7 +1895,7 @@ export interface paths {
         };
         /**
          * Get Track
-         * @description Get track detail.
+         * @description Get track detail scoped to the selected release.
          */
         get: operations["get_track_api_v1_tracks__track_id__get"];
         put?: never;
@@ -3608,6 +3608,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/page-builder/pages/{page_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish Now
+         * @description Publish a version immediately without the asynchronous task round-trip.
+         */
+        post: operations["publish_now_api_v1_admin_page_builder_pages__page_id__publish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/plugins": {
         parameters: {
             query?: never;
@@ -4465,6 +4485,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/data-views/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Data View Sources */
+        get: operations["list_data_view_sources_api_v1_admin_data_views_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/data-views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Data Views */
+        get: operations["list_data_views_api_v1_admin_data_views_get"];
+        put?: never;
+        /** Create Data View */
+        post: operations["create_data_view_api_v1_admin_data_views_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/data-views/{view_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Data View */
+        put: operations["update_data_view_api_v1_admin_data_views__view_id__put"];
+        post?: never;
+        /** Delete Data View */
+        delete: operations["delete_data_view_api_v1_admin_data_views__view_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/uploads/presign": {
         parameters: {
             query?: never;
@@ -4848,6 +4921,46 @@ export interface paths {
          * @description Return a bilingual brand snapshot for one explicit site artifact.
          */
         get: operations["get_site_branding_api_v1_site_branding_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/site/navigation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Site Navigation
+         * @description Return the editable primary navigation, filtered by feature flags.
+         */
+        get: operations["get_site_navigation_api_v1_site_navigation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/site/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Site Profile
+         * @description Return the configured database kind and public feature availability.
+         */
+        get: operations["get_site_profile_api_v1_site_profile_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5359,6 +5472,202 @@ export interface components {
              * @default 0
              */
             queryP95Change: number;
+        };
+        /** AdminDataViewCreate */
+        AdminDataViewCreate: {
+            /** Name */
+            name: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "genes" | "variants" | "mutant_lines";
+            /**
+             * View Type
+             * @default grid
+             * @enum {string}
+             */
+            view_type: "grid" | "kanban" | "gallery";
+            /** Visible Fields */
+            visible_fields: string[];
+            /** Filters */
+            filters?: {
+                [key: string]: string;
+            };
+            /**
+             * Sort Field
+             * @default null
+             */
+            sort_field: string | null;
+            /**
+             * Sort Dir
+             * @default null
+             */
+            sort_dir: ("asc" | "desc") | null;
+            /**
+             * Group Field
+             * @default null
+             */
+            group_field: string | null;
+            /**
+             * Title Field
+             * @default null
+             */
+            title_field: string | null;
+            /**
+             * Page Size
+             * @default 25
+             */
+            page_size: number;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
+        };
+        /** AdminDataViewListResponse */
+        AdminDataViewListResponse: {
+            /** Items */
+            items: components["schemas"]["AdminDataViewResponse"][];
+            /** Total */
+            total: number;
+        };
+        /** AdminDataViewResponse */
+        AdminDataViewResponse: {
+            /** Name */
+            name: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "genes" | "variants" | "mutant_lines";
+            /**
+             * View Type
+             * @default grid
+             * @enum {string}
+             */
+            view_type: "grid" | "kanban" | "gallery";
+            /** Visible Fields */
+            visible_fields: string[];
+            /** Filters */
+            filters?: {
+                [key: string]: string;
+            };
+            /**
+             * Sort Field
+             * @default null
+             */
+            sort_field: string | null;
+            /**
+             * Sort Dir
+             * @default null
+             */
+            sort_dir: ("asc" | "desc") | null;
+            /**
+             * Group Field
+             * @default null
+             */
+            group_field: string | null;
+            /**
+             * Title Field
+             * @default null
+             */
+            title_field: string | null;
+            /**
+             * Page Size
+             * @default 25
+             */
+            page_size: number;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
+            /** Id */
+            id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * AdminDataViewUpdate
+         * @description Partial update. ``source`` is immutable, so the vocabulary stays fixed.
+         */
+        AdminDataViewUpdate: {
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * View Type
+             * @default null
+             */
+            view_type: ("grid" | "kanban" | "gallery") | null;
+            /**
+             * Visible Fields
+             * @default null
+             */
+            visible_fields: string[] | null;
+            /**
+             * Filters
+             * @default null
+             */
+            filters: {
+                [key: string]: string;
+            } | null;
+            /**
+             * Sort Field
+             * @default null
+             */
+            sort_field: string | null;
+            /**
+             * Sort Dir
+             * @default null
+             */
+            sort_dir: ("asc" | "desc") | null;
+            /**
+             * Group Field
+             * @default null
+             */
+            group_field: string | null;
+            /**
+             * Title Field
+             * @default null
+             */
+            title_field: string | null;
+            /**
+             * Page Size
+             * @default null
+             */
+            page_size: number | null;
+            /**
+             * Is Default
+             * @default null
+             */
+            is_default: boolean | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
         };
         /** AdminFeaturesResponse */
         AdminFeaturesResponse: {
@@ -5942,12 +6251,21 @@ export interface components {
              * @default null
              */
             value: number | null;
-            /**
-             * Reason
-             * @default null
-             */
-            reason: string | null;
+            /** @default null */
+            reason: components["schemas"]["AssemblyMetricReason"] | null;
         };
+        /**
+         * AssemblyMetricReason
+         * @description Why an assembly statistic has no value.
+         *
+         *     A closed set. The reason reaches the reader as translated text, so it has to
+         *     be a code the client can look up; a sentence written by the service would be
+         *     shown untranslated and cannot be covered by a locale check. Keeping the set
+         *     closed on the server is also what stops a new free-text reason from being
+         *     introduced without a client-side translation.
+         * @enum {string}
+         */
+        AssemblyMetricReason: "no_genes" | "no_chromosomes" | "no_linked_downloads";
         /** AssemblyResponse */
         AssemblyResponse: {
             /** Id */
@@ -6862,6 +7180,28 @@ export interface components {
              * @enum {string}
              */
             patch_type: "set" | "clear" | "format";
+        };
+        /**
+         * DataViewSourceInfo
+         * @description The vocabulary the console uses to build view editors.
+         */
+        DataViewSourceInfo: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "genes" | "variants" | "mutant_lines";
+            /** Fields */
+            fields: string[];
+            /** Filter Fields */
+            filter_fields: string[];
+            /** Default Fields */
+            default_fields: string[];
+        };
+        /** DataViewSourceListResponse */
+        DataViewSourceListResponse: {
+            /** Items */
+            items: components["schemas"]["DataViewSourceInfo"][];
         };
         /** DatabaseCapabilitiesResponse */
         DatabaseCapabilitiesResponse: {
@@ -8702,6 +9042,52 @@ export interface components {
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HeaderNavigationGroup
+         * @description A bilingual group rendered as one dropdown (or direct link).
+         */
+        HeaderNavigationGroup: {
+            /** Id */
+            id: string;
+            /** Title En */
+            title_en: string;
+            /** Title Zh */
+            title_zh: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Order */
+            order: number;
+            /** Links */
+            links: components["schemas"]["HeaderNavigationLink"][];
+        };
+        /**
+         * HeaderNavigationLink
+         * @description One editable, bilingual primary-navigation destination.
+         */
+        HeaderNavigationLink: {
+            /** Id */
+            id: string;
+            /** Label En */
+            label_en: string;
+            /** Label Zh */
+            label_zh: string;
+            /**
+             * Target
+             * @enum {string}
+             */
+            target: "internal" | "external";
+            /** Href */
+            href: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Order */
+            order: number;
+            /**
+             * Feature
+             * @default null
+             */
+            feature: string | null;
         };
         /**
          * HomeContentResponse
@@ -12720,6 +13106,39 @@ export interface components {
             icon_url: string | null;
         };
         /**
+         * SiteNavigationResponse
+         * @description Feature-gated primary navigation for one explicit site variant.
+         */
+        SiteNavigationResponse: {
+            /**
+             * Variant
+             * @enum {string}
+             */
+            variant: "external" | "internal";
+            /** Groups */
+            groups?: components["schemas"]["HeaderNavigationGroup"][];
+        };
+        /**
+         * SiteProfileResponse
+         * @description Database identity and public feature availability for the web client.
+         */
+        SiteProfileResponse: {
+            /**
+             * Variant
+             * @enum {string}
+             */
+            variant: "external" | "internal";
+            /**
+             * Database Kind
+             * @enum {string}
+             */
+            database_kind: "genome" | "gene_ontology" | "transcription_factor";
+            /** Features */
+            features?: {
+                [key: string]: boolean;
+            };
+        };
+        /**
          * SiteVariant
          * @description The two independently generated SoyMutDB site artifacts.
          * @enum {string}
@@ -16115,7 +16534,7 @@ export interface operations {
                     "application/json": components["schemas"]["ExportManifestResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Validation Error. The path parameter is not a well-formed export identifier; the response carries the unified envelope with field-level ``errors``. */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -18092,8 +18511,11 @@ export interface operations {
             query?: {
                 assembly_id?: number | null;
                 category_id?: number | null;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -18218,8 +18640,12 @@ export interface operations {
     };
     get_track_api_v1_tracks__track_id__get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path: {
                 track_id: number;
             };
@@ -19381,7 +19807,7 @@ export interface operations {
                     "application/json": components["schemas"]["ExportQueryResponse"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Unprocessable Content */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -22151,6 +22577,50 @@ export interface operations {
             };
         };
     };
+    publish_now_api_v1_admin_page_builder_pages__page_id__publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     list_plugins_api_v1_admin_plugins_get: {
         parameters: {
             query?: never;
@@ -24440,6 +24910,208 @@ export interface operations {
             };
         };
     };
+    list_data_view_sources_api_v1_admin_data_views_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataViewSourceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_data_views_api_v1_admin_data_views_get: {
+        parameters: {
+            query?: {
+                source?: ("genes" | "variants" | "mutant_lines") | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDataViewListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_data_view_api_v1_admin_data_views_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDataViewCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDataViewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_data_view_api_v1_admin_data_views__view_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDataViewUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDataViewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_data_view_api_v1_admin_data_views__view_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     create_upload_presign_api_v1_admin_uploads_presign_post: {
         parameters: {
             query?: never;
@@ -25162,6 +25834,86 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SiteBrandResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_site_navigation_api_v1_site_navigation_get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteNavigationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_site_profile_api_v1_site_profile_get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteProfileResponse"];
                 };
             };
             /** @description Validation Error */

@@ -18,8 +18,8 @@ export interface DatabaseCapabilities {
   analytics: "postgresql" | null;
 }
 
-/** Engine state shared with the /tools/sequence/capabilities endpoint. */
-export interface SequenceCapabilities {
+/** Summary embedded in the public capabilities payload, not the endpoint response. */
+export interface SequenceCapabilitiesSummary {
   available: boolean;
   engine: string | null;
   engine_version: string | null;
@@ -40,7 +40,7 @@ export interface PublicCapabilitiesResponse {
   features: Record<string, boolean>;
   plugins: Record<string, PluginCapability>;
   databases: DatabaseCapabilities;
-  sequence: SequenceCapabilities;
+  sequence: SequenceCapabilitiesSummary;
 }
 
 export interface PluginAvailability {

@@ -2,17 +2,20 @@
  * Guide route — NCBI database retrieval guide rendered from a static page.
  *
  * Fetches `GET /content/pages/ncbi-database-guide` via the typed API client and
- * renders the Markdown body with a lightweight in-house renderer (the project
- * does not depend on `react-markdown`). A table of contents is auto-generated
- * from h2/h3 headings and a back-to-top button appears after scrolling.
+ * renders the Markdown body with `@ant-design/x-markdown`. Raw HTML is escaped
+ * and every link goes through the published-content href policy below, so CMS
+ * text can never inject markup or unsafe protocols. A table of contents is
+ * auto-generated from h2/h3 headings and a back-to-top button appears after
+ * scrolling.
  */
 import * as React from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import XMarkdown, { type ComponentProps as MarkdownComponentProps } from "@ant-design/x-markdown";
 import { useSiteContent } from "../lib/site-content-react";
 import { http, ApiError } from "@soymutdb/api-client";
-import { Button, Card, Skeleton, Table, Tag, Typography } from "../lib/antd";
+import { Button, Card, Skeleton, Tag, Typography } from "../lib/antd";
 import {
     AimOutlined as Microscope,
     ArrowLeftOutlined as ArrowLeft,
@@ -92,6 +95,28 @@ function slugify(text: string): string {
     return slug || "section";
 }
 
+/** Flatten rendered heading children into the plain text used for anchor ids. */
+function nodeText(node: React.ReactNode): string {
+    if (typeof node === "string" || typeof node === "number") return String(node);
+    if (Array.isArray(node)) return node.map(nodeText).join("");
+    if (React.isValidElement(node)) {
+        return nodeText((node.props as { children?: React.ReactNode }).children);
+    }
+    return "";
+}
+
+/**
+ * Normalize a raw heading line for the table of contents: keep the visible
+ * label of links, drop emphasis/code markers, and collapse whitespace so it
+ * matches `nodeText` of the rendered heading.
+ */
+function headingText(raw: string): string {
+    return raw
+        .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+        .replace(/[#*`]/g, "")
+        .trim();
+}
+
 /** Extract h2/h3 headings from Markdown source for the table of contents. */
 function extractToc(markdown: string): TocItem[] {
     const items: TocItem[] = [];
@@ -106,272 +131,81 @@ function extractToc(markdown: string): TocItem[] {
         const h2 = /^(?:##)\s+(.+?)\s*$/.exec(line);
         const h3 = /^(?:###)\s+(.+?)\s*$/.exec(line);
         if (h3) {
-            const text = h3[1].replace(/[#*`]/g, "").trim();
+            const text = headingText(h3[1]);
             items.push({ id: slugify(text), text, level: 3 });
         } else if (h2) {
-            const text = h2[1].replace(/[#*`]/g, "").trim();
+            const text = headingText(h2[1]);
             items.push({ id: slugify(text), text, level: 2 });
         }
     }
     return items;
 }
 
-/** Render inline Markdown (bold, italic, code, links) into React nodes. */
-function renderInline(text: string, keyPrefix: string): React.ReactNode[] {
-    const nodes: React.ReactNode[] = [];
-    // Order matters: bold (**) before italic (*) so the greedy star wins.
-    const regex = /\*\*(.+?)\*\*|`(.+?)`|\[(.+?)\]\(([^)]+)\)|\*(.+?)\*/g;
-    let lastIndex = 0;
-    let match: RegExpExecArray | null;
-    let i = 0;
-    while ((match = regex.exec(text)) !== null) {
-        if (match.index > lastIndex) {
-            nodes.push(text.slice(lastIndex, match.index));
-        }
-        if (match[1] !== undefined) {
-            nodes.push(
-                <strong key={`${keyPrefix}-b-${i}`} className="font-semibold text-foreground">
-                    {match[1]}
-                </strong>,
-            );
-        } else if (match[2] !== undefined) {
-            nodes.push(
-                <code
-                    key={`${keyPrefix}-c-${i}`}
-                    className="rounded bg-muted px-1.5 py-0.5 font-mono text-[0.85em]"
-                >
-                    {match[2]}
-                </code>,
-            );
-        } else if (match[3] !== undefined) {
-            const href = getSafeMarkdownHref(match[4]);
-            if (href) {
-                nodes.push(
-                    <a
-                        key={`${keyPrefix}-a-${i}`}
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="link-underline inline-flex items-center gap-0.5 text-primary"
-                    >
-                        {match[3]}
-                        <ExternalLink className="size-3" aria-hidden />
-                    </a>,
-                );
-            } else {
-                // Keep the published label visible, but never make an unsafe
-                // target actionable.
-                nodes.push(match[3]);
-            }
-        } else if (match[5] !== undefined) {
-            nodes.push(
-                <em key={`${keyPrefix}-i-${i}`} className="italic">
-                    {match[5]}
-                </em>,
-            );
-        }
-        lastIndex = regex.lastIndex;
-        i++;
-    }
-    if (lastIndex < text.length) {
-        nodes.push(text.slice(lastIndex));
-    }
-    return nodes;
+const HEADING_CLASS: Record<number, string> = {
+    1: "mt-8 font-display text-3xl font-semibold tracking-tight",
+    2: "mt-10 border-b pb-2 font-display text-2xl font-semibold tracking-tight",
+    3: "mt-8 font-display text-xl font-semibold tracking-tight",
+    4: "mt-6 text-lg font-semibold",
+    5: "mt-4 text-base font-semibold",
+    6: "mt-4 text-base font-semibold",
+};
+
+/**
+ * Link renderer for published Markdown. Safe targets open in a new tab with a
+ * hardened rel; rejected targets keep their visible label but never become
+ * actionable anchors.
+ */
+function MarkdownLink({ href, title, children }: MarkdownComponentProps) {
+    const target = typeof href === "string" ? getSafeMarkdownHref(href) : null;
+    if (!target) return <>{children}</>;
+    return (
+        <a
+            href={target}
+            title={typeof title === "string" ? title : undefined}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="link-underline inline-flex items-center gap-0.5 text-primary"
+        >
+            {children}
+            <ExternalLink className="size-3" aria-hidden />
+        </a>
+    );
 }
 
-/** Parse a Markdown table row into trimmed cells. */
-function parseTableRow(line: string): string[] {
-    return line
-        .replace(/^\s*\|/, "")
-        .replace(/\|\s*$/, "")
-        .split("|")
-        .map((cell) => cell.trim());
-}
-
-const isTableSeparator = (line: string): boolean =>
-    /^\s*\|?[\s:-]*-{3,}[\s:-|]*\|?\s*$/.test(line);
-
-/** Lightweight Markdown renderer → React nodes. Handles the common subset. */
-export function Markdown({ content }: { content: string }): React.ReactElement {
-    const lines = content.split(/\r?\n/);
-    const blocks: React.ReactNode[] = [];
-    let i = 0;
-    let key = 0;
-
-    while (i < lines.length) {
-        const line = lines[i];
-
-        // Code fence
-        if (line.trim().startsWith("```")) {
-            const lang = line.trim().slice(3).trim();
-            const codeLines: string[] = [];
-            i++;
-            while (i < lines.length && !lines[i].trim().startsWith("```")) {
-                codeLines.push(lines[i]);
-                i++;
-            }
-            i++; // consume closing fence
-            blocks.push(
-                <pre
-                    key={`code-${key++}`}
-                    className="overflow-x-auto rounded-lg border bg-muted/40 p-4 text-sm"
-                >
-                    <code className={`font-mono ${lang ? `language-${lang}` : ""}`}>
-                        {codeLines.join("\n")}
-                    </code>
-                </pre>,
-            );
-            continue;
-        }
-
-        // Headers
-        const header = /^(#{1,6})\s+(.+?)\s*$/.exec(line);
-        if (header) {
-            const level = header[1].length;
-            const text = header[2].replace(/[#*`]/g, "").trim();
-            const id = slugify(text);
-            const inner = renderInline(header[2], `h-${key}`);
-            if (level === 1) {
-                blocks.push(<h1 key={`h-${key++}`} id={id} className="mt-8 font-display text-3xl font-semibold tracking-tight">{inner}</h1>);
-            } else if (level === 2) {
-                blocks.push(<h2 key={`h-${key++}`} id={id} className="mt-10 border-b pb-2 font-display text-2xl font-semibold tracking-tight">{inner}</h2>);
-            } else if (level === 3) {
-                blocks.push(<h3 key={`h-${key++}`} id={id} className="mt-8 font-display text-xl font-semibold tracking-tight">{inner}</h3>);
-            } else if (level === 4) {
-                blocks.push(<h4 key={`h-${key++}`} id={id} className="mt-6 text-lg font-semibold">{inner}</h4>);
-            } else {
-                blocks.push(<h5 key={`h-${key++}`} id={id} className="mt-4 text-base font-semibold">{inner}</h5>);
-            }
-            i++;
-            continue;
-        }
-
-        // Table: current line starts with | and next line is a separator
-        if (line.trim().startsWith("|") && i + 1 < lines.length && isTableSeparator(lines[i + 1])) {
-            const headerCells = parseTableRow(line);
-            i += 2; // skip header + separator
-            const rows: string[][] = [];
-            while (i < lines.length && lines[i].trim().startsWith("|")) {
-                rows.push(parseTableRow(lines[i]));
-                i++;
-            }
-            // antd's Table renders the markdown table: the header and body
-            // styling come from the theme instead of hand-applied classes.
-            const tableKey = key++;
-            blocks.push(
-                <Table<{ key: string; cells: string[] }>
-                    key={`tbl-${tableKey}`}
-                    className="my-4"
-                    size="middle"
-                    rowKey="key"
-                    bordered
-                    pagination={false}
-                    scroll={{ x: "max-content" }}
-                    columns={headerCells.map((cell, ci) => ({
-                        title: renderInline(cell, `th-${tableKey}-${ci}`),
-                        key: `c${ci}`,
-                        render: (_: unknown, row: { key: string; cells: string[] }) =>
-                            renderInline(row.cells[ci] ?? "", `td-${tableKey}-${row.key}-${ci}`),
-                    }))}
-                    dataSource={rows.map((row, ri) => ({ key: String(ri), cells: row }))}
-                />,
-            );
-            continue;
-        }
-
-        // Blockquote
-        if (line.trim().startsWith(">")) {
-            const quoteLines: string[] = [];
-            while (i < lines.length && lines[i].trim().startsWith(">")) {
-                quoteLines.push(lines[i].replace(/^\s*>\s?/, ""));
-                i++;
-            }
-            blocks.push(
-                <blockquote
-                    key={`bq-${key++}`}
-                    className="my-4 border-l-4 border-primary/40 bg-muted/30 px-4 py-3 text-sm italic text-muted-foreground"
-                >
-                    {renderInline(quoteLines.join(" "), `bq-${key}`)}
-                </blockquote>,
-            );
-            continue;
-        }
-
-        // Bullet list
-        if (/^\s*[-*]\s+/.test(line)) {
-            const items: string[] = [];
-            while (i < lines.length && /^\s*[-*]\s+/.test(lines[i])) {
-                items.push(lines[i].replace(/^\s*[-*]\s+/, ""));
-                i++;
-            }
-            blocks.push(
-                <ul key={`ul-${key++}`} className="my-4 list-disc space-y-1.5 pl-6">
-                    {items.map((item, ii) => (
-                        <li key={ii}>{renderInline(item, `li-${key}-${ii}`)}</li>
-                    ))}
-                </ul>,
-            );
-            continue;
-        }
-
-        // Numbered list
-        if (/^\s*\d+\.\s+/.test(line)) {
-            const items: string[] = [];
-            while (i < lines.length && /^\s*\d+\.\s+/.test(lines[i])) {
-                items.push(lines[i].replace(/^\s*\d+\.\s+/, ""));
-                i++;
-            }
-            blocks.push(
-                <ol key={`ol-${key++}`} className="my-4 list-decimal space-y-1.5 pl-6">
-                    {items.map((item, ii) => (
-                        <li key={ii}>{renderInline(item, `oli-${key}-${ii}`)}</li>
-                    ))}
-                </ol>,
-            );
-            continue;
-        }
-
-        // Horizontal rule
-        if (/^\s*([-*]){3,}\s*$/.test(line)) {
-            blocks.push(<hr key={`hr-${key++}`} className="my-6 border-t" />);
-            i++;
-            continue;
-        }
-
-        // Blank line
-        if (line.trim() === "") {
-            i++;
-            continue;
-        }
-
-        // Paragraph: gather consecutive non-blank, non-block lines
-        const paraLines: string[] = [];
-        while (
-            i < lines.length &&
-            lines[i].trim() !== "" &&
-            !lines[i].trim().startsWith("```") &&
-            !/^(#{1,6})\s+/.test(lines[i]) &&
-            !lines[i].trim().startsWith(">") &&
-            !/^\s*[-*]\s+/.test(lines[i]) &&
-            !/^\s*\d+\.\s+/.test(lines[i]) &&
-            !/^\s*([-*]){3,}\s*$/.test(lines[i]) &&
-            !(
-                lines[i].trim().startsWith("|") &&
-                i + 1 < lines.length &&
-                isTableSeparator(lines[i + 1])
-            )
-        ) {
-            paraLines.push(lines[i]);
-            i++;
-        }
-        blocks.push(
-            <p key={`p-${key++}`} className="my-4 leading-relaxed text-foreground/90">
-                {renderInline(paraLines.join(" "), `p-${key}`)}
-            </p>,
+/** Heading renderer that stamps the same anchor ids the TOC scrolls to. */
+function heading(level: 1 | 2 | 3 | 4 | 5 | 6) {
+    const Tag = `h${level}` as keyof React.JSX.IntrinsicElements;
+    const className = HEADING_CLASS[level];
+    return function MarkdownHeading({ children }: MarkdownComponentProps) {
+        return (
+            <Tag id={slugify(nodeText(children))} className={className}>
+                {children}
+            </Tag>
         );
-    }
+    };
+}
 
-    return <div className="guide-content">{blocks}</div>;
+const MARKDOWN_COMPONENTS = {
+    a: MarkdownLink,
+    h1: heading(1),
+    h2: heading(2),
+    h3: heading(3),
+    h4: heading(4),
+    h5: heading(5),
+    h6: heading(6),
+};
+
+export function Markdown({ content }: { content: string }): React.ReactElement {
+    return (
+        <div className="guide-content">
+            <XMarkdown
+                content={content}
+                components={MARKDOWN_COMPONENTS}
+                escapeRawHtml
+                openLinksInNewTab
+            />
+        </div>
+    );
 }
 
 function GuideComponent() {

@@ -37,10 +37,20 @@ class SeedService:
         release_context: ReleaseContext,
         mutant_line_public_id: str | None = None,
     ) -> list[SeedInventoryResponse]:
+        """List seed lots whose line is released, public and not deleted.
+
+        The release predicate alone would still expose a line an operator has
+        unpublished or soft-deleted inside a released namespace, so visibility
+        and deletion are applied on the same join as the release.
+        """
         stmt = (
             select(SeedInventory)
             .join(MutantLine, SeedInventory.mutant_line_id == MutantLine.id)
-            .where(MutantLine.release_id == release_context.release_id)
+            .where(
+                MutantLine.release_id == release_context.release_id,
+                MutantLine.is_public.is_(True),
+                MutantLine.is_deleted.is_(False),
+            )
         )
         if mutant_line_public_id is not None:
             stmt = stmt.where(
@@ -64,6 +74,8 @@ class SeedService:
             .where(
                 SeedInventory.seed_lot == seed_lot,
                 MutantLine.release_id == release_context.release_id,
+                MutantLine.is_public.is_(True),
+                MutantLine.is_deleted.is_(False),
             )
         )
         inv = result.scalar_one_or_none()

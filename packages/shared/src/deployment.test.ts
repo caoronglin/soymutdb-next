@@ -48,6 +48,16 @@ describe("deployment URL contract", () => {
     expect(csp).not.toContain("example.com;");
   });
 
+  it("allows an explicitly configured file viewer to be framed", () => {
+    const csp = buildCsp({
+      apiOrigin: "https://api.staging.example.org",
+      frameOrigins: ["https://viewer.staging.example.org"],
+    });
+    expect(csp).toContain(
+      "frame-src 'self' https://viewer.staging.example.org;",
+    );
+  });
+
   it("rejects placeholder origins at build time", () => {
     expect(() => requireDeploymentOrigin("https://api.example.com", "API")).toThrow(
       /placeholder origin/i,

@@ -86,11 +86,14 @@ VALID_429 = {
 # leaves the whole contracts layer green. This literal is read from nowhere:
 # sha256 of "\n".join(["soymutdb-openapi-extensions/v1"] +
 # sorted("METHOD|path|key") operation rows + sorted("TOP|key") root rows).
+# Re-pinned 2026-11-09 for the site-control + multi-view slice: the eight new
+# operations inherit the standard x-idempotent rule, taking the reviewed row
+# count from 183 to 189 and x-idempotent from 182 to 188.
 _EXTENSION_SURFACE_DIGEST = (
-    "05f5ca1d7276272f409b034260f6e2e24200e31b1b34cf957541c9dd4e9189dd"
+    "9017e91c05f8368baa611bb9978b2df4a840dadce9fbeda9956b62fea9d386d6"
 )
-_EXPECTED_OPERATION_EXTENSION_ROWS = 183
-_EXPECTED_EXTENSION_KEYS = {"x-idempotent": 182, "x-pagination": 1}
+_EXPECTED_OPERATION_EXTENSION_ROWS = 189
+_EXPECTED_EXTENSION_KEYS = {"x-idempotent": 188, "x-pagination": 1}
 _EXPECTED_TOP_EXTENSION_KEYS = ("x-error-codes", "x-error-status")
 
 # Exact published x-pagination values, an independent fixed point.  The

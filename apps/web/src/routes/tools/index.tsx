@@ -16,6 +16,7 @@ import {
   ThunderboltOutlined,
 } from "@ant-design/icons";
 import { Breadcrumb, Tag, Typography } from "@/lib/antd";
+import { useSiteContent } from "../../lib/site-content-react";
 import * as React from "react";
 
 type IconComponent = React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
@@ -86,11 +87,12 @@ const TOOLS: ToolCard[] = [
 
 function ToolsIndexComponent() {
   const { t } = useTranslation();
+  const { get } = useSiteContent();
 
   return (
     <div className="container-prose section-rhythm">
       <header className="flex flex-col gap-4">
-        <Breadcrumb items={[{ title: <Link to="/">{t("nav.home")}</Link> }, { title: t("tools.title") }]} />
+        <Breadcrumb items={[{ title: <Link to="/">{get("nav.home", t("nav.home"))}</Link> }, { title: t("tools.title") }]} />
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-3.5">
             <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm">

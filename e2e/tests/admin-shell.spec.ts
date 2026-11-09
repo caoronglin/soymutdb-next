@@ -80,6 +80,7 @@ const ADMIN_ROUTES = [
   "/guide",
   "/preview-test-data",
   "/resource-catalog",
+  "/site-control",
   "/page-builder",
   "/widgets",
   "/widget-health",

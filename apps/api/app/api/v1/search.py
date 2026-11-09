@@ -51,8 +51,8 @@ async def global_search(
         default=None,
         ge=1,
         description=(
-            "Explicit release scope. Used verbatim (published or not); "
-            "defaults to the active published release."
+            "Explicit release scope. Must name a published release; the "
+            "active published release is used when omitted."
         ),
     ),
 ) -> Response:

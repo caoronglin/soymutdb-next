@@ -35,13 +35,20 @@ def get_engine() -> AsyncEngine:
     """Return the global async engine, creating it on first call."""
     global _engine
     if _engine is None:
-        # Statement timeout (asyncpg server_settings) so a slow query cannot
-        # pin a pooled connection forever. Pool sizes are per API process.
-        connect_args: dict[str, Any] = {}
+        # Connection-level server settings.  ``jit`` is configured here
+        # rather than via ``SET LOCAL`` because aggregate queries run in
+        # sessions opened by helpers (e.g. the variant service); only the
+        # connection setting reaches every session the pool hands out.
+        server_settings: dict[str, str] = {}
         if settings.db_statement_timeout > 0:
-            connect_args["server_settings"] = {
-                "statement_timeout": str(settings.db_statement_timeout * 1000)
-            }
+            server_settings["statement_timeout"] = str(
+                settings.db_statement_timeout * 1000
+            )
+        if not settings.db_jit_enabled:
+            server_settings["jit"] = "off"
+        connect_args: dict[str, Any] = {}
+        if server_settings:
+            connect_args["server_settings"] = server_settings
         _engine = create_async_engine(
             settings.database_url,
             pool_size=settings.db_pool_size,
@@ -49,6 +56,7 @@ def get_engine() -> AsyncEngine:
             pool_timeout=settings.db_pool_timeout,
             pool_recycle=settings.db_pool_recycle,
             pool_pre_ping=settings.db_pool_pre_ping,
+            pool_use_lifo=settings.db_pool_use_lifo,
             echo=settings.db_echo,
             future=True,
             connect_args=connect_args,
@@ -163,6 +171,8 @@ def get_redis() -> Redis:
             decode_responses=True,
             socket_timeout=settings.redis_socket_timeout,
             socket_connect_timeout=settings.redis_socket_connect_timeout,
+            socket_keepalive=True,
+            max_connections=settings.redis_max_connections,
             health_check_interval=30,
         )
     return _redis

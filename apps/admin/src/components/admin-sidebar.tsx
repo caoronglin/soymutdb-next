@@ -1,4 +1,4 @@
-import { DashboardOutlined, CloudUploadOutlined, FileTextOutlined, ReadOutlined, SnippetsOutlined, SettingOutlined, CheckOutlined, BarChartOutlined, EnvironmentOutlined, RiseOutlined, PictureOutlined, ExperimentOutlined } from "@ant-design/icons";
+import { DashboardOutlined, CloudUploadOutlined, FileTextOutlined, ReadOutlined, SnippetsOutlined, SettingOutlined, CheckOutlined, BarChartOutlined, EnvironmentOutlined, RiseOutlined, PictureOutlined, ExperimentOutlined, AppstoreOutlined, LayoutOutlined } from "@ant-design/icons";
 import type { ComponentType } from "react";
 
 /**
@@ -51,6 +51,7 @@ export const NAV_SECTIONS: NavSection[] = [
     items: [
       { path: "/imports", label: "Imports", labelKey: "admin.shell.imports", icon: CloudUploadOutlined },
       { path: "/releases", label: "Releases", labelKey: "admin.releases", icon: RiseOutlined },
+      { path: "/data-views", label: "Data views", labelKey: "admin.shell.dataViews", icon: LayoutOutlined },
       { path: "/instances", label: "Instances", labelKey: "admin.instances.title", icon: EnvironmentOutlined },
       { path: "/preview-test-data", label: "Test Data Preview", labelKey: "admin.shell.previewTestData", icon: ExperimentOutlined },
     ],
@@ -59,6 +60,8 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Content",
     labelKey: "admin.shell.content",
     items: [
+      { path: "/site-control", label: "Site control", labelKey: "admin.siteControl.title", icon: AppstoreOutlined },
+      { path: "/page-builder", label: "Page Builder", labelKey: "admin.pageBuilder.title", icon: LayoutOutlined },
       { path: "/content/pages", label: "Pages", labelKey: "admin.shell.pages", icon: FileTextOutlined },
       { path: "/content/legacy", label: "Legacy Pages", labelKey: "admin.shell.legacyPages", icon: FileTextOutlined },
       { path: "/news", label: "News", labelKey: "admin.shell.news", icon: ReadOutlined },

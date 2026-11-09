@@ -4,8 +4,8 @@
 # =============================================================================
 # Owns the ordered, blocking frontend gates:
 #   i18n key parity → offline demo build → placeholder scan → bundle budget →
-#   unit tests → lint → typecheck → page/query/admin architecture checks →
-#   OpenAPI client contract.
+#   unit tests → lint → ANT Design source scan → typecheck →
+#   page/query/admin architecture checks → OpenAPI client contract.
 #
 # The bundle stage runs twice over: scripts/check-bundle-size.sh keeps the
 # per-cache-group caps for the external portal, and the chart dependency closure
@@ -133,6 +133,12 @@ pnpm turbo run test
 
 step "Lint"
 pnpm turbo run lint
+
+step "ANT Design component usage scan"
+# `antd lint` exits 0 even when it finds deprecated/a11y/usage problems, so the
+# wrapper parses the JSON report and fails on any finding. Self-test runs first
+# so a scanner that stops reading the target fails instead of passing silently.
+node scripts/check-antd-design.mjs --self-test
 
 step "Typecheck"
 pnpm turbo run typecheck

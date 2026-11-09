@@ -100,11 +100,17 @@ METHODS = frozenset(
 #   sorted(f"{method} {path} {operationId} {summary} {description} {deprecated}")).
 # Regenerate with _digest() after an intentional contract change and update in
 # the same commit, with a reason.
+#
+# Re-pinned 2026-11-09 with the regenerated snapshot: three `GET /site/*`
+# operations (profile, branding, navigation) and five `/admin/data-views`
+# operations (sources, list, create, update, delete) were added. Every new
+# operation carries a summary; three of them carry a description, which is the
+# 209 -> 212 move.
 _ANNOTATION_DIGEST = (
-    "08d71c3640063cb455764b6bd0238a666b74779de4d3fd0e784aac453be10ad7"
+    "2b07205d52ff989e117d75de74d556916952b873d642b39d0fec1eb4cc5f31cc"
 )
-_EXPECTED_OPERATION_COUNT = 268
-_EXPECTED_DESCRIPTION_COUNT = 209
+_EXPECTED_OPERATION_COUNT = 276
+_EXPECTED_DESCRIPTION_COUNT = 212
 _EXPECTED_DEPRECATED_COUNT = 2
 
 # Independent fixed point for the generated continuation prose. sha256 of

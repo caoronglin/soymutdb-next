@@ -3102,6 +3102,20 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertTrue((ROOT / "scripts/check_api_client_base_path.py").is_file())
         self.assertTrue((ROOT / "scripts/test_api_client_base_path_guard.py").is_file())
 
+    def test_antd_design_scan_runs_its_self_test_from_the_frontend_gate(self) -> None:
+        """`antd lint` exits 0 even when it reports findings.
+
+        A bare CLI invocation would therefore be a gate that cannot fail. The
+        frontend gate must call the JSON-parsing wrapper, and the wrapper must
+        self-test against a bad fixture so a scanner that stops reading the
+        target fails loudly instead of passing silently.
+        """
+        frontend = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
+        self.assertIn("scripts/check-antd-design.mjs --self-test", frontend)
+        scanner = (ROOT / "scripts/check-antd-design.mjs").read_text(encoding="utf-8")
+        self.assertIn("report.partial === true", scanner)
+        self.assertIn("process.exit(1)", scanner)
+
     def test_package_script_invocations_do_not_double_up_the_separator(self) -> None:
         """`pnpm run <script> -- --flag` forwards a literal "--" to the script.
 

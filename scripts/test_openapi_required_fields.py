@@ -656,7 +656,7 @@ def test_type_named_property_rows_are_pinned() -> None:
         "ValidationError/properties/type",
         "ValidationErrorResponse/$defs/FieldError/properties/type",
     ], named
-    assert guard._EXPECTED_SCHEMA_TYPE_ROWS == len(rows) == 3050
+    assert guard._EXPECTED_SCHEMA_TYPE_ROWS == len(rows) == 3156
     assert guard._SCHEMA_TYPE_DIGEST == guard._schema_type_digest(rows)
 
     target = document["components"]["schemas"]["FieldError"]["properties"]["type"]

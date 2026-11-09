@@ -36,6 +36,7 @@ from .content import (
     StaticPage,
 )
 from .data_publishing import ActiveRelease, DataSet, ImportStatus, Provenance, ReleaseDataSet
+from .data_views import AdminDataView
 from .expression import ExpressionData, ExpressionLibrary
 from .gene_annotation import GeneAnnotation, GeneAnnotationSet
 from .gene_data_cache import GeneDataCache
@@ -96,6 +97,7 @@ __all__ = [
     "variant_facts_staging",
     "web_vitals",
     "ActiveRelease",
+    "AdminDataView",
     "AnalysisJob",
     "AnalysisJobStatus",
     "AnalysisType",

@@ -403,10 +403,12 @@ async def load_phenotype_section(
 ) -> PhenotypeSection:
     """Phenotypes reached through variants and their mutant lines.
 
-    Only public mutant lines are read: a phenotype record is a statement about
-    a line, and an unpublished line is not part of the public record. The
-    mutant is identified by ``public_id``; the internal row key never leaves
-    the API.
+    Only public, live mutant lines of the selected release are read: a
+    phenotype record is a statement about a line, and a line that is
+    unpublished, soft-deleted, or pinned to another release is not part of this
+    release's public record. A variant summary in scope does not by itself
+    establish that its line is published. The mutant is identified by
+    ``public_id``; the internal row key never leaves the API.
     """
     result = await db.execute(
         select(Phenotype, MutantLine)
@@ -416,7 +418,9 @@ async def load_phenotype_section(
             VariantSummary.gene_id == gene.gene_pk,
             VariantSummary.release_id == release_context.release_id,
             VariantSummary.assembly_id == gene.assembly_id,
+            MutantLine.release_id == release_context.release_id,
             MutantLine.is_public.is_(True),
+            MutantLine.is_deleted.is_(False),
         )
         .order_by(MutantLine.name, Phenotype.trait_category, Phenotype.trait_name)
     )

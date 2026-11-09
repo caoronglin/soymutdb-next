@@ -102,7 +102,7 @@
 - 无统一的**秘密轮换周期**与轮换标准操作流程（JWT、DB、MINIO、SMTP）。
 - 生产仍以**明文 `.env`** 承载全部秘密，未接任何密钥管理/密文存储（Vault/SOPS 等）；若暴露 `/opt/soymutdb/.env` 即全量泄露。
 - `BACKUP_S3_ACCESS_KEY` / `BACKUP_S3_SECRET_KEY`（异站备份凭据）走环境变量，属受限敏感配置，应纳入轮换与最小权限（只写目标桶）。
-- 静态发布目标 token（GitHub/Cloudflare Pages）目前建议放 `.env`；如已上 S3 中转桶，`SOYMUTDB_PUBLICATION_ARTIFACT_BUCKET` 配置字段存在但三适配器均未消费，属「待决策」项。
+- 静态发布目标 token（GitHub/Cloudflare Pages）目前建议放 `.env`。
 
 ---
 

@@ -220,22 +220,25 @@ _SCHEMA_MARKERS = frozenset(
 # v2 folds the 897 published ``default`` values into the same fixed point.
 # Regenerate with _digest() after an intentional contract change and update in
 # the same commit, with a reason.
+# Re-pinned 2026-11-09 for the site-control + multi-view slice: the five new
+# data-view schemas and three site schemas add 78 constraint rows (1712 -> 1790)
+# across five schemas (263 -> 268), mostly defaults and string length bounds.
 _FIELD_CONSTRAINT_DIGEST = (
-    "405ca0867e880043ee132cc37647981fa372ff85fb0d4db2db2c4f6e56f7a56c"
+    "579d380d87070549cf0a9c66f53801704ed1f246de4da2fabf30f5675661dfcd"
 )
-_EXPECTED_CONSTRAINT_ROWS = 1712
-_EXPECTED_SCHEMAS = 263
+_EXPECTED_CONSTRAINT_ROWS = 1790
+_EXPECTED_SCHEMAS = 268
 _EXPECTED_BY_KEY: dict[str, int] = {
-    "default": 897,
+    "default": 925,
     "exclusiveMinimum": 6,
-    "format": 151,
-    "maxItems": 24,
-    "maxLength": 183,
-    "maximum": 58,
-    "minItems": 17,
-    "minLength": 125,
-    "minimum": 227,
-    "pattern": 24,
+    "format": 153,
+    "maxItems": 28,
+    "maxLength": 203,
+    "maximum": 61,
+    "minItems": 20,
+    "minLength": 135,
+    "minimum": 232,
+    "pattern": 27,
 }
 
 # Independent fixed point for the published ``examples`` arrays. sha256 of
@@ -261,9 +264,9 @@ _GENERATED_EXAMPLE = re.compile(r"^\s*\* @example ", re.MULTILINE)
 # guard. Regenerate with _default_tag_digest() after an intentional, reviewed
 # regenerate and update in the same commit as both artifacts, with a reason.
 _DEFAULT_TAG_DIGEST = (
-    "f5737d9fbfb4a689721a52c51604185c6997b5c011999091be128b95dc72d065"
+    "4cda5b04621f154fac8e0e08644efff9c09dae282330f0dd5944b10577480fd1"
 )
-_EXPECTED_DEFAULT_TAGS = 896
+_EXPECTED_DEFAULT_TAGS = 924
 
 # Independent fixed point for the *value* written in each generated @default
 # tag. sha256 of "\n".join(["soymutdb-generated-default-values/v1"] +
@@ -275,7 +278,7 @@ _EXPECTED_DEFAULT_TAGS = 896
 # Regenerate with _default_tag_value_digest() after an intentional, reviewed
 # regenerate and update in the same commit as both artifacts, with a reason.
 _DEFAULT_TAG_VALUE_DIGEST = (
-    "c7c1f7f5c31416c69b892107f8711f64ef629b8919619a7c9d614c1c7d013824"
+    "7d8ff34bbe8ab92b5a69492354e1194dd3d581d461abde66b4a90e6db4eaa0ef"
 )
 
 # Independent fixed point for the VALUE printed in each generated @example
@@ -301,17 +304,19 @@ _EXPECTED_GENERATED_EXAMPLE_VALUE_ROWS = 7
 # "\n".join(["soymutdb-schema-additional-properties/v1"] + sorted rows), each
 # row "|".join((dotted path, canonical JSON value)). Read from nowhere.
 _ADDITIONAL_PROPERTIES_DIGEST = (
-    "4030dc8d56d82e3be31ea99cf2838fcbc6865384765f2df50530334e8ca23f4e"
+    "aa2242c9cd00b82595376a871f2aec6811069e0588a391abe56124a8cc62536d"
 )
-_EXPECTED_ADDITIONAL_PROPERTIES = 102
+_EXPECTED_ADDITIONAL_PROPERTIES = 111
 # sha256 over the generated client's (component, index-signature type) rows.
-# The 35 ``false`` nodes deliberately render nothing; the other 67 do. A
+# The 40 ``false`` nodes deliberately render nothing; the other 71 do. A
 # second literal is required: checking the client against the snapshot under
 # guard would pass on a coordinated regenerate that moves both halves.
+# Re-pinned 2026-11-09 for the site-control + multi-view slice: four new map
+# payloads in the data-view/site schemas take 67 -> 71 index signatures.
 _CLIENT_ADDITIONAL_PROPERTIES_DIGEST = (
-    "380346075bd99ab0fd4e2a2481e8d63f64b05b32681eb94b6b877a65476e899d"
+    "28f6d79f90e712dc38c6b40e9d6ff8afcc515082958d073b4bbd709caaeed45d"
 )
-_EXPECTED_CLIENT_ADDITIONAL_PROPERTIES = 67
+_EXPECTED_CLIENT_ADDITIONAL_PROPERTIES = 71
 
 
 def rows(document: dict[str, Any]) -> list[tuple[str, str, Any]]:

@@ -8,13 +8,12 @@ vi.mock("@tanstack/react-router", () => ({
   useRouterState: () => ({ redirect: runtime.redirect }),
   Link: ({ children }: { children: React.ReactNode }) => <span>{children}</span>,
 }));
-vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ removeQueries: vi.fn() }) }));
+vi.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => ({ removeQueries: vi.fn() }),
+  useQuery: () => ({ data: undefined }),
+}));
 vi.mock("@soymutdb/api-client", () => ({ ApiError: class extends Error {}, request: async () => ({ access_token: "token" }), setAccessToken: vi.fn() }));
-vi.mock("react-i18next", () => {
-  // These boundary tests assert keys; keep their translator stable across renders.
-  const translation = { t: (key: string) => key };
-  return { useTranslation: () => translation };
-});
+vi.mock("react-i18next", async () => (await import("../test/mocks")).mockTranslation);
 vi.mock("../components/route-motion", () => ({
   TextReveal: () => null,
   Reveal: ({ children }: { children: React.ReactNode }) => children,

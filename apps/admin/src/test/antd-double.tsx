@@ -281,6 +281,20 @@ export const Descriptions = (props: Props) => {
 export const Table = (props: Props) => <table data-testid={testid(props)}>{props.children}</table>;
 export const Tabs = (props: Props) => <div data-testid={testid(props)}>{props.children}</div>;
 
+export const Steps = (props: Props) => {
+  const items = (props.items as Array<{ title?: React.ReactNode; description?: React.ReactNode }> | undefined) ?? [];
+  return (
+    <ol data-testid={testid(props)} data-current={String(props.current ?? 0)}>
+      {items.map((item, index) => (
+        <li key={index}>
+          {item.title}
+          {item.description ? <p>{item.description}</p> : null}
+        </li>
+      ))}
+    </ol>
+  );
+};
+
 export const Typography = {
   Title: (props: Props) => {
     const level = Number(props.level ?? 3);

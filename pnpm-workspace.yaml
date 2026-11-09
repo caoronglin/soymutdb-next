@@ -23,12 +23,20 @@ catalog:
   '@types/react': 19.3.0
   '@types/react-dom': 19.3.0
   antd: 6.6.6
+  '@ant-design/icons': 6.3.4
   # A1 measurement slice: exact pin verified against the registry `latest`
   # (2.6.8, published 2025-12-24, MIT, AntV maintainers). Only the React 19
   # feasibility smoke test imports it, so `@soymutdb/charts` keeps it as a
   # devDependency; the production engine is `@antv/g2` via `g2-runtime`.
   '@ant-design/plots': 2.6.8
   '@ant-design/pro-components': 3.1.15-2
+  # Markdown rendering for admin previews and untrusted file previews. Ships
+  # marked + DOMPurify, so the hand-wired `marked` dependency can go away.
+  '@ant-design/x-markdown': 2.10.0
+  # Mobile shell for the narrow-viewport public site (adopted in #18).
+  antd-mobile: 5.43.0
+  # Ant Design's own source linter (`antd lint`), run by the frontend gate.
+  '@ant-design/cli': 6.7.0
   vitest: 5.0.5
   tailwindcss: 4.3.3
   '@tailwindcss/vite': 4.3.3

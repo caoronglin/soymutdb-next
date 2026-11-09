@@ -453,6 +453,7 @@ export default function AuditPage() {
               </p>
               <Select
                 value={period}
+                aria-label={t("admin.audit.statsPeriod", { defaultValue: "Statistics period" })}
                 onChange={(v) => setPeriod(v as StatsPeriod)}
                 options={[
                   { value: "day", label: t("admin.audit.periodDay", { defaultValue: "Day" }) },
@@ -470,6 +471,7 @@ export default function AuditPage() {
             <FilterOutlined className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder={t("admin.audit.searchPlaceholder", { defaultValue: "Search by actor, resource, or IP..." })}
+              aria-label={t("admin.audit.searchPlaceholder", { defaultValue: "Search by actor, resource, or IP..." })}
               value={scope.search}
               onChange={(e) => updateScope({ search: e.target.value })}
               className="h-9 w-72 pl-8"
@@ -477,6 +479,7 @@ export default function AuditPage() {
           </div>
           <Select
             value={scope.action}
+            aria-label={t("admin.audit.actionFilter", { defaultValue: "Action filter" })}
             onChange={(v) => updateScope({ action: v })}
             options={[
               { value: "all", label: t("admin.audit.actionAll", { defaultValue: "All Actions" }) },
@@ -493,6 +496,7 @@ export default function AuditPage() {
             <GlobalOutlined className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder={t("admin.audit.ipFilterPlaceholder", { defaultValue: "Filter by IP address..." })}
+              aria-label={t("admin.audit.ipFilterPlaceholder", { defaultValue: "Filter by IP address..." })}
               value={scope.ipAddress}
               onChange={(e) => updateScope({ ipAddress: e.target.value })}
               className="h-9 w-44 pl-8"

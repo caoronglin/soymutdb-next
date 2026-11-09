@@ -287,6 +287,14 @@ async def create_import(
                 f"expected one of {', '.join(SUPPORTED_MODULE_FORMATS)}"
             )
 
+    # Expression and homolog facts are assembly-scoped: an accession alone is
+    # ambiguous across v4/v5, so the writer refuses to guess. Fail the request
+    # here with a clear 422 instead of queueing a worker that must fail closed.
+    if body.type in {"expression_csv", "homolog_csv"} and not (
+        body.assembly or ""
+    ).strip():
+        raise ValidationError(f"assembly is required for {body.type} imports")
+
     task = await create_import_command(
         db,
         actor_id=current_user.id,

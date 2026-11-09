@@ -105,8 +105,10 @@ METHODS = frozenset(
 # sha256 of "\n".join(["soymutdb-operation-ids/v1"] + sorted(f"{key} {oid}")).
 # Regenerate with _digest() after an intentional contract change and update in
 # the same commit, with a reason.
-_OPERATION_ID_DIGEST = "1f55857d26bba0210cdb9d0b8dc73b8a5d42f33ddac8d55cba3a68681d491673"
-_EXPECTED_OPERATION_COUNT = 268
+# Re-pinned 2026-11-09 for the site-control + multi-view slice: three GET
+# /site/* and five /admin/data-views operations take 268 -> 276.
+_OPERATION_ID_DIGEST = "7193e588a6b7fab8636c3a861b9cd921efcdb1ef7df2ab93e029a26816122c88"
+_EXPECTED_OPERATION_COUNT = 276
 
 # Independent fixed points on the published PATH DECLARATION ORDER. The
 # operationId digest above walks a *sorted* (METHOD path, operationId) pair
@@ -127,9 +129,9 @@ _EXPECTED_OPERATION_COUNT = 268
 # silence the other. Regenerate with _path_order_digest() after an
 # intentional, reviewed reorder and update in the same commit as both
 # artifacts, with a reason.
-_PATH_ORDER_DIGEST = "086901ee36ea25318728b5486aa311968568e7633e255b72fa4701fe68a1bcd2"
-_CLIENT_PATH_ORDER_DIGEST = "baabc2c7606dafb7dbbf10b54292007ceaefe105c072c394460ec524f014a7e7"
-_EXPECTED_PATH_COUNT = 238
+_PATH_ORDER_DIGEST = "665c9ae9ad16faa213ccb0f0904e171c0dc26c6765e40f60926929c2b83f7a25"
+_CLIENT_PATH_ORDER_DIGEST = "abb53d4a8f592fe81d09a977cad65754bcc4bda8f360cbe41c881e00cca21d6b"
+_EXPECTED_PATH_COUNT = 244
 # Reviewed, hand-written fixed point on the snapshot's HTTP method sequence.
 # sha256 of "\n".join(["soymutdb-published-method-sequence/v1"] +
 #   sorted(f"{path}|{index}|{METHOD}")) over every method of every path, where
@@ -140,9 +142,9 @@ _EXPECTED_PATH_COUNT = 238
 # against -- this literal is the only anchor. Read from nowhere; re-pin in the
 # same commit as the snapshot after an intentional, reviewed reorder.
 _METHOD_SEQUENCE_DIGEST = (
-    "1a3af1165bdd777bead8a38837d1b075b1aee45bd162e77c612daa2b2f5b888b"
+    "445b5b027c694caf74c2e24c29c18d0046b62c32cb1aac62cbd3188e7790dca1"
 )
-_EXPECTED_METHOD_ROWS = 268
+_EXPECTED_METHOD_ROWS = 276
 
 # Independent fixed point on the generated ``operations`` interface MEMBER
 # ORDER. Every literal above walks the snapshot or the ``paths`` interface;
@@ -160,10 +162,12 @@ _EXPECTED_METHOD_ROWS = 268
 #   *f"{index}|{operationId}"]), read from nowhere. Regenerate with
 # _client_operation_order_digest() in the same commit as an intentional,
 # reviewed reorder, with a reason.
+# Re-pinned 2026-11-09 for the site-control + multi-view slice: three GET
+# /site/* and five /admin/data-views members take the interface 268 -> 276.
 _CLIENT_OPERATION_ORDER_DIGEST = (
-    "dff9419ef335a2e764859a9dcef93a463bc4168195561527f1d4266b9e7b338d"
+    "375a093e1e1d0cac916f1449df6daaa9ef6da0b72b623f8ba8e4d2a6e2bfe810"
 )
-_EXPECTED_CLIENT_OPERATION_ROWS = 268
+_EXPECTED_CLIENT_OPERATION_ROWS = 276
 
 PATH_LINE = re.compile(r'^    "(/[^"]*)": \{$')
 OP_REF = re.compile(

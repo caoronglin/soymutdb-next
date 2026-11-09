@@ -20,6 +20,8 @@ export interface DeploymentOrigins {
   apiOrigin: string;
   /** Omitted for the web-only minimal deployment, which ships no iframe app. */
   jbrowseOrigin?: string;
+  /** Additional origins allowed to be framed (e.g. the opt-in remote file viewer). */
+  frameOrigins?: readonly string[];
 }
 
 /** Build-time deployment modes accepted by the public portal. */
@@ -165,7 +167,13 @@ export function buildCsp(origins: DeploymentOrigins, analytics = false): string 
       origins.apiOrigin,
       ...(analytics ? ["https://cloudflareinsights.com"] : []),
     ],
-    "frame-src": ["'self'", ...(origins.jbrowseOrigin ? [origins.jbrowseOrigin] : [])],
+    "frame-src": [
+      ...new Set([
+        "'self'",
+        ...(origins.jbrowseOrigin ? [origins.jbrowseOrigin] : []),
+        ...(origins.frameOrigins ?? []),
+      ]),
+    ],
     "base-uri": ["'self'"],
     "form-action": ["'self'"],
     "frame-ancestors": ["'self'"],

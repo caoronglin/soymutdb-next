@@ -139,7 +139,13 @@ METHODS = frozenset(
 #   sorted(f"{method}|{path}|{','.join(sorted(tags))}")). Regenerate with
 # _operation_tag_digest() after an intentional, reviewed retag and update in
 # the same commit, with a reason.
-_OPERATION_TAG_DIGEST = "a2753305d5790d8f278a0caa4bd21040125631f0fcec75750c669b0cde25b71c"
+#
+# Re-pinned 2026-11-09 with the regenerated snapshot: the site control plane
+# added `GET /site/profile`, `GET /site/branding` and `GET /site/navigation`,
+# and the multi-view workspace added five `/admin/data-views` operations
+# (sources, list, create, update, delete), all tagged as reviewed above. No
+# existing operation changed tags.
+_OPERATION_TAG_DIGEST = "d991b226764675b56c4ba5bf96c75303b00aca15f780e8f84a836aa57d9746b8"
 
 # Independent fixed point for the per-operation tag ORDER. The digest above
 # sorts tags inside each row, so swapping two tags on one operation (same
@@ -149,9 +155,9 @@ _OPERATION_TAG_DIGEST = "a2753305d5790d8f278a0caa4bd21040125631f0fcec75750c669b0
 # tag) in document order from nowhere; re-pin in the same commit as a reviewed
 # reorder, with a reason.
 _OPERATION_TAG_ORDER_DIGEST = (
-    "b8bb675d5b5b96073df47eef40f8df7506a78a99b3be4b4fd353c065ae345b76"
+    "792f77e8c63d90c4b90a0aa1ebbfea783b3e7c5768bb9a82d73e854f37f4ad10"
 )
-_EXPECTED_OPERATION_TAG_ROWS = 270
+_EXPECTED_OPERATION_TAG_ROWS = 278
 
 
 def _operation_tag_rows(document: dict[str, Any]) -> list[tuple[str, str, str]]:
@@ -977,14 +983,17 @@ def self_test() -> tuple[list[str], int, int, frozenset[str]]:
         return snapshot, generated, golden, main, config, smoke
 
     def source_wiring_unrunnable(snapshot, generated, golden, main, config, smoke):
-        # ``ast.parse`` and ``symtable`` both accept ``__debug__ = 1``; only
-        # ``compile()`` rejects it. Every AST pass stays silent, so this row
-        # pins the compile probe. The module would never import: GREEN on bytes
-        # that cannot run is the hole.
+        # ``ast.parse`` and ``symtable`` both accept a stray ``break``; only
+        # ``compile()`` rejects it (``'break' outside loop``). Every AST pass
+        # stays silent, so this row pins the compile probe. The module would
+        # never import: GREEN on bytes that cannot run is the hole. Do not use
+        # ``__debug__ = 1`` here: since Python 3.15 ``symtable`` rejects it too,
+        # which routes the ablation through the compile-source check first and
+        # never reaches the probe this row exists to defend.
         main = main.replace(
             '    """Create and configure the FastAPI application."""\n    app = FastAPI(',
             '    """Create and configure the FastAPI application."""\n'
-            "    __debug__ = 1\n"
+            "    break\n"
             "    app = FastAPI(",
             1,
         )

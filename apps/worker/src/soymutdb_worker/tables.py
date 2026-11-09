@@ -134,6 +134,8 @@ expression_data = Table(
     Column("fpkm", Float),
     Column("tpm", Float),
     Column("raw_count", BigInteger),
+    # Upserts refresh this so "last touched" is not frozen at creation time.
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
 )
 
 expression_libraries = Table(
@@ -143,6 +145,8 @@ expression_libraries = Table(
     Column("library_name", String(256)),
     Column("tissue", String(32)),
     Column("treatment", String(32)),
+    # Expression is assembly-scoped: a library belongs to exactly one assembly.
+    Column("assembly_id", Integer, nullable=False),
 )
 
 gene_homologs = Table(
@@ -154,6 +158,7 @@ gene_homologs = Table(
     Column("homolog_gene_id", String(64), nullable=False),
     Column("homolog_type", String(16), nullable=False),
     Column("source", String(128)),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
 )
 
 #: Comparative-genomics membership. API owns the migration; the worker reads

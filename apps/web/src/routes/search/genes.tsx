@@ -32,6 +32,7 @@ import { queryKeys } from "../../lib/query-keys";
 import { SITE_VARIANT } from "../../lib/site-variant";
 import { buildJbrowseLocusUrl } from "../../lib/deployment";
 import { resolveSearchAssembly } from "../../lib/search-assembly";
+import { assemblyOptionLabel } from "../../lib/assembly-selection";
 import { useReleaseId } from "../../lib/release-scope";
 
 /**
@@ -401,7 +402,11 @@ function GeneIdSearchComponent() {
       title: get("search.genes.colAssembly", t("search.genes.colAssembly")),
       key: "assembly",
       width: 150,
-      render: () => <span className="font-mono text-xs">{selectedAssembly?.name ?? "—"}</span>,
+      render: () => (
+        <span className="font-mono text-xs">
+          {selectedAssembly ? assemblyOptionLabel(selectedAssembly) : "—"}
+        </span>
+      ),
     },
     {
       title: get("search.genes.colGbrowse", t("search.genes.colGbrowse")),
@@ -484,7 +489,9 @@ function GeneIdSearchComponent() {
                   value: String(a.id),
                   label: (
                     <span className="flex items-center gap-2">
-                      <span>{a.name}</span>
+                      {/* Name alone repeats across versions ("Wm82" is both v4 and v5),
+                        so the visible option text carries the version. */}
+                      <span>{assemblyOptionLabel(a)}</span>
                       {a.is_default ? (
                         <Tag className="m-0 text-[9px] uppercase">{t("home.defaultAssembly")}</Tag>
                       ) : null}

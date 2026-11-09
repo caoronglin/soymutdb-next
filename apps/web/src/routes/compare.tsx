@@ -216,7 +216,7 @@ function ComparePage() {
 
   return (
     <div ref={rootRef} className="container-prose py-8 md:py-12">
-      <FadeUp stagger={0.05}>
+      <FadeUp>
         <div className="mb-8">
           <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
             <GitCompareArrows className="size-4" />
@@ -301,7 +301,7 @@ function ComparePage() {
               {/* Summary cards */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
                 {selectedVariants.map((v, i) => (
-                  <FadeUp key={v.id} delay={0.05 + i * 0.05}>
+                  <FadeUp key={v.id} delay={50 + i * 50}>
                     <VariantCard
                       v={v}
                       onRemove={() => toggle(v.id)}
@@ -312,7 +312,7 @@ function ComparePage() {
               </div>
 
               {/* Comparison grid */}
-              <FadeUp delay={0.2}>
+              <FadeUp delay={200}>
                 <Card>
                   <div className="pb-3">
                     <Typography.Title level={2} className="m-0 text-lg flex items-center gap-2">
@@ -359,7 +359,7 @@ function ComparePage() {
               </FadeUp>
 
               {/* Distribution chart (pure SVG, no heavy lib needed) */}
-              <FadeUp delay={0.25}>
+              <FadeUp delay={250}>
                 <Card>
                   <div className="pb-3">
                     <Typography.Title level={2} className="m-0 text-lg flex items-center gap-2">

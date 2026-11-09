@@ -161,6 +161,8 @@ NON_ADMIN_PROTECTED = frozenset({
     ("/api/v1/site/content", "get"),
     ("/api/v1/site/footer", "get"),
     ("/api/v1/site/home", "get"),
+    ("/api/v1/site/navigation", "get"),
+    ("/api/v1/site/profile", "get"),
     ("/api/v1/table-views/{kind}", "get"),
     ("/api/v1/tracks", "get"),
     ("/api/v1/tracks/jbrowse-config", "get"),
@@ -172,7 +174,7 @@ NON_ADMIN_PROTECTED = frozenset({
     ("/api/v1/variants/export/{export_id}/manifest", "get"),
     ("/api/v1/widget/{name}", "get"),
 })
-# pinned count: 48 non-admin protected, checked below
+# pinned count: 50 non-admin protected, checked below
 
 _LITERAL_FLOOR_LINE = re.compile(
     r"^NON_ADMIN_PROTECTED = frozenset\(\{$", re.MULTILINE
@@ -184,10 +186,13 @@ _LITERAL_FLOOR_LINE = re.compile(
 # regenerating it from the snapshot would make it self-referential, which is the
 # entire failure this pin replaces. Re-pin in the same commit as an intentional
 # contract change, with a reason.
+# Re-pinned 2026-11-09 for the site-control + multi-view slice: three GET
+# /site/* operations are anonymous and five /admin/data-views operations are
+# protected, moving the projection 268 -> 276 rows and protected 170 -> 178.
 _SECURITY_PROJECTION_DIGEST = (
-    "4a94373fc9c8c4a658d89d492804bc0fe803f7a21128913c306e5f88ca932d60"
+    "5389a953a8a1a11297179a541926a3260391d96040df4f63c5d04ab742213d2c"
 )
-_EXPECTED_PROJECTED = 170
+_EXPECTED_PROJECTED = 178
 _EXPECTED_HIDDEN_OPS = 98
 
 # Independent fixed point on the *content* of each published security
@@ -196,10 +201,10 @@ _EXPECTED_HIDDEN_OPS = 98
 # deriving it from the snapshot it guards would be self-referential. Re-pin in
 # the same commit as an intentional contract change, with a reason.
 _SECURITY_REQUIREMENT_DIGEST = (
-    "e227b106475a35cf387a024699cf7ee5bbce7a5b6d3eea0888dcca618d69ac16"
+    "8ed0c7a6b77d42dec638c0ffa8a7c0359155576a070c34845572efd0fd3bd4ff"
 )
-_EXPECTED_SECURITY_REQUIREMENT_ROWS = 268
-_EXPECTED_PROTECTED_REQUIREMENTS = 170
+_EXPECTED_SECURITY_REQUIREMENT_ROWS = 276
+_EXPECTED_PROTECTED_REQUIREMENTS = 178
 
 # Reviewed, hand-written fixed point on the two securityScheme descriptions.
 # sha256 of "\n".join(["soymutdb-security-scheme-descriptions/v1"] +

@@ -11,7 +11,7 @@ GitHub Pages（`.github/workflows/ci.yml` 生成 `pages-demo-dist` → `.github/
 门户必须按站点变体分别构建和部署，而不是在 API 中按访问者自动识别。执行 apps/web 的 pnpm run build:sites 会顺序生成：
 
 - dist/external：公开站点；使用 VITE_SITE_VARIANT=external，部署到公开 Pages 自定义域名。
-- dist/internal：内部站点；使用 VITE_SITE_VARIANT=internal，部署到独立的内部 Pages 项目或私有静态 origin。生产构建必须设置 SOYMUTDB_INTERNAL_SITE_URL；不能把内部 origin 的地址、token 或任何密钥放进 VITE_*。
+- dist/internal：内部站点；使用 VITE_SITE_VARIANT=internal，部署到独立的内部 Pages 项目或私有静态 origin。生产构建必须设置 SOYMUTDB_INTERNAL_SITE_URL；不能把内部 origin 的地址、token 或任何密钥放进 VITE_*。可选远程预览同样使用非 VITE_ 的变体输入（SOYMUTDB_EXTERNAL_FILE_VIEWER_* / SOYMUTDB_INTERNAL_FILE_VIEWER_*），由 build:sites 只把当前变体的一对映射到本次构建。
 
 两套制品的静态文件和 manifest 互不复用。internal bundle 会请求 /api/v1/site/*?variant=internal；该变体要求认证 viewer，响应为 private, no-store。external 请求默认使用 external 变体并可按公开内容短时缓存。
 

@@ -136,19 +136,42 @@ def test_vcf_export_stamps_release_and_assembly_provenance():
         assert forbidden not in text
 
 
-def test_bed_export_names_the_public_gene_not_a_surrogate():
+def test_bed_export_stamps_release_and_assembly_provenance():
+    """BED has no metadata field, so the track line must carry provenance."""
     output = io.StringIO()
 
-    count = export_task._write_bed(output, [_row()])
+    count = export_task._write_bed(
+        output, [_row()], {"release_key": "7", "assembly_key": "Wm82.a4.v1"}
+    )
 
     assert count == 1
-    fields = output.getvalue().strip().split("\t")
+    lines = output.getvalue().splitlines()
+    assert lines[0].startswith("track ")
+    assert "release_key=7" in lines[0]
+    assert "assembly_key=Wm82.a4.v1" in lines[0]
+    fields = lines[1].split("\t")
     assert fields[0] == "chr01"
     # BED is 0-based half-open: position 1000 -> start 999.
     assert fields[1] == "999"
     assert fields[3].startswith("Glyma.01G000100|")
     for forbidden in sorted(export_task.FORBIDDEN_EXPORT_COLUMNS):
         assert forbidden not in output.getvalue()
+
+
+def test_bed_provenance_cannot_break_the_track_line():
+    """A quote or newline in the label must not inject a second line."""
+    output = io.StringIO()
+
+    export_task._write_bed(
+        output,
+        [_row()],
+        {"release_key": "7", "assembly_key": 'v4"\nname="forged'},
+    )
+
+    lines = output.getvalue().splitlines()
+    assert len(lines) == 2
+    assert lines[0].startswith("track ")
+    assert "forged" in lines[0]
 
 
 def test_record_mapping_follows_the_declared_column_order():

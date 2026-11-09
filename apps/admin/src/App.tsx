@@ -47,9 +47,13 @@ const SettingsSecurityPage = lazy(() => import("./routes/settings/security"));
 const SettingsLocalizationPage = lazy(() => import("./routes/settings/localization"));
 const SettingsAdvancedPage = lazy(() => import("./routes/settings/advanced"));
 const FeaturesPage = lazy(() => import("./routes/features"));
+const SiteControlPage = lazy(() => import("./routes/site-control"));
+const PageBuilderListPage = lazy(() => import("./routes/page-builder/index"));
+const PageBuilderEditorPage = lazy(() => import("./routes/page-builder/$pageId"));
 const AnalyticsSettingsPage = lazy(() => import("./routes/analytics-settings"));
 const PublicationsAdminPage = lazy(() => import("./routes/publications"));
 const TableViewsPage = lazy(() => import("./routes/table-views"));
+const DataViewsPage = lazy(() => import("./routes/data-views"));
 
 /** Loading fallback for lazy-loaded routes. */
 function RouteLoading() {
@@ -280,6 +284,12 @@ const featuresRoute = createRoute({
   component: () => withSuspense(FeaturesPage),
 });
 
+const siteControlRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/site-control",
+  component: () => withSuspense(SiteControlPage),
+});
+
 const analyticsSettingsRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/analytics-settings",
@@ -319,13 +329,13 @@ const widgetHealthRoute = createRoute({
 const pageBuilderIndexRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/page-builder",
-  component: () => withSuspense(LegacyUnavailablePage),
+  component: () => withSuspense(PageBuilderListPage),
 });
 
 const pageBuilderEditRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/page-builder/$pageId",
-  component: () => withSuspense(LegacyUnavailablePage),
+  component: () => withSuspense(PageBuilderEditorPage),
 });
 
 const publicationsAdminRoute = createRoute({
@@ -338,6 +348,12 @@ const tableTemplatesRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/table-templates",
   component: () => withSuspense(TableViewsPage),
+});
+
+const dataViewsRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/data-views",
+  component: () => withSuspense(DataViewsPage),
 });
 
 const tableViewsRedirectRoute = createRoute({
@@ -378,6 +394,7 @@ const routeTree = rootRoute.addChildren([
     settingsLocalizationRoute,
     settingsAdvancedRoute,
     featuresRoute,
+    siteControlRoute,
     analyticsSettingsRoute,
     widgetsRoute,
     widgetEditorRoute,
@@ -388,6 +405,7 @@ const routeTree = rootRoute.addChildren([
     pageBuilderEditRoute,
     publicationsAdminRoute,
     tableTemplatesRoute,
+    dataViewsRoute,
     tableViewsRedirectRoute,
   ]),
 ]);

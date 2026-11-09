@@ -76,6 +76,11 @@ export function escapeHtml(value: string): string {
  */
 const SHELL_MOUNT_PATTERN = /<div\b[^>]*\bid=["'](?:root|app)["'][^>]*>\s*<\/div>/i;
 
+const SHELL_FALLBACK_STYLE =
+  "<style>html,body{margin:0;padding:0}" +
+  ".soymutdb-shell-fallback{position:absolute;top:0;left:0;right:0;padding:16px}" +
+  "body:has(#root > *) .soymutdb-shell-fallback{display:none}</style>";
+
 function shellFallback(entry: StaticRouteEntry): string {
   const summary = entry.description ? `<p>${escapeHtml(entry.description)}</p>` : "";
   return (
@@ -130,9 +135,11 @@ export function injectPageHead(
   // content-snapshot build only recognises an empty `#root`, and `createRoot`
   // clears that node on boot anyway. Sibling text survives for the crawler that
   // never runs the app; text inside the mount would be dropped on boot.
-  const withFallback = options.shellFallback
+  const mountable = options.shellFallback && SHELL_MOUNT_PATTERN.test(document);
+  const withFallback = mountable
     ? document.replace(SHELL_MOUNT_PATTERN, (match) => `${match}${shellFallback(entry)}`)
     : document;
+  if (mountable) tags.push(SHELL_FALLBACK_STYLE);
   if (tags.length === 0) return withFallback;
   return withFallback.replace("</head>", `  ${tags.join("\n    ")}\n  </head>`);
 }

@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
@@ -18,6 +18,7 @@ from ...core.public_ids import normalize_public_id
 from ...core.security import RoleName
 from ...core.task_contract import EXPORT_VARIANTS_TASK
 from ...models.auth import User
+from ...models.genomic import Assembly
 from ...models.variant import MutantLine
 from ...models.variant_facts import variant_facts
 from ...schemas.error import ValidationErrorResponse
@@ -162,23 +163,12 @@ def _export_assembly_scope(
     return candidate
 
 
-async def _assembly_namespace_exists(
+async def _fact_namespace_exists(
     db: AsyncSession,
     release_id: int,
     assembly: str,
 ) -> bool:
-    """Whether the release actually holds variants in this namespace.
-
-    The namespace of a fact is the assembly key it was imported under, which
-    is the assembly's name *or* its version — both vocabularies occur in
-    the data. So the question "does this export have anything to export?"
-    can only be answered by the facts themselves.
-
-    Without this check a misspelled assembly name produces an export that
-    is recorded as ``succeeded`` with zero rows: the record advertises a
-    release/assembly pair that does not exist, and the download is an empty
-    file. A refused request is the honest answer.
-    """
+    """Whether the release holds any variant facts under *assembly* exactly."""
     result = await db.execute(
         select(variant_facts.c.variant_id)
         .where(
@@ -188,6 +178,50 @@ async def _assembly_namespace_exists(
         .limit(1)
     )
     return result.first() is not None
+
+
+async def _resolve_export_namespace(
+    db: AsyncSession,
+    release_id: int,
+    assembly: str,
+) -> str | None:
+    """Return the fact namespace *assembly* names, accepting either label.
+
+    The namespace of a fact is the assembly key it was imported under, which
+    is the assembly's name *or* its version — both vocabularies occur in
+    the data. So the question "does this export have anything to export?"
+    can only be answered by the facts themselves.
+
+    Only an explicit ``assemblies`` row links the two labels. Similar-looking
+    strings are never treated as the same namespace: if the alias is
+    ambiguous the export is refused rather than guessing which coordinate
+    system the caller meant.
+    """
+    if await _fact_namespace_exists(db, release_id, assembly):
+        return assembly
+
+    rows = (
+        await db.execute(
+            select(Assembly.name, Assembly.version).where(
+                or_(Assembly.name == assembly, Assembly.version == assembly)
+            )
+        )
+    ).all()
+    aliases = {
+        version if name == assembly else name for name, version in rows
+    } - {assembly}
+    matches = [
+        alias
+        for alias in sorted(aliases)
+        if alias and await _fact_namespace_exists(db, release_id, alias)
+    ]
+    if len(matches) > 1:
+        raise ValidationError(
+            f"Assembly {assembly!r} matches more than one variant namespace in "
+            "this release. The export was refused: one artifact cannot span "
+            "assembly namespaces."
+        )
+    return matches[0] if matches else None
 
 
 @router.get("", response_model=VariantListResponse)
@@ -334,14 +368,21 @@ async def _submit_export(
     # successful export: the request is refused instead, so the submitter
     # learns that the namespace is empty rather than downloading an empty
     # file that claims to be the release's data.
-    if not await _assembly_namespace_exists(
+    #
+    # The request names the public assembly label (usually the name); the
+    # facts may have been imported under the version label. Resolve through
+    # the assemblies row so both labels reach the same namespace, and record
+    # the namespace the artifact is actually built from.
+    resolved_scope = await _resolve_export_namespace(
         db, release_context.release_id, assembly_scope
-    ):
+    )
+    if resolved_scope is None:
         raise ValidationError(
             f"No variants are published for assembly {assembly_scope!r} in this "
             "release. The export was refused: an artifact with no rows would "
             "claim a namespace the release does not have."
         )
+    assembly_scope = resolved_scope
     filters["assembly"] = assembly_scope
 
     export_id = uuid.uuid4()

@@ -277,6 +277,12 @@ def test_valid_route_accepted():
     assert validate_route("/latest-news") == "/latest-news"
 
 
+def test_homepage_route_is_editable():
+    # The portal homepage is the only route without a path segment; Admin must
+    # be able to create a published PageDefinition override for it.
+    assert validate_route("/") == "/"
+
+
 @pytest.mark.parametrize(
     "bad",
     ["about", "", "UPPER", "/About", "/with space", "/a//b", "/./x", "/-x"],

@@ -40,8 +40,8 @@ FEATURES: Final[dict[str, FeatureDefinition]] = {
     "imports.local_upload": FeatureDefinition(
         "imports.local_upload", True, True, "Enable browser-direct multipart uploads."
     ),
-    # The seven classic scientific import types default to OFF: their durable
-    # persistence writers are not yet implemented (data_adapters raise
+    # The remaining classic scientific import types default to OFF: their
+    # durable persistence writers are not implemented (data_adapters raise
     # UnsupportedImportError; import_vcf/import_gff3/import_mutant_lines are
     # fail-closed or count-only).  They must be hidden in Admin and rejected at
     # the API until a writer closes the loop.  See docs/ops/first-release-data-plan.md §5.
@@ -62,12 +62,15 @@ FEATURES: Final[dict[str, FeatureDefinition]] = {
     ),
     "imports.expression_csv": FeatureDefinition(
         "imports.expression_csv",
-        False,
         True,
-        "Enable Expression CSV imports (writer not yet closed).",
+        True,
+        "Enable Expression CSV imports (assembly-scoped durable writer).",
     ),
     "imports.homolog_csv": FeatureDefinition(
-        "imports.homolog_csv", False, True, "Enable Homolog CSV imports (writer not yet closed)."
+        "imports.homolog_csv",
+        True,
+        True,
+        "Enable Homolog CSV imports (assembly-scoped durable writer).",
     ),
     "publication.github_pages": FeatureDefinition(
         "publication.github_pages", True, False, "Enable GitHub Pages publication target."

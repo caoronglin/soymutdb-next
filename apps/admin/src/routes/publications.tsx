@@ -23,6 +23,7 @@ import {
   Empty,
   Skeleton,
   Alert,
+  Pagination,
 } from "@/lib/antd";
 import { PlusOutlined, EditOutlined, DeleteOutlined } from "@ant-design/icons";
 import {
@@ -34,6 +35,8 @@ import {
   type AdminPublication,
 } from "@soymutdb/api-client";
 import { ConfirmDialog } from "../components/confirm-dialog";
+
+const PAGE_SIZE = 20;
 
 interface PublicationFormValues {
   id?: string;
@@ -171,6 +174,7 @@ export default function AdminPublicationsPage() {
   const { t } = useTranslation();
   const { message } = App.useApp();
   const queryClient = useQueryClient();
+  const [page, setPage] = React.useState(1);
   const [formOpen, setFormOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<PublicationFormValues>(emptyForm());
   const [deleteTarget, setDeleteTarget] = React.useState<{ id: string; title: string } | null>(null);
@@ -179,16 +183,18 @@ export default function AdminPublicationsPage() {
 
 
   const listQuery = useQuery({
-    queryKey: ["admin-publications"],
-    queryFn: () => listAdminPublications({ page: 1, page_size: 50 }),
+    queryKey: ["admin-publications", page],
+    queryFn: () => listAdminPublications({ page, page_size: PAGE_SIZE }),
   });
 
   // If the row Edit button navigated here with `?edit=<id>`, open the
   // dialog pre-populated with that publication's data once the list arrives.
+  // The link always originates from the first list page, so pin it there.
   React.useEffect(() => {
     const editId = search.edit;
     if (!editId) return;
     if (editHandledRef.current === editId) return;
+    setPage(1);
     const items = listQuery.data?.items ?? [];
     const target = items.find((p) => p.id === editId);
     if (!target) return;
@@ -238,6 +244,14 @@ export default function AdminPublicationsPage() {
   });
 
   const items = listQuery.data?.items ?? [];
+  const total = listQuery.data?.total ?? 0;
+
+  // Deleting the last row of a page would otherwise leave an empty page.
+  React.useEffect(() => {
+    if (!listQuery.isLoading && page > 1 && listQuery.data && items.length === 0 && total > 0) {
+      setPage((current) => Math.max(1, current - 1));
+    }
+  }, [items.length, listQuery.data, listQuery.isLoading, page, total]);
 
   const handleSubmit = (values: PublicationFormValues) => {
     const payload: PublicationCreate = {
@@ -329,6 +343,17 @@ export default function AdminPublicationsPage() {
             ))}
           </div>
         )}
+
+        {total > PAGE_SIZE ? (
+          <Pagination
+            current={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            onChange={setPage}
+            disabled={listQuery.isFetching}
+            showSizeChanger={false}
+          />
+        ) : null}
 
         <PublicationFormDialog
           key={editing.id ?? "new"}

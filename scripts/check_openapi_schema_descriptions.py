@@ -164,10 +164,10 @@ GENERATED = ROOT / "packages" / "api-client" / "src" / "generated" / "openapi.d.
 #   component-schema node. Regenerate with _digest() after an intentional
 #   prose change and update in the same commit, with a reason.
 _SCHEMA_DESCRIPTION_DIGEST = (
-    "a60bd748da20db13a062c12b747f8b641c4bb744b212002ba10362aa6797a3d5"
+    "e618886efcd825fdcf99cea204bb6760a802a46dfc679ca1be8762f447843d0f"
 )
-_EXPECTED_ROWS = 257
-_EXPECTED_SCHEMAS = 169
+_EXPECTED_ROWS = 264
+_EXPECTED_SCHEMAS = 176
 
 # openapi-typescript emits one JSDoc description that is not in the snapshot.
 # Pinned explicitly so a future generator change to this line is a reviewed
@@ -184,21 +184,21 @@ _SYNTHETIC_CLIENT_DESCRIPTION = (
 # _digest_client_description_sequence() after an intentional, reviewed prose
 # change, in the same commit as both artifacts, with a reason.
 _CLIENT_DESCRIPTION_SEQUENCE_DIGEST = (
-    "e2cbc097af0dc74c9f43fcf4def6f279c3dfd86f21f73fdacfc2e9669c80bec4"
+    "25cee55b5b2f3ead1f568f798a4f95e0c75d6671e85fa70916c24329981d8eeb"
 )
-_EXPECTED_CLIENT_DESCRIPTION_LINES = 258
+_EXPECTED_CLIENT_DESCRIPTION_LINES = 265
 
 # Reviewed, hand-written fixed point on the whole published title surface.
 # sha256 of "\n".join(["soymutdb-schema-titles/v1"] +
 #   sorted(f"{path}|{title}")) over every string `title` on a component-schema
 #   node. Regenerate with _digest_title() after an intentional prose change.
 _SCHEMA_TITLE_DIGEST = (
-    "6ad9c8cd12ceb3508a25ce934509716405b9b326eac5afdfc9e9c37ff6ddaec0"
+    "e8fd99a2ffffcbcb4a170ff6096805be16211f2b6e1106e12d5ff1e31d1ffd89"
 )
-_EXPECTED_TITLE_ROWS = 2327
-_EXPECTED_TITLE_SCHEMAS = 362
+_EXPECTED_TITLE_ROWS = 2401
+_EXPECTED_TITLE_SCHEMAS = 373
 
-# Of the 1232 multi-line JSDoc blocks client_titles() reads, exactly one has
+# Of the 1275 multi-line JSDoc blocks client_titles() reads, exactly one has
 # "Title" as its first prose line. The seven published "Title" rows are on
 # single-line JSDoc blocks, which this reader does not collect; that line is
 # pinned here so a generator change is a reviewed edit, not a silent extra row.
@@ -211,9 +211,9 @@ _SYNTHETIC_CLIENT_TITLE = "Title"
 # *snapshot under guard* would be self-referential -- a co-revert of both
 # halves would agree with itself and pass.
 _CLIENT_TITLE_DIGEST = (
-    "3daaf30bd143170c66710c8497c7229b3d415a42f60b09bed3014fc7358ba2e9"
+    "cdea88ab5f8d855f28b6ec163ef44031ea4e494c27474aa2196fe36e8dae3e79"
 )
-_EXPECTED_CLIENT_TITLE_LINES = 1232
+_EXPECTED_CLIENT_TITLE_LINES = 1275
 
 _COMPONENT_SCHEMAS = re.compile(
     r"^    schemas: \{\n(?P<body>.*?)^    \};$", re.M | re.S
@@ -327,9 +327,9 @@ def _digest_client_title(lines: list[str]) -> str:
 # over the definition names IN INSERTION ORDER, read from nowhere, so both
 # rotations move it and a one-sided edit cannot hide behind a re-pinned count.
 _COMPONENT_DEFINITION_ORDER_DIGEST = (
-    "91f239588b99fd442ea8341908dd13d5721cc270e16dd48e450f91c31d74b968"
+    "2f9994c734237a47a70215040565e435e85f0e8a9ddb9d1d3a6e4d5989ae2285"
 )
-_EXPECTED_COMPONENT_DEFINITIONS = 362
+_EXPECTED_COMPONENT_DEFINITIONS = 373
 
 
 def component_definition_order(document: dict[str, Any]) -> list[str]:
@@ -366,9 +366,9 @@ _FIELD_DOC = re.compile(
 # rows. regenerate with _digest_client_title_rows() after an intentional
 # prose change, in the same commit as both artifacts.
 _CLIENT_TITLE_ROWS_DIGEST = (
-    "8ece22ef60eba74cbe47e3e4e0806348a8cbfcf8fe804221141afdcd606ce271"
+    "2b1a47b882f733cd1664fa529843c3f3c9027e888ff1f31a62c489fb4ef08a39"
 )
-_EXPECTED_CLIENT_TITLE_ROWS = 1952
+_EXPECTED_CLIENT_TITLE_ROWS = 2015
 
 # Reviewed, hand-written fixed point on component-property declaration order.
 # sha256 of "\n".join(["soymutdb-component-property-order/v1"] +
@@ -377,10 +377,10 @@ _EXPECTED_CLIENT_TITLE_ROWS = 1952
 # nowhere -- regenerate with _digest_property_order() after an intentional,
 # reviewed reorder, in the same commit as both artifacts, with a reason.
 _PROPERTY_ORDER_DIGEST = (
-    "85ae9dc9832c6ba547fade07dad0eb7ce3f0a8d8673683da6b630371e09bd812"
+    "ea589f1449f52e5b26f9e8d406b24768f65c08a7715cb41b47bb9b65e65bff7e"
 )
-_EXPECTED_PROPERTY_ORDER_ROWS = 2083
-_EXPECTED_PROPERTY_ORDER_SCHEMAS = 335
+_EXPECTED_PROPERTY_ORDER_ROWS = 2147
+_EXPECTED_PROPERTY_ORDER_SCHEMAS = 345
 
 # Second independent fixed point: the generated component blocks' own
 # (component, index, field) rows, in document order. A coordinated co-revert
@@ -388,9 +388,9 @@ _EXPECTED_PROPERTY_ORDER_SCHEMAS = 335
 # it, and comparing the client against the snapshot under guard would be
 # self-referential on exactly that shape.
 _CLIENT_PROPERTY_ORDER_DIGEST = (
-    "759631f346cec56ae0cfd055a70360a51b7e1bedfc7ff6bb976b70ac56fd1e8a"
+    "04ba824fc701412ea162354bd48e6512dce8b58bbc75f11709fe6f56ad4c8c39"
 )
-_EXPECTED_CLIENT_PROPERTY_ORDER_ROWS = 2083
+_EXPECTED_CLIENT_PROPERTY_ORDER_ROWS = 2147
 
 # A direct property declaration in a generated component block, at the one
 # indentation level the generator uses for top-level component fields. Nested
@@ -411,12 +411,12 @@ _PROPERTY_DECL = re.compile(
 # _digest_client_title_sequence() after an intentional, reviewed reorder, in
 # the same commit as both artifacts, with a reason.
 _CLIENT_TITLE_SEQUENCE_DIGEST = (
-    "e5d5c74091be283cc1df3cb2b7f92a1a19f36a173c8a8fd997d3a4d4074c4a65"
+    "f8489042ac15c4fbf3d764ab74c1bca133301b257b4e9fcff74b6b1a4f71f443"
 )
 _ORDER_SNAPSHOT_TITLE_SEQUENCE_DIGEST = (
-    "d28b247eb2bd4a5af47084792c39d297de8de2523241efb6c80ca59fd6ff74b8"
+    "a23bbc6462cf4b919c99cc59c8fb6dc342ce286fd52331932c5c5f520d1613fb"
 )
-_EXPECTED_CLIENT_TITLE_LINES = 1232
+_EXPECTED_CLIENT_TITLE_LINES = 1275
 
 
 def _first_plain_line(doc: str) -> str | None:
@@ -504,10 +504,10 @@ def _digest_client_property_order(rows_: list[tuple[str, str, str]]) -> str:
 # _digest_client_continuations() after an intentional, reviewed prose change,
 # in the same commit as both artifacts, with a reason.
 _CLIENT_DESCRIPTION_CONTINUATION_DIGEST = (
-    "ccc25f1c2e289f12bcefa716408896282c0a9ef8eb3a8386fb9b0f58d99867e8"
+    "399de3dfbd8359ecb0449f8a9346b795951ebf2f48a731136b99b82213b9aadc"
 )
-_EXPECTED_CLIENT_CONTINUATION_ROWS = 204
-_EXPECTED_CLIENT_CONTINUATION_NODES = 50
+_EXPECTED_CLIENT_CONTINUATION_ROWS = 209
+_EXPECTED_CLIENT_CONTINUATION_NODES = 51
 
 _CONTINUATION_LINE = re.compile(r"^\s*\*\s{4,}(\S.*)$")
 _COMPONENT_NAME = re.compile(r"^        (\w+): \{$")

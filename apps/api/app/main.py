@@ -95,6 +95,10 @@ OPENAPI_TAGS = [
         "name": "admin-content",
         "description": "Administrator content pages and page-builder migration.",
     },
+    {
+        "name": "admin-data-views",
+        "description": "Administrator saved multi-view presentations over public data.",
+    },
     {"name": "admin-features", "description": "Administrator feature-flag configuration."},
     {
         "name": "admin-import-studio",

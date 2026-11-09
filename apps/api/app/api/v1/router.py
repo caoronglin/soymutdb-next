@@ -11,6 +11,7 @@ from fastapi import APIRouter
 from . import (
     admin,
     admin_content,
+    admin_data_views,
     admin_features,
     admin_imports,
     admin_media,
@@ -117,6 +118,7 @@ api_router.include_router(admin_settings.router)
 api_router.include_router(admin_static.router)
 api_router.include_router(admin_table_views.router)
 api_router.include_router(admin_table_views.species_router)
+api_router.include_router(admin_data_views.router)
 api_router.include_router(admin_uploads.router)
 api_router.include_router(expression.router)
 api_router.include_router(homolog.router)

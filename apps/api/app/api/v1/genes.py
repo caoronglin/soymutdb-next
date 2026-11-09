@@ -8,6 +8,7 @@ import math
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...core.config import get_settings
 from ...core.database import get_db
 from ...core.exceptions import SoyMutDBError
 from ...schemas.genomic import (
@@ -365,17 +366,22 @@ async def get_gene_genome_view(
         assembly_id=assembly_id,
     )
 
-    try:
-        from ...services.local_test_preview_service import (
-            list_preview_mutation_sites_for_gene,
-        )
+    sites: list = []
+    if get_settings().local_test_preview_enabled:
+        # The preview dataset is unpublished and lives in a different assembly
+        # namespace. This response is public and edge-cached, so the lane must
+        # never appear outside the explicit dev-only preview mode.
+        try:
+            from ...services.local_test_preview_service import (
+                list_preview_mutation_sites_for_gene,
+            )
 
-        sites = await list_preview_mutation_sites_for_gene(db, gene_id=gene_id)
-    except Exception:
-        # The unpublished preview dataset may legitimately be absent; the gene
-        # body is still a useful picture, so degrade to no mutation lane rather
-        # than failing the request.
-        sites = []
+            sites = await list_preview_mutation_sites_for_gene(db, gene_id=gene_id)
+        except Exception:
+            # The unpublished preview dataset may legitimately be absent; the
+            # gene body is still a useful picture, so degrade to no mutation
+            # lane rather than failing the request.
+            sites = []
 
     span = max(GENOME_VIEW_MIN_SPAN_BP, gene.end_pos - gene.start_pos)
     # Math.round semantics on purpose: `round()` would banker's-round a .5 and

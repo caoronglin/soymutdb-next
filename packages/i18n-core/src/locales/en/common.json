@@ -454,7 +454,8 @@
     "exportDownload": "Download export",
     "exportDownloadFailed": "The export could not be downloaded",
     "exportTakingLong": "This export is taking longer than expected. It may still finish.",
-    "exportCheckAgain": "Check again"
+    "exportCheckAgain": "Check again",
+    "exportUnavailable": "This export record could not be read. It may have expired or belong to another account."
   },
   "mutantLines": {
     "title": "Mutant Lines",
@@ -738,7 +739,8 @@
     "title": "File preview",
     "downloadOnly": "Download-only preview",
     "undecodable": "This compressed, unknown, or binary format is not decoded in the browser.",
-    "downloadOnlyHint": "This file cannot be previewed online. Download it to view."
+    "downloadOnlyHint": "This file cannot be previewed online. Download it to view.",
+    "remoteFallback": "The external preview service is unavailable — showing the built-in viewer instead."
   },
   "docs": {
     "title": "Documentation",
@@ -859,6 +861,7 @@
     "backToList": "Back to List"
   },
   "common": {
+    "refresh": "Refresh",
     "loading": "…loading",
     "error": "Error",
     "errorDescription": "An unexpected error occurred while loading this page.",
@@ -1175,6 +1178,57 @@
     "internalNotPaginated": "Internal directory results are not paginated."
   },
   "admin": {
+    "siteControl": {
+      "navHint": "Internal and external sites keep separate navigation documents; the API never copies one variant into the other."
+    },
+    "pageBuilder": {
+      "layouts": "Layout",
+      "components": "Components",
+      "paletteHint": "Select a container in the canvas, then click a component to place it there. Without a container selection, components are added to the page root.",
+      "dragHandle": "Drag to reorder",
+      "selectContainer": "Select this container, then add a component",
+      "remove": "Remove component",
+      "emptyContainer": "Empty container — select it from the palette.",
+      "pageSettings": "Page settings",
+      "titleKey": "Title key",
+      "theme": "Theme",
+      "properties": "Properties",
+      "noSelection": "Select a component",
+      "noProps": "This component has no configurable props.",
+      "documentJson": "Definition JSON",
+      "documentJsonHint": "Advanced: edit data sources and responsive layouts directly. The server re-validates on save.",
+      "draftSaved": "Draft v{{version}} saved.",
+      "previewReady": "Preview validated. Nothing was saved.",
+      "published": "Published v{{version}}.",
+      "loadFailed": "Failed to load the page definition.",
+      "unsaved": "Unsaved",
+      "lastEdited": "Last edited {{when}}",
+      "preview": "Preview",
+      "saveDraft": "Save draft",
+      "publish": "Publish",
+      "palette": "Components",
+      "canvas": "Canvas",
+      "inspector": "Inspector",
+      "previewTitle": "Preview (validated definition)",
+      "publishTitle": "Publish page definition",
+      "publishSavesFirst": "Unsaved changes will be saved as a new draft, then published.",
+      "publishHint": "The public site serves the newest published version immediately.",
+      "publishReason": "Reason (optional)",
+      "getStarted": "Start by selecting a component from the palette. The root is a columns container, so any component may be placed directly.",
+      "created": "Page definition created.",
+      "route": "Route",
+      "version": "Version",
+      "status": "Status",
+      "updatedAt": "Updated",
+      "title": "Page Builder",
+      "subtitle": "Design public pages by dragging registered components. Publish explicitly — drafts are never served.",
+      "newPage": "New page",
+      "empty": "No page definitions yet. Create one to get started.",
+      "routeHelp": "Lowercase path such as /downloads or / for the homepage. Reserved prefixes (/admin, /api, /blast, /browser) are rejected by the server.",
+      "template": "Start from template",
+      "blankCanvas": "Blank canvas",
+      "draftNote": "A draft v1 is created. Use the editor to add components, preview and publish."
+    },
     "title": "Admin Console",
     "brand": {
       "title": "Site brand",
@@ -1249,6 +1303,35 @@
     },
     "importStudio": {
       "newImport": "New import",
+      "subtitle": "Upload module data, inspect it, and submit it as an import task.",
+      "stepSource": "Source",
+      "stepFile": "File",
+      "stepInspect": "Inspect",
+      "stepReview": "Review",
+      "moduleData": "Module data",
+      "moduleHint": "The module schema this file provides rows for.",
+      "datasetHint": "Data set that owns the uploaded object.",
+      "releaseHint": "Release the imported rows belong to.",
+      "fileHint": "Upload a local file, or reference an existing S3 object.",
+      "s3Hint": "The object key is validated against the data set prefix.",
+      "back": "Back",
+      "continue": "Continue",
+      "startOver": "Start over",
+      "openTask": "Open task",
+      "backToList": "Back to imports",
+      "loadingCapabilities": "Loading import capabilities…",
+      "fileRequired": "Choose a file to upload.",
+      "s3Required": "Filename and S3 path are required in S3 mode.",
+      "inspectHint": "Inspect the local file before submitting to catch column errors early.",
+      "inspectLocalOnly": "Inspection is available for local files only.",
+      "previewRows": "{{rows}} preview rows",
+      "previewTruncated": "(truncated)",
+      "previewReadOnly": "Read-only preview",
+      "previewNoRows": "The file has no data rows.",
+      "reviewChecksumPending": "Computed during upload",
+      "submitted": "Import submitted",
+      "submittedHint": "Import task {{id}} has been queued.",
+      "browse": "Browse",
       "module": "Data module",
       "datasetId": "Dataset ID",
       "releaseId": "Release ID",
@@ -1442,7 +1525,8 @@
         "restoreConfirm": "Restore revision",
         "reasonLabel": "Reason for restoration",
         "reasonPlaceholder": "Required audit reason",
-        "restoreError": "Unable to restore this revision. Refresh history and retry if the version changed."
+        "restoreError": "Unable to restore this revision. Refresh history and retry if the version changed.",
+        "loadMore": "Load older revisions"
       },
       "overviewTitle": "Settings",
       "overviewDescription": "Choose a domain to edit and save independently.",
@@ -1577,7 +1661,6 @@
       "back": "Back to imports",
       "titleWithId": "Import task #{{id}}",
       "loadError": "Could not load this import.",
-      "back": "Back to imports",
       "filename": "File",
       "type": "Type",
       "status": "Status",
@@ -1588,6 +1671,8 @@
       "completedAt": "Completed",
       "celeryStatus": "Worker state",
       "errorMessage": "Error",
+      "notCompleted": "Not completed",
+      "noError": "No error reported.",
       "filePath": "Object",
       "retry": "Retry",
       "cancel": "Cancel",
@@ -1672,6 +1757,7 @@
       "labelTitleEnglish": "Title (English) *",
       "placeholderTitleEnglish": "Page title in English",
       "labelTitleChinese": "Title (Chinese)",
+      "placeholderTitleChinese": "Page title in Chinese",
       "labelSlug": "Slug *",
       "slugReadonlyHint": "Slug cannot be changed after creation.",
       "labelCategory": "Category",
@@ -1684,6 +1770,7 @@
       "placeholderSummary": "Short summary for listings",
       "labelContentEnglish": "Content (English) *",
       "placeholderContentEnglish": "Page content in English (Markdown supported)",
+      "placeholderContentChinese": "Page content in Chinese (Markdown supported)",
       "labelContentChinese": "Content (Chinese)",
       "labelEditComment": "Edit Comment",
       "placeholderDescribeRevision": "Describe this revision",
@@ -1708,6 +1795,15 @@
       "editLoadError": "The requested page could not be loaded.",
       "statusAll": "All Statuses",
       "statusArchived": "Archived",
+      "searchPlaceholder": "Search by title…",
+      "searchContent": "Search content",
+      "filterStatus": "Filter by status",
+      "filterFeatured": "Filter by featured status",
+      "featuredAll": "All publications",
+      "featuredOnly": "Featured only",
+      "unfeaturedOnly": "Not featured",
+      "noMatchingContent": "No matching {{type}} content",
+      "noMatchingContentDesc": "Clear the search or filters to see everything.",
       "filterCategoryPlaceholder": "Filter by category...",
       "noPagesFound": "No pages found",
       "noPagesFoundDesc": "Create a new static page to get started.",
@@ -1817,6 +1913,27 @@
       "purgeConfirmBody": "This action cannot be undone.",
       "restoreSuccess": "Article restored",
       "purgeSuccess": "Article permanently deleted",
+      "externalImport": {
+        "title": "Import external article",
+        "cancel": "Cancel",
+        "apply": "Apply reviewed preview",
+        "reviewTitle": "Review before saving",
+        "reviewDescription": "Previewing or applying this source does not create, save, or publish a news article. Review the imported content and make any edits before saving it in the news form.",
+        "platform": "Platform",
+        "platformRequired": "Choose an external platform.",
+        "url": "Article URL",
+        "urlRequired": "Enter an HTTPS article URL.",
+        "httpsOnly": "Only HTTPS URLs are allowed.",
+        "invalidUrl": "Enter a valid HTTPS URL.",
+        "preview": "Preview article",
+        "previewFailed": "Preview failed",
+        "previewFailedFallback": "Unable to preview the external article.",
+        "previewReady": "Preview ready",
+        "fieldTitle": "Title",
+        "fieldSource": "Source",
+        "fieldPublishedAt": "Source publication date",
+        "fieldBody": "Imported body (text preview)"
+      },
       "saveError": "Could not save the article",
       "createNew": "New Article",
       "edit": "Edit Article",
@@ -1993,6 +2110,8 @@
       "bannerDescription": "A saved template takes effect immediately: the portal resolves this column set by species, site variant and release.",
       "instancesTitle": "Species instances",
       "instancesBanner": "One console can manage several species databases: register each instance's API / JBrowse / portal address here; the data stays inside each instance.",
+      "toggleInstance": "Enable {{name}}",
+      "siteVariant": "Site variant",
       "name": "Name",
       "namePlaceholder": "e.g. Mutation sites (with homologs)",
       "columnsLabel": "Columns (display order; tick to show)",
@@ -2059,6 +2178,64 @@
       "instanceDeleteFailed": "The instance \"{{name}}\" could not be unregistered.",
       "loadError": "The table-view templates could not be loaded.",
       "instancesLoadError": "The species instances could not be loaded."
+    },
+    "dataViews": {
+      "title": "Data views",
+      "subtitle": "Saved multi-view workspaces over released genes, variants and mutant lines.",
+      "bannerTitle": "Views are presentation, not a second database",
+      "bannerDescription": "Every row still comes from the release-scoped public read APIs, so a saved view cannot surface unreleased records or internal identifiers.",
+      "sourceLabel": "Data source",
+      "source": {
+        "genes": "Genes",
+        "variants": "Variants",
+        "mutant_lines": "Mutant lines"
+      },
+      "viewTypeLabel": "View type",
+      "viewType": {
+        "grid": "Grid",
+        "kanban": "Kanban",
+        "gallery": "Gallery"
+      },
+      "newView": "New view",
+      "editView": "Edit view",
+      "savedViews": "Saved views",
+      "loadError": "The saved views could not be loaded.",
+      "rowsError": "The rows for this view could not be loaded.",
+      "empty": "No saved view for this source yet. Create one to choose its fields, filters and layout.",
+      "activeView": "Preview: {{name}}",
+      "preview": "Preview",
+      "noActiveView": "Select or create a saved view to preview it.",
+      "name": "View name",
+      "namePlaceholder": "e.g. High-impact variants by chromosome",
+      "fieldsLabel": "Visible fields",
+      "fieldsHint": "The numbered order is the column order. Use the arrows to reorder.",
+      "filtersLabel": "Filters",
+      "filterKey": "Filter field",
+      "filterValue": "Value",
+      "addFilter": "Add filter",
+      "removeFilter": "Remove filter",
+      "sortField": "Sort field",
+      "sortDirection": "Direction",
+      "asc": "Ascending",
+      "desc": "Descending",
+      "groupField": "Group field",
+      "titleField": "Card title field",
+      "pageSize": "Rows per page",
+      "defaultTag": "Default view",
+      "notes": "Notes",
+      "setDefault": "Set as default",
+      "deleteTitle": "Delete view",
+      "deleteConfirm": "Delete the view \"{{name}}\"? The saved configuration is removed; no biological data is deleted.",
+      "loadMore": "Load more",
+      "groupRequiredTitle": "Kanban needs a group field",
+      "groupRequired": "Choose a group field when editing this view, then switch back to the kanban layout.",
+      "none": "None",
+      "issue": {
+        "name": "Give the view a name before saving.",
+        "fields": "Choose at least one visible field.",
+        "group": "Kanban views need a group field.",
+        "sort": "Choose a sort field before choosing a direction."
+      }
     },
     "tableViewsHint": "Choose the columns each portal table renders. Templates are scoped by species, site variant and release; the cross-assembly homolog columns are opt-in.",
     "table": "Table",
@@ -2142,6 +2319,8 @@
       "uniqueIps": "Unique IPs",
       "action": "Action",
       "actionPlaceholder": "Action",
+      "actionFilter": "Action filter",
+      "statsPeriod": "Statistics period",
       "actor": "Actor",
       "readOnly": "Read-only",
       "loadError": "The audit log could not be loaded.",
@@ -2270,6 +2449,7 @@
     "shell": {
       "overview": "Overview",
       "dataManagement": "Data Management",
+      "dataViews": "Data views",
       "content": "Content",
       "presentation": "Presentation",
       "administration": "Administration",
@@ -2411,6 +2591,9 @@
       "savedDraftsUnavailable": "Saved drafts are unavailable. Existing imports are unaffected.",
       "resume": "Resume",
       "noDrafts": "No server-backed import drafts are available to resume.",
+      "draftCounts": "{{rows}} rows · {{columns}} columns",
+      "emptyTitle": "No import tasks",
+      "emptyDescription": "Submit a new import to get started.",
       "searchPlaceholder": "Search import tasks…",
       "importType": "Import Type",
       "datasetId": "Data Set ID",
@@ -2472,6 +2655,7 @@
       "fileMimeRequired": "File MIME type is required",
       "presignMustUsePost": "Upload presign response must use POST",
       "importPreviewAria": "Import preview",
+      "openRow": "Open row",
       "featureFlagsTitle": "\\\"Feature Flags\\\"",
       "featureFlagsSubtitle": "\\\"Enable or disable registered capabilities atomically. Disabling rejects new requests and does not kill running jobs.\\\"",
       "loadFeatureFlagsFailed": "Failed to load feature flags.",
@@ -3341,12 +3525,18 @@
     "truncationNotice": "Graph is limited to {{nodes}} nodes and {{edges}} relationships."
   },
   "site": {
+    "databaseKind": {
+      "gene_ontology": "Gene Ontology Database",
+      "transcription_factor": "Transcription Factor Database"
+    },
     "internalBadgeTitle": "Private internal site artifact",
     "internalBadge": "Internal"
   },
   "errorBoundary": {
     "title": "Something went wrong",
-    "description": "An unexpected error occurred while rendering this section."
+    "description": "An unexpected error occurred while rendering this section.",
+    "retry": "Retry",
+    "backToDashboard": "Back to dashboard"
   },
   "a11y": {
     "skipToContent": "Skip to content"
@@ -3464,7 +3654,8 @@
     "resultsAria": "Mutant line search results",
     "subtitle": "Search published mutant lines by cultivar, mutagen and phenotype.",
     "title": "Mutant lines",
-    "resultCount": "{{count}} mutant lines"
+    "resultCount": "{{count}} mutant lines",
+    "pageWindow": "Showing {{start}}–{{end}} · page {{page}}"
   },
   "blastPublic": {
     "eyebrow": "Public sequence search",
@@ -3767,5 +3958,26 @@
         "no_linked_downloads": "No download file is linked to this assembly."
       }
     }
-  }
+  },
+    "errors": {
+      "pageUnavailable": "Page temporarily unavailable",
+      "notFound": "Page not found",
+      "pageUnavailableHint": "The page could not be loaded. Please try again later.",
+      "notFoundHint": "Check the address, or use search to find a record."
+    },
+    "pageBuilder": {
+      "newsUnavailable": "News is temporarily unavailable",
+      "noNews": "No news yet",
+      "assembliesUnavailable": "Assemblies are temporarily unavailable",
+      "selectAssembly": "Select a genome assembly",
+      "openJbrowse": "Open JBrowse 2",
+      "openBlast": "Run BLAST",
+      "graphUnavailable": "Ontology graph is temporarily unavailable",
+      "ontologyGraph": "Ontology relationship graph",
+      "graphTruncated": "The graph was truncated to the configured node/edge limits."
+    },
+    "ui": {
+      "searchButton": "Search",
+      "noResults": "No results found"
+    }
 }

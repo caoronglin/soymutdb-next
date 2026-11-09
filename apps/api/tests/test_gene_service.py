@@ -88,10 +88,13 @@ class FakeDbSession:
         self.last_stmt = stmt
         self.statements.append(stmt)
         text = str(stmt)
-        if "FROM genes" in text:
-            return _Result(self._gene_rows(stmt))
+        # The assemblies branch is checked first: its statement now carries an
+        # EXISTS over ``genes`` for the publication guard, and the fake answers
+        # by the outer select, not by a substring anywhere in the statement.
         if "FROM assemblies" in text:
             return _Result(list(self.assemblies))
+        if "FROM genes" in text:
+            return _Result(self._gene_rows(stmt))
         if "FROM chromosomes" in text:
             return _Result(list(self.chromosomes))
         return _Result([])

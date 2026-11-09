@@ -473,57 +473,81 @@ async def test_phenotypes_are_reached_through_public_mutant_lines(db_session):
         public_id=f"SM{uuid4().hex[:8]}",
         name=f"line-{uuid4().hex[:6]}",
         is_public=True,
+        release_id=scope.release.id,
     )
-    hidden = MutantLine(name=f"hidden-{uuid4().hex[:6]}", is_public=False)
-    db_session.add_all([line, hidden])
+    hidden = MutantLine(
+        name=f"hidden-{uuid4().hex[:6]}",
+        is_public=False,
+        release_id=scope.release.id,
+    )
+    deleted = MutantLine(
+        public_id=f"SM{uuid4().hex[:8]}",
+        name=f"deleted-{uuid4().hex[:6]}",
+        is_public=True,
+        release_id=scope.release.id,
+        is_deleted=True,
+    )
+    foreign = MutantLine(
+        public_id=f"SM{uuid4().hex[:8]}",
+        name=f"foreign-{uuid4().hex[:6]}",
+        is_public=True,
+    )
+    db_session.add_all([line, hidden, deleted, foreign])
     await db_session.flush()
-    db_session.add_all(
-        [
+    others = [
+        (hidden, "unreleased sentinel trait"),
+        (deleted, "deleted sentinel trait"),
+        (foreign, "foreign-release sentinel trait"),
+    ]
+    rows = [
+        VariantSummary(
+            assembly_id=scope.v4.id,
+            chromosome_id=scope.gene_v4.chromosome_id,
+            position=20,
+            ref="A",
+            alt="T",
+            variant_type="SNP",
+            gene_id=scope.gene_v4.gene_pk,
+            mutant_line_id=line.id,
+            release_id=scope.release.id,
+        ),
+        Phenotype(
+            mutant_line_id=line.id,
+            trait_category="seed",
+            trait_name="seed coat colour",
+            trait_value="brown",
+        ),
+    ]
+    for offset, (other, trait) in enumerate(others, start=1):
+        rows.append(
             VariantSummary(
                 assembly_id=scope.v4.id,
                 chromosome_id=scope.gene_v4.chromosome_id,
-                position=20,
-                ref="A",
-                alt="T",
-                variant_type="SNP",
-                gene_id=scope.gene_v4.gene_pk,
-                mutant_line_id=line.id,
-                release_id=scope.release.id,
-            ),
-            VariantSummary(
-                assembly_id=scope.v4.id,
-                chromosome_id=scope.gene_v4.chromosome_id,
-                position=21,
+                position=20 + offset,
                 ref="A",
                 alt="G",
                 variant_type="SNP",
                 gene_id=scope.gene_v4.gene_pk,
-                mutant_line_id=hidden.id,
+                mutant_line_id=other.id,
                 release_id=scope.release.id,
-            ),
-            Phenotype(
-                mutant_line_id=line.id,
-                trait_category="seed",
-                trait_name="seed coat colour",
-                trait_value="brown",
-            ),
-            Phenotype(
-                mutant_line_id=hidden.id,
-                trait_category="seed",
-                trait_name="unreleased sentinel trait",
-            ),
-        ]
-    )
+            )
+        )
+        rows.append(
+            Phenotype(mutant_line_id=other.id, trait_category="seed", trait_name=trait)
+        )
+    db_session.add_all(rows)
     await db_session.flush()
 
     section = await sections.load_phenotype_section(
         db_session, scope.gene_v4, release_context=_context(scope)
     )
     assert section.status.state == "available"
-    # The unpublished line is neither listed nor counted, and its sentinel trait
-    # never reaches the payload.
+    # Unpublished, soft-deleted and other-release lines are neither listed nor
+    # counted, and their sentinel traits never reach the payload.
     assert [record.trait_name for record in section.records] == ["seed coat colour"]
-    assert "unreleased sentinel trait" not in section.model_dump_json()
+    payload = section.model_dump_json()
+    for _, sentinel in others:
+        assert sentinel not in payload
 
 
 @pytest.mark.integration

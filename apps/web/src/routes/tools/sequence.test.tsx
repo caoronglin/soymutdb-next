@@ -19,6 +19,10 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("react-i18next", async () => (await import("../../test/mocks")).mockTranslation);
 
+vi.mock("../../lib/site-content-react", () => ({
+  useSiteContent: () => ({ get: (_key: string, fallback: string) => fallback }),
+}));
+
 const api = vi.hoisted(() => ({
   capabilities: vi.fn(),
   reverseComplement: vi.fn(),

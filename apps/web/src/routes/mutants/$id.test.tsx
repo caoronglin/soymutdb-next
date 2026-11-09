@@ -17,6 +17,7 @@ vi.mock("@tanstack/react-router", () => ({
 }));
 
 vi.mock("react-i18next", async () => (await import("../../test/mocks")).mockTranslation);
+vi.mock("../../lib/release-scope", () => ({ useReleaseId: () => "2026.09" }));
 vi.mock("../../components/route-motion", () => ({
   FadeUp: ({ children }: { children: React.ReactNode }) => children,
 }));
@@ -32,7 +33,6 @@ vi.mock("@soymutdb/api-client", async () => {
   );
   return {
     isMutantLineId: actual.isMutantLineId,
-    getReleaseId: () => "2026.09",
     getMutantLine: api.getMutantLine,
     getMutantLinePhenotypes: api.getMutantLinePhenotypes,
   };

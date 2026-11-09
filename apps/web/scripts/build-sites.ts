@@ -26,10 +26,22 @@ execFileSync(process.execPath, ["scripts/sync-pdf-worker.mjs"], {
 
 function buildVariant(variant: "external" | "internal") {
   const isExternal = variant === "external";
+  // The remote-preview provider is configured with non-VITE inputs and mapped
+  // to this build only. Letting both variants read one shared VITE_* value would
+  // put the internal viewer origin into the public artifact (and vice versa),
+  // and `config.ts` inlines every key of its `viteEnv` object.
+  const fileViewerUrl = isExternal
+    ? process.env["SOYMUTDB_EXTERNAL_FILE_VIEWER_URL"]?.trim() || ""
+    : process.env["SOYMUTDB_INTERNAL_FILE_VIEWER_URL"]?.trim() || "";
+  const fileViewerOrigins = isExternal
+    ? process.env["SOYMUTDB_EXTERNAL_FILE_VIEWER_ARTIFACT_ORIGINS"]?.trim() || ""
+    : process.env["SOYMUTDB_INTERNAL_FILE_VIEWER_ARTIFACT_ORIGINS"]?.trim() || "";
   const env = {
     ...process.env,
     VITE_DEPLOYMENT_MODE: process.env.VITE_DEPLOYMENT_MODE || "demo",
     VITE_SITE_VARIANT: variant,
+    VITE_FILE_VIEWER_URL: fileViewerUrl,
+    VITE_FILE_VIEWER_ARTIFACT_ORIGINS: fileViewerOrigins,
     VITE_BASE_URL: isExternal
       ? process.env["SOYMUTDB_EXTERNAL_BASE_URL"] || process.env.VITE_BASE_URL || "/"
       : process.env["SOYMUTDB_INTERNAL_BASE_URL"] ||

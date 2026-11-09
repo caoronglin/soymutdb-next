@@ -3,7 +3,7 @@
 
 ``openapi.json`` and ``src/generated/openapi.d.ts`` are both exports of
 ``app.main:app``. A guard that compares them to each other proves
-self-consistency, not truth. The 467 published parameters are client-visible:
+self-consistency, not truth. The 471 published parameters are client-visible:
 ``openapi-typescript`` turns each one into a property of the generated
 ``operations[*].parameters`` object, so a renamed/retyped/dropped parameter
 changes the TypeScript a consumer compiles against. Nothing in the contracts
@@ -86,9 +86,15 @@ LOCATIONS = frozenset({"query", "header", "path", "cookie"})
 # serialised with sort_keys=True, ensure_ascii=False). Regenerate with
 # _digest() after an intentional contract change and update in the same
 # commit, with a reason.
-_PARAMETER_DIGEST = "e8b5b11d4a9a2ced2614d8d7939e6c31b9f5377cb7bfa7a2445e28d1b6245872"
-_EXPECTED_PARAMETER_COUNT = 467
-_EXPECTED_OPERATION_COUNT = 268
+#
+# Re-pinned 2026-11-09 with the regenerated snapshot: the six new parameters
+# are the optional `source` filter on `GET /admin/data-views`, the `view_id`
+# path parameter on `PUT`/`DELETE /admin/data-views/{view_id}`, and one
+# explicit site-variant selector on each of the three `GET /site/*`
+# operations. The operation count moves 268 -> 276 with those eight routes.
+_PARAMETER_DIGEST = "848ad19c98110a3238d83e062cda7b8bb60451fa02b63e3faff6fcd10c43f461"
+_EXPECTED_PARAMETER_COUNT = 477
+_EXPECTED_OPERATION_COUNT = 276
 
 # Reviewed, hand-written fixed point on the published parameter descriptions.
 # 20 operations publish a `description` on a parameter; openapi-typescript
@@ -128,18 +134,53 @@ _EXPECTED_CLIENT_PARAMETER_DESCRIPTIONS = 20
 # the generated client), one over the generated column read from committed
 # bytes. Re-pinning one cannot silence the other, and a coordinated co-revert
 # of both halves still moves the projection.
+#
+# Re-pinned 2026-11-09 with the six parameters named above. `GET
+# /admin/data-views` is also the first published nullable multi-value enum:
+# openapi-typescript prints `("genes" | "variants" | "mutant_lines") | null`,
+# so the projection now parenthesises a union used as a union branch instead
+# of reporting a retype that never happened.
 _PARAMETER_TYPE_DIGEST = (
-    "e90cf3a00ef84431cba4b72cccb7124819c093259a60fc591f6b7d230e3ed960"
+    "78ea254d9a404024b8d5984421b3dbd08a3d09d0e11b16c412378368ece465c3"
 )
 _CLIENT_PARAMETER_TYPE_DIGEST = (
-    "1b4fa1f9d319933b82fb721e81e68945bbfcac619372e10e5fb44883dedcd4f7"
+    "b9f5a0a73fd85aa1f2dab2981decb42e955619c621df5bb97378e5a8c8124123"
 )
-_EXPECTED_PARAMETER_TYPES = 467
-_EXPECTED_CLIENT_PARAMETER_TYPES = 467
+_EXPECTED_PARAMETER_TYPES = 477
+_EXPECTED_CLIENT_PARAMETER_TYPES = 477
 
 _GEN_PROP_TYPE = re.compile(
     r'^ {16}(?:"([^"]+)"|([A-Za-z_][A-Za-z0-9_]*))(\??): ([^;]+);$'
 )
+
+
+def _is_top_level_union(expression: str) -> bool:
+    """True when ``expression`` is an unparenthesised ``a | b`` union."""
+    depth = 0
+    index = 0
+    while index < len(expression):
+        char = expression[index]
+        if char in "([{":
+            depth += 1
+        elif char in ")]}":
+            depth -= 1
+        elif char == "|" and depth == 0:
+            if index + 1 < len(expression) and expression[index + 1] == "|":
+                index += 1
+            else:
+                return True
+        index += 1
+    return False
+
+
+def _union_branch(expression: str) -> str:
+    """Parenthesise a union used as one branch of a larger union.
+
+    ``openapi-typescript`` prints ``anyOf: [enum, null]`` as
+    ``("a" | "b") | null``; the projection has to render the same precedence
+    or the door reports a retype that never happened.
+    """
+    return f"({expression})" if _is_top_level_union(expression) else expression
 
 
 def _typescript_type(schema: dict[str, Any]) -> str:
@@ -155,7 +196,9 @@ def _typescript_type(schema: dict[str, Any]) -> str:
             json.dumps(value, ensure_ascii=False) for value in schema["enum"]
         )
     if "anyOf" in schema:
-        return " | ".join(_typescript_type(branch) for branch in schema["anyOf"])
+        return " | ".join(
+            _union_branch(_typescript_type(branch)) for branch in schema["anyOf"]
+        )
     kind = schema.get("type")
     if kind == "null":
         return "null"
@@ -164,7 +207,7 @@ def _typescript_type(schema: dict[str, Any]) -> str:
     if kind in ("string", "boolean"):
         return str(kind)
     if kind == "array":
-        return _typescript_type(schema.get("items", {})) + "[]"
+        return _union_branch(_typescript_type(schema.get("items", {}))) + "[]"
     raise ValueError(f"unmapped parameter schema: {schema!r}")
 
 

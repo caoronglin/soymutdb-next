@@ -257,8 +257,8 @@ def request_bodies(document: dict) -> dict[str, int]:
 # over the same rows and would move, but it is re-pinned in the same reviewed
 # act as the counts, which is precisely the escape hatch this gate closes.
 _BODY_PAIR_SET = {
-    "rows": 807,
-    "digest": "347ca54c41140fd472c577b5229cb44b25f3d8a45eb0eb9ad6478253d7f5000c",
+    "rows": 833,
+    "digest": "7eae6e24dec34b9eb32a5f508b1162f81a54c38b98386b44468fb0f2381bed3f",
 }
 
 

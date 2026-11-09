@@ -279,6 +279,54 @@ def test_0039_table_views_migration_adds_tables_constraints_and_downgrades() -> 
     assert dropped_tables == {"table_view_templates", "species_instances"}
 
 
+def test_0058_admin_data_views_migration_adds_constraints_and_downgrades() -> None:
+    revision = _load_revision("0058_admin_data_views.py")
+    operations = _RecordingOperations()
+    revision.op = operations
+
+    revision.upgrade()
+    created_tables = {
+        args[0] for name, args, _ in operations.calls if name == "create_table"
+    }
+    assert created_tables == {"admin_data_views"}
+
+    created_constraints = {
+        getattr(element, "name", None)
+        for name, args, _ in operations.calls
+        if name == "create_table"
+        for element in args[1:]
+    }
+    assert {
+        "ck_admin_data_views_source",
+        "ck_admin_data_views_view_type",
+        "ck_admin_data_views_sort_dir",
+        "ck_admin_data_views_visible_fields_array",
+        "ck_admin_data_views_filters_object",
+        "ck_admin_data_views_page_size",
+        "uq_admin_data_views_source_name",
+    } <= created_constraints
+
+    partial_default_index = [
+        kwargs
+        for name, _, kwargs in operations.calls
+        if name == "create_index"
+        and kwargs.get("postgresql_where") is not None
+        and kwargs.get("unique") is True
+    ]
+    assert partial_default_index
+    assert all(
+        kwargs["postgresql_where"].text == "is_default"
+        for kwargs in partial_default_index
+    )
+
+    operations.calls.clear()
+    revision.downgrade()
+    dropped_tables = {
+        args[0] for name, args, _ in operations.calls if name == "drop_table"
+    }
+    assert dropped_tables == {"admin_data_views"}
+
+
 class _EmptyResult:
     def scalar_one_or_none(self) -> None:
         return None

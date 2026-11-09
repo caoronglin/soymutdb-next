@@ -5,6 +5,7 @@
  * supplied by the caller's forthcoming API-client contract update.
  */
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Alert,
   Button,
@@ -45,8 +46,8 @@ export interface ExternalArticleImportModalProps {
   disabled?: boolean;
 }
 
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : "Unable to preview the external article.";
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback;
 }
 
 /**
@@ -59,6 +60,7 @@ export function ExternalArticleImportModal({
   onApply,
   disabled = false,
 }: ExternalArticleImportModalProps) {
+  const { t } = useTranslation();
   const [form] = Form.useForm<ExternalArticleImportFormValues>();
   const [preview, setPreview] = useState<ExternalArticlePreview | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -89,7 +91,7 @@ export function ExternalArticleImportModal({
       });
       setPreview(result);
     } catch (reason) {
-      setError(errorMessage(reason));
+      setError(errorMessage(reason, t("admin.news.externalImport.previewFailedFallback", { defaultValue: "Unable to preview the external article." })));
     } finally {
       setPreviewing(false);
     }
@@ -103,13 +105,13 @@ export function ExternalArticleImportModal({
   return (
     <Modal
       open={open}
-      title="Import external article"
+      title={t("admin.news.externalImport.title", { defaultValue: "Import external article" })}
       onCancel={() => onOpenChange(false)}
       destroyOnHidden
       footer={
         <Space>
           <Button onClick={() => onOpenChange(false)} disabled={previewing}>
-            Cancel
+            {t("admin.news.externalImport.cancel", { defaultValue: "Cancel" })}
           </Button>
           <Button
             type="primary"
@@ -117,7 +119,7 @@ export function ExternalArticleImportModal({
             disabled={!preview || previewing || disabled}
             onClick={handleApply}
           >
-            Apply reviewed preview
+            {t("admin.news.externalImport.apply", { defaultValue: "Apply reviewed preview" })}
           </Button>
         </Space>
       }
@@ -125,8 +127,8 @@ export function ExternalArticleImportModal({
       <Alert
         type="info"
         showIcon
-        title="Review before saving"
-        description="Previewing or applying this source does not create, save, or publish a news article. Review the imported content and make any edits before saving it in the news form."
+        title={t("admin.news.externalImport.reviewTitle", { defaultValue: "Review before saving" })}
+        description={t("admin.news.externalImport.reviewDescription", { defaultValue: "Previewing or applying this source does not create, save, or publish a news article. Review the imported content and make any edits before saving it in the news form." })}
         style={{ marginBottom: 16 }}
       />
 
@@ -138,17 +140,17 @@ export function ExternalArticleImportModal({
         onValuesChange={clearPreview}
       >
         <Form.Item
-          label="Platform"
+          label={t("admin.news.externalImport.platform", { defaultValue: "Platform" })}
           name="platform"
-          rules={[{ required: true, message: "Choose an external platform." }]}
+          rules={[{ required: true, message: t("admin.news.externalImport.platformRequired", { defaultValue: "Choose an external platform." }) }]}
         >
           <Select options={PLATFORM_OPTIONS} disabled={disabled || previewing} />
         </Form.Item>
         <Form.Item
-          label="Article URL"
+          label={t("admin.news.externalImport.url", { defaultValue: "Article URL" })}
           name="source_url"
           rules={[
-            { required: true, message: "Enter an HTTPS article URL." },
+            { required: true, message: t("admin.news.externalImport.urlRequired", { defaultValue: "Enter an HTTPS article URL." }) },
             {
               validator: async (_, value: unknown) => {
                 const text = typeof value === "string" ? value.trim() : "";
@@ -156,12 +158,12 @@ export function ExternalArticleImportModal({
                 try {
                   const url = new URL(text);
                   if (url.protocol !== "https:") {
-                    throw new Error("Only HTTPS URLs are allowed.");
+                    throw new Error(t("admin.news.externalImport.httpsOnly", { defaultValue: "Only HTTPS URLs are allowed." }));
                   }
                 } catch (reason) {
                   throw reason instanceof Error
                     ? reason
-                    : new Error("Enter a valid HTTPS URL.");
+                    : new Error(t("admin.news.externalImport.invalidUrl", { defaultValue: "Enter a valid HTTPS URL." }));
                 }
               },
             },
@@ -180,7 +182,7 @@ export function ExternalArticleImportModal({
           loading={previewing}
           disabled={disabled}
         >
-          Preview article
+          {t("admin.news.externalImport.preview", { defaultValue: "Preview article" })}
         </Button>
       </Form>
 
@@ -188,7 +190,7 @@ export function ExternalArticleImportModal({
         <Alert
           type="error"
           showIcon
-          title="Preview failed"
+          title={t("admin.news.externalImport.previewFailed", { defaultValue: "Preview failed" })}
           description={error}
           style={{ marginTop: 16 }}
         />
@@ -197,28 +199,28 @@ export function ExternalArticleImportModal({
       {preview ? (
         <div className="mt-4 space-y-3 rounded-lg border border-border p-4">
           <Typography.Title level={5} className="!mb-0">
-            Preview ready
+            {t("admin.news.externalImport.previewReady", { defaultValue: "Preview ready" })}
           </Typography.Title>
           <div>
-            <Typography.Text type="secondary">Title</Typography.Text>
+            <Typography.Text type="secondary">{t("admin.news.externalImport.fieldTitle", { defaultValue: "Title" })}</Typography.Text>
             <Typography.Paragraph className="!mb-0">{preview.title}</Typography.Paragraph>
           </div>
           <div>
-            <Typography.Text type="secondary">Source</Typography.Text>
+            <Typography.Text type="secondary">{t("admin.news.externalImport.fieldSource", { defaultValue: "Source" })}</Typography.Text>
             <Typography.Paragraph className="!mb-0 break-all">
               {preview.source_url}
             </Typography.Paragraph>
           </div>
           {preview.source_published_at ? (
             <div>
-              <Typography.Text type="secondary">Source publication date</Typography.Text>
+              <Typography.Text type="secondary">{t("admin.news.externalImport.fieldPublishedAt", { defaultValue: "Source publication date" })}</Typography.Text>
               <Typography.Paragraph className="!mb-0">
                 {preview.source_published_at}
               </Typography.Paragraph>
             </div>
           ) : null}
           <div>
-            <Typography.Text type="secondary">Imported body (text preview)</Typography.Text>
+            <Typography.Text type="secondary">{t("admin.news.externalImport.fieldBody", { defaultValue: "Imported body (text preview)" })}</Typography.Text>
             <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words rounded bg-muted p-3 text-sm">
               {preview.content_html}
             </pre>

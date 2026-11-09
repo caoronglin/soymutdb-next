@@ -26,6 +26,8 @@ const allowInsecureDevOrigins =
   env.SOYMUTDB_LOCAL_TEST_PREVIEW_ENABLED === "true" ||
   env.SOYMUTDB_LOCAL_TEST_PREVIEW_ENABLED === "1";
 
+const fileViewerUrl = env.VITE_FILE_VIEWER_URL?.trim() || undefined;
+
 /** CSP for every document and the `_headers` file before inline hashes are added. */
 export const CSP_CONTENT = buildCsp(
   {
@@ -41,6 +43,13 @@ export const CSP_CONTENT = buildCsp(
           "JBrowse",
           { allowInsecureHttp: allowInsecureDevOrigins },
         ),
+    frameOrigins: fileViewerUrl
+      ? [
+          requireDeploymentOrigin(fileViewerUrl, "File viewer", {
+            allowInsecureHttp: allowInsecureDevOrigins,
+          }),
+        ]
+      : [],
   },
   Boolean(analyticsToken),
 );

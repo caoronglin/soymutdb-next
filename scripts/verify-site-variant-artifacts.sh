@@ -58,6 +58,24 @@ export VITE_API_BASE_URL="${SOYMUTDB_SITE_VARIANT_API_URL:-https://api.soymutdb.
 export VITE_JBROWSE_BASE_URL="${SOYMUTDB_SITE_VARIANT_JBROWSE_URL:-https://jbrowse.soymutdb.test}"
 export SOYMUTDB_INTERNAL_SITE_URL="${INTERNAL_SITE_URL}"
 
+# Seed the variant-scoped remote-preview inputs with distinct reserved origins.
+# They are non-VITE on purpose: `build-sites.ts` maps only the building
+# variant's pair into the Vite env, so the internal viewer must never appear in
+# the public tree (and the sentinel below turns a regression into a scan failure).
+EXTERNAL_VIEWER_URL="${SOYMUTDB_EXTERNAL_FILE_VIEWER_URL:-https://file-viewer-public.soymutdb.invalid/?file={url}}"
+EXTERNAL_VIEWER_ORIGINS="${SOYMUTDB_EXTERNAL_FILE_VIEWER_ARTIFACT_ORIGINS:-https://files-public.soymutdb.invalid}"
+INTERNAL_VIEWER_URL="${SOYMUTDB_INTERNAL_FILE_VIEWER_URL:-https://file-viewer-private.soymutdb.invalid/?file={url}}"
+INTERNAL_VIEWER_ORIGINS="${SOYMUTDB_INTERNAL_FILE_VIEWER_ARTIFACT_ORIGINS:-https://files-private.soymutdb.invalid}"
+export SOYMUTDB_EXTERNAL_FILE_VIEWER_URL="${EXTERNAL_VIEWER_URL}"
+export SOYMUTDB_EXTERNAL_FILE_VIEWER_ARTIFACT_ORIGINS="${EXTERNAL_VIEWER_ORIGINS}"
+export SOYMUTDB_INTERNAL_FILE_VIEWER_URL="${INTERNAL_VIEWER_URL}"
+export SOYMUTDB_INTERNAL_FILE_VIEWER_ARTIFACT_ORIGINS="${INTERNAL_VIEWER_ORIGINS}"
+INTERNAL_VIEWER_HOST="$(printf '%s' "${INTERNAL_VIEWER_URL}" | sed -E 's#^(https?://[^/]+).*$#\1#')"
+if [[ "${INTERNAL_VIEWER_HOST}" != https://* ]]; then
+  echo "FAIL: cannot derive the internal viewer origin from '${INTERNAL_VIEWER_URL}'" >&2
+  exit 1
+fi
+
 if [[ "${SOYMUTDB_SITE_VARIANTS_PREBUILT:-0}" == "1" ]]; then
   # The frontend gate already built both variants from the same commit; reuse
   # them instead of paying for two more Vite builds in the same pipeline run.
@@ -90,7 +108,7 @@ echo "[site-variants] external artifact must not contain internal-only values"
 mapfile -t SITE_SENTINELS < <(
   python3 scripts/check_site_artifact_isolation.py --print-default-sentinels
 )
-SITE_SENTINELS+=("${INTERNAL_SITE_URL}")
+SITE_SENTINELS+=("${INTERNAL_SITE_URL}" "${INTERNAL_VIEWER_HOST}" "${INTERNAL_VIEWER_ORIGINS}")
 sentinel_args=()
 for sentinel in "${SITE_SENTINELS[@]}"; do
   sentinel_args+=(--sentinel "${sentinel}")

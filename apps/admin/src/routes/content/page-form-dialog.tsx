@@ -85,7 +85,7 @@ export function PageFormDialog({
                 id="page-title-zh"
                 value={values.title_zh}
                 onChange={(e) => setField("title_zh", e.target.value)}
-                placeholder="页面标题（中文）"
+                placeholder={t("admin.content.placeholderTitleChinese", { defaultValue: "Page title in Chinese" })}
               />
             </div>
             <div className="space-y-1.5">
@@ -162,7 +162,7 @@ export function PageFormDialog({
                 id="page-content-zh"
                 value={values.content_zh}
                 onChange={(e) => setField("content_zh", e.target.value)}
-                placeholder="页面内容（中文）"
+                placeholder={t("admin.content.placeholderContentChinese", { defaultValue: "Page content in Chinese (Markdown supported)" })}
                 className="min-h-[160px] font-mono text-sm"
               />
             </div>

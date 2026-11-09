@@ -622,8 +622,16 @@ def test_supply_chain_script_finds_cargo_bootstrapped_by_the_sibling_job(
         fake.write_text("#!/bin/sh\nexit 42\n", encoding="utf-8")
         fake.chmod(0o755)
 
+    # The premise is "no cargo on PATH", which must not depend on whether the
+    # host happens to have rustup installed. Drop every PATH entry that
+    # provides cargo or rustc instead of trusting the ambient shell.
     system_path = os.pathsep.join(
-        d for d in os.environ.get("PATH", "").split(os.pathsep) if d
+        d
+        for d in os.environ.get("PATH", "").split(os.pathsep)
+        if d
+        and not any(
+            (Path(d) / name).exists() for name in ("cargo", "rustc")
+        )
     )
     env = {
         "PATH": f"{tmp_path / 'empty-bin'}{os.pathsep}{system_path}",

@@ -137,10 +137,13 @@ METHODS = frozenset(
 # Regenerate with _digest() after an intentional contract change and update in
 # the same commit, with a reason.
 _RESPONSE_SURFACE_DIGEST = (
-    "eb685be49379913d47db7b2e90ceec2e691931e69f992cb1e724a17b1ff1a951"
+    "67f3d20034606393dd2cb7f9e60d30e266eb8a85e1dd1a202eb96c01033168ab"
 )
-_EXPECTED_RESPONSE_ENTRIES = 808
-_EXPECTED_OPERATION_COUNT = 268
+# Re-pinned 2026-11-09 for the site-control + multi-view slice: 3 GET /site/*
+# and 5 /admin/data-views operations add 24 response entries (808 -> 832) and
+# move the operation count 268 -> 276.
+_EXPECTED_RESPONSE_ENTRIES = 832
+_EXPECTED_OPERATION_COUNT = 276
 
 # Second independent fixed point, on the GENERATED half. Every literal above
 # walks the snapshot; the three-way agreement below compares the two halves to
@@ -155,9 +158,9 @@ _EXPECTED_OPERATION_COUNT = 268
 # reviewed regenerate, in the same commit as both artifacts and both literals,
 # with a reason.
 _CLIENT_RESPONSE_SURFACE_DIGEST = (
-    "43c67d75eb298e9d42401738c12c856726aaacaa376755fd1a53cfedfe3408bc"
+    "3b6556a84cf79c35745048fbc880493c9d5225bf239d612dca52e10cdfdc380a"
 )
-_EXPECTED_CLIENT_RESPONSE_ENTRIES = 808
+_EXPECTED_CLIENT_RESPONSE_ENTRIES = 832
 
 # Independent fixed point for the operation-level ``summary`` prose. sha256 of
 # "\n".join(["soymutdb-operation-summary/v1"] +
@@ -165,9 +168,9 @@ _EXPECTED_CLIENT_RESPONSE_ENTRIES = 808
 # _summary_digest() after an intentional, reviewed contract change and update
 # in the same commit as the two artifacts, with a reason.
 _OPERATION_SUMMARY_DIGEST = (
-    "e0ae8e0a760b465ad280c5c462e914bebadb18a98f627970159f0ba559fd0ac6"
+    "1b3c3f807399996f6751c4c52496215ae12ec1352e7187b9a404a6a8b6f864a6"
 )
-_EXPECTED_SUMMARY_OPERATIONS = 268
+_EXPECTED_SUMMARY_OPERATIONS = 276
 
 # Independent fixed point for the request-body surface. ``openapi-typescript``
 # renders ``requestBody.required: true`` as ``requestBody: {`` and a missing
@@ -185,9 +188,9 @@ _EXPECTED_SUMMARY_OPERATIONS = 268
 # ``absent`` / ``true`` / ``false``. Read from nowhere; re-pin in the same
 # commit as an intentional contract change, with a reason.
 _REQUEST_BODY_SURFACE_DIGEST = (
-    "11042ffae3a33f2eaf5e9324e389fe83c587d61bd6977906c7bfa367ea8491c0"
+    "f992228b1c42b73331ba82ac9364c07c4d0be1fc91f43ed8ae91a10790aa3ce1"
 )
-_EXPECTED_REQUEST_BODY_BEARING_OPERATIONS = 86
+_EXPECTED_REQUEST_BODY_BEARING_OPERATIONS = 89
 
 # Independent fixed point for declared response headers. ``openapi-typescript``
 # renders a response's ``headers`` entry as a named property in that status's
@@ -213,15 +216,15 @@ _EXPECTED_RESPONSE_HEADERS = 1
 # Hand-written, NOT derived from either artifact under guard. A regenerate
 # that reorders two statuses must re-pin BOTH in the same commit, with a reason.
 _RESPONSE_STATUS_ORDER_DIGEST = (
-    "6d5c2259fbe9376d06844192d795ddb692f09a7007efb9d2959a24ac4418e8a8"
+    "bcf889d83813cf7145849d788bdb5b43698d2d70ae2d680a9fd9afc41059514e"
 )
 _CLIENT_RESPONSE_STATUS_ORDER_DIGEST = (
-    "7fc1f83a09b61f3e417f7420f56261c45b23c6b306e37055c2f3592418f60725"
+    "75a2ff8ecb8a04a698190b6c88cdc8051548f61a9d678faf61d8e7a2e8f53f69"
 )
-_EXPECTED_RESPONSE_STATUS_ORDER_ROWS = 808
+_EXPECTED_RESPONSE_STATUS_ORDER_ROWS = 832
 
 # Independent fixed point on the DECLARATION ORDER of the generated ``operations``
-# interface symbols (268 ``export interface operations`` blocks). Every digest
+# interface symbols (276 ``export interface operations`` blocks). Every digest
 # above reduces that interface to a sorted row set, the path map compares two
 # halves to each other, and the byte fixed point re-emits the generator's own
 # order. A regenerate that swaps two adjacent operation blocks -- each keeping
@@ -236,9 +239,9 @@ _EXPECTED_RESPONSE_STATUS_ORDER_ROWS = 808
 #   "index|symbol" rows IN DECLARATION ORDER), read from nowhere; re-pin in the
 # same commit as an intentional, reviewed regenerate, with a reason.
 _OPERATION_SYMBOL_ORDER_DIGEST = (
-    "1dc540216ab03dbce2641a15380466afcd1f01cad9930b287a230b4a5e019f48"
+    "8b172d2c4c8325b2eb4f13307582fcca525087c62a293d4fdc4c710cbcfa2947"
 )
-_EXPECTED_OPERATION_SYMBOLS = 268
+_EXPECTED_OPERATION_SYMBOLS = 276
 
 # The generated ``paths`` interface maps (METHOD, path) -> operations["symbol"].
 PATH_LINE = re.compile(r'^    "(/[^"]*)": \{$')

@@ -37,8 +37,8 @@ import {
 } from "@/lib/antd";
 import {
   getGene,
-  getReleaseId,
   listTestDataPreviewMutationSitesForGene,
+  type AssemblyInfo,
   type GeneExpressionRecord,
   type TestDataPreviewMutationSite,
 } from "@soymutdb/api-client";
@@ -55,9 +55,11 @@ import { GeneGenomeView } from "../../components/gene-genome-view";
 import { GeneSeedRequestEntry } from "../../components/gene-seed-request-entry";
 import { FadeUp, ScaleIn } from "../../components/route-motion";
 import { isGeneDetailRecord } from "../../lib/api-contract-guards";
+import { assemblyOptionLabel, resolveAssemblyParam, toAssemblyIdParam } from "../../lib/assembly-selection";
 import { buildJbrowseLocusUrl } from "../../lib/deployment";
 import { formatPosition } from "../../lib/format";
 import { queryKeys } from "../../lib/query-keys";
+import { useReleaseId } from "../../lib/release-scope";
 import { SITE_VARIANT } from "../../lib/site-variant";
 
 // The chart module exports the component by name only: its `export default` of
@@ -72,8 +74,9 @@ const ExpressionBarChart = React.lazy(() =>
 
 export const Route = createFileRoute("/genes/$geneId")({
   component: GeneDetailComponent,
-  // Keep deep-link assembly context typed, but do not render it until the
-  // detail API accepts assembly and binds the returned record to it.
+  // The deep-link assembly is a request hint, not an id: a link may carry the
+  // legacy genome-name spelling, so it is resolved against this release's
+  // catalogue before it reaches the API's numeric `assembly_id`.
   validateSearch: (search: Record<string, unknown>) => ({
     assembly: search.assembly ? String(search.assembly) : undefined,
   }),
@@ -83,22 +86,54 @@ function GeneDetailComponent() {
   const { t } = useTranslation();
   const { geneId } = Route.useParams();
   const { assembly } = Route.useSearch();
-  const releaseId = getReleaseId();
+  const releaseId = useReleaseId();
   const assembliesQuery = useQuery(assembliesQueryOptions({
-    releaseId: getReleaseId(),
+    releaseId,
     siteVariant: SITE_VARIANT,
   }));
-  const selectedAssembly = assembliesQuery.data?.find(
-    (candidate) => String(candidate.id) === String(assembly),
+  const assemblies = React.useMemo(() => assembliesQuery.data ?? [], [assembliesQuery.data]);
+
+  // The catalogue is the authority on which assembly ids exist in this
+  // release. An id-shaped string that is not in it is "unknown", never sent:
+  // the endpoint would read another namespace's plausible-looking record.
+  const assemblyParam = assembly?.trim() ? assembly.trim() : undefined;
+  const assemblyResolution = React.useMemo(
+    () => resolveAssemblyParam(assemblies, assemblyParam),
+    [assemblies, assemblyParam],
   );
+  const requestedAssemblyId = assemblyResolution.status === "resolved"
+    ? toAssemblyIdParam(assemblyResolution.assembly.id)
+    : undefined;
+  // A requested assembly that cannot be resolved is a blocked context: the
+  // page says so instead of sending an unscoped request whose rows could come
+  // from the other genome version.
+  const assemblyPending =
+    Boolean(assemblyParam) && !assembliesQuery.isSuccess && !assembliesQuery.isError;
+  const assemblyBlocked =
+    Boolean(assemblyParam) &&
+    (assembliesQuery.isError ||
+      (assembliesQuery.isSuccess && requestedAssemblyId === undefined));
+  const requestedAssemblyIdParam =
+    requestedAssemblyId === undefined ? undefined : String(requestedAssemblyId);
+
   const geneQuery = useQuery({
-    queryKey: queryKeys.genes.detail(geneId, assembly, releaseId, SITE_VARIANT),
-    queryFn: () => getGene(geneId, { assembly_id: assembly }),
+    queryKey: queryKeys.genes.detail(geneId, requestedAssemblyIdParam, releaseId, SITE_VARIANT),
+    queryFn: () => getGene(geneId, { assembly_id: requestedAssemblyIdParam }),
+    enabled: !assemblyPending && !assemblyBlocked,
   });
 
   // A 200 response of the wrong shape (e.g. the search-list envelope) must render
   // the empty state, not crash the genome view on undefined coordinates.
   const gene = isGeneDetailRecord(geneQuery.data) ? geneQuery.data : undefined;
+
+  // The record itself is authoritative for its assembly; the catalogue entry
+  // contributes the version the detail payload does not carry. Without a
+  // record, the resolved request context is all that is known.
+  const assemblyEntry: AssemblyInfo | undefined = gene?.assembly_id != null
+    ? assemblies.find((candidate) => String(candidate.id) === String(gene.assembly_id))
+    : assemblyResolution.status === "resolved"
+      ? assemblyResolution.assembly
+      : undefined;
 
   // Local-only unpublished test-data preview. The operator asked for these
   // columns (line / mutation-site key / chromosome / position / confidence /
@@ -136,7 +171,7 @@ function GeneDetailComponent() {
     () => expressionSection?.records ?? [],
     [expressionSection],
   );
-  const jbrowseAssembly = gene?.assembly_name ?? selectedAssembly?.name;
+  const jbrowseAssembly = gene?.assembly_name ?? assemblyEntry?.name;
   const jbrowseHref = gene && jbrowseAssembly
     ? buildJbrowseLocusUrl(import.meta.env.BASE_URL, {
         assembly: jbrowseAssembly,
@@ -251,7 +286,11 @@ function GeneDetailComponent() {
         {t("genes.backToSearch")}
       </Link>
 
-      {geneQuery.isLoading ? (
+      {assemblyBlocked ? (
+        <Card className="mt-8">
+          <Empty description={t("search.assemblyUnavailable")} className="py-8" />
+        </Card>
+      ) : geneQuery.isLoading || assemblyPending ? (
         <div className="mt-8 grid gap-4">
           <Skeleton active paragraph={{ rows: 1 }} title={{ width: "66%" }} />
           <Skeleton active paragraph={{ rows: 8 }} title={false} />
@@ -269,7 +308,7 @@ function GeneDetailComponent() {
                   <Tag className="m-0 font-mono text-[10px] uppercase">{gene.biotype}</Tag>
                   <Tag className="m-0 font-mono text-[10px]">{gene.chromosome}</Tag>
                   <Tag data-testid="gene-assembly" className="m-0 font-mono text-[10px]" color="blue">
-                    {gene.assembly_name ?? selectedAssembly?.name ?? assembly ?? "—"}
+                    {assemblyEntry ? assemblyOptionLabel(assemblyEntry) : (gene.assembly_name ?? "—")}
                   </Tag>
                 </div>
                 <h1 data-testid="gene-id" className="mt-3 font-mono text-3xl font-semibold tracking-tight">
