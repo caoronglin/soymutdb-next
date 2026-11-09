@@ -40,14 +40,14 @@ function PublishedRouteComponent() {
       <Result
         status={definition.isError ? "500" : "404"}
         title={definition.isError
-          ? t("errors.pageUnavailable", { defaultValue: "Page temporarily unavailable" })
-          : t("errors.notFound", { defaultValue: "Page not found" })}
+          ? t("errors.pageUnavailable")
+          : t("errors.notFound")}
         subTitle={definition.isError
-          ? t("errors.pageUnavailableHint", { defaultValue: "The page could not be loaded. Please try again later." })
-          : t("errors.notFoundHint", { defaultValue: "Check the address, or use search to find a record." })}
+          ? t("errors.pageUnavailableHint")
+          : t("errors.notFoundHint")}
         extra={
           <Button type="primary" onClick={() => void Promise.resolve(navigate({ to: "/" }))}>
-            {t("nav.home", { defaultValue: "Home" })}
+            {t("nav.home")}
           </Button>
         }
       />

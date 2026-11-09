@@ -168,10 +168,11 @@ function renderNode({ node, index }: RenderNodeProps): React.ReactNode {
 }
 
 function NavigationNode({ node }: { node: PageComponentNode }) {
+  const { t } = useTranslation();
   const title = asString(node.props.title);
   const items = Array.isArray(node.props.items) ? node.props.items : [];
   return (
-    <nav className="flex flex-col gap-3" aria-label={title || "Page navigation"}>
+    <nav className="flex flex-col gap-3" aria-label={title || t("pageBuilder.pageNavigation")}>
       {title ? <Title level={4} style={{ margin: 0 }}>{title}</Title> : null}
       <Space size="middle" wrap>
         {items.map((item, i) => {
@@ -200,14 +201,14 @@ function NewsListNode({ node }: { node: PageComponentNode }) {
   });
 
   if (news.isPending) return <Skeleton active paragraph={{ rows: 4 }} />;
-  if (news.isError) return <Alert type="warning" showIcon message={t("pageBuilder.newsUnavailable", { defaultValue: "News is temporarily unavailable" })} />;
+  if (news.isError) return <Alert type="warning" showIcon message={t("pageBuilder.newsUnavailable")} />;
   const items = news.data?.items ?? [];
-  if (items.length === 0) return <Empty description={t("pageBuilder.noNews", { defaultValue: "No news yet" })} />;
+  if (items.length === 0) return <Empty description={t("pageBuilder.noNews")} />;
 
   return (
     <section className="flex flex-col gap-3">
       <Title level={4} style={{ margin: 0 }}>
-        {t("nav.news", { defaultValue: "News" })}
+        {t("nav.news")}
       </Title>
       <div className="grid gap-3 md:grid-cols-2">
         {items.map((item) => {
@@ -347,14 +348,14 @@ function AssemblySelectNode({ node }: { node: PageComponentNode }) {
 
   if (assemblies.isPending) return <Skeleton.Input active />;
   if (assemblies.isError) {
-    return <Alert type="warning" showIcon message={t("pageBuilder.assembliesUnavailable", { defaultValue: "Assemblies are temporarily unavailable" })} />;
+    return <Alert type="warning" showIcon message={t("pageBuilder.assembliesUnavailable")} />;
   }
 
   return (
     <Select
       style={{ minWidth: 260 }}
-      aria-label={t("pageBuilder.selectAssembly", { defaultValue: "Select a genome assembly" })}
-      placeholder={t("pageBuilder.selectAssembly", { defaultValue: "Select a genome assembly" })}
+      aria-label={t("pageBuilder.selectAssembly")}
+      placeholder={t("pageBuilder.selectAssembly")}
       value={defaultAssembly || undefined}
       options={options}
       onChange={(value: string) =>
@@ -381,11 +382,11 @@ function GeneSearchFormNode({ node }: { node: PageComponentNode }) {
           value={term}
           onChange={(event) => setTerm(event.target.value)}
           onPressEnter={submit}
-          placeholder={t("search.genes.geneIdPlaceholder", { defaultValue: "Enter a gene ID" })}
-          aria-label={title || t("nav.search", { defaultValue: "Search" })}
+          placeholder={t("pageBuilder.geneIdPlaceholder")}
+          aria-label={title || t("nav.search")}
         />
         <Button type="primary" onClick={submit}>
-          {t("ui.searchButton", { defaultValue: "Search" })}
+          {t("ui.searchButton")}
         </Button>
       </Space.Compact>
     </section>
@@ -419,23 +420,23 @@ function LocationSearchFormNode({ node }: { node: PageComponentNode }) {
         <Input
           value={chromosome}
           onChange={(event) => setChromosome(event.target.value)}
-          placeholder={t("search.location.chromosome", { defaultValue: "Chromosome" })}
-          aria-label={t("search.location.chromosome", { defaultValue: "Chromosome" })}
+          placeholder={t("search.location.chromosome")}
+          aria-label={t("search.location.chromosome")}
         />
         <Input
           value={start}
           onChange={(event) => setStart(event.target.value.replace(/[^\d]/g, ""))}
-          placeholder={t("search.location.start", { defaultValue: "Start" })}
-          aria-label={t("search.location.start", { defaultValue: "Start" })}
+          placeholder={t("search.location.start")}
+          aria-label={t("search.location.start")}
         />
         <Input
           value={end}
           onChange={(event) => setEnd(event.target.value.replace(/[^\d]/g, ""))}
-          placeholder={t("search.location.end", { defaultValue: "End" })}
-          aria-label={t("search.location.end", { defaultValue: "End" })}
+          placeholder={t("search.location.end")}
+          aria-label={t("search.location.end")}
         />
         <Button type="primary" onClick={submit}>
-          {t("search.location.submit", { defaultValue: "Search" })}
+          {t("search.location.submit")}
         </Button>
       </Space>
     </section>
@@ -469,6 +470,7 @@ const ACTION_ROUTES: Record<string, string> = {
 };
 
 function ButtonNode({ node }: { node: PageComponentNode }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const label = asString(node.props.label);
   const action = asString(node.props.action);
@@ -481,7 +483,7 @@ function ButtonNode({ node }: { node: PageComponentNode }) {
       disabled={!target}
       onClick={target ? () => void Promise.resolve(navigate({ to: target })) : undefined}
     >
-      {label || action || "Button"}
+      {label || action || t("pageBuilder.buttonFallback")}
     </Button>
   );
 }
@@ -556,7 +558,7 @@ function JbrowseLauncherNode({ node }: { node: PageComponentNode }) {
         }))
       }
     >
-      {t("pageBuilder.openJbrowse", { defaultValue: "Open JBrowse 2" })}
+      {t("pageBuilder.openJbrowse")}
     </Button>
   );
 }
@@ -566,7 +568,7 @@ function BlastLauncherNode({ node }: { node: PageComponentNode }) {
   const navigate = useNavigate();
   return (
     <Button type="primary" onClick={() => void Promise.resolve(navigate({ to: "/blast" }))}>
-      {t("pageBuilder.openBlast", { defaultValue: "Run BLAST" })}
+      {t("pageBuilder.openBlast")}
       {asString(node.props.program) ? ` (${asString(node.props.program)})` : ""}
     </Button>
   );
@@ -600,7 +602,7 @@ function OntologyGraphNode({ node }: { node: PageComponentNode }) {
   if (!ontology || !iri) return null;
   if (graph.isPending) return <Skeleton active paragraph={{ rows: 6 }} />;
   if (graph.isError) {
-    return <Alert type="warning" showIcon message={t("pageBuilder.graphUnavailable", { defaultValue: "Ontology graph is temporarily unavailable" })} />;
+    return <Alert type="warning" showIcon message={t("pageBuilder.graphUnavailable")} />;
   }
   return <GraphSvg graph={graph.data} />;
 }
@@ -628,7 +630,7 @@ function GraphSvg({ graph }: { graph: OntologyRelationshipGraphResponse }) {
     <figure className="flex flex-col gap-2">
       <svg
         role="img"
-        aria-label={t("pageBuilder.ontologyGraph", { defaultValue: "Ontology relationship graph" })}
+        aria-label={t("pageBuilder.ontologyGraph")}
         viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`}
         style={{ width: "100%", height: "auto" }}
       >
@@ -682,7 +684,7 @@ function GraphSvg({ graph }: { graph: OntologyRelationshipGraphResponse }) {
       </svg>
       {graph.truncated ? (
         <Text type="secondary">
-          {t("pageBuilder.graphTruncated", { defaultValue: "The graph was truncated to the configured node/edge limits." })}
+          {t("pageBuilder.graphTruncated")}
         </Text>
       ) : null}
     </figure>
