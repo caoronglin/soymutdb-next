@@ -173,11 +173,12 @@ from __future__ import annotations
 
 import argparse
 import copy
-from collections import Counter
 import hashlib
 import json
+import pathlib
 import re
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -518,15 +519,15 @@ def example_field_drift(
 # property doc blocks at 12, and the property declaration right below the
 # block. Restrict to the ``schemas`` region so ``parameters`` / ``responses``
 # blocks with the same indentation cannot be misread as components.
-_SCHEMAS_REGION = re.compile(r"^    schemas: \{\n(?P<body>.*?)^    \};$", re.M | re.S)
+_SCHEMAS_REGION = re.compile(r"^    schemas: \{\n(?P<body>.*?)^    \};$", re.MULTILINE | re.DOTALL)
 _COMPONENT_BLOCK = re.compile(
     r"^        (?P<name>[A-Za-z_][A-Za-z0-9_]*): \{\n(?P<body>.*?)^        \};$",
-    re.M | re.S,
+    re.MULTILINE | re.DOTALL,
 )
 _PROPERTY_DOC = re.compile(
     r"^            (?P<doc>/\*\*(?:.|\n)*?\*/)\n"
     r"^            (?P<field>[A-Za-z_][A-Za-z0-9_]*)\??\s*:",
-    re.M,
+    re.MULTILINE,
 )
 
 
@@ -647,6 +648,9 @@ def _additional_properties_digest(rows_: list[tuple[str, str]]) -> str:
 
 def _client_type(value: Any) -> str | None:
     """openapi-typescript's index-signature type for one published value."""
+#: `is True` / `is False` are deliberate here: these values come from parsed
+#: JSON, where `False` and `0` / `""` are different facts. A truthiness test
+#: would accept 0 as a boolean and silently change what the guard compares.
     if value is True:
         return "unknown"
     if value is False:
@@ -1038,7 +1042,7 @@ def failures(
     # this door names the component when only one half moves.
     expected_client = Counter()
     for path, value in additional_rows_:
-        type_ = _client_type(json.loads(value))
+        type_ = _client_type(_load_json_text(value, f"{path}: additionalProperties"))
         if type_ is not None:
             expected_client[(path.split("/", 1)[0], type_)] += 1
     observed_client = Counter(client_additional_)
@@ -1058,7 +1062,7 @@ def self_test() -> int:
         print(f"SELF-TEST FAIL: clean tree drifts: {clean}")
         return 1
 
-    document = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
+    document = _load_json_file(SNAPSHOT)
     cases: dict[str, str] = {}
 
     # A coordinated regenerate shape: one real value retyped in the snapshot,
@@ -1614,7 +1618,7 @@ def self_test() -> int:
         snapshot=ap_snap,
         generated=ap_gen,
         additional_digest=_additional_properties_digest(
-            additional_property_rows(json.loads(ap_snap))
+            additional_property_rows(_load_json_text(ap_snap, 'additionalProperties snapshot'))
         ),
         client_additional_digest=_client_additional_properties_digest(
             client_additional_properties(ap_gen)
@@ -1642,8 +1646,31 @@ def self_test() -> int:
     return 1 if failures_count else 0
 
 
+def _load_json_text(text: str, label: str) -> Any:
+    """Parse a committed JSON snapshot, naming it when the bytes are invalid.
+
+    This module audits committed artifacts, so the one failure mode worth
+    spelling out is "the snapshot itself is corrupt". A bare `JSONDecodeError`
+    from a deep call site does not say which file, and the reader ends up
+    debugging the guard instead of the artifact.
+    """
+    try:
+        return json.loads(text)
+    except ValueError as exc:
+        raise SystemExit(f"{label}: not valid JSON: {exc}") from exc
+
+
+def _load_json_file(path: Path) -> Any:
+    """Parse a committed JSON file, naming the path on failure."""
+    return _load_json_text(path.read_text(encoding="utf-8"), str(path))
+
+
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    # `__doc__` is optional on a module; fall back to the file name so a
+    # stripped docstring does not turn `--help` into an AttributeError.
+    summary = (__doc__ or "").strip().splitlines()
+    description = summary[0] if summary else pathlib.Path(__file__).name
+    parser = argparse.ArgumentParser(description=description)
     parser.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if args.self_test:
