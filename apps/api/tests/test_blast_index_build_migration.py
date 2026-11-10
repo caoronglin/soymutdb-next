@@ -17,9 +17,12 @@ CATALOG = Path(__file__).resolve().parents[1] / "migrations/versions/0050_blast_
 
 def migration(connection, path, method):
     spec = importlib.util.spec_from_file_location("migration_under_test", path)
+    assert spec is not None and spec.loader is not None, path
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    module.op = Operations(MigrationContext.configure(connection))
+    # The migration module assigns ``op`` at import scope; the attribute is not
+    # declared on ModuleType, so set it through its __dict__.
+    module.__dict__["op"] = Operations(MigrationContext.configure(connection))
     getattr(module, method)()
 
 
@@ -144,15 +147,16 @@ def test_build_revision_chains_after_the_lifecycle_revision() -> None:
     assert revision_of["0052"] == "0052_blast_index_build_state.py"
     assert parent_of["0052"] == "0051"
     # The revision chain must not fork: exactly one node has no children.
-    # ``0058`` (admin data views) chains after ``0057`` and is therefore the
-    # current head; the assertion is about *one* head, not about ``0054`` being
-    # the last revision ever written.
+    # The assertion is about *one* head in the tail, not about ``0054`` being the
+    # last revision ever written — pinning a literal head made every new
+    # migration a red test for a reason unrelated to this file's subject.
     children = set(parent_of.values())
-    # Both plain assignments and annotated assignments are scanned above, so
-    # the tail from ``0050`` on has exactly one head: ``0058``.
+    # Both plain assignments and annotated assignments are scanned above.
     heads = [revision for revision in revision_of if revision not in children]
-    assert "0058" in heads
-    assert [head for head in heads if head >= "0050"] == ["0058"], heads
+    tail_heads = [head for head in heads if head >= "0050"]
+    assert len(tail_heads) == 1, f"the migration tail must have exactly one head, got {heads}"
+    # And the blast revision is not it: `0054` still has a descendant.
+    assert tail_heads[0] != "0054"
     assert parent_of["0055"] == "0054"
     assert parent_of["0056"] == "0055"
     assert parent_of["0057"] == "0056"
