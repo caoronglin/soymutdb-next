@@ -615,21 +615,29 @@ db_ab_run() {
 clickhouse_migration_run() {
   local container="soymutdb-ci-clickhouse"
   docker rm -f "${container}" >/dev/null 2>&1 || true
+  # Ephemeral per-run password: a literal default here would be a published
+  # credential that every pipeline shares, and it would also be baked into the
+  # container's environment on a shared runner. An explicit caller value still
+  # wins, so a developer can attach to their own instance.
+  if [[ -z "${SOYMUTDB_CLICKHOUSE_PASSWORD:-}" ]]; then
+    SOYMUTDB_CLICKHOUSE_PASSWORD="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+    export SOYMUTDB_CLICKHOUSE_PASSWORD
+  fi
   docker run -d --name "${container}" -p 8123:8123 \
     -e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 \
-    -e CLICKHOUSE_PASSWORD="${SOYMUTDB_CLICKHOUSE_PASSWORD:-ci-ch-password}" \
+    -e CLICKHOUSE_PASSWORD="${SOYMUTDB_CLICKHOUSE_PASSWORD}" \
     "${SOYMUTDB_CLICKHOUSE_CI_IMAGE:-clickhouse/clickhouse-server:24.8-alpine}" >/dev/null
 
   local attempt
   for attempt in $(seq 1 60); do
     if curl --fail --silent \
-      -u "default:${SOYMUTDB_CLICKHOUSE_PASSWORD:-ci-ch-password}" \
+      -u "default:${SOYMUTDB_CLICKHOUSE_PASSWORD}" \
       http://127.0.0.1:8123/ping >/dev/null; then
       break
     fi
     sleep 2
   done
-  curl --fail --silent -u "default:${SOYMUTDB_CLICKHOUSE_PASSWORD:-ci-ch-password}" \
+  curl --fail --silent -u "default:${SOYMUTDB_CLICKHOUSE_PASSWORD}" \
     http://127.0.0.1:8123/ping >/dev/null || {
     docker logs "${container}" >&2 || true
     return 1
@@ -638,7 +646,8 @@ clickhouse_migration_run() {
   export SOYMUTDB_CLICKHOUSE_HOST=127.0.0.1
   export SOYMUTDB_CLICKHOUSE_PORT=8123
   export SOYMUTDB_CLICKHOUSE_USER=default
-  export SOYMUTDB_CLICKHOUSE_PASSWORD="${SOYMUTDB_CLICKHOUSE_PASSWORD:-ci-ch-password}"
+  # Set by clickhouse_migration_run above; never defaulted to a literal.
+  export SOYMUTDB_CLICKHOUSE_PASSWORD
   export SOYMUTDB_CLICKHOUSE_DATABASE=soymutdb
   export CLICKHOUSE_MIGRATION_PYTHON="${CLICKHOUSE_MIGRATION_PYTHON:-python}"
 

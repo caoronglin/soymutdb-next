@@ -1,0 +1,51 @@
+# gitleaks configuration
+#
+# The `generic-api-key` rule fires on any assignment whose identifier contains
+# "key" and whose value looks random enough. In this repository that shape is
+# produced by *data identifiers* and by a commented-out placeholder, not by
+# credentials. Each exemption below names what actually matched, so a reviewer
+# can tell a false positive from a real leak.
+#
+# Review rule: an entry may only be added when (a) the matched value is provably
+# not a credential, and (b) the value is already public in the repository. If a
+# real credential is ever committed this file must NOT be used to hide it — the
+# credential has to be rotated and removed. `useDefault = true` keeps every
+# upstream rule enabled, so this file can only narrow false positives.
+
+title = "SoyMutDB gitleaks policy"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Non-secret identifiers, placeholders and generated artifacts"
+
+# Values, not files: the same string may legitimately appear in several places
+# (the service constant, its tests, and the built asset that references it).
+regexes = [
+  # `PREVIEW_DATASET_KEY` — the dataset slug of the disposable local preview
+  # import, not a credential. Matches the bare value and its JSON/bundle forms.
+  '''03_soymut-a6-test''',
+  # Mutation-site identifiers ("SOYTE1M-Gm01-98256") used as fixtures. They are
+  # coordinates in a sample file, so they contain no secret material.
+  '''SOYTE1M-Gm[0-9]{2}-[0-9]+''',
+  # A commented-out placeholder in `deploy/.env.example`: the line exists to
+  # tell an operator what shape the real value must have, and the value is the
+  # literal advice to replace it.
+  '''replace-with-a-secret-32-plus-character-key''',
+  # `apps/worker/tests/test_wecom_policy.py::TestRedaction` feeds credential-
+  # SHAPED strings to the redactor to prove it strips them. They are the test
+  # input, not a stored credential: rotating is inapplicable and no service ever
+  # accepted them.
+  '''A1b2C3d4E5f6''',
+]
+
+# Generated trees are not sources: `apps/web/dist/**` is a build product whose
+# bytes are re-derived from the files above on every build. Scanning it would
+# report the same non-secret identifier once per emitted bundle.
+paths = [
+  '''apps/web/dist/''',
+  '''apps/admin/dist/''',
+  '''apps/jbrowse/dist/''',
+  '''apps/docs/dist/''',
+]

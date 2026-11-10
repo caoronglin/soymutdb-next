@@ -162,7 +162,7 @@ ENV NUMBA_CACHE_DIR=/tmp/soymutdb-numba-cache
 #                  which does not cover third-party C++ extensions.
 #   libhdf5-310    h5py links libhdf5_serial.so.310; the SONAME package name
 #                  follows the HDF5 series Debian ships (trixie: 1.14.5).
-#   libhdf5-hl-310 h5py also links the high-level API, libhdf5_serial_hl.so.310;
+#   libhdf5-hl-310 h5py also links the high-level interface (libhdf5_serial_hl.so.310);
 #                  Debian ships it as a separate package that libhdf5-310 does
 #                  not depend on, so both have to be named.
 # Arrow C++, pandas, matplotlib's FreeType/Qhull and cyvcf2's htslib carry
