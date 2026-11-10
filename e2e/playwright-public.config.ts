@@ -17,7 +17,7 @@ const baseURL = "http://localhost:4173/";
 export default defineConfig({
   testDir: "./tests",
   testMatch:
-    /(homepage|search|genes|accessibility|blast|public-login|route-smoke|api-shape-resilience|seed-request|downloads|seqfetch|exppattern|enrichment|browser-bridge|analyses|analyses-submit|expression-phenotype)\.spec\.ts/,
+    /(homepage|search|genes|accessibility|blast|public-login|route-smoke|api-shape-resilience|seed-request|downloads|seqfetch|exppattern|enrichment|browser-bridge|expression-phenotype)\.spec\.ts/,
   workers: 1,
   fullyParallel: false,
   timeout: 45_000,

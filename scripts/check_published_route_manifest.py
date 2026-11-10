@@ -78,8 +78,15 @@ ROBOTS_TAG = "soymutdb-published-robots/v1"
 # instead of the legacy single-site https://soymutdb.invalid. The route list,
 # order and crawl policy are unchanged; only the origin line moved, so both
 # digests moved together.
+#
+# Re-pinned again 2026-11-09 when the `/analyses` route was removed: this
+# repository is a database, not an analysis platform, so the public analysis
+# pages (list, fastp, scanpy, job detail) and their navigation entry are gone.
+# `/analyses` was the only prerendered route among them, so the enumeration
+# drops 33 -> 32 while the indexable set (25) and the crawl policy stay
+# unchanged -- which is why only _MANIFEST_DIGEST moved below.
 _MANIFEST_DIGEST: str | None = (
-    "cb91b21c95e8d079dff8594572a02ea96798cfbeb4cfcbae82fae48174e819b0"
+    "8aaa581e022784ace37f0a31497dd94c22f3731de26fd23b5e5badc5f66bd751"
 )
 _ROBOTS_DIGEST: str | None = (
     "270e18bf22e414c7aec477741c0dc91c754859b81a25ca6f263dc843eaf7f4a2"
@@ -87,7 +94,7 @@ _ROBOTS_DIGEST: str | None = (
 
 # Second, independent doors: a permutation is only caught by the digests above,
 # but a route that gains or loses its document moves these.
-_EXPECTED_ROUTES = 33
+_EXPECTED_ROUTES = 32
 _EXPECTED_INDEXABLE = 25
 
 MANIFEST_KEYS = frozenset({"siteVariant", "origin", "entries"})
@@ -191,8 +198,11 @@ def shape_errors(document: dict[str, Any]) -> list[str]:
 
 def check(
     external: Path | None = None,
-    manifest_literal: str | None = True,
-    robots_literal: str | None = True,
+    # `True` means "use the module-level literal"; a string overrides it and
+    # `None` models an unarmed door. All three states are exercised by the
+    # self-test, so the annotation has to name all three.
+    manifest_literal: str | bool | None = True,
+    robots_literal: str | bool | None = True,
     expected_routes: int | None = None,
     expected_indexable: int | None = None,
 ) -> list[str]:
@@ -260,7 +270,10 @@ def check(
                 f"reviewed floor is {pinned_indexable}"
             )
         paths = [row.get("path") for row in rows]
-        duplicates = sorted({path for path in paths if paths.count(path) > 1})
+        # Only real, non-empty path strings can be duplicated; a missing one is
+        # reported by the entry-shape door instead of crashing this comparison.
+        names = [path for path in paths if isinstance(path, str) and path]
+        duplicates = sorted({path for path in names if names.count(path) > 1})
         if duplicates:
             found.append(f"routes.json repeats route path(s) {duplicates}")
         if document.get("siteVariant") != "external":
@@ -336,7 +349,10 @@ FIXTURE_ROBOTS = robots_digest(CLEAN_ROBOTS)
 def _fixture(tmp: Path, rows: list[dict[str, Any]], robots: str, **overrides: Any) -> Path:
     external = tmp / "external"
     external.mkdir(parents=True, exist_ok=True)
-    document = {"siteVariant": "external", "origin": "https://soymutdb.invalid"}
+    document: dict[str, Any] = {
+        "siteVariant": "external",
+        "origin": "https://soymutdb.invalid",
+    }
     document.update(overrides)
     document["entries"] = rows
     (external / MANIFEST_NAME).write_text(

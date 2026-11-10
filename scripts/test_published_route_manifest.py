@@ -175,6 +175,126 @@ class SelfTestHasASignal(unittest.TestCase):
         self.assertIn("scripts/check_published_route_manifest.py", teeth._GUT_COVERED)
 
 
+class DemoSiteOriginIsTheSiteOrigin(unittest.TestCase):
+    """The demo builders must feed `SOYMUTDB_SITE_URL` a *site* origin.
+
+    ``SOYMUTDB_SITE_URL`` is not the API origin. ``generate-static-routes.ts``
+    uses it for the canonical ``<link>``, ``sitemap.xml`` and the ``Sitemap:``
+    line in ``robots.txt``. Feeding it the demo API origin published
+    ``<link rel="canonical" href="https://api.soymutdb.test/">`` and a sitemap
+    that named the API server instead of the site itself.
+
+    The second half is reproducibility: the committed ``routes.json`` carries an
+    ``origin`` field inside the pinned digest, so a builder that injects a
+    different origin produces different bytes and the digest door fails on every
+    machine that rebuilt the artifact. Both halves are one assertion -- the demo
+    site origin has to equal the committed artifact's origin.
+    """
+
+    BUILDERS = (
+        "scripts/verify-frontend-artifacts.sh",
+        "scripts/build-all-static-apps.sh",
+    )
+
+    def test_no_builder_feeds_the_api_origin_to_the_site_url(self) -> None:
+        committed_origin = json.loads(
+            (ROOT / "apps/web/dist/external/routes.json").read_text(encoding="utf-8")
+        )["origin"]
+        self.assertIsInstance(committed_origin, str)
+        for name in self.BUILDERS:
+            source = (ROOT / name).read_text(encoding="utf-8")
+            resolved = self._site_url_default(source)
+            self.assertIsNotNone(
+                resolved, f"{name}: no SOYMUTDB_SITE_URL default found to audit"
+            )
+            # Narrow for the type checker: the assertion above already guarantees
+            # a string at runtime.
+            audited = resolved if resolved is not None else ""
+            for marker in (
+                "SOYMUTDB_CI_DEMO_API_URL",
+                "VITE_API_BASE_URL",
+                "api.soymutdb.test",
+            ):
+                self.assertNotIn(
+                    marker,
+                    audited,
+                    f"{name}: SOYMUTDB_SITE_URL is the site origin used for "
+                    "canonical/sitemap/robots; it must not carry the API origin "
+                    f"({marker})",
+                )
+            self.assertIn(
+                committed_origin,
+                audited,
+                f"{name}: the SOYMUTDB_SITE_URL default must be the origin the "
+                f"committed routes.json records ({committed_origin}), otherwise a "
+                "rebuild emits different bytes and the pinned digest fails",
+            )
+
+    @staticmethod
+    def _site_url_default(source: str) -> str | None:
+        """Resolve the effective default of `SOYMUTDB_SITE_URL` in one script.
+
+        Two shapes exist and both must be audited:
+
+        * a literal default -- `SOYMUTDB_SITE_URL="${X:-https://host}"`;
+        * one level of indirection -- `SOYMUTDB_SITE_URL="${X}"` where `X` is
+          itself declared in the same file. Auditing only the first shape would
+          let the second reintroduce the API origin.
+        """
+        declarations: dict[str, str] = {}
+        for line in source.splitlines():
+            stripped = line.strip().removeprefix("export ").rstrip(" \\")
+            if "=" not in stripped or stripped.startswith("#"):
+                continue
+            name, _, value = stripped.partition("=")
+            if name.isupper():
+                declarations[name] = value.strip().strip('"')
+
+        def resolve(name: str, depth: int = 0) -> str | None:
+            if depth > 3:
+                return None
+            value = declarations.get(name)
+            if value is None:
+                return None
+            inner = value
+            if inner.startswith("${"):
+                inner = inner[2:]
+                if inner.endswith("}"):
+                    inner = inner[:-1]
+                if ":-" in inner:
+                    _, _, literal = inner.partition(":-")
+                    return literal
+                return resolve(inner, depth + 1)
+            return inner
+
+        return resolve("SOYMUTDB_SITE_URL")
+
+    def test_the_demo_site_origin_matches_the_committed_artifact(self) -> None:
+        committed = json.loads(
+            (ROOT / "apps/web/dist/external/routes.json").read_text(encoding="utf-8")
+        )
+        origin = committed.get("origin")
+        self.assertIsInstance(origin, str, "the committed manifest must name an origin")
+        frontend = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
+        # The variable the gate exports for the build, with its default.
+        declaration = next(
+            line.strip()
+            for line in frontend.splitlines()
+            if line.strip().startswith("SOYMUTDB_CI_DEMO_SITE_URL=")
+        )
+        self.assertIn(
+            origin,
+            declaration,
+            "the demo site origin must default to the origin the committed "
+            f"routes.json recorded ({origin}); otherwise a rebuild emits different "
+            "bytes and the pinned digest fails",
+        )
+        # `build-sites.ts` falls back to the same value when nothing is exported,
+        # so a hand-run build reproduces the artifact too.
+        build_sites = (ROOT / "apps/web/scripts/build-sites.ts").read_text(encoding="utf-8")
+        self.assertIn(origin, build_sites)
+
+
 class WiringIsPinned(unittest.TestCase):
     def test_the_layer_runs_both_forms(self) -> None:
         smoke = SMOKE.read_text(encoding="utf-8")

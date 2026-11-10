@@ -295,14 +295,13 @@ DEFAULT_HEADER_NAVIGATION = HeaderNavigationDocument(
             [
                 _default_link("blast-tool", "BLAST", "BLAST", "/blast", 0),
                 _default_link("comparative", "Comparative", "比较基因组", "/comparative", 1),
-                _default_link("analyses", "Analyze", "分析", "/analyses", 2),
-                _default_link("seqfetch", "Sequence Fetch", "序列获取", "/tools/seqfetch", 3),
+                _default_link("seqfetch", "Sequence Fetch", "序列获取", "/tools/seqfetch", 2),
                 _default_link(
                     "enrichment",
                     "GO / KEGG Enrichment",
                     "GO / KEGG 富集",
                     "/tools/enrichment",
-                    4,
+                    3,
                 ),
                 _default_link(
                     "exppattern",

@@ -48,10 +48,6 @@ import { Route as NewsSlugRouteImport } from './routes/news/$slug'
 import { Route as PhenotypesIndexRouteImport } from './routes/phenotypes/index'
 import { Route as PhenotypesLineIdRouteImport } from './routes/phenotypes/$lineId'
 import { Route as VariantsIndexRouteImport } from './routes/variants/index'
-import { Route as AnalysesIndexRouteImport } from './routes/analyses/index'
-import { Route as AnalysesFastpRouteImport } from './routes/analyses/fastp'
-import { Route as AnalysesScanpyRouteImport } from './routes/analyses/scanpy'
-import { Route as AnalysesJobIdRouteImport } from './routes/analyses/$jobId'
 import { Route as SearchGenesRouteImport } from './routes/search/genes'
 import { Route as SearchLocationRouteImport } from './routes/search/location'
 import { Route as SearchGbrowseRouteImport } from './routes/search/gbrowse'
@@ -254,26 +250,6 @@ const VariantsIndexRoute = VariantsIndexRouteImport.update({
   path: '/variants/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AnalysesIndexRoute = AnalysesIndexRouteImport.update({
-  id: '/analyses/',
-  path: '/analyses',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AnalysesFastpRoute = AnalysesFastpRouteImport.update({
-  id: '/analyses/fastp',
-  path: '/analyses/fastp',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AnalysesScanpyRoute = AnalysesScanpyRouteImport.update({
-  id: '/analyses/scanpy',
-  path: '/analyses/scanpy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AnalysesJobIdRoute = AnalysesJobIdRouteImport.update({
-  id: '/analyses/$jobId',
-  path: '/analyses/$jobId',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SearchGenesRoute = SearchGenesRouteImport.update({
   id: '/search/genes',
   path: 'genes',
@@ -370,10 +346,6 @@ export interface FileRoutesByFullPath {
   '/genes/': typeof GenesIndexRoute
   '/news/': typeof NewsIndexRoute
   '/variants/': typeof VariantsIndexRoute
-  '/analyses/': typeof AnalysesIndexRoute
-  '/analyses/fastp': typeof AnalysesFastpRoute
-  '/analyses/scanpy': typeof AnalysesScanpyRoute
-  '/analyses/$jobId': typeof AnalysesJobIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -423,10 +395,6 @@ export interface FileRoutesByTo {
   '/genes': typeof GenesIndexRoute
   '/news': typeof NewsIndexRoute
   '/variants': typeof VariantsIndexRoute
-  '/analyses': typeof AnalysesIndexRoute
-  '/analyses/fastp': typeof AnalysesFastpRoute
-  '/analyses/scanpy': typeof AnalysesScanpyRoute
-  '/analyses/$jobId': typeof AnalysesJobIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -472,10 +440,6 @@ export interface FileRoutesById {
   '/genes/': typeof GenesIndexRoute
   '/news/': typeof NewsIndexRoute
   '/variants/': typeof VariantsIndexRoute
-  '/analyses/': typeof AnalysesIndexRoute
-  '/analyses/fastp': typeof AnalysesFastpRoute
-  '/analyses/scanpy': typeof AnalysesScanpyRoute
-  '/analyses/$jobId': typeof AnalysesJobIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -522,10 +486,6 @@ export interface FileRouteTypes {
     | '/genes/'
     | '/news/'
     | '/variants/'
-    | '/analyses/'
-    | '/analyses/fastp'
-    | '/analyses/scanpy'
-    | '/analyses/$jobId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/assemblies'
@@ -572,10 +532,6 @@ export interface FileRouteTypes {
     | '/genes'
     | '/news'
     | '/variants'
-    | '/analyses'
-    | '/analyses/fastp'
-    | '/analyses/scanpy'
-    | '/analyses/$jobId'
   id:
     | '__root__'
     | '/'
@@ -620,10 +576,6 @@ export interface FileRouteTypes {
     | '/genes/'
     | '/news/'
     | '/variants/'
-    | '/analyses/'
-    | '/analyses/fastp'
-    | '/analyses/scanpy'
-    | '/analyses/$jobId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -664,10 +616,6 @@ export interface RootRouteChildren {
   GenesIndexRoute: typeof GenesIndexRoute
   NewsIndexRoute: typeof NewsIndexRoute
   VariantsIndexRoute: typeof VariantsIndexRoute
-  AnalysesIndexRoute: typeof AnalysesIndexRoute
-  AnalysesFastpRoute: typeof AnalysesFastpRoute
-  AnalysesScanpyRoute: typeof AnalysesScanpyRoute
-  AnalysesJobIdRoute: typeof AnalysesJobIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -931,34 +879,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VariantsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/analyses/': {
-      id: '/analyses/'
-      path: '/analyses'
-      fullPath: '/analyses/'
-      preLoaderRoute: typeof AnalysesIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/analyses/fastp': {
-      id: '/analyses/fastp'
-      path: '/analyses/fastp'
-      fullPath: '/analyses/fastp'
-      preLoaderRoute: typeof AnalysesFastpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/analyses/scanpy': {
-      id: '/analyses/scanpy'
-      path: '/analyses/scanpy'
-      fullPath: '/analyses/scanpy'
-      preLoaderRoute: typeof AnalysesScanpyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/analyses/$jobId': {
-      id: '/analyses/$jobId'
-      path: '/analyses/$jobId'
-      fullPath: '/analyses/$jobId'
-      preLoaderRoute: typeof AnalysesJobIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/tools/': {
       id: '/tools/'
       path: '/tools'
@@ -1058,10 +978,6 @@ const rootRouteChildren: RootRouteChildren = {
   GenesIndexRoute: GenesIndexRoute,
   NewsIndexRoute: NewsIndexRoute,
   VariantsIndexRoute: VariantsIndexRoute,
-  AnalysesIndexRoute: AnalysesIndexRoute,
-  AnalysesFastpRoute: AnalysesFastpRoute,
-  AnalysesScanpyRoute: AnalysesScanpyRoute,
-  AnalysesJobIdRoute: AnalysesJobIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -63,7 +63,9 @@ def _json(*groups: dict[str, object], schema_version: object = 1) -> str:
 def test_default_navigation_matches_the_active_header_snapshot() -> None:
     groups = DEFAULT_FOOTER_NAVIGATION.groups
     assert [group.id for group in groups] == ["explore", "tools", "downloads", "resources"]
-    assert len([link for group in groups for link in group.links]) == 20
+    # 19, not 20: the default footer no longer advertises `/analyses`, because
+    # the public portal stopped shipping that route.
+    assert len([link for group in groups for link in group.links]) == 19
     assert all(link.target == "internal" for group in groups for link in group.links)
     assert any(link.href == "/tools/seqfetch" for group in groups for link in group.links)
     assert parse_footer_navigation(DEFAULT_FOOTER_NAVIGATION_JSON) == DEFAULT_FOOTER_NAVIGATION

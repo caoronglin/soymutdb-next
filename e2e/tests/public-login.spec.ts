@@ -9,7 +9,9 @@
 import { expect, test, type Page, type Request } from "@playwright/test";
 import { waitForAppReady } from "./helpers";
 
-const BASE = "";
+// Empty for the standard-base sweep; set E2E_BASE_PATH for a
+// sub-path deployment artifact.
+const BASE = (process.env.E2E_BASE_PATH ?? "").replace(/\/+$/, "");
 const LOGIN_ENDPOINT = "/api/v1/auth/login";
 
 const VALID_CREDENTIALS = {
@@ -32,7 +34,7 @@ function collectPageErrors(page: Page): string[] {
   return pageErrors;
 }
 
-async function openLogin(page: Page, redirect = "/analyses"): Promise<void> {
+async function openLogin(page: Page, redirect = "/blast"): Promise<void> {
   await page.goto(`${BASE}/login?redirect=${encodeURIComponent(redirect)}`, {
     waitUntil: "load",
   });
@@ -94,14 +96,14 @@ test.describe("public production artifact — login", () => {
     await expectHealthyLoginSurface(page, pageErrors);
   });
 
-  test("redirects a successful login to the safe internal analyses route", async ({ page }) => {
+  test("redirects a successful login to the safe internal route", async ({ page }) => {
     const pageErrors = collectPageErrors(page);
-    await openLogin(page, "/analyses");
+    await openLogin(page, "/blast");
 
     const { status } = await submitLogin(page, VALID_CREDENTIALS);
 
     expect(status).toBe(200);
-    await expect(page).toHaveURL(/\/analyses$/);
+    await expect(page).toHaveURL(/\/blast$/);
     await expectHealthyLoginSurface(page, pageErrors);
   });
 

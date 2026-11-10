@@ -286,7 +286,6 @@ DEFAULT_FOOTER_NAVIGATION = FooterNavigationDocument(
             "工具",
             [
                 _default_link("blast", "BLAST", "BLAST", "/blast", 0),
-                _default_link("analyses", "Analyze", "分析", "/analyses", 1),
                 _default_link("seqfetch", "Sequence Fetch", "序列获取", "/tools/seqfetch", 2),
                 _default_link(
                     "enrichment",

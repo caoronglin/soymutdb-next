@@ -86,12 +86,9 @@ describe("public path detection", () => {
 
   it("treats account-only routes as gated", () => {
     expect(isPublicPath("/login")).toBe(false);
-    expect(isPublicPath("/analyses")).toBe(false);
-    expect(isPublicPath("/analyses/abc")).toBe(false);
   });
 
   it("honours the deployment base path", () => {
-    expect(isPublicPath("/portal/analyses", "/portal/")).toBe(false);
     expect(isPublicPath("/portal/search", "/portal/")).toBe(true);
   });
 });

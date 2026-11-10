@@ -15,10 +15,6 @@ import { TOLERATED_CONSOLE_ERRORS, waitForAppReady } from "./helpers";
 const ROUTES = [
   "/",
   "/about",
-  "/analyses",
-  "/analyses/fastp",
-  "/analyses/scanpy",
-  "/analyses/does-not-exist",
   "/analytics",
   "/blast",
   "/browser",

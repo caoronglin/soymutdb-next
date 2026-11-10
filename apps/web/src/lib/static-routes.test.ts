@@ -18,7 +18,6 @@ describe("deriveStaticRouteEntries", () => {
     expect(paths).toEqual([
       "/",
       "/about",
-      "/analyses",
       "/analytics",
       "/assemblies",
       "/blast",

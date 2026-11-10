@@ -107,7 +107,6 @@ const NAV_GROUPS: ReadonlyArray<NavGroupDef> = [
     children: [
       { kind: "link", href: "/blast", target: "internal", labelKey: "nav.blast" },
       { kind: "link", href: "/comparative", target: "internal", labelKey: "nav.comparative" },
-      { kind: "link", href: "/analyses", target: "internal", labelKey: "nav.analyses" },
       { kind: "separator" },
       { kind: "link", href: "/tools/seqfetch", target: "internal", labelKey: "tools.seqfetch.title" },
       { kind: "link", href: "/tools/enrichment", target: "internal", labelKey: "tools.enrichment.title" },
@@ -561,7 +560,7 @@ export function SiteHeader() {
               <span className="min-w-0 flex-1 truncate text-left">
                 {t("nav.searchPlaceholder")}
               </span>
-              <kbd className="shrink-0 text-xs" aria-hidden>⌘ K</kbd>
+              <kbd className="shrink-0 text-xs" aria-hidden>Ctrl K</kbd>
             </Button>
           </div>
           <LanguageSwitcher

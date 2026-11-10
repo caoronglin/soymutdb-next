@@ -115,5 +115,5 @@ export function statusFromProbeFailure(
 export function isPublicPath(pathname: string, base = "/"): boolean {
   const prefix = base.endsWith("/") ? base.slice(0, -1) : base;
   const path = pathname.startsWith(prefix) ? pathname.slice(prefix.length) || "/" : pathname;
-  return !path.startsWith("/login") && !path.startsWith("/analyses");
+  return !path.startsWith("/login");
 }

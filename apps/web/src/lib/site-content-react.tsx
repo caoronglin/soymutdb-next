@@ -117,7 +117,6 @@ export const SITE_CONTENT_DEFAULTS: Record<string, string> = {
   "nav.downloads": "Downloads",
   "nav.allTools": "All tools",
   "nav.blast": "BLAST",
-  "nav.analyses": "Analyze",
   "nav.comparative": "Comparative",
   "nav.expression": "Expression",
   "nav.phenotypes": "Phenotypes",

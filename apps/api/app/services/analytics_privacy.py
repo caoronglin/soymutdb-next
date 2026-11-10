@@ -61,10 +61,7 @@ _STATIC_PAGE_TEMPLATES: tuple[str, ...] = (
     "/",
     "/about",
     "/analytics",
-    "/analyses",
     "/assemblies",
-    "/analyses/fastp",
-    "/analyses/scanpy",
     "/blast",
     "/browser",
     "/comparative",
@@ -102,7 +99,6 @@ _STATIC_PAGE_TEMPLATES: tuple[str, ...] = (
 #: Parameter names are fixed and match the router; a template segment never
 #: accepts a caller-chosen parameter name.
 _DYNAMIC_PAGE_TEMPLATES: tuple[str, ...] = (
-    "/analyses/:jobId",
     "/assemblies/:assemblyId",
     "/comparative/:familyId",
     "/expression/:sampleId",

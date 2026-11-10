@@ -50,10 +50,6 @@ export interface PortalRouteDefinition {
     | "primer"
     | "gbrowse"
     | "search-tools"
-    | "analyses"
-    | "analyses-fastp"
-    | "analyses-scanpy"
-    | "analyses-job"
     | "assemblies"
     | "assembly"
     | "sra"
@@ -261,35 +257,6 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
       prerender: true,
       sitemap: true,
     },
-  },
-  {
-    path: "/analyses",
-    name: "analyses",
-    componentKey: "analyses",
-    meta: {
-      title: "Analyses — SoyMutDB",
-      description: "Run read QC and single-cell clustering on your own data.",
-      prerender: true,
-      sitemap: false,
-    },
-  },
-  {
-    path: "/analyses/fastp",
-    name: "analyses-fastp",
-    componentKey: "analyses-fastp",
-    meta: { title: "fastp — SoyMutDB" },
-  },
-  {
-    path: "/analyses/scanpy",
-    name: "analyses-scanpy",
-    componentKey: "analyses-scanpy",
-    meta: { title: "scanpy — SoyMutDB" },
-  },
-  {
-    path: "/analyses/:jobId",
-    name: "analyses-job",
-    componentKey: "analyses-job",
-    meta: { title: "Analysis job — SoyMutDB" },
   },
   {
     path: "/sra",

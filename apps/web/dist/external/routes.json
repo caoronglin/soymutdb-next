@@ -15,12 +15,6 @@
       "includeInSitemap": true
     },
     {
-      "path": "/analyses",
-      "title": "Analyses — SoyMutDB",
-      "description": "Run read QC and single-cell clustering on your own data.",
-      "includeInSitemap": false
-    },
-    {
       "path": "/analytics",
       "title": "Analytics — SoyMutDB",
       "description": "Aggregate views of variant density, types, impact and discovery trend.",

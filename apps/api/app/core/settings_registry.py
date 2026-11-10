@@ -103,7 +103,14 @@ def _definition(
     hot_reload: bool,
     redaction: SettingRedaction,
     requires_approval: bool,
-    **kwargs: object,
+    # Named instead of `**kwargs: object`: the pass-through form erases every
+    # option's type, so each of the nine constructions above reported an
+    # argument-type error against the dataclass it was building.
+    allowed_values: frozenset[str] = frozenset(),
+    allowed_url_hosts: frozenset[str] = frozenset(),
+    minimum: int | None = None,
+    maximum: int | None = None,
+    max_length: int = 10_000,
 ) -> SettingDefinition:
     return SettingDefinition(
         section=section,
@@ -115,11 +122,18 @@ def _definition(
         hot_reload=hot_reload,
         redaction=redaction,
         requires_approval=requires_approval,
-        **kwargs,
+        allowed_values=allowed_values,
+        allowed_url_hosts=allowed_url_hosts,
+        minimum=minimum,
+        maximum=maximum,
+        max_length=max_length,
     )
 
 
-_DEFINITIONS = (
+# Annotated as an open tuple: this constant is extended in three later
+# reassignments, and letting the checker infer a fixed-length tuple made every
+# extension a spurious type error whose message printed all 175 elements.
+_DEFINITIONS: tuple[SettingDefinition, ...] = (
     _definition(
         "general",
         "siteName",
@@ -1552,17 +1566,6 @@ _DEFINITIONS = (
     ),
     _definition(
         "content",
-        "nav.analyses",
-        default="Analyze",
-        permission=SettingPermission.ADMINISTRATOR,
-        scope=SettingScope.GLOBAL,
-        hot_reload=True,
-        redaction=SettingRedaction.NONE,
-        requires_approval=False,
-        max_length=256,
-    ),
-    _definition(
-        "content",
         "nav.comparative",
         default="Comparative",
         permission=SettingPermission.ADMINISTRATOR,
@@ -2312,7 +2315,10 @@ def validate_setting_update(section: str, key: str, value: object) -> str:
         if isinstance(value, bool):
             raise SettingValidationError(f"Setting '{definition.full_key}' must be an integer")
         try:
-            parsed = int(value)  # type: ignore[arg-type]
+            # `value` is the raw stored payload; the integer branch is the only
+            # place that accepts it, and a non-integral object must be a
+            # validation error rather than a TypeError escaping to the caller.
+            parsed = int(str(value)) if not isinstance(value, (int, float)) else int(value)
         except (TypeError, ValueError) as exc:
             raise SettingValidationError(
                 f"Setting '{definition.full_key}' must be an integer"

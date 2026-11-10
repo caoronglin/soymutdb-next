@@ -66,12 +66,8 @@ const FULL_PATH_TO_TEMPLATE: Readonly<Record<string, string>> = Object.freeze({
   "/": "/",
   "/about": "/about",
   "/analytics": "/analytics",
-  // The `/analyses` and `/tools` routes are registered with a slash-less
-  // `path`, so their `fullPath` is slash-less even though their id is not.
-  "/analyses": "/analyses",
-  "/analyses/$jobId": "/analyses/:jobId",
-  "/analyses/fastp": "/analyses/fastp",
-  "/analyses/scanpy": "/analyses/scanpy",
+  // The `/tools` routes are registered with a slash-less `path`, so their
+  // `fullPath` is slash-less even though their id is not.
   "/blast": "/blast",
   "/browser": "/browser",
   "/compare": "/compare",
