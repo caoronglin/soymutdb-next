@@ -56,6 +56,10 @@ PLATFORM_CATALOG = {
     "@ant-design/x-markdown": "2.10.0",
     "antd-mobile": "5.43.0",
     "@ant-design/cli": "6.7.0",
+    # Admin page-motion engine (motion.ant.design's TweenOne) and the
+    # component documentation site (apps/docs).
+    "rc-tween-one": "3.0.6",
+    "dumi": "2.4.55",
     "vitest": "5.0.5",
     "tailwindcss": "4.3.3",
     "@tailwindcss/vite": "4.3.3",
@@ -329,8 +333,15 @@ def test_workspace_catalog_pins_platform_dependencies() -> None:
 def test_dependency_build_scripts_are_fail_closed_except_for_reviewed_tools() -> None:
     workspace = yaml.safe_load((ROOT / "pnpm-workspace.yaml").read_text(encoding="utf-8"))
 
+    # Every allowed postinstall is reviewed and justified in the workspace file
+    # itself. `@swc/core` and `@parcel/watcher` are dumi's (apps/docs) compile
+    # and watch helpers: swc's postinstall links the downloaded platform binary
+    # and watcher's install prefers the prebuilt optional package, so neither
+    # builds arbitrary code. Anything else stays refused.
     assert workspace["allowBuilds"] == {
         "esbuild": True,
+        "@swc/core": True,
+        "@parcel/watcher": True,
         "core-js": False,
         "core-js-pure": False,
         "es5-ext": False,

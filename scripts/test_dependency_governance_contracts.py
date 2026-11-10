@@ -8,7 +8,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-import pytest
+import pytest  # pyright: ignore[reportMissingImports]  # provided by apps/api/.venv
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -289,8 +289,8 @@ def test_governance_policy_covers_every_required_gate_with_pinned_tools() -> Non
 def _governance_module():
     """Load scripts/dependency_governance.py as a module for unit assertions."""
     spec = importlib.util.spec_from_file_location("dependency_governance", SCRIPT)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
 
@@ -1018,6 +1018,68 @@ def test_knip_treats_admin_vitest_doubles_as_entry_points() -> None:
     assert any("test/antd-double" in path.read_text(encoding="utf-8") for path in admin_sources)
 
 
+def test_knip_treats_the_dumi_docs_site_as_a_markdown_driven_workspace() -> None:
+    """The component docs site imports its facade packages from Markdown fences.
+
+    `apps/docs` is a dumi site: the demo code lives in fenced ```tsx blocks
+    inside `docs/**/*.md`, and dumi compiles those blocks into the published
+    pages. Knip 5 does not parse Markdown code fences, so every facade import
+    looked unused and the dependency gate failed on a live documentation app.
+
+    The dependencies are still real — the docs bundle them — so they are
+    declared in the workspace's `ignoreDependencies` instead of being deleted
+    from `apps/docs/package.json`. The entry points keep the Markdown files
+    themselves in the analyzed project.
+    """
+    knip = json.loads((ROOT / "knip.json").read_text(encoding="utf-8"))
+    docs = knip["workspaces"]["apps/docs"]
+    assert ".dumirc.ts" in docs["entry"]
+    assert "docs/**/*.md" in docs["entry"]
+    for package in (
+        "@ant-design/pro-components",
+        "@soymutdb/charts",
+        "@soymutdb/genome-view",
+        "@soymutdb/ui-react",
+        "antd",
+    ):
+        assert package in docs["ignoreDependencies"]
+        # An ignored dependency must still be a declared dependency: the gate
+        # would otherwise hide a genuinely undeclared import.
+        manifest = json.loads((ROOT / "apps/docs/package.json").read_text(encoding="utf-8"))
+        assert package in manifest["dependencies"]
+
+    # The fences the ignore covers must really import those packages.
+    fences = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "apps/docs/docs").rglob("*.md")
+    )
+    assert 'from "@soymutdb/ui-react"' in fences
+    assert 'from "@soymutdb/charts"' in fences
+    assert 'from "@soymutdb/genome-view"' in fences
+
+
+def test_knip_registers_the_antd_lint_gate_as_an_entry_point() -> None:
+    """`scripts/check-antd-design.mjs` is invoked by the frontend gate shell.
+
+    The gate is a checked-in script that `scripts/verify-frontend-artifacts.sh`
+    runs as `node scripts/check-antd-design.mjs --self-test`. Knip only follows
+    JavaScript imports, so a shell-invoked script looks like dead code unless it
+    is registered as an entry point.
+    """
+    knip = json.loads((ROOT / "knip.json").read_text(encoding="utf-8"))
+    assert "scripts/check-antd-design.mjs" in knip["workspaces"]["."]["entry"]
+    # The CLI package itself is spawned as a subprocess, never imported, so
+    # Knip cannot see the reference either.
+    assert "@ant-design/cli" in knip["ignoreDependencies"]
+    package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+    assert "@ant-design/cli" in package["devDependencies"]
+
+    frontend_gate = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
+    assert "node scripts/check-antd-design.mjs --self-test" in frontend_gate
+    contracts = (ROOT / "scripts/test_ci_job_contracts.py").read_text(encoding="utf-8")
+    assert "scripts/check-antd-design.mjs --self-test" in contracts
+
+
 def test_root_scripts_and_knip_configuration_are_executable_contracts() -> None:
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     knip = json.loads((ROOT / "knip.json").read_text(encoding="utf-8"))
@@ -1582,7 +1644,9 @@ def test_every_subprocess_the_runner_launches_is_bounded() -> None:
     simply being written in a file nobody re-reads.
     """
     governance = _governance_module()
-    tree = ast.parse(Path(governance.__file__).read_text(encoding="utf-8"))
+    governance_source = governance.__file__
+    assert governance_source is not None
+    tree = ast.parse(Path(governance_source).read_text(encoding="utf-8"))
     launches = [
         node
         for node in ast.walk(tree)
@@ -1595,8 +1659,12 @@ def test_every_subprocess_the_runner_launches_is_bounded() -> None:
     assert launches, "the dependency runner is expected to launch analyzers"
     for call in launches:
         keywords = {keyword.arg for keyword in call.keywords}
+        # `call.func` is narrowed by the comprehension above but not inside this
+        # f-string, so name the attribute explicitly.
+        assert isinstance(call.func, ast.Attribute)
+        called = call.func.attr
         assert "timeout" in keywords, (
-            f"subprocess.{call.func.attr} at line {call.lineno} has no timeout: "
+            f"subprocess.{called} at line {call.lineno} has no timeout: "
             "a hung child silently kills the stage and discards every evidence file"
         )
 
@@ -1617,8 +1685,11 @@ def test_a_hung_license_probe_is_reported_instead_of_killing_the_stage(
 
     def hang(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
         expired = subprocess.TimeoutExpired(cmd=["uv", "run", "python", "-c"], timeout=1)
-        expired.stdout = "partial stdout\n"
-        expired.stderr = "building cyvcf2\n"
+        # `TimeoutExpired.stdout`/`.stderr` are declared `bytes | None`; the
+        # subprocess module stores whatever it captured, so use bytes rather
+        # than a str literal that only type-checks by accident.
+        expired.stdout = b"partial stdout\n"
+        expired.stderr = b"building cyvcf2\n"
         return governance._kill_on_timeout(expired, 1, "declared-license probe")
 
     stalled = {}

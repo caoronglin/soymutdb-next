@@ -18,6 +18,7 @@
     "python3"
   ],
   "ignoreDependencies": [
+    "@ant-design/cli",
     "@testing-library/jest-dom",
     "@types/react-dom",
     "autoprefixer",
@@ -42,6 +43,7 @@
         "tests/load/smoke.js",
         "tests/load/variant-stress.js",
         "scripts/scan-ant-design.mjs",
+        "scripts/check-antd-design.mjs",
         "scripts/webpack/chart-closure-plugin.cjs",
         "scripts/webpack/chart-split-groups.ts"
       ]
@@ -87,6 +89,19 @@
       "entry": [
         "config/config.ts",
         "src/umi-entry.tsx"
+      ]
+    },
+    "apps/docs": {
+      "entry": [
+        ".dumirc.ts",
+        "docs/**/*.md"
+      ],
+      "ignoreDependencies": [
+        "@ant-design/pro-components",
+        "@soymutdb/charts",
+        "@soymutdb/genome-view",
+        "@soymutdb/ui-react",
+        "antd"
       ]
     },
     "packages/genome-view": {
