@@ -131,9 +131,7 @@ async def test_partial_update_validates_the_merged_row(db_session: AsyncSession)
     view = await service.create_view(db_session, AdminDataViewCreate(**_payload()))
 
     with pytest.raises(HTTPException) as excinfo:
-        await service.update_view(
-            db_session, view.id, AdminDataViewUpdate(view_type="kanban")
-        )
+        await service.update_view(db_session, view.id, AdminDataViewUpdate(view_type="kanban"))
     assert excinfo.value.status_code == 422
 
     updated = await service.update_view(
@@ -160,6 +158,83 @@ async def test_update_can_clear_optional_sort(db_session: AsyncSession) -> None:
     )
     assert updated.sort_field is None
     assert updated.sort_dir is None
+
+    await db_session.delete(updated)
+    await db_session.commit()
+
+
+def test_searchable_field_outside_the_source_vocabulary_is_rejected() -> None:
+    with pytest.raises(ValidationError, match="searchable fields not available"):
+        AdminDataViewCreate(**_payload(searchable_fields=["symbol", "internal_id"]))
+
+
+def test_searchable_fields_default_to_empty_and_must_not_repeat() -> None:
+    default = AdminDataViewCreate(**_payload())
+    assert default.searchable_fields == []
+    assert default.visibility == "visible"
+
+    with pytest.raises(ValidationError, match="duplicate field"):
+        AdminDataViewCreate(**_payload(searchable_fields=["symbol", "symbol"]))
+
+
+@pytest.mark.asyncio
+async def test_searchable_fields_and_visibility_are_stored(db_session: AsyncSession) -> None:
+    view = await service.create_view(
+        db_session,
+        AdminDataViewCreate(**_payload(searchable_fields=["symbol"], visibility="hidden")),
+    )
+
+    stored = (
+        await db_session.execute(select(AdminDataView).where(AdminDataView.id == view.id))
+    ).scalar_one()
+    assert stored.searchable_fields == ["symbol"]
+    assert stored.visibility == "hidden"
+
+    await db_session.delete(stored)
+    await db_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_hidden_views_are_withheld_from_the_list_but_still_readable(
+    db_session: AsyncSession,
+) -> None:
+    hidden = await service.create_view(
+        db_session, AdminDataViewCreate(**_payload(name="Hidden locus", visibility="hidden"))
+    )
+    shown = await service.create_view(
+        db_session, AdminDataViewCreate(**_payload(name="Shown locus"))
+    )
+
+    listed = await service.list_views(db_session, source="genes")
+    assert [row.name for row in listed] == ["Shown locus"]
+
+    with_hidden = await service.list_views(db_session, source="genes", include_hidden=True)
+    assert {row.name for row in with_hidden} == {"Hidden locus", "Shown locus"}
+
+    # Visibility is a presentation flag, not a permission: the row is still
+    # readable by id and nothing about it is deleted or restricted.
+    assert await db_session.get(AdminDataView, hidden.id) is not None
+
+    await db_session.delete(hidden)
+    await db_session.delete(shown)
+    await db_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_partial_update_can_hide_a_view(db_session: AsyncSession) -> None:
+    view = await service.create_view(
+        db_session,
+        AdminDataViewCreate(**_payload(name="Toggle visibility", searchable_fields=["symbol"])),
+    )
+
+    updated = await service.update_view(
+        db_session, view.id, AdminDataViewUpdate(visibility="hidden")
+    )
+
+    assert updated.visibility == "hidden"
+    # The untouched axes of the stored configuration survive the patch.
+    assert updated.searchable_fields == ["symbol"]
+    assert updated.visible_fields == ["gene_id", "symbol", "chromosome"]
 
     await db_session.delete(updated)
     await db_session.commit()

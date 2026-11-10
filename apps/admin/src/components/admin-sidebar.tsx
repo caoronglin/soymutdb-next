@@ -2,7 +2,6 @@ import {
   AppstoreOutlined,
   BarChartOutlined,
   CheckOutlined,
-  CloudUploadOutlined,
   DashboardOutlined,
   DeleteOutlined,
   EnvironmentOutlined,
@@ -77,17 +76,8 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Data Management",
     labelKey: "admin.shell.dataManagement",
     items: [
-      {
-        label: "Imports",
-        labelKey: "admin.shell.imports",
-        icon: CloudUploadOutlined,
-        children: [
-          { path: "/imports", label: "All imports", labelKey: "admin.shell.allImports", icon: SnippetsOutlined },
-          { path: "/imports/new", label: "New import", labelKey: "admin.shell.newImport", icon: FileAddOutlined },
-        ],
-      },
-      { path: "/releases", label: "Releases", labelKey: "admin.releases", icon: RiseOutlined },
       { path: "/data-views", label: "Data views", labelKey: "admin.shell.dataViews", icon: LayoutOutlined },
+      { path: "/releases", label: "Releases", labelKey: "admin.releases", icon: RiseOutlined },
       { path: "/instances", label: "Instances", labelKey: "admin.instances.title", icon: EnvironmentOutlined },
       { path: "/preview-test-data", label: "Test Data Preview", labelKey: "admin.shell.previewTestData", icon: ExperimentOutlined },
     ],
@@ -96,7 +86,6 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Content",
     labelKey: "admin.shell.content",
     items: [
-      { path: "/site-control", label: "Site control", labelKey: "admin.siteControl.title", icon: AppstoreOutlined },
       { path: "/page-builder", label: "Page Builder", labelKey: "admin.pageBuilder.title", icon: LayoutOutlined },
       {
         label: "Pages",

@@ -45,13 +45,18 @@ const NAV_PATHS = new Set(NAV_ITEMS.map((item) => item.path).filter((path): path
 
 /**
  * Routes that are intentionally not sidebar entries: the login screen (no console
- * behind it), the redirect/alias routes that keep a retired deep link alive, and the
- * ADR-0009 retirements that deliberately resolve to an "unavailable" page.
+ * behind it), the redirect/alias routes that keep a retired deep link alive, the
+ * destinations the owner retired (`/imports`, `/imports/new`, `/site-control`:
+ * the pages stay routable for deep links and tests, but the menu no longer
+ * advertises them), and the ADR-0009 retirements that deliberately resolve to an
+ * "unavailable" page.
  */
 const NOT_IN_NAV = new Set([
   "/login",
   "/content",
+  "/imports",
   "/imports/new",
+  "/site-control",
   "/news/new",
   "/news/trash",
   "/settings/site",

@@ -327,6 +327,48 @@ def test_0058_admin_data_views_migration_adds_constraints_and_downgrades() -> No
     assert dropped_tables == {"admin_data_views"}
 
 
+def test_0059_adds_searchable_fields_and_visibility_with_a_real_downgrade() -> None:
+    revision = _load_revision("0059_data_view_searchable_fields_and_visibility.py")
+    assert revision.down_revision == "0058"
+    operations = _RecordingOperations()
+    # Alembic injects ``op`` into the module namespace at runtime; ``setattr``
+    # keeps this offline binding out of the module's static attribute surface.
+    setattr(revision, "op", operations)
+
+    revision.upgrade()
+    added_columns = {
+        args[1].name: args[1] for name, args, _ in operations.calls if name == "add_column"
+    }
+    assert set(added_columns) == {"searchable_fields", "visibility"}
+    # Existing rows must keep working: both columns are NOT NULL with a default.
+    assert added_columns["searchable_fields"].nullable is False
+    assert added_columns["searchable_fields"].server_default is not None
+    assert added_columns["visibility"].nullable is False
+    assert added_columns["visibility"].server_default.arg == "visible"
+
+    created_constraints = {
+        args[0] for name, args, _ in operations.calls if name == "create_check_constraint"
+    }
+    assert created_constraints == {
+        "ck_admin_data_views_searchable_fields_array",
+        "ck_admin_data_views_visibility",
+    }
+
+    operations.calls.clear()
+    revision.downgrade()
+    dropped_constraints = {
+        args[0] for name, args, _ in operations.calls if name == "drop_constraint"
+    }
+    dropped_columns = {
+        args[1] for name, args, _ in operations.calls if name == "drop_column"
+    }
+    assert dropped_constraints == {
+        "ck_admin_data_views_searchable_fields_array",
+        "ck_admin_data_views_visibility",
+    }
+    assert dropped_columns == {"searchable_fields", "visibility"}
+
+
 class _EmptyResult:
     def scalar_one_or_none(self) -> None:
         return None

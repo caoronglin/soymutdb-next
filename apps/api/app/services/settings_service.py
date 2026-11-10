@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
+from typing import Literal, cast
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
@@ -56,8 +58,26 @@ _RICH_TEXT_KEYS = frozenset(
 )
 
 
+#: The revision actions this service can record, mirroring the response schema's
+#: `Literal` so the same vocabulary is enforced on both sides.
+SettingsHistoryAction = Literal["patch", "put_compat", "rollback"]
+_HISTORY_ACTIONS: tuple[SettingsHistoryAction, ...] = ("patch", "put_compat", "rollback")
+
+
+def _history_action(value: str) -> SettingsHistoryAction:
+    """Narrow the stored revision action to the published vocabulary.
+
+    The column is a plain string, but this service is its only writer and it
+    only ever records one of the three actions. Narrowing here keeps the response
+    schema honest without inventing a database enum for a value that never varies.
+    """
+    if value not in _HISTORY_ACTIONS:
+        raise ValueError(f"unknown settings revision action {value!r}")
+    return cast(SettingsHistoryAction, value)
+
+
 def _canonical_values(
-    section: str, values: dict[str, SettingValue]
+    section: str, values: Mapping[str, SettingValue]
 ) -> dict[str, str]:
     try:
         canonical = {
@@ -304,7 +324,7 @@ async def settings_history(
     items = [
         SettingsHistoryItem(
             version=revision.version,
-            action=revision.action,
+            action=_history_action(revision.action),
             values=_public_snapshot(section, revision.snapshot),
             changes=_public_changes(section, revision.changes),
             actor_id=revision.created_by,

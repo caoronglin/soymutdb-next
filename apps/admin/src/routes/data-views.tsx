@@ -46,6 +46,7 @@ import {
 import {
   DATA_VIEW_KINDS,
   DATA_VIEW_SOURCES,
+  DATA_VIEW_VISIBILITIES,
   createAdminDataView,
   deleteAdminDataView,
   fetchDataViewRows,
@@ -60,6 +61,7 @@ import {
   type DataViewSortDir,
   type DataViewSource,
   type DataViewSourceInfo,
+  type DataViewVisibility,
 } from "@soymutdb/api-client";
 import { ConfirmDialog } from "../components/confirm-dialog";
 
@@ -69,6 +71,8 @@ interface DraftView {
   name: string;
   view_type: DataViewKind;
   visible_fields: string[];
+  searchable_fields: string[];
+  visibility: DataViewVisibility;
   filter_rows: Array<{ key: string; value: string }>;
   sort_field: string | null;
   sort_dir: DataViewSortDir | null;
@@ -98,11 +102,21 @@ function cellText(value: unknown): string {
   return String(value);
 }
 
+/** Raw text a search term is matched against; a blank cell matches nothing. */
+function searchableText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (Array.isArray(value)) return value.join(" ");
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
 function draftFromSource(info: DataViewSourceInfo | undefined): DraftView {
   return {
     name: "",
     view_type: "grid",
     visible_fields: [...(info?.default_fields ?? [])].slice(0, 8),
+    searchable_fields: [],
+    visibility: "visible",
     filter_rows: [],
     sort_field: null,
     sort_dir: null,
@@ -119,6 +133,8 @@ function draftFromView(view: AdminDataView): DraftView {
     name: view.name,
     view_type: view.view_type,
     visible_fields: [...view.visible_fields],
+    searchable_fields: [...view.searchable_fields],
+    visibility: view.visibility,
     filter_rows: Object.entries(view.filters).map(([key, value]) => ({ key, value })),
     sort_field: view.sort_field,
     sort_dir: view.sort_dir,
@@ -155,6 +171,8 @@ export default function DataViewsPage() {
 
   const [source, setSource] = React.useState<DataViewSource>("genes");
   const [activeViewId, setActiveViewId] = React.useState<number | null>(null);
+  const [showHidden, setShowHidden] = React.useState(false);
+  const [search, setSearch] = React.useState("");
   const [renderOverride, setRenderOverride] = React.useState<
     { viewId: number; mode: DataViewKind } | null
   >(null);
@@ -172,8 +190,9 @@ export default function DataViewsPage() {
     staleTime: Infinity,
   });
   const viewsQuery = useQuery({
-    queryKey: ["admin", "data-views", source],
-    queryFn: () => listAdminDataViews({ source }),
+    queryKey: ["admin", "data-views", source, showHidden],
+    queryFn: () =>
+      listAdminDataViews(showHidden ? { source, includeHidden: true } : { source }),
     staleTime: 15_000,
   });
 
@@ -195,6 +214,7 @@ export default function DataViewsPage() {
 
   React.useEffect(() => {
     setPage(1);
+    setSearch("");
   }, [activeView?.id]);
 
   const gridQuery = useQuery({
@@ -230,6 +250,23 @@ export default function DataViewsPage() {
       ? Boolean(variantQuery.hasNextPage)
       : Boolean(gridQuery.data?.hasMore);
 
+  // The search box is a client-side filter over the loaded rows, limited to the
+  // fields the saved view declared searchable. A view with no searchable fields
+  // shows no search box at all, so "search" is never silently a no-op.
+  const searchableFields = React.useMemo(
+    () => activeView?.searchable_fields ?? [],
+    [activeView],
+  );
+  const searchTerm = search.trim().toLowerCase();
+  const visibleRows: Row[] = React.useMemo(() => {
+    if (!searchTerm || searchableFields.length === 0) return rows;
+    return rows.filter((row) =>
+      searchableFields.some((field) =>
+        searchableText(row[field]).toLowerCase().includes(searchTerm),
+      ),
+    );
+  }, [rows, searchTerm, searchableFields]);
+
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["admin", "data-views"] });
   };
@@ -242,6 +279,8 @@ export default function DataViewsPage() {
         name: draft.name.trim(),
         view_type: draft.view_type,
         visible_fields: draft.visible_fields,
+        searchable_fields: draft.searchable_fields,
+        visibility: draft.visibility,
         filters: draftFilters(draft),
         sort_field: draft.sort_field,
         sort_dir: draft.sort_dir,
@@ -264,6 +303,9 @@ export default function DataViewsPage() {
       setEditor(null);
       setActiveViewId(view.id);
       setSource(view.source);
+      // A view saved as hidden is filtered out of the list the operator is
+      // looking at; keep it on screen rather than dropping it silently.
+      if (view.visibility === "hidden") setShowHidden(true);
       invalidate();
     },
     onError: (error) => {
@@ -358,6 +400,24 @@ export default function DataViewsPage() {
       render: (_, row) => <span className="font-mono text-xs">{row.visible_fields.join(", ")}</span>,
     },
     {
+      title: t("admin.dataViews.searchableFieldsLabel"),
+      key: "searchable_fields",
+      render: (_, row) => (
+        <span className="font-mono text-xs">
+          {row.searchable_fields.length > 0 ? row.searchable_fields.join(", ") : "—"}
+        </span>
+      ),
+    },
+    {
+      title: t("admin.dataViews.visibilityLabel"),
+      key: "visibility",
+      render: (_, row) => (
+        <Tag color={row.visibility === "hidden" ? "orange" : "green"}>
+          {t(`admin.dataViews.visibility.${row.visibility}`)}
+        </Tag>
+      ),
+    },
+    {
       title: t("common.edit"),
       key: "actions",
       render: (_, row) => (
@@ -402,7 +462,7 @@ export default function DataViewsPage() {
           <ProTable<Row>
             rowKey={IDENTITY_FIELD[activeView.source]}
             size="small"
-            dataSource={rows}
+            dataSource={visibleRows}
             pagination={false}
             columns={columns}
           />
@@ -455,11 +515,13 @@ export default function DataViewsPage() {
       );
     }
     const groups = new Map<string, Row[]>();
-    for (const row of rows) {
+    for (const row of visibleRows) {
       const key = cellText(row[groupField]);
       groups.set(key, [...(groups.get(key) ?? []), row]);
     }
-    if (groups.size === 0) return <Empty description={t("common.noData")} />;
+    if (groups.size === 0) {
+      return <Empty description={t(searchTerm ? "admin.dataViews.searchNoMatch" : "common.noData")} />;
+    }
     return (
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="data-views-kanban">
         {[...groups.entries()].map(([group, groupRows]) => (
@@ -490,10 +552,12 @@ export default function DataViewsPage() {
 
   function renderGallery() {
     if (!activeView) return <Empty description={t("admin.dataViews.noActiveView")} />;
-    if (rows.length === 0) return <Empty description={t("common.noData")} />;
+    if (visibleRows.length === 0) {
+      return <Empty description={t(searchTerm ? "admin.dataViews.searchNoMatch" : "common.noData")} />;
+    }
     return (
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="data-views-gallery">
-        {rows.map((row, index) => (
+        {visibleRows.map((row, index) => (
           <Card key={rowKey(activeView.source, row, index)} size="small">
             <div className="mb-2 font-medium">{cellText(row[titleField])}</div>
             <dl className="space-y-1 text-sm">
@@ -533,6 +597,15 @@ export default function DataViewsPage() {
                 setPage(1);
               }}
             />
+            <label className="inline-flex items-center gap-2 text-sm">
+              <Switch
+                checked={showHidden}
+                aria-label={t("admin.dataViews.showHidden")}
+                onChange={(checked: boolean) => setShowHidden(checked)}
+                data-testid="data-views-show-hidden"
+              />
+              {t("admin.dataViews.showHidden")}
+            </label>
             <Select
               value={renderMode}
               aria-label={t("admin.dataViews.viewTypeLabel")}
@@ -579,11 +652,28 @@ export default function DataViewsPage() {
               : t("admin.dataViews.preview")
           }
           extra={
-            activeView ? (
-              <Button size="small" icon={<EditOutlined />} onClick={() => startEdit(activeView)}>
-                {t("common.edit")}
-              </Button>
-            ) : null
+            <Space>
+              {activeView && searchableFields.length > 0 ? (
+                <Input
+                  value={search}
+                  allowClear
+                  style={{ width: 240 }}
+                  aria-label={t("admin.dataViews.searchPlaceholder", {
+                    fields: searchableFields.join(", "),
+                  })}
+                  placeholder={t("admin.dataViews.searchPlaceholder", {
+                    fields: searchableFields.join(", "),
+                  })}
+                  onChange={(event) => setSearch(event.target.value)}
+                  data-testid="data-views-search"
+                />
+              ) : null}
+              {activeView ? (
+                <Button size="small" icon={<EditOutlined />} onClick={() => startEdit(activeView)}>
+                  {t("common.edit")}
+                </Button>
+              ) : null}
+            </Space>
           }
         >
           {loading ? (
@@ -640,8 +730,7 @@ export default function DataViewsPage() {
 
             <div className="text-sm">
               {t("admin.dataViews.fieldsLabel")}
-              <p className="text-xs text-muted-foreground">{t("admin.dataViews.fieldsHint")}</p>
-              <div className="grid gap-1 sm:grid-cols-2">
+              <p className="text-xs text-muted-foreground">{t("admin.dataViews.fieldsHint")}</p>              <div className="grid gap-1 sm:grid-cols-2">
                 {fieldOptions.map((option) => {
                   const position = editor.draft.visible_fields.indexOf(option.value);
                   return (
@@ -691,6 +780,50 @@ export default function DataViewsPage() {
                 })}
               </div>
             </div>
+
+            <div className="text-sm">
+              {t("admin.dataViews.searchableFieldsLabel")}
+              <p className="text-xs text-muted-foreground">
+                {t("admin.dataViews.searchableFieldsHint")}
+              </p>
+              <div className="grid gap-1 sm:grid-cols-2">
+                {fieldOptions.map((option) => (
+                  <Space key={option.value} size={6}>
+                    <Checkbox
+                      checked={editor.draft.searchable_fields.includes(option.value)}
+                      aria-label={`searchable ${option.value}`}
+                      data-testid={`data-views-searchable-${option.value}`}
+                      onChange={(event) => {
+                        const fields = event.target.checked
+                          ? [...editor.draft.searchable_fields, option.value]
+                          : editor.draft.searchable_fields.filter(
+                              (field) => field !== option.value,
+                            );
+                        patchDraft({ searchable_fields: fields });
+                      }}
+                    />
+                    {option.label}
+                  </Space>
+                ))}
+              </div>
+            </div>
+
+            <label className="block text-sm">
+              {t("admin.dataViews.visibilityLabel")}
+              <p className="text-xs text-muted-foreground">
+                {t("admin.dataViews.visibilityHint")}
+              </p>
+              <Select
+                value={editor.draft.visibility}
+                aria-label={t("admin.dataViews.visibilityLabel")}
+                options={DATA_VIEW_VISIBILITIES.map((value) => ({
+                  value,
+                  label: t(`admin.dataViews.visibility.${value}`),
+                }))}
+                onChange={(value: DataViewVisibility) => patchDraft({ visibility: value })}
+                data-testid="data-views-visibility"
+              />
+            </label>
 
             <div className="text-sm">
               {t("admin.dataViews.filtersLabel")}

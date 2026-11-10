@@ -183,7 +183,7 @@ describe("admin root navigation rendering", () => {
     const submenus = Array.from(document.querySelectorAll("[data-submenu]")).map((node) =>
       node.getAttribute("data-submenu"),
     );
-    for (const label of ["Dashboards", "Imports", "Pages", "News", "Settings"]) {
+    for (const label of ["Dashboards", "Pages", "News", "Settings"]) {
       expect(submenus).toContain(label);
     }
   });

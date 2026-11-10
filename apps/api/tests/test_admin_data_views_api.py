@@ -142,6 +142,55 @@ async def test_administrator_can_list_sources_without_a_database_query(
 
 
 @pytest.mark.asyncio
+async def test_include_hidden_is_forwarded_to_the_service(
+    client: AsyncClient, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _as(app, _user("administrator"))
+    seen: dict[str, object] = {}
+
+    async def _fake_list_views(_db, *, source=None, include_hidden=False):
+        seen["source"] = source
+        seen["include_hidden"] = include_hidden
+        return []
+
+    monkeypatch.setattr("app.api.v1.admin_data_views.service.list_views", _fake_list_views)
+
+    response = await client.get("/api/v1/admin/data-views?include_hidden=true")
+
+    assert response.status_code == 200
+    assert response.json() == {"items": [], "total": 0}
+    assert seen == {"source": None, "include_hidden": True}
+
+
+@pytest.mark.asyncio
+async def test_include_hidden_is_withheld_by_default(
+    client: AsyncClient, app: FastAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _as(app, _user("administrator"))
+    seen: dict[str, object] = {}
+
+    async def _fake_list_views(_db, *, source=None, include_hidden=False):
+        seen["include_hidden"] = include_hidden
+        return []
+
+    monkeypatch.setattr("app.api.v1.admin_data_views.service.list_views", _fake_list_views)
+
+    response = await client.get("/api/v1/admin/data-views")
+
+    assert response.status_code == 200
+    assert seen == {"include_hidden": False}
+
+
+@pytest.mark.asyncio
+async def test_include_hidden_must_be_a_boolean(client: AsyncClient, app: FastAPI) -> None:
+    _as(app, _user("administrator"))
+
+    response = await client.get("/api/v1/admin/data-views?include_hidden=maybe")
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_unknown_source_filter_is_rejected(client: AsyncClient, app: FastAPI) -> None:
     _as(app, _user("administrator"))
 

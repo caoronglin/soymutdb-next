@@ -31,13 +31,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
 from ...core.exceptions import AuthenticationError, AuthorizationError
+from ...core.features import FeatureFlagService
 from ...core.footer_content import (
     DEFAULT_FOOTER_NAVIGATION_JSON,
     FooterContentValidationError,
     parse_footer_navigation,
     visible_footer_navigation,
 )
-from ...core.features import FeatureFlagService
 from ...core.header_navigation import (
     DEFAULT_HEADER_NAVIGATION_JSON,
     HeaderContentValidationError,

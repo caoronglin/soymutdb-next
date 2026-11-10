@@ -15,6 +15,11 @@ import { searchVariants } from "./variants";
 export type DataViewSource = "genes" | "variants" | "mutant_lines";
 export type DataViewKind = "grid" | "kanban" | "gallery";
 export type DataViewSortDir = "asc" | "desc";
+/**
+ * A presentation flag, not a permission. A `hidden` view is still stored and
+ * still readable by id; it is only withheld from the saved-view list.
+ */
+export type DataViewVisibility = "visible" | "hidden";
 
 export const DATA_VIEW_SOURCES: readonly DataViewSource[] = [
   "genes",
@@ -23,6 +28,11 @@ export const DATA_VIEW_SOURCES: readonly DataViewSource[] = [
 ];
 
 export const DATA_VIEW_KINDS: readonly DataViewKind[] = ["grid", "kanban", "gallery"];
+
+export const DATA_VIEW_VISIBILITIES: readonly DataViewVisibility[] = [
+  "visible",
+  "hidden",
+];
 
 export interface DataViewSourceInfo {
   source: DataViewSource;
@@ -37,6 +47,8 @@ export interface AdminDataView {
   source: DataViewSource;
   view_type: DataViewKind;
   visible_fields: string[];
+  /** Fields the search box matches against. Empty means "no search box". */
+  searchable_fields: string[];
   filters: Record<string, string>;
   sort_field: string | null;
   sort_dir: DataViewSortDir | null;
@@ -45,6 +57,7 @@ export interface AdminDataView {
   page_size: number;
   is_default: boolean;
   notes: string | null;
+  visibility: DataViewVisibility;
   created_at: string;
   updated_at: string;
 }
@@ -54,6 +67,7 @@ export interface AdminDataViewInput {
   source: DataViewSource;
   view_type?: DataViewKind;
   visible_fields: string[];
+  searchable_fields?: string[];
   filters?: Record<string, string>;
   sort_field?: string | null;
   sort_dir?: DataViewSortDir | null;
@@ -62,6 +76,7 @@ export interface AdminDataViewInput {
   page_size?: number;
   is_default?: boolean;
   notes?: string | null;
+  visibility?: DataViewVisibility;
 }
 
 export type AdminDataViewPatch = Omit<Partial<AdminDataViewInput>, "source">;
@@ -80,10 +95,13 @@ export function listDataViewSources(): Promise<{ items: DataViewSourceInfo[] }> 
 }
 
 export function listAdminDataViews(
-  params: { source?: DataViewSource } = {},
+  params: { source?: DataViewSource; includeHidden?: boolean } = {},
 ): Promise<{ items: AdminDataView[]; total: number }> {
+  const query: Record<string, string | boolean> = {};
+  if (params.source) query.source = params.source;
+  if (params.includeHidden) query.include_hidden = true;
   return http.get("/admin/data-views", {
-    params: params.source ? { source: params.source } : undefined,
+    params: Object.keys(query).length > 0 ? query : undefined,
   });
 }
 
@@ -120,6 +138,22 @@ export function buildSourceFilters(
     params[key] = integers.has(key) ? Number(text) : text;
   }
   return params;
+}
+
+/**
+ * Present a typed source row as a string-keyed record.
+ *
+ * The data-view table is source-agnostic (genes / variants / mutant lines), so it
+ * reads rows by the field names the view itself configured. `visible_fields` and
+ * `searchable_fields` are validated server-side against each source's field
+ * vocabulary, which means every key the table asks for exists on the row — the
+ * only thing lost here is TypeScript's static knowledge of *which* keys, not any
+ * runtime fact. `Object.fromEntries(Object.entries(...))` states that directly,
+ * without an `as unknown as` assertion that would silence the checker instead of
+ * describing the invariant.
+ */
+function toViewRows(rows: readonly object[]): Array<Record<string, unknown>> {
+  return rows.map((row) => Object.fromEntries(Object.entries(row)));
 }
 
 function sortRows(
@@ -163,7 +197,7 @@ export async function fetchDataViewRows(
       sort_dir: view.sort_field ? view.sort_dir ?? undefined : undefined,
     });
     return {
-      items: response.items as unknown as Array<Record<string, unknown>>,
+      items: toViewRows(response.items),
       total: response.total,
       nextCursor: null,
       hasMore: response.has_more,
@@ -178,7 +212,7 @@ export async function fetchDataViewRows(
     });
     return {
       items: sortRows(
-        response.items as unknown as Array<Record<string, unknown>>,
+        toViewRows(response.items),
         view.sort_field,
         view.sort_dir,
       ),
@@ -196,7 +230,7 @@ export async function fetchDataViewRows(
   });
   return {
     items: sortRows(
-      rows as unknown as Array<Record<string, unknown>>,
+      toViewRows(rows),
       view.sort_field,
       view.sort_dir,
     ),

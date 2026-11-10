@@ -67,6 +67,7 @@ const VIEW = {
   source: "genes",
   view_type: "grid",
   visible_fields: ["gene_id", "symbol"],
+  searchable_fields: [] as string[],
   filters: {},
   sort_field: null,
   sort_dir: null,
@@ -75,6 +76,7 @@ const VIEW = {
   page_size: 25,
   is_default: true,
   notes: null,
+  visibility: "visible" as "visible" | "hidden",
   created_at: "2026-11-01T00:00:00Z",
   updated_at: "2026-11-01T00:00:00Z",
 };
@@ -203,6 +205,75 @@ describe("data-view workspace", () => {
     const gallery = await screen.findByTestId("data-views-gallery");
     expect(gallery).toHaveTextContent("Glyma.01G000100");
     expect(gallery).toHaveTextContent("symbol");
+  });
+
+  it("shows no search box when the view declares no searchable fields", async () => {
+    renderPage();
+    await screen.findByText("Genes by chromosome");
+
+    expect(screen.queryByTestId("data-views-search")).toBeNull();
+  });
+
+  it("filters the loaded rows through the view's searchable fields only", async () => {
+    api.listAdminDataViews.mockResolvedValue({
+      items: [{ ...VIEW, searchable_fields: ["symbol"] }],
+      total: 1,
+    });
+    api.fetchDataViewRows.mockResolvedValue({
+      items: [
+        { gene_id: "Glyma.01G000100", symbol: "Alpha" },
+        { gene_id: "Glyma.02G000200", symbol: "Beta" },
+      ],
+      total: 2,
+      nextCursor: null,
+      hasMore: false,
+    });
+    renderPage();
+
+    const search = await screen.findByTestId("data-views-search");
+    fireEvent.change(search, { target: { value: "beta" } });
+
+    await waitFor(() => expect(screen.queryByText("Alpha")).toBeNull());
+    expect(screen.getByText("Beta")).toBeInTheDocument();
+  });
+
+  it("saves the searchable fields and visibility chosen in the editor", async () => {
+    renderPage();
+    await screen.findByText("Genes by chromosome");
+
+    fireEvent.click(screen.getByRole("button", { name: "admin.dataViews.newView" }));
+    fireEvent.change(await screen.findByTestId("data-views-name"), {
+      target: { value: "Searchable genes" },
+    });
+    fireEvent.click(screen.getByTestId("data-views-searchable-symbol"));
+    fireEvent.change(screen.getByTestId("data-views-visibility"), {
+      target: { value: "hidden" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "common.save" }));
+
+    await waitFor(() =>
+      expect(api.createAdminDataView).toHaveBeenCalledWith(
+        expect.objectContaining({
+          searchable_fields: ["symbol"],
+          visibility: "hidden",
+        }),
+      ),
+    );
+  });
+
+  it("asks the API for hidden views only when the operator enables them", async () => {
+    renderPage();
+    await screen.findByText("Genes by chromosome");
+    expect(api.listAdminDataViews).toHaveBeenCalledWith({ source: "genes" });
+
+    fireEvent.click(screen.getByTestId("data-views-show-hidden"));
+
+    await waitFor(() =>
+      expect(api.listAdminDataViews).toHaveBeenCalledWith({
+        source: "genes",
+        includeHidden: true,
+      }),
+    );
   });
 
   it("confirms before deleting and reports a rejected delete", async () => {

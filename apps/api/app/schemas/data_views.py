@@ -16,6 +16,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 DataViewSource = Literal["genes", "variants", "mutant_lines"]
 DataViewKind = Literal["grid", "kanban", "gallery"]
 DataViewSortDir = Literal["asc", "desc"]
+# A presentation flag, not a permission: ``hidden`` views stay stored and stay
+# readable by id, they are only excluded from the saved-view list.
+DataViewVisibility = Literal["visible", "hidden"]
 
 # Field vocabulary of each read-only source, mirroring the row payloads the
 # public API returns. Order is the natural fallback presentation order.
@@ -139,6 +142,7 @@ def _validate_vocabulary(
     source: str,
     view_type: str,
     visible_fields: list[str],
+    searchable_fields: list[str],
     filters: dict[str, str],
     sort_field: str | None,
     sort_dir: str | None,
@@ -154,11 +158,15 @@ def _validate_vocabulary(
     if unknown_fields:
         raise ValueError(f"fields not available for {source}: {', '.join(unknown_fields)}")
 
+    unknown_searchable = [field for field in searchable_fields if field not in fields]
+    if unknown_searchable:
+        raise ValueError(
+            f"searchable fields not available for {source}: {', '.join(unknown_searchable)}"
+        )
+
     unknown_filters = [key for key in filters if key not in filter_fields]
     if unknown_filters:
-        raise ValueError(
-            f"filters not available for {source}: {', '.join(unknown_filters)}"
-        )
+        raise ValueError(f"filters not available for {source}: {', '.join(unknown_filters)}")
 
     if sort_field is not None and sort_field not in fields:
         raise ValueError(f"sort field not available for {source}: {sort_field}")
@@ -179,6 +187,7 @@ class AdminDataViewBase(BaseModel):
     source: DataViewSource
     view_type: DataViewKind = "grid"
     visible_fields: list[str] = Field(min_length=1, max_length=40)
+    searchable_fields: list[str] = Field(default_factory=list, max_length=40)
     filters: dict[str, str] = Field(default_factory=dict)
     sort_field: str | None = Field(default=None, max_length=64)
     sort_dir: DataViewSortDir | None = None
@@ -187,10 +196,16 @@ class AdminDataViewBase(BaseModel):
     page_size: int = Field(default=25, ge=5, le=200)
     is_default: bool = False
     notes: str | None = Field(default=None, max_length=2000)
+    visibility: DataViewVisibility = "visible"
 
     @field_validator("visible_fields")
     @classmethod
     def _validate_visible_fields(cls, value: list[str]) -> list[str]:
+        return _clean_field_list(value)
+
+    @field_validator("searchable_fields")
+    @classmethod
+    def _validate_searchable_fields(cls, value: list[str]) -> list[str]:
         return _clean_field_list(value)
 
     @field_validator("filters")
@@ -204,6 +219,7 @@ class AdminDataViewBase(BaseModel):
             source=self.source,
             view_type=self.view_type,
             visible_fields=self.visible_fields,
+            searchable_fields=self.searchable_fields,
             filters=self.filters,
             sort_field=self.sort_field,
             sort_dir=self.sort_dir,
@@ -225,6 +241,7 @@ class AdminDataViewUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=128)
     view_type: DataViewKind | None = None
     visible_fields: list[str] | None = Field(default=None, min_length=1, max_length=40)
+    searchable_fields: list[str] | None = Field(default=None, max_length=40)
     filters: dict[str, str] | None = None
     sort_field: str | None = Field(default=None, max_length=64)
     sort_dir: DataViewSortDir | None = None
@@ -233,10 +250,16 @@ class AdminDataViewUpdate(BaseModel):
     page_size: int | None = Field(default=None, ge=5, le=200)
     is_default: bool | None = None
     notes: str | None = Field(default=None, max_length=2000)
+    visibility: DataViewVisibility | None = None
 
     @field_validator("visible_fields")
     @classmethod
     def _validate_visible_fields(cls, value: list[str] | None) -> list[str] | None:
+        return None if value is None else _clean_field_list(value)
+
+    @field_validator("searchable_fields")
+    @classmethod
+    def _validate_searchable_fields(cls, value: list[str] | None) -> list[str] | None:
         return None if value is None else _clean_field_list(value)
 
     @field_validator("filters")
@@ -283,6 +306,7 @@ __all__ = [
     "DataViewSource",
     "DataViewSourceInfo",
     "DataViewSourceListResponse",
+    "DataViewVisibility",
     "SOURCE_FIELDS",
     "SOURCE_FILTER_FIELDS",
 ]

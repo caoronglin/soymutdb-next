@@ -17,6 +17,11 @@ const VIEW: AdminDataView = {
   source: "variants",
   view_type: "grid",
   visible_fields: ["variant_id", "impact"],
+  // 0059 made both fields required on the response type: \`searchable_fields\`
+  // is the search-box allowlist (empty = no search box) and \`visibility\`
+  // decides whether the saved view is advertised in the picker.
+  searchable_fields: ["variant_id"],
+  visibility: "visible",
   filters: { impact: "HIGH", start: " 100 " },
   sort_field: "position",
   sort_dir: "desc",

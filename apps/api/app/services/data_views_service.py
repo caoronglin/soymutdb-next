@@ -44,13 +44,21 @@ def source_catalog() -> list[DataViewSourceInfo]:
 
 
 async def list_views(
-    db: AsyncSession, *, source: str | None = None
+    db: AsyncSession, *, source: str | None = None, include_hidden: bool = False
 ) -> list[AdminDataView]:
-    statement = select(AdminDataView)
+    """Saved views, hidden ones excluded unless the caller asks for them.
+
+    ``visibility`` is a presentation flag rather than a permission: a hidden
+    view is still readable by id, it is just not advertised.
+    """
+    # Every clause is a bound ORM expression; no SQL text is interpolated.
+    clauses = [] if include_hidden else [AdminDataView.visibility == "visible"]
     if source is not None:
-        statement = statement.where(AdminDataView.source == source)
+        clauses.append(AdminDataView.source == source)
     result = await db.execute(
-        statement.order_by(
+        select(AdminDataView)
+        .where(*clauses)
+        .order_by(
             AdminDataView.source,
             AdminDataView.is_default.desc(),
             AdminDataView.name,
@@ -66,6 +74,7 @@ async def create_view(db: AsyncSession, payload: AdminDataViewCreate) -> AdminDa
         source=payload.source,
         view_type=payload.view_type,
         visible_fields=list(payload.visible_fields),
+        searchable_fields=list(payload.searchable_fields),
         filters=dict(payload.filters),
         sort_field=payload.sort_field,
         sort_dir=payload.sort_dir,
@@ -74,6 +83,7 @@ async def create_view(db: AsyncSession, payload: AdminDataViewCreate) -> AdminDa
         page_size=payload.page_size,
         is_default=payload.is_default,
         notes=payload.notes,
+        visibility=payload.visibility,
     )
     try:
         if payload.is_default:
@@ -145,6 +155,7 @@ def _validate_merged(view: AdminDataView, updates: dict[str, Any]) -> None:
         "source": view.source,
         "view_type": updates.get("view_type", view.view_type),
         "visible_fields": updates.get("visible_fields", view.visible_fields),
+        "searchable_fields": updates.get("searchable_fields", view.searchable_fields),
         "filters": updates.get("filters", view.filters),
         "sort_field": updates.get("sort_field", view.sort_field),
         "sort_dir": updates.get("sort_dir", view.sort_dir),
@@ -153,6 +164,7 @@ def _validate_merged(view: AdminDataView, updates: dict[str, Any]) -> None:
         "page_size": updates.get("page_size", view.page_size),
         "is_default": updates.get("is_default", view.is_default),
         "notes": updates.get("notes", view.notes),
+        "visibility": updates.get("visibility", view.visibility),
     }
     try:
         AdminDataViewBase.model_validate(merged)
@@ -166,12 +178,12 @@ def _validate_merged(view: AdminDataView, updates: dict[str, Any]) -> None:
 async def _assert_name_free(
     db: AsyncSession, source: str, name: str, *, ignore_id: int | None = None
 ) -> None:
-    statement = select(AdminDataView.id).where(
-        AdminDataView.source == source, AdminDataView.name == name
-    )
+    conditions = [AdminDataView.source == source, AdminDataView.name == name]
     if ignore_id is not None:
-        statement = statement.where(AdminDataView.id != ignore_id)
-    existing = (await db.execute(statement.limit(1))).scalar_one_or_none()
+        conditions.append(AdminDataView.id != ignore_id)
+    existing = (
+        await db.execute(select(AdminDataView.id).where(*conditions).limit(1))
+    ).scalar_one_or_none()
     if existing is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -179,16 +191,14 @@ async def _assert_name_free(
         )
 
 
-async def _demote_other_defaults(
-    db: AsyncSession, source: str, winner_id: int | None
-) -> None:
-    statement = update(AdminDataView).where(
+async def _demote_other_defaults(db: AsyncSession, source: str, winner_id: int | None) -> None:
+    conditions = [
         AdminDataView.source == source,
         AdminDataView.is_default.is_(True),
-    )
+    ]
     if winner_id is not None:
-        statement = statement.where(AdminDataView.id != winner_id)
-    await db.execute(statement.values(is_default=False))
+        conditions.append(AdminDataView.id != winner_id)
+    await db.execute(update(AdminDataView).where(*conditions).values(is_default=False))
 
 
 __all__ = [

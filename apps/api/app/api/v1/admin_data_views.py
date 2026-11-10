@@ -43,6 +43,7 @@ def _to_response(view: AdminDataView) -> AdminDataViewResponse:
         source=view.source,  # type: ignore[arg-type]
         view_type=view.view_type,  # type: ignore[arg-type]
         visible_fields=view.visible_fields or [],
+        searchable_fields=view.searchable_fields or [],
         filters=view.filters or {},
         sort_field=view.sort_field,
         sort_dir=view.sort_dir,  # type: ignore[arg-type]
@@ -51,6 +52,7 @@ def _to_response(view: AdminDataView) -> AdminDataViewResponse:
         page_size=view.page_size,
         is_default=view.is_default,
         notes=view.notes,
+        visibility=view.visibility,  # type: ignore[arg-type]
         created_at=view.created_at,
         updated_at=view.updated_at,
     )
@@ -69,17 +71,20 @@ async def list_data_views(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     source: DataViewSource | None = Query(default=None),
+    include_hidden: bool = Query(
+        default=False,
+        description=(
+            "Include views whose visibility is 'hidden'. Hidden views are kept "
+            "and stay readable by id; they are only withheld from this list."
+        ),
+    ),
 ) -> AdminDataViewListResponse:
     _require_admin(current_user)
-    items = await service.list_views(db, source=source)
-    return AdminDataViewListResponse(
-        items=[_to_response(item) for item in items], total=len(items)
-    )
+    items = await service.list_views(db, source=source, include_hidden=include_hidden)
+    return AdminDataViewListResponse(items=[_to_response(item) for item in items], total=len(items))
 
 
-@router.post(
-    "", response_model=AdminDataViewResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("", response_model=AdminDataViewResponse, status_code=status.HTTP_201_CREATED)
 async def create_data_view(
     payload: AdminDataViewCreate,
     db: AsyncSession = Depends(get_db),
