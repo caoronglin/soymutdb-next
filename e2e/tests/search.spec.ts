@@ -17,7 +17,9 @@
 import { test, expect, type Page } from "@playwright/test";
 import { gotoReady, MOCK_PREVIEW_ASSEMBLY } from "./helpers";
 
-const BASE = "";
+// Empty for the standard-base sweep; set E2E_BASE_PATH for a
+// sub-path deployment artifact.
+const BASE = (process.env.E2E_BASE_PATH ?? "").replace(/\/+$/, "");
 
 /** The form control, rather than the similarly named results landmark. */
 function geneIdInput(page: Page) {

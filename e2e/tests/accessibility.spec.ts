@@ -7,7 +7,9 @@
 import { test, expect } from "@playwright/test";
 import { gotoReady, mockEntityApis, MOCK_VARIANT_ID, MOCK_ASSEMBLY } from "./helpers";
 
-const BASE = "";
+// Empty for the standard-base sweep; set E2E_BASE_PATH for a
+// sub-path deployment artifact.
+const BASE = (process.env.E2E_BASE_PATH ?? "").replace(/\/+$/, "");
 
 // Static artifact + deterministic API fixtures, not live backend/AT acceptance.
 for (const width of [1440, 390]) {

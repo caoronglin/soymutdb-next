@@ -14,6 +14,30 @@ import { expect, type Page, type Request } from "@playwright/test";
  * Wait until the SPA owns the document. Fails with a clear message instead of
  * letting subsequent locator actions time out on inert markup.
  */
+/**
+ * Mount prefix of the artifact under test.
+ *
+ * The offline sweep serves the standard-base artifact, so this is empty by
+ * default. A sub-path deployment (gh-pages under `/soymutdb-next/`) sets
+ * `E2E_BASE_PATH` and every spec that composes `${BASE}/…` — or calls
+ * `gotoReady` with a root-absolute path — follows it without edits.
+ */
+export const BASE_PATH = (process.env.E2E_BASE_PATH ?? "").replace(/\/+$/, "");
+
+/**
+ * Prefix a root-absolute path with the artifact's mount prefix.
+ *
+ * Idempotent on purpose: most specs already compose `${BASE}/…` themselves, so
+ * a blind prefix would produce `/soymutdb-next/soymutdb-next/…` and every
+ * navigation would 404. That bug made the whole public suite fail under the
+ * sub-path build (31 failed) while the artifact itself rendered correctly.
+ */
+export function withBasePath(url: string): string {
+  if (!BASE_PATH || !url.startsWith("/")) return url;
+  if (url === BASE_PATH || url.startsWith(`${BASE_PATH}/`)) return url;
+  return `${BASE_PATH}${url}`;
+}
+
 export async function waitForAppReady(page: Page): Promise<void> {
   await expect
     .poll(
@@ -29,7 +53,7 @@ export async function waitForAppReady(page: Page): Promise<void> {
 
 /** Navigate to a route and wait for the interactive document. */
 export async function gotoReady(page: Page, url: string): Promise<void> {
-  await page.goto(url);
+  await page.goto(withBasePath(url));
   await waitForAppReady(page);
 }
 

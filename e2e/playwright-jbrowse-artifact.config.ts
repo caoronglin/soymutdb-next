@@ -32,7 +32,9 @@ export default defineConfig({
   use: {
     baseURL,
     locale: "en-US",
-    reducedMotion: "reduce",
+    // `reducedMotion` is a browser-context option; the type surface accepts it
+    // only under `contextOptions`, not as a top-level `use` key.
+    contextOptions: { reducedMotion: "reduce" },
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     viewport: { width: 1440, height: 900 },

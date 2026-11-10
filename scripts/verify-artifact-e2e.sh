@@ -56,7 +56,11 @@ if [[ "${1:-}" == "--build" ]]; then
   shift
 fi
 
-GATES=(public internal admin-production admin-shell entity-detail visual web-performance primer jbrowse-artifact)
+# `subpath-artifact` serves the gh-pages-shaped tree from `build-pages-artifact.sh`
+# (mounted under /soymutdb-next) instead of the base-`/` trees the other gates
+# use. It runs last because producing that tree rebuilds apps/web/dist with a
+# different base; see the prerequisite note where it is skipped.
+GATES=(public internal admin-production admin-shell entity-detail visual web-performance primer jbrowse-artifact subpath-artifact)
 
 if (($# > 0)); then
   GATES=("$@")
@@ -81,6 +85,16 @@ if ((missing_artifact)); then
   exit 2
 fi
 
+# The sub-path gate needs `scripts/build-pages-artifact.sh` to have run: that
+# script rebuilds `apps/web/dist` with the mount prefix, so it cannot be folded
+# into the sweep without clobbering the artifacts the nine root-base gates just
+# used. A missing tree is reported SKIPPED with the reason (never counted as a
+# pass), and the gate is excluded from the run.
+subpath_ready=0
+if [[ -f "pages-dist/index.html" ]]; then
+  subpath_ready=1
+fi
+
 declare -a RESULTS=()
 declare -a FAILED=()
 declare -a RETRIES=()
@@ -95,10 +109,25 @@ for gate in "${GATES[@]}"; do
     echo "error: unknown gate '${gate}' (e2e/${config} does not exist)" >&2
     exit 2
   fi
+  if [[ "${gate}" == "subpath-artifact" && "${subpath_ready}" -eq 0 ]]; then
+    echo "==> [${gate}] SKIPPED: pages-dist/ is absent" >&2
+    echo "    run: bash scripts/build-pages-artifact.sh   (rebuilds apps/web/dist with the mount prefix)" >&2
+    RESULTS+=("$(printf '%-16s SKIPPED    → pages-dist/ absent; run scripts/build-pages-artifact.sh' "${gate}")")
+    continue
+  fi
   log="${LOG_DIR}/${gate}.log"
   echo "==> [${gate}] ${log}"
   gate_started=$(date +%s)
-  if (cd e2e && "${PLAYWRIGHT}" test -c "${config}" "${RETRIES[@]}" >"../${log}" 2>&1); then
+  # The sub-path gate mounts the artifact under /soymutdb-next, so its specs must
+  # compose URLs with that prefix: `E2E_BASE_PATH` is what `helpers.ts` reads to
+  # build `${BASE}` and to make `gotoReady` prefix-aware. Without it the specs
+  # navigate to the origin root, the prefixed server 404s, and the gate fails for
+  # a reason that has nothing to do with the artifact.
+  gate_env=()
+  if [[ "${gate}" == "subpath-artifact" ]]; then
+    gate_env=(env E2E_BASE_PATH=/soymutdb-next)
+  fi
+  if (cd e2e && "${gate_env[@]}" "${PLAYWRIGHT}" test -c "${config}" "${RETRIES[@]}" >"../${log}" 2>&1); then
     status="pass"
     RESULTS+=("$(printf '%-16s pass %4ss' "${gate}" "$(( $(date +%s) - gate_started ))")")
   else

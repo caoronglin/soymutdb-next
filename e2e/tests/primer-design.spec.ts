@@ -32,7 +32,9 @@ test.beforeEach(async ({ page }) => {
 const MOCK_TEMPLATE =
   "ACGTACGTACGTACGTACGT".repeat(15); // GC-balanced 300 bp — yields valid pairs
 
-const BASE = "";
+// Empty for the standard-base sweep; set E2E_BASE_PATH for a
+// sub-path deployment artifact.
+const BASE = (process.env.E2E_BASE_PATH ?? "").replace(/\/+$/, "");
 const SUBMIT = /submit primer design/i;
 
 /** Switch the page to "paste sequence" mode and fill its textarea. */

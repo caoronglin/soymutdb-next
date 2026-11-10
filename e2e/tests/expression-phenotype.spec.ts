@@ -17,7 +17,9 @@
 import { test, expect, type Page } from "@playwright/test";
 import { gotoReady, waitForAppReady } from "./helpers";
 
-const BASE = "";
+// Empty for the standard-base sweep; set E2E_BASE_PATH for a
+// sub-path deployment artifact.
+const BASE = (process.env.E2E_BASE_PATH ?? "").replace(/\/+$/, "");
 
 const RELEASE_ID = "7";
 const SAMPLE_PUBLIC_ID = "SAMPLE-0001";
