@@ -89,7 +89,7 @@ export function AdminHeader({ onToggleSidebar }: AdminHeaderProps) {
           type="text"
         >
           <span className="text-xs text-muted-foreground">{t("admin.shell.commandPalette", { defaultValue: "Commands" })}</span>
-          <kbd className="ml-1 rounded border border-border px-1 text-[10px] text-muted-foreground">⌘K</kbd>
+          <kbd className="ml-1 rounded border border-border px-1 text-[10px] text-muted-foreground">Ctrl K</kbd>
         </Button> : null}
         <ThemeToggle theme={theme} onToggle={toggleTheme} />
         <NotificationBell />

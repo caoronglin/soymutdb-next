@@ -1,5 +1,5 @@
 /**
- * Regression cover for the ⌘K command palette.
+ * Regression cover for the keyboard shortcut command palette.
  *
  * Two defects this file pins down, both of which shipped green:
  *

@@ -3,8 +3,8 @@
   "app": "jbrowse",
   "font_dir": "apps/jbrowse/public/fonts/harmonyos",
   "charset": {
-    "codepoint_count": 6895,
-    "charset_sha256": "5c24d99a355e4b4241e0acabf48b16066155522c69a74ff8f8d1258e4bfd4fb2",
+    "codepoint_count": 6891,
+    "charset_sha256": "4e2daf1a4f0dee12bcb42d3bc0ad31a4ce1d8a640fc9952db0120e237fe4ae06",
     "ranges": [
       "20-7e",
       "a7",
@@ -21,12 +21,9 @@
       "2026",
       "2028-2029",
       "2032",
-      "2082",
-      "2191-2194",
-      "21b5",
+      "2191-2193",
       "2212",
       "2264-2265",
-      "2318",
       "3001-3002",
       "300c-300d",
       "4e00-4e01",
@@ -3577,17 +3574,17 @@
       "ff1f"
     ],
     "parts": {
-      "latin": 122,
+      "latin": 118,
       "cjk": 6773
     },
     "sources": {
       "locale_json": {
-        "packages/i18n-core/src/locales/en/common.json": 102,
-        "packages/i18n-core/src/locales/zh/common.json": 963
+        "packages/i18n-core/src/locales/en/common.json": 104,
+        "packages/i18n-core/src/locales/zh/common.json": 980
       },
       "app_typescript": {
-        "apps/admin/src": 286,
-        "apps/web/src": 516
+        "apps/admin/src": 192,
+        "apps/web/src": 577
       },
       "gb2312_level_1_2": 6763,
       "ascii_printable": 95,

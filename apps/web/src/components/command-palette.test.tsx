@@ -1,5 +1,5 @@
 /**
- * Regression cover for the public ⌘K command palette.
+ * Regression cover for the public keyboard shortcut command palette.
  *
  * Three defects this file pins down, all of which shipped green:
  *
@@ -43,7 +43,7 @@ afterEach(async () => {
   await i18next.changeLanguage("en");
 });
 
-/** Open the palette the way the page does: the global ⌘K / Ctrl+K shortcut. */
+/** Open the palette the way the page does: the global keyboard shortcut. */
 function openPalette() {
   fireEvent.keyDown(document, { key: "k", metaKey: true });
 }
