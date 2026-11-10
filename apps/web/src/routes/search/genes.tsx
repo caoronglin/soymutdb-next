@@ -470,9 +470,18 @@ function GeneIdSearchComponent() {
               as that control's caption. */}
           {/* Desktop keeps the single control row; below `sm` the groups and
               their labels stack, because an inline label next to a textarea
-              reads as a separate control at 375px. */}
-          <Flex wrap gap={20} className="flex-col items-stretch sm:flex-row sm:items-center">
-            <Flex wrap gap={8} className="w-full min-w-0 flex-col items-start sm:w-auto sm:flex-row sm:items-center">
+              reads as a separate control at 375px.
+
+              The two control groups share one flex basis so the assembly
+              selector and the identifier field are the same width, and the
+              textarea starts at a single row so both controls are the same
+              height at rest — previously the Select was a one-line `large`
+              control (fixed `min(280px, 100%)` wide) beside a two-row textarea
+              on a `1 1 220px` basis, so the pair read as two unrelated boxes.
+              `items-end` keeps the bottoms on one line even after a pasted
+              multi-line value grows the textarea. */}
+          <Flex wrap gap={20} className="flex-col items-stretch sm:flex-row sm:items-end">
+            <Flex wrap gap={8} className="w-full min-w-0 flex-col items-start sm:w-auto sm:flex-[1_1_320px] sm:flex-row sm:items-center">
               <label
                 htmlFor="genes-assembly"
                 className="whitespace-nowrap text-sm text-muted-foreground"
@@ -487,7 +496,8 @@ function GeneIdSearchComponent() {
                 loading={assembliesQuery.isLoading}
                 data-testid="search-genes-assembly"
                 size="large"
-                style={{ width: "min(280px, 100%)" }}
+                className="w-full min-w-0 sm:w-auto sm:flex-[1_1_220px]"
+                style={{ minWidth: 0 }}
                 options={assemblies?.map((a) => ({
                   value: String(a.id),
                   label: (
@@ -506,18 +516,19 @@ function GeneIdSearchComponent() {
             <Flex
               wrap
               gap={8}
-              // The group takes the leftover row width, so the identifier field
-              // tracks the viewport instead of stopping at a fixed 560px. The
-              // basis is only applied from `sm` up: in the stacked mobile
-              // column a flex-basis would stretch the group's height.
-              className="w-full min-w-0 flex-col items-start sm:w-auto sm:flex-[1_1_360px] sm:flex-row sm:items-center"
+              // Same basis as the assembly group: the two controls are a pair,
+              // so they must be the same width rather than one fixed and one
+              // elastic. The basis is only applied from `sm` up: in the stacked
+              // mobile column a flex-basis would stretch the group's height.
+              className="w-full min-w-0 flex-col items-start sm:w-auto sm:flex-[1_1_320px] sm:flex-row sm:items-center"
             >
               <span className="whitespace-nowrap text-sm text-muted-foreground">
                 {get("search.genes.geneId", t("search.genes.geneId"))}
               </span>
               {/* A textarea, not a single-line input: the field accepts several
                   identifiers and operators paste them one per line. Enter submits,
-                  Shift+Enter inserts a newline. */}
+                  Shift+Enter inserts a newline. `minRows: 1` keeps it the same
+                  height as the neighbouring Select; it still grows on paste. */}
               <Input.TextArea
                 value={geneIdsRaw}
                 onChange={(e) => setGeneIdsRaw(e.target.value)}
@@ -529,7 +540,7 @@ function GeneIdSearchComponent() {
                 }}
                 placeholder={get("search.genes.geneIdPlaceholder", t("search.genes.geneIdPlaceholder"))}
                 className="w-full min-w-0 font-mono sm:w-auto sm:flex-[1_1_220px]"
-                autoSize={{ minRows: 2, maxRows: 6 }}
+                autoSize={{ minRows: 1, maxRows: 6 }}
                 // Grows into the leftover row space, but never below a width
                 // that still shows a full accession; wraps to its own line when
                 // the row runs out.

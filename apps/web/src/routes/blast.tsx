@@ -91,13 +91,33 @@ type JobContext = {
 };
 
 
-const blastSchema = z.object({
-  program: z.string().min(1),
-  database: z.string().min(1),
-  sequence: z.string().min(10, "Sequence must be at least 10 characters"),
-  e_value: z.number().gt(0).max(1000).default(1e-5),
-  max_hits: z.number().int().min(1).max(500).default(50),
-});
+/**
+ * Build the BLAST form schema with localized messages.
+ *
+ * A module-level schema cannot be localized: `z.string().min(1)` and
+ * `.min(10, "...")` bake their text in at import time, so a Chinese UI showed
+ * zod's default English ("Too small: expected string to have >=1 characters")
+ * next to the localized help copy. Taking `t` here is what makes the validation
+ * text follow the active language.
+ */
+function makeBlastSchema(t: (key: string, options?: Record<string, unknown>) => string) {
+  return z.object({
+    program: z.string().min(1, t("blast.validation.programRequired")),
+    database: z.string().min(1, t("blast.validation.databaseRequired")),
+    sequence: z.string().trim().min(10, t("blast.validation.sequenceTooShort")),
+    e_value: z
+      .number()
+      .gt(0, t("blast.validation.eValueRange"))
+      .max(1000, t("blast.validation.eValueRange"))
+      .default(1e-5),
+    max_hits: z
+      .number()
+      .int(t("blast.validation.maxHitsRange"))
+      .min(1, t("blast.validation.maxHitsRange"))
+      .max(500, t("blast.validation.maxHitsRange"))
+      .default(50),
+  });
+}
 
 
 /** Extract the ID from the first FASTA header of a submitted query, if any. */
@@ -279,7 +299,7 @@ function BlastComponent() {
     // Request Notification permission inside this user gesture (browser
     // requirement) — fire-and-forget; denied is handled by the hook.
     void ensurePermission();
-    const parsed = blastSchema.safeParse({
+    const parsed = makeBlastSchema(t).safeParse({
       program: form.program,
       database: form.database,
       sequence: form.sequence,
