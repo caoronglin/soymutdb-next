@@ -35,6 +35,16 @@ SOYMUTDB_CI_DEMO_JBROWSE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL:-https://jbrowse.so
 # origins above so the gate stays runnable without network access.
 SOYMUTDB_CI_DEMO_PORTAL_URL="${SOYMUTDB_CI_DEMO_PORTAL_URL:-https://portal.soymutdb.test}"
 SOYMUTDB_CI_DEMO_ADMIN_URL="${SOYMUTDB_CI_DEMO_ADMIN_URL:-https://admin.soymutdb.test}"
+# The *site* origin is NOT the API origin. `SOYMUTDB_SITE_URL` feeds the
+# canonical `<link>`, `sitemap.xml` and the `Sitemap:` line in `robots.txt`
+# (`apps/web/scripts/generate-static-routes.ts`), so pointing it at the API host
+# publishes a canonical URL and a sitemap that name the API server instead of
+# the page's own origin. The value here is the one
+# `apps/web/scripts/build-sites.ts` already falls back to for the external
+# variant, which is also what the committed `apps/web/dist/external/routes.json`
+# records: a rebuild must reproduce those pinned bytes, and
+# `scripts/test_published_route_manifest.py` asserts the two agree.
+SOYMUTDB_CI_DEMO_SITE_URL="${SOYMUTDB_CI_DEMO_SITE_URL:-https://external.soymutdb.invalid}"
 
 step() { printf '\n==> %s\n' "$*"; }
 
@@ -66,7 +76,7 @@ VITE_API_BASE_URL="${SOYMUTDB_CI_DEMO_API_URL}" \
 VITE_JBROWSE_BASE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL}" \
 SOYMUTDB_PORTAL_ORIGIN="${SOYMUTDB_CI_DEMO_PORTAL_URL}" \
 SOYMUTDB_ADMIN_ORIGIN="${SOYMUTDB_CI_DEMO_ADMIN_URL}" \
-SOYMUTDB_SITE_URL="${SOYMUTDB_CI_DEMO_API_URL}" \
+SOYMUTDB_SITE_URL="${SOYMUTDB_CI_DEMO_SITE_URL}" \
   pnpm --filter @soymutdb/web build:sites
 
 step "Scan demo artifact for placeholder origins"

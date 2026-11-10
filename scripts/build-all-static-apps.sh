@@ -26,7 +26,12 @@ export VITE_API_BASE_URL="${VITE_API_BASE_URL:-https://api.soymutdb.test}"
 export VITE_JBROWSE_BASE_URL="${VITE_JBROWSE_BASE_URL:-https://jbrowse.soymutdb.test}"
 export SOYMUTDB_PORTAL_ORIGIN="${SOYMUTDB_PORTAL_ORIGIN:-https://portal.soymutdb.test}"
 export SOYMUTDB_ADMIN_ORIGIN="${SOYMUTDB_ADMIN_ORIGIN:-https://admin.soymutdb.test}"
-export SOYMUTDB_SITE_URL="${SOYMUTDB_SITE_URL:-https://api.soymutdb.test}"
+# The SITE origin, not the API origin: `generate-static-routes.ts` writes it into
+# the canonical `<link>`, `sitemap.xml` and the `Sitemap:` line of `robots.txt`.
+# This default is the value `apps/web/scripts/build-sites.ts` falls back to and
+# the origin the committed `apps/web/dist/external/routes.json` records, so a
+# rebuild reproduces the bytes `check_published_route_manifest.py` pins.
+export SOYMUTDB_SITE_URL="${SOYMUTDB_SITE_URL:-https://external.soymutdb.invalid}"
 
 echo "==> portal (external + internal) and admin artifact"
 bash scripts/build-static-apps.sh
