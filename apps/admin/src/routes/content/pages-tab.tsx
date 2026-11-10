@@ -406,15 +406,20 @@ export function PagesTab({ PageFormDialog, VersionHistoryDialog, VersionDetail }
               { value: "archived", label: t("admin.content.statusArchived", { defaultValue: "Archived" }) },
             ]}
           />
-          <Input
-            data-testid="pages-category-filter"
-            placeholder={t("admin.content.filterCategoryPlaceholder", { defaultValue: "Filter by category..." })}
-            value={categoryFilter}
-            onChange={(e) => {
-              updateSearch({ ...search, category: e.target.value, page: 1 });
-            }}
-            className="h-9 max-w-xs"
-          />
+          {/* antd sets `width: 100%` on Input as unlayered CSS, so a Tailwind
+              width class cannot size it inside a shrink-to-fit flex row.
+              The wrapper owns the width; the input fills it. */}
+          <div className="w-64">
+            <Input
+              data-testid="pages-category-filter"
+              placeholder={t("admin.content.filterCategoryPlaceholder", { defaultValue: "Filter by category..." })}
+              value={categoryFilter}
+              onChange={(e) => {
+                updateSearch({ ...search, category: e.target.value, page: 1 });
+              }}
+              className="h-9"
+            />
+          </div>
           <Badge color="secondary">
             {isError || !data ? "—" : t("admin.content.pageCount", { defaultValue: totalCount === 1 ? "{{count}} page" : "{{count}} pages", count: totalCount })}
           </Badge>
