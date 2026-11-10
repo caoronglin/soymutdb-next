@@ -113,6 +113,8 @@ test-results-*/
 # Cache
 # ---------------------------------------------------------------------------
 .cache/
+# The coding agent's own session state (goals, task output). Never published.
+.pi/
 .parcel-cache/
 .vite/
 .eslintcache
