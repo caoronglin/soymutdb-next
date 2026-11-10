@@ -1024,12 +1024,17 @@ def test_summary_caps_the_breakdown_only_after_merging(
     monkeypatch: pytest.MonkeyPatch, session: SessionSpy
 ) -> None:
     """The cap drops whole templates; it never shaves a merged count."""
+    # 25 distinct real templates. `/analyses*` used to fill three slots; those
+    # routes no longer exist, so the same three slots now hold other pages that
+    # are still in the canonical set — the test is about the cap dropping whole
+    # templates, not about any particular page.
     templates = [
-        "/", "/about", "/analytics", "/analyses", "/analyses/fastp",
-        "/analyses/scanpy", "/blast", "/browser", "/compare", "/downloads",
+        "/", "/about", "/analytics", "/assemblies", "/blast",
+        "/browser", "/compare", "/downloads",
         "/genes", "/guide", "/help", "/login", "/mutants", "/news",
         "/publications", "/search", "/search/blast", "/search/gbrowse",
-        "/search/genes", "/seed-request", "/sra", "/tools", "/variants",
+        "/search/genes", "/search/location", "/search/primer",
+        "/seed-request", "/sra", "/tools", "/variants",
     ]
     # 25 distinct templates, one of them reached through two raw spellings.
     session.responses = {
