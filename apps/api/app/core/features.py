@@ -46,13 +46,22 @@ FEATURES: Final[dict[str, FeatureDefinition]] = {
     # fail-closed or count-only).  They must be hidden in Admin and rejected at
     # the API until a writer closes the loop.  See docs/ops/first-release-data-plan.md §5.
     "imports.fasta": FeatureDefinition(
-        "imports.fasta", False, True, "Enable FASTA reference imports (writer not yet closed)."
+        "imports.fasta",
+        False,
+        True,
+        "Enable FASTA reference imports (writes chromosomes + lengths from the .fai index).",
     ),
     "imports.gff3": FeatureDefinition(
-        "imports.gff3", False, True, "Enable GFF3 gene-model imports (writer not yet closed)."
+        "imports.gff3",
+        False,
+        True,
+        "Enable GFF3 annotation imports (writes genes, transcripts, CDS/UTR parts, derived exons).",
     ),
     "imports.vcf": FeatureDefinition(
-        "imports.vcf", False, True, "Enable VCF variant imports (writer not yet closed)."
+        "imports.vcf",
+        False,
+        True,
+        "Enable VCF variant imports (durable writer exists; gated by SOYMUTDB_ENABLE_VCF_IMPORT).",
     ),
     "imports.blast_db": FeatureDefinition(
         "imports.blast_db", False, True, "Enable BLAST database imports (writer not yet closed)."

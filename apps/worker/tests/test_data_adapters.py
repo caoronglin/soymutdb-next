@@ -1,4 +1,5 @@
 import hashlib
+import io
 import multiprocessing
 import os
 import time
@@ -38,10 +39,20 @@ class _BoundedReadStream:
         self.closed = True
 
 
-class _GeneratedGenesTsvStream:
-    """Produce a large valid TSV without allocating its complete source fixture."""
+class _GeneratedGenesTsvStream(io.RawIOBase):
+    """Produce a large valid TSV without allocating its complete source fixture.
+
+    Subclasses :class:`io.RawIOBase` so it is a real binary stream: the shared
+    validator's streaming entry points are typed ``BinaryIO``, and a read()-only
+    duck type does not satisfy that contract for a type checker even though the
+    runtime path works. ``name``/``mode`` match what a file object exposes.
+    """
+
+    name = "<generated-genes-tsv>"
+    mode = "rb"
 
     def __init__(self, rows: int) -> None:
+        super().__init__()
         self._rows = rows
         self._next_row = -1
         self._pending = b""
@@ -119,10 +130,12 @@ def test_registry_contains_only_approved_types():
     )
 
 
-@pytest.mark.parametrize("kind", ["fasta", "gff3", "blast_db"])
+@pytest.mark.parametrize("kind", ["blast_db"])
 def test_adapter_without_durable_writer_fails_closed(kind, tmp_path):
-    # vcf is no longer in this set: it has a durable writer behind the ADR-0005
-    # protocol (flag-gated OFF), covered by test_vcf_import.py.
+    # Only blast_db is left in this set. `vcf` has a durable writer behind the
+    # ADR-0005 protocol (flag-gated OFF, covered by test_vcf_import.py); `fasta`
+    # and `gff3` gained real writers in annotation_writers.py, and their own
+    # fail-closed behaviour is asserted below.
     path = tmp_path / f"input-{kind}.txt"
     path.write_text(">chr1\nACGT\n")
 
@@ -131,6 +144,39 @@ def test_adapter_without_durable_writer_fails_closed(kind, tmp_path):
         match=rf"{kind} import is disabled.*durable persistence",
     ):
         get_adapter(kind).run(ImportContext(1, 2, "r1", str(path), "a1"))
+
+
+def test_fasta_adapter_requires_the_faidx_index(tmp_path):
+    """A reference without its `.fai` sidecar cannot state its lengths.
+
+    The writer reads the index, not the FASTA, so a missing index is the one
+    failure mode that would otherwise produce a silently empty chromosome table.
+    """
+    path = tmp_path / "reference.fa"
+    path.write_text(">chr1\nACGT\n")
+
+    with pytest.raises(RuntimeError, match=r"needs the faidx index"):
+        get_adapter("fasta").run(ImportContext(1, 2, "r1", str(path), "a1"))
+
+
+def test_gff3_parser_rejects_a_row_that_is_not_nine_columns(tmp_path):
+    """The GFF3 reader fails closed on a malformed row instead of skipping it.
+
+    A skipped row is how a truncated annotation imports "successfully" with
+    fewer genes than the file claims, which is the failure the counting stub
+    could not detect. The reader is exercised directly: it needs no database,
+    and the row-shape contract is the part that has to hold.
+    """
+    from soymutdb_worker.tasks.annotation_writers import (
+        AnnotationWriteError,
+        _iter_gff3_rows,
+    )
+
+    path = tmp_path / "annotation.gff3"
+    path.write_text("chr1\ttest\tgene\t1\t10\n")
+
+    with pytest.raises(AnnotationWriteError, match="must contain 9 fields"):
+        list(_iter_gff3_rows(path))
 
 
 @pytest.mark.parametrize("kind", ["seed_data"])

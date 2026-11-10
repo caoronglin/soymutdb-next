@@ -225,21 +225,29 @@ class TestCheckSourceDomain:
             check_source_domain(_envelope(source_domain="evil-example.com"), _binding())
 
 
+#: The redactor keys on the credential's *name* (`access_token=`, `secret:`, …),
+#: never on the value's shape. Assembling the probe from parts keeps a
+#: credential-shaped literal out of the source tree — a scanner cannot tell a
+#: redaction-test input from a leaked key, and it should not have to.
+REDACTION_PROBE = "-".join(("probe", "value", "not", "a", "secret"))
+
+
 class TestRedaction:
     @pytest.mark.parametrize(
-        "raw",
+        ("name", "separator"),
         [
-            "access_token=A1b2C3d4E5f6",
-            "secret: A1b2C3d4E5f6",
-            "password=A1b2C3d4E5f6",
-            "api_key=A1b2C3d4E5f6",
-            "apikey: A1b2C3d4E5f6",
+            ("access_token", "="),
+            ("secret", ": "),
+            ("password", "="),
+            ("api_key", "="),
+            ("apikey", ": "),
         ],
     )
-    def test_credential_shaped_values_are_stripped(self, raw: str) -> None:
+    def test_credential_shaped_values_are_stripped(self, name: str, separator: str) -> None:
+        raw = f"{name}{separator}{REDACTION_PROBE}"
         redacted = redact(raw)
 
-        assert "A1b2C3d4E5f6" not in redacted
+        assert REDACTION_PROBE not in redacted, raw
 
     def test_ordinary_text_survives_intact(self) -> None:
         message = "processed 42 rows for release v4"
@@ -255,15 +263,21 @@ class TestRedaction:
         assert redact("key=1") == "key=1"
 
     def test_mapping_redacts_by_key_name(self) -> None:
-        redacted = redact_mapping({"api_key": "A1b2C3d4E5f6", "release": "v4"})
+        redacted = redact_mapping({"api_key": REDACTION_PROBE, "release": "v4"})
 
-        assert "A1b2C3d4E5f6" not in redacted["api_key"]
+        # `redact_mapping` returns `dict[str, object]` because it passes
+        # non-strings through untouched; assert the exact replacement instead of
+        # a substring search so the expected value is stated, not implied.
+        assert redacted["api_key"] == "***redacted***"
         assert redacted["release"] == "v4"
 
     def test_mapping_redacts_inside_free_text_values(self) -> None:
-        redacted = redact_mapping({"note": "access_token=A1b2C3d4E5f6"})
+        redacted = redact_mapping({"note": f"access_token={REDACTION_PROBE}"})
 
-        assert "A1b2C3d4E5f6" not in redacted["note"]
+        note = redacted["note"]
+        assert isinstance(note, str)
+        assert REDACTION_PROBE not in note
+        assert "***redacted***" in note
 
     def test_non_string_values_pass_through_untouched(self) -> None:
         assert redact_mapping({"rows": 42, "flag": True}) == {"rows": 42, "flag": True}

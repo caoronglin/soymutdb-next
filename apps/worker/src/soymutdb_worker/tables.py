@@ -20,6 +20,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     MetaData,
+    SmallInteger,
     String,
     Table,
     Text,
@@ -106,6 +107,11 @@ chromosomes = Table(
     Column("id", Integer, primary_key=True),
     Column("assembly_id", Integer, nullable=False),
     Column("name", String(64)),
+    # The FASTA writer registers the reference length of every sequence; the
+    # column is NOT NULL in the schema, so the worker definition has to carry
+    # it or a bulk insert would omit a required field silently.
+    Column("length", BigInteger, nullable=False),
+    Column("order", Integer),
 )
 
 transcripts = Table(
@@ -114,6 +120,35 @@ transcripts = Table(
     Column("id", String(64), primary_key=True),
     Column("gene_id", BigInteger),
     Column("is_canonical", Boolean),
+    Column("name", String(256)),
+    Column("biotype", String(64)),
+    Column("start", BigInteger),
+    Column("end", BigInteger),
+    Column("strand", String(1)),
+)
+
+#: CDS / UTR segments inside a transcript (migration 0045). An exon is derived
+#: from these, never copied from the file: GFF3 carries no ``exon`` feature for
+#: this annotation, so an exon is by definition the union of the parts it holds.
+transcript_parts = Table(
+    "transcript_parts",
+    metadata,
+    Column("id", BigInteger, primary_key=True),
+    Column("transcript_id", String(64), nullable=False),
+    Column("part_type", String(24), nullable=False),
+    Column("start", BigInteger, nullable=False),
+    Column("end", BigInteger, nullable=False),
+    Column("order", SmallInteger, nullable=False),
+)
+
+exons = Table(
+    "exons",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("transcript_id", String(64), nullable=False),
+    Column("start", BigInteger, nullable=False),
+    Column("end", BigInteger, nullable=False),
+    Column("order", SmallInteger, nullable=False),
 )
 
 gene_aliases = Table(

@@ -19,7 +19,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, BinaryIO, Protocol, cast
 
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.shared import _ensure_jobs_package
@@ -69,15 +69,23 @@ class UnsupportedImportError(RuntimeError):
     """Raised when an import cannot satisfy the pipeline's safety contract."""
 
 
-class _HashingReader:
+class _HashingReader(io.RawIOBase):
     """Record a SHA-256 while the existing bounded parser consumes a source.
 
-    The wrapper implements just enough of the read-only IO protocol for
-    ``io.TextIOWrapper`` and ``gzip.GzipFile``; the digest therefore covers
-    the bytes actually stored in the object, compressed bytes included.
+    Subclasses :class:`io.RawIOBase` rather than re-implementing a subset of the
+    IO protocol by hand: ``gzip.GzipFile`` needs a real ``fileobj`` (it probes
+    for ``seek``/``tell``/``readable``), and typed helpers such as
+    ``validate_module_file_streaming_from_stream`` declare ``BinaryIO``. A
+    read()-only duck type satisfied neither, which surfaced as a type error at
+    every call site even though the happy path happened to work.
     """
 
-    def __init__(self, source: Any) -> None:
+    def __init__(self, source: Any, name: str = "<import-stream>") -> None:
+        super().__init__()
+        # A real binary stream exposes `name` and `mode`; typed helpers that
+        # accept `BinaryIO` require them even when they never read the value.
+        self.name = name
+        self.mode = "rb"
         self._source = source
         self._digest = hashlib.sha256()
         self._closed = False
@@ -105,18 +113,15 @@ class _HashingReader:
     def writable(self) -> bool:
         return False
 
+    # A stream that is hashed as it is read cannot seek: the digest covers only
+    # the bytes that passed through, so rewinding would silently invalidate it.
+    # ``gzip.GzipFile`` only probes this; it is not required to succeed.
     def seekable(self) -> bool:
         return False
 
-    def flush(self) -> None:
-        return None
-
     def close(self) -> None:
         self._closed = True
-
-    @property
-    def closed(self) -> bool:
-        return self._closed
+        super().close()
 
     @property
     def checksum_sha256(self) -> str:
@@ -159,9 +164,61 @@ class FastaAdapter(_TextAdapter):
     kind = "fasta"
 
     def run(self, context: ImportContext, *, progress=None) -> AdapterResult:
-        raise UnsupportedImportError(
-            "fasta import is disabled: durable persistence writer, artifact upload, "
-            "and release registration are not implemented"
+        """Persist the reference sequence lengths for one assembly.
+
+        Reads the ``.fai`` sidecar next to the uploaded FASTA. The index is the
+        authoritative statement of what the reference is (names, lengths,
+        order), so a 1 GB genome costs a millisecond scan instead of a full
+        read — and a missing index is a hard failure rather than a silent
+        "0 chromosomes".
+        """
+        from ..utils.db import get_db
+        from .annotation_writers import (
+            AnnotationWriteError,
+            write_reference_fai,
+        )
+        from .ingest import _resolve_release_assembly
+
+        fasta_path = _path(context)
+        fai_path = Path(f"{fasta_path}.fai")
+        if not fai_path.exists():
+            raise UnsupportedImportError(
+                "fasta import needs the faidx index next to the reference: "
+                f"{fai_path.name} not found"
+            )
+
+        with get_db() as session:
+            _, assembly_id = _resolve_release_assembly(
+                session, context.release_id, context.assembly or ""
+            )
+            if assembly_id is None:
+                raise UnsupportedImportError(
+                    "fasta import cannot resolve the assembly "
+                    f"{context.assembly!r}; register it before importing the reference"
+                )
+            _progress(progress, progress=10)
+            try:
+                report = write_reference_fai(
+                    session,
+                    assembly_id=int(assembly_id),
+                    fai_path=fai_path,
+                    fasta_path=fasta_path,
+                )
+            except AnnotationWriteError as exc:
+                raise UnsupportedImportError(f"fasta import rejected the index: {exc}") from exc
+
+        _progress(progress, processed=report.chromosomes, total=report.chromosomes, progress=100)
+        return AdapterResult(
+            records=report.chromosomes,
+            inserted=report.chromosomes,
+            skipped=0,
+            evidence={
+                "assembly_id": int(assembly_id),
+                "chromosomes": report.chromosomes,
+                "replaced_chromosomes": report.replaced,
+                "fasta_sha256": report.fasta_sha256,
+                "fai": fai_path.name,
+            },
         )
 
 
@@ -169,9 +226,54 @@ class Gff3Adapter(_TextAdapter):
     kind = "gff3"
 
     def run(self, context: ImportContext, *, progress=None) -> AdapterResult:
-        raise UnsupportedImportError(
-            "gff3 import is disabled: durable persistence writer and release "
-            "registration are not implemented"
+        """Store genes, transcripts, CDS/UTR parts and derived exons.
+
+        Before this writer existed the worker streamed the file, counted
+        features and returned the counts while writing nothing: a green import
+        reported tens of thousands of genes against an empty catalogue. The
+        reported counts below are rows the database can be asked for again.
+        """
+        from ..utils.db import get_db
+        from .annotation_writers import (
+            AnnotationWriteError,
+            assembly_gene_count,
+            write_gff3_annotation,
+        )
+        from .ingest import _resolve_release_assembly
+
+        path = _path(context)
+        with get_db() as session:
+            _, assembly_id = _resolve_release_assembly(
+                session, context.release_id, context.assembly or ""
+            )
+            if assembly_id is None:
+                raise UnsupportedImportError(
+                    "gff3 import cannot resolve the assembly "
+                    f"{context.assembly!r}; register it before importing the annotation"
+                )
+            _progress(progress, progress=10)
+            try:
+                report = write_gff3_annotation(
+                    session, assembly_id=int(assembly_id), path=path
+                )
+            except AnnotationWriteError as exc:
+                raise UnsupportedImportError(f"gff3 import rejected the file: {exc}") from exc
+            stored = assembly_gene_count(session, int(assembly_id))
+
+        _progress(progress, processed=report.genes, total=report.genes, progress=100)
+        return AdapterResult(
+            records=report.genes,
+            inserted=report.genes,
+            skipped=0,
+            evidence={
+                "assembly_id": int(assembly_id),
+                "genes": report.genes,
+                "transcripts": report.transcripts,
+                "cds_utr_parts": report.parts,
+                "exons_derived": report.exons,
+                "replaced_genes": report.replaced_genes,
+                "assembly_gene_total": stored,
+            },
         )
 
 
@@ -749,10 +851,14 @@ class ModuleTsvAdapter(_TextAdapter):
         filename = context.filename or str(Path(context.file_key).name)
         with _open_module_source(context) as source:
             hashing_source = _HashingReader(source)
+            # SAFETY: the validator only ever calls `read`, which is the
+            # whole contract `_HashingReader` implements; `BinaryIO` also
+            # promises `write`/`seek`, which a checksum hasher must not
+            # offer (a rewind would silently invalidate the digest).
             result = validate_module_file_streaming_from_stream(
                 context.module_key or "",
                 filename,
-                hashing_source,
+                cast(BinaryIO, hashing_source),
             )
         if not result.ok:
             raise ValueError(f"TSV validation failed: {result.first_error()}")
@@ -785,13 +891,23 @@ class ModuleTsvAdapter(_TextAdapter):
         from soymutdb_worker.tables import data_sets, module_data_rows, releases
         from soymutdb_worker.utils.db import get_db
 
+        # `module_tsv` is defined by its schema: without a module key there is no
+        # column contract and no unique key to deduplicate on, so this fails
+        # closed instead of falling back to "no key".
+        module_key = context.module_key
+        if not module_key:
+            # A missing module key is an invalid *request*, not a missing
+            # capability: raising UnsupportedImportError here would report
+            # module_tsv as unimplemented to the capability contract.
+            raise ValueError("module_tsv import requires a module key; the request carries none")
+
         def flush_batch(session, values: list[dict[str, Any]]) -> int:
             if not values:
                 return 0
             payload = []
             for row in values:
                 key_parts = [
-                    str(row.get(col, "")) for col in _module_unique_key(context.module_key)
+                    str(row.get(col, "")) for col in _module_unique_key(module_key)
                 ]
                 payload.append(
                     {
@@ -835,10 +951,11 @@ class ModuleTsvAdapter(_TextAdapter):
             )
             with _open_module_source(context) as source:
                 hashing_source = _HashingReader(source)
+                # SAFETY: same read-only contract as the validate path above.
                 for typed, error in iter_module_rows_from_stream(
                     context.module_key,
                     filename,
-                    hashing_source,
+                    cast(BinaryIO, hashing_source),
                 ):
                     if error is not None:
                         skipped += 1
@@ -929,7 +1046,10 @@ def _module_unique_key(module_key: str) -> tuple[str, ...]:
     schema = get_schema(module_key)
     if schema is None:
         raise ValueError(f"unknown module schema: {module_key}")
-    return schema.unique_key
+    # Rebuild the tuple instead of returning the attribute directly: the schema
+    # registry crosses a package boundary, so an untyped re-export there would
+    # otherwise leak `Any` into this function's declared return type.
+    return tuple(str(column) for column in schema.unique_key)
 
 
 _ADAPTERS: dict[str, DataAdapter] = {
