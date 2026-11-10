@@ -147,6 +147,81 @@ export function requireDeploymentOrigin(
   return url.origin;
 }
 
+/**
+ * Access-analytics provider selection.
+ *
+ * The platform serves its own first-party collector (`/track.gif` on the API,
+ * fed by `apps/web/src/lib/analytics.ts`). That collector needs no third-party
+ * script, stores nothing in a cookie and is gated by DNT server-side, so it is
+ * the **default**. Cloudflare Web Analytics is an *optional* extra: it ships a
+ * remote beacon, which is a real third-party dependency on the page and
+ * therefore has to be asked for by name.
+ */
+export type AnalyticsProvider = "native" | "cloudflare" | "both";
+
+export interface AnalyticsSelection {
+  /** True when the Cloudflare beacon script may be injected. */
+  cloudflare: boolean;
+  /** Why this selection was made; surfaced at build time, never in the page. */
+  reason: string;
+}
+
+const ANALYTICS_PROVIDERS = new Set<string>(["native", "cloudflare", "both"]);
+
+/**
+ * Resolve the analytics provider from the build environment.
+ *
+ * Contract:
+ *
+ * * `SOYMUTDB_ANALYTICS_PROVIDER` is the single input. Unset means `native`.
+ * * An unknown value fails the build instead of silently falling back, for the
+ *   same reason `VITE_SITE_VARIANT` does: a typo must not quietly change what a
+ *   deployed page loads.
+ * * A provider that enables the beacon without a token also fails: a beacon
+ *   with an empty token reports nothing, which looks like "no traffic" rather
+ *   than "misconfigured".
+ * * Legacy continuity: the token used to be the only switch, so a deployment
+ *   that sets a token and no provider keeps its beacon. That exception is
+ *   reported so an operator can make it explicit and then drop it.
+ */
+export function resolveAnalyticsProvider(
+  provider: string | undefined,
+  token: string | undefined,
+): AnalyticsSelection {
+  const raw = (provider ?? "").trim().toLowerCase();
+  const secret = (token ?? "").trim();
+
+  if (raw === "") {
+    if (secret) {
+      return {
+        cloudflare: true,
+        reason:
+          "legacy: a Cloudflare token is set and SOYMUTDB_ANALYTICS_PROVIDER is unset; "
+          + "the beacon stays on. Set SOYMUTDB_ANALYTICS_PROVIDER=cloudflare to keep it "
+          + "explicit, or =native to drop the third-party beacon.",
+      };
+    }
+    return { cloudflare: false, reason: "default: platform-native analytics only" };
+  }
+
+  if (!ANALYTICS_PROVIDERS.has(raw)) {
+    throw new Error(
+      "SOYMUTDB_ANALYTICS_PROVIDER must be one of native, cloudflare, both; "
+        + `got ${JSON.stringify(provider)}`,
+    );
+  }
+  if (raw === "native") {
+    return { cloudflare: false, reason: "explicit: platform-native analytics only" };
+  }
+  if (!secret) {
+    throw new Error(
+      `SOYMUTDB_ANALYTICS_PROVIDER=${raw} requires `
+        + "SOYMUTDB_CLOUDFLARE_ANALYTICS_TOKEN; without a token the beacon reports nothing",
+    );
+  }
+  return { cloudflare: true, reason: `explicit: ${raw} (native + Cloudflare beacon)` };
+}
+
 export function buildCsp(origins: DeploymentOrigins, analytics = false): string {
   // Composed through the shared builder so this policy, the SSG template and the
   // `_headers` writer cannot drift in directive order or separators. The output

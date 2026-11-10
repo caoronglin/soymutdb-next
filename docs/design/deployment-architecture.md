@@ -286,9 +286,11 @@ clickhouse 自带 healthcheck；migrate-clickhouse ──► clickhouse(healthy)
 | `SOYMUTDB_API_BASE` | 固定 `http://api:8010`（容器内），穿透调用内部 REST |
 | `SOYMUTDB_MCP_API_TOKEN` | 写工具 Bearer 透传鉴权；为空则写工具无鉴权占位（G3 未接） |
 
-### 4.4 前端 VITE_*（**build 期**变量，打进产物；禁止放 secret）
+### 4.4 前端构建期变量（打进产物；禁止放 secret）
 
 > 生产构建由页面制品脚本完成：`VITE_API_BASE_URL` 取自部署配置。CDN 构建开关已随 ECharts/GSAP 退役删除；第三方库全部本地打包。
+>
+> 历史变量名沿用 `VITE_*`（构建已迁移到 Umi Max，前缀不再代表构建器）。新增变量使用 `SOYMUTDB_*`，见 [ADR-0016](../adr/0016-build-time-public-config-prefix.md)。
 
 | 变量 | gh-pages 生产值 | 说明 |
 | --- | --- | --- |
@@ -299,14 +301,20 @@ clickhouse 自带 healthcheck；migrate-clickhouse ──► clickhouse(healthy)
 | ~~`VITE_GSAP_CDN` / `VITE_ECHARTS_CDN` / `VITE_LENIS_CDN`~~ | — | 已随 ECharts/GSAP 退役删除；不要恢复 |
 | `VITE_DEMO_MODE` | `false` | analytics 演示模式开关（可选） |
 | `VITE_PUBLIC_URL` | — | admin 新闻预览（可选） |
+| `SOYMUTDB_CLOUDFLARE_ANALYTICS_TOKEN` | token 值（可选） | Cloudflare Web Analytics beacon；旧名 `VITE_CLOUDFLARE_ANALYTICS_TOKEN` 仍兼容（见 4.5） |
 
-### 4.5 Cloudflare Web Analytics beacon token（**未实现**）
+### 4.5 Cloudflare Web Analytics beacon token
 
-- 当前代码库**没有任何 CF beacon 注入**（已全局搜索确认）。
-- 若未来启用：在 `apps/web/index.html` 添加
-  `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "<CF_BEACON_TOKEN>"}'></script>`，
-  并同步在 `apps/web/index.html` 的 meta CSP 与 `apps/web/public/_headers` 的 `script-src` / `connect-src` 中加入 `static.cloudflareinsights.com`（两处需一致，否则被 CSP 拦截，见 `deploy/cloudflare.md` §2.3 同款约束）。
-- 该 token 属于**公开**值（会打进产物），不是 secret；可放 CI 的普通变量而非 secret。当前列入遗留项。
+已实现。门户（`apps/web`）构建时读取
+`SOYMUTDB_CLOUDFLARE_ANALYTICS_TOKEN`（旧名 `VITE_CLOUDFLARE_ANALYTICS_TOKEN`
+仍兼容），由 `apps/web/config/config.ts` 的 `headScripts` 注入
+`https://static.cloudflareinsights.com/beacon.min.js`，并由
+`apps/web/scripts/csp.ts` 同步放宽 CSP。未设置 token 时产物与启用前一致。
+
+- 该 token 属于**公开**值（会打进产物），不是 secret；可作为 CI 普通变量。
+- 后台「访问设置 → 分析设置」页面只文档化 `SOYMUTDB_*` 新名、不保存 token，
+  也不回读 Cloudflare；旧名仅记录在部署文档中。
+- 运维步骤与验证方法见 `deploy/cloudflare.md` §5.5 / §6.5。
 
 ### 4.6 备份/恢复脚本环境变量（`deploy/scripts/backup.sh` / `restore.sh`）
 

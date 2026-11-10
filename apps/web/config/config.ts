@@ -6,6 +6,7 @@ import {
   isMinimalDeploymentMode,
   normalizeBasePath,
   requireDeploymentOrigin,
+  resolveAnalyticsProvider,
   resolveDevAllowedHosts,
 } from "@soymutdb/shared/deployment";
 import { resolveSiteVariant } from "../src/lib/site-variant";
@@ -56,13 +57,26 @@ const fileViewerArtifactOrigins = (env.VITE_FILE_VIEWER_ARTIFACT_ORIGINS ?? "")
       allowInsecureHttp: allowInsecureDevOrigins,
     }),
   );
-const analyticsToken = env.VITE_CLOUDFLARE_ANALYTICS_TOKEN?.trim();
+// The VITE_* spelling is a legacy alias from the pre-Umi build; keep reading it
+// so existing Cloudflare Pages projects do not silently lose analytics.
+const analyticsToken = (
+  env.SOYMUTDB_CLOUDFLARE_ANALYTICS_TOKEN ?? env.VITE_CLOUDFLARE_ANALYTICS_TOKEN
+)?.trim();
+// The platform's own `/track.gif` collector is the default; the Cloudflare
+// beacon is opt-in. Resolved through the shared helper so this config and the
+// CSP finalizer cannot disagree about which provider a build selected.
+const analytics = resolveAnalyticsProvider(env.SOYMUTDB_ANALYTICS_PROVIDER, analyticsToken);
+if (analytics.reason.startsWith("legacy:")) {
+  // Build-time notice only: the reason describes how this artifact was
+  // configured, so it must never reach the emitted page bytes.
+  process.stderr.write(`[analytics] ${analytics.reason}\n`);
+}
 const configuredDevHosts = resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS);
 const csp = buildCsp(
   { apiOrigin, jbrowseOrigin, frameOrigins: fileViewerFrameOrigins },
-  Boolean(analyticsToken),
+  analytics.cloudflare,
 );
-const headScripts = analyticsToken
+const headScripts = analytics.cloudflare
   ? [
       `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='${JSON.stringify({ token: analyticsToken })}'></script>`,
     ]

@@ -6,15 +6,18 @@
  * document. The same policy is used by those documents and `_headers`; the
  * finalizer may then add per-page inline-script hashes.
  */
-import { fileURLToPath } from "node:url";
-import { dirname } from "node:path";
+import { buildCsp, requireDeploymentOrigin, resolveAnalyticsProvider } from "@soymutdb/shared/deployment";
 
-import { buildCsp, requireDeploymentOrigin } from "@soymutdb/shared/deployment";
-
-const here = dirname(fileURLToPath(import.meta.url));
 // build-sites passes one explicit environment to Umi and every post-build step.
 const env = process.env;
-const analyticsToken = env.VITE_CLOUDFLARE_ANALYTICS_TOKEN?.trim() || undefined;
+const analyticsToken =
+  (env.SOYMUTDB_CLOUDFLARE_ANALYTICS_TOKEN ?? env.VITE_CLOUDFLARE_ANALYTICS_TOKEN)?.trim() ||
+  undefined;
+// Same shared resolver as `apps/web/config/config.ts`: the CSP finalizer and the
+// Umi config must agree on whether this build loads the Cloudflare beacon,
+// otherwise the policy either blocks the beacon or permits an origin nothing
+// uses. An invalid provider therefore fails the build here too.
+const analytics = resolveAnalyticsProvider(env.SOYMUTDB_ANALYTICS_PROVIDER, analyticsToken);
 const minimalDeployment = (env.VITE_DEPLOYMENT_MODE ?? "").trim().toLowerCase() === "minimal";
 // Keep this aligned with `apps/web/config/config.ts`. An http preview origin is
 // accepted by either `NODE_ENV=development` or the explicit local-test flag;
@@ -51,7 +54,7 @@ export const CSP_CONTENT = buildCsp(
         ]
       : [],
   },
-  Boolean(analyticsToken),
+  analytics.cloudflare,
 );
 
 export function escapeHtmlAttribute(value: string): string {
