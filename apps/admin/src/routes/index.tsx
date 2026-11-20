@@ -11,7 +11,15 @@ const ImportThroughputChart = lazy(() => import("../components/charts/import-thr
 const QueryLatencyChart = lazy(() => import("../components/charts/query-latency").then((m) => ({ default: m.QueryLatencyChart })));
 const StorageGrowthChart = lazy(() => import("../components/charts/storage-growth").then((m) => ({ default: m.StorageGrowthChart })));
 
-export default function DashboardPage() {
+/**
+ * The console's landing page.
+ *
+ * It is not a dashboard: the two dashboards live at `/dashboard/analysis` and
+ * `/dashboard/monitor`, and the sidebar labels this entry "Welcome". The old
+ * name (`DashboardPage`) made three different pages answer to "dashboard", so
+ * the component is named for the job it does.
+ */
+export default function SystemOverviewPage() {
   const { t } = useTranslation();
   const { homepage, stats, series, importThroughput, queryLatency, storageGrowth } = useDashboardData();
   const homepageStats = homepage.data;
@@ -35,17 +43,12 @@ export default function DashboardPage() {
                 call-to-action opened "this page is unavailable". Imports is the
                 live workflow the unavailable page itself recommends. */}
             <div className="flex flex-wrap items-center gap-2">
+              {/* One entry point per destination. `/imports` used to be reachable
+                  from this button *and* from a "Data imports" card in the
+                  shortcut grid below; visitor analytics is a sidebar entry under
+                  Administration and does not also need a button here. */}
               <Link to="/imports" className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
                 {t("admin.dashboard.openImports", { defaultValue: "Open imports" })} <ArrowRightOutlined className="size-4" aria-hidden />
-              </Link>
-              {/* Visitor analytics lives on its own settings page and, until
-                  this link existed, the dashboard had no route to it: the only
-                  path was the sidebar entry under Administration. */}
-              <Link
-                to="/analytics-settings"
-                className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-accent"
-              >
-                {t("admin.dashboard.openAnalytics", { defaultValue: "Visitor analytics" })}
               </Link>
             </div>
           </div>
@@ -137,13 +140,6 @@ export default function DashboardPage() {
                 icon: <BranchesOutlined className="size-5" aria-hidden />,
                 title: t("admin.dashboard.shortcuts.releases.title", { defaultValue: "Releases" }),
                 description: t("admin.dashboard.shortcuts.releases.description", { defaultValue: "Versions, publication status and record counts." }),
-              },
-              {
-                key: "imports",
-                to: "/imports",
-                icon: <ExperimentOutlined className="size-5" aria-hidden />,
-                title: t("admin.dashboard.shortcuts.imports.title", { defaultValue: "Data imports" }),
-                description: t("admin.dashboard.shortcuts.imports.description", { defaultValue: "Upload module data and track running tasks." }),
               },
               {
                 key: "data-views",

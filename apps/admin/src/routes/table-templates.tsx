@@ -1,17 +1,21 @@
 /**
  * Admin table-view templates — configure the columns every portal table renders.
  *
- * One screen answers three operator needs from the product requirement:
+ * One screen, one job:
  *
  * 1. choose which columns a table shows and in which order (the default hides
  *    the cross-assembly homolog columns; an operator adds them explicitly);
  * 2. save that layout as a named template, scoped by species, site variant and
- *    optionally release, and promote it to the default;
- * 3. register the deployed species databases so one console can point at more
- *    than one server.
+ *    optionally release, and promote it to the default.
  *
  * The list is the source of truth the public `/table-views/{kind}` endpoint
  * resolves; every mutation here is immediately visible on the portal.
+ *
+ * The species-instance registry that used to be embedded here was a second
+ * editor for the same records `/instances` owns, with fewer actions: this screen
+ * could only toggle and unregister, while `/instances` also checks health and
+ * switches the console's current instance. One destination per record — the
+ * registry is `/instances`.
  */
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -39,15 +43,10 @@ import { ConfirmDialog } from "../components/confirm-dialog";
 import { PlusOutlined, SaveOutlined, DeleteOutlined, StarOutlined } from "@ant-design/icons";
 import {
   TABLE_KINDS,
-  createSpeciesInstance,
   createTableViewTemplate,
-  deleteSpeciesInstance,
   deleteTableViewTemplate,
-  listSpeciesInstances,
   listTableViewTemplates,
-  updateSpeciesInstance,
   updateTableViewTemplate,
-  type SpeciesInstance,
   type TableColumn,
   type TableKind,
   type TableViewTemplate,
@@ -106,17 +105,7 @@ const KNOWN_COLUMN_KEYS: Record<TableKind, Array<{ key: string; labelKey: string
   ],
 };
 
-interface InstanceFormValues {
-  code: string;
-  name: string;
-  species: string;
-  api_base_url: string;
-  jbrowse_base_url?: string;
-  portal_base_url?: string;
-  is_local: boolean;
-}
-
-export default function TableViewsPage() {
+export default function TableTemplatesPage() {
   const { t, i18n } = useTranslation();
   const { message } = App.useApp();
   const queryClient = useQueryClient();
@@ -129,27 +118,17 @@ export default function TableViewsPage() {
   const [draftActions, setDraftActions] = React.useState({ jbrowse: true, genome_preview: true });
   const [editingId, setEditingId] = React.useState<number | null>(null);
   const [editingReleaseId, setEditingReleaseId] = React.useState<string>("");
-  const [instanceForm] = Form.useForm<InstanceFormValues>();
   // Every write on this screen is confirmed and every rejection is reported.
   const [promoteTarget, setPromoteTarget] = React.useState<TableViewTemplate | null>(null);
   const [deleteTarget, setDeleteTarget] = React.useState<TableViewTemplate | null>(null);
-  const [instanceDeleteTarget, setInstanceDeleteTarget] = React.useState<SpeciesInstance | null>(null);
-  const [actionError, setActionError] = React.useState<{ message: string; reason: string } | null>(null);
   const [promoteError, setPromoteError] = React.useState<string | null>(null);
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
-  const [instanceDeleteError, setInstanceDeleteError] = React.useState<string | null>(null);
 
   const templatesQuery = useQuery({
     queryKey: ["admin", "table-views", kind],
     queryFn: () => listTableViewTemplates({ kind }),
     staleTime: 30_000,
   });
-  const instancesQuery = useQuery({
-    queryKey: ["admin", "species-instances"],
-    queryFn: listSpeciesInstances,
-    staleTime: 30_000,
-  });
-
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["admin", "table-views"] });
     // The portal caches the resolved layout too; drop it so the change is
@@ -214,69 +193,7 @@ export default function TableViewsPage() {
     },
   });
 
-  /**
-   * Enable / disable a registered species instance.
-   *
-   * The row switch used to call the API directly and chain only a
-   * `then(...)`, so a rejected update became an unhandled promise rejection:
-   * the switch kept the old value and the operator was told nothing.
-   */
-  const instanceToggleMutation = useMutation({
-    mutationFn: (variables: { id: number; is_enabled: boolean; name: string }) =>
-      updateSpeciesInstance(variables.id, { is_enabled: variables.is_enabled }),
-    onSuccess: () => {
-      setActionError(null);
-      void queryClient.invalidateQueries({ queryKey: ["admin", "species-instances"] });
-    },
-    onError: (error, variables) => {
-      const reason = error instanceof Error ? error.message : String(error);
-      const failure = {
-        message: t("admin.tableViews.instanceUpdateFailed", {
-          name: variables.name,
-          defaultValue: 'The instance "{{name}}" could not be updated.',
-        }),
-        reason,
-      };
-      setActionError(failure);
-      message.error(failure.message);
-    },
-  });
-
-  const instanceDeleteMutation = useMutation({
-    mutationFn: (id: number) => deleteSpeciesInstance(id),
-    onSuccess: () => {
-      message.success(t("common.success"));
-      setInstanceDeleteTarget(null);
-      setInstanceDeleteError(null);
-      void queryClient.invalidateQueries({ queryKey: ["admin", "species-instances"] });
-    },
-    onError: (error) => {
-      setInstanceDeleteError(error instanceof Error ? error.message : String(error));
-      message.error(t("common.error"));
-    },
-  });
-
-  const instanceMutation = useMutation({
-    mutationFn: (values: InstanceFormValues) =>
-      createSpeciesInstance({
-        code: values.code.trim(),
-        name: values.name.trim(),
-        species: values.species.trim(),
-        api_base_url: values.api_base_url.trim(),
-        jbrowse_base_url: values.jbrowse_base_url?.trim() || null,
-        portal_base_url: values.portal_base_url?.trim() || null,
-        is_local: values.is_local,
-      }),
-    onSuccess: () => {
-      message.success(t("common.success"));
-      instanceForm.resetFields();
-      void queryClient.invalidateQueries({ queryKey: ["admin", "species-instances"] });
-    },
-    onError: () => message.error(t("common.error")),
-  });
-
   const templates: TableViewTemplate[] = templatesQuery.data?.items ?? [];
-  const instances: SpeciesInstance[] = instancesQuery.data?.items ?? [];
   const candidates = KNOWN_COLUMN_KEYS[kind];
   const selectedKeys = new Set(draftColumns.map((column) => column.key));
   // A template persists one label per locale, so both are resolved from the
@@ -366,10 +283,7 @@ export default function TableViewsPage() {
               size="small"
               icon={<StarOutlined />}
               loading={promoteMutation.isPending}
-              onClick={() => {
-                setActionError(null);
-                setPromoteTarget(row);
-              }}
+              onClick={() => setPromoteTarget(row)}
             >
               {t("admin.tableViews.actionSetDefault")}
             </Button>
@@ -378,57 +292,7 @@ export default function TableViewsPage() {
             size="small"
             danger
             icon={<DeleteOutlined />}
-            onClick={() => {
-              setActionError(null);
-              setDeleteTarget(row);
-            }}
-          >
-            {t("admin.tableViews.actionDelete")}
-          </Button>
-        </Space>
-      ),
-    },
-  ];
-
-  const instanceColumns: ProColumns<SpeciesInstance>[] = [
-    { title: "code", dataIndex: "code", key: "code", editable: false, render: (code) => <code>{code}</code> },
-    { title: t("admin.tableViews.columnName"), dataIndex: "name", key: "name", editable: false },
-    { title: t("admin.tableViews.species"), dataIndex: "species", key: "species", editable: false },
-    { title: "API", dataIndex: "api_base_url", key: "api_base_url", editable: false, render: (url) => <code>{url}</code> },
-    {
-      title: t("admin.tableViews.local"),
-      key: "is_local",
-      editable: false,
-      render: (_, row) => (row.is_local ? <Tag color="green">{t("admin.tableViews.localTag", { defaultValue: "local" })}</Tag> : null),
-    },
-    {
-      title: t("admin.tableViews.actions"),
-      key: "actions",
-      editable: false,
-      render: (_, row) => (
-        <Space>
-          <Switch
-            size="small"
-            checked={row.is_enabled}
-            aria-label={t("admin.tableViews.toggleInstance", { defaultValue: "Enable {{name}}", name: row.name })}
-            loading={instanceToggleMutation.isPending}
-            onChange={(checked) => {
-              setActionError(null);
-              instanceToggleMutation.mutate({
-                id: row.id,
-                is_enabled: checked,
-                name: row.name,
-              });
-            }}
-          />
-          <Button
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => {
-              setActionError(null);
-              setInstanceDeleteTarget(row);
-            }}
+            onClick={() => setDeleteTarget(row)}
           >
             {t("admin.tableViews.actionDelete")}
           </Button>
@@ -446,22 +310,6 @@ export default function TableViewsPage() {
           title={t("admin.tableViews.bannerTitle")}
           description={t("admin.tableViews.bannerDescription")}
         />
-
-        {actionError ? (
-          <div
-            role="alert"
-            data-testid="table-views-action-error"
-            className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
-          >
-            <p>{actionError.message}</p>
-            <p className="mt-1 text-xs">
-              {t("common.errorReason", {
-                reason: actionError.reason,
-                defaultValue: "Server response: {{reason}}",
-              })}
-            </p>
-          </div>
-        ) : null}
 
         <ProCard
           size="small"
@@ -665,81 +513,6 @@ export default function TableViewsPage() {
           </Form>
         </ProCard>
 
-        <ProCard size="small" title={t("admin.tableViews.instancesTitle")}>
-          <Alert
-            type="info"
-            showIcon
-            title={t("admin.tableViews.instancesBanner")}
-            style={{ marginBottom: 12 }}
-          />
-          {instancesQuery.isLoading ? (
-            <Skeleton active />
-          ) : instancesQuery.isError ? (
-            <div
-              role="alert"
-              data-testid="table-views-instances-error"
-              className="rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
-            >
-              {t("admin.tableViews.instancesLoadError", { defaultValue: "The species instances could not be loaded." })}
-            </div>
-          ) : (
-            <ProTable<SpeciesInstance>
-              {...PRO_LIST_SHELL}
-              rowKey="id"
-              size="small"
-              dataSource={instances}
-              pagination={false}
-              columns={instanceColumns}
-            />
-          )}
-
-          <Form
-            form={instanceForm}
-            layout="vertical"
-            className="mt-4"
-            initialValues={{ is_local: false }}
-            onFinish={(values: InstanceFormValues) => instanceMutation.mutate(values)}
-          >
-            <Space wrap align="start">
-              <Form.Item name="code" label="code" rules={[{ required: true }]}>
-                <Input placeholder="soy" />
-              </Form.Item>
-              <Form.Item name="name" label={t("admin.tableViews.instanceName")} rules={[{ required: true }]}>
-                <Input placeholder="Soybean" />
-              </Form.Item>
-              <Form.Item name="species" label={t("admin.tableViews.instanceSpecies")} rules={[{ required: true }]}>
-                <Input placeholder="Glycine max" />
-              </Form.Item>
-              <Form.Item
-                name="api_base_url"
-                label={t("admin.tableViews.apiOrigin", { defaultValue: "API origin" })}
-               rules={[{ required: true }]}>
-                <Input placeholder="https://api.example.org" />
-              </Form.Item>
-              <Form.Item
-                name="jbrowse_base_url"
-                label={t("admin.tableViews.jbrowseOrigin", { defaultValue: "JBrowse origin" })}
-              >
-                <Input placeholder="https://jbrowse.example.org" />
-              </Form.Item>
-              <Form.Item
-                name="portal_base_url"
-                label={t("admin.tableViews.portalOrigin", { defaultValue: "Portal origin" })}
-              >
-                <Input placeholder="https://portal.example.org" />
-              </Form.Item>
-              <Form.Item name="is_local" label={t("admin.tableViews.instanceLocal")} valuePropName="checked">
-                <Switch aria-label={t("admin.tableViews.instanceLocal")} />
-              </Form.Item>
-              <Form.Item label=" ">
-                <Button type="primary" htmlType="submit" icon={<PlusOutlined />} loading={instanceMutation.isPending}>
-                  {t("admin.tableViews.registerInstance")}
-                </Button>
-              </Form.Item>
-            </Space>
-          </Form>
-        </ProCard>
-
         {/* Promote confirmation */}
         {promoteTarget && (
           <ConfirmDialog
@@ -799,40 +572,6 @@ export default function TableViewsPage() {
           />
         )}
 
-        {/* Instance unregister confirmation */}
-        {instanceDeleteTarget && (
-          <ConfirmDialog
-            open={Boolean(instanceDeleteTarget)}
-            onOpenChange={(open) => {
-              if (!open) {
-                setInstanceDeleteTarget(null);
-                setInstanceDeleteError(null);
-              }
-            }}
-            title={t("admin.tableViews.deleteInstanceTitle", { defaultValue: "Unregister instance" })}
-            description={t("admin.tableViews.deleteInstanceConfirm", {
-              defaultValue: 'Unregister the instance "{{name}}"? The console stops using it.',
-              name: instanceDeleteTarget.name,
-            })}
-            confirmLabel={t("admin.tableViews.actionDelete", { defaultValue: "Delete" })}
-            severity="destructive"
-            onConfirm={() => instanceDeleteMutation.mutate(instanceDeleteTarget.id)}
-            loading={instanceDeleteMutation.isPending}
-            error={instanceDeleteError ? (
-              <span data-testid="table-views-instance-delete-error">
-                {t("admin.tableViews.instanceDeleteFailed", {
-                  name: instanceDeleteTarget.name,
-                  defaultValue: 'The instance "{{name}}" could not be unregistered.',
-                })}
-                {" "}
-                {t("common.errorReason", {
-                  reason: instanceDeleteError,
-                  defaultValue: "Server response: {{reason}}",
-                })}
-              </span>
-            ) : null}
-          />
-        )}
       </div>
     </PageContainer>
   );

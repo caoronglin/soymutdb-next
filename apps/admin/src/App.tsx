@@ -22,7 +22,7 @@ import {
 } from "./lib/motion-policy";
 
 // Lazy-loaded route components (code-splitting per route).
-const DashboardPage = lazy(() => import("./routes/index"));
+const SystemOverviewPage = lazy(() => import("./routes/index"));
 const DashboardAnalysisPage = lazy(() => import("./routes/dashboard/analysis"));
 const DashboardMonitorPage = lazy(() => import("./routes/dashboard/monitor"));
 const UsageGuidePage = lazy(() => import("./routes/usage-guide"));
@@ -53,7 +53,7 @@ const PageBuilderListPage = lazy(() => import("./routes/page-builder/index"));
 const PageBuilderEditorPage = lazy(() => import("./routes/page-builder/$pageId"));
 const AnalyticsSettingsPage = lazy(() => import("./routes/analytics-settings"));
 const PublicationsAdminPage = lazy(() => import("./routes/publications"));
-const TableViewsPage = lazy(() => import("./routes/table-views"));
+const TableTemplatesPage = lazy(() => import("./routes/table-templates"));
 const DataViewsPage = lazy(() => import("./routes/data-views"));
 
 /** Loading fallback for lazy-loaded routes. */
@@ -133,10 +133,10 @@ function RequireAuth() {
   );
 }
 
-const dashboardRoute = createRoute({
+const systemOverviewRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/",
-  component: () => withSuspense(DashboardPage),
+  component: () => withSuspense(SystemOverviewPage),
 });
 
 const dashboardAnalysisRoute = createRoute({
@@ -206,11 +206,17 @@ const contentRoute = createRoute({
   component: () => withSuspense(ContentPage),
 });
 
+/**
+ * `/content/pages` is a deep-link alias, not a second page: it mounted
+ * `ContentPage`, the same component `/content` mounts, so the console had two
+ * URLs for one screen. The alias survives so existing links keep working.
+ */
 const contentPagesRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/content/pages",
-  validateSearch: parseContentPageSearch,
-  component: () => withSuspense(ContentPage),
+  beforeLoad: () => {
+    throw redirect({ to: "/content", search: { page: 1, status: "all", category: "" } });
+  },
 });
 
 const contentPageDetailRoute = createRoute({
@@ -278,7 +284,7 @@ const settingsBrandRoute = createRoute({ getParentRoute: () => authLayoutRoute, 
 const settingsSiteRedirectRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/settings/site",
-  beforeLoad: () => { throw redirect({ to: "/settings/brand" }); },
+  beforeLoad: () => { throw redirect({ to: "/settings/appearance" }); },
 });
 const settingsAppearanceRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "/settings/appearance", component: () => withSuspense(SettingsAppearancePage) });
 const settingsIntegrationsRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "/settings/integrations", component: () => withSuspense(SettingsIntegrationsPage) });
@@ -355,7 +361,7 @@ const publicationsAdminRoute = createRoute({
 const tableTemplatesRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/table-templates",
-  component: () => withSuspense(TableViewsPage),
+  component: () => withSuspense(TableTemplatesPage),
 });
 
 const dataViewsRoute = createRoute({
@@ -373,7 +379,7 @@ const tableViewsRedirectRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   loginRoute,
   authLayoutRoute.addChildren([
-    dashboardRoute,
+    systemOverviewRoute,
     dashboardAnalysisRoute,
     dashboardMonitorRoute,
     usageGuideRoute,

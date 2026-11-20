@@ -175,6 +175,23 @@ export const InputNumber = (props: Props) => (
 
 export const TextArea = Input.TextArea;
 
+/**
+ * A free-text input with suggestions, which is how the navigation editors use
+ * it: the value is what the operator typed, the options are only hints.
+ */
+export const AutoComplete = (props: Props) => (
+  <input
+    data-testid={testid(props)}
+    aria-label={props["aria-label"] as string | undefined}
+    value={(props.value as string | undefined) ?? ""}
+    placeholder={props.placeholder as string | undefined}
+    onChange={(event) =>
+      (props.onChange as ((value: string) => void) | undefined)?.(event.target.value)
+    }
+    onBlur={props.onBlur as ((event: React.FocusEvent<HTMLInputElement>) => void) | undefined}
+  />
+);
+
 export const Select = (props: Props) => {
   const options = (props.options as Array<{ value: string; label: React.ReactNode; disabled?: boolean }> | undefined) ?? [];
   return (
@@ -393,6 +410,9 @@ export const Form = Object.assign(FormRoot, {
       setFields: () => undefined,
     },
   ],
+  // Fields the double never binds, so a watched value is always "nothing yet".
+  // A component that dereferences it must therefore handle the empty case.
+  useWatch: () => undefined,
 });
 
 export const ProForm = (props: Props) => <div data-testid={testid(props)}>{props.children}</div>;
@@ -412,36 +432,50 @@ interface DoubleColumn {
   render?: (value: unknown, row: Record<string, unknown>, index: number) => React.ReactNode;
 }
 
+/**
+ * A table double that renders its header cells as well as its rows.
+ *
+ * The header is not decoration here: several admin tables carry their own
+ * per-column controls (a switch, a field name, a drag handle) in `title`, so a
+ * double that dropped titles would silently hide the controls the route tests
+ * exist to exercise. `rowKey` accepts the function form antd supports, because a
+ * row identified by something other than a single column is the case that made
+ * the index fallback a real defect.
+ */
 export const ProTable = (props: Props) => {
   const columns = props.columns as DoubleColumn[] | undefined;
   const dataSource = props.dataSource as Array<Record<string, unknown>> | undefined;
-  const rowKey = (props.rowKey as string | undefined) ?? "id";
+  const rowKey = props.rowKey as string | ((row: Record<string, unknown>, index?: number) => React.Key) | undefined;
   const emptyText = (props.locale as { emptyText?: React.ReactNode } | undefined)?.emptyText;
-  if (!dataSource || dataSource.length === 0) {
-    return (
-      <table data-testid={testid(props)}>
-        <tbody>
+  const keyFor = (row: Record<string, unknown>, index: number) =>
+    typeof rowKey === "function" ? rowKey(row, index) : String(row[rowKey ?? "id"]);
+  return (
+    <table data-testid={testid(props)}>
+      <thead>
+        <tr>
+          {columns?.map((column, columnIndex) => (
+            <th key={column.key ?? columnIndex}>{column.title}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {!dataSource || dataSource.length === 0 ? (
           <tr>
             <td>{emptyText}</td>
           </tr>
-        </tbody>
-      </table>
-    );
-  }
-  return (
-    <table data-testid={testid(props)}>
-      <tbody>
-        {dataSource.map((row, index) => (
-          <tr key={String(row[rowKey])}>
-            {columns?.map((column, columnIndex) => (
-              <td key={column.key ?? columnIndex}>
-                {column.render
-                  ? column.render(row[column.dataIndex ?? column.key ?? ""], row, index)
-                  : null}
-              </td>
-            ))}
-          </tr>
-        ))}
+        ) : (
+          dataSource.map((row, index) => (
+            <tr key={keyFor(row, index)}>
+              {columns?.map((column, columnIndex) => (
+                <td key={column.key ?? columnIndex}>
+                  {column.render
+                    ? column.render(row[column.dataIndex ?? column.key ?? ""], row, index)
+                    : null}
+                </td>
+              ))}
+            </tr>
+          ))
+        )}
       </tbody>
     </table>
   );

@@ -53,7 +53,7 @@ const NAV_PATHS = new Set(NAV_ITEMS.map((item) => item.path).filter((path): path
  */
 const NOT_IN_NAV = new Set([
   "/login",
-  "/content",
+  "/content/pages",
   "/imports",
   "/imports/new",
   "/site-control",
@@ -120,13 +120,17 @@ describe("admin navigation reachability", () => {
   it("parses the router path literals it depends on", () => {
     // If this fails the guard below is vacuous, which is worse than no guard.
     expect(routerPaths().length).toBeGreaterThan(20);
-    expect(routerPaths()).toContain("/content/pages");
+    expect(routerPaths()).toContain("/content");
   });
 
   it("resolves each sidebar entry to the component the router renders", () => {
     const components = routerComponents();
     expect(components.size).toBeGreaterThan(20);
-    expect(components.get("/")).toBe("DashboardPage");
+    // The page was renamed from `DashboardPage`: the old name made three
+    // different pages answer to "dashboard". The guard checks that `/`
+    // resolves to the component the router actually renders, which is now
+    // `SystemOverviewPage` in App.tsx.
+    expect(components.get("/")).toBe("SystemOverviewPage");
     // The retired routes are the ones this guard exists for, so the parser has
     // to see them before it can keep them out of the menu.
     expect(components.get("/resource-catalog")).toBe(UNAVAILABLE_COMPONENT);

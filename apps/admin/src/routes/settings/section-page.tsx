@@ -5,6 +5,7 @@ import { PageContainer } from "@/lib/antd";
 import SettingsPage from "../settings";
 import { SETTINGS_DOMAIN_META, type SettingsDomain } from "./domains";
 import { AppearanceSettingsForm } from "./appearance-form";
+import { SiteAppearanceSections } from "./site-appearance";
 import { SiteSettingsForm } from "./site-form";
 import { LocalizationSettingsForm } from "./localization-form";
 import { SecuritySettingsForm } from "./security-form";
@@ -46,7 +47,12 @@ export function SettingsDomainPage({ domain, children }: SettingsDomainPageProps
       }}
     >
       <div className="space-y-4">
-        {domain === "appearance" ? <AppearanceSettingsForm /> : domain === "site" ? <SiteSettingsForm /> : domain === "localization" ? <LocalizationSettingsForm /> : domain === "security" ? <SecuritySettingsForm /> : <SettingsPage domain={domain} />}
+        {domain === "appearance" ? (
+          <>
+            <SiteAppearanceSections />
+            <AppearanceSettingsForm />
+          </>
+        ) : domain === "site" ? <SiteSettingsForm /> : domain === "localization" ? <LocalizationSettingsForm /> : domain === "security" ? <SecuritySettingsForm /> : <SettingsPage domain={domain} />}
         {children}
         <SettingsRevisionHistory sections={translatedSections} />
       </div>

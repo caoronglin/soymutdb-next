@@ -19,15 +19,40 @@ type ImportTaskDetail = {
 
 export default function ImportTaskDetailRoute() {
   const { taskId } = useParams({ strict: false }) as { taskId: string };
-  return <ImportTaskDetailPage taskId={Number(taskId)} />;
+  // `Number("abc")` is NaN, and "NaN" was then sent to the API as if it were
+  // an id, which answers 422 for a URL the operator cannot have meant. A
+  // non-numeric id is a bad request, not a missing task.
+  const parsed = Number(taskId);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return <ImportTaskDetailPage taskId={null} />;
+  }
+  return <ImportTaskDetailPage taskId={parsed} />;
 }
 
-export function ImportTaskDetailPage({ taskId }: { taskId: number }) {
+export function ImportTaskDetailPage({ taskId }: { taskId: number | null }) {
   const { t } = useTranslation();
   const taskQuery = useQuery({
     queryKey: ["admin-import", taskId],
+    // An invalid id never reaches the API: there is nothing to fetch, and a
+    // request for it would only report the mistake as a server error.
     queryFn: () => http.get<ImportTaskDetail>("/admin/imports/" + taskId),
+    enabled: taskId !== null,
   });
+
+  if (taskId === null) {
+    return (
+      <PageContainer
+        title={t("admin.importDetail.invalidTitle", { defaultValue: "Invalid import task id" })}
+        extra={[<Button key="back"><Link to="/imports">{t("admin.importDetail.back", { defaultValue: "Back to imports" })}</Link></Button>]}
+      >
+        <p className="text-muted-foreground">
+          {t("admin.importDetail.invalidBody", {
+            defaultValue: "This address does not name an import task.",
+          })}
+        </p>
+      </PageContainer>
+    );
+  }
 
   if (taskQuery.isPending) return <p className="p-6" role="status">{t("admin.importDetail.loading", { defaultValue: "Loading import task…" })}</p>;
   if (taskQuery.isError || !taskQuery.data) {

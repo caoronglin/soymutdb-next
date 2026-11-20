@@ -92,7 +92,7 @@ export const NAV_SECTIONS: NavSection[] = [
         labelKey: "admin.shell.pagesGroup",
         icon: FileTextOutlined,
         children: [
-          { path: "/content/pages", label: "Pages", labelKey: "admin.shell.pages", icon: FileTextOutlined },
+          { path: "/content", label: "Pages", labelKey: "admin.shell.pages", icon: FileTextOutlined },
         ],
       },
       {
@@ -120,8 +120,7 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: SettingOutlined,
         children: [
           { path: "/settings", label: "Overview", labelKey: "admin.shell.settingsOverview", icon: SettingOutlined },
-          { path: "/settings/brand", label: "Site branding", labelKey: "admin.brand.title", icon: PictureOutlined },
-          { path: "/settings/appearance", label: "Appearance", labelKey: "admin.settings.appearance", icon: AppstoreOutlined },
+          { path: "/settings/appearance", label: "Site appearance", labelKey: "admin.siteAppearance.title", icon: AppstoreOutlined },
           { path: "/settings/integrations", label: "Integrations", labelKey: "admin.settings.integrations", icon: SnippetsOutlined },
           { path: "/settings/security", label: "Security", labelKey: "admin.settings.security", icon: CheckOutlined },
           { path: "/settings/localization", label: "Localization", labelKey: "admin.settings.localization", icon: ReadOutlined },

@@ -1,12 +1,24 @@
 /**
- * Multi-dimensional data workspace for the console.
+ * Data views: one saved view, one table.
  *
- * The conceptual model is borrowed from NocoBase: one data source, many saved
- * views over it, and each view is a presentation (grid / kanban / gallery)
- * with its own visible fields, filters, sort and grouping. Unlike a generic
- * low-code runtime, the sources are fixed and release-scoped: every row comes
- * from the same public read APIs the portal uses, so a view cannot bypass
- * release visibility or expose an internal identifier.
+ * A saved view stores presentation only — which fields a table shows, which of
+ * those the search box matches, the filters, the sort and the page size. Rows
+ * always come from the release-scoped public read APIs, so no view can widen
+ * visibility to unreleased records or internal identifiers.
+ *
+ * The table is the page and the table is the field configuration. Each column
+ * header carries two switches (`可搜索` / `展示`) and a drag handle; toggling one
+ * issues a single partial `PUT /admin/data-views/{id}` (`{"searchable_fields":
+ * [...]}` or `{"visible_fields": [...]}`), applies it optimistically, and rolls
+ * the cached view back if the server rejects it. There is no per-toggle save
+ * button because the endpoint accepts partial updates (`AdminDataViewUpdate`,
+ * `model_dump(exclude_unset=True)`); the drawer is reserved for the settings a
+ * table header cannot express (name, filters, sort, grouping, page size,
+ * visibility, notes).
+ *
+ * `view_type` stays a stored value of the view, but this console presents every
+ * view as a table. A view saved as a board or a gallery gets one line of copy
+ * saying so instead of being silently reinterpreted.
  */
 import * as React from "react";
 import {
@@ -17,30 +29,45 @@ import {
 } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  horizontalListSortingStrategy,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import {
   Alert,
   App,
   Button,
-  Card,
-  Checkbox,
   Drawer,
   Empty,
   Input,
   InputNumber,
   PageContainer,
   Pagination,
-  ProCard,
   ProTable,
   Select,
   Skeleton,
   Space,
   Switch,
   Tag,
+  Tooltip,
+  Typography,
   type ProColumns,
 } from "@/lib/antd";
 import {
   DeleteOutlined,
-  EditOutlined,
+  HolderOutlined,
   PlusOutlined,
+  SettingOutlined,
   StarOutlined,
 } from "@ant-design/icons";
 import {
@@ -60,18 +87,25 @@ import {
   type DataViewRowPage,
   type DataViewSortDir,
   type DataViewSource,
-  type DataViewSourceInfo,
   type DataViewVisibility,
 } from "@soymutdb/api-client";
+import { PRO_LIST_SHELL } from "../components/pro-table-shell";
 import { ConfirmDialog } from "../components/confirm-dialog";
+import { cn } from "../lib/cn";
 
 type Row = Record<string, unknown>;
+type AdminDataViewList = { items: AdminDataView[]; total: number };
 
-interface DraftView {
+/**
+ * The editable copy the drawer keeps while an operator types.
+ *
+ * `visible_fields` and `searchable_fields` are deliberately absent: they are the
+ * table's own axes now, and a second editor for them is exactly the duplication
+ * this page removed.
+ */
+interface ViewDraft {
   name: string;
   view_type: DataViewKind;
-  visible_fields: string[];
-  searchable_fields: string[];
   visibility: DataViewVisibility;
   filter_rows: Array<{ key: string; value: string }>;
   sort_field: string | null;
@@ -83,19 +117,44 @@ interface DraftView {
   notes: string;
 }
 
-const IDENTITY_FIELD: Record<DataViewSource, string> = {
+/** The field that identifies a row of each source; also the default card title. */
+const ROW_IDENTITY_FIELD: Record<DataViewSource, string> = {
   genes: "gene_id",
   variants: "variant_id",
   mutant_lines: "public_id",
 };
 
-const SEGMENTED_FIELD_LIMIT = 4;
+const DATA_VIEWS_KEY = ["admin", "data-views"] as const;
+const DATA_VIEWS_LIST_KEY = ["admin", "data-views", "list"] as const;
 
-function rowKey(source: DataViewSource, row: Row, index: number): string {
-  return String(row[IDENTITY_FIELD[source]] ?? index);
+function viewsListKey(source: DataViewSource, includeHidden: boolean) {
+  return [...DATA_VIEWS_LIST_KEY, source, includeHidden] as const;
 }
 
-function cellText(value: unknown): string {
+/**
+ * Row identity of the fetched page.
+ *
+ * It carries only the settings the *request* depends on: filters, sort and page
+ * size. Toggling a column therefore never refetches rows that did not change.
+ */
+function rowsKey(view: AdminDataView | null, page: number | "cursor") {
+  return [
+    ...DATA_VIEWS_KEY,
+    "rows",
+    view?.id ?? null,
+    view?.filters ?? null,
+    view?.sort_field ?? null,
+    view?.sort_dir ?? null,
+    view?.page_size ?? null,
+    page,
+  ] as const;
+}
+
+function rowIdentityKey(source: DataViewSource, row: Row, index: number): string {
+  return String(row[ROW_IDENTITY_FIELD[source]] ?? index);
+}
+
+function formatCell(value: unknown): string {
   if (value === null || value === undefined || value === "") return "—";
   if (Array.isArray(value)) return value.join(", ");
   if (typeof value === "object") return JSON.stringify(value);
@@ -110,12 +169,10 @@ function searchableText(value: unknown): string {
   return String(value);
 }
 
-function draftFromSource(info: DataViewSourceInfo | undefined): DraftView {
+function emptyDraft(): ViewDraft {
   return {
     name: "",
     view_type: "grid",
-    visible_fields: [...(info?.default_fields ?? [])].slice(0, 8),
-    searchable_fields: [],
     visibility: "visible",
     filter_rows: [],
     sort_field: null,
@@ -128,12 +185,10 @@ function draftFromSource(info: DataViewSourceInfo | undefined): DraftView {
   };
 }
 
-function draftFromView(view: AdminDataView): DraftView {
+function draftFromView(view: AdminDataView): ViewDraft {
   return {
     name: view.name,
     view_type: view.view_type,
-    visible_fields: [...view.visible_fields],
-    searchable_fields: [...view.searchable_fields],
     visibility: view.visibility,
     filter_rows: Object.entries(view.filters).map(([key, value]) => ({ key, value })),
     sort_field: view.sort_field,
@@ -146,8 +201,8 @@ function draftFromView(view: AdminDataView): DraftView {
   };
 }
 
-/** Turn the drawer's rows into the strict filter object, dropping blanks. */
-function draftFilters(draft: DraftView): Record<string, string> {
+/** Turn the drawer's filter rows into the strict filter object, dropping blanks. */
+function draftFilters(draft: ViewDraft): Record<string, string> {
   const filters: Record<string, string> = {};
   for (const row of draft.filter_rows) {
     if (!row.key || !row.value.trim()) continue;
@@ -156,12 +211,125 @@ function draftFilters(draft: DraftView): Record<string, string> {
   return filters;
 }
 
-function draftIssue(draft: DraftView): string | null {
+/** The first reason the draft cannot be saved, as a locale-key suffix. */
+function draftIssueKey(draft: ViewDraft): string | null {
   if (!draft.name.trim()) return "name";
-  if (draft.visible_fields.length === 0) return "fields";
   if (draft.view_type === "kanban" && !draft.group_field) return "group";
   if (draft.sort_dir && !draft.sort_field) return "sort";
   return null;
+}
+
+/**
+ * One column header: drag handle, field name, and the two switches that write
+ * this field's presentation back to the saved view.
+ *
+ * The two switch rows are always rendered at a fixed width, so toggling a switch
+ * never reflows the header or the neighbouring columns. The move buttons are the
+ * keyboard path for the same reorder the drag handle performs; they stay out of
+ * the way until the header is hovered or focused.
+ */
+function FieldHeader({
+  field,
+  position,
+  count,
+  searchable,
+  onToggleSearchable,
+  onToggleVisible,
+  onMove,
+}: {
+  field: string;
+  position: number;
+  count: number;
+  searchable: boolean;
+  onToggleSearchable: (field: string) => void;
+  onToggleVisible: (field: string) => void;
+  onMove: (field: string, delta: number) => void;
+}) {
+  const { t } = useTranslation();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: field,
+  });
+  const isLastVisible = count <= 1;
+
+  const searchableSwitch = (
+    <Switch
+      size="small"
+      checked={searchable}
+      aria-label={t("admin.dataViews.field.searchableAria", { field })}
+      data-testid={`field-${field}-searchable`}
+      onChange={() => onToggleSearchable(field)}
+    />
+  );
+  const visibleSwitch = (
+    <Switch
+      size="small"
+      checked
+      disabled={isLastVisible}
+      aria-label={t("admin.dataViews.field.visibleAria", { field })}
+      data-testid={`field-${field}-visible`}
+      onChange={() => onToggleVisible(field)}
+    />
+  );
+
+  return (
+    <div
+      ref={setNodeRef}
+      data-testid={`field-header-${field}`}
+      className={cn("group/field flex flex-col gap-1 text-xs font-normal", isDragging && "opacity-50")}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+    >
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          aria-label={t("admin.dataViews.field.dragAria", { field })}
+          className="cursor-grab touch-none rounded p-0.5 text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <HolderOutlined aria-hidden />
+        </button>
+        <span className="min-w-0 flex-1 truncate font-mono" title={field}>
+          {field}
+        </span>
+        <span className="flex shrink-0 items-center opacity-0 transition-opacity group-focus-within/field:opacity-100 group-hover/field:opacity-100">
+          <Button
+            size="small"
+            type="text"
+            aria-label={t("admin.dataViews.field.moveLeftAria", { field })}
+            disabled={position === 0}
+            onClick={() => onMove(field, -1)}
+          >
+            ‹
+          </Button>
+          <Button
+            size="small"
+            type="text"
+            aria-label={t("admin.dataViews.field.moveRightAria", { field })}
+            disabled={position === count - 1}
+            onClick={() => onMove(field, 1)}
+          >
+            ›
+          </Button>
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="inline-flex w-[5.25rem] shrink-0 items-center gap-1">
+          {searchableSwitch}
+          <span className="text-muted-foreground">{t("admin.dataViews.field.searchable")}</span>
+        </span>
+        <span className="inline-flex w-[4.25rem] shrink-0 items-center gap-1">
+          {isLastVisible ? (
+            <Tooltip title={t("admin.dataViews.field.lastVisibleHint")}>
+              <span className="inline-flex">{visibleSwitch}</span>
+            </Tooltip>
+          ) : (
+            visibleSwitch
+          )}
+          <span className="text-muted-foreground">{t("admin.dataViews.field.visible")}</span>
+        </span>
+      </div>
+    </div>
+  );
 }
 
 export default function DataViewsPage() {
@@ -173,24 +341,21 @@ export default function DataViewsPage() {
   const [activeViewId, setActiveViewId] = React.useState<number | null>(null);
   const [showHidden, setShowHidden] = React.useState(false);
   const [search, setSearch] = React.useState("");
-  const [renderOverride, setRenderOverride] = React.useState<
-    { viewId: number; mode: DataViewKind } | null
-  >(null);
   const [page, setPage] = React.useState(1);
-  const [editor, setEditor] = React.useState<
-    { mode: "create" | "edit"; viewId: number | null; draft: DraftView } | null
+  const [viewEditor, setViewEditor] = React.useState<
+    { mode: "create" | "edit"; viewId: number | null; draft: ViewDraft } | null
   >(null);
   const [deleteTarget, setDeleteTarget] = React.useState<AdminDataView | null>(null);
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
   const [saveError, setSaveError] = React.useState<string | null>(null);
 
   const sourcesQuery = useQuery({
-    queryKey: ["admin", "data-views", "sources"],
+    queryKey: [...DATA_VIEWS_KEY, "sources"],
     queryFn: listDataViewSources,
     staleTime: Infinity,
   });
   const viewsQuery = useQuery({
-    queryKey: ["admin", "data-views", source, showHidden],
+    queryKey: viewsListKey(source, showHidden),
     queryFn: () =>
       listAdminDataViews(showHidden ? { source, includeHidden: true } : { source }),
     staleTime: 15_000,
@@ -205,32 +370,27 @@ export default function DataViewsPage() {
     return views.find((view) => view.is_default) ?? views[0] ?? null;
   }, [views, activeViewId]);
 
-  // A saved view carries its own render mode; the selector previews another
-  // mode without mutating the saved configuration.
-  const renderMode: DataViewKind =
-    activeView && renderOverride?.viewId === activeView.id
-      ? renderOverride.mode
-      : activeView?.view_type ?? "grid";
-
   React.useEffect(() => {
     setPage(1);
     setSearch("");
   }, [activeView?.id]);
 
-  const gridQuery = useQuery({
-    queryKey: ["admin", "data-views", "rows", activeView?.id, activeView?.updated_at, page],
+  // Two pagination contracts, two queries: genes and mutant lines page by
+  // offset, variants page by cursor. Naming them for the contract keeps a
+  // reader from assuming either one is "the grid".
+  const pagedRowsQuery = useQuery({
+    queryKey: rowsKey(activeView, page),
     queryFn: () => fetchDataViewRows(activeView as AdminDataView, { page }),
     enabled: Boolean(activeView) && activeView?.source !== "variants",
     staleTime: 15_000,
   });
 
-  const variantQuery = useInfiniteQuery({
-    queryKey: ["admin", "data-views", "rows", activeView?.id, activeView?.updated_at, "cursor"],
+  const cursorRowsQuery = useInfiniteQuery({
+    queryKey: rowsKey(activeView, "cursor"),
     queryFn: ({ pageParam }) =>
       fetchDataViewRows(activeView as AdminDataView, { cursor: pageParam }),
     initialPageParam: null as string | null,
-    getNextPageParam: (last: DataViewRowPage) =>
-      last.hasMore ? last.nextCursor : undefined,
+    getNextPageParam: (last: DataViewRowPage) => (last.hasMore ? last.nextCursor : undefined),
     enabled: Boolean(activeView) && activeView?.source === "variants",
     staleTime: 15_000,
   });
@@ -238,27 +398,30 @@ export default function DataViewsPage() {
   const rows: Row[] = React.useMemo(() => {
     if (!activeView) return [];
     if (activeView.source === "variants") {
-      return variantQuery.data?.pages.flatMap((item) => item.items) ?? [];
+      return cursorRowsQuery.data?.pages.flatMap((item) => item.items) ?? [];
     }
-    return gridQuery.data?.items ?? [];
-  }, [activeView, gridQuery.data, variantQuery.data]);
+    return pagedRowsQuery.data?.items ?? [];
+  }, [activeView, pagedRowsQuery.data, cursorRowsQuery.data]);
 
-  const loading = activeView?.source === "variants" ? variantQuery.isLoading : gridQuery.isLoading;
-  const rowsError = activeView?.source === "variants" ? variantQuery.isError : gridQuery.isError;
+  const rowsLoading =
+    activeView?.source === "variants" ? cursorRowsQuery.isLoading : pagedRowsQuery.isLoading;
+  const rowsError =
+    activeView?.source === "variants" ? cursorRowsQuery.isError : pagedRowsQuery.isError;
   const hasMore =
     activeView?.source === "variants"
-      ? Boolean(variantQuery.hasNextPage)
-      : Boolean(gridQuery.data?.hasMore);
+      ? Boolean(cursorRowsQuery.hasNextPage)
+      : Boolean(pagedRowsQuery.data?.hasMore);
+  const knownTotal =
+    pagedRowsQuery.data?.total ?? cursorRowsQuery.data?.pages[0]?.total ?? null;
 
-  // The search box is a client-side filter over the loaded rows, limited to the
-  // fields the saved view declared searchable. A view with no searchable fields
-  // shows no search box at all, so "search" is never silently a no-op.
+  // The search box matches only the fields this view declared searchable. A view
+  // with none shows no search box, so "search" is never silently a no-op.
   const searchableFields = React.useMemo(
     () => activeView?.searchable_fields ?? [],
     [activeView],
   );
   const searchTerm = search.trim().toLowerCase();
-  const visibleRows: Row[] = React.useMemo(() => {
+  const filteredRows: Row[] = React.useMemo(() => {
     if (!searchTerm || searchableFields.length === 0) return rows;
     return rows.filter((row) =>
       searchableFields.some((field) =>
@@ -267,19 +430,124 @@ export default function DataViewsPage() {
     );
   }, [rows, searchTerm, searchableFields]);
 
-  const invalidate = () => {
-    void queryClient.invalidateQueries({ queryKey: ["admin", "data-views"] });
+  const visibleFields = React.useMemo(() => activeView?.visible_fields ?? [], [activeView]);
+  const addableFields = React.useMemo(
+    () => (sourceInfo?.fields ?? []).filter((field) => !visibleFields.includes(field)),
+    [sourceInfo, visibleFields],
+  );
+
+  const invalidateDataViews = () => {
+    void queryClient.invalidateQueries({ queryKey: DATA_VIEWS_KEY });
+  };
+
+  /**
+   * Write a partial view update: one request, applied to the cached list first
+   * and undone from the snapshot if the server rejects it.
+   */
+  const patchViewMutation = useMutation({
+    mutationFn: ({ view, patch }: { view: AdminDataView; patch: AdminDataViewPatch }) =>
+      updateAdminDataView(view.id, patch),
+    onMutate: async ({ view, patch }) => {
+      const queryKey = viewsListKey(view.source, showHidden);
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<AdminDataViewList>(queryKey);
+      queryClient.setQueryData<AdminDataViewList>(queryKey, (current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((item) =>
+                item.id === view.id ? { ...item, ...patch } : item,
+              ),
+            }
+          : current,
+      );
+      return { queryKey, previous };
+    },
+    onError: (error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(context.queryKey, context.previous);
+      }
+      message.error(
+        t("admin.dataViews.patchFailed", {
+          reason: error instanceof Error ? error.message : String(error),
+          defaultValue: "Could not save the change: {{reason}}",
+        }),
+      );
+    },
+    onSuccess: (updated) => {
+      const queryKey = viewsListKey(updated.source, showHidden);
+      queryClient.setQueryData<AdminDataViewList>(queryKey, (current) =>
+        current
+          ? {
+              ...current,
+              items: current.items.map((item) => (item.id === updated.id ? updated : item)),
+            }
+          : current,
+      );
+    },
+    onSettled: () => {
+      // Only the saved-view list is refetched: the row data does not depend on
+      // which fields are displayed or searchable, and refetching it would make
+      // every switch cost a public read request.
+      void queryClient.invalidateQueries({ queryKey: DATA_VIEWS_LIST_KEY });
+    },
+  });
+
+  const applyViewPatch = (view: AdminDataView, patch: AdminDataViewPatch) => {
+    patchViewMutation.mutate({ view, patch });
+  };
+
+  const toggleSearchableField = (field: string) => {
+    if (!activeView) return;
+    const current = activeView.searchable_fields;
+    const next = current.includes(field)
+      ? current.filter((item) => item !== field)
+      : [...current, field];
+    applyViewPatch(activeView, { searchable_fields: next });
+  };
+
+  const hideField = (field: string) => {
+    if (!activeView) return;
+    const current = activeView.visible_fields;
+    if (current.length <= 1) return;
+    applyViewPatch(activeView, { visible_fields: current.filter((item) => item !== field) });
+  };
+
+  const addField = (field: string) => {
+    if (!activeView || activeView.visible_fields.includes(field)) return;
+    applyViewPatch(activeView, { visible_fields: [...activeView.visible_fields, field] });
+  };
+
+  const moveField = (field: string, delta: number) => {
+    if (!activeView) return;
+    const current = activeView.visible_fields;
+    const from = current.indexOf(field);
+    const to = from + delta;
+    if (from < 0 || to < 0 || to >= current.length) return;
+    applyViewPatch(activeView, { visible_fields: arrayMove(current, from, to) });
+  };
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !activeView) return;
+    const current = activeView.visible_fields;
+    const from = current.indexOf(String(active.id));
+    const to = current.indexOf(String(over.id));
+    if (from < 0 || to < 0) return;
+    applyViewPatch(activeView, { visible_fields: arrayMove(current, from, to) });
   };
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      if (!editor) throw new Error("no draft");
-      const { draft } = editor;
+      if (!viewEditor) throw new Error("no draft");
+      const { draft } = viewEditor;
       const payload = {
         name: draft.name.trim(),
         view_type: draft.view_type,
-        visible_fields: draft.visible_fields,
-        searchable_fields: draft.searchable_fields,
         visibility: draft.visibility,
         filters: draftFilters(draft),
         sort_field: draft.sort_field,
@@ -290,23 +558,30 @@ export default function DataViewsPage() {
         is_default: draft.is_default,
         notes: draft.notes.trim() || null,
       };
-      if (editor.mode === "edit" && editor.viewId) {
+      if (viewEditor.mode === "edit" && viewEditor.viewId) {
         const patch: AdminDataViewPatch = payload;
-        return updateAdminDataView(editor.viewId, patch);
+        return updateAdminDataView(viewEditor.viewId, patch);
       }
-      const input: AdminDataViewInput = { ...payload, source };
+      // A new view starts from the source's default presentation; the operator
+      // then tunes the columns in the table header.
+      const input: AdminDataViewInput = {
+        ...payload,
+        source,
+        visible_fields: [...(sourceInfo?.default_fields ?? [])],
+        searchable_fields: [],
+      };
       return createAdminDataView(input);
     },
     onSuccess: (view) => {
       message.success(t("common.success"));
       setSaveError(null);
-      setEditor(null);
+      setViewEditor(null);
       setActiveViewId(view.id);
       setSource(view.source);
       // A view saved as hidden is filtered out of the list the operator is
       // looking at; keep it on screen rather than dropping it silently.
       if (view.visibility === "hidden") setShowHidden(true);
-      invalidate();
+      invalidateDataViews();
     },
     onError: (error) => {
       setSaveError(error instanceof Error ? error.message : String(error));
@@ -314,12 +589,12 @@ export default function DataViewsPage() {
     },
   });
 
-  const promoteMutation = useMutation({
+  const setDefaultMutation = useMutation({
     mutationFn: (view: AdminDataView) => updateAdminDataView(view.id, { is_default: true }),
     onSuccess: (view) => {
       message.success(t("common.success"));
       setActiveViewId(view.id);
-      invalidate();
+      invalidateDataViews();
     },
     onError: (error) => message.error(error instanceof Error ? error.message : t("common.error")),
   });
@@ -331,7 +606,7 @@ export default function DataViewsPage() {
       setDeleteTarget(null);
       setDeleteError(null);
       setActiveViewId(null);
-      invalidate();
+      invalidateDataViews();
     },
     onError: (error) => {
       setDeleteError(error instanceof Error ? error.message : String(error));
@@ -341,20 +616,16 @@ export default function DataViewsPage() {
 
   const startCreate = () => {
     setSaveError(null);
-    setEditor({
-      mode: "create",
-      viewId: null,
-      draft: draftFromSource(sourceInfo),
-    });
+    setViewEditor({ mode: "create", viewId: null, draft: emptyDraft() });
   };
 
   const startEdit = (view: AdminDataView) => {
     setSaveError(null);
-    setEditor({ mode: "edit", viewId: view.id, draft: draftFromView(view) });
+    setViewEditor({ mode: "edit", viewId: view.id, draft: draftFromView(view) });
   };
 
-  const patchDraft = (patch: Partial<DraftView>) => {
-    setEditor((previous) =>
+  const patchDraft = (patch: Partial<ViewDraft>) => {
+    setViewEditor((previous) =>
       previous ? { ...previous, draft: { ...previous.draft, ...patch } } : previous,
     );
   };
@@ -368,356 +639,312 @@ export default function DataViewsPage() {
     label: <code>{field}</code>,
   }));
 
-  const columns: ProColumns<Row>[] = (activeView?.visible_fields ?? []).map((field) => ({
-    title: <code>{field}</code>,
+  const dataColumns: ProColumns<Row>[] = visibleFields.map((field, position) => ({
+    title: (
+      <FieldHeader
+        field={field}
+        position={position}
+        count={visibleFields.length}
+        searchable={searchableFields.includes(field)}
+        onToggleSearchable={toggleSearchableField}
+        onToggleVisible={hideField}
+        onMove={moveField}
+      />
+    ),
     dataIndex: field,
     key: field,
-    render: (value) => cellText(value),
+    render: (value) => {
+      const text = formatCell(value);
+      return (
+        <span className="block truncate" title={text}>
+          {text}
+        </span>
+      );
+    },
   }));
 
-  const viewColumns: ProColumns<AdminDataView>[] = [
-    {
-      title: t("admin.dataViews.name"),
-      dataIndex: "name",
-      key: "name",
-      render: (name, row) => (
-        <Space>
-          <Button type="link" size="small" onClick={() => setActiveViewId(row.id)}>
-            {String(name)}
-          </Button>
-          {row.is_default ? <Tag color="green">{t("admin.dataViews.defaultTag")}</Tag> : null}
-        </Space>
-      ),
-    },
-    {
-      title: t("admin.dataViews.viewTypeLabel"),
-      key: "view_type",
-      render: (_, row) => <Tag>{t(`admin.dataViews.viewType.${row.view_type}`)}</Tag>,
-    },
-    {
-      title: t("admin.dataViews.fieldsLabel"),
-      key: "fields",
-      render: (_, row) => <span className="font-mono text-xs">{row.visible_fields.join(", ")}</span>,
-    },
-    {
-      title: t("admin.dataViews.searchableFieldsLabel"),
-      key: "searchable_fields",
-      render: (_, row) => (
-        <span className="font-mono text-xs">
-          {row.searchable_fields.length > 0 ? row.searchable_fields.join(", ") : "—"}
-        </span>
-      ),
-    },
-    {
-      title: t("admin.dataViews.visibilityLabel"),
-      key: "visibility",
-      render: (_, row) => (
-        <Tag color={row.visibility === "hidden" ? "orange" : "green"}>
-          {t(`admin.dataViews.visibility.${row.visibility}`)}
-        </Tag>
-      ),
-    },
-    {
-      title: t("common.edit"),
-      key: "actions",
-      render: (_, row) => (
-        <Space>
-          <Button size="small" icon={<EditOutlined />} onClick={() => startEdit(row)}>
-            {t("common.edit")}
-          </Button>
-          {row.is_default ? null : (
-            <Button
-              size="small"
-              icon={<StarOutlined />}
-              loading={promoteMutation.isPending}
-              onClick={() => promoteMutation.mutate(row)}
-            >
-              {t("admin.dataViews.setDefault")}
-            </Button>
-          )}
-          <Button
-            size="small"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={() => {
-              setDeleteError(null);
-              setDeleteTarget(row);
-            }}
-          >
-            {t("common.delete")}
-          </Button>
-        </Space>
-      ),
-    },
-  ];
+  const activeFilters = Object.entries(activeView?.filters ?? {});
+  const rowCount = knownTotal ?? filteredRows.length;
+  const issueKey = viewEditor ? draftIssueKey(viewEditor.draft) : null;
 
-  const groupField = activeView?.group_field;
-  const titleField = activeView?.title_field ?? IDENTITY_FIELD[source];
-
-  function renderGrid() {
-    if (!activeView) return <Empty description={t("admin.dataViews.noActiveView")} />;
+  function renderRows() {
+    if (!activeView) {
+      return <Empty description={t("admin.dataViews.noActiveView")} />;
+    }
+    if (rowsLoading) return <Skeleton active />;
+    if (rowsError) {
+      return (
+        <div role="alert" data-testid="data-views-rows-error" className="text-sm text-destructive">
+          {t("admin.dataViews.rowsError")}
+        </div>
+      );
+    }
     return (
       <>
-        <div data-testid="data-views-grid">
-          <ProTable<Row>
-            rowKey={IDENTITY_FIELD[activeView.source]}
-            size="small"
-            dataSource={visibleRows}
-            pagination={false}
-            columns={columns}
-          />
-        </div>
-        {activeView.source === "genes" ? (
-          <Pagination
-            current={page}
-            pageSize={activeView.page_size}
-            total={gridQuery.data?.total ?? 0}
-            onChange={setPage}
-            data-testid="data-views-pagination"
-          />
-        ) : null}
-        {hasMore || page > 1 ? (
-          <Space>
-            {page > 1 ? (
-              <Button onClick={() => setPage((current) => Math.max(1, current - 1))}>
-                {t("common.previous")}
-              </Button>
-            ) : null}
-            {activeView.source === "variants" ? (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <SortableContext items={visibleFields} strategy={horizontalListSortingStrategy}>
+            <ProTable<Row>
+              {...PRO_LIST_SHELL}
+              // No horizontal scroll: with a fixed layout the columns share the
+              // container width and long cells truncate inside their own cell,
+              // so the table fits a 1440px viewport instead of pushing the page
+              // sideways (PRO_LIST_SHELL's `max-content` default does the latter).
+              scroll={{}}
+              tableLayout="fixed"
+              rowKey={(row, index) => rowIdentityKey(activeView.source, row, index ?? 0)}
+              size="small"
+              dataSource={filteredRows}
+              pagination={false}
+              columns={dataColumns}
+              locale={{
+                emptyText: t(searchTerm ? "admin.dataViews.searchNoMatch" : "common.noData"),
+              }}
+              data-testid="data-views-table"
+            />
+          </SortableContext>
+        </DndContext>
+        <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+          {activeView.source === "genes" ? (
+            <Pagination
+              current={page}
+              pageSize={activeView.page_size}
+              total={knownTotal ?? 0}
+              onChange={setPage}
+              data-testid="data-views-pagination"
+            />
+          ) : null}
+          {activeView.source === "variants" ? (
+            cursorRowsQuery.hasNextPage ? (
               <Button
-                onClick={() => void variantQuery.fetchNextPage()}
-                loading={variantQuery.isFetchingNextPage}
-                disabled={!variantQuery.hasNextPage}
+                onClick={() => void cursorRowsQuery.fetchNextPage()}
+                loading={cursorRowsQuery.isFetchingNextPage}
               >
                 {t("admin.dataViews.loadMore")}
               </Button>
-            ) : (
+            ) : null
+          ) : (
+            <Space>
+              <Button
+                disabled={page <= 1}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+              >
+                {t("common.previous")}
+              </Button>
               <Button disabled={!hasMore} onClick={() => setPage((current) => current + 1)}>
                 {t("common.next")}
               </Button>
-            )}
-          </Space>
-        ) : null}
+            </Space>
+          )}
+        </div>
       </>
     );
   }
 
-  function renderKanban() {
-    if (!activeView) return <Empty description={t("admin.dataViews.noActiveView")} />;
-    if (!groupField) {
-      return (
-        <Alert
-          type="warning"
-          showIcon
-          title={t("admin.dataViews.groupRequiredTitle")}
-          description={t("admin.dataViews.groupRequired")}
-        />
-      );
-    }
-    const groups = new Map<string, Row[]>();
-    for (const row of visibleRows) {
-      const key = cellText(row[groupField]);
-      groups.set(key, [...(groups.get(key) ?? []), row]);
-    }
-    if (groups.size === 0) {
-      return <Empty description={t(searchTerm ? "admin.dataViews.searchNoMatch" : "common.noData")} />;
-    }
-    return (
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4" data-testid="data-views-kanban">
-        {[...groups.entries()].map(([group, groupRows]) => (
-          <div key={group} className="rounded-lg border border-border/60 bg-card p-3">
-            <div className="mb-2 flex items-center justify-between">
-              <strong>{group}</strong>
-              <Tag>{groupRows.length}</Tag>
-            </div>
-            <Space direction="vertical">
-              {groupRows.map((row, index) => (
-                <div key={rowKey(activeView.source, row, index)} className="rounded border border-border/50 p-2">
-                  <div className="font-medium">{cellText(row[titleField])}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {activeView.visible_fields
-                      .filter((field) => field !== titleField)
-                      .slice(0, SEGMENTED_FIELD_LIMIT)
-                      .map((field) => `${field}: ${cellText(row[field])}`)
-                      .join(" · ")}
-                  </div>
-                </div>
-              ))}
-            </Space>
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  function renderGallery() {
-    if (!activeView) return <Empty description={t("admin.dataViews.noActiveView")} />;
-    if (visibleRows.length === 0) {
-      return <Empty description={t(searchTerm ? "admin.dataViews.searchNoMatch" : "common.noData")} />;
-    }
-    return (
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="data-views-gallery">
-        {visibleRows.map((row, index) => (
-          <Card key={rowKey(activeView.source, row, index)} size="small">
-            <div className="mb-2 font-medium">{cellText(row[titleField])}</div>
-            <dl className="space-y-1 text-sm">
-              {activeView.visible_fields.map((field) => (
-                <div key={field} className="flex justify-between gap-4">
-                  <dt className="font-mono text-xs text-muted-foreground">{field}</dt>
-                  <dd className="text-right">{cellText(row[field])}</dd>
-                </div>
-              ))}
-            </dl>
-          </Card>
-        ))}
-      </div>
-    );
-  }
-
-  const issue = editor ? draftIssue(editor.draft) : null;
-
   return (
-    <PageContainer title={t("admin.dataViews.title")} subTitle={t("admin.dataViews.subtitle")}>
-      <div className="space-y-6">
-        <Alert type="info" showIcon title={t("admin.dataViews.bannerTitle")} description={t("admin.dataViews.bannerDescription")} />
-
-        <ProCard>
-          <Space wrap>
-            <Select
-              value={source}
-              aria-label={t("admin.dataViews.sourceLabel")}
-              style={{ width: 220 }}
-              options={DATA_VIEW_SOURCES.map((value) => ({
-                value,
-                label: t(`admin.dataViews.source.${value}`),
-              }))}
-              onChange={(value: DataViewSource) => {
-                setSource(value);
-                setActiveViewId(null);
-                setPage(1);
-              }}
-            />
-            <label className="inline-flex items-center gap-2 text-sm">
-              <Switch
-                checked={showHidden}
-                aria-label={t("admin.dataViews.showHidden")}
-                onChange={(checked: boolean) => setShowHidden(checked)}
-                data-testid="data-views-show-hidden"
-              />
-              {t("admin.dataViews.showHidden")}
-            </label>
-            <Select
-              value={renderMode}
-              aria-label={t("admin.dataViews.viewTypeLabel")}
-              style={{ width: 180 }}
-              options={DATA_VIEW_KINDS.map((value) => ({
-                value,
-                label: t(`admin.dataViews.viewType.${value}`),
-              }))}
-              onChange={(value: DataViewKind) => {
-                if (activeView) setRenderOverride({ viewId: activeView.id, mode: value });
-              }}
-            />
-            <Button type="primary" icon={<PlusOutlined />} onClick={startCreate}>
-              {t("admin.dataViews.newView")}
-            </Button>
-          </Space>
-        </ProCard>
-
-        <ProCard size="small" title={t("admin.dataViews.savedViews")}>
-          {viewsQuery.isLoading ? (
-            <Skeleton active />
-          ) : viewsQuery.isError ? (
-            <div role="alert" data-testid="data-views-list-error" className="text-sm text-destructive">
-              {t("admin.dataViews.loadError")}
-            </div>
-          ) : views.length === 0 ? (
-            <Empty description={t("admin.dataViews.empty")} />
-          ) : (
-            <ProTable<AdminDataView>
-              rowKey="id"
-              size="small"
-              dataSource={views}
-              pagination={false}
-              columns={viewColumns}
-            />
-          )}
-        </ProCard>
-
-        <ProCard
-          size="small"
-          title={
-            activeView
-              ? t("admin.dataViews.activeView", { name: activeView.name })
-              : t("admin.dataViews.preview")
-          }
-          extra={
-            <Space>
-              {activeView && searchableFields.length > 0 ? (
-                <Input
-                  value={search}
-                  allowClear
-                  style={{ width: 240 }}
-                  aria-label={t("admin.dataViews.searchPlaceholder", {
-                    fields: searchableFields.join(", "),
-                  })}
-                  placeholder={t("admin.dataViews.searchPlaceholder", {
-                    fields: searchableFields.join(", "),
-                  })}
-                  onChange={(event) => setSearch(event.target.value)}
-                  data-testid="data-views-search"
-                />
-              ) : null}
-              {activeView ? (
-                <Button size="small" icon={<EditOutlined />} onClick={() => startEdit(activeView)}>
-                  {t("common.edit")}
-                </Button>
-              ) : null}
-            </Space>
-          }
+    <PageContainer
+      title={t("admin.dataViews.title")}
+      subTitle={t("admin.dataViews.subtitle")}
+      extra={[
+        <Button
+          key="new"
+          type="primary"
+          icon={<PlusOutlined />}
+          // The source catalog supplies the default columns a new view starts
+          // from; without it the create request would carry an empty field list,
+          // which the API rejects (visible_fields has min_length 1).
+          disabled={!sourceInfo}
+          data-testid="data-views-new"
+          onClick={startCreate}
         >
-          {loading ? (
-            <Skeleton active />
-          ) : rowsError ? (
-            <div role="alert" data-testid="data-views-rows-error" className="text-sm text-destructive">
-              {t("admin.dataViews.rowsError")}
-            </div>
-          ) : !activeView ? (
-            <Empty description={t("admin.dataViews.noActiveView")} />
-          ) : renderMode === "kanban" ? (
-            renderKanban()
-          ) : renderMode === "gallery" ? (
-            renderGallery()
-          ) : (
-            renderGrid()
-          )}
-        </ProCard>
+          {t("admin.dataViews.newView")}
+        </Button>,
+        <Button
+          key="settings"
+          icon={<SettingOutlined />}
+          disabled={!activeView}
+          data-testid="data-views-settings"
+          onClick={() => activeView && startEdit(activeView)}
+        >
+          {t("admin.dataViews.viewSettings")}
+        </Button>,
+        activeView && !activeView.is_default ? (
+          <Button
+            key="default"
+            icon={<StarOutlined />}
+            loading={setDefaultMutation.isPending}
+            data-testid="data-views-set-default"
+            onClick={() => setDefaultMutation.mutate(activeView)}
+          >
+            {t("admin.dataViews.setDefault")}
+          </Button>
+        ) : null,
+        <Button
+          key="delete"
+          danger
+          icon={<DeleteOutlined />}
+          disabled={!activeView}
+          data-testid="data-views-delete"
+          onClick={() => {
+            if (!activeView) return;
+            setDeleteError(null);
+            setDeleteTarget(activeView);
+          }}
+        >
+          {t("common.delete")}
+        </Button>,
+      ]}
+    >
+      <div className="space-y-3">
+        {/* One toolbar row: the view's filters, its field picker and its counts.
+            It sits above the table and outside it, so the table is the page. */}
+        <div
+          className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card px-3 py-2"
+          data-testid="data-views-toolbar"
+        >
+          <Select
+            value={source}
+            aria-label={t("admin.dataViews.sourceLabel")}
+            style={{ width: 150 }}
+            data-testid="data-views-source"
+            options={DATA_VIEW_SOURCES.map((value) => ({
+              value,
+              label: t(`admin.dataViews.source.${value}`),
+            }))}
+            onChange={(value: DataViewSource) => {
+              setSource(value);
+              setActiveViewId(null);
+              setPage(1);
+            }}
+          />
+          <Select
+            value={activeView ? activeView.id : undefined}
+            aria-label={t("admin.dataViews.viewSelect")}
+            placeholder={t("admin.dataViews.noActiveView")}
+            style={{ minWidth: 200 }}
+            data-testid="data-views-view-select"
+            options={views.map((view) => ({ value: view.id, label: view.name }))}
+            onChange={(value: number) => setActiveViewId(Number(value))}
+          />
+          {activeView?.is_default ? (
+            <Tag color="green">{t("admin.dataViews.defaultTag")}</Tag>
+          ) : null}
+          {activeView?.visibility === "hidden" ? (
+            <Tag color="orange">{t("admin.dataViews.visibility.hidden")}</Tag>
+          ) : null}
+          {activeView && searchableFields.length > 0 ? (
+            <Input
+              value={search}
+              allowClear
+              style={{ width: 200 }}
+              aria-label={t("admin.dataViews.searchPlaceholder", {
+                fields: searchableFields.join(", "),
+              })}
+              placeholder={t("admin.dataViews.searchPlaceholder", {
+                fields: searchableFields.join(", "),
+              })}
+              onChange={(event) => setSearch(event.target.value)}
+              data-testid="data-views-search"
+            />
+          ) : null}
+          {activeView && addableFields.length > 0 ? (
+            <Select
+              // Remounted whenever the column set changes: the picker is an
+              // action, not a value, so it must fall back to its placeholder
+              // after a field has been added.
+              key={`add-field-${visibleFields.length}`}
+              value={undefined}
+              aria-label={t("admin.dataViews.addField", { count: addableFields.length })}
+              placeholder={t("admin.dataViews.addField", { count: addableFields.length })}
+              style={{ width: 170 }}
+              data-testid="data-views-add-field"
+              options={addableFields.map((field) => ({ value: field, label: field }))}
+              onChange={(value: string) => addField(String(value))}
+            />
+          ) : null}
+          <label className="inline-flex items-center gap-2 text-sm">
+            <Switch
+              checked={showHidden}
+              aria-label={t("admin.dataViews.showHidden")}
+              onChange={(checked: boolean) => setShowHidden(checked)}
+              data-testid="data-views-show-hidden"
+            />
+            {t("admin.dataViews.showHidden")}
+          </label>
+          {activeFilters.length > 0 ? (
+            <span className="inline-flex flex-wrap items-center gap-1 text-xs">
+              <span className="text-muted-foreground">{t("admin.dataViews.filtersLabel")}</span>
+              {activeFilters.map(([key, value]) => (
+                <Tag key={key}>
+                  <code>{key}</code>={value}
+                </Tag>
+              ))}
+            </span>
+          ) : null}
+          <span
+            className="ml-auto text-xs text-muted-foreground"
+            data-testid="data-views-summary"
+          >
+            {t("admin.dataViews.summary", {
+              rows: rowCount,
+              columns: visibleFields.length,
+              searchable: searchableFields.length,
+            })}
+            {activeFilters.length > 0
+              ? ` · ${t("admin.dataViews.activeFilters", { count: activeFilters.length })}`
+              : ""}
+          </span>
+        </div>
+
+        {viewsQuery.isError ? (
+          <div role="alert" data-testid="data-views-list-error" className="text-sm text-destructive">
+            {t("admin.dataViews.loadError")}
+          </div>
+        ) : viewsQuery.isLoading ? (
+          <Skeleton active />
+        ) : views.length === 0 ? (
+          <Empty description={t("admin.dataViews.empty")} />
+        ) : (
+          <>
+            {activeView && activeView.view_type !== "grid" ? (
+              <Typography.Text
+                type="secondary"
+                className="block text-xs"
+                data-testid="data-views-layout-note"
+              >
+                {t(`admin.dataViews.layoutNote.${activeView.view_type}`)}
+              </Typography.Text>
+            ) : null}
+            {renderRows()}
+          </>
+        )}
+
       </div>
 
       <Drawer
-        open={Boolean(editor)}
-        width={560}
-        title={t(editor?.mode === "edit" ? "admin.dataViews.editView" : "admin.dataViews.newView")}
-        onClose={() => setEditor(null)}
+        open={Boolean(viewEditor)}
+        width={520}
+        title={t(viewEditor?.mode === "edit" ? "admin.dataViews.editView" : "admin.dataViews.newView")}
+        onClose={() => setViewEditor(null)}
         data-testid="data-views-editor"
       >
-        {editor ? (
+        {viewEditor ? (
           <div className="space-y-4">
             <Tag>{t(`admin.dataViews.source.${source}`)}</Tag>
             <label className="block text-sm">
               {t("admin.dataViews.name")}
               <Input
-                value={editor.draft.name}
+                value={viewEditor.draft.name}
                 placeholder={t("admin.dataViews.namePlaceholder")}
                 onChange={(event) => patchDraft({ name: event.target.value })}
                 data-testid="data-views-name"
               />
             </label>
 
-            <label className="block text-sm">
+            <div className="text-sm">
               {t("admin.dataViews.viewTypeLabel")}
+              <p className="text-xs text-muted-foreground">{t("admin.dataViews.viewTypeHint")}</p>
               <Select
-                value={editor.draft.view_type}
+                value={viewEditor.draft.view_type}
                 aria-label={t("admin.dataViews.viewTypeLabel")}
                 options={DATA_VIEW_KINDS.map((value) => ({
                   value,
@@ -726,95 +953,15 @@ export default function DataViewsPage() {
                 onChange={(value: DataViewKind) => patchDraft({ view_type: value })}
                 data-testid="data-views-view-type"
               />
-            </label>
-
-            <div className="text-sm">
-              {t("admin.dataViews.fieldsLabel")}
-              <p className="text-xs text-muted-foreground">{t("admin.dataViews.fieldsHint")}</p>              <div className="grid gap-1 sm:grid-cols-2">
-                {fieldOptions.map((option) => {
-                  const position = editor.draft.visible_fields.indexOf(option.value);
-                  return (
-                    <Space key={option.value} size={6}>
-                      <Checkbox
-                        checked={position >= 0}
-                        aria-label={option.value}
-                        onChange={(event) => {
-                          const fields = event.target.checked
-                            ? [...editor.draft.visible_fields, option.value]
-                            : editor.draft.visible_fields.filter((field) => field !== option.value);
-                          patchDraft({ visible_fields: fields });
-                        }}
-                      />
-                      {option.label}
-                      {position >= 0 ? <Tag>{position + 1}</Tag> : null}
-                      {position > 0 ? (
-                        <Button
-                          size="small"
-                          type="text"
-                          aria-label={`${option.value} up`}
-                          onClick={() => {
-                            const fields = [...editor.draft.visible_fields];
-                            [fields[position - 1], fields[position]] = [fields[position], fields[position - 1]];
-                            patchDraft({ visible_fields: fields });
-                          }}
-                        >
-                          ↑
-                        </Button>
-                      ) : null}
-                      {position >= 0 && position < editor.draft.visible_fields.length - 1 ? (
-                        <Button
-                          size="small"
-                          type="text"
-                          aria-label={`${option.value} down`}
-                          onClick={() => {
-                            const fields = [...editor.draft.visible_fields];
-                            [fields[position + 1], fields[position]] = [fields[position], fields[position + 1]];
-                            patchDraft({ visible_fields: fields });
-                          }}
-                        >
-                          ↓
-                        </Button>
-                      ) : null}
-                    </Space>
-                  );
-                })}
-              </div>
             </div>
 
             <div className="text-sm">
-              {t("admin.dataViews.searchableFieldsLabel")}
-              <p className="text-xs text-muted-foreground">
-                {t("admin.dataViews.searchableFieldsHint")}
-              </p>
-              <div className="grid gap-1 sm:grid-cols-2">
-                {fieldOptions.map((option) => (
-                  <Space key={option.value} size={6}>
-                    <Checkbox
-                      checked={editor.draft.searchable_fields.includes(option.value)}
-                      aria-label={`searchable ${option.value}`}
-                      data-testid={`data-views-searchable-${option.value}`}
-                      onChange={(event) => {
-                        const fields = event.target.checked
-                          ? [...editor.draft.searchable_fields, option.value]
-                          : editor.draft.searchable_fields.filter(
-                              (field) => field !== option.value,
-                            );
-                        patchDraft({ searchable_fields: fields });
-                      }}
-                    />
-                    {option.label}
-                  </Space>
-                ))}
-              </div>
-            </div>
-
-            <label className="block text-sm">
               {t("admin.dataViews.visibilityLabel")}
               <p className="text-xs text-muted-foreground">
                 {t("admin.dataViews.visibilityHint")}
               </p>
               <Select
-                value={editor.draft.visibility}
+                value={viewEditor.draft.visibility}
                 aria-label={t("admin.dataViews.visibilityLabel")}
                 options={DATA_VIEW_VISIBILITIES.map((value) => ({
                   value,
@@ -823,12 +970,12 @@ export default function DataViewsPage() {
                 onChange={(value: DataViewVisibility) => patchDraft({ visibility: value })}
                 data-testid="data-views-visibility"
               />
-            </label>
+            </div>
 
             <div className="text-sm">
               {t("admin.dataViews.filtersLabel")}
               <Space direction="vertical">
-                {editor.draft.filter_rows.map((row, index) => (
+                {viewEditor.draft.filter_rows.map((row, index) => (
                   <Space key={index}>
                     <Select
                       value={row.key}
@@ -836,7 +983,7 @@ export default function DataViewsPage() {
                       options={filterOptions}
                       onChange={(value: string) =>
                         patchDraft({
-                          filter_rows: editor.draft.filter_rows.map((item, position) =>
+                          filter_rows: viewEditor.draft.filter_rows.map((item, position) =>
                             position === index ? { ...item, key: value } : item,
                           ),
                         })
@@ -848,7 +995,7 @@ export default function DataViewsPage() {
                       placeholder={t("admin.dataViews.filterValue")}
                       onChange={(event) =>
                         patchDraft({
-                          filter_rows: editor.draft.filter_rows.map((item, position) =>
+                          filter_rows: viewEditor.draft.filter_rows.map((item, position) =>
                             position === index ? { ...item, value: event.target.value } : item,
                           ),
                         })
@@ -861,7 +1008,9 @@ export default function DataViewsPage() {
                       aria-label={t("admin.dataViews.removeFilter")}
                       onClick={() =>
                         patchDraft({
-                          filter_rows: editor.draft.filter_rows.filter((_, position) => position !== index),
+                          filter_rows: viewEditor.draft.filter_rows.filter(
+                            (_, position) => position !== index,
+                          ),
                         })
                       }
                     >
@@ -874,7 +1023,7 @@ export default function DataViewsPage() {
                   onClick={() =>
                     patchDraft({
                       filter_rows: [
-                        ...editor.draft.filter_rows,
+                        ...viewEditor.draft.filter_rows,
                         { key: sourceInfo?.filter_fields[0] ?? "", value: "" },
                       ],
                     })
@@ -889,18 +1038,21 @@ export default function DataViewsPage() {
               <label className="block text-sm">
                 {t("admin.dataViews.sortField")}
                 <Select
-                  value={editor.draft.sort_field ?? ""}
+                  value={viewEditor.draft.sort_field ?? ""}
                   aria-label={t("admin.dataViews.sortField")}
                   options={[{ value: "", label: t("admin.dataViews.none") }, ...fieldOptions]}
                   onChange={(value: string) =>
-                    patchDraft({ sort_field: value || null, sort_dir: value ? editor.draft.sort_dir ?? "asc" : null })
+                    patchDraft({
+                      sort_field: value || null,
+                      sort_dir: value ? viewEditor.draft.sort_dir ?? "asc" : null,
+                    })
                   }
                 />
               </label>
               <label className="block text-sm">
                 {t("admin.dataViews.sortDirection")}
                 <Select
-                  value={editor.draft.sort_dir ?? ""}
+                  value={viewEditor.draft.sort_dir ?? ""}
                   aria-label={t("admin.dataViews.sortDirection")}
                   options={[
                     { value: "", label: t("admin.dataViews.none") },
@@ -918,7 +1070,7 @@ export default function DataViewsPage() {
               <label className="block text-sm">
                 {t("admin.dataViews.groupField")}
                 <Select
-                  value={editor.draft.group_field ?? ""}
+                  value={viewEditor.draft.group_field ?? ""}
                   aria-label={t("admin.dataViews.groupField")}
                   options={[{ value: "", label: t("admin.dataViews.none") }, ...fieldOptions]}
                   onChange={(value: string) => patchDraft({ group_field: value || null })}
@@ -927,7 +1079,7 @@ export default function DataViewsPage() {
               <label className="block text-sm">
                 {t("admin.dataViews.titleField")}
                 <Select
-                  value={editor.draft.title_field ?? ""}
+                  value={viewEditor.draft.title_field ?? ""}
                   aria-label={t("admin.dataViews.titleField")}
                   options={[{ value: "", label: t("admin.dataViews.none") }, ...fieldOptions]}
                   onChange={(value: string) => patchDraft({ title_field: value || null })}
@@ -939,7 +1091,7 @@ export default function DataViewsPage() {
               <label className="block text-sm">
                 {t("admin.dataViews.pageSize")}
                 <InputNumber
-                  value={editor.draft.page_size}
+                  value={viewEditor.draft.page_size}
                   min={5}
                   max={200}
                   onChange={(value) => {
@@ -951,7 +1103,7 @@ export default function DataViewsPage() {
               <label className="block text-sm">
                 {t("admin.dataViews.defaultTag")}
                 <Switch
-                  checked={editor.draft.is_default}
+                  checked={viewEditor.draft.is_default}
                   aria-label={t("admin.dataViews.defaultTag")}
                   onChange={(checked) => patchDraft({ is_default: checked })}
                 />
@@ -961,24 +1113,24 @@ export default function DataViewsPage() {
             <label className="block text-sm">
               {t("admin.dataViews.notes")}
               <Input.TextArea
-                value={editor.draft.notes}
+                value={viewEditor.draft.notes}
                 onChange={(event) => patchDraft({ notes: event.target.value })}
               />
             </label>
 
-            {issue ? (
+            {issueKey ? (
               <Alert
                 type="warning"
                 showIcon
-                title={t(`admin.dataViews.issue.${issue}`)}
+                title={t(`admin.dataViews.issue.${issueKey}`)}
                 data-testid="data-views-draft-issue"
               />
             ) : null}
             {saveError ? (
               <div role="alert" data-testid="data-views-save-error" className="text-sm text-destructive">
-                {t("common.errorReason", {
+                {t("admin.dataViews.saveFailed", {
                   reason: saveError,
-                  defaultValue: "Server response: {{reason}}",
+                  defaultValue: "Could not save the view: {{reason}}",
                 })}
               </div>
             ) : null}
@@ -987,12 +1139,12 @@ export default function DataViewsPage() {
               <Button
                 type="primary"
                 loading={saveMutation.isPending}
-                disabled={Boolean(issue)}
+                disabled={Boolean(issueKey)}
                 onClick={() => saveMutation.mutate()}
               >
                 {t("common.save")}
               </Button>
-              <Button onClick={() => setEditor(null)}>{t("common.cancel")}</Button>
+              <Button onClick={() => setViewEditor(null)}>{t("common.cancel")}</Button>
             </Space>
           </div>
         ) : null}
@@ -1016,9 +1168,9 @@ export default function DataViewsPage() {
           error={
             deleteError ? (
               <span data-testid="data-views-delete-error">
-                {t("common.errorReason", {
+                {t("admin.dataViews.saveFailed", {
                   reason: deleteError,
-                  defaultValue: "Server response: {{reason}}",
+                  defaultValue: "Could not save the view: {{reason}}",
                 })}
               </span>
             ) : null

@@ -103,7 +103,7 @@ const MIGRATED_LIST_PAGES = [
   "routes/news/trash.tsx",
   "routes/preview-test-data.tsx",
   "routes/releases.tsx",
-  "routes/table-views.tsx",
+  "routes/table-templates.tsx",
 ];
 
 /** The detail views slice A3 moved onto ProDescriptions. */
@@ -125,7 +125,7 @@ const PRO_CARD_PAGES = [
   "routes/instances.tsx",
   "routes/preview-test-data.tsx",
   "routes/releases.tsx",
-  "routes/table-views.tsx",
+  "routes/table-templates.tsx",
 ];
 
 /**

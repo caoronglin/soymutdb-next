@@ -1,12 +1,14 @@
 /**
- * Table-view console contract.
+ * Table-template console contract.
  *
- * The instance enable/disable switch and the instance delete button called
- * the API directly and chained only a `then(...)`, so a rejected write became
- * an unhandled promise rejection: the operator saw the old value and no
- * message. Promoting and deleting a template fired on a single click, with no
- * confirmation, even though the screen's own comment says every row carries
- * its own write action.
+ * Promoting and deleting a template fired on a single click, with no
+ * confirmation, even though the screen's own comment says every row carries its
+ * own write action. Each write is now confirmed and a rejection is reported in
+ * the dialog that asked for it.
+ *
+ * The species-instance registry that used to live on this page moved to
+ * `/instances` (the only screen that owns those records); its write-path tests
+ * live in `instances.test.tsx`.
  */
 import * as React from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -18,13 +20,9 @@ vi.mock("@/lib/antd", async () => (await import("../test/antd-double")));
 
 const api = vi.hoisted(() => ({
   listTableViewTemplates: vi.fn(),
-  listSpeciesInstances: vi.fn(),
   updateTableViewTemplate: vi.fn(),
   deleteTableViewTemplate: vi.fn(),
-  updateSpeciesInstance: vi.fn(),
-  deleteSpeciesInstance: vi.fn(),
   createTableViewTemplate: vi.fn(),
-  createSpeciesInstance: vi.fn(),
 }));
 
 vi.mock("@soymutdb/api-client", async (importOriginal) => {
@@ -32,17 +30,13 @@ vi.mock("@soymutdb/api-client", async (importOriginal) => {
   return {
     ...actual,
     listTableViewTemplates: api.listTableViewTemplates,
-    listSpeciesInstances: api.listSpeciesInstances,
     updateTableViewTemplate: api.updateTableViewTemplate,
     deleteTableViewTemplate: api.deleteTableViewTemplate,
-    updateSpeciesInstance: api.updateSpeciesInstance,
-    deleteSpeciesInstance: api.deleteSpeciesInstance,
     createTableViewTemplate: api.createTableViewTemplate,
-    createSpeciesInstance: api.createSpeciesInstance,
   };
 });
 
-const TableViewsPage = (await import("./table-views")).default;
+const TableTemplatesPage = (await import("./table-templates")).default;
 
 const TEMPLATE = {
   id: 7,
@@ -56,20 +50,6 @@ const TEMPLATE = {
   is_default: false,
 };
 
-const INSTANCE = {
-  id: 3,
-  code: "soy",
-  name: "Soybean",
-  species: "Glycine max",
-  api_base_url: "https://api.example.org",
-  jbrowse_base_url: null,
-  portal_base_url: null,
-  site_url: null,
-  is_enabled: true,
-  is_local: false,
-  notes: null,
-};
-
 /** The row buttons render the raw i18n key, because the call site has no
  *  `defaultValue`; the catalogue resolves it in the running application. */
 const ROW_DELETE = "admin.tableViews.actionDelete";
@@ -77,13 +57,9 @@ const ROW_PROMOTE = "admin.tableViews.actionSetDefault";
 
 beforeEach(() => {
   api.listTableViewTemplates.mockReset().mockResolvedValue({ items: [TEMPLATE], total: 1 });
-  api.listSpeciesInstances.mockReset().mockResolvedValue({ items: [INSTANCE], total: 1 });
   api.updateTableViewTemplate.mockReset().mockRejectedValue(new Error("promote rejected"));
   api.deleteTableViewTemplate.mockReset().mockRejectedValue(new Error("template delete rejected"));
-  api.updateSpeciesInstance.mockReset().mockRejectedValue(new Error("instance update rejected"));
-  api.deleteSpeciesInstance.mockReset().mockRejectedValue(new Error("instance delete rejected"));
   api.createTableViewTemplate.mockReset().mockResolvedValue(TEMPLATE);
-  api.createSpeciesInstance.mockReset().mockResolvedValue(INSTANCE);
 });
 
 function renderPage() {
@@ -92,24 +68,31 @@ function renderPage() {
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <TableViewsPage />
+      <TableTemplatesPage />
     </QueryClientProvider>,
   );
 }
 
-/** The template row's delete button is the first one; the instance row's is the second. */
+/** The template row's delete button labels itself with the row action key. */
 async function deleteButtons() {
   return screen.findAllByRole("button", { name: ROW_DELETE });
 }
 
 describe("table-view write actions", () => {
-  it("renders failed template and instance requests as errors, not empty lists", async () => {
+  it("renders a failed template request as an error, not an empty list", async () => {
     api.listTableViewTemplates.mockRejectedValue(new Error("templates unavailable"));
-    api.listSpeciesInstances.mockRejectedValue(new Error("instances unavailable"));
     renderPage();
     expect(await screen.findByTestId("table-views-templates-error")).toHaveAttribute("role", "alert");
-    expect(await screen.findByTestId("table-views-instances-error")).toHaveAttribute("role", "alert");
     expect(screen.queryByText("admin.tableViews.empty")).toBeNull();
+  });
+
+  it("no longer embeds the species-instance registry that /instances owns", async () => {
+    renderPage();
+    await deleteButtons();
+    // One destination per record: the console registers and enables species
+    // databases on /instances, not a second, weaker copy inside this page.
+    expect(screen.queryByTestId("table-views-instances-error")).toBeNull();
+    expect(screen.queryByText("admin.tableViews.instancesTitle")).toBeNull();
   });
   it("confirms before deleting a template and reports a rejected delete", async () => {
     renderPage();
@@ -145,42 +128,5 @@ describe("table-view write actions", () => {
     const error = await screen.findByTestId("table-views-promote-error");
     expect(error.closest('[role="alert"]')).not.toBeNull();
     expect(error).toHaveTextContent("promote rejected");
-  });
-
-  it("reports a rejected instance enable/disable instead of rejecting silently", async () => {
-    renderPage();
-
-    // Wait for the instance row: the template editor's own switches render
-    // before the instance query resolves.
-    await deleteButtons();
-    const toggle = screen
-      .getAllByRole("checkbox")
-      .find((node) => node.closest("table") && (node as HTMLInputElement).checked);
-    expect(toggle).toBeDefined();
-    fireEvent.click(toggle!);
-
-    await waitFor(() => expect(api.updateSpeciesInstance).toHaveBeenCalledTimes(1));
-    const alert = await screen.findByTestId("table-views-action-error");
-    expect(alert).toHaveAttribute("role", "alert");
-    expect(alert).toHaveTextContent("Soybean");
-    expect(alert).toHaveTextContent("instance update rejected");
-  });
-
-  it("confirms before unregistering an instance and reports a rejected unregister", async () => {
-    renderPage();
-
-    const buttons = await deleteButtons();
-    const instanceDelete = buttons[buttons.length - 1];
-    fireEvent.click(instanceDelete);
-
-    expect(api.deleteSpeciesInstance).not.toHaveBeenCalled();
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-    await waitFor(() => expect(api.deleteSpeciesInstance).toHaveBeenCalledWith(3));
-
-    const error = await screen.findByTestId("table-views-instance-delete-error");
-    expect(error.closest('[role="alert"]')).not.toBeNull();
-    expect(error).toHaveTextContent("instance delete rejected");
   });
 });

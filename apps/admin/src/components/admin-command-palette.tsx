@@ -5,12 +5,12 @@ import { useTranslation } from "react-i18next";
 import { Input, type InputRef } from "@/lib/antd";
 import { cn } from "../lib/cn";
 
-export type AdminCommandPath = "/" | "/imports" | "/content" | "/news/new" | "/settings" | "/audit";
+export type AdminCommandDestination = "/" | "/imports" | "/content" | "/news/new" | "/settings" | "/audit";
 
-interface RouteCommand {
+interface DestinationCommand {
   id: string;
   kind: "route";
-  path: AdminCommandPath;
+  path: AdminCommandDestination;
   /** Locale key for the row title; `defaultValue` is the English fallback. */
   labelKey: string;
   label: string;
@@ -29,14 +29,14 @@ interface GeneResult {
   hint: string;
 }
 
-type PaletteResult = RouteCommand | GeneResult;
+type PaletteResult = DestinationCommand | GeneResult;
 
 // Only live destinations belong here. ADR-0009 retirements and the unavailable
 // resource-catalog page are intentionally absent: a command that lands on an
 // "unavailable" page is a dead end an operator cannot act on. Every copy is a
 // locale key — this surface is reachable from the keyboard shortcut in a Chinese console, so
 // hardcoded English here would bypass the locale entirely.
-export const COMMANDS: readonly RouteCommand[] = [
+export const COMMANDS: readonly DestinationCommand[] = [
   {
     id: "dashboard",
     labelKey: "admin.commandPalette.commands.dashboard.label",
@@ -113,7 +113,7 @@ function geneResult(
   };
 }
 
-export function AdminCommandPalette({ open, onClose, onNavigate, onOpenGene }: { open: boolean; onClose: () => void; onNavigate: (path: AdminCommandPath) => void; onOpenGene: (geneId: string) => void }) {
+export function AdminCommandPalette({ open, onClose, onNavigate, onOpenGene }: { open: boolean; onClose: () => void; onNavigate: (path: AdminCommandDestination) => void; onOpenGene: (geneId: string) => void }) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const listboxId = useId();

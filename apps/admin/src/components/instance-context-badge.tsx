@@ -16,9 +16,15 @@ export function InstanceContextBadge() {
   const { t } = useTranslation();
   const { currentInstance, isRemote, isLoading } = useInstanceContext();
   const configuredReleaseId = import.meta.env.VITE_SOYMUTDB_RELEASE_ID as string | undefined;
-  const releaseId =
-    configuredReleaseId ||
-    t("admin.status.releaseActive", { defaultValue: "Active" });
+  // A status word is not a release identifier. The badge used to fall back to
+  // "Active"/"生效中" when the build carried no release id, so a console with
+  // no active release pointer rendered "Release Active" -- a statement about
+  // a release that did not exist, on every page of the console. Say what is
+  // true instead: no release is pinned.
+  const releaseId = configuredReleaseId?.trim();
+  const releaseLabel = releaseId
+    ? releaseId
+    : t("admin.releasesSummary.noActive", { defaultValue: "No active release" });
   const instanceLabel = currentInstance
     ? `${currentInstance.name} (${currentInstance.code})`
     : isLoading
@@ -35,7 +41,7 @@ export function InstanceContextBadge() {
       <span className="max-w-40 truncate font-medium" data-testid="instance-context-instance">{instanceLabel}</span>
       <span aria-hidden="true" className="opacity-40">·</span>
       <span className="truncate" data-testid="instance-context-release">
-        {t("admin.instances.releaseLabel", { defaultValue: "Release" })} {releaseId}
+        {t("admin.instances.releaseLabel", { defaultValue: "Release" })} {releaseLabel}
       </span>
       <span aria-hidden="true" className="opacity-40">·</span>
       <span className="truncate font-mono" data-testid="instance-context-server">

@@ -50,8 +50,7 @@ function readSource(path: string): string {
  * form: `"./routes/audit"` → `routes/audit`.
  *
  * Read from the router rather than from a list, so renaming or adding a route
- * changes what this guard checks. `imports/index.tsx` re-exports `../imports`,
- * so the module id is the routing truth even when the component is not local.
+ * changes what this guard checks.
  */
 function routedModules(): string[] {
   return [...appSource.matchAll(/lazy\(\(\) => import\("\.\/(routes\/[^"]+)"\)\)/g)]
@@ -113,7 +112,7 @@ const PAGE_CONTAINER_OWNER: Record<string, string> = {
   "routes/page-builder/$pageId.tsx": "routes/page-builder/$pageId.tsx",
   "routes/analytics-settings.tsx": "routes/analytics-settings.tsx",
   "routes/publications.tsx": "routes/publications.tsx",
-  "routes/table-views.tsx": "routes/table-views.tsx",
+  "routes/table-templates.tsx": "routes/table-templates.tsx",
   "routes/data-views.tsx": "routes/data-views.tsx",
 };
 

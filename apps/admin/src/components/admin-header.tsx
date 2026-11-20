@@ -1,5 +1,5 @@
 import { BellOutlined, MenuOutlined, SearchOutlined, SunOutlined, BulbOutlined, UserOutlined, LogoutOutlined, DownOutlined } from "@ant-design/icons";
-import { AdminCommandPalette, type AdminCommandPath } from "./admin-command-palette";
+import { AdminCommandPalette, type AdminCommandDestination } from "./admin-command-palette";
 import type * as React from "react";
 // Ant Design icon component type is declared locally for the header.
 type IconComponent = React.ComponentType<{
@@ -55,8 +55,8 @@ export function AdminHeader({ onToggleSidebar }: AdminHeaderProps) {
     onToggleSidebar,
   });
 
-  const navigateFromCommandPalette = (path: AdminCommandPath) => {
-    void navigate({ to: path });
+  const navigateFromCommandPalette = (destination: AdminCommandDestination) => {
+    void navigate({ to: destination });
   };
 
   return (
