@@ -181,9 +181,108 @@ def capabilities() -> s.SequenceCapabilitiesResponse:
     value-by-value comparison, so that guard also compares key presence.
     """
     st = bridge.status()
-    return s.SequenceCapabilitiesResponse(
+    payload = s.SequenceCapabilitiesResponse(
         available=st.available,
         engine=st.engine,
         engine_version=st.engine_version,
         reason=st.reason,
     )
+    # Report the capability set of the engine that is actually loaded. The
+    # compiled kernel answers code 1 and nine programs; the Biopython engine
+    # carries the full codon-table set and six more operations. A client reads
+    # this instead of inferring the difference from a 404.
+    if st.available:
+        advertised = bridge.advertised_capabilities()
+        if advertised:
+            payload.genetic_codes = advertised.get("genetic_codes", payload.genetic_codes)
+            payload.programs = advertised.get("programs", payload.programs)
+    return payload
+
+
+# ---------------------------------------------------------------------------
+# Capabilities beyond the original kernel. Each one validates at the Pydantic
+# boundary and delegates to the engine in a worker thread, exactly like the
+# operations above, so the event loop is never blocked.
+# ---------------------------------------------------------------------------
+
+
+async def convert_format(req: s.ConvertFormatRequest) -> s.ConvertFormatResponse:
+    raw = await anyio.to_thread.run_sync(
+        lambda: _call(
+            "convert_format",
+            req.data,
+            req.source_format,
+            req.target_format,
+            req.max_records,
+        )
+    )
+    return s.ConvertFormatResponse(**raw, engine=_engine_meta())
+
+
+async def restriction_sites(req: s.RestrictionRequest) -> s.RestrictionResponse:
+    raw = await anyio.to_thread.run_sync(
+        lambda: _call(
+            "restriction_sites",
+            req.sequence,
+            req.enzymes or None,
+            req.circular,
+            req.max_hits,
+        )
+    )
+    return s.RestrictionResponse(
+        sequence_length=raw["sequence_length"],
+        circular=raw["circular"],
+        enzyme_count=raw["enzyme_count"],
+        total_cut_sites=raw["total_cut_sites"],
+        enzymes=[s.RestrictionEnzymeResult(**item) for item in raw["enzymes"]],
+        limited=raw["limited"],
+        engine=_engine_meta(),
+    )
+
+
+async def protein_properties(
+    req: s.ProteinPropertiesRequest,
+) -> s.ProteinPropertiesResponse:
+    raw = await anyio.to_thread.run_sync(
+        lambda: _call("protein_properties", req.protein)
+    )
+    return s.ProteinPropertiesResponse(**raw, engine=_engine_meta())
+
+
+async def melting_temp(req: s.MeltingTempRequest) -> s.MeltingTempResponse:
+    raw = await anyio.to_thread.run_sync(
+        lambda: _call(
+            "melting_temp",
+            req.sequence,
+            req.method,
+            req.dna_conc_nm,
+            req.salt_conc_mm,
+        )
+    )
+    return s.MeltingTempResponse(**raw, engine=_engine_meta())
+
+
+async def multiple_alignment(
+    req: s.MultipleAlignmentRequest,
+) -> s.MultipleAlignmentResponse:
+    raw = await anyio.to_thread.run_sync(
+        lambda: _call(
+            "multiple_alignment",
+            req.sequences,
+            req.alphabet,
+            req.mode,
+        )
+    )
+    return s.MultipleAlignmentResponse(**raw, engine=_engine_meta())
+
+
+async def neighbor_joining_tree(req: s.TreeRequest) -> s.TreeResponse:
+    raw = await anyio.to_thread.run_sync(
+        lambda: _call(
+            "neighbor_joining_tree",
+            req.sequences,
+            req.labels,
+            req.alphabet,
+        )
+    )
+    return s.TreeResponse(**raw, engine=_engine_meta())

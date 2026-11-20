@@ -66,3 +66,52 @@ async def sequence_kmers(payload: s.KmerRequest) -> s.KmerResponse:
 async def inspect_format(payload: s.FormatInspectRequest) -> s.FormatInspectResponse:
     """Validate a bounded FASTA/FASTQ/BED payload; never accepts a path or URL."""
     return await inspect_service.inspect(payload)
+
+
+# ---------------------------------------------------------------------------
+# Capabilities beyond the original kernel. They keep the same rules: inline
+# sequences only, no paths or URLs, bounded work, and a structured 503 when no
+# engine is available.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/convert", response_model=s.ConvertFormatResponse)
+async def convert_sequence_format(
+    payload: s.ConvertFormatRequest,
+) -> s.ConvertFormatResponse:
+    """Convert records between FASTA / GenBank / EMBL / tabular text."""
+    return await service.convert_format(payload)
+
+
+@router.post("/restriction-sites", response_model=s.RestrictionResponse)
+async def restriction_sites(payload: s.RestrictionRequest) -> s.RestrictionResponse:
+    """Report the cut sites of one or more restriction enzymes."""
+    return await service.restriction_sites(payload)
+
+
+@router.post("/protein-properties", response_model=s.ProteinPropertiesResponse)
+async def protein_properties(
+    payload: s.ProteinPropertiesRequest,
+) -> s.ProteinPropertiesResponse:
+    """Molecular weight, isoelectric point, extinction and hydrophobicity."""
+    return await service.protein_properties(payload)
+
+
+@router.post("/melting-temp", response_model=s.MeltingTempResponse)
+async def melting_temp(payload: s.MeltingTempRequest) -> s.MeltingTempResponse:
+    """Primer melting temperature by Wallace, GC or nearest-neighbour."""
+    return await service.melting_temp(payload)
+
+
+@router.post("/multiple-alignment", response_model=s.MultipleAlignmentResponse)
+async def multiple_alignment(
+    payload: s.MultipleAlignmentRequest,
+) -> s.MultipleAlignmentResponse:
+    """Progressively align several sequences and return the distance matrix."""
+    return await service.multiple_alignment(payload)
+
+
+@router.post("/tree", response_model=s.TreeResponse)
+async def neighbor_joining_tree(payload: s.TreeRequest) -> s.TreeResponse:
+    """Neighbour-joining tree over the sequences, as Newick text."""
+    return await service.neighbor_joining_tree(payload)

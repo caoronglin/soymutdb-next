@@ -335,11 +335,19 @@ class Settings(BaseSettings):
     # --------------------------------------------------------- Feature flags
     feature_registration_enabled: bool = True
 
-    # Rust bio-core engine selector.  ``python`` is documented as a legacy
-    # fallback but there is NO equivalent Python implementation of these
-    # algorithms, so selecting it must fail closed rather than silently return
-    # empty results.  ``rust`` is the only value that enables computation.
-    bio_engine: Literal["rust", "python"] = "rust"
+    # Sequence engine selector.
+    #
+    # ``python`` is the Biopython-backed engine (app/services/bio_python_engine.py)
+    # and the default: it is the implementation of record, it ships a maintained
+    # REBASE enzyme table, codon tables and the tree builders, and it needs no
+    # build toolchain. ``rust`` selects the compiled soymutdb_bio_core kernel
+    # when that wheel is installed; the two answer the same contract, so a
+    # deployment can switch without the API or the UI noticing.
+    #
+    # Both engines fail closed on invalid input — neither falls back to empty
+    # results — so a misconfigured deployment reports "unavailable" rather than
+    # silently answering wrong.
+    bio_engine: Literal["rust", "python"] = "python"
 
     @property
     def refresh_cookie_secure_effective(self) -> bool:
@@ -439,6 +447,15 @@ class Settings(BaseSettings):
             if not self.rate_limit_enabled:
                 validation_errors.append(
                     "rate_limit_enabled must not be disabled in production"
+                )
+
+            # Self-registration grants VIEWER automatically, so leaving it on
+            # in production silently opens the viewer namespace to strangers.
+            # This is a fail-fast rather than a default flip: an operator who
+            # really wants open registration says so explicitly.
+            if self.feature_registration_enabled:
+                validation_errors.append(
+                    "feature_registration_enabled must be false in production"
                 )
 
             required_fields = [

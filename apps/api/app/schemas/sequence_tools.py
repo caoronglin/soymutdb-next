@@ -200,6 +200,10 @@ class SequenceCapabilitiesResponse(BaseModel):
     genetic_codes: list[int] = Field(default_factory=lambda: [1])
     coordinate_system_internal: str = "0-based-half-open"
     coordinate_system_public: str = "1-based-inclusive"
+    # Every live POST operation must appear here, or a client enumerating
+    # `programs` cannot discover the endpoint. The list is the conservative
+    # baseline both engines answer; the Biopython engine additionally reports
+    # its wider codon-table set at runtime.
     programs: list[str] = Field(
         default_factory=lambda: [
             "reverse-complement",
@@ -211,6 +215,12 @@ class SequenceCapabilitiesResponse(BaseModel):
             "kmers",
             "inspect",
             "intervals/overlap",
+            "convert",
+            "restriction-sites",
+            "protein-properties",
+            "melting-temp",
+            "multiple-alignment",
+            "tree",
         ]
     )
     formats: list[str] = Field(default_factory=lambda: ["fasta", "fastq", "bed"])
@@ -270,4 +280,131 @@ class FormatInspectResponse(BaseModel):
     record_count: int
     truncated: bool
     records: list[dict[str, object]] = Field(default_factory=list)
+    engine: EngineMetadata
+
+
+# ---------------------------------------------------------------------------
+# Capabilities beyond the original kernel: format conversion, restriction
+# enzymes, protein properties, primer Tm and multiple alignment/trees.
+# ---------------------------------------------------------------------------
+
+#: Short oligos only: beyond this the thermodynamic tables are not a primer Tm.
+MAX_PRIMER_LENGTH = 200
+#: Defensive bound on the number of sequences one alignment request may carry.
+MAX_ALIGNMENT_SEQUENCES = 50
+
+
+class ConvertFormatRequest(BaseModel):
+    data: SequenceText
+    source_format: Literal["fasta", "genbank", "embl", "tab"] = "fasta"
+    target_format: Literal["fasta", "genbank", "embl", "tab"] = "genbank"
+    max_records: int = Field(default=100, ge=1, le=1000)
+
+
+class ConvertFormatResponse(BaseModel):
+    source_format: str
+    target_format: str
+    record_count: int
+    total_records: int
+    limited: bool
+    output: str
+    engine: EngineMetadata
+
+
+class RestrictionRequest(BaseModel):
+    sequence: SequenceText
+    #: Empty means "scan every known enzyme and report the ones with a site".
+    enzymes: Annotated[list[str], Field(max_length=200)] = Field(default_factory=list)
+    circular: bool = False
+    max_hits: int = Field(default=1000, ge=1, le=MAX_HITS)
+
+
+class RestrictionEnzymeResult(BaseModel):
+    enzyme: str
+    site: str
+    cut_positions: list[int]
+    site_starts: list[int]
+    count: int
+    limited: bool
+
+
+class RestrictionResponse(BaseModel):
+    sequence_length: int
+    circular: bool
+    enzyme_count: int
+    total_cut_sites: int
+    enzymes: list[RestrictionEnzymeResult]
+    limited: bool
+    engine: EngineMetadata
+
+
+class ProteinPropertiesRequest(BaseModel):
+    protein: Annotated[str, StringConstraints(min_length=1, max_length=MAX_INLINE_SEQUENCE)]
+
+
+class ProteinPropertiesResponse(BaseModel):
+    length: int
+    molecular_weight: float
+    isoelectric_point: float
+    aromaticity: float
+    instability_index: float
+    gravy: float
+    extinction_coefficient: list[int]
+    amino_acid_composition: dict[str, float]
+    engine: EngineMetadata
+
+
+class MeltingTempRequest(BaseModel):
+    sequence: Annotated[
+        str, StringConstraints(min_length=1, max_length=MAX_PRIMER_LENGTH)
+    ]
+    method: Literal["wallace", "gc", "nearest_neighbor"] = "nearest_neighbor"
+    dna_conc_nm: float = Field(default=50.0, gt=0, le=10_000)
+    salt_conc_mm: float = Field(default=50.0, gt=0, le=5_000)
+
+
+class MeltingTempResponse(BaseModel):
+    method: str
+    length: int
+    gc_fraction: float
+    melting_temp_c: float
+    dna_conc_nm: float
+    salt_conc_mm: float
+    engine: EngineMetadata
+
+
+class MultipleAlignmentRequest(BaseModel):
+    sequences: Annotated[
+        list[SequenceText], Field(min_length=2, max_length=MAX_ALIGNMENT_SEQUENCES)
+    ]
+    alphabet: Alphabet = "dna"
+    mode: AlignmentMode = "global"
+
+
+class MultipleAlignmentResponse(BaseModel):
+    aligned_sequences: list[str]
+    column_count: int
+    sequence_count: int
+    method: str
+    mode: str
+    distance_matrix: list[list[float]]
+    identity_matrix: list[list[float]]
+    engine: EngineMetadata
+
+
+class TreeRequest(BaseModel):
+    sequences: Annotated[
+        list[SequenceText], Field(min_length=3, max_length=MAX_ALIGNMENT_SEQUENCES)
+    ]
+    labels: Annotated[list[str], Field(max_length=MAX_ALIGNMENT_SEQUENCES)] | None = None
+    alphabet: Alphabet = "dna"
+
+
+class TreeResponse(BaseModel):
+    newick: str
+    leaf_count: int
+    labels: list[str]
+    distance_model: str
+    method: str
+    caveat: str
     engine: EngineMetadata

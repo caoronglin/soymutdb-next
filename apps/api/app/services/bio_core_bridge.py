@@ -48,18 +48,47 @@ _UNSET = object()
 _module: Any = _UNSET
 
 
+def _load_python_engine() -> Any:
+    """The Biopython-backed engine: the same surface, no compiled wheel.
+
+    It is imported lazily so a deployment that selects the Rust kernel never
+    pays for importing Biopython, and so a missing optional dependency fails at
+    first use with a clear message rather than at process start.
+    """
+    from . import bio_python_engine
+
+    return bio_python_engine
+
+
 def status() -> BioCoreStatus:
     """Report engine availability without importing at module import time."""
     global _module
     if _engine_setting() == "python":
+        # ``_module is None`` means a caller explicitly marked the engine
+        # unavailable (the fail-closed test does this); treat it the same as a
+        # missing dependency instead of dereferencing None.
+        if _module is _UNSET:
+            try:
+                _module = _load_python_engine()
+            except ImportError as exc:  # Biopython not installed
+                return BioCoreStatus(
+                    available=False,
+                    engine=None,
+                    engine_version=None,
+                    reason=f"the Python sequence engine is not importable: {exc}",
+                )
+        if _module is None:
+            return BioCoreStatus(
+                available=False,
+                engine=None,
+                engine_version=None,
+                reason="the Python sequence engine is not installed",
+            )
+        cap = _module.capabilities()
         return BioCoreStatus(
-            available=False,
-            engine=None,
-            engine_version=None,
-            reason=(
-                "SOYMUTDB_BIO_ENGINE=python has no equivalent implementation; "
-                "no silent fallback"
-            ),
+            available=True,
+            engine=cap["engine"],
+            engine_version=cap["engine_version"],
         )
     if _module is _UNSET:
         _module = _load()
@@ -76,6 +105,33 @@ def status() -> BioCoreStatus:
         engine=cap["engine"],
         engine_version=cap["engine_version"],
     )
+
+
+def advertised_capabilities() -> dict[str, Any]:
+    """Extra capability fields the loaded engine publishes.
+
+    The compiled kernel answers ``{"engine", "engine_version"}`` only; the
+    Biopython engine also lists its codon tables and programs. Returning a
+    plain dict keeps the bridge from assuming either shape.
+    """
+    if not status().available or _module is None:
+        return {}
+    capabilities = getattr(_module, "capabilities", None)
+    if not callable(capabilities):
+        return {}
+    try:
+        published: object = capabilities()
+    except Exception:  # an engine that cannot describe itself is not fatal
+        return {}
+    if not isinstance(published, dict):
+        return {}
+    # The engine is an extension module (or a plain Python module), so the
+    # published mapping is untyped. Rebuild it with string keys so the return
+    # type is honest rather than a cast.
+    narrowed: dict[str, Any] = {}
+    for key, value in dict(published).items():
+        narrowed[str(key)] = value
+    return narrowed
 
 
 def require() -> Any:
@@ -127,7 +183,10 @@ def translate_error(exc: Exception) -> Exception:
     not forwarded: it is an implementation detail of the Rust error type, and
     unifying it here is what keeps one code = one sentence.
     """
-    args = getattr(exc, "args", ())
+    # `Exception.args` is typed as an empty tuple by the checker when read
+    # through `getattr`, so the annotations below would be rejected as
+    # out-of-range indices. The value is a real argument tuple at runtime.
+    args: tuple[object, ...] = getattr(exc, "args", ())
     if (
         len(args) == 2
         and isinstance(args[0], str)
