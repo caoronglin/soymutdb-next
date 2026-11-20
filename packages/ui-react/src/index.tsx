@@ -58,6 +58,7 @@ export {
   Tooltip,
   Typography,
   Upload,
+  Watermark,
   theme,
 } from "antd";
 export {
