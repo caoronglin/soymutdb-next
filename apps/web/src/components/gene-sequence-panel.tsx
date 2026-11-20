@@ -13,6 +13,7 @@
 import { Alert, Card, Descriptions, Empty, Tag, Typography } from "@/lib/antd";
 import { useTranslation } from "react-i18next";
 import type { GeneSequenceAvailability } from "@soymutdb/api-client";
+import { SequenceAnalysis } from "./gene-sequence-analysis";
 
 export interface GeneSequencePanelProps {
   sequences?: GeneSequenceAvailability[];
@@ -95,6 +96,8 @@ function SequenceValue({ entry }: { entry?: GeneSequenceAvailability }) {
       <pre className="max-h-64 overflow-auto break-all whitespace-pre-wrap font-mono text-xs">
         {entry.sequence}
       </pre>
+      {/* The tools run on what is already on screen: no copy, navigate, paste. */}
+      <SequenceAnalysis molecule={entry.molecule} sequence={entry.sequence} />
     </div>
   );
 }

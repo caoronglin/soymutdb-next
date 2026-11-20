@@ -60,6 +60,21 @@ export type KmerResponse = Schemas["KmerResponse"];
 export type FormatInspectResponse = Schemas["FormatInspectResponse"];
 export type SequenceFormat = NonNullable<Schemas["FormatInspectRequest"]["fmt"]>;
 
+export type ConvertFormatResponse = Schemas["ConvertFormatResponse"];
+export type SequenceTextFormat = NonNullable<Schemas["ConvertFormatRequest"]["source_format"]>;
+
+export type RestrictionEnzymeResult = Schemas["RestrictionEnzymeResult"];
+export type RestrictionResponse = Schemas["RestrictionResponse"];
+
+export type ProteinPropertiesResponse = Schemas["ProteinPropertiesResponse"];
+
+export type MeltingTempResponse = Schemas["MeltingTempResponse"];
+export type MeltingTempMethod = NonNullable<Schemas["MeltingTempRequest"]["method"]>;
+
+export type MultipleAlignmentResponse = Schemas["MultipleAlignmentResponse"];
+
+export type TreeResponse = Schemas["TreeResponse"];
+
 /** Match target is a discriminated inline sequence — no path, key or URL. */
 export interface InlineTargetInput {
   kind: "inline";
@@ -82,6 +97,44 @@ export interface AlignRequestInput {
   alphabet?: Alphabet;
   mode?: AlignmentMode;
   scoring?: Schemas["ScoringConfig"];
+}
+
+export interface ConvertFormatInput {
+  data: string;
+  source_format?: SequenceTextFormat;
+  target_format?: SequenceTextFormat;
+  max_records?: number;
+}
+
+export interface RestrictionSitesInput {
+  sequence: string;
+  /** Empty scans every known enzyme and reports the ones with a site. */
+  enzymes?: string[];
+  circular?: boolean;
+  max_hits?: number;
+}
+
+export interface ProteinPropertiesInput {
+  protein: string;
+}
+
+export interface MeltingTempInput {
+  sequence: string;
+  method?: MeltingTempMethod;
+  dna_conc_nm?: number;
+  salt_conc_mm?: number;
+}
+
+export interface MultipleAlignmentInput {
+  sequences: string[];
+  alphabet?: Alphabet;
+  mode?: AlignmentMode;
+}
+
+export interface TreeInput {
+  sequences: string[];
+  labels?: string[];
+  alphabet?: Alphabet;
 }
 
 export interface ReverseComplementInput {
@@ -235,5 +288,35 @@ export const sequenceApi = {
   /** Validate a FASTA/FASTQ/BED payload. `data` is base64, never a path. */
   inspect(fmt: SequenceFormat, base64Data: string): Promise<FormatInspectResponse> {
     return post<FormatInspectResponse>("/inspect", { fmt, data: base64Data });
+  },
+
+  /** Convert records between FASTA / GenBank / EMBL / tabular text. */
+  convertFormat(input: ConvertFormatInput): Promise<ConvertFormatResponse> {
+    return post<ConvertFormatResponse>("/convert", input);
+  },
+
+  /** Cut sites of one or more restriction enzymes (REBASE). */
+  restrictionSites(input: RestrictionSitesInput): Promise<RestrictionResponse> {
+    return post<RestrictionResponse>("/restriction-sites", input);
+  },
+
+  /** Molecular weight, isoelectric point, extinction and hydrophobicity. */
+  proteinProperties(input: ProteinPropertiesInput): Promise<ProteinPropertiesResponse> {
+    return post<ProteinPropertiesResponse>("/protein-properties", input);
+  },
+
+  /** Primer melting temperature: Wallace, GC or nearest-neighbour. */
+  meltingTemp(input: MeltingTempInput): Promise<MeltingTempResponse> {
+    return post<MeltingTempResponse>("/melting-temp", input);
+  },
+
+  /** Progressively align several sequences and score the result. */
+  multipleAlignment(input: MultipleAlignmentInput): Promise<MultipleAlignmentResponse> {
+    return post<MultipleAlignmentResponse>("/multiple-alignment", input);
+  },
+
+  /** Neighbour-joining tree over the sequences, as Newick text. */
+  tree(input: TreeInput): Promise<TreeResponse> {
+    return post<TreeResponse>("/tree", input);
   },
 };

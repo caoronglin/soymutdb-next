@@ -29,6 +29,7 @@ import {
   Button,
   Card,
   Empty,
+  Modal,
   Select,
   Skeleton,
   Table,
@@ -40,6 +41,7 @@ import { FadeUp, Stagger } from "../components/route-motion";
 import { getDownloadFiles, getDownloadUrl } from "@soymutdb/api-client";
 import type { DownloadFile } from "@soymutdb/api-client";
 import { ExportQueryCard } from "../components/export-query-card";
+import { SequenceFormatConverter } from "../components/sequence-format-converter";
 import { FilePreviewDialog } from "../components/file-viewer/file-preview-dialog";
 import type { PreviewFile } from "../components/file-viewer/file-preview-dialog";
 import { VariantExportControls } from "../components/variant-export-controls";
@@ -93,6 +95,14 @@ function shortChecksum(sha256: string | null): string {
   return sha256 ? sha256.slice(0, 12) : "—";
 }
 
+/** Sequence formats the converter can read. */
+const SEQUENCE_EXTENSIONS = [".fa", ".fasta", ".fna", ".fas"];
+
+function isSequenceFile(file: DownloadFile): boolean {
+  const lowered = file.name.toLowerCase();
+  return SEQUENCE_EXTENSIONS.some((extension) => lowered.endsWith(extension));
+}
+
 function getFileFormat(name: string): string {
   const parts = name.toLowerCase().split(".");
   if (parts.length < 2) return "Unknown";
@@ -107,6 +117,9 @@ function DownloadsComponent() {
   const { t } = useTranslation();
   const { get } = useSiteContent();
   const [preview, setPreview] = useState<{ files: PreviewFile[]; index: number } | null>(null);
+  // Conversion fetches the file body into the page, so it is bounded by the
+  // same size cap the preview uses and only offered for sequence formats.
+  const [convert, setConvert] = useState<{ file: DownloadFile; text: string } | null>(null);
 
   const { data: files, isLoading, error, refetch } = useQuery({
     queryKey: ["downloads"],
@@ -186,6 +199,24 @@ function DownloadsComponent() {
 
   // antd's native table replaces the hand-rolled <table>: same columns, but it
   // inherits the theme's header/row/hover tokens and the responsive scroll.
+  /**
+   * Fetch a sequence artifact and open the converter.
+   *
+   * The body is read here rather than in the component so the 10 MB cap and the
+   * "no paths, only text" rule stay next to the existing preview policy.
+   */
+  const handleConvert = async (file: DownloadFile) => {
+    if (!isSequenceFile(file)) return;
+    if (file.file_size !== null && file.file_size > MAX_PREVIEW_SIZE) return;
+    try {
+      const response = await fetch(file.file_url);
+      if (!response.ok) throw new Error(String(response.status));
+      setConvert({ file, text: await response.text() });
+    } catch {
+      setConvert({ file, text: "" });
+    }
+  };
+
   const downloadColumns: TableColumnsType<DownloadFile> = [
     {
       title: get("downloads.fileName", t("downloads.fileName")),
@@ -270,10 +301,26 @@ function DownloadsComponent() {
             {tooLarge ? (
               <Tag className="text-[10px]">{get("downloads.too_large", t("downloads.too_large"))}</Tag>
             ) : (
-              <Button type="text" size="small" onClick={() => handlePreview(file)}>
-                <Eye className="size-3.5" aria-hidden />
-                <span className="hidden sm:inline">{get("downloads.preview", t("downloads.preview"))}</span>
-              </Button>
+              <>
+                {/* Only a sequence artifact can be converted, and only when it
+                    is small enough to read into the page. */}
+                {isSequenceFile(file) ? (
+                  <Button
+                    type="text"
+                    size="small"
+                    onClick={() => void handleConvert(file)}
+                    data-testid={`download-convert-${file.id}`}
+                  >
+                    {get("downloads.convert.action", t("downloads.convert.action"))}
+                  </Button>
+                ) : null}
+                <Button type="text" size="small" onClick={() => handlePreview(file)}>
+                  <Eye className="size-3.5" aria-hidden />
+                  <span className="hidden sm:inline">
+                    {get("downloads.preview", t("downloads.preview"))}
+                  </span>
+                </Button>
+              </>
             )}
             <Button
               type="text"
@@ -412,6 +459,23 @@ function DownloadsComponent() {
         assemblies={assemblies}
         defaultAssemblyId={exportAssembly ? String(exportAssembly.id) : undefined}
       />
+
+      {convert ? (
+        <Modal
+          open
+          title={convert.file.name}
+          footer={null}
+          width={720}
+          onCancel={() => setConvert(null)}
+          data-testid="download-convert-dialog"
+        >
+          <SequenceFormatConverter
+            text={convert.text}
+            sourceFormat="fasta"
+            fileName={convert.file.name}
+          />
+        </Modal>
+      ) : null}
 
       {preview && (
         <FilePreviewDialog

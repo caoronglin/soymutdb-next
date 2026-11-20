@@ -15,6 +15,7 @@ import type { GeneHomologRecord, GeneHomologSection } from "@soymutdb/api-client
 import { EvidenceLine } from "@/components/evidence-tag";
 import { ScaleIn } from "./animation";
 import { SectionMissing, SectionNotice } from "./section-state";
+import { HomologAlignment } from "./homolog-alignment";
 
 export interface GeneHomologSectionCardProps {
   section?: GeneHomologSection | null;
@@ -72,6 +73,14 @@ export function GeneHomologSectionCard({ section }: GeneHomologSectionCardProps)
           pagination={false}
           locale={{ emptyText: <Empty description={t("genes.homologs.no_data")} /> }}
         />
+        {/* Cross-locus comparison runs on the records already on screen, and
+            reports any accession this deployment cannot resolve instead of
+            dropping it. */}
+        {section.records.length > 0 ? (
+          <div className="mt-4">
+            <HomologAlignment records={section.records} molecule="cds" />
+          </div>
+        ) : null}
       </Card>
     </ScaleIn>
   );
