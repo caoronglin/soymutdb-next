@@ -56,7 +56,7 @@ import { normalizeBasePath } from "@soymutdb/shared/deployment";
 // @ts-expect-error jsdom has no bundled types
 import jsdomPkg from "jsdom";
 
-import { deriveStaticRouteEntries, injectPageHead, renderSitemap, type SiteVariant } from "../src/lib/static-routes";
+import { deriveStaticRouteEntries, injectPageHead, renderSitemap, type SiteVariant, type StaticRouteEntry } from "../src/lib/static-routes";
 import { PORTAL_ROUTES } from "../src/router/routes";
 import {
   assertSnapshotRelease,
@@ -80,6 +80,29 @@ const { JSDOM } = jsdomPkg as {
 };
 
 const CONTENT_DOCUMENT_MANIFEST = "data/content-documents.json";
+
+/**
+ * The enumeration `generate-static-routes.ts` already wrote for this tree.
+ *
+ * The sitemap rewrite below must extend *that* list, not re-derive it: the
+ * earlier step also writes the released entity documents, which come from the
+ * build's entity snapshot and are absent from the route metadata. Re-deriving
+ * silently dropped every prerendered record page from the sitemap.
+ */
+function emittedRouteEntries(distDir: string): StaticRouteEntry[] {
+  const manifest = join(distDir, "routes.json");
+  if (!existsSync(manifest)) {
+    // A tree built without the generator step: fall back to the static routes
+    // so the sitemap still describes what this build can serve.
+    return deriveStaticRouteEntries(PORTAL_ROUTES, "external");
+  }
+  const parsed: unknown = JSON.parse(readFileSync(manifest, "utf8"));
+  const entries = (parsed as { entries?: unknown }).entries;
+  if (!Array.isArray(entries)) {
+    throw new Error(`[content-snapshot] ${manifest} carries no 'entries' array`);
+  }
+  return entries as StaticRouteEntry[];
+}
 
 function previousDocuments(distDir: string): string[] {
   const path = join(distDir, CONTENT_DOCUMENT_MANIFEST);
@@ -302,7 +325,7 @@ export function buildContentDocuments(options: BuildOptions): BuildReport {
   mkdirSync(dirname(manifest), { recursive: true });
   writeFileSync(manifest, JSON.stringify(documents), "utf8");
   if (origin) {
-    const entries = deriveStaticRouteEntries(PORTAL_ROUTES, "external");
+    const entries = emittedRouteEntries(distDir);
     const known = new Set(entries.map((entry) => entry.path));
     for (const page of pages) {
       if (known.has(page.routePath)) continue;

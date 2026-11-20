@@ -500,6 +500,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/jobs/sse-ticket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Sse Ticket
+         * @description Exchange an authenticated session for one single-use stream ticket.
+         *
+         *     ``EventSource`` cannot send an ``Authorization`` header, but the access
+         *     token must not travel in the stream URL (nginx logs the query string).
+         *     This endpoint returns an opaque ticket that ``GET /jobs/events?ticket=``
+         *     accepts exactly once, within :data:`SSE_TICKET_TTL_SECONDS`.
+         */
+        post: operations["create_sse_ticket_api_v1_jobs_sse_ticket_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/jobs/events": {
         parameters: {
             query?: never;
@@ -1042,6 +1067,126 @@ export interface paths {
          * @description Validate a bounded FASTA/FASTQ/BED payload; never accepts a path or URL.
          */
         post: operations["inspect_format_api_v1_tools_sequence_inspect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/convert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Convert Sequence Format
+         * @description Convert records between FASTA / GenBank / EMBL / tabular text.
+         */
+        post: operations["convert_sequence_format_api_v1_tools_sequence_convert_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/restriction-sites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restriction Sites
+         * @description Report the cut sites of one or more restriction enzymes.
+         */
+        post: operations["restriction_sites_api_v1_tools_sequence_restriction_sites_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/protein-properties": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Protein Properties
+         * @description Molecular weight, isoelectric point, extinction and hydrophobicity.
+         */
+        post: operations["protein_properties_api_v1_tools_sequence_protein_properties_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/melting-temp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Melting Temp
+         * @description Primer melting temperature by Wallace, GC or nearest-neighbour.
+         */
+        post: operations["melting_temp_api_v1_tools_sequence_melting_temp_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/multiple-alignment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Multiple Alignment
+         * @description Progressively align several sequences and return the distance matrix.
+         */
+        post: operations["multiple_alignment_api_v1_tools_sequence_multiple_alignment_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Neighbor Joining Tree
+         * @description Neighbour-joining tree over the sequences, as Newick text.
+         */
+        post: operations["neighbor_joining_tree_api_v1_tools_sequence_tree_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5490,6 +5635,8 @@ export interface components {
             view_type: "grid" | "kanban" | "gallery";
             /** Visible Fields */
             visible_fields: string[];
+            /** Searchable Fields */
+            searchable_fields?: string[];
             /** Filters */
             filters?: {
                 [key: string]: string;
@@ -5529,6 +5676,12 @@ export interface components {
              * @default null
              */
             notes: string | null;
+            /**
+             * Visibility
+             * @default visible
+             * @enum {string}
+             */
+            visibility: "visible" | "hidden";
         };
         /** AdminDataViewListResponse */
         AdminDataViewListResponse: {
@@ -5554,6 +5707,8 @@ export interface components {
             view_type: "grid" | "kanban" | "gallery";
             /** Visible Fields */
             visible_fields: string[];
+            /** Searchable Fields */
+            searchable_fields?: string[];
             /** Filters */
             filters?: {
                 [key: string]: string;
@@ -5593,6 +5748,12 @@ export interface components {
              * @default null
              */
             notes: string | null;
+            /**
+             * Visibility
+             * @default visible
+             * @enum {string}
+             */
+            visibility: "visible" | "hidden";
             /** Id */
             id: number;
             /**
@@ -5626,6 +5787,11 @@ export interface components {
              * @default null
              */
             visible_fields: string[] | null;
+            /**
+             * Searchable Fields
+             * @default null
+             */
+            searchable_fields: string[] | null;
             /**
              * Filters
              * @default null
@@ -5668,6 +5834,11 @@ export interface components {
              * @default null
              */
             notes: string | null;
+            /**
+             * Visibility
+             * @default null
+             */
+            visibility: ("visible" | "hidden") | null;
         };
         /** AdminFeaturesResponse */
         AdminFeaturesResponse: {
@@ -5765,7 +5936,7 @@ export interface components {
              * Abstract
              * @default null
              */
-            abstract: string | null;
+            "abstract": string | null;
             /**
              * Abstract Zh
              * @default null
@@ -7097,6 +7268,44 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+        };
+        /** ConvertFormatRequest */
+        ConvertFormatRequest: {
+            /** Data */
+            data: string;
+            /**
+             * Source Format
+             * @default fasta
+             * @enum {string}
+             */
+            source_format: "fasta" | "genbank" | "embl" | "tab";
+            /**
+             * Target Format
+             * @default genbank
+             * @enum {string}
+             */
+            target_format: "fasta" | "genbank" | "embl" | "tab";
+            /**
+             * Max Records
+             * @default 100
+             */
+            max_records: number;
+        };
+        /** ConvertFormatResponse */
+        ConvertFormatResponse: {
+            /** Source Format */
+            source_format: string;
+            /** Target Format */
+            target_format: string;
+            /** Record Count */
+            record_count: number;
+            /** Total Records */
+            total_records: number;
+            /** Limited */
+            limited: boolean;
+            /** Output */
+            output: string;
+            engine: components["schemas"]["EngineMetadata"];
         };
         /**
          * CrossVersionLink
@@ -8666,6 +8875,16 @@ export interface components {
              * @default null
              */
             assembly_name: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: string | null;
+            /**
+             * Release Name
+             * @default null
+             */
+            release_name: string | null;
             /** Chromosome */
             chromosome: string;
             /**
@@ -8790,6 +9009,16 @@ export interface components {
              * @default null
              */
             assembly_name: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: string | null;
+            /**
+             * Release Name
+             * @default null
+             */
+            release_name: string | null;
             /** Chromosome */
             chromosome: string;
             /**
@@ -10116,6 +10345,43 @@ export interface components {
              */
             is_decorative: boolean | null;
         };
+        /** MeltingTempRequest */
+        MeltingTempRequest: {
+            /** Sequence */
+            sequence: string;
+            /**
+             * Method
+             * @default nearest_neighbor
+             * @enum {string}
+             */
+            method: "wallace" | "gc" | "nearest_neighbor";
+            /**
+             * Dna Conc Nm
+             * @default 50
+             */
+            dna_conc_nm: number;
+            /**
+             * Salt Conc Mm
+             * @default 50
+             */
+            salt_conc_mm: number;
+        };
+        /** MeltingTempResponse */
+        MeltingTempResponse: {
+            /** Method */
+            method: string;
+            /** Length */
+            length: number;
+            /** Gc Fraction */
+            gc_fraction: number;
+            /** Melting Temp C */
+            melting_temp_c: number;
+            /** Dna Conc Nm */
+            dna_conc_nm: number;
+            /** Salt Conc Mm */
+            salt_conc_mm: number;
+            engine: components["schemas"]["EngineMetadata"];
+        };
         /**
          * MemberComparisonResponse
          * @description Two families side by side: shared and unique members.
@@ -10177,6 +10443,41 @@ export interface components {
              * @default null
              */
             data_set_id: number | null;
+        };
+        /** MultipleAlignmentRequest */
+        MultipleAlignmentRequest: {
+            /** Sequences */
+            sequences: string[];
+            /**
+             * Alphabet
+             * @default dna
+             * @enum {string}
+             */
+            alphabet: "dna" | "rna" | "protein";
+            /**
+             * Mode
+             * @default global
+             * @enum {string}
+             */
+            mode: "local" | "global" | "semiglobal";
+        };
+        /** MultipleAlignmentResponse */
+        MultipleAlignmentResponse: {
+            /** Aligned Sequences */
+            aligned_sequences: string[];
+            /** Column Count */
+            column_count: number;
+            /** Sequence Count */
+            sequence_count: number;
+            /** Method */
+            method: string;
+            /** Mode */
+            mode: string;
+            /** Distance Matrix */
+            distance_matrix: number[][];
+            /** Identity Matrix */
+            identity_matrix: number[][];
+            engine: components["schemas"]["EngineMetadata"];
         };
         /**
          * MutagenCount
@@ -11731,6 +12032,33 @@ export interface components {
             /** Url */
             url: string;
         };
+        /** ProteinPropertiesRequest */
+        ProteinPropertiesRequest: {
+            /** Protein */
+            protein: string;
+        };
+        /** ProteinPropertiesResponse */
+        ProteinPropertiesResponse: {
+            /** Length */
+            length: number;
+            /** Molecular Weight */
+            molecular_weight: number;
+            /** Isoelectric Point */
+            isoelectric_point: number;
+            /** Aromaticity */
+            aromaticity: number;
+            /** Instability Index */
+            instability_index: number;
+            /** Gravy */
+            gravy: number;
+            /** Extinction Coefficient */
+            extinction_coefficient: number[];
+            /** Amino Acid Composition */
+            amino_acid_composition: {
+                [key: string]: number;
+            };
+            engine: components["schemas"]["EngineMetadata"];
+        };
         /**
          * PublicBlastSubmission
          * @description The capability is returned once; send it only in X-Blast-Token.
@@ -11818,7 +12146,7 @@ export interface components {
              * Abstract
              * @default null
              */
-            abstract: string | null;
+            "abstract": string | null;
             /**
              * Abstract Zh
              * @default null
@@ -11958,7 +12286,7 @@ export interface components {
              * Abstract
              * @default null
              */
-            abstract: string | null;
+            "abstract": string | null;
             /**
              * Abstract Zh
              * @default null
@@ -12278,6 +12606,54 @@ export interface components {
             /** Columns */
             columns: components["schemas"]["TableColumn"][];
             actions: components["schemas"]["TableActions"];
+        };
+        /** RestrictionEnzymeResult */
+        RestrictionEnzymeResult: {
+            /** Enzyme */
+            enzyme: string;
+            /** Site */
+            site: string;
+            /** Cut Positions */
+            cut_positions: number[];
+            /** Site Starts */
+            site_starts: number[];
+            /** Count */
+            count: number;
+            /** Limited */
+            limited: boolean;
+        };
+        /** RestrictionRequest */
+        RestrictionRequest: {
+            /** Sequence */
+            sequence: string;
+            /** Enzymes */
+            enzymes?: string[];
+            /**
+             * Circular
+             * @default false
+             */
+            circular: boolean;
+            /**
+             * Max Hits
+             * @default 1000
+             */
+            max_hits: number;
+        };
+        /** RestrictionResponse */
+        RestrictionResponse: {
+            /** Sequence Length */
+            sequence_length: number;
+            /** Circular */
+            circular: boolean;
+            /** Enzyme Count */
+            enzyme_count: number;
+            /** Total Cut Sites */
+            total_cut_sites: number;
+            /** Enzymes */
+            enzymes: components["schemas"]["RestrictionEnzymeResult"][];
+            /** Limited */
+            limited: boolean;
+            engine: components["schemas"]["EngineMetadata"];
         };
         /** ReverseComplementRequest */
         ReverseComplementRequest: {
@@ -13366,6 +13742,26 @@ export interface components {
             notes: string | null;
         };
         /**
+         * SseTicketResponse
+         * @description A single-use credential for one SSE subscription.
+         *
+         *     The ticket is opaque and bound server-side to the authenticated caller. It
+         *     is presented as ``?ticket=`` on ``GET /api/v1/jobs/events`` and stops
+         *     working after its first use or after ``expires_in`` seconds.
+         */
+        SseTicketResponse: {
+            /**
+             * Ticket
+             * @description Opaque single-use ticket for the `ticket` query parameter of the job event stream.
+             */
+            ticket: string;
+            /**
+             * Expires In
+             * @description Seconds until the ticket expires (at most 60); it is also invalidated by its first use.
+             */
+            expires_in: number;
+        };
+        /**
          * StaticBuildRequest
          * @description Body of the static-build trigger.
          *
@@ -13907,6 +14303,38 @@ export interface components {
             codons: number;
             /** Trailing Bases */
             trailing_bases: number;
+            engine: components["schemas"]["EngineMetadata"];
+        };
+        /** TreeRequest */
+        TreeRequest: {
+            /** Sequences */
+            sequences: string[];
+            /**
+             * Labels
+             * @default null
+             */
+            labels: string[] | null;
+            /**
+             * Alphabet
+             * @default dna
+             * @enum {string}
+             */
+            alphabet: "dna" | "rna" | "protein";
+        };
+        /** TreeResponse */
+        TreeResponse: {
+            /** Newick */
+            newick: string;
+            /** Leaf Count */
+            leaf_count: number;
+            /** Labels */
+            labels: string[];
+            /** Distance Model */
+            distance_model: string;
+            /** Method */
+            method: string;
+            /** Caveat */
+            caveat: string;
             engine: components["schemas"]["EngineMetadata"];
         };
         /**
@@ -14789,7 +15217,7 @@ export interface components {
              * Abstract
              * @default null
              */
-            abstract: string | null;
+            "abstract": string | null;
             /**
              * Abstract Zh
              * @default null
@@ -15873,6 +16301,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["GwasResultResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_sse_ticket_api_v1_jobs_sse_ticket_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SseTicketResponse"];
                 };
             };
             /** @description Validation Error */
@@ -16992,6 +17458,258 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FormatInspectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    convert_sequence_format_api_v1_tools_sequence_convert_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConvertFormatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConvertFormatResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    restriction_sites_api_v1_tools_sequence_restriction_sites_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestrictionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestrictionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    protein_properties_api_v1_tools_sequence_protein_properties_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProteinPropertiesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProteinPropertiesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    melting_temp_api_v1_tools_sequence_melting_temp_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeltingTempRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeltingTempResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    multiple_alignment_api_v1_tools_sequence_multiple_alignment_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MultipleAlignmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MultipleAlignmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    neighbor_joining_tree_api_v1_tools_sequence_tree_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TreeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TreeResponse"];
                 };
             };
             /** @description Validation Error */
@@ -24952,6 +25670,8 @@ export interface operations {
         parameters: {
             query?: {
                 source?: ("genes" | "variants" | "mutant_lines") | null;
+                /** @description Include views whose visibility is 'hidden'. Hidden views are kept and stay readable by id; they are only withheld from this list. */
+                include_hidden?: boolean;
             };
             header?: never;
             path?: never;

@@ -1620,6 +1620,53 @@
         "x-idempotent": true
       }
     },
+    "/api/v1/jobs/sse-ticket": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Create Sse Ticket",
+        "description": "Exchange an authenticated session for one single-use stream ticket.\n\n``EventSource`` cannot send an ``Authorization`` header, but the access\ntoken must not travel in the stream URL (nginx logs the query string).\nThis endpoint returns an opaque ticket that ``GET /jobs/events?ticket=``\naccepts exactly once, within :data:`SSE_TICKET_TTL_SECONDS`.",
+        "operationId": "create_sse_ticket_api_v1_jobs_sse_ticket_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SseTicketResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/jobs/events": {
       "get": {
         "tags": [
@@ -3595,6 +3642,318 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/FormatInspectResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/sequence/convert": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Convert Sequence Format",
+        "description": "Convert records between FASTA / GenBank / EMBL / tabular text.",
+        "operationId": "convert_sequence_format_api_v1_tools_sequence_convert_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConvertFormatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConvertFormatResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/sequence/restriction-sites": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Restriction Sites",
+        "description": "Report the cut sites of one or more restriction enzymes.",
+        "operationId": "restriction_sites_api_v1_tools_sequence_restriction_sites_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestrictionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestrictionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/sequence/protein-properties": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Protein Properties",
+        "description": "Molecular weight, isoelectric point, extinction and hydrophobicity.",
+        "operationId": "protein_properties_api_v1_tools_sequence_protein_properties_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProteinPropertiesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProteinPropertiesResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/sequence/melting-temp": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Melting Temp",
+        "description": "Primer melting temperature by Wallace, GC or nearest-neighbour.",
+        "operationId": "melting_temp_api_v1_tools_sequence_melting_temp_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MeltingTempRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MeltingTempResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/sequence/multiple-alignment": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Multiple Alignment",
+        "description": "Progressively align several sequences and return the distance matrix.",
+        "operationId": "multiple_alignment_api_v1_tools_sequence_multiple_alignment_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MultipleAlignmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MultipleAlignmentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/tools/sequence/tree": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Neighbor Joining Tree",
+        "description": "Neighbour-joining tree over the sequences, as Newick text.",
+        "operationId": "neighbor_joining_tree_api_v1_tools_sequence_tree_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TreeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TreeResponse"
                 }
               }
             }
@@ -16968,6 +17327,18 @@
               ],
               "title": "Source"
             }
+          },
+          {
+            "name": "include_hidden",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "description": "Include views whose visibility is 'hidden'. Hidden views are kept and stay readable by id; they are only withheld from this list.",
+              "default": false,
+              "title": "Include Hidden"
+            },
+            "description": "Include views whose visibility is 'hidden'. Hidden views are kept and stay readable by id; they are only withheld from this list."
           }
         ],
         "responses": {
@@ -20696,6 +21067,14 @@
             "minItems": 1,
             "title": "Visible Fields"
           },
+          "searchable_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 40,
+            "title": "Searchable Fields"
+          },
           "filters": {
             "type": "object",
             "additionalProperties": {
@@ -20782,6 +21161,15 @@
             ],
             "default": null,
             "title": "Notes"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "visible",
+              "hidden"
+            ],
+            "default": "visible",
+            "title": "Visibility"
           }
         },
         "additionalProperties": false,
@@ -20850,6 +21238,14 @@
             "minItems": 1,
             "title": "Visible Fields"
           },
+          "searchable_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 40,
+            "title": "Searchable Fields"
+          },
           "filters": {
             "type": "object",
             "additionalProperties": {
@@ -20936,6 +21332,15 @@
             ],
             "default": null,
             "title": "Notes"
+          },
+          "visibility": {
+            "type": "string",
+            "enum": [
+              "visible",
+              "hidden"
+            ],
+            "default": "visible",
+            "title": "Visibility"
           },
           "id": {
             "type": "integer",
@@ -21013,6 +21418,22 @@
             ],
             "default": null,
             "title": "Visible Fields"
+          },
+          "searchable_fields": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 40
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Searchable Fields"
           },
           "filters": {
             "anyOf": [
@@ -21122,6 +21543,22 @@
             ],
             "default": null,
             "title": "Notes"
+          },
+          "visibility": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "visible",
+                  "hidden"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Visibility"
           }
         },
         "additionalProperties": false,
@@ -24182,6 +24619,92 @@
           "created_at"
         ],
         "title": "ContentVersionResponse"
+      },
+      "ConvertFormatRequest": {
+        "properties": {
+          "data": {
+            "type": "string",
+            "maxLength": 1048576,
+            "minLength": 1,
+            "title": "Data"
+          },
+          "source_format": {
+            "type": "string",
+            "enum": [
+              "fasta",
+              "genbank",
+              "embl",
+              "tab"
+            ],
+            "default": "fasta",
+            "title": "Source Format"
+          },
+          "target_format": {
+            "type": "string",
+            "enum": [
+              "fasta",
+              "genbank",
+              "embl",
+              "tab"
+            ],
+            "default": "genbank",
+            "title": "Target Format"
+          },
+          "max_records": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "default": 100,
+            "title": "Max Records"
+          }
+        },
+        "type": "object",
+        "required": [
+          "data"
+        ],
+        "title": "ConvertFormatRequest"
+      },
+      "ConvertFormatResponse": {
+        "properties": {
+          "source_format": {
+            "type": "string",
+            "title": "Source Format"
+          },
+          "target_format": {
+            "type": "string",
+            "title": "Target Format"
+          },
+          "record_count": {
+            "type": "integer",
+            "title": "Record Count"
+          },
+          "total_records": {
+            "type": "integer",
+            "title": "Total Records"
+          },
+          "limited": {
+            "type": "boolean",
+            "title": "Limited"
+          },
+          "output": {
+            "type": "string",
+            "title": "Output"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_format",
+          "target_format",
+          "record_count",
+          "total_records",
+          "limited",
+          "output",
+          "engine"
+        ],
+        "title": "ConvertFormatResponse"
       },
       "CrossVersionLink": {
         "properties": {
@@ -27334,6 +27857,30 @@
             "default": null,
             "title": "Assembly Name"
           },
+          "release_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Release Id"
+          },
+          "release_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Release Name"
+          },
           "chromosome": {
             "type": "string",
             "title": "Chromosome"
@@ -27643,6 +28190,30 @@
             ],
             "default": null,
             "title": "Assembly Name"
+          },
+          "release_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Release Id"
+          },
+          "release_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Release Name"
           },
           "chromosome": {
             "type": "string",
@@ -30467,6 +31038,87 @@
         "title": "MediaAssetUpdateRequest",
         "description": "Editable accessibility metadata; object identity is immutable."
       },
+      "MeltingTempRequest": {
+        "properties": {
+          "sequence": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Sequence"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "wallace",
+              "gc",
+              "nearest_neighbor"
+            ],
+            "default": "nearest_neighbor",
+            "title": "Method"
+          },
+          "dna_conc_nm": {
+            "type": "number",
+            "maximum": 10000.0,
+            "exclusiveMinimum": 0.0,
+            "default": 50.0,
+            "title": "Dna Conc Nm"
+          },
+          "salt_conc_mm": {
+            "type": "number",
+            "maximum": 5000.0,
+            "exclusiveMinimum": 0.0,
+            "default": 50.0,
+            "title": "Salt Conc Mm"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence"
+        ],
+        "title": "MeltingTempRequest"
+      },
+      "MeltingTempResponse": {
+        "properties": {
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "length": {
+            "type": "integer",
+            "title": "Length"
+          },
+          "gc_fraction": {
+            "type": "number",
+            "title": "Gc Fraction"
+          },
+          "melting_temp_c": {
+            "type": "number",
+            "title": "Melting Temp C"
+          },
+          "dna_conc_nm": {
+            "type": "number",
+            "title": "Dna Conc Nm"
+          },
+          "salt_conc_mm": {
+            "type": "number",
+            "title": "Salt Conc Mm"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "method",
+          "length",
+          "gc_fraction",
+          "melting_temp_c",
+          "dna_conc_nm",
+          "salt_conc_mm",
+          "engine"
+        ],
+        "title": "MeltingTempResponse"
+      },
       "MemberComparisonResponse": {
         "properties": {
           "left": {
@@ -30623,6 +31275,108 @@
           "part_count"
         ],
         "title": "MultipartStartRequest"
+      },
+      "MultipleAlignmentRequest": {
+        "properties": {
+          "sequences": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1048576,
+              "minLength": 1
+            },
+            "maxItems": 50,
+            "minItems": 2,
+            "title": "Sequences"
+          },
+          "alphabet": {
+            "type": "string",
+            "enum": [
+              "dna",
+              "rna",
+              "protein"
+            ],
+            "default": "dna",
+            "title": "Alphabet"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "local",
+              "global",
+              "semiglobal"
+            ],
+            "default": "global",
+            "title": "Mode"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequences"
+        ],
+        "title": "MultipleAlignmentRequest"
+      },
+      "MultipleAlignmentResponse": {
+        "properties": {
+          "aligned_sequences": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "Aligned Sequences"
+          },
+          "column_count": {
+            "type": "integer",
+            "title": "Column Count"
+          },
+          "sequence_count": {
+            "type": "integer",
+            "title": "Sequence Count"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "mode": {
+            "type": "string",
+            "title": "Mode"
+          },
+          "distance_matrix": {
+            "type": "array",
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Distance Matrix"
+          },
+          "identity_matrix": {
+            "type": "array",
+            "items": {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            "title": "Identity Matrix"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "aligned_sequences",
+          "column_count",
+          "sequence_count",
+          "method",
+          "mode",
+          "distance_matrix",
+          "identity_matrix",
+          "engine"
+        ],
+        "title": "MultipleAlignmentResponse"
       },
       "MutagenCount": {
         "properties": {
@@ -33981,6 +34735,79 @@
         "title": "PreviewTokenResponse",
         "description": "Short-lived HMAC preview token (15 min, stateless, NOT a JWT)."
       },
+      "ProteinPropertiesRequest": {
+        "properties": {
+          "protein": {
+            "type": "string",
+            "maxLength": 1048576,
+            "minLength": 1,
+            "title": "Protein"
+          }
+        },
+        "type": "object",
+        "required": [
+          "protein"
+        ],
+        "title": "ProteinPropertiesRequest"
+      },
+      "ProteinPropertiesResponse": {
+        "properties": {
+          "length": {
+            "type": "integer",
+            "title": "Length"
+          },
+          "molecular_weight": {
+            "type": "number",
+            "title": "Molecular Weight"
+          },
+          "isoelectric_point": {
+            "type": "number",
+            "title": "Isoelectric Point"
+          },
+          "aromaticity": {
+            "type": "number",
+            "title": "Aromaticity"
+          },
+          "instability_index": {
+            "type": "number",
+            "title": "Instability Index"
+          },
+          "gravy": {
+            "type": "number",
+            "title": "Gravy"
+          },
+          "extinction_coefficient": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Extinction Coefficient"
+          },
+          "amino_acid_composition": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Amino Acid Composition"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "length",
+          "molecular_weight",
+          "isoelectric_point",
+          "aromaticity",
+          "instability_index",
+          "gravy",
+          "extinction_coefficient",
+          "amino_acid_composition",
+          "engine"
+        ],
+        "title": "ProteinPropertiesResponse"
+      },
       "PublicBlastSubmission": {
         "properties": {
           "job": {
@@ -35179,6 +36006,130 @@
         ],
         "title": "ResolvedTableView",
         "description": "The layout the portal should render for this request."
+      },
+      "RestrictionEnzymeResult": {
+        "properties": {
+          "enzyme": {
+            "type": "string",
+            "title": "Enzyme"
+          },
+          "site": {
+            "type": "string",
+            "title": "Site"
+          },
+          "cut_positions": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Cut Positions"
+          },
+          "site_starts": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Site Starts"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "limited": {
+            "type": "boolean",
+            "title": "Limited"
+          }
+        },
+        "type": "object",
+        "required": [
+          "enzyme",
+          "site",
+          "cut_positions",
+          "site_starts",
+          "count",
+          "limited"
+        ],
+        "title": "RestrictionEnzymeResult"
+      },
+      "RestrictionRequest": {
+        "properties": {
+          "sequence": {
+            "type": "string",
+            "maxLength": 1048576,
+            "minLength": 1,
+            "title": "Sequence"
+          },
+          "enzymes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 200,
+            "title": "Enzymes"
+          },
+          "circular": {
+            "type": "boolean",
+            "default": false,
+            "title": "Circular"
+          },
+          "max_hits": {
+            "type": "integer",
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "default": 1000,
+            "title": "Max Hits"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence"
+        ],
+        "title": "RestrictionRequest"
+      },
+      "RestrictionResponse": {
+        "properties": {
+          "sequence_length": {
+            "type": "integer",
+            "title": "Sequence Length"
+          },
+          "circular": {
+            "type": "boolean",
+            "title": "Circular"
+          },
+          "enzyme_count": {
+            "type": "integer",
+            "title": "Enzyme Count"
+          },
+          "total_cut_sites": {
+            "type": "integer",
+            "title": "Total Cut Sites"
+          },
+          "enzymes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RestrictionEnzymeResult"
+            },
+            "title": "Enzymes"
+          },
+          "limited": {
+            "type": "boolean",
+            "title": "Limited"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequence_length",
+          "circular",
+          "enzyme_count",
+          "total_cut_sites",
+          "enzymes",
+          "limited",
+          "engine"
+        ],
+        "title": "RestrictionResponse"
       },
       "ReverseComplementRequest": {
         "properties": {
@@ -37499,6 +38450,27 @@
         "type": "object",
         "title": "SpeciesInstanceUpdate"
       },
+      "SseTicketResponse": {
+        "properties": {
+          "ticket": {
+            "type": "string",
+            "description": "Opaque single-use ticket for the `ticket` query parameter of the job event stream.",
+            "title": "Ticket"
+          },
+          "expires_in": {
+            "type": "integer",
+            "description": "Seconds until the ticket expires (at most 60); it is also invalidated by its first use.",
+            "title": "Expires In"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ticket",
+          "expires_in"
+        ],
+        "title": "SseTicketResponse",
+        "description": "A single-use credential for one SSE subscription.\n\nThe ticket is opaque and bound server-side to the authenticated caller. It\nis presented as ``?ticket=`` on ``GET /api/v1/jobs/events`` and stops\nworking after its first use or after ``expires_in`` seconds."
+      },
       "StaticBuildRequest": {
         "properties": {
           "gene_ids": {
@@ -38621,6 +39593,97 @@
           "engine"
         ],
         "title": "TranslateResponse"
+      },
+      "TreeRequest": {
+        "properties": {
+          "sequences": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 1048576,
+              "minLength": 1
+            },
+            "maxItems": 50,
+            "minItems": 3,
+            "title": "Sequences"
+          },
+          "labels": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array",
+                "maxItems": 50
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Labels"
+          },
+          "alphabet": {
+            "type": "string",
+            "enum": [
+              "dna",
+              "rna",
+              "protein"
+            ],
+            "default": "dna",
+            "title": "Alphabet"
+          }
+        },
+        "type": "object",
+        "required": [
+          "sequences"
+        ],
+        "title": "TreeRequest"
+      },
+      "TreeResponse": {
+        "properties": {
+          "newick": {
+            "type": "string",
+            "title": "Newick"
+          },
+          "leaf_count": {
+            "type": "integer",
+            "title": "Leaf Count"
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "title": "Labels"
+          },
+          "distance_model": {
+            "type": "string",
+            "title": "Distance Model"
+          },
+          "method": {
+            "type": "string",
+            "title": "Method"
+          },
+          "caveat": {
+            "type": "string",
+            "title": "Caveat"
+          },
+          "engine": {
+            "$ref": "#/components/schemas/EngineMetadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "newick",
+          "leaf_count",
+          "labels",
+          "distance_model",
+          "method",
+          "caveat",
+          "engine"
+        ],
+        "title": "TreeResponse"
       },
       "UnreadCountResponse": {
         "properties": {

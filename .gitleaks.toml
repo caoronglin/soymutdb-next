@@ -48,4 +48,13 @@ paths = [
   '''apps/admin/dist/''',
   '''apps/jbrowse/dist/''',
   '''apps/docs/dist/''',
+  # Same status as the four trees above: pages-dist is the SSG artifact built
+  # by scripts/build-pages-artifact.sh and ignored by git. Minified Chart.js in
+  # its chunks assigns `this.key,i=this.defaultProps`, which generic-api-key
+  # reads as `key=<secret>`; the "secret" is a variable name.
+  '''pages-dist/''',
+  # Tool caches are not sources either: they hold raw scanner stdout that can
+  # quote a finding verbatim, which generic-api-key then reports again.
+  '''.cache/''',
+  '''.pi/''',
 ]

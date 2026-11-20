@@ -26,4 +26,16 @@ echo ">> generating TypeScript client types..."
 pnpm exec openapi-typescript "$PKG_DIR/openapi.json" \
   -o "$PKG_DIR/src/generated/openapi.d.ts"
 
+# Quote interface property names that collide with TypeScript *modifiers*.
+# The API schema legitimately publishes an `abstract` field (publication
+# metadata); openapi-typescript emits `abstract: string | null`, which is valid
+# TypeScript and passes `tsc`, but opengrep's TS parser reads it as a class
+# modifier and aborts parsing the whole file. That leaves an entire scanner
+# lane silently incomplete in pi-lens. A quoted property name is exactly the
+# same type and the same runtime shape -- only the parser stops guessing.
+# Keep this in the generator: the generated file is never hand-edited.
+# Keep this in the generator: the generated file is never hand-edited.
+"$API_PYTHON" "$PKG_DIR/scripts/quote_reserved_properties.py" \
+  "$PKG_DIR/src/generated/openapi.d.ts"
+
 echo ">> done: packages/api-client/src/generated/openapi.d.ts"

@@ -85,8 +85,18 @@ ROBOTS_TAG = "soymutdb-published-robots/v1"
 # `/analyses` was the only prerendered route among them, so the enumeration
 # drops 33 -> 32 while the indexable set (25) and the crawl policy stay
 # unchanged -- which is why only _MANIFEST_DIGEST moved below.
+#
+# Re-pinned 2026-11-10 with the dynamic-eligible entity documents. A record page
+# is now a real document when -- and only when -- the build's entity snapshot
+# lists the record: the demo artifact prerenders the two genes in
+# `apps/web/fixtures/entity-snapshot.demo.json`, so the enumeration moves
+# 32 -> 34 and the indexable set 25 -> 27 (a released record is indexable on the
+# external variant; the internal variant still never is). Both documents carry a
+# real body -- identifier, coordinates, strand, assembly, release -- instead of
+# the "enable JavaScript" shell. The crawl policy is byte-identical, so only
+# _MANIFEST_DIGEST moved.
 _MANIFEST_DIGEST: str | None = (
-    "8aaa581e022784ace37f0a31497dd94c22f3731de26fd23b5e5badc5f66bd751"
+    "fa9a208ca22b4ecccdb43a410e45ec44ed8ab8e1f10a846acf43252f81e73903"
 )
 _ROBOTS_DIGEST: str | None = (
     "270e18bf22e414c7aec477741c0dc91c754859b81a25ca6f263dc843eaf7f4a2"
@@ -94,8 +104,8 @@ _ROBOTS_DIGEST: str | None = (
 
 # Second, independent doors: a permutation is only caught by the digests above,
 # but a route that gains or loses its document moves these.
-_EXPECTED_ROUTES = 32
-_EXPECTED_INDEXABLE = 25
+_EXPECTED_ROUTES = 34
+_EXPECTED_INDEXABLE = 27
 
 MANIFEST_KEYS = frozenset({"siteVariant", "origin", "entries"})
 ENTRY_KEYS = frozenset({"path", "title", "description", "includeInSitemap"})
@@ -194,6 +204,135 @@ def shape_errors(document: dict[str, Any]) -> list[str]:
                 f"{sorted(entry)}; the reviewed row shape is {sorted(ENTRY_KEYS)}"
             )
     return found
+
+
+#: The static route set of the external artifact, excluding record documents.
+#: Pinned by `_MANIFEST_DIGEST` in the default (committed-artifact) mode; a
+#: snapshot-driven build asserts the count instead, because its total is a
+#: function of the release it publishes.
+BASE_ROUTES = 32
+BASE_INDEXABLE = 25
+
+_ENTITY_PATH = re.compile(r"^/genes/(?P<public_id>[^/]+)/?$")
+
+
+def _snapshot_public_ids(snapshot_path: Path) -> tuple[list[str], list[str]]:
+    """The snapshot's gene identifiers, plus the reasons it is unusable."""
+    try:
+        payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    except OSError as exc:
+        return [], [f"entity snapshot {snapshot_path} is unreadable: {exc}"]
+    except json.JSONDecodeError as exc:
+        return [], [f"entity snapshot {snapshot_path} is not JSON: {exc}"]
+    if not isinstance(payload, dict):
+        return [], [f"entity snapshot {snapshot_path} is not an object"]
+    if payload.get("schema_version") != 1:
+        return [], [
+            f"entity snapshot schema_version is {payload.get('schema_version')!r}, expected 1"
+        ]
+    if payload.get("site_variant") != "external":
+        return [], [
+            (
+                "entity snapshot names site_variant "
+                f"{payload.get('site_variant')!r}; the internal artifact never publishes a record"
+            )
+        ]
+    entities = payload.get("entities")
+    if not isinstance(entities, list):
+        return [], ["entity snapshot 'entities' is not an array"]
+    ids: list[str] = []
+    failed: list[str] = []
+    for index, entity in enumerate(entities):
+        if not isinstance(entity, dict):
+            failed.append(f"entity snapshot entry {index} is not an object")
+            continue
+        public_id = entity.get("public_id")
+        if not isinstance(public_id, str) or not public_id.strip():
+            failed.append(f"entity snapshot entry {index} carries no public_id")
+            continue
+        if "/" in public_id or public_id.startswith("."):
+            failed.append(
+                f"entity snapshot entry {index} public_id {public_id!r} could escape its directory"
+            )
+            continue
+        ids.append(public_id)
+    duplicates = sorted({value for value in ids if ids.count(value) > 1})
+    if duplicates:
+        failed.append(f"entity snapshot repeats public_id(s) {duplicates}")
+    return ids, failed
+
+
+def entity_snapshot_errors(document: dict[str, Any], snapshot_path: Path) -> list[str]:
+    """Verify a build whose record documents come from ``snapshot_path``.
+
+    The default mode pins the whole manifest by digest, which works because the
+    committed artifact is built from the demo snapshot. A deployment publishes
+    the release it actually holds, so its route total is data, not a constant.
+    This mode therefore pins the *shape* instead:
+
+    * the static routes are unchanged -- the count must still be
+      ``BASE_ROUTES``/``BASE_INDEXABLE``, so a dropped or added page fails;
+    * there is exactly one document per snapshot entity, and no other record
+      document, so neither a missing nor a stray page passes;
+    * each record document is indexable on the external variant and carries a
+      title and description, so a bare shell does not count as a document.
+
+    What this mode deliberately does not do is compare the digest: that would
+    encode one deployment's data into the repository's contract.
+    """
+    entries = document.get("entries")
+    if not isinstance(entries, list):
+        return ["routes.json 'entries' is not an array"]
+    expected_ids, failed = _snapshot_public_ids(snapshot_path)
+    if failed:
+        return failed
+
+    found_ids: list[str] = []
+    base = 0
+    base_indexable = 0
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        path = entry.get("path")
+        if not isinstance(path, str):
+            continue
+        match = _ENTITY_PATH.match(path)
+        if match is None:
+            base += 1
+            if entry.get("includeInSitemap") is True:
+                base_indexable += 1
+            continue
+        found_ids.append(match.group("public_id"))
+        if entry.get("includeInSitemap") is not True:
+            failed.append(
+                f"record document {path} is not indexable; a released record is "
+                "indexable on the external variant"
+            )
+        for key in ("title", "description"):
+            value = entry.get(key)
+            if not isinstance(value, str) or not value.strip():
+                failed.append(f"record document {path} carries no {key}")
+
+    if base != BASE_ROUTES:
+        failed.append(
+            f"static routes moved: found {base}, the pinned non-record set is {BASE_ROUTES}"
+        )
+    if base_indexable != BASE_INDEXABLE:
+        failed.append(
+            f"static indexable routes moved: found {base_indexable}, pinned {BASE_INDEXABLE}"
+        )
+    missing = sorted(set(expected_ids) - set(found_ids))
+    stray = sorted(set(found_ids) - set(expected_ids))
+    if missing:
+        failed.append(
+            f"{len(missing)} snapshot entit(y/ies) have no document, e.g. {missing[:3]}"
+        )
+    if stray:
+        failed.append(
+            f"{len(stray)} document(s) are not in the snapshot, e.g. {stray[:3]}: a "
+            "record page must come from the release snapshot, never from a route flag"
+        )
+    return failed
 
 
 def check(
@@ -540,6 +679,16 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="print the two literal lines for the artifact in this tree",
     )
+    parser.add_argument(
+        "--entity-snapshot",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help=(
+            "verify a build whose record documents came from this release snapshot, "
+            "instead of pinning the committed demo manifest by digest"
+        ),
+    )
     args = parser.parse_args(argv)
     if args.self_test:
         return self_test()
@@ -549,6 +698,29 @@ def main(argv: list[str] | None = None) -> int:
         except ValueError as exc:
             print(f"published route manifest: FAIL: {exc}", file=sys.stderr)
             return 1
+        return 0
+    if args.entity_snapshot is not None:
+        try:
+            document, _robots = _read(EXTERNAL)
+        except ValueError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 1
+        problems = shape_errors(document) + entity_snapshot_errors(
+            document, args.entity_snapshot
+        )
+        if problems:
+            for problem in problems:
+                print(f"FAIL: {problem}", file=sys.stderr)
+            print(
+                f"published route manifest: {len(problems)} failure(s) "
+                f"(snapshot mode: {args.entity_snapshot})",
+                file=sys.stderr,
+            )
+            return 1
+        print(
+            "published route manifest: OK "
+            f"(snapshot mode: {BASE_ROUTES} static + one document per snapshot entity)"
+        )
         return 0
     problems = check()
     if problems:

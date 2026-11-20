@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-01-01T00:00:00Z",
+  "site_variant": "external",
+  "entities": [
+    {
+      "kind": "gene",
+      "public_id": "Glyma.01G000100",
+      "symbol": null,
+      "assembly_id": "1",
+      "assembly_name": "Wm82.a4.v1",
+      "release_id": 7,
+      "chromosome": "chr01",
+      "start": 100,
+      "end": 200,
+      "strand": "+",
+      "title": "Glyma.01G000100 — Gene — SoyMutDB",
+      "description": "Glyma.01G000100 on Wm82.a4.v1 chr01:100-200 (release 7)."
+    },
+    {
+      "kind": "gene",
+      "public_id": "Glyma.02G000200",
+      "symbol": null,
+      "assembly_id": "1",
+      "assembly_name": "Wm82.a4.v1",
+      "release_id": 7,
+      "chromosome": "chr02",
+      "start": 20450,
+      "end": 21890,
+      "strand": "-",
+      "title": "Glyma.02G000200 — Gene — SoyMutDB",
+      "description": "Glyma.02G000200 on Wm82.a4.v1 chr02:20,450-21,890 (release 7)."
+    }
+  ]
+}

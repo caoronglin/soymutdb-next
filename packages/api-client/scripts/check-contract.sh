@@ -62,6 +62,12 @@ echo ">> regenerating client types in temp dir..."
   -o "$TMP_DIR/openapi.d.ts"
 )
 
+# Apply the same post-processing the generator does: quote interface property
+# names that look like TypeScript modifiers (`abstract`). Without this the
+# byte-for-byte comparison would fail for an artefact both sides produce.
+"$API_PYTHON" "$REPO_ROOT/packages/api-client/scripts/quote_reserved_properties.py" \
+  "$TMP_DIR/openapi.d.ts"
+
 if ! diff -q "$TMP_DIR/openapi.d.ts" "$PKG_DIR/src/generated/openapi.d.ts" >/dev/null; then
   echo "CONTRACT DEBT: packages/api-client/openapi.json matches the backend, but"
   echo "packages/api-client/src/generated/openapi.d.ts does not match the snapshot."

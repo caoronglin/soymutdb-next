@@ -69,6 +69,18 @@
       "includeInSitemap": true
     },
     {
+      "path": "/genes/Glyma.01G000100",
+      "title": "Glyma.01G000100 — Gene — SoyMutDB",
+      "description": "Glyma.01G000100 on Wm82.a4.v1 chr01:100-200 (release 7).",
+      "includeInSitemap": true
+    },
+    {
+      "path": "/genes/Glyma.02G000200",
+      "title": "Glyma.02G000200 — Gene — SoyMutDB",
+      "description": "Glyma.02G000200 on Wm82.a4.v1 chr02:20,450-21,890 (release 7).",
+      "includeInSitemap": true
+    },
+    {
       "path": "/guide",
       "title": "Guide — SoyMutDB",
       "description": "How to retrieve records, coordinates and releases.",

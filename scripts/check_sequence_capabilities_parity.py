@@ -84,8 +84,8 @@ COORD = {
 
 RUST_CONST = re.compile(r"pub\s+const\s+(\w+)\s*:\s*[\w]+\s*=\s*([\d_]+)\s*;")
 K_BOUND = re.compile(r"\((\d+)\.\.=(\d+)\)\.contains")
-SET_ITEM = re.compile(r'd\.set_item\(\s*"([^"]+)"\s*,\s*(.*?)\s*,?\s*\)\?;', re.S)
-CAPS_FN = re.compile(r"\nfn capabilities\(.*?\n\}", re.S)
+SET_ITEM = re.compile(r'd\.set_item\(\s*"([^"]+)"\s*,\s*(.*?)\s*,?\s*\)\?;', re.DOTALL)
+CAPS_FN = re.compile(r"\nfn capabilities\(.*?\n\}", re.DOTALL)
 ROUTER_OP = re.compile(r'@router\.(get|post)\(\s*["\']([^"\']+)["\']')
 VALIDATOR = re.compile(r"wrap_pyfunction!\((validate_\w+),")
 
@@ -116,14 +116,21 @@ def _py_schema(text: str) -> tuple[dict[str, int], dict, set[str]]:
     tree = ast.parse(text)
     consts: dict[str, int] = {}
     for node in tree.body:
-        targets = []
+        # Only `Assign` and `AnnAssign` carry a `value`; checking the node type
+        # first keeps the attribute access well-typed instead of reaching for a
+        # field that other statement types do not have.
+        targets: list[ast.expr] = []
+        value_node: ast.expr | None = None
         if isinstance(node, ast.Assign):
             targets = [t for t in node.targets if isinstance(t, ast.Name)]
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            targets = [node.target]
+            value_node = node.value
+        elif isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name):
+                targets = [node.target]
+            value_node = node.value
+        value = _literal(value_node, {}) if value_node is not None else None
         for target in targets:
-            value = _literal(node.value, {}) if node.value else None
-            if isinstance(value, int):
+            if isinstance(target, ast.Name) and isinstance(value, int):
                 consts[target.id] = value
 
     caps_cls = next(
@@ -145,7 +152,13 @@ def _py_schema(text: str) -> tuple[dict[str, int], dict, set[str]]:
         ann = node.annotation
         if isinstance(ann, ast.Subscript) and isinstance(ann.value, ast.Name) \
                 and ann.value.id == "Literal" and isinstance(ann.slice, ast.Tuple):
-            fmts.update(e.value for e in ann.slice.elts if isinstance(e, ast.Constant))
+            # `Constant.value` may be Ellipsis/bytes as far as the checker is
+            # concerned; only string members name a format.
+            fmts.update(
+                e.value
+                for e in ann.slice.elts
+                if isinstance(e, ast.Constant) and isinstance(e.value, str)
+            )
     return consts, caps, fmts
 
 
@@ -234,10 +247,15 @@ def check(root: Path = ROOT, texts: dict[str, str] | None = None) -> list[str]:
         eq("kernel capabilities()[k_range]",
            (int(m.group(1)), int(m.group(2))) if m else bindings["k_range"], rust_k)
 
-    # 4. Only implemented genetic codes may be advertised.
+    # 4. The *declared baseline* equals the kernel's implemented set. This
+    #    reads the schema field default, not a live response: the default is
+    #    the conservative promise both engines keep, while a loaded engine may
+    #    report a wider set at runtime (the Biopython engine carries the full
+    #    NCBI table list). Pinning the default keeps "a code was invented that
+    #    nothing implements" detectable in a static edit.
     if "STANDARD_GENETIC_CODE" in rust:
-        eq("capabilities.genetic_codes", caps.get("genetic_codes"),
-           [rust["STANDARD_GENETIC_CODE"]])
+        eq("capabilities.genetic_codes (declared baseline)",
+           caps.get("genetic_codes"), [rust["STANDARD_GENETIC_CODE"]])
 
     # 5. Coordinate-system strings are a published contract.
     for key, want in COORD.items():

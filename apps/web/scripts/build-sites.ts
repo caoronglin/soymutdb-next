@@ -3,18 +3,32 @@
  * Build the isolated external and internal portal artifacts.
  *
  * Each variant is a complete Umi build of its own: the application shell, the
- * per-route documents, the finalized CSP, the optional .gz siblings and the
- * service worker. The two trees never share a build step that could carry one
+ * per-route documents, the finalized CSP, the .gz siblings and the service
+ * worker. The two trees never share a build step that could carry one
  * variant's configuration into the other.
  */
 
 
 import { execFileSync } from "node:child_process";
 import { rmSync } from "node:fs";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 const packageDir = resolve(import.meta.dirname, "..");
 const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
+
+/**
+ * Entities the demo artifact prerenders, as a checked-in snapshot file.
+ *
+ * `generate-static-routes.ts` emits no entity document unless it is handed a
+ * snapshot, and the committed `dist/external/routes.json` is built from the
+ * demo tree, so the demo build has to name one explicitly. It is an *input* to
+ * the build, not a default inside the generator: a production build gets
+ * nothing here and therefore prerenders no entity page until an operator
+ * supplies `SOYMUTDB_ENTITY_SNAPSHOT` for the release being deployed. See
+ * `docs/dev/published-route-manifest.md` for the re-pin that a new snapshot
+ * forces.
+ */
+const DEMO_ENTITY_SNAPSHOT = join(packageDir, "fixtures", "entity-snapshot.demo.json");
 
 // The PDF viewer loads its worker from `public/pdf.worker.min.mjs` (Umi's
 // webpack has no `?url` import convention); refresh that file before building
@@ -26,6 +40,10 @@ execFileSync(process.execPath, ["scripts/sync-pdf-worker.mjs"], {
 
 function buildVariant(variant: "external" | "internal") {
   const isExternal = variant === "external";
+  // A production build publishes only what an operator points it at: the demo
+  // entity snapshot is a demo-build input, never a production default.
+  const isProduction =
+    (process.env.VITE_DEPLOYMENT_MODE || "demo").trim().toLowerCase() === "production";
   // The remote-preview provider is configured with non-VITE inputs and mapped
   // to this build only. Letting both variants read one shared VITE_* value would
   // put the internal viewer origin into the public artifact (and vice versa),
@@ -63,6 +81,12 @@ function buildVariant(variant: "external" | "internal") {
     SOYMUTDB_SITE_URL: isExternal
       ? process.env["SOYMUTDB_SITE_URL"] || process.env["SOYMUTDB_PORTAL_ORIGIN"] || "https://external.soymutdb.invalid"
       : process.env["SOYMUTDB_INTERNAL_SITE_URL"] || "https://internal.soymutdb.invalid",
+    // External variant only, like the content snapshot: the internal artifact
+    // never publishes a record document, so it never reads the file.
+    SOYMUTDB_ENTITY_SNAPSHOT: isExternal
+      ? process.env["SOYMUTDB_ENTITY_SNAPSHOT"] ??
+        (isProduction ? "" : DEMO_ENTITY_SNAPSHOT)
+      : "",
   };
 
   console.log(`[sites] building ${variant} artifact`);
@@ -103,13 +127,15 @@ function buildVariant(variant: "external" | "internal") {
     env,
     stdio: "inherit",
   });
-  if (process.env.SOYMUTDB_EMIT_GZ === "1") {
-    execFileSync(pnpmCommand, ["exec", "tsx", "scripts/gzip-compress.ts"], {
-      cwd: packageDir,
-      env,
-      stdio: "inherit",
-    });
-  }
+  // Unconditional: every tree this repo serves is served from a host that
+  // answers `Accept-Encoding: gzip` with these siblings (nginx gzip_static, the
+  // two preview servers). `SOYMUTDB_EMIT_GZ=0` is the opt-out and lives inside
+  // the script, so the two paths cannot disagree about whether it ran.
+  execFileSync(pnpmCommand, ["exec", "tsx", "scripts/gzip-compress.ts"], {
+    cwd: packageDir,
+    env,
+    stdio: "inherit",
+  });
   execFileSync(pnpmCommand, ["exec", "node", "scripts/gen-sw.js"], {
     cwd: packageDir,
     env,
