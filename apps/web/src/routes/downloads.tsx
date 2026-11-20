@@ -208,8 +208,16 @@ function DownloadsComponent() {
   const handleConvert = async (file: DownloadFile) => {
     if (!isSequenceFile(file)) return;
     if (file.file_size !== null && file.file_size > MAX_PREVIEW_SIZE) return;
+    // The catalogue's `file_url` is server-controlled, but it is still a URL a
+    // reader's browser will fetch: run it through the same scheme check the
+    // preview and download paths use, so only http(s) can be reached.
+    const target = safeExternalUrl(file.file_url);
+    if (!target) {
+      setConvert({ file, text: "" });
+      return;
+    }
     try {
-      const response = await fetch(file.file_url);
+      const response = await fetch(target);
       if (!response.ok) throw new Error(String(response.status));
       setConvert({ file, text: await response.text() });
     } catch {
@@ -375,7 +383,11 @@ function DownloadsComponent() {
       {!isLoading && !error && groups.length === 0 && (
         <div data-testid="downloads-empty" className="mt-10">
           <Empty description={t("downloads.empty")}>
-            <Link to="/search" className="text-sm font-medium text-primary hover:underline">
+            {/* `min-h-6` is the 24px WCAG 2.2 AA target floor; the link measured 20px. */}
+            <Link
+              to="/search"
+              className="inline-flex min-h-6 items-center text-sm font-medium text-primary hover:underline"
+            >
               {t("home.databaseSearch")} →
             </Link>
           </Empty>
