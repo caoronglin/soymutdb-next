@@ -207,10 +207,10 @@ def test_navigation_rejects_unsafe_or_malformed_destinations(target: str, href: 
 def test_optional_email_and_phone_values_are_validated_without_rewriting_display_text() -> None:
     assert validate_footer_setting("contact_email_value", "") == ""
     assert validate_footer_setting("contact_email_value", "help@example.org") == "help@example.org"
-    phone = "+86 (025)-84391957"
+    phone = "+86 (555) 0100"
     assert validate_footer_setting("contact_phone_value", phone) == phone
 
     with pytest.raises(FooterContentValidationError):
         validate_footer_setting("contact_email_value", "not-an-email")
     with pytest.raises(FooterContentValidationError):
-        validate_footer_setting("contact_phone_value", "025-84391957<script>")
+        validate_footer_setting("contact_phone_value", "555-0100<script>")

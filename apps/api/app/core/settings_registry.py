@@ -204,12 +204,19 @@ _DEFINITIONS: tuple[SettingDefinition, ...] = (
         requires_approval=False,
         max_length=7,
     ),
-    # Footer contact block — editable by admins at runtime and served to
-    # the public site footer via GET /site/footer.
+    # Footer contact block — editable by admins at runtime and served to the
+    # public site footer via GET /site/footer.
+    #
+    # The defaults are empty on purpose. A contact block is one deployment's
+    # operational detail (a person's name, a phone number, a mailbox, a street
+    # address); shipping one in the source would publish that person's details
+    # from every checkout, and a fork would inherit them. An empty value renders
+    # no line at all, so a fresh install shows the brand and the copyright and
+    # the operator fills in what they want to publish.
     _definition(
         "footer",
         "contact_person",
-        default="联系人: 周玲",
+        default="",
         permission=SettingPermission.ADMINISTRATOR,
         scope=SettingScope.GLOBAL,
         hot_reload=True,
@@ -220,7 +227,7 @@ _DEFINITIONS: tuple[SettingDefinition, ...] = (
     _definition(
         "footer",
         "contact_phone",
-        default="电话: 025-84391957",
+        default="",
         permission=SettingPermission.ADMINISTRATOR,
         scope=SettingScope.GLOBAL,
         hot_reload=True,
@@ -231,7 +238,7 @@ _DEFINITIONS: tuple[SettingDefinition, ...] = (
     _definition(
         "footer",
         "contact_email",
-        default="电子邮件: zlingxiaoyao@163.com",
+        default="",
         permission=SettingPermission.ADMINISTRATOR,
         scope=SettingScope.GLOBAL,
         hot_reload=True,
@@ -253,7 +260,7 @@ _DEFINITIONS: tuple[SettingDefinition, ...] = (
     _definition(
         "footer",
         "address",
-        default="地址: 南京市玄武区钟灵街50号 邮编210014",
+        default="",
         permission=SettingPermission.ADMINISTRATOR,
         scope=SettingScope.GLOBAL,
         hot_reload=True,

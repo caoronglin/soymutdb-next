@@ -70,7 +70,9 @@ describe("public footer contract", () => {
     runtime.getFooter.mockRejectedValue(new Error("private transport diagnostic"));
     mount();
     await waitFor(() => expect(runtime.getFooter).toHaveBeenCalledTimes(2));
-    expect(screen.getByText("Local address")).toBeTruthy();
+    // No address was published, so no address line may appear -- and the
+    // transport error must never surface as copy.
+    expect(screen.queryByText("Local address")).toBeNull();
     expect(screen.queryByText("private transport diagnostic")).toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
   });

@@ -212,11 +212,13 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
   });
 
   const [footer, setFooter] = useState({
-    contact_person: "联系人: 周玲",
-    contact_phone: "电话: 025-84391957",
-    contact_email: "电子邮件: zlingxiaoyao@163.com",
+    // Empty by design: these are one deployment's operational details. The
+    // inputs carry placeholders that show the expected shape.
+    contact_person: "",
+    contact_phone: "",
+    contact_email: "",
     copyright: "© {{year}} SoyMutDB. All rights reserved.",
-    address: "地址: 南京市玄武区钟灵街50号 邮编210014",
+    address: "",
   });
 
   const [siteContent, setSiteContent] = useState<Record<string, string>>({});
@@ -392,11 +394,11 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
         return;
       }
       setFooter({
-        contact_person: String(res.contact_person ?? "联系人: 周玲"),
-        contact_phone: String(res.contact_phone ?? "电话: 025-84391957"),
-        contact_email: String(res.contact_email ?? "电子邮件: zlingxiaoyao@163.com"),
+        contact_person: String(res.contact_person ?? ""),
+        contact_phone: String(res.contact_phone ?? ""),
+        contact_email: String(res.contact_email ?? ""),
         copyright: String(res.copyright ?? "© {{year}} SoyMutDB. All rights reserved."),
-        address: String(res.address ?? "地址: 南京市玄武区钟灵街50号 邮编210014"),
+        address: String(res.address ?? ""),
       });
       setSectionLoadError((errors) => ({ ...errors, footer: false }));
       setSectionLoaded((loaded) => ({ ...loaded, footer: true }));

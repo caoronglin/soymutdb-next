@@ -4,7 +4,9 @@ import { useTranslation } from "react-i18next";
 import { getSiteFooter } from "@soymutdb/api-client";
 import { SITE_VARIANT } from "../lib/site-variant";
 
-const FALLBACK_ADDRESS = "地址: 南京市玄武区钟灵街50号 邮编210014";
+// No address fallback: a postal address belongs to one deployment's operator,
+// and shipping one would publish that address from every checkout. When the
+// setting is empty the footer simply omits the line.
 const PHONE_RE = /^\+?[0-9][0-9 .()-]{0,30}$/;
 
 function legacyValue(value: string | null | undefined): string | undefined {
@@ -33,7 +35,7 @@ export function SiteFooter() {
     retry: false,
   });
   const site = footerQuery.data;
-  const address = (language === "zh" ? site?.address_zh : site?.address_en) || legacyValue(site?.address) || t("footer.address", { defaultValue: FALLBACK_ADDRESS });
+  const address = (language === "zh" ? site?.address_zh : site?.address_en) || legacyValue(site?.address);
   const copyrightText = (language === "zh" ? site?.copyright_zh : site?.copyright_en) || site?.copyright || t("footer.copyright", { year });
   const copyright = copyrightText.replaceAll("{{year}}", String(year));
   const person = (language === "zh" ? site?.contact_person_zh : site?.contact_person_en) || legacyValue(site?.contact_person);
@@ -53,7 +55,8 @@ export function SiteFooter() {
         </div>
         <div className="min-w-0 space-y-1 break-words text-left sm:text-right">
           <p>{copyright}</p>
-          <p>{address}</p>
+          {/* Rendered only when an operator published one. */}
+          {address ? <p>{address}</p> : null}
         </div>
       </div>
     </footer>
