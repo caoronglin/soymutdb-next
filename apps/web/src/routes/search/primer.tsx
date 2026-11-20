@@ -1,3 +1,4 @@
+import { CopyValue } from "../../components/copy-value";
 import { assembliesQueryOptions } from "../../lib/query-options";
 /**
  * Primer design — second-level catalog of the /search portal (PPTX V2).
@@ -31,11 +32,7 @@ import {
   Tag,
   Typography,
 } from "@/lib/antd";
-import {
-  CopyOutlined,
-  ExperimentOutlined,
-  ReloadOutlined,
-} from "@ant-design/icons";
+import { ExperimentOutlined, ReloadOutlined } from "@ant-design/icons";
 import { getReleaseId, seqFetchRegion } from "@soymutdb/api-client";
 import { FadeUp } from "../../components/route-motion";
 import { SOYBEAN_CHROMOSOMES } from "../../lib/format";
@@ -134,14 +131,6 @@ function PrimerComponent() {
     }
   };
 
-  const copySeq = async (seq: string) => {
-    try {
-      await navigator.clipboard.writeText(seq);
-      message.success(t("search.primer.copied"));
-    } catch {
-      message.error(t("search.primer.copyFailed"));
-    }
-  };
 
   const columns = [
     {
@@ -160,12 +149,10 @@ function PrimerComponent() {
       render: (_: unknown, pair: PrimerPair) => (
         <Space size={4}>
           <code className="font-mono text-xs break-all">{pair.forward.seq}</code>
-          <Button
-            size="small"
-            type="text"
-            icon={<CopyOutlined />}
-            aria-label={t("search.primer.copy")}
-            onClick={() => void copySeq(pair.forward.seq)}
+          <CopyValue
+            value={pair.forward.seq}
+            label={t("search.primer.copy")}
+            testId="primer-copy-forward"
           />
         </Space>
       ),
@@ -177,12 +164,10 @@ function PrimerComponent() {
       render: (_: unknown, pair: PrimerPair) => (
         <Space size={4}>
           <code className="font-mono text-xs break-all">{pair.reverse.seq}</code>
-          <Button
-            size="small"
-            type="text"
-            icon={<CopyOutlined />}
-            aria-label={t("search.primer.copy")}
-            onClick={() => void copySeq(pair.reverse.seq)}
+          <CopyValue
+            value={pair.reverse.seq}
+            label={t("search.primer.copy")}
+            testId="primer-copy-reverse"
           />
         </Space>
       ),
@@ -253,7 +238,15 @@ function PrimerComponent() {
             const locus = source?.region
               ? source.region
               : `${pair.forward.start}-${pair.reverse.end}`;
-            const base = import.meta.env.BASE_URL ?? "/";
+            // `BASE_URL` is a build-time constant, not user input, but a
+            // deployment can set it: only a rooted, single-slash path may be
+            // used, so a misconfigured base cannot turn this into an
+            // off-origin open. Everything after it is query-encoded.
+            const configured = import.meta.env.BASE_URL ?? "/";
+            const base =
+              configured.startsWith("/") && !configured.startsWith("//")
+                ? configured
+                : "/";
             window.open(
               `${base}browser?assembly=${encodeURIComponent(source?.assembly ?? "")}&locus=${encodeURIComponent(locus)}`,
               "_blank",

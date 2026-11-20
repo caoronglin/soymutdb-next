@@ -19,6 +19,8 @@ import {
   type SearchResult,
   type SearchResultType,
 } from "@soymutdb/api-client";
+import { HighlightText } from "../components/highlight-text";
+import { CopyValue } from "../components/copy-value";
 import { FadeUp } from "../components/route-motion";
 import { queryKeys } from "../lib/query-keys";
 import { SITE_VARIANT } from "../lib/site-variant";
@@ -405,7 +407,7 @@ function SearchComponent() {
 
       {(catalog || directory) && !assemblyContextMissing ? <section data-testid="search-results" className="mt-10" aria-label={t("search.resultsAria")}>
         <div className="mb-4 flex items-center justify-between text-sm text-muted-foreground"><span>{t("search.resultsFor")} <span className="font-mono text-foreground">“{q}”</span>{isRefreshing ? <span> · {t("search.refreshing")}</span> : null}</span>{totalCount !== null ? <span>{t("search.resultCount", { count: totalCount })}</span> : null}</div>
-        {results.length === 0 ? <Empty image={<SearchIcon style={{ fontSize: 40, color: "var(--muted-foreground)" }} />} description={<><p className="font-medium">{t("search.noResults")}</p><p className="text-sm text-muted-foreground">{t("search.noMatchesDescription")}</p></>} /> : <div className="grid gap-3">{results.map((result) => <ResultRow key={`${result.type}-${result.id}-${result.internal_id ?? "public"}`} result={result} assemblyLabels={assemblyLabels} />)}</div>}
+        {results.length === 0 ? <Empty image={<SearchIcon style={{ fontSize: 40, color: "var(--muted-foreground)" }} />} description={<><p className="font-medium">{t("search.noResults")}</p><p className="text-sm text-muted-foreground">{t("search.noMatchesDescription")}</p></>} /> : <div className="grid gap-3">{results.map((result) => <ResultRow key={`${result.type}-${result.id}-${result.internal_id ?? "public"}`} result={result} assemblyLabels={assemblyLabels} query={q} />)}</div>}
         {catalog && !internalSite ? <nav className="mt-6 flex justify-center gap-3" aria-label={t("common.pagination")}>
           <Button onClick={previousPage} disabled={!scopedCursor || query.isFetching}>
             {t(cursorIndex > 0 ? "common.previous" : "genes.first")}
@@ -422,26 +424,12 @@ function SearchComponent() {
   );
 }
 
-function CopyIdentifier({ value }: { value: string }) {
-  const { t } = useTranslation();
-  const [copied, setCopied] = React.useState(false);
-  const copy = async () => {
-    if (!navigator.clipboard) return;
-    await navigator.clipboard.writeText(value);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
-  };
-  return (
-    <Button size="small" onClick={() => void copy()}>
-      {copied ? t("common.copied") : t("common.copy")}
-    </Button>
-  );
-}
-
-function ResultRow({ result, assemblyLabels }: {
+function ResultRow({ result, assemblyLabels, query }: {
   result: SearchResult;
   /** Canonical assembly id → display label, for hits that carry only an id. */
   assemblyLabels?: Map<string, string>;
+  /** The reader's query, marked inside the identifiers it matched. */
+  query?: string;
 }) {
   const { t } = useTranslation();
   const Icon = RESULT_ICONS[result.type] ?? FileText;
@@ -471,12 +459,16 @@ function ResultRow({ result, assemblyLabels }: {
           <div className="flex flex-wrap items-center gap-2">
             <Tag className="font-mono text-[10px] uppercase">{result.type}</Tag>
             {assemblyLabel ? <Tag data-testid="search-result-assembly" className="font-mono text-[10px] uppercase">{assemblyLabel}</Tag> : null}
-            <p className="truncate font-medium">{result.name ?? publicId}</p>
-            <code className="font-mono text-xs text-muted-foreground">{publicId}</code>
+            <p className="truncate font-medium">
+              <HighlightText text={result.name ?? publicId} query={query} />
+            </p>
+            <code className="font-mono text-xs text-muted-foreground">
+              <HighlightText text={publicId} query={query} />
+            </code>
             {SITE_VARIANT === "internal" && result.internal_id ? (
               <span className="flex items-center gap-1" data-testid="search-internal-id">
                 <code className="font-mono text-xs text-muted-foreground">{result.internal_id}</code>
-                <CopyIdentifier value={result.internal_id} />
+                <CopyValue value={result.internal_id} variant="text" size="small" label={t("common.copy")} />
               </span>
             ) : null}
           </div>

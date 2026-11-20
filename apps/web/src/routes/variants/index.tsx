@@ -12,8 +12,6 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useSiteContent } from "../../lib/site-content-react";
 import {
-  CheckOutlined,
-  CopyOutlined,
   LeftOutlined,
   ReloadOutlined,
   RightOutlined,
@@ -36,6 +34,7 @@ import {
   type VariantSummary,
   type VariantType,
 } from "@soymutdb/api-client";
+import { CopyValue } from "../../components/copy-value";
 import { FadeUp } from "../../components/route-motion";
 import { VariantExportControls } from "../../components/variant-export-controls";
 import { SOYBEAN_CHROMOSOMES, formatPosition } from "../../lib/format";
@@ -166,7 +165,7 @@ function VariantsComponent() {
           <span className="font-mono text-xs break-all" data-testid="variant-id">
             {row.variant_id}
           </span>
-          <CopyIdentifier value={row.variant_id} />
+          <CopyValue value={row.variant_id} />
         </span>
       ),
     },
@@ -479,42 +478,6 @@ function VariantsComponent() {
         </div>
       </div>
     </FadeUp>
-  );
-}
-
-/**
- * Copy an identifier to the clipboard.
- *
- * The identifier is long and wraps inside its cell, so selecting it by hand
- * is error-prone. A denied clipboard is not an error the user has to solve:
- * the value stays visible and selectable as plain text.
- */
-function CopyIdentifier({ value }: { value: string }) {
-  const { t } = useTranslation();
-  const [copied, setCopied] = React.useState(false);
-  React.useEffect(() => {
-    if (!copied) return;
-    const timer = window.setTimeout(() => setCopied(false), 2000);
-    return () => window.clearTimeout(timer);
-  }, [copied]);
-  const copy = async () => {
-    try {
-      if (!navigator.clipboard) return;
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-    } catch {
-      // Clipboard access denied: the identifier stays selectable as text.
-    }
-  };
-  return (
-    <button
-      type="button"
-      className="shrink-0 text-muted-foreground hover:text-foreground"
-      aria-label={copied ? `${t("common.copied")} ${value}` : `${t("common.copy")} ${value}`}
-      onClick={() => void copy()}
-    >
-      {copied ? <CheckOutlined aria-hidden /> : <CopyOutlined aria-hidden />}
-    </button>
   );
 }
 
