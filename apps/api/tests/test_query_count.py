@@ -158,6 +158,15 @@ class TestGeneDetailQueryCount:
         gene.gene_pk = 501
         gene.accession = "Glyma.01G000100"
         gene.assembly_id = 1
+        # The detail response names the assembly it belongs to, so the stub
+        # needs one with a real name: a bare MagicMock would answer with a
+        # mock object and fail the response schema.
+        assembly = MagicMock()
+        assembly.id = 1
+        # `MagicMock(name=...)` sets the mock's *name*, not an attribute, so
+        # the attribute has to be assigned after construction.
+        assembly.name = "Wm82.a4.v1"
+        gene.assembly = assembly
         gene.chromosome_id = "1"
         chromosome = MagicMock()
         chromosome.name = "1"

@@ -726,6 +726,9 @@ class TestRefreshCookieConfig:
             jwt_secret="prod-jwt-secret-that-is-longer-than-32-characters",
             analytics_ip_salt="production-analytics-ip-salt-at-least-32-characters",
             cors_origins=["https://app.example.com"],
+            # Production must say no to open self-registration explicitly;
+            # the setting is rejected at startup otherwise.
+            feature_registration_enabled=False,
         )
         assert settings.refresh_cookie_secure_effective is True
 

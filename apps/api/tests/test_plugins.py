@@ -298,7 +298,13 @@ async def test_capabilities_preserves_features_and_adds_plugins_and_databases(
     # v3: the public face carries the same sequence engine state as the narrow
     # /tools/sequence/capabilities endpoint, without a second source of truth.
     assert body["sequence"]["coordinate_system_public"] == "1-based-inclusive"
-    assert body["sequence"]["genetic_codes"] == [1]
+    # The advert reflects the loaded engine: both engines carry the standard
+    # code (1); the Biopython engine additionally carries the full NCBI set,
+    # so the assertion is that the standard code is present and the list is
+    # well-formed, not that it is exactly [1].
+    codes = body["sequence"]["genetic_codes"]
+    assert 1 in codes
+    assert codes == sorted(codes)
     assert "match" in body["sequence"]["programs"]
     assert isinstance(body["sequence"]["available"], bool)
 

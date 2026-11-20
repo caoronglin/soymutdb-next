@@ -29,6 +29,7 @@ from ...models.content import (
 from ...schemas.content import (
     DownloadFileResponse,
     NewsResponse,
+    PageStatus,
     PublicationResponse,
     SignedUrlResponse,
     StaticPageResponse,
@@ -78,7 +79,8 @@ async def content_snapshot(
     if variant is SiteVariant.INTERNAL:
         if current_user is None:
             raise AuthenticationError("Internal content requires authentication")
-        if not has_role(get_user_roles(current_user), RoleName.VIEWER):
+        # Same boundary as site.py: VIEWER is granted by self-registration.
+        if not has_role(get_user_roles(current_user), RoleName.RESEARCHER):
             raise AuthorizationError("Viewer role required for internal content")
     if release_id is not None:
         cache_key = (
@@ -381,7 +383,7 @@ def _page_to_response(p: StaticPage) -> StaticPageResponse:
         title_zh=p.title_zh,
         content_en=p.content_en,
         content_zh=p.content_zh,
-        status=p.status,
+        status=PageStatus(p.status),
         category=p.category,
         summary=p.summary,
         sort_order=p.sort_order,

@@ -5,18 +5,25 @@ from __future__ import annotations
 import uuid
 from importlib import import_module
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, cast
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import NotFoundError, ServiceUnavailableError, ValidationError
 from app.schemas.genomic import GeneListParams
 from app.schemas.popgen import AlleleFreqRequest
-from app.schemas.variant import ExportRequest, VariantFilterParams
+from app.schemas.variant import (
+    ConsequenceType,
+    ExportRequest,
+    VariantExportFilters,
+    VariantFilterParams,
+)
 from app.services.clickhouse_service import ClickHouseService
 from app.services.gene_service import GeneService
 from app.services.popgen_service import PopGenService
+from app.services.postgres_variant_service import PostgresVariantService
 from app.services.release_context import ReleaseContext
 from app.services.variant_service import VariantService
 
@@ -111,6 +118,7 @@ async def test_active_release_context_is_resolved_before_queries():
     release_context = import_module("app.services.release_context")
     release = SimpleNamespace(
         id=7,
+        name="Published release",
         assembly_id=3,
         assembly="Wm82.a4.v1",
         status="published",
@@ -199,7 +207,7 @@ async def test_gene_list_storage_query_is_always_release_scoped():
     db = _EmptyGeneDb()
 
     await GeneService().list_genes(
-        db,
+        cast(AsyncSession, db),
         GeneListParams(chromosome="Gm01", limit=20),
         release_context=_context(),
     )
@@ -215,7 +223,7 @@ async def test_gene_detail_storage_query_is_always_release_scoped():
 
     with pytest.raises(NotFoundError):
         await GeneService().get_gene(
-            db,
+            cast(AsyncSession, db),
             "Glyma.01G000100",
             release_context=_context(),
         )
@@ -237,10 +245,10 @@ class _CapturingRegionStore:
 async def test_popgen_region_query_propagates_release_context():
     store = _CapturingRegionStore()
     context = _context()
-    service = PopGenService(variant_service=store)
+    service = PopGenService(variant_service=cast(PostgresVariantService, store))
 
     await service.allele_frequencies(
-        _EmptyGeneDb(),
+        cast(AsyncSession, _EmptyGeneDb()),
         AlleleFreqRequest(
             assembly="Wm82.a4.v1",
             chromosome="Gm01",
@@ -265,7 +273,7 @@ async def test_variant_sql_binds_release_filters_and_boundary_cursor():
         end=100,
         ref="A",
         alt="T",
-        consequence="missense_variant",
+        consequence=cast(ConsequenceType, "missense_variant"),
     )
 
     await service.query_variants(
@@ -374,7 +382,7 @@ async def test_variant_export_writes_durable_event_pinned_to_release():
     db = _Db()
     with patch.object(variants_route, "dispatch_task", create=True) as dispatch:
         response = await variants_route.export_variants(
-            ExportRequest(filters={"chromosome": "Gm01"}),
+            ExportRequest(filters=cast(VariantExportFilters, {"chromosome": "Gm01"})),
             db=db,
             release_context=_context(),
             current_user=SimpleNamespace(id=uuid.uuid4()),
@@ -450,16 +458,16 @@ async def test_same_position_variants_paginate_without_skip_or_duplicate():
     store = _InMemoryVariantStore(
         [_variant(41, 0), _variant(42, 0), _variant(43, 0), _variant(44, 1)]
     )
-    service = VariantService(variant_service=store)
+    service = VariantService(variant_service=cast(PostgresVariantService, store))
     context = _context()
 
     first = await service.list_variants(
-        None,
+        cast(AsyncSession, None),
         VariantFilterParams(limit=2),
         release_context=context,
     )
     second = await service.list_variants(
-        None,
+        cast(AsyncSession, None),
         VariantFilterParams(limit=2, cursor=first.next_cursor),
         release_context=context,
     )

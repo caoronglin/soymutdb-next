@@ -18,6 +18,8 @@ def _prod_settings(**overrides: object) -> Settings:
         "s3_secret_key": "production-secret-key",
         "analytics_ip_salt": "production-analytics-ip-salt-at-least-32-characters",
         "cors_origins": ["https://app.example.com"],
+        # Production must say no to open self-registration explicitly.
+        "feature_registration_enabled": False,
     }
     values.update(overrides)
     return Settings(_env_file=None, app_env="prod", **values)

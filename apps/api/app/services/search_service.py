@@ -18,7 +18,17 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 from urllib.parse import quote, urlencode
 
-from sqlalchemy import and_, case, desc, func, literal, or_, select, union_all
+from sqlalchemy import (
+    ColumnElement,
+    and_,
+    case,
+    desc,
+    func,
+    literal,
+    or_,
+    select,
+    union_all,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -123,7 +133,9 @@ def _encode_global_cursor(payload: Mapping[str, Any]) -> str:
     return signed
 
 
-def _normalize_active_types(types: list[SearchResultType] | None) -> list[SearchResultType]:
+def _normalize_active_types(
+    types: Iterable[str | SearchResultType] | None,
+) -> list[SearchResultType]:
     """Deduplicate types in enum order so cursor bindings are deterministic."""
     supplied = types or list(SearchResultType)
     try:
@@ -614,8 +626,10 @@ class SearchService:
                         assembly_id=hit.metadata.get("assembly_id"),
                         assembly=hit.metadata.get("assembly"),
                         cross_version=cross_version_by_gene.get(
-                            hit.metadata.get("gene_pk"), []
-                        ),
+                            int(hit.metadata["gene_pk"]), []
+                        )
+                        if isinstance(hit.metadata.get("gene_pk"), int)
+                        else [],
                     )
                     for hit in hits
                 ],
@@ -732,7 +746,7 @@ class SearchService:
         # The match set arrives as one indexable subquery instead of an OR of
         # text tests and a correlated alias EXISTS; see _gene_match_query for
         # the measured reason.
-        conditions: list = [
+        conditions: list[ColumnElement[bool]] = [
             Gene.gene_pk.in_(
                 _gene_match_query(
                     query, pattern, release_id=release_id, assembly_id=assembly_id
@@ -1076,7 +1090,7 @@ class SearchService:
 
         # Internal federated search: kept for internal callers of
         # global_search; matching spans both identities.
-        stmt = (
+        internal_stmt = (
             select(
                 MutantLine.public_id,
                 MutantLine.id,
@@ -1098,13 +1112,13 @@ class SearchService:
                 )
             )
         )
-        rank_expr = literal(1)
+        internal_rank = literal(1)
         if cursor_key is not None:
-            stmt = stmt.where(
+            internal_stmt = internal_stmt.where(
                 or_(
-                    rank_expr < cursor_key["rank"],
+                    internal_rank < cursor_key["rank"],
                     and_(
-                        rank_expr == cursor_key["rank"],
+                        internal_rank == cursor_key["rank"],
                         or_(
                             MutantLine.name > cursor_key["name"],
                             and_(
@@ -1115,12 +1129,12 @@ class SearchService:
                     ),
                 )
             )
-        stmt = (
-            stmt.order_by(desc(rank_expr), MutantLine.name, MutantLine.id)
+        internal_stmt = (
+            internal_stmt.order_by(desc(internal_rank), MutantLine.name, MutantLine.id)
             .limit(limit)
             .offset(offset)
         )
-        result = await db.execute(stmt)
+        result = await db.execute(internal_stmt)
         hits = []
         for ml in result.all():
             hits.append(
@@ -1153,7 +1167,7 @@ class SearchService:
         query: str,
         pattern: str,
         *,
-        release_id: int,
+        release_id: int | None,
         limit: int,
     ) -> list[InternalMutantSearchItem]:
         """Internal mutant search across public_id, internal id and name."""
@@ -1168,7 +1182,7 @@ class SearchService:
             candidate = int(stripped)
             if candidate <= 2_147_483_647:
                 internal_id_value = candidate
-        conditions = [
+        conditions: list[ColumnElement[bool]] = [
             MutantLine.is_deleted.is_(False),
         ]
         if is_exact:
@@ -1221,7 +1235,7 @@ class SearchService:
         query: str,
         pattern: str,
         *,
-        release_id: int,
+        release_id: int | None,
         limit: int,
     ) -> list[InternalGeneSearchItem]:
         """Internal gene search across accession, name and curated aliases."""
@@ -1336,6 +1350,7 @@ class SearchService:
     async def suggest(
         self, db: AsyncSession, query: str, limit: int = 5,
         *, release_id: int | None = None,
+        site_variant: SiteVariant = SiteVariant.EXTERNAL,
     ) -> list[SearchSuggestion]:
         """Return autocomplete suggestions, cached for a short interval.
 
@@ -1375,6 +1390,16 @@ class SearchService:
             "search:suggest",
             ttl=30,
             loader=load,
-            params={"query": query, "limit": limit, "release_id": release_id},
+            # Every biological-search cache key carries the full context that
+            # changes its result set (AGENTS.md, database-core-contract.md):
+            # site variant, release, query and limit. `suggest` was the one
+            # search path missing the variant, so an internal caller reusing it
+            # would have collided with the external suggestion set.
+            params={
+                "query": query,
+                "limit": limit,
+                "release_id": release_id,
+                "site_variant": site_variant.value,
+            },
         )
         return [SearchSuggestion.model_validate(item) for item in payload]

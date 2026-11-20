@@ -34,9 +34,7 @@ class Assembly(Base, TimestampMixin):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
-    species: Mapped[str] = mapped_column(
-        String(128), nullable=False, default="Glycine max"
-    )
+    species: Mapped[str] = mapped_column(String(128), nullable=False, default="Glycine max")
     version: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     fasta_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
@@ -53,9 +51,7 @@ class Assembly(Base, TimestampMixin):
         lazy="selectin",
         cascade="all, delete-orphan",
     )
-    genes: Mapped[list[Gene]] = relationship(
-        back_populates="assembly", lazy="noload"
-    )
+    genes: Mapped[list[Gene]] = relationship(back_populates="assembly", lazy="noload")
     variant_summaries: Mapped[list[VariantSummary]] = relationship(
         back_populates="assembly", lazy="noload"
     )
@@ -70,9 +66,7 @@ class Assembly(Base, TimestampMixin):
 
     # Enables annotation rows to enforce that their assembly and release
     # belong together through a composite foreign key.
-    __table_args__ = (
-        UniqueConstraint("id", "release_id", name="uq_assemblies_id_release"),
-    )
+    __table_args__ = (UniqueConstraint("id", "release_id", name="uq_assemblies_id_release"),)
 
     def __repr__(self) -> str:
         return f"<Assembly id={self.id} name={self.name!r}>"
@@ -89,12 +83,8 @@ class Chromosome(Base):
     length: Mapped[int] = mapped_column(BigInteger, nullable=False)
     order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    assembly: Mapped[Assembly] = relationship(
-        back_populates="chromosomes", lazy="joined"
-    )
-    genes: Mapped[list[Gene]] = relationship(
-        back_populates="chromosome", lazy="noload"
-    )
+    assembly: Mapped[Assembly] = relationship(back_populates="chromosomes", lazy="joined")
+    genes: Mapped[list[Gene]] = relationship(back_populates="chromosome", lazy="noload")
     variant_summaries: Mapped[list[VariantSummary]] = relationship(
         back_populates="chromosome", lazy="noload"
     )
@@ -137,12 +127,8 @@ class Gene(Base, TimestampMixin):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     attributes: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
-    assembly: Mapped[Assembly] = relationship(
-        back_populates="genes", lazy="joined"
-    )
-    chromosome: Mapped[Chromosome] = relationship(
-        back_populates="genes", lazy="joined"
-    )
+    assembly: Mapped[Assembly] = relationship(back_populates="genes", lazy="joined")
+    chromosome: Mapped[Chromosome] = relationship(back_populates="genes", lazy="joined")
     transcripts: Mapped[list[Transcript]] = relationship(
         back_populates="gene",
         lazy="selectin",
@@ -159,17 +145,13 @@ class Gene(Base, TimestampMixin):
     expression_data: Mapped[list[ExpressionData]] = relationship(
         back_populates="gene", lazy="noload"
     )
-    homologs: Mapped[list[GeneHomolog]] = relationship(
-        back_populates="gene", lazy="noload"
-    )
+    homologs: Mapped[list[GeneHomolog]] = relationship(back_populates="gene", lazy="noload")
     data_cache: Mapped[GeneDataCache | None] = relationship(
         back_populates="gene", lazy="joined", uselist=False
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "assembly_id", "accession", name="uq_gene_assembly_accession"
-        ),
+        UniqueConstraint("assembly_id", "accession", name="uq_gene_assembly_accession"),
         Index("ix_gene_accession", "accession"),
         Index("ix_gene_assembly_chr", "assembly_id", "chromosome_id"),
         Index("ix_gene_location", "chromosome_id", "start", "end"),
@@ -186,7 +168,8 @@ class Transcript(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     gene_id: Mapped[int] = mapped_column(
-        ForeignKey("genes.gene_pk", ondelete="CASCADE"), nullable=False,
+        ForeignKey("genes.gene_pk", ondelete="CASCADE"),
+        nullable=False,
         comment="FK to genes.gene_pk (surrogate)",
     )
     name: Mapped[str | None] = mapped_column(String(256), nullable=True)
@@ -234,13 +217,9 @@ class Exon(Base):
     end: Mapped[int] = mapped_column(BigInteger, nullable=False)
     order: Mapped[int] = mapped_column(SmallInteger, nullable=False)
 
-    transcript: Mapped[Transcript] = relationship(
-        back_populates="exons", lazy="joined"
-    )
+    transcript: Mapped[Transcript] = relationship(back_populates="exons", lazy="joined")
 
-    __table_args__ = (
-        Index("ix_exon_transcript_order", "transcript_id", "order"),
-    )
+    __table_args__ = (Index("ix_exon_transcript_order", "transcript_id", "order"),)
 
     def __repr__(self) -> str:
         return f"<Exon id={self.id} transcript={self.transcript_id!r} order={self.order}>"
@@ -278,9 +257,7 @@ class TranscriptPart(Base):
     end: Mapped[int] = mapped_column(BigInteger, nullable=False)
     order: Mapped[int] = mapped_column(SmallInteger, nullable=False)
 
-    transcript: Mapped[Transcript] = relationship(
-        back_populates="parts", lazy="joined"
-    )
+    transcript: Mapped[Transcript] = relationship(back_populates="parts", lazy="joined")
 
     __table_args__ = (
         CheckConstraint(
@@ -302,12 +279,72 @@ class TranscriptPart(Base):
         )
 
 
+#: Molecules whose residues the platform stores, one row per transcript.
+#: ``genomic`` and ``transcript`` are deliberately absent: they are sliced or
+#: spliced from the assembly's reference FASTA on demand, because a 1 GB
+#: reference is not shreddable into rows (see ``assemblies.fasta_url``).
+TRANSCRIPT_SEQUENCE_MOLECULES: tuple[str, ...] = ("cds", "protein")
+
+
+class TranscriptSequence(Base):
+    """Residues of one transcript for one molecule.
+
+    The residues live in their own table rather than as ``transcripts``
+    columns: a molecule is a row, so adding one later is data, not a schema
+    change, and a transcript whose protein is missing does not have to carry an
+    empty string that reads like a measured zero-length protein.
+
+    ``length`` and ``sha256`` are stored next to the residue instead of being
+    recomputed by every reader: the gene detail contract publishes both, and a
+    digest computed in two places is a digest that eventually disagrees. The
+    database enforces ``length = char_length(sequence)`` for the same reason.
+
+    Rows follow their transcript: ``ON DELETE CASCADE`` means re-importing a
+    GFF3 (which replaces every transcript of an assembly) also clears the now
+    orphaned residues, so the two can never describe different transcript sets.
+    """
+
+    __tablename__ = "transcript_sequences"
+
+    transcript_id: Mapped[str] = mapped_column(
+        ForeignKey("transcripts.id", ondelete="CASCADE"), primary_key=True
+    )
+    molecule: Mapped[str] = mapped_column(String(16), primary_key=True, comment="cds | protein")
+    length: Mapped[int] = mapped_column(Integer, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    sequence: Mapped[str] = mapped_column(Text, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "molecule IN ("
+            + ", ".join(f"'{molecule}'" for molecule in TRANSCRIPT_SEQUENCE_MOLECULES)
+            + ")",
+            name="ck_transcript_sequences_molecule",
+        ),
+        CheckConstraint(
+            "length = char_length(sequence)",
+            name="ck_transcript_sequences_length",
+        ),
+        CheckConstraint(
+            "sha256 ~ '^[0-9a-f]{64}$'",
+            name="ck_transcript_sequences_sha256_shape",
+        ),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<TranscriptSequence transcript={self.transcript_id!r} "
+            f"molecule={self.molecule!r} length={self.length}>"
+        )
+
+
 class GeneAlias(Base):
     __tablename__ = "gene_aliases"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     gene_id: Mapped[int] = mapped_column(
-        ForeignKey("genes.gene_pk", ondelete="CASCADE"), nullable=False,
+        ForeignKey("genes.gene_pk", ondelete="CASCADE"),
+        nullable=False,
         comment="FK to genes.gene_pk (surrogate)",
     )
     alias: Mapped[str] = mapped_column(String(256), nullable=False)
@@ -352,12 +389,8 @@ class GeneCrosswalk(Base, TimestampMixin):
         ForeignKey("releases.id", ondelete="SET NULL"), nullable=True
     )
 
-    source_gene: Mapped[Gene] = relationship(
-        foreign_keys=[source_gene_id], lazy="joined"
-    )
-    target_gene: Mapped[Gene] = relationship(
-        foreign_keys=[target_gene_id], lazy="joined"
-    )
+    source_gene: Mapped[Gene] = relationship(foreign_keys=[source_gene_id], lazy="joined")
+    target_gene: Mapped[Gene] = relationship(foreign_keys=[target_gene_id], lazy="joined")
 
     __table_args__ = (
         UniqueConstraint(

@@ -8,6 +8,7 @@ historical backfill/test surface; no runtime query path uses it.
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -69,16 +70,25 @@ def get_db_pool_status() -> dict[str, int] | None:
     if _engine is None:
         return None
     pool = _engine.sync_engine.pool
+    # ``Pool`` declares only the generic surface; ``size``/``checkedin``/
+    # ``checkedout``/``overflow`` live on ``QueuePool``. The guard below already
+    # established that all four are callable on this instance, so the calls go
+    # through the same attribute lookup rather than asserting a concrete type
+    # the engine is free to change.
     required = ("size", "checkedin", "checkedout", "overflow")
-    if not all(callable(getattr(pool, name, None)) for name in required):
-        return None
+    counters: dict[str, Any] = {}
+    for name in required:
+        counter = getattr(pool, name, None)
+        if not callable(counter):
+            return None
+        counters[name] = counter
     return {
         "capacity": settings.db_pool_size + settings.db_max_overflow,
-        "size": int(pool.size()),
-        "checked_in": int(pool.checkedin()),
-        "checked_out": int(pool.checkedout()),
+        "size": int(counters["size"]()),
+        "checked_in": int(counters["checkedin"]()),
+        "checked_out": int(counters["checkedout"]()),
         # QueuePool reports negative overflow until its base pool is populated.
-        "overflow": max(0, int(pool.overflow())),
+        "overflow": max(0, int(counters["overflow"]())),
     }
 
 
@@ -124,7 +134,11 @@ async def get_clickhouse_client() -> Any:
     if _clickhouse_client is None:
         # Legacy backfill tooling only. Native API queries never load this
         # optional driver or maintain a second analytics connection.
-        import clickhouse_connect
+        #
+        # Imported through importlib because the driver is not a declared
+        # dependency: a static import would make every type check and every
+        # deployment resolve a package only the legacy backfill lane installs.
+        clickhouse_connect = importlib.import_module("clickhouse_connect")
 
         _clickhouse_client = await clickhouse_connect.get_async_client(
             host=settings.clickhouse_host,

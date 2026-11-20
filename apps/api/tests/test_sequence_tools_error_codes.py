@@ -90,9 +90,12 @@ TRIGGERS: dict[str, tuple[str, dict]] = {
         "/api/v1/tools/sequence/translate",
         {"sequence": "ATG", "genetic_code_id": 1, "frame": 0},
     ),
+    # Code 7 is absent from every codon table both engines ship. Code 11 used
+    # to stand here, but it is a real bacterial table the Biopython engine
+    # supports, so asking for it is a valid request now.
     "UNKNOWN_GENETIC_CODE": (
         "/api/v1/tools/sequence/translate",
-        {"sequence": "ATG", "genetic_code_id": 11},
+        {"sequence": "ATG", "genetic_code_id": 7},
     ),
     "INVALID_RECORD": (
         "/api/v1/tools/sequence/inspect",

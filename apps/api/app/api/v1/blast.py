@@ -262,8 +262,14 @@ async def get_blast_hit_genome_target(
     An unresolved subject returns an explicit reason and no locus.
     """
     _private(response)
+    # `user_id` and `user_roles` are keyword-only on the service: passing them
+    # positionally raised a TypeError before the call ever ran.
     return await service.resolve_genome_target(
-        db, job_id, subject_id, current_user.id, get_user_roles(current_user)
+        db,
+        job_id,
+        subject_id,
+        user_id=current_user.id,
+        user_roles=get_user_roles(current_user),
     )
 
 

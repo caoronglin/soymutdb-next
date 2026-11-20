@@ -22,6 +22,9 @@ def _production_values() -> dict[str, object]:
         "admin_password": "a-strong-production-admin-password",
         "admin_email": "ops@example.com",
         "cors_origins": ["https://app.example.com"],
+        # Self-registration grants VIEWER automatically, so production must say
+        # no explicitly. This is the same value a real deployment sets.
+        "feature_registration_enabled": False,
     }
 
 
@@ -139,6 +142,7 @@ def test_baseline_prod_does_not_require_optional_services() -> None:
         _env_file=None,
         app_env="prod",
         deployment_mode="baseline",
+        feature_registration_enabled=False,
         database_url="postgresql+asyncpg://api:strong-db-password@db:5432/soymutdb",
         jwt_secret="a-production-jwt-secret-with-at-least-32-chars",
         analytics_ip_salt="a-production-analytics-salt-with-at-least-32-chars",

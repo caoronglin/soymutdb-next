@@ -157,8 +157,32 @@ class TestListVariants:
 class TestRegionQuery:
     """Tests for GET /api/v1/variants/region."""
 
-    async def test_region_query_success(self, client):
+    async def test_region_query_success(self, client, db_session):
         """Region query returns variants in the specified range."""
+        # The endpoint refuses an assembly it does not know: a typo or a
+        # stale assembly name must not read as "this region has no variants".
+        # The fixture below registers the assembly the request names.
+        from app.models.content import Release, ReleaseStatus
+        from app.models.genomic import Assembly
+
+        release = Release(
+            id=7,
+            version="region-release",
+            name="Region release",
+            status=ReleaseStatus.PUBLISHED,
+        )
+        db_session.add(release)
+        await db_session.flush()
+        db_session.add(
+            Assembly(
+                name="Wm82.gnm4",
+                species="Glycine max",
+                version="v4",
+                release_id=release.id,
+            )
+        )
+        await db_session.flush()
+
         variants = [_make_variant_dict(f"var_{i}", position=1000 + i) for i in range(10)]
         with patch(
             "app.services.variant_service.VariantService.get_variants_by_region",

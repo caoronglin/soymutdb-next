@@ -61,6 +61,9 @@ def _settings(
         jwt_secret="test-jwt-secret-that-is-longer-than-32-characters",
         analytics_ip_salt="test-analytics-ip-salt-that-is-longer-than-32-characters",
         cors_origins=["https://example.com"],
+        # Production must say no to open self-registration explicitly; the
+        # setting is rejected at startup otherwise.
+        feature_registration_enabled=False,
         login_rate_limit_window=60,
         login_rate_limit_max=maximum,
         login_ip_rate_limit_max=ip_maximum,

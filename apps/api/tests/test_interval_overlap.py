@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import base64
 import importlib.util
+from typing import cast
 
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.types import ExceptionHandler
 
 from app.api.v1.tools_sequence import router as sequence_router
 from app.core.exceptions import (
@@ -87,7 +90,7 @@ async def test_overlap_count_vs_union_coverage() -> None:
         regions=[s.IntervalRegion(start=10, end=30)],
     )
     ctx = ReleaseContext(release_id=11, assembly_id=7, assembly="GmWm82.a2.v1")
-    result = await interval_overlap_service.overlap(_FakeDb(), payload, ctx)
+    result = await interval_overlap_service.overlap(cast(AsyncSession, _FakeDb()), payload, ctx)
     assert result.assembly == "GmWm82.a2.v1"
     assert result.release == "11"
     q = result.queries[0]
@@ -95,6 +98,7 @@ async def test_overlap_count_vs_union_coverage() -> None:
     # 1-based inclusive genes [10,20], [19,30] -> half-open [9,20), [18,30);
     # query [10,30] -> [9,30). Union of overlaps = [9,30) = 21 bp.
     assert q.covered_bp == 21, "coverage is the union, not a record count"
+    assert q.hits is not None, "hits mode must return the hit list"
     assert {h.public_id for h in q.hits} == {
         "Glyma.01G000100", "Glyma.01G000200", "Glyma.01G000300"
     }
@@ -113,7 +117,7 @@ async def test_private_gene_pk_never_leaks() -> None:
         regions=[s.IntervalRegion(start=10, end=20)],
     )
     ctx = ReleaseContext(release_id=11, assembly_id=7, assembly="GmWm82.a2.v1")
-    result = await interval_overlap_service.overlap(_FakeDb(), payload, ctx)
+    result = await interval_overlap_service.overlap(cast(AsyncSession, _FakeDb()), payload, ctx)
     body = result.model_dump_json()
     assert "gene_pk" not in body
     assert "999" not in body
@@ -149,7 +153,7 @@ async def test_unpublished_assembly_fails_closed() -> None:
     )
     ctx = ReleaseContext(release_id=11, assembly_id=7, assembly="GmWm82.a2.v1")
     with pytest.raises(SoyMutDBError) as exc:
-        await interval_overlap_service.overlap(_Empty([]), payload, ctx)
+        await interval_overlap_service.overlap(cast(AsyncSession, _Empty([])), payload, ctx)
     assert exc.value.status_code == 404
 
 
@@ -178,7 +182,7 @@ async def test_unpublished_assembly_404_wins_over_missing_engine(
     ctx = ReleaseContext(release_id=11, assembly_id=7, assembly="GmWm82.a2.v1")
     db = _Empty([])
     with pytest.raises(SoyMutDBError) as exc:
-        await interval_overlap_service.overlap(db, payload, ctx)
+        await interval_overlap_service.overlap(cast(AsyncSession, db), payload, ctx)
     assert exc.value.status_code == 404
     assert db.calls == 1, "the assembly lookup must precede any engine check"
 
@@ -200,7 +204,7 @@ async def test_unknown_chromosome_404_wins_over_missing_engine(monkeypatch) -> N
     ctx = ReleaseContext(release_id=11, assembly_id=7, assembly="GmWm82.a2.v1")
     db = _Empty([_Assembly()])
     with pytest.raises(SoyMutDBError) as exc:
-        await interval_overlap_service.overlap(db, payload, ctx)
+        await interval_overlap_service.overlap(cast(AsyncSession, db), payload, ctx)
     assert exc.value.status_code == 404
     assert db.calls == 2, "both visibility lookups must precede any engine check"
 
@@ -208,7 +212,9 @@ async def test_unknown_chromosome_404_wins_over_missing_engine(monkeypatch) -> N
 def _app() -> FastAPI:
     application = FastAPI()
     application.include_router(sequence_router, prefix="/api/v1")
-    application.add_exception_handler(SoyMutDBError, soy_mut_db_exception_handler)
+    application.add_exception_handler(
+        SoyMutDBError, cast(ExceptionHandler, soy_mut_db_exception_handler)
+    )
     return application
 
 
@@ -244,14 +250,35 @@ async def test_inspect_rejects_malformed_fastq() -> None:
 
 
 @pytest.mark.asyncio
-async def test_python_engine_fails_closed(monkeypatch) -> None:
-    """SOYMUTDB_BIO_ENGINE=python must never silently fake results."""
+async def test_python_engine_is_a_real_engine(monkeypatch) -> None:
+    """SOYMUTDB_BIO_ENGINE=python selects the Biopython engine, which computes.
+
+    The engine used to be a documented dead end: the Rust kernel was the only
+    implementation, so `python` had to fail closed rather than answer with
+    made-up numbers. It is now a real implementation, so the contract is the
+    opposite: the engine is available and returns results.
+    """
     import app.services.bio_core_bridge as bridge
 
     monkeypatch.setattr(bridge, "_engine_setting", lambda: "python")
+    monkeypatch.setattr(bridge, "_module", bridge._UNSET)
+    st = bridge.status()
+    assert st.available is True
+    assert st.engine == "biopython"
+
+    core = bridge.require()
+    assert core.reverse_complement("ATGC", "dna", False) == "GCAT"
+
+
+async def test_an_unavailable_engine_still_fails_closed(monkeypatch) -> None:
+    """No engine at all must be a 503, never a silent empty success."""
+    import app.services.bio_core_bridge as bridge
+
+    monkeypatch.setattr(bridge, "_engine_setting", lambda: "python")
+    monkeypatch.setattr(bridge, "_module", None)
+
     st = bridge.status()
     assert st.available is False
-    assert "no equivalent implementation" in st.reason
 
     with pytest.raises(SoyMutDBError) as exc:
         bridge.require()

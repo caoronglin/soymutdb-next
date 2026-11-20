@@ -96,8 +96,11 @@ __all__ = [
 ]
 
 VALID_EVENT_TYPES = {"pageview", "click", "search", "widget"}
-VALID_WEB_VITAL_NAMES = {"LCP", "FID", "INP", "CLS", "TTFB", "FCP"}
-VALID_WEB_VITAL_RATINGS = {"good", "needs-improvement", "poor"}
+#: Immutable allow-lists: they are compared against caller input and must not
+#: be mutable at runtime, so a frozenset is both the correct type and what the
+#: request-bound parser expects.
+VALID_WEB_VITAL_NAMES = frozenset({"LCP", "FID", "INP", "CLS", "TTFB", "FCP"})
+VALID_WEB_VITAL_RATINGS = frozenset({"good", "needs-improvement", "poor"})
 
 #: Upper bound for both ``duration_ms`` and a Web Vital ``value``. A metric
 #: outside it is a broken client, not a measurement, and is never stored.

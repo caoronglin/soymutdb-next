@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from fastapi import FastAPI, HTTPException
@@ -20,6 +20,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import ORJSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
+from starlette.types import ASGIApp, ExceptionHandler
 
 from .api.v1.router import api_router
 from .core.config import get_settings
@@ -440,16 +441,24 @@ def create_app() -> FastAPI:
     )
 
     # --- Exception handlers ---
-    app.add_exception_handler(SoyMutDBError, soy_mut_db_exception_handler)
-    app.add_exception_handler(HTTPException, http_exception_handler)
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    #
+    # Starlette types the handler as accepting *any* Exception (so one handler
+    # can cover both HTTP and WebSocket), while each of ours narrows the second
+    # parameter to the class it is registered for. The casts state that
+    # narrowing; the runtime dispatch still only calls a handler for the class
+    # it is registered against.
+    app.add_exception_handler(SoyMutDBError, cast(ExceptionHandler, soy_mut_db_exception_handler))
+    app.add_exception_handler(HTTPException, cast(ExceptionHandler, http_exception_handler))
+    app.add_exception_handler(
+        RequestValidationError, cast(ExceptionHandler, validation_exception_handler)
+    )
     app.add_exception_handler(Exception, unhandled_exception_handler)
 
     # --- Routes ---
     app.include_router(api_router, prefix=settings.api_v1_prefix)
 
     # Prometheus metrics endpoint
-    app.mount("/metrics", get_metrics_app())
+    app.mount("/metrics", cast(ASGIApp, get_metrics_app()))
 
     # Root health check
     @app.get("/health", tags=["health"])

@@ -8,21 +8,22 @@ from urllib.parse import quote
 
 import pytest
 from fastapi import HTTPException
+from fastapi.routing import APIRoute
 from starlette.requests import Request
 
 from app.api.v1 import preview_test_data
 from app.models.content import Release, ReleaseStatus
 from app.models.genomic import Assembly, Chromosome, Gene
 from app.models.local_test_preview import LocalTestMutationSite
+from app.schemas.local_test_preview import (
+    PreviewMutationSiteItem,
+    PreviewMutationSiteUpdate,
+)
 from app.services.local_test_preview_import_service import (
     parse_gene_features,
     parse_mutation_sites,
     read_fai,
     validate_local_test_database,
-)
-from app.schemas.local_test_preview import (
-    PreviewMutationSiteItem,
-    PreviewMutationSiteUpdate,
 )
 from app.services.local_test_preview_service import (
     PREVIEW_ANNOTATION_VERSION,
@@ -114,6 +115,10 @@ def test_preview_gate_uses_tcp_peer_and_ignores_spoofed_host_and_forwarded_ip(mo
         "postgresql+asyncpg://user:secret@example.org:55432/soymutdb",
         "postgresql+asyncpg://user:secret@example.org:5432/soymutdb",
         "sqlite+aiosqlite:///tmp/not-allowed.db",
+        # The allowlist is enumerated, not a `soymutdb*` prefix: a loopback
+        # database that merely starts with the name is still refused.
+        "postgresql+asyncpg://user:secret@127.0.0.1:5432/soymutdb_production",
+        "postgresql+asyncpg://user:secret@127.0.0.1:5432/soymutdb_staging",
     ],
 )
 def test_importer_rejects_non_disposable_or_non_postgres_targets(url):
@@ -131,6 +136,11 @@ def test_importer_rejects_non_disposable_or_non_postgres_targets(url):
         # is what the guard actually protects, on a different port.
         "postgresql+asyncpg://user:secret@127.0.0.1:5432/soymutdb",
         "postgresql+asyncpg://user:secret@localhost:5432/soymutdb",
+        # The database `.deploy/scripts/up.sh` and the local preview actually
+        # serve. Loopback plus an allowlisted soymutdb name, which is the
+        # property the guard protects.
+        "postgresql+asyncpg://user:secret@127.0.0.1:5433/soymutdb_dev",
+        "postgresql+asyncpg://user:secret@localhost:5433/soymutdb_dev",
     ],
 )
 def test_importer_accepts_only_the_dedicated_loopback_target(url):
@@ -347,7 +357,13 @@ async def test_preview_api_returns_unpublished_v6_data_without_variant_fields(
 def test_preview_router_exposes_the_operator_maintenance_endpoints():
     """The pages rely on these three paths existing; a rename would silently
     drop the mutation-site table or the availability switch."""
-    paths = {(route.path, tuple(sorted(route.methods))) for route in preview_test_data.router.routes}
+    # `router.routes` is typed as `list[BaseRoute]`; only `APIRoute` carries the
+    # path and method set this assertion reads, so narrow before touching them.
+    paths = {
+        (route.path, tuple(sorted(route.methods or set())))
+        for route in preview_test_data.router.routes
+        if isinstance(route, APIRoute)
+    }
     assert ("/preview/test-data/mutation-sites", ("GET",)) in paths
     assert ("/preview/test-data/mutation-sites/by-gene", ("GET",)) in paths
     assert ("/preview/test-data/mutation-sites/{source_site_key}", ("PATCH",)) in paths

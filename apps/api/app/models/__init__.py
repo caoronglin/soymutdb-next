@@ -49,6 +49,7 @@ from .genomic import (
     GeneCrosswalk,
     Transcript,
     TranscriptPart,
+    TranscriptSequence,
 )
 from .gwas import GwasFileType, GwasJob, GwasJobStatus, GwasMethod
 from .homolog import GeneHomolog
@@ -186,6 +187,7 @@ __all__ = [
     "Track",
     "TrackCategory",
     "Transcript",
+    "TranscriptSequence",
     "User",
     "VariantExport",
     "VariantExportStatus",

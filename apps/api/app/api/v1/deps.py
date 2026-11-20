@@ -21,6 +21,26 @@ from ...models.auth import User
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
+async def load_active_user(db: AsyncSession, user_uuid: uuid.UUID) -> User:
+    """Return the active, non-deleted user with *user_uuid*.
+
+    Raises :class:`AuthenticationError` when the account is absent, inactive
+    or deleted. Every credential path (bearer token, single-use SSE ticket)
+    resolves its account through this one function, so no path can accept a
+    disallowed account that another rejects.
+    """
+    result = await db.execute(select(User).where(User.id == user_uuid))
+    user = result.scalar_one_or_none()
+    if user is None:
+        raise AuthenticationError("User not found")
+    if not user.is_active:
+        raise AuthenticationError("User account is inactive")
+    if user.is_deleted:
+        raise AuthenticationError("User account has been deleted")
+
+    return user
+
+
 async def get_current_user(
     db: AsyncSession = Depends(get_db),
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
@@ -51,16 +71,7 @@ async def get_current_user(
     except ValueError as exc:
         raise AuthenticationError("Invalid subject in token") from exc
 
-    result = await db.execute(select(User).where(User.id == user_uuid))
-    user = result.scalar_one_or_none()
-    if user is None:
-        raise AuthenticationError("User not found")
-    if not user.is_active:
-        raise AuthenticationError("User account is inactive")
-    if user.is_deleted:
-        raise AuthenticationError("User account has been deleted")
-
-    return user
+    return await load_active_user(db, user_uuid)
 
 
 def get_user_roles(user: User) -> list[str]:
@@ -85,9 +96,7 @@ def require_role(required_role: RoleName):
     async def _checker(current_user: User = Depends(get_current_user)) -> User:
         user_roles = get_user_roles(current_user)
         if not has_role(user_roles, required_role):
-            raise AuthorizationError(
-                f"Requires role '{required_role.value}' or higher"
-            )
+            raise AuthorizationError(f"Requires role '{required_role.value}' or higher")
         return current_user
 
     return _checker

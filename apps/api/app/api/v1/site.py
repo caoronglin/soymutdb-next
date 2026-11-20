@@ -107,13 +107,19 @@ _CONTENT_DEFINITIONS = tuple(
 
 
 def _ensure_variant_access(variant: SiteVariant, current_user: User | None) -> None:
-    """Enforce the private read boundary for the internal artifact."""
+    """Enforce the private read boundary for the internal artifact.
+
+    The bar is RESEARCHER, not VIEWER: registration grants VIEWER automatically
+    (``auth.py``), so requiring VIEWER would let any stranger who signs up read
+    the internal namespace. RESEARCHER is only ever assigned by an operator, so
+    this remains a real boundary rather than a formality.
+    """
     if variant is SiteVariant.EXTERNAL:
         return
     if current_user is None:
         raise AuthenticationError("Internal site content requires authentication")
-    if not has_role(get_user_roles(current_user), RoleName.VIEWER):
-        raise AuthorizationError("Viewer role required for internal site content")
+    if not has_role(get_user_roles(current_user), RoleName.RESEARCHER):
+        raise AuthorizationError("Researcher role required for internal site content")
 
 
 def _set_cache_policy(response: Response, variant: SiteVariant) -> None:

@@ -105,7 +105,13 @@ async def suggest(
         logger.warning("search.suggest.no_active_release")
         return []
     suggestions = await service.suggest(
-        db, query=q, limit=limit, release_id=release_context.release_id
+        db,
+        query=q,
+        limit=limit,
+        release_id=release_context.release_id,
+        # The cache key carries the variant; passing it keeps that boundary
+        # honest even though this route is external-only today.
+        site_variant=SiteVariant.EXTERNAL,
     )
     return [s if isinstance(s, dict) else s.model_dump() for s in suggestions]
 

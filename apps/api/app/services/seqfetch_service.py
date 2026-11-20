@@ -109,12 +109,8 @@ def fai_byte_range(rec: FaiRecord, start: int, end: int) -> tuple[int, int]:
     """
     pos0 = start - 1
     pos1 = end - 1
-    b_start = (
-        rec.offset + (pos0 // rec.linebases) * rec.linewidth + (pos0 % rec.linebases)
-    )
-    b_end = (
-        rec.offset + (pos1 // rec.linebases) * rec.linewidth + (pos1 % rec.linebases)
-    )
+    b_start = rec.offset + (pos0 // rec.linebases) * rec.linewidth + (pos0 % rec.linebases)
+    b_end = rec.offset + (pos1 // rec.linebases) * rec.linewidth + (pos1 % rec.linebases)
     return b_start, b_end
 
 
@@ -124,16 +120,34 @@ def fai_byte_range(rec: FaiRecord, start: int, end: int) -> tuple[int, int]:
 
 
 def read_bytes(path: str, byte_range: tuple[int, int] | None = None) -> bytes:
-    """Read *path* (``s3://`` or ``https://``), optionally with a byte range.
+    """Read *path*, optionally with a byte range.
 
-    Synchronous boto3 / httpx calls are the established pattern in this API
-    (see ``app.utils.s3`` and ``app.services.presign``).
+    Three storage shapes are supported, because the same column carries all of
+    them: ``s3://bucket/key`` (the deployed layout), an ``https://`` URL, and a
+    local filesystem path -- either absolute (``/data/genome.fa``) or
+    ``file:///data/genome.fa``. Local paths matter for the workstation and
+    single-host deployments, where the reference genome is a mounted file of
+    over a gigabyte; ``seek``+``read`` gives the same bounded read a ranged GET
+    does, without loading the file.
+
+    Synchronous boto3 / httpx / file reads are the established pattern in this
+    API (see ``app.utils.s3`` and ``app.services.presign``).
     """
     if byte_range is not None:
         b_start, b_end = byte_range
         range_header = f"bytes={b_start}-{b_end}"
     else:
         range_header = None
+
+    if "://" not in path or path.startswith("file://"):
+        local_path = path.removeprefix("file://")
+        if byte_range is None:
+            with open(local_path, "rb") as handle:
+                return handle.read()
+        local_start, local_end = byte_range
+        with open(local_path, "rb") as handle:
+            handle.seek(local_start)
+            return handle.read(local_end - local_start + 1)
 
     if path.startswith("s3://"):
         s3 = get_s3_client()
@@ -143,7 +157,7 @@ def read_bytes(path: str, byte_range: tuple[int, int] | None = None) -> bytes:
             params["Range"] = range_header
         body = s3.get_object(**params)["Body"]
         try:
-            return body.read()
+            return bytes(body.read())
         finally:
             body.close()
 
@@ -158,8 +172,11 @@ def read_bytes(path: str, byte_range: tuple[int, int] | None = None) -> bytes:
 
 def _strip_newlines(block: bytes) -> str:
     """Drop FASTA line-wrapping bytes from a ranged block."""
-    return block.replace(b"\r\n", b"\n").replace(b"\n", b"").replace(b"\r", b"").decode(
-        "ascii", errors="replace"
+    return (
+        block.replace(b"\r\n", b"\n")
+        .replace(b"\n", b"")
+        .replace(b"\r", b"")
+        .decode("ascii", errors="replace")
     )
 
 
@@ -187,10 +204,12 @@ def _upload_result_file(fasta_text: str) -> str:
     bucket = settings.s3_analyses_bucket
     object_key = f"{SEQFETCH_PREFIX}/{uuid.uuid4()}.fa"
     s3.put_object(Bucket=bucket, Key=object_key, Body=fasta_text.encode("utf-8"))
-    return s3.generate_presigned_url(
-        "get_object",
-        Params={"Bucket": bucket, "Key": object_key},
-        ExpiresIn=SEQFETCH_EXPIRES_IN,
+    return str(
+        s3.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": bucket, "Key": object_key},
+            ExpiresIn=SEQFETCH_EXPIRES_IN,
+        )
     )
 
 
@@ -303,9 +322,7 @@ class SeqFetchService:
         if assembly is None:
             raise ValidationError(f"Unknown assembly '{assembly_name}'")
         if not assembly.fasta_url or not assembly.fai_url:
-            raise ValidationError(
-                f"Assembly '{assembly_name}' has no sequence files configured"
-            )
+            raise ValidationError(f"Assembly '{assembly_name}' has no sequence files configured")
 
         chrom_result = await db.execute(
             select(Chromosome).where(
@@ -320,21 +337,16 @@ class SeqFetchService:
             )
 
         if end - start + 1 > MAX_REGION_BP:
-            raise ValidationError(
-                f"Region exceeds the {MAX_REGION_BP} bp extraction limit"
-            )
+            raise ValidationError(f"Region exceeds the {MAX_REGION_BP} bp extraction limit")
         if start < 1 or end > chromosome.length:
             raise ValidationError(
-                f"Region out of bounds for '{chromosome_name}' "
-                f"(length {chromosome.length})"
+                f"Region out of bounds for '{chromosome_name}' (length {chromosome.length})"
             )
 
         index = parse_fai(read_bytes(assembly.fai_url))
         rec = index.get(chromosome_name)
         if rec is None:
-            raise ValidationError(
-                f"Chromosome '{chromosome_name}' missing from FASTA index"
-            )
+            raise ValidationError(f"Chromosome '{chromosome_name}' missing from FASTA index")
         sequence = slice_fasta(rec, assembly.fasta_url, start, end)
         return self._build_response(
             [(f"{assembly_name}:{chromosome_name}:{start}-{end}", sequence)]
@@ -375,9 +387,7 @@ class SeqFetchService:
         """Parse ``chr:start-end`` (1-based inclusive) into its parts."""
         match = _REGION_RE.match(region.strip())
         if match is None:
-            raise ValidationError(
-                "region must match 'chr:start-end' (e.g. 'chr1:1000-2000')"
-            )
+            raise ValidationError("region must match 'chr:start-end' (e.g. 'chr1:1000-2000')")
         chromosome_name, start_s, end_s = match.groups()
         start, end = int(start_s), int(end_s)
         if end < start:
