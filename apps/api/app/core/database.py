@@ -8,6 +8,7 @@ historical backfill/test surface; no runtime query path uses it.
 
 from __future__ import annotations
 
+import importlib
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -35,13 +36,20 @@ def get_engine() -> AsyncEngine:
     """Return the global async engine, creating it on first call."""
     global _engine
     if _engine is None:
-        # Statement timeout (asyncpg server_settings) so a slow query cannot
-        # pin a pooled connection forever. Pool sizes are per API process.
-        connect_args: dict[str, Any] = {}
+        # Connection-level server settings.  ``jit`` is configured here
+        # rather than via ``SET LOCAL`` because aggregate queries run in
+        # sessions opened by helpers (e.g. the variant service); only the
+        # connection setting reaches every session the pool hands out.
+        server_settings: dict[str, str] = {}
         if settings.db_statement_timeout > 0:
-            connect_args["server_settings"] = {
-                "statement_timeout": str(settings.db_statement_timeout * 1000)
-            }
+            server_settings["statement_timeout"] = str(
+                settings.db_statement_timeout * 1000
+            )
+        if not settings.db_jit_enabled:
+            server_settings["jit"] = "off"
+        connect_args: dict[str, Any] = {}
+        if server_settings:
+            connect_args["server_settings"] = server_settings
         _engine = create_async_engine(
             settings.database_url,
             pool_size=settings.db_pool_size,
@@ -49,6 +57,7 @@ def get_engine() -> AsyncEngine:
             pool_timeout=settings.db_pool_timeout,
             pool_recycle=settings.db_pool_recycle,
             pool_pre_ping=settings.db_pool_pre_ping,
+            pool_use_lifo=settings.db_pool_use_lifo,
             echo=settings.db_echo,
             future=True,
             connect_args=connect_args,
@@ -61,16 +70,25 @@ def get_db_pool_status() -> dict[str, int] | None:
     if _engine is None:
         return None
     pool = _engine.sync_engine.pool
+    # ``Pool`` declares only the generic surface; ``size``/``checkedin``/
+    # ``checkedout``/``overflow`` live on ``QueuePool``. The guard below already
+    # established that all four are callable on this instance, so the calls go
+    # through the same attribute lookup rather than asserting a concrete type
+    # the engine is free to change.
     required = ("size", "checkedin", "checkedout", "overflow")
-    if not all(callable(getattr(pool, name, None)) for name in required):
-        return None
+    counters: dict[str, Any] = {}
+    for name in required:
+        counter = getattr(pool, name, None)
+        if not callable(counter):
+            return None
+        counters[name] = counter
     return {
         "capacity": settings.db_pool_size + settings.db_max_overflow,
-        "size": int(pool.size()),
-        "checked_in": int(pool.checkedin()),
-        "checked_out": int(pool.checkedout()),
+        "size": int(counters["size"]()),
+        "checked_in": int(counters["checkedin"]()),
+        "checked_out": int(counters["checkedout"]()),
         # QueuePool reports negative overflow until its base pool is populated.
-        "overflow": max(0, int(pool.overflow())),
+        "overflow": max(0, int(counters["overflow"]())),
     }
 
 
@@ -116,7 +134,11 @@ async def get_clickhouse_client() -> Any:
     if _clickhouse_client is None:
         # Legacy backfill tooling only. Native API queries never load this
         # optional driver or maintain a second analytics connection.
-        import clickhouse_connect
+        #
+        # Imported through importlib because the driver is not a declared
+        # dependency: a static import would make every type check and every
+        # deployment resolve a package only the legacy backfill lane installs.
+        clickhouse_connect = importlib.import_module("clickhouse_connect")
 
         _clickhouse_client = await clickhouse_connect.get_async_client(
             host=settings.clickhouse_host,
@@ -163,6 +185,8 @@ def get_redis() -> Redis:
             decode_responses=True,
             socket_timeout=settings.redis_socket_timeout,
             socket_connect_timeout=settings.redis_socket_connect_timeout,
+            socket_keepalive=True,
+            max_connections=settings.redis_max_connections,
             health_check_interval=30,
         )
     return _redis

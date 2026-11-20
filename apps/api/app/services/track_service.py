@@ -35,14 +35,23 @@ class TrackService:
         assembly_id: int | None = None,
         category_id: int | None = None,
         *,
+        release_id: int,
         user_id: uuid.UUID | None = None,
         user_roles: list[str] | None = None,
     ) -> list[dict[str, Any]]:
+        """List this release's ready tracks visible to the caller.
+
+        ``release_id`` is required: tracks carry a nullable legacy release pin
+        and an unpinned track must not be treated as belonging to whichever
+        release happens to be active. This matches ``get_jbrowse_config``, so
+        an element advertised here is one JBrowse would actually render.
+        """
         roles = user_roles or []
         project_ids = await self._project_ids_for_user(db, user_id, roles)
         stmt = select(Track).where(
             Track.is_deleted.is_(False),
             Track.status == TrackStatus.READY,
+            Track.release_id == release_id,
         )
         visibility_filter = self._visibility_filter(user_id, roles, project_ids)
         if visibility_filter is not None:
@@ -63,9 +72,15 @@ class TrackService:
         db: AsyncSession,
         track_id: int,
         *,
+        release_id: int,
         user_id: uuid.UUID | None = None,
         user_roles: list[str] | None = None,
     ) -> dict[str, Any]:
+        """Return one ready track of this release, or ``NotFoundError``.
+
+        A track pinned to another (or no) release is indistinguishable from a
+        missing one, so the 404 leaks neither the row nor its release.
+        """
         roles = user_roles or []
         project_ids = await self._project_ids_for_user(db, user_id, roles)
         visibility_filter = self._visibility_filter(user_id, roles, project_ids)
@@ -73,6 +88,7 @@ class TrackService:
             Track.id == track_id,
             Track.is_deleted.is_(False),
             Track.status == TrackStatus.READY,
+            Track.release_id == release_id,
         ]
         if visibility_filter is not None:
             filters.append(visibility_filter)

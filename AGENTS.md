@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This is a pnpm/Turbo monorepo. Frontend applications live in `apps/web` (public React/Vite SSG portal), `apps/admin`, and `apps/jbrowse`; Python services are in `apps/api`, `apps/worker`, and `apps/mcp-server`. Shared TypeScript packages are under `packages/`, with the API/worker job contract in `packages/jobs-py`. Python tests are in each service’s `tests/` directory; frontend unit tests are colocated near source; browser tests are in `e2e/tests`. Deployment, Docker, Nginx, ClickHouse, and monitoring assets are in `deploy/` and `infra/`. Read `docs/dev/` for architecture and deployment contracts.
+This is a pnpm/Turbo monorepo. Frontend applications live in `apps/web` (public React/Vite SSG portal), `apps/admin`, and `apps/jbrowse`; Python services are in `apps/api`, `apps/worker`, and `apps/mcp-server`. The staged read-only Go gateway lives in `apps/gateway-go` (vendored lib/pq, offline build; see `docs/dev/go-gateway.md`). Shared TypeScript packages are under `packages/`, with the API/worker job contract in `packages/jobs-py`. Python tests are in each service’s `tests/` directory; frontend unit tests are colocated near source; browser tests are in `e2e/tests`. Deployment, Docker, Nginx, ClickHouse, and monitoring assets are in `deploy/` and `infra/`. Read `docs/dev/` for architecture and deployment contracts.
 
 ## Product and Data Invariants
 

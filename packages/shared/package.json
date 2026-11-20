@@ -61,7 +61,7 @@
     "src"
   ],
   "devDependencies": {
-    "typescript": "5.9.3",
+    "typescript": "catalog:",
     "vitest": "catalog:",
     "@types/node": "^26.6.5"
   },

@@ -9,7 +9,7 @@ URL for the raw MinIO object.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -43,20 +43,32 @@ class _Result:
 
 
 class FakeDbSession:
-    """AsyncSession stand-in serving one job row plus optional hit rows."""
+    """AsyncSession stand-in serving one job row plus optional hit rows.
+
+    Statements are routed on the SQL text so a catalog/assembly lookup can
+    never be answered with the job row: answering everything with the job is
+    what hides "read a catalog column off ``BlastJob``" defects.
+    """
 
     def __init__(self, job: BlastJob | None, hits: list[BlastHit] | None = None):
         self.job: BlastJob | None = job
         self.hits = hits or []
         #: (min evalue, max bit score) returned for the aggregate query
         self.best: tuple[float, float] | None = None
+        #: Catalog row the job points at (``None`` models a stale job).
+        self.database = None
 
     async def execute(self, stmt, params=None):
         sql = str(stmt)
         if "min(" in sql and "max(" in sql:
             return _Result([self.best] if self.best else [])
-        if "blast_hits" in sql:
+        if "FROM blast_hits" in sql:
             return _Result(self.hits)
+        if "FROM blast_databases" in sql:
+            return _Result([self.database] if self.database else [])
+        if "FROM assemblies" in sql:
+            assembly = getattr(self.database, "assembly", None)
+            return _Result([assembly] if assembly else [])
         return _Result([self.job])
 
     async def scalar(self, stmt):
@@ -85,7 +97,7 @@ def _make_job(status: BlastJobStatus, *, result_path: str | None = None) -> Blas
             if status in (BlastJobStatus.COMPLETED, BlastJobStatus.FAILED)
             else None
         ),
-        expires_at=datetime.now(UTC),
+        expires_at=datetime.now(UTC) + timedelta(days=7),
         hit_count=2 if status == BlastJobStatus.COMPLETED else 0,
         query_len=120 if status == BlastJobStatus.COMPLETED else None,
     )

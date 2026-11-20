@@ -158,6 +158,15 @@ class TestGeneDetailQueryCount:
         gene.gene_pk = 501
         gene.accession = "Glyma.01G000100"
         gene.assembly_id = 1
+        # The detail response names the assembly it belongs to, so the stub
+        # needs one with a real name: a bare MagicMock would answer with a
+        # mock object and fail the response schema.
+        assembly = MagicMock()
+        assembly.id = 1
+        # `MagicMock(name=...)` sets the mock's *name*, not an attribute, so
+        # the attribute has to be assigned after construction.
+        assembly.name = "Wm82.a4.v1"
+        gene.assembly = assembly
         gene.chromosome_id = "1"
         chromosome = MagicMock()
         chromosome.name = "1"
@@ -173,8 +182,22 @@ class TestGeneDetailQueryCount:
         gene.created_at = None
         gene.updated_at = None
 
+        # Gene detail now also assembles its optional sections (annotation,
+        # homology, expression, variants, phenotype, literature), each of which
+        # issues exactly one statement. A statement of the wrong shape here
+        # would surface as a pydantic error instead of a query count, so the
+        # stub below answers each section's own statement with "no rows" and the
+        # assertion keeps measuring what it was written to measure: nothing in
+        # this path issues a statement per transcript.
+        section_statements = 6
+
         db = MagicMock()
-        db.execute = AsyncMock(return_value=_make_exec_result(scalars_list=[gene]))
+        db.execute = AsyncMock(
+            side_effect=[
+                _make_exec_result(scalars_list=[gene]),
+                *[_make_exec_result(scalars_list=[]) for _ in range(section_statements)],
+            ]
+        )
         # get_gene resolves the header's variant total through db.scalar.
         db.scalar = AsyncMock(return_value=0)
 
@@ -187,7 +210,7 @@ class TestGeneDetailQueryCount:
         assert detail.gene_id == "Glyma.01G000100"
         assert len(detail.transcripts) == 1
         # Eager-loaded via selectin relationship: no per-transcript queries.
-        assert db.execute.await_count == 1
+        assert db.execute.await_count == 1 + section_statements
 
 
 @pytest.mark.asyncio

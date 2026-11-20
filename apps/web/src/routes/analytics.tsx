@@ -50,6 +50,27 @@ function ChartFallback() {
   return <Skeleton className="h-72 w-full" />;
 }
 
+/**
+ * An empty dataset is not a loading state and not an error: it is the answer.
+ *
+ * Four charts on one page that each render an empty frame read as a broken
+ * page, and a page-wide "nothing published yet" says what the numbers would
+ * be about once there is a release -- without implying the data is missing.
+ */
+function EmptyChart() {
+  const { t } = useTranslation();
+  return (
+    <div className="flex h-72 flex-col items-center justify-center gap-1 rounded-lg border border-dashed text-center">
+      <p className="text-sm font-medium text-muted-foreground">
+        {t("analytics.noPublishedVariants")}
+      </p>
+      <p className="max-w-xs text-xs text-muted-foreground">
+        {t("analytics.noPublishedVariantsHelp")}
+      </p>
+    </div>
+  );
+}
+
 function isDemoEnabled(urlDemo: boolean): boolean {
   return urlDemo || import.meta.env.VITE_DEMO_MODE === "true";
 }
@@ -141,7 +162,11 @@ function AnalyticsComponent() {
           { name: "SNP", value: statsQuery.data.snp_count },
           { name: "Indel", value: statsQuery.data.indel_count },
           { name: "SV", value: statsQuery.data.sv_count },
-        ].filter((item) => Number.isFinite(item.value))
+        ]
+          // A release with zero SNP/Indel/SV is the same "nothing published"
+          // state the other three charts report. Keeping three zero slices
+          // makes a pie chart that silently says nothing.
+          .filter((item) => Number.isFinite(item.value) && item.value > 0)
         : [];
   const impactData = demo ? DEMO_IMPACT : normalizeImpact(impactQuery.data);
   const trendData = demo ? DEMO_TREND : normalizeTrend(trendQuery.data);
@@ -158,16 +183,32 @@ function AnalyticsComponent() {
 
       <div className="mt-10 grid gap-4 lg:grid-cols-2">
         <AnalyticsCard title={t("analytics.chromosomeDensity")} description={t("analytics.totalByChromosome")} loading={!demo && densityQuery.isLoading} error={!demo && densityQuery.isError} onRetry={() => void densityQuery.refetch()}>
-          <React.Suspense fallback={<ChartFallback />}><ChromosomeDensityChart data={density.map((d) => ({ chromosome: d.chromosome, variantCount: d.variant_count }))} /></React.Suspense>
+          {density.length === 0 && !demo ? (
+            <EmptyChart />
+          ) : (
+            <React.Suspense fallback={<ChartFallback />}><ChromosomeDensityChart data={density.map((d) => ({ chromosome: d.chromosome, variantCount: d.variant_count }))} /></React.Suspense>
+          )}
         </AnalyticsCard>
         <AnalyticsCard title={t("analytics.variantTypes")} description={t("analytics.variantTypesDescription")} loading={!demo && (variantTypeQuery.isLoading || statsQuery.isLoading)} error={!demo && variantTypeQuery.isError && statsQuery.isError} onRetry={() => { void variantTypeQuery.refetch(); void statsQuery.refetch(); }}>
-          <React.Suspense fallback={<ChartFallback />}><VariantTypeChart data={variantTypeData} /></React.Suspense>
+          {variantTypeData.length === 0 && !demo ? (
+            <EmptyChart />
+          ) : (
+            <React.Suspense fallback={<ChartFallback />}><VariantTypeChart data={variantTypeData} /></React.Suspense>
+          )}
         </AnalyticsCard>
         <AnalyticsCard title={t("analytics.impactSummary")} description={t("analytics.impactDescription")} loading={!demo && impactQuery.isLoading} error={!demo && impactQuery.isError} onRetry={() => void impactQuery.refetch()}>
-          <React.Suspense fallback={<ChartFallback />}><ImpactDistribution data={impactData} /></React.Suspense>
+          {impactData.length === 0 && !demo ? (
+            <EmptyChart />
+          ) : (
+            <React.Suspense fallback={<ChartFallback />}><ImpactDistribution data={impactData} /></React.Suspense>
+          )}
         </AnalyticsCard>
         <AnalyticsCard title={t("analytics.discoveryTrend")} description={t("analytics.trendDescription")} loading={!demo && trendQuery.isLoading} error={!demo && trendQuery.isError} onRetry={() => void trendQuery.refetch()}>
-          <React.Suspense fallback={<ChartFallback />}><ReleaseTrend data={trendData} /></React.Suspense>
+          {trendData.length === 0 && !demo ? (
+            <EmptyChart />
+          ) : (
+            <React.Suspense fallback={<ChartFallback />}><ReleaseTrend data={trendData} /></React.Suspense>
+          )}
         </AnalyticsCard>
       </div>
     </div>

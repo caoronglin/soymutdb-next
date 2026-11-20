@@ -50,10 +50,14 @@ trap cleanup EXIT
 export SOYMUTDB_APP_ENV=dev
 export SOYMUTDB_DEPLOYMENT_MODE=baseline
 export SOYMUTDB_DATABASE_URL="postgresql+asyncpg://postgres@127.0.0.1:${PG_PORT}/soymutdb"
-export SOYMUTDB_JWT_SECRET="mamba-smoke-secret-with-at-least-32-characters"
+# Ephemeral per-run credentials: a literal here would be a published secret
+# that every copy of this script shares. 48 bytes of /dev/urandom is well
+# above the 32-character floor the API enforces.
+smoke_secret() { LC_ALL=C tr -dc "A-Za-z0-9" </dev/urandom | head -c 48; }
+export SOYMUTDB_JWT_SECRET="$(smoke_secret)"
 export SOYMUTDB_CORS_ORIGINS="http://127.0.0.1:4173"
 export SOYMUTDB_ADMIN_EMAIL="smoke@example.invalid"
-export SOYMUTDB_ADMIN_PASSWORD="mamba-smoke-admin-password-long"
+export SOYMUTDB_ADMIN_PASSWORD="$(smoke_secret)"
 
 PG_DIR="$(mktemp -d)"
 "${ENV_PREFIX}/bin/initdb" -D "${PG_DIR}" --username=postgres --auth=trust >/dev/null

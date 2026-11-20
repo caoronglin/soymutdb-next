@@ -30,7 +30,12 @@ from ..core.config import get_settings
 from ..core.exceptions import ConflictError, NotFoundError
 from ..core.security import RoleName, has_role
 from ..models.variant_export import VariantExport, VariantExportStatus
-from ..schemas.variant import ExportDownloadResponse, ExportStatusResponse
+from ..schemas.variant import (
+    ExportDownloadResponse,
+    ExportManifestResponse,
+    ExportStatusResponse,
+    VariantExportFilters,
+)
 from ..utils.s3 import generate_presigned_url
 
 __all__ = [
@@ -51,6 +56,29 @@ EXPORT_ARTIFACT_RETENTION_DAYS = 7
 #: Lifetime of a signed download URL.  Short on purpose: the link is a
 #: per-request grant, not a durable shareable URL.
 EXPORT_DOWNLOAD_URL_TTL_SECONDS = 900
+
+#: Filter keys a manifest may echo: exactly the public request fields of
+#: ``VariantExportFilters`` minus the paging/deferred ones. Derived from the
+#: schema rather than hand-listed so a filter added to the export contract is
+#: echoed automatically, and a key the schema does not declare (the resolved
+#: ``mutant_line_name`` join key, the server-set ``release_key``) never is.
+#: ``limit``/``cursor`` are excluded because an export does not paginate and
+#: echoing them would advertise a constraint the artifact does not honour.
+PUBLIC_MANIFEST_FILTER_KEYS: frozenset[str] = frozenset(
+    VariantExportFilters.model_fields
+) - {"limit", "cursor"}
+
+
+def _public_manifest_filters(filters: dict) -> dict[str, object]:
+    """Echo only whitelisted public filter values, never internal join keys."""
+    result: dict[str, object] = {}
+    for key in PUBLIC_MANIFEST_FILTER_KEYS:
+        value = filters.get(key)
+        if value is None:
+            continue
+        result[key] = getattr(value, "value", value)
+    return result
+
 
 class VariantExportService:
     """Read/authorisation service for variant export records."""
@@ -112,6 +140,40 @@ class VariantExportService:
             started_at=record.started_at,
             completed_at=record.completed_at,
             expires_at=record.expires_at,
+        )
+
+    async def get_manifest(
+        self,
+        db: AsyncSession,
+        export_id: uuid.UUID,
+        *,
+        user_id: uuid.UUID | None,
+        user_roles: list[str],
+    ) -> ExportManifestResponse:
+        """Return the citable provenance of one export the caller may read.
+
+        A ``NULL`` sha256 is reported as ``sha256_state='not_recorded'`` —
+        never as an empty string or an all-zero digest, so a downloader cannot
+        mistake a legacy artifact for a verified one.
+        """
+        record = await self._load_visible(
+            db, export_id, user_id=user_id, user_roles=user_roles
+        )
+        return ExportManifestResponse(
+            export_id=str(record.id),
+            status=str(record.status),
+            format=record.format,
+            release_key=record.release_key,
+            assembly_key=record.assembly_key,
+            record_count=record.record_count,
+            file_size=record.file_size,
+            sha256=record.sha256,
+            sha256_state="recorded" if record.sha256 else "not_recorded",
+            license=record.license,
+            generated_at=record.generated_at,
+            completed_at=record.completed_at,
+            expires_at=record.expires_at,
+            filters=_public_manifest_filters(record.filters),
         )
 
     async def get_download(

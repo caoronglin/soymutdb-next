@@ -499,7 +499,9 @@ def validate_route(route: str) -> str:
     """Validate a page route against the reserved list and pattern."""
     if not route or not route.startswith("/"):
         raise ValidationError("Route must start with '/'")
-    if not ROUTE_PATTERN.match(route):
+    # ``/`` is the portal homepage; it is the only route with no path segment
+    # and is deliberately editable so Admin can own the homepage layout.
+    if route != "/" and not ROUTE_PATTERN.match(route):
         raise ValidationError(
             "Route must match /[a-z0-9][a-z0-9/_-]*",
             details={"route": route},

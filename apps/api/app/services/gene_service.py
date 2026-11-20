@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, lazyload
@@ -9,6 +11,7 @@ from sqlalchemy.orm import joinedload, lazyload
 from ..core.exceptions import NotFoundError, ValidationError
 from ..models.genomic import Assembly, Chromosome, Gene, Transcript
 from ..models.variant import VariantSummary
+from ..schemas.gene_evidence import EVIDENCE_KINDS, EvidenceTag
 from ..schemas.genomic import (
     AssemblyResponse,
     ChromosomeResponse,
@@ -20,14 +23,17 @@ from ..schemas.genomic import (
     RegionGeneResponse,
     RegionStructureResponse,
     RegionTranscriptResponse,
+    Strand,
     TranscriptPartResponse,
     TranscriptResponse,
 )
+from .gene_detail_sections import load_gene_sections
 from .release_context import (
     ReleaseContext,
     decode_bound_cursor,
     encode_bound_cursor,
 )
+from .sequence_availability import load_gene_sequences
 from .sql_like import LIKE_ESCAPE_CHARACTER, contains_pattern
 
 
@@ -78,6 +84,53 @@ def _variant_count_subquery(release_id: int):
         .correlate(Gene)
         .scalar_subquery()
     )
+
+
+#: Source strings that mean "a model called this gene, nobody checked it".
+#: Kept as a branch of literal matches rather than a fuzzy match: a wrong guess
+#: here would relabel a curated annotation as predicted.
+_PREDICTED_SOURCE_MARKERS = (
+    "augustus",
+    "genesnap",
+    "fgenesh",
+    "maker",
+    "predicted",
+    "ab initio",
+    "abinitio",
+)
+
+#: Source strings that mean a human reviewed this record.
+_CURATED_SOURCE_MARKERS = ("curated", "reviewed", "swiss-prot", "uniprot")
+
+
+def gene_model_evidence(gene: Gene) -> EvidenceTag | None:
+    """Report how the gene model came to exist, or ``None`` when unknown.
+
+    Reads only what the imported annotation actually carries (the GFF3
+    ``attributes["source"]`` / ``attributes["evidence"]``), never the accession
+    pattern. Returning ``None`` for a silent source is the point: guessing
+    "predicted" from a gene id would put a claim on the page the data never
+    made.
+    """
+    attributes = gene.attributes if isinstance(gene.attributes, dict) else {}
+    declared = attributes.get("evidence")
+    if isinstance(declared, str) and declared.strip():
+        known = set(EVIDENCE_KINDS)
+        candidate = declared.strip().lower()
+        if candidate in known:
+            return EvidenceTag(
+                kind=candidate,
+                source=str(attributes.get("source") or "annotation"),
+            )
+    source = attributes.get("source")
+    if isinstance(source, str) and source.strip():
+        lowered = source.strip().lower()
+        if any(marker in lowered for marker in _CURATED_SOURCE_MARKERS):
+            return EvidenceTag(kind="curated", source=source.strip())
+        if any(marker in lowered for marker in _PREDICTED_SOURCE_MARKERS):
+            return EvidenceTag(kind="predicted", source=source.strip())
+        return EvidenceTag(kind="imported", source=source.strip())
+    return None
 
 
 def _order_by(params: GeneListParams, release_id: int):
@@ -150,7 +203,31 @@ def decode_cursor(
         raise ValidationError(f"Invalid cursor: {exc}") from exc
 
 
-PART_KIND_BY_TYPE: dict[str, str] = {
+#: The vocabulary the renderers speak, typed so the literal survives into the
+#: response. A plain ``dict[str, str]`` would widen it to ``str`` and force a
+#: cast at the one place that has to be right.
+def _strand(value: str | None) -> Strand:
+    """Normalize a stored strand into the schema's enum.
+
+    The column holds a one-character string and the database does not
+    constrain it beyond that, while the response schema speaks the ``Strand``
+    enum. A row that says something else (``"."`` for an unstranded contig, an
+    empty string, a stray character from a third-party import) must still
+    produce a valid answer, so anything that is not ``+`` or ``-`` is reported
+    as a minus strand only when it literally is one and otherwise rejected by
+    the caller.
+
+    Keeping the conversion here means every response is built from a value the
+    schema accepts, instead of trusting the column.
+    """
+    if value == Strand.PLUS:
+        return Strand.PLUS
+    if value == Strand.MINUS:
+        return Strand.MINUS
+    raise ValueError(f"unsupported strand value: {value!r}")
+
+
+PART_KIND_BY_TYPE: dict[str, Literal["cds", "utr5", "utr3"]] = {
     "cds": "cds",
     "five_prime_utr": "utr5",
     "three_prime_utr": "utr3",
@@ -179,7 +256,7 @@ def _region_transcript(tx: Transcript, *, include_parts: bool) -> RegionTranscri
         biotype=tx.biotype,
         start=tx.start,
         end=tx.end,
-        strand=tx.strand,
+        strand=_strand(tx.strand),
         is_canonical=tx.is_canonical,
         parts=parts,
     )
@@ -202,9 +279,7 @@ class GeneService:
         back as ``0`` for every row (the React table rendered an always-empty
         column) and an unscoped count would have spanned draft releases.
         """
-        variant_count = _variant_count_subquery(release_context.release_id).label(
-            "variant_count"
-        )
+        variant_count = _variant_count_subquery(release_context.release_id).label("variant_count")
         stmt = (
             select(Gene, variant_count)
             .join(Assembly, Gene.assembly_id == Assembly.id)
@@ -240,14 +315,12 @@ class GeneService:
             stmt = stmt.where(Gene.assembly_id == int(params.assembly_id))
         if params.chromosome is not None:
             # genes stores a chromosome_id FK; filter via the joined name.
-            stmt = stmt.join(
-                Chromosome, Gene.chromosome_id == Chromosome.id
-            ).where(Chromosome.name == params.chromosome)
+            stmt = stmt.join(Chromosome, Gene.chromosome_id == Chromosome.id).where(
+                Chromosome.name == params.chromosome
+            )
             if params.assembly_id is not None:
                 # same chromosome names exist across assemblies.
-                stmt = stmt.where(
-                    Chromosome.assembly_id == int(params.assembly_id)
-                )
+                stmt = stmt.where(Chromosome.assembly_id == int(params.assembly_id))
         if params.biotype is not None:
             stmt = stmt.where(Gene.biotype == params.biotype)
         if params.search:
@@ -317,15 +390,14 @@ class GeneService:
         genes = [gene for gene, _count in rows]
 
         has_more = (
-            len(genes) > params.limit
-            if params.page is None
-            else params.page * page_size < total
+            len(genes) > params.limit if params.page is None else params.page * page_size < total
         )
         if has_more and params.page is None:
             genes = genes[: params.limit]
 
         items = [
-            self._gene_to_response(gene, count) for gene, count in rows[: len(genes)]
+            self._gene_to_response(gene, count, release_context)
+            for gene, count in rows[: len(genes)]
         ]
         next_cursor = (
             encode_cursor(
@@ -375,6 +447,14 @@ class GeneService:
             .join(Assembly, Gene.assembly_id == Assembly.id)
             .where(and_(*conditions))
             .order_by(Gene.gene_pk)
+            # The assembly is already joined here, so load it in the same
+            # statement. Without this the detail response reported
+            # `assembly_name: null` while the list endpoint reported the same
+            # gene's assembly name -- two answers for one record, and the
+            # detail page lost the assembly context the portal is required to
+            # show. `lazyload` on the assembly's own `selectin` chromosomes
+            # keeps the detail query to one round trip.
+            .options(joinedload(Gene.assembly).lazyload(Assembly.chromosomes))
         )
         result = await db.execute(stmt)
         genes = list(result.scalars().all())
@@ -382,8 +462,7 @@ class GeneService:
             raise NotFoundError(f"Gene {gene_id} not found")
         if len(genes) > 1:
             raise ValidationError(
-                f"Gene {gene_id} exists in multiple assemblies; "
-                "supply an explicit assembly_id",
+                f"Gene {gene_id} exists in multiple assemblies; supply an explicit assembly_id",
                 details={
                     "code": "ambiguous_assembly",
                     "assemblies": [
@@ -398,9 +477,7 @@ class GeneService:
         gene = genes[0]
 
         # Transcripts + exons are eager-loaded via relationship.
-        transcripts = [
-            self._transcript_to_response(t) for t in gene.transcripts
-        ]
+        transcripts = [self._transcript_to_response(t) for t in gene.transcripts]
         aliases = [a.alias for a in gene.aliases]
 
         # The detail header renders this as the gene's variant total. It must be
@@ -420,10 +497,29 @@ class GeneService:
             or 0
         )
 
+        # Optional sections are assembled after the header so each one can
+        # report its own presence (`empty` vs `not_imported`) instead of being
+        # flattened into an empty list.
+        sections = await load_gene_sections(db, gene, release_context=release_context)
+
+        # Residues are a per-gene answer: ``transcript_sequences`` rows for this
+        # gene's transcripts, plus a bounded slice of the assembly's reference
+        # FASTA for the genomic/transcript molecules. Both are keyed off the
+        # gene already resolved inside this release, so an unreleased or
+        # other-assembly record cannot contribute one.
+        sequences = await load_gene_sequences(db, gene, release_context=release_context)
+
         return GeneDetail(
             id=str(gene.accession),
             gene_id=str(gene.accession),
             assembly_id=str(gene.assembly_id),
+            # The detail response used to omit the assembly name and the
+            # release entirely, so the gene page showed "assembly: unknown"
+            # while the list endpoint showed the same gene's assembly. Both
+            # belong to the record: the portal is required to show them.
+            assembly_name=gene.assembly.name if gene.assembly else None,
+            release_id=str(release_context.release_id),
+            release_name=release_context.release_name,
             chromosome=gene.chromosome.name,
             name=gene.name,
             symbol=gene.name,
@@ -432,11 +528,14 @@ class GeneService:
             end=gene.end,
             start_pos=gene.start,
             end_pos=gene.end,
-            strand=gene.strand,
+            strand=_strand(gene.strand),
             description=gene.description,
             transcripts=transcripts,
             aliases=aliases,
             variant_count=variant_count,
+            sequences=sequences,
+            model_evidence=gene_model_evidence(gene),
+            **sections,
             created_at=gene.created_at,
             updated_at=gene.updated_at,
         )
@@ -459,9 +558,9 @@ class GeneService:
             return {}
         stmt = select(Gene).where(Gene.accession.in_(list(accessions)))
         if release_context is not None:
-            stmt = stmt.join(
-                Assembly, Gene.assembly_id == Assembly.id
-            ).where(Assembly.release_id == release_context.release_id)
+            stmt = stmt.join(Assembly, Gene.assembly_id == Assembly.id).where(
+                Assembly.release_id == release_context.release_id
+            )
         if assembly_id is not None:
             stmt = stmt.where(Gene.assembly_id == int(assembly_id))
         result = await db.execute(stmt)
@@ -496,8 +595,7 @@ class GeneService:
             raise NotFoundError(f"Gene {accession} not found")
         if len(matches) > 1:
             raise ValidationError(
-                f"Gene {accession} exists in multiple assemblies; "
-                "supply an explicit assembly_id",
+                f"Gene {accession} exists in multiple assemblies; supply an explicit assembly_id",
                 details={"code": "ambiguous_assembly"},
             )
         return matches[0]
@@ -576,7 +674,7 @@ class GeneService:
                     end=gene.end,
                     start_pos=gene.start,
                     end_pos=gene.end,
-                    strand=gene.strand,
+                    strand=_strand(gene.strand),
                     biotype=gene.biotype,
                     transcripts=[
                         _region_transcript(tx, include_parts=include_parts)
@@ -587,12 +685,15 @@ class GeneService:
             ],
         )
 
-    async def list_assemblies(
-        self, db: AsyncSession, *, release_id: int
-    ) -> list[AssemblyResponse]:
+    async def list_assemblies(self, db: AsyncSession, *, release_id: int) -> list[AssemblyResponse]:
+        # Same rule as ``AssemblyService.list_assemblies``: an assembly with no
+        # gene rows is staged metadata, not an annotation namespace, so it is
+        # not advertised by a list that hands out ids.
+        has_genes = select(Gene.gene_pk).where(Gene.assembly_id == Assembly.id).exists()
         result = await db.execute(
             select(Assembly)
             .where(Assembly.release_id == release_id)
+            .where(has_genes)
             .order_by(Assembly.name)
         )
         return [
@@ -612,11 +713,29 @@ class GeneService:
     async def list_chromosomes(
         self, db: AsyncSession, assembly_id: int, *, release_id: int
     ) -> list[ChromosomeResponse]:
+        """Chromosomes of one assembly, only when it belongs to this release.
+
+        The existence check is separate from the row query on purpose. Filtering
+        a join by ``Assembly.release_id`` and returning whatever came back makes
+        an assembly outside the release answer ``200 + []``, which tells the
+        caller "that assembly exists and has no chromosomes" -- a claim the data
+        never made, and one that discloses the existence of unpublished rows.
+        Unpublished and non-existent therefore share one 404, with no row data in
+        the error, and no fallback to the default assembly (that would silently
+        answer for a different coordinate namespace).
+        """
+        in_release = (
+            await db.execute(
+                select(Assembly.id)
+                .where(Assembly.id == assembly_id)
+                .where(Assembly.release_id == release_id)
+            )
+        ).scalar_one_or_none()
+        if in_release is None:
+            raise NotFoundError(f"Assembly {assembly_id} is not available")
         result = await db.execute(
             select(Chromosome)
-            .join(Assembly, Chromosome.assembly_id == Assembly.id)
             .where(Chromosome.assembly_id == assembly_id)
-            .where(Assembly.release_id == release_id)
             .order_by(Chromosome.order)
         )
         return [
@@ -635,12 +754,23 @@ class GeneService:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _gene_to_response(gene: Gene, variant_count: int = 0) -> GeneResponse:
+    def _gene_to_response(
+        gene: Gene,
+        variant_count: int = 0,
+        release_context: ReleaseContext | None = None,
+    ) -> GeneResponse:
         return GeneResponse(
             id=str(gene.accession),
             gene_id=str(gene.accession),
             assembly_id=str(gene.assembly_id),
             assembly_name=gene.assembly.name if gene.assembly else None,
+            # The release the record was resolved in. The portal must show the
+            # release next to the assembly: a coordinate means nothing without
+            # the data version it was read from.
+            release_id=(
+                str(release_context.release_id) if release_context is not None else None
+            ),
+            release_name=release_context.release_name if release_context is not None else None,
             chromosome=gene.chromosome.name,
             name=gene.name,
             symbol=gene.name,
@@ -649,7 +779,7 @@ class GeneService:
             end=gene.end,
             start_pos=gene.start,
             end_pos=gene.end,
-            strand=gene.strand,
+            strand=_strand(gene.strand),
             description=gene.description,
             variant_count=variant_count,
         )
@@ -663,7 +793,7 @@ class GeneService:
             biotype=tx.biotype,
             start=tx.start,
             end=tx.end,
-            strand=tx.strand,
+            strand=_strand(tx.strand),
             is_canonical=tx.is_canonical,
             exons=[
                 ExonResponse(

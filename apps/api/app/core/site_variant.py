@@ -18,7 +18,7 @@ class SiteVariant(StrEnum):
 
 SITE_VARIANTS: tuple[SiteVariant, ...] = (SiteVariant.EXTERNAL, SiteVariant.INTERNAL)
 SITE_VARIANT_VALUES = frozenset(variant.value for variant in SITE_VARIANTS)
-SITE_VARIANT_BASE_SECTIONS = frozenset({"about", "home", "footer", "content"})
+SITE_VARIANT_BASE_SECTIONS = frozenset({"about", "home", "footer", "header", "content"})
 
 
 def variant_section(base_section: str, variant: SiteVariant) -> str:

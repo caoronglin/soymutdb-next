@@ -30,6 +30,10 @@ OFFLINE_GATES = (
     "web-performance",
     "primer",
     "jbrowse-artifact",
+    # Serves the gh-pages-shaped tree from build-pages-artifact.sh, mounted under
+    # /soymutdb-next. It is skipped with a reason when pages-dist/ is absent, but
+    # it is a sweep member and this list is what keeps the two in step.
+    "subpath-artifact",
 )
 
 

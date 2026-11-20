@@ -45,7 +45,10 @@
     "internalBadge": "Internal",
     "primaryLabel": "Primary navigation",
     "quickSearchLabel": "Quick search (Cmd+K)",
-    "searchPlaceholder": "Search…"
+    "searchPlaceholder": "Search…",
+    "comparative": "Comparative",
+    "expression": "Expression",
+    "phenotypes": "Phenotypes"
   },
   "home": {
     "subtitle": "Soybean mutant database",
@@ -62,7 +65,9 @@
       "variants": "Variants",
       "variantsDescription": "Filter released variants by assembly, chromosome, type and impact.",
       "mutants": "Mutant lines",
-      "mutantsDescription": "Explore released mutant lines by their stable public identifiers."
+      "mutantsDescription": "Explore released mutant lines by their stable public identifiers.",
+      "notPublished": "Not published",
+      "notPublishedHelp": "No data release is published yet, so this count starts at publication."
     },
     "tasks": "Research tools",
     "tasksSubtitle": "Choose a focused tool for a gene, sequence or genomic region.",
@@ -178,7 +183,11 @@
     "tabs": {
       "overview": "Overview",
       "expression": "Expression",
-      "homologs": "Homologs"
+      "homologs": "Homologs",
+      "annotation": "GO / KEGG",
+      "variants": "Variants",
+      "phenotype": "Phenotypes",
+      "literature": "Literature"
     },
     "expression": {
       "no_data": "No expression data available for this gene",
@@ -193,7 +202,18 @@
       "species": "Species",
       "gene_id": "Homolog Gene ID",
       "type": "Type",
-      "source": "Source"
+      "source": "Source",
+      "align": {
+        "title": "Homolog alignment and NJ tree",
+        "run": "Align {{count}} homologs ({{molecule}})",
+        "hint": "CDS is compared locus to locus; entries this database cannot resolve are listed separately.",
+        "unresolvedTitle": "{{count}} entries cannot be resolved in this database",
+        "noSequence": "no imported {{molecule}} sequence for this entry",
+        "notInDatabase": "this deployment does not hold that version",
+        "tooFew": "only {{count}} sequences resolved; a tree needs at least {{needed}}",
+        "leaves": "{{count}} leaves",
+        "resolved": "{{count}} sequences resolved"
+      }
     },
     "loadError": "Could not load this gene.",
     "assemblyLabel": "Genome version",
@@ -263,7 +283,115 @@
       "siteKey": "Mutant system (parent + position)"
     },
     "mutationSitesTitle": "Mutation sites",
-    "unpublishedPreview": "Unpublished preview"
+    "unpublishedPreview": "Unpublished preview",
+    "sequences": {
+      "title": "Sequences",
+      "molecule": {
+        "genomic": "Genomic DNA",
+        "cds": "CDS",
+        "transcript": "Transcript",
+        "protein": "Protein"
+      },
+      "available": "Available",
+      "unavailable": "Not imported",
+      "unavailableHint": "This platform release holds coordinates and annotations for this gene, not residues. A sequence is not shown because none is stored.",
+      "length": "Length",
+      "analysis": {
+        "proteinProperties": "Properties (MW / pI)",
+        "composition": "Base composition",
+        "meltingTemp": "Primer Tm",
+        "reverseComplement": "Reverse complement",
+        "reverseComplementLabel": "Reverse complement",
+        "residues": "Residues",
+        "molecularWeight": "Molecular weight (Da)",
+        "isoelectricPoint": "Isoelectric point",
+        "gravy": "Hydrophobicity (GRAVY)",
+        "instabilityIndex": "Instability index",
+        "aromaticity": "Aromaticity",
+        "bases": "Bases",
+        "gcFraction": "GC content",
+        "ambiguous": "Ambiguous bases",
+        "meltingMethod": "Method {{method}}",
+        "failed": "Analysis failed; try again"
+      }
+    },
+    "evidence": {
+      "label": "Evidence",
+      "source": "Source",
+      "kind": {
+        "experimental": "Experimental",
+        "curated": "Curated",
+        "predicted": "Predicted",
+        "transferred": "Transferred by orthology",
+        "imported": "Imported",
+        "unknown": "Unknown"
+      },
+      "kindHint": {
+        "experimental": "Measured or experimentally validated by the source study.",
+        "curated": "Manually reviewed annotation from the source record.",
+        "predicted": "Computational prediction, not experimentally confirmed.",
+        "transferred": "Inferred from another species or gene by homology.",
+        "imported": "Import source states nothing about how it was produced.",
+        "unknown": "The source record does not describe its provenance."
+      },
+      "unknownSource": "The source record does not state its provenance."
+    },
+    "sections": {
+      "state": {
+        "empty": "This gene has no {{section}}.",
+        "emptyHint": "The source snapshot is loaded for this release; this gene simply carries no records in it.",
+        "notImported": "{{section}} was not imported for this release.",
+        "notImportedHint": "The release holds no snapshot for this data at all. That is not the same as this gene having none.",
+        "unreported": "{{section}}: nothing reported by this API build.",
+        "reason": "Reason: {{reason}}"
+      },
+      "annotation": {
+        "title": "GO / KEGG annotation",
+        "empty": "This gene has no GO or KEGG terms in this release.",
+        "ontology": "Ontology",
+        "term": "Term",
+        "termName": "Name",
+        "evidenceCode": "Evidence code",
+        "qualifier": "Qualifier",
+        "reference": "Reference",
+        "snapshot": "Snapshot",
+        "snapshotVersion": "Snapshot version"
+      },
+      "variants": {
+        "title": "Variants",
+        "empty": "This gene has no variants in this release.",
+        "total": "Total",
+        "impact": "Consequence",
+        "count": "Count",
+        "unannotated": "No consequence predicted"
+      },
+      "phenotype": {
+        "title": "Phenotypes",
+        "empty": "No phenotype has been recorded for mutants of this gene.",
+        "mutant": "Mutant line",
+        "category": "Category",
+        "trait": "Trait",
+        "value": "Value",
+        "method": "Method"
+      },
+      "literature": {
+        "title": "Literature",
+        "empty": "No publication is linked to this gene.",
+        "titleColumn": "Title",
+        "authors": "Authors",
+        "journal": "Journal",
+        "year": "Year",
+        "identifier": "Identifier"
+      }
+    },
+    "confidence": {
+      "high": "High",
+      "medium": "Medium",
+      "low": "Low"
+    },
+    "entryPoints": "Gene data entry points",
+    "openLocusView": "Locus view (±{{flank}} kb)",
+    "releaseLabel": "Release"
   },
   "variants": {
     "title": "Variant Search",
@@ -360,7 +488,8 @@
     "exportDownload": "Download export",
     "exportDownloadFailed": "The export could not be downloaded",
     "exportTakingLong": "This export is taking longer than expected. It may still finish.",
-    "exportCheckAgain": "Check again"
+    "exportCheckAgain": "Check again",
+    "exportUnavailable": "This export record could not be read. It may have expired or belong to another account."
   },
   "mutantLines": {
     "title": "Mutant Lines",
@@ -469,7 +598,9 @@
     "openInNewTab": "Open in a new tab",
     "retry": "Retry",
     "stillLoading": "Still loading",
-    "stillLoadingDesc": "Large datasets can take a moment on first paint."
+    "stillLoadingDesc": "Large datasets can take a moment on first paint.",
+    "pickAssembly": "Choose a published genome assembly to open the browser",
+    "noAssemblies": "This data release publishes no genome assemblies, so there is nothing to open in the genome browser."
   },
   "blast": {
     "title": "BLAST Search",
@@ -513,6 +644,7 @@
     "noHits": "No hits found for this job",
     "hitsLoadError": "Could not load BLAST hits. Please retry.",
     "resultsTitle": "BLAST Results",
+    "download": "Download raw results",
     "alignments": "Alignments",
     "hitTable": "Hit Table",
     "hitName": "Name",
@@ -546,7 +678,25 @@
       "resolveFailed": "Could not load the genome position. Please retry."
     },
     "submitRequiresLogin": "Sign in with a researcher-capable account to submit BLAST jobs.",
-    "submitRequiresResearcher": "Your account does not have permission to submit BLAST jobs."
+    "submitRequiresResearcher": "Your account does not have permission to submit BLAST jobs.",
+    "publicWorkflow": "Run BLAST anonymously",
+    "engine": "Engine",
+    "jobStatus": "Status",
+    "parametersHint": "Defaults suit a first look. Change them only if you need a different sensitivity.",
+    "validation": {
+      "programRequired": "Select a programme.",
+      "databaseRequired": "Select a database.",
+      "sequenceTooShort": "Enter a sequence with at least 10 characters.",
+      "eValueRange": "The E-value must be greater than 0 and at most 1000.",
+      "maxHitsRange": "The maximum hit count must be a whole number from 1 to 500."
+    }
+  },
+  "releaseStatus": {
+    "draft": "Draft",
+    "validated": "Validated",
+    "ready": "Ready",
+    "published": "Published",
+    "rolled_back": "Rolled back"
   },
   "releases": {
     "title": "Data Releases",
@@ -595,7 +745,32 @@
     "downloadFile": "Download {{name}}",
     "downloadCount": "{{count}} downloads",
     "customExportTitle": "Need a custom export?",
-    "customExportDescription": "Submit an async export job for the variant sets matching your filters (up to 100 million records)."
+    "customExportDescription": "Submit an async export job for the variant sets matching your filters (up to 100 million records).",
+    "checksumNotRecorded": "Not recorded",
+    "queryBuilderTitle": "Build a custom export",
+    "queryBuilderDescription": "Combine filters into one asynchronous export. Only filters with real query support are accepted.",
+    "queryBuilderEmpty": "No exportable datasets in this release.",
+    "queryBuilderFormat": "Format",
+    "queryBuilderSubmit": "Build export",
+    "queryBuilderUnsupported": "No backing query:",
+    "queryBuilderSubmitted": "Export submitted",
+    "queryBuilderFailed": "Export could not be submitted",
+    "license": "License",
+    "generatedAt": "Generated",
+    "queryBuilderAssembly": "Assembly",
+    "queryBuilderChromosome": "Chromosome",
+    "queryBuilderImpact": "Impact",
+    "queryBuilderVariantType": "Variant type",
+    "queryBuilderFiltersCount": "supported filters",
+    "convert": {
+      "action": "Convert",
+      "label": "Convert {{source}} to",
+      "run": "Convert",
+      "save": "Download {{format}}",
+      "chars": "characters",
+      "empty": "The file is empty; nothing to convert.",
+      "failed": "Conversion failed; check the file format."
+    }
   },
   "fileViewer": {
     "singleFile": "Single file",
@@ -616,7 +791,8 @@
     "title": "File preview",
     "downloadOnly": "Download-only preview",
     "undecodable": "This compressed, unknown, or binary format is not decoded in the browser.",
-    "downloadOnlyHint": "This file cannot be previewed online. Download it to view."
+    "downloadOnlyHint": "This file cannot be previewed online. Download it to view.",
+    "remoteFallback": "The external preview service is unavailable — showing the built-in viewer instead."
   },
   "docs": {
     "title": "Documentation",
@@ -737,6 +913,7 @@
     "backToList": "Back to List"
   },
   "common": {
+    "refresh": "Refresh",
     "loading": "…loading",
     "error": "Error",
     "errorDescription": "An unexpected error occurred while loading this page.",
@@ -857,7 +1034,9 @@
     "demoNotice": "Demo mode is enabled. The charts below use synthetic example data and are not database measurements.",
     "variantTypesDescription": "SNP / Indel / SV distribution",
     "impactDescription": "Variant count by predicted impact",
-    "liveDataUnavailable": "Live data is unavailable. Please retry."
+    "liveDataUnavailable": "Live data is unavailable. Please retry.",
+    "noPublishedVariants": "No published variant data",
+    "noPublishedVariantsHelp": "This data release has no published variant records yet; the distribution appears once there is one."
   },
   "search": {
     "title": "Global Search",
@@ -1053,10 +1232,214 @@
     "internalNotPaginated": "Internal directory results are not paginated."
   },
   "admin": {
+    "siteControl": {
+      "title": "Site control",
+      "navHint": "The public site and the internal site keep separate navigation documents; the API never copies one variant into the other.",
+      "subtitle": "Database type, primary navigation and feature availability for the public portal",
+      "external": "public site",
+      "internal": "internal site",
+      "saveFailed": "Save failed",
+      "conflict": "Settings were changed in another session. The latest version has been loaded; save again.",
+      "dbKind": {
+        "genome": "Genome / mutant database",
+        "genomeDescription": "Genes, variants, mutants, genome browser and comparative genomics.",
+        "geneOntology": "Gene ontology database",
+        "geneOntologyDescription": "GO terms, ontology relationships and functional enrichment workflows.",
+        "transcriptionFactor": "Transcription factor database",
+        "transcriptionFactorDescription": "TF families, binding sites, regulons and expression programmes."
+      },
+      "dbType": {
+        "cardTitle": "Database type",
+        "description": "Selects the biological profile this deployment presents. It is stored as a server-owned enum and surfaced to the web client through GET /site/profile.",
+        "save": "Save database type",
+        "saved": "Database type saved."
+      },
+      "features": {
+        "cardTitle": "Feature availability",
+        "description": "Toggling a feature also hides its gated navigation links from the public site.",
+        "save": "Save features",
+        "saved": "Feature availability saved.",
+        "enableAria": "Enable {{feature}}",
+        "page_builder": "Render published PageDefinition components.",
+        "imports_module_tsv": "Enable schema-driven module imports.",
+        "imports_module_xlsx": "Enable XLSX module imports.",
+        "imports_local_upload": "Enable browser-direct multipart uploads.",
+        "imports_fasta": "Enable FASTA reference imports (writes chromosomes and their lengths from the .fai index).",
+        "imports_gff3": "Enable GFF3 annotation imports (writes genes, transcripts, CDS/UTR parts and derived exons).",
+        "imports_vcf": "Enable VCF variant imports (durable writer exists; gated by SOYMUTDB_ENABLE_VCF_IMPORT).",
+        "imports_blast_db": "Enable BLAST database imports (writer not yet closed).",
+        "imports_seed_data": "Enable Seed data imports (writer not yet closed).",
+        "imports_expression_csv": "Enable Expression CSV imports (assembly-scoped durable writer).",
+        "imports_homolog_csv": "Enable Homolog CSV imports (assembly-scoped durable writer).",
+        "publication_github_pages": "Enable GitHub Pages publication target.",
+        "publication_cloudflare_pages": "Enable Cloudflare Pages publication target."
+      },
+      "nav": {
+        "cardTitle": "Primary navigation",
+        "dragHint": "Drag groups and links to reorder. A link with a feature gate disappears from the public site while that feature flag is off.",
+        "addGroup": "Add group",
+        "addLink": "Add link",
+        "save": "Save {{variant}} navigation",
+        "saved": "{{variant}} navigation saved",
+        "loadError": "Unable to load navigation settings",
+        "conflict": "Navigation was changed in another session. The latest version has been loaded; review your edits and save again.",
+        "linksUsed": "{{count}} / {{max}} links",
+        "linkCount": "{{count}} links",
+        "on": "On",
+        "off": "Off",
+        "noGate": "No gate",
+        "destinationPlaceholder": "/path, /path/:id or https://…",
+        "reorderGroup": "Reorder {{name}}",
+        "reorderLink": "Reorder {{name}}",
+        "groupEnTitleAria": "Group {{index}} English title",
+        "groupZhTitleAria": "Group {{index}} Chinese title",
+        "linkEnLabelAria": "Link {{index}} English label ({{group}})",
+        "linkZhLabelAria": "Link {{index}} Chinese label ({{group}})",
+        "linkDestinationAria": "Link {{index}} destination ({{group}})",
+        "linkGateAria": "Link {{index}} feature gate ({{group}})",
+        "linkEnabledAria": "Link {{index}} enabled ({{group}})",
+        "error": {
+          "noDestination": "Link '{{label}}' needs a destination",
+          "whitespace": "Destination for '{{label}}' cannot contain whitespace or a backslash",
+          "protocolRelative": "Destination for '{{label}}' cannot be protocol-relative",
+          "prefix": "Destination for '{{label}}' must start with / or https://",
+          "notLoaded": "Settings not loaded",
+          "tooManyGroups": "Too many groups",
+          "tooManyLinks": "Too many links",
+          "invalidGroupId": "Invalid group id '{{id}}'",
+          "invalidLinkId": "Invalid link id '{{id}}'"
+        }
+      }
+    },
+    "siteAppearance": {
+      "title": "Site appearance",
+      "internal": {
+        "title": "Internal site (internal deployments only)",
+        "help": "The internal site is a separate deployment artifact, not part of the public site; these settings only affect the internal build.",
+        "toggleAria": "Edit internal site content"
+      },
+      "brand": {
+        "title": "Brand and icon",
+        "description": "The name and icon the public site shows in its header. The icon is a media-library asset you can pick here."
+      },
+      "header": {
+        "title": "Header navigation",
+        "description": "Groups and links in the public site header. A link can be gated on a feature flag, which hides it while the flag is off."
+      },
+      "footer": {
+        "title": "Footer",
+        "description": "The footer link groups and copyright line the public site renders.",
+        "empty": "This footer has no groups yet, so the public site shows only the copyright line.",
+        "loadError": "Unable to load the footer settings.",
+        "on": "Shown",
+        "off": "Hidden",
+        "addGroup": "Add group",
+        "addLink": "Add link",
+        "save": "Save footer",
+        "saved": "Footer saved.",
+        "conflict": "The footer was changed in another session. The latest version has been loaded; check your edits and save again.",
+        "linkCount": "{{count}} links",
+        "linksUsed": "{{count}} of {{max}} links used",
+        "groupEnTitleAria": "Group {{index}} English title",
+        "groupZhTitleAria": "Group {{index}} Chinese title",
+        "groupEnabledAria": "Show group {{name}}",
+        "moveGroupUpAria": "Move group {{name}} up",
+        "moveGroupDownAria": "Move group {{name}} down",
+        "removeGroupAria": "Remove group {{name}}",
+        "linkEnLabelAria": "Group {{group}} link {{index}} English label",
+        "linkZhLabelAria": "Group {{group}} link {{index}} Chinese label",
+        "linkDestinationAria": "Group {{group}} link {{index}} destination",
+        "linkEnabledAria": "Show link {{label}}",
+        "moveLinkUpAria": "Move link {{label}} up",
+        "moveLinkDownAria": "Move link {{label}} down",
+        "removeLinkAria": "Remove link {{label}}",
+        "destinationPlaceholder": "Site path (e.g. /genes) or an https:// address",
+        "copyrightZh": "Chinese copyright line",
+        "copyrightEn": "English copyright line",
+        "copyrightHelp": "The copyright line supports a year placeholder that the public site replaces; when the Chinese or English line is empty, the legacy copyright value is used.",
+        "error": {
+          "noDestination": "Link \"{{label}}\" has no destination.",
+          "whitespace": "Link \"{{label}}\" must not contain spaces or a backslash.",
+          "protocolRelative": "Link \"{{label}}\" must not use a protocol-relative // address.",
+          "prefix": "Link \"{{label}}\" must be a site path starting with /.",
+          "httpsOnly": "Link \"{{label}}\" must be an https:// address.",
+          "notLoaded": "The footer settings are not loaded yet.",
+          "tooManyGroups": "A footer supports at most {{max}} groups.",
+          "tooManyLinks": "A footer supports at most {{max}} links.",
+          "invalidGroupId": "Group id \"{{id}}\" may only contain lowercase letters, digits and hyphens.",
+          "duplicateGroupId": "Group id \"{{id}}\" is used twice.",
+          "invalidLinkId": "Link id \"{{id}}\" may only contain lowercase letters, digits and hyphens.",
+          "blankLabel": "Group \"{{group}}\" has a blank Chinese or English link label."
+        }
+      },
+      "media": {
+        "title": "Images and media",
+        "description": "Logos, banners and screenshots live in the media library, not on this page. Upload or re-use an asset there, then select it on a page or in the icon field above.",
+        "open": "Open media library"
+      }
+    },
+    "pageBuilder": {
+      "layouts": "Layout",
+      "components": "Components",
+      "paletteHint": "Select a container in the canvas, then click a component to place it there. Without a container selection, components are added to the page root.",
+      "dragHandle": "Drag to reorder",
+      "selectContainer": "Select this container, then add a component",
+      "remove": "Remove component",
+      "emptyContainer": "Empty container — select it from the palette.",
+      "pageSettings": "Page settings",
+      "titleKey": "Title key",
+      "theme": "Theme",
+      "properties": "Properties",
+      "noSelection": "Select a component",
+      "noProps": "This component has no configurable props.",
+      "documentJson": "Definition JSON",
+      "documentJsonHint": "Advanced: edit data sources and responsive layouts directly. The server re-validates on save.",
+      "draftSaved": "Draft v{{version}} saved.",
+      "previewReady": "Preview validated. Nothing was saved.",
+      "published": "Published v{{version}}.",
+      "loadFailed": "Failed to load the page definition.",
+      "unsaved": "Unsaved",
+      "lastEdited": "Last edited {{when}}",
+      "preview": "Preview",
+      "saveDraft": "Save draft",
+      "publish": "Publish",
+      "palette": "Components",
+      "canvas": "Canvas",
+      "inspector": "Inspector",
+      "previewTitle": "Preview (validated definition)",
+      "publishTitle": "Publish page definition",
+      "publishSavesFirst": "Unsaved changes will be saved as a new draft, then published.",
+      "publishHint": "The public site serves the newest published version immediately.",
+      "publishReason": "Reason (optional)",
+      "getStarted": "Start by selecting a component from the palette. The root is a columns container, so any component may be placed directly.",
+      "created": "Page definition created.",
+      "route": "Route",
+      "version": "Version",
+      "status": "Status",
+      "updatedAt": "Updated",
+      "title": "Page Builder",
+      "subtitle": "Design public pages by dragging registered components. Publish explicitly — drafts are never served.",
+      "newPage": "New page",
+      "empty": "No page definitions yet. Create one to get started.",
+      "routeHelp": "Lowercase path such as /downloads or / for the homepage. Reserved prefixes (/admin, /api, /blast, /browser) are rejected by the server.",
+      "template": "Start from template",
+      "blankCanvas": "Blank canvas",
+      "draftNote": "A draft v1 is created. Use the editor to add components, preview and publish.",
+      "missingPageId": "Missing page id",
+      "routeRequired": "Route is required",
+      "routeInvalid": "Use / for the homepage or a lowercase path like /downloads",
+      "titleKeyRequired": "Title key is required"
+    },
     "title": "Admin Console",
     "brand": {
       "title": "Site brand",
       "description": "Manage the names and icon shown by each SoyMutDB site.",
+      "uploadPurpose": "Upload purpose",
+      "purposes": {
+        "news": "News",
+        "editor": "Editor",
+        "about": "About"
+      },
       "nameZh": "Chinese display name",
       "nameEn": "English display name",
       "iconUrl": "Site icon",
@@ -1121,6 +1504,35 @@
     },
     "importStudio": {
       "newImport": "New import",
+      "subtitle": "Upload module data, inspect it, and submit it as an import task.",
+      "stepSource": "Source",
+      "stepFile": "File",
+      "stepInspect": "Inspect",
+      "stepReview": "Review",
+      "moduleData": "Module data",
+      "moduleHint": "The module schema this file provides rows for.",
+      "datasetHint": "Data set that owns the uploaded object.",
+      "releaseHint": "Release the imported rows belong to.",
+      "fileHint": "Upload a local file, or reference an existing S3 object.",
+      "s3Hint": "The object key is validated against the data set prefix.",
+      "back": "Back",
+      "continue": "Continue",
+      "startOver": "Start over",
+      "openTask": "Open task",
+      "backToList": "Back to imports",
+      "loadingCapabilities": "Loading import capabilities…",
+      "fileRequired": "Choose a file to upload.",
+      "s3Required": "Filename and S3 path are required in S3 mode.",
+      "inspectHint": "Inspect the local file before submitting to catch column errors early.",
+      "inspectLocalOnly": "Inspection is available for local files only.",
+      "previewRows": "{{rows}} preview rows",
+      "previewTruncated": "(truncated)",
+      "previewReadOnly": "Read-only preview",
+      "previewNoRows": "The file has no data rows.",
+      "reviewChecksumPending": "Computed during upload",
+      "submitted": "Import submitted",
+      "submittedHint": "Import task {{id}} has been queued.",
+      "browse": "Browse",
       "module": "Data module",
       "datasetId": "Dataset ID",
       "releaseId": "Release ID",
@@ -1151,6 +1563,9 @@
     },
     "dashboard": {
       "title": "Dashboard",
+      "welcome": "Welcome",
+      "analysis": "Analysis",
+      "monitor": "Monitor",
       "systemOverview": "System Overview",
       "totalTeam": "Team Members",
       "activeReleases": "Active Releases",
@@ -1167,7 +1582,29 @@
       "pipelineHeadline": "Keep the data pipeline moving",
       "pipelineDesc": "Start from the real operational workflows instead of decorative management pages.",
       "openImports": "Open imports",
-      "trendUnavailable": "Dashboard trend data is unavailable."
+      "openAnalytics": "Visitor analytics",
+      "trendUnavailable": "Dashboard trend data is unavailable.",
+      "quickLinks": "Data management shortcuts",
+      "quickLinksHint": "Jump straight to the workflows behind the numbers above.",
+      "contentOverview": "Database content",
+      "shortcuts": {
+        "releases": {
+          "title": "Releases",
+          "description": "Versions, publication status and record counts."
+        },
+        "imports": {
+          "title": "Data imports",
+          "description": "Upload module data and track running tasks."
+        },
+        "dataViews": {
+          "title": "Multi-dimensional views",
+          "description": "Saved grid, kanban and gallery views over the data."
+        },
+        "media": {
+          "title": "Media library",
+          "description": "Portal images and files used by the public site."
+        }
+      }
     },
     "dashboardStats": {
       "analyticsHeading": "Visitor analytics",
@@ -1193,8 +1630,8 @@
           "variantNoticeAfter": " while its local editor is extracted."
         },
         "appearance": {
-          "title": "Appearance",
-          "description": "Theme colour and public presentation defaults."
+          "title": "Site appearance",
+          "description": "Brand, header navigation, footer and media for the public site."
         },
         "integrations": {
           "title": "Integrations",
@@ -1215,7 +1652,75 @@
           "description": "Data, notification, and file-preview configuration."
         }
       },
+      "appearanceForm": {
+        "title": "Admin console theme",
+        "description": "Primary colour of the administrator interface. It does not change the public site.",
+        "loading": "Loading appearance settings…",
+        "loadError": "Unable to load appearance settings.",
+        "primaryColor": "Primary color",
+        "primaryColorHelp": "Controls Ant Design buttons, links, tags, and selected states.",
+        "save": "Save appearance",
+        "saveError": "Unable to save appearance settings.",
+        "saved": "Appearance saved."
+      },
+      "localizationForm": {
+        "title": "Localization",
+        "description": "Configure the default language used by the public site.",
+        "loading": "Loading localization settings…",
+        "loadError": "Unable to load localization settings.",
+        "defaultLanguage": "Default Language",
+        "save": "Save localization",
+        "saveError": "Unable to save localization settings.",
+        "saved": "Localization saved."
+      },
+      "securityForm": {
+        "title": "Security",
+        "description": "Authentication and access-control settings.",
+        "loading": "Loading security settings…",
+        "loadError": "Unable to load security settings.",
+        "sessionTimeout": "Session Timeout (minutes)",
+        "maxLoginAttempts": "Max Login Attempts",
+        "passwordMinLength": "Password Min Length",
+        "twoFactor": "Two-Factor Auth",
+        "required": "Required",
+        "optional": "Optional",
+        "toggle": "Toggle",
+        "save": "Save security",
+        "saveError": "Unable to save security settings.",
+        "saved": "Security settings saved."
+      },
+      "siteForm": {
+        "title": "Site information",
+        "description": "Configure the public site identity and default language.",
+        "loading": "Loading site settings…",
+        "loadError": "Unable to load site settings.",
+        "siteName": "Site Name",
+        "defaultLanguage": "Default Language",
+        "siteDescription": "Site Description",
+        "save": "Save site information",
+        "saveError": "Unable to save site settings.",
+        "saved": "Site information saved."
+      },
       "sectionsLabel": "Settings sections",
+      "contentArea": {
+        "hero": "Hero",
+        "tools": "Tool cards",
+        "search": "Search pages",
+        "blast": "BLAST",
+        "help": "Help",
+        "generic": "Generic UI"
+      },
+      "section": {
+        "general": "General settings",
+        "about": "About settings",
+        "home": "Homepage welcome settings",
+        "data": "Data & Storage settings",
+        "email": "Email & Notifications settings",
+        "security": "Security settings",
+        "filePreview": "File Preview settings",
+        "footer": "Footer settings",
+        "content": "Site content settings"
+      },
       "overview": "Settings overview",
       "sections": {
         "general": "General",
@@ -1224,7 +1729,9 @@
         "home_external": "Homepage (external)",
         "home_internal": "Homepage (internal)",
         "content_external": "Site content (external)",
-        "footer_external": "Footer (external)",
+        "brand_external": "Brand (public site)",
+        "header_external": "Header navigation (public site)",
+        "footer_external": "Footer (public site)",
         "security": "Security",
         "data": "Data and storage",
         "email": "Email and notifications",
@@ -1245,7 +1752,8 @@
         "restoreConfirm": "Restore revision",
         "reasonLabel": "Reason for restoration",
         "reasonPlaceholder": "Required audit reason",
-        "restoreError": "Unable to restore this revision. Refresh history and retry if the version changed."
+        "restoreError": "Unable to restore this revision. Refresh history and retry if the version changed.",
+        "loadMore": "Load older revisions"
       },
       "overviewTitle": "Settings",
       "overviewDescription": "Choose a domain to edit and save independently.",
@@ -1320,17 +1828,22 @@
       "settingsSavedDesc": "The {{section}} settings have been updated successfully.",
       "ok": "OK",
       "placeholderAboutContentChinese": "Full page content in Chinese (rich text / Markdown supported)",
-      "saveFailed": "The {{section}} settings could not be saved. The values on screen are unchanged."
+      "saveFailed": "The {{section}} settings could not be saved. The values on screen are unchanged.",
+      "appearance": "Appearance",
+      "integrations": "Integrations",
+      "security": "Security",
+      "localization": "Localization",
+      "advanced": "Advanced"
     },
     "analyticsSettings": {
       "title": "Analytics Settings",
-      "description": "Visitor statistics for the public portal via Cloudflare Web Analytics.",
+      "description": "Visitor statistics for the public portal. Platform-native collection is the default; Cloudflare Web Analytics is an optional extra.",
       "overviewTitle": "Overview",
-      "overviewDesc": "Cloudflare Web Analytics is a free, privacy-first, cookie-free traffic analytics service. The portal (apps/web) loads it through a single static JavaScript beacon embedded at build time — no Workers, KV or D1 involved, so the deployment stays pure static hosting.",
+      "overviewDesc": "The portal reports page views to the platform's own collector at GET /api/v1/analytics/track.gif by default. That collector is first-party, sets no cookie, honours DNT server-side and needs no third-party script. Cloudflare Web Analytics is an opt-in extra: it loads one remote beacon script and reports to Cloudflare as well. Select the provider with SOYMUTDB_ANALYTICS_PROVIDER (native | cloudflare | both).",
       "beaconNote": "Only the public portal (apps/web) loads the beacon; this admin console and the JBrowse app do not.",
       "dashboardLink": "Open Cloudflare Dashboard",
       "configTitle": "Configuration",
-      "configDesc": "The beacon token is a VITE_* variable injected at BUILD time into the portal HTML. This page is a documentation-only interface: it does not store the token, does not call the backend, and cannot change the running site.",
+      "configDesc": "The beacon token is a build-time environment variable (SOYMUTDB_CLOUDFLARE_ANALYTICS_TOKEN) injected into the portal HTML at BUILD time. This page is a documentation-only interface: it does not store the token, does not call the backend, and cannot change the running site.",
       "envVar": "Environment variable",
       "envVarHelp": "Set it in the Cloudflare Pages project \"soymutdb-web\" → Settings → Environment variables, for both Production and Preview. Values cannot be read back from the dashboard after saving.",
       "copy": "Copy",
@@ -1340,7 +1853,7 @@
       "step2Title": "Copy the beacon token",
       "step2Desc": "Open the installation snippet of the new site and copy the token from data-cf-beacon (a short hex string).",
       "step3Title": "Set the Pages environment variable",
-      "step3Desc": "In the soymutdb-web Pages project: Settings → Environment variables → Add variable VITE_CLOUDFLARE_ANALYTICS_TOKEN with the token value (Production and Preview), then redeploy.",
+      "step3Desc": "In the soymutdb-web Pages project: Settings → Environment variables → Add variable SOYMUTDB_CLOUDFLARE_ANALYTICS_TOKEN with the token value (Production and Preview), then redeploy.",
       "step4Title": "Redeploy",
       "step4Desc": "Trigger a new production deployment so the token is baked into the built index.html. Older deployments created before the variable was added contain no beacon.",
       "step5Title": "Verify",
@@ -1360,12 +1873,15 @@
       "topSearches": "Top searches",
       "topReferrers": "Top referrers",
       "cloudflareBadge": "Cloudflare",
-      "badgeCloudflare": "Cloudflare Web Analytics",
+      "badgeCloudflare": "Cloudflare Web Analytics (optional)",
       "badgeBeacon": "Beacon (static JS)",
       "badgeBuildTimeInjection": "Build-time injection",
       "badgeCookieFree": "Cookie-free",
       "badgeBuildTime": "Build-time",
-      "badgeRuntimeDetection": "Runtime detection: N/A"
+      "badgeRuntimeDetection": "Runtime detection: N/A",
+      "badgeNative": "Platform-native (default)",
+      "providerVar": "Provider switch",
+      "providerVarHelp": "Unset means native only. Set it to cloudflare or both to also load the Cloudflare beacon (that also requires the token above). An unknown value fails the build instead of silently changing what the page loads."
     },
     "file_preview": "File Preview Configuration",
     "file_preview_enabled": "Enable file preview",
@@ -1374,8 +1890,12 @@
     "imports": "Data Imports",
     "importDetail": {
       "title": "Import task",
-      "loadError": "Could not load this import.",
+      "loading": "Loading import task…",
+      "unavailableTitle": "Import task unavailable",
+      "unavailableBody": "The task may have been removed or you may not have access.",
       "back": "Back to imports",
+      "titleWithId": "Import task #{{id}}",
+      "loadError": "Could not load this import.",
       "filename": "File",
       "type": "Type",
       "status": "Status",
@@ -1386,11 +1906,15 @@
       "completedAt": "Completed",
       "celeryStatus": "Worker state",
       "errorMessage": "Error",
+      "notCompleted": "Not completed",
+      "noError": "No error reported.",
       "filePath": "Object",
       "retry": "Retry",
       "cancel": "Cancel",
       "cancelConfirm": "Cancel this import?",
-      "unknown": "Unknown"
+      "unknown": "Unknown",
+      "invalidTitle": "Invalid import task id",
+      "invalidBody": "This address does not name an import task. Go back to the import list and pick one."
     },
     "importCreate": {
       "title": "Start an import",
@@ -1453,6 +1977,16 @@
       "deleteContentTitle": "Delete Content",
       "deleteContentConfirm": "Are you sure you want to delete ",
       "unknownError": "An unknown error occurred",
+      "type": {
+        "news": "News",
+        "publication": "Publications",
+        "page": "Pages"
+      },
+      "status": {
+        "draft": "Draft",
+        "published": "Published",
+        "archived": "Archived"
+      },
       "editPageTitle": "Edit Page",
       "newPage": "New Page",
       "editPageDesc": "Editing ",
@@ -1460,6 +1994,7 @@
       "labelTitleEnglish": "Title (English) *",
       "placeholderTitleEnglish": "Page title in English",
       "labelTitleChinese": "Title (Chinese)",
+      "placeholderTitleChinese": "Page title in Chinese",
       "labelSlug": "Slug *",
       "slugReadonlyHint": "Slug cannot be changed after creation.",
       "labelCategory": "Category",
@@ -1472,6 +2007,7 @@
       "placeholderSummary": "Short summary for listings",
       "labelContentEnglish": "Content (English) *",
       "placeholderContentEnglish": "Page content in English (Markdown supported)",
+      "placeholderContentChinese": "Page content in Chinese (Markdown supported)",
       "labelContentChinese": "Content (Chinese)",
       "labelEditComment": "Edit Comment",
       "placeholderDescribeRevision": "Describe this revision",
@@ -1496,6 +2032,15 @@
       "editLoadError": "The requested page could not be loaded.",
       "statusAll": "All Statuses",
       "statusArchived": "Archived",
+      "searchPlaceholder": "Search by title…",
+      "searchContent": "Search content",
+      "filterStatus": "Filter by status",
+      "filterFeatured": "Filter by featured status",
+      "featuredAll": "All publications",
+      "featuredOnly": "Featured only",
+      "unfeaturedOnly": "Not featured",
+      "noMatchingContent": "No matching {{type}} content",
+      "noMatchingContentDesc": "Clear the search or filters to see everything.",
       "filterCategoryPlaceholder": "Filter by category...",
       "noPagesFound": "No pages found",
       "noPagesFoundDesc": "Create a new static page to get started.",
@@ -1531,6 +2076,18 @@
       "migrationTitle": "Page Builder migration preview",
       "migrationBody": "This preview only validates legacy pages and reports draft candidates. It never creates, publishes, or changes source pages.",
       "previewMigration": "Preview migration",
+      "migrationColumnSlug": "Legacy slug",
+      "migrationColumnRoute": "Draft route",
+      "migrationColumnOutcome": "Result",
+      "migrationColumnMessage": "Message",
+      "migrationReady": "Ready for a draft migration.",
+      "migrationPreviewError": "Unable to load the migration preview. Try again later.",
+      "migrationSummary": "Dry run: {{created}} ready, {{skipped}} already mapped, {{invalid}} needs review.",
+      "migrationOutcome": {
+        "created": "Ready",
+        "skipped": "Already mapped",
+        "invalid": "Needs review"
+      },
       "publishTitle": "Publish page",
       "publishConfirm": "Publish \"{{title}}\"? It becomes visible on the public site.",
       "unpublishTitle": "Unpublish page",
@@ -1593,6 +2150,27 @@
       "purgeConfirmBody": "This action cannot be undone.",
       "restoreSuccess": "Article restored",
       "purgeSuccess": "Article permanently deleted",
+      "externalImport": {
+        "title": "Import external article",
+        "cancel": "Cancel",
+        "apply": "Apply reviewed preview",
+        "reviewTitle": "Review before saving",
+        "reviewDescription": "Previewing or applying this source does not create, save, or publish a news article. Review the imported content and make any edits before saving it in the news form.",
+        "platform": "Platform",
+        "platformRequired": "Choose an external platform.",
+        "url": "Article URL",
+        "urlRequired": "Enter an HTTPS article URL.",
+        "httpsOnly": "Only HTTPS URLs are allowed.",
+        "invalidUrl": "Enter a valid HTTPS URL.",
+        "preview": "Preview article",
+        "previewFailed": "Preview failed",
+        "previewFailedFallback": "Unable to preview the external article.",
+        "previewReady": "Preview ready",
+        "fieldTitle": "Title",
+        "fieldSource": "Source",
+        "fieldPublishedAt": "Source publication date",
+        "fieldBody": "Imported body (text preview)"
+      },
       "saveError": "Could not save the article",
       "createNew": "New Article",
       "edit": "Edit Article",
@@ -1769,6 +2347,8 @@
       "bannerDescription": "A saved template takes effect immediately: the portal resolves this column set by species, site variant and release.",
       "instancesTitle": "Species instances",
       "instancesBanner": "One console can manage several species databases: register each instance's API / JBrowse / portal address here; the data stays inside each instance.",
+      "toggleInstance": "Enable {{name}}",
+      "siteVariant": "Site variant",
       "name": "Name",
       "namePlaceholder": "e.g. Mutation sites (with homologs)",
       "columnsLabel": "Columns (display order; tick to show)",
@@ -1834,7 +2414,104 @@
       "instanceUpdateFailed": "The instance \"{{name}}\" could not be updated.",
       "instanceDeleteFailed": "The instance \"{{name}}\" could not be unregistered.",
       "loadError": "The table-view templates could not be loaded.",
-      "instancesLoadError": "The species instances could not be loaded."
+      "instancesLoadError": "The species instances could not be loaded.",
+      "apiOrigin": "API origin",
+      "jbrowseOrigin": "JBrowse origin",
+      "portalOrigin": "Portal origin",
+      "localTag": "local",
+      "siteVariantExternal": "External",
+      "siteVariantInternal": "Internal"
+    },
+    "dataViews": {
+      "title": "Data views",
+      "subtitle": "Saved multi-view workspaces over released genes, variants and mutant lines.",
+      "bannerTitle": "Views are presentation, not a second database",
+      "bannerDescription": "Every row still comes from the release-scoped public read APIs, so a saved view cannot surface unreleased records or internal identifiers.",
+      "sourceLabel": "Data source",
+      "source": {
+        "genes": "Genes",
+        "variants": "Variants",
+        "mutant_lines": "Mutant lines"
+      },
+      "viewTypeLabel": "View type",
+      "viewType": {
+        "grid": "Grid",
+        "kanban": "Kanban",
+        "gallery": "Gallery"
+      },
+      "newView": "New view",
+      "editView": "Edit view",
+      "savedViews": "Saved views",
+      "loadError": "The saved views could not be loaded.",
+      "rowsError": "The rows for this view could not be loaded.",
+      "empty": "No saved view for this source yet. Create one to choose its fields, filters and layout.",
+      "activeView": "Preview: {{name}}",
+      "preview": "Preview",
+      "noActiveView": "Select or create a saved view to preview it.",
+      "name": "View name",
+      "namePlaceholder": "e.g. High-impact variants by chromosome",
+      "fieldsLabel": "Visible fields",
+      "fieldsHint": "The numbered order is the column order. Use the arrows to reorder.",
+      "searchableFieldsLabel": "Searchable fields",
+      "searchableFieldsHint": "Pick the fields the search box matches. None selected means no search box.",
+      "searchPlaceholder": "Search {{fields}}",
+      "searchNoMatch": "No rows match the current search.",
+      "visibilityLabel": "Visibility",
+      "visibilityHint": "A hidden view is still saved and still opens by link; it is only left out of the saved-view list.",
+      "visibility": {
+        "visible": "Visible",
+        "hidden": "Hidden"
+      },
+      "showHidden": "Show hidden views",
+      "filtersLabel": "Filters",
+      "filterKey": "Filter field",
+      "filterValue": "Value",
+      "addFilter": "Add filter",
+      "removeFilter": "Remove filter",
+      "sortField": "Sort field",
+      "sortDirection": "Direction",
+      "asc": "Ascending",
+      "desc": "Descending",
+      "groupField": "Group field",
+      "titleField": "Card title field",
+      "pageSize": "Rows per page",
+      "defaultTag": "Default view",
+      "notes": "Notes",
+      "setDefault": "Set as default",
+      "viewSelect": "Saved view",
+      "viewSettings": "View settings",
+      "summary": "{{rows}} rows · {{columns}} columns · {{searchable}} searchable",
+      "activeFilters": "{{count}} filters",
+      "addField": "Add field ({{count}} left)",
+      "viewTypeHint": "Saved with the view. This console presents every view as one table.",
+      "layoutNote": {
+        "kanban": "This view was saved as a kanban board; the console presents every view as one table. The saved layout is unchanged.",
+        "gallery": "This view was saved as a gallery; the console presents every view as one table. The saved layout is unchanged."
+      },
+      "field": {
+        "searchable": "Searchable",
+        "visible": "Shown",
+        "searchableAria": "{{field}}: use as a search source",
+        "visibleAria": "{{field}}: show this column",
+        "dragAria": "Drag to reorder {{field}}",
+        "moveLeftAria": "Move {{field}} left",
+        "moveRightAria": "Move {{field}} right",
+        "lastVisibleHint": "A view has to show at least one column. Add another column, then hide this one."
+      },
+      "patchFailed": "Could not save the change: {{reason}}",
+      "saveFailed": "Could not save the view: {{reason}}",
+      "deleteTitle": "Delete view",
+      "deleteConfirm": "Delete the view \"{{name}}\"? The saved configuration is removed; no biological data is deleted.",
+      "loadMore": "Load more",
+      "groupRequiredTitle": "Kanban needs a group field",
+      "groupRequired": "Choose a group field when editing this view, then switch back to the kanban layout.",
+      "none": "None",
+      "issue": {
+        "name": "Give the view a name before saving.",
+        "fields": "Choose at least one visible field.",
+        "group": "Kanban views need a group field.",
+        "sort": "Choose a sort field before choosing a direction."
+      }
     },
     "tableViewsHint": "Choose the columns each portal table renders. Templates are scoped by species, site variant and release; the cross-assembly homolog columns are opt-in.",
     "table": "Table",
@@ -1918,6 +2595,8 @@
       "uniqueIps": "Unique IPs",
       "action": "Action",
       "actionPlaceholder": "Action",
+      "actionFilter": "Action filter",
+      "statsPeriod": "Statistics period",
       "actor": "Actor",
       "readOnly": "Read-only",
       "loadError": "The audit log could not be loaded.",
@@ -1933,7 +2612,47 @@
       "abstract": "Abstract",
       "deleteTitle": "Delete publication"
     },
+    "previewTestData": {
+      "title": "Test data preview",
+      "subtitle": "Unpublished test data on this machine. Only availability can be edited here; it survives a re-import.",
+      "columnSiteKey": "Mutation site (line parent + position)",
+      "columnChromosome": "Chromosome",
+      "columnPosition": "Position",
+      "columnConfidence": "Confidence",
+      "confidenceHigh": "High",
+      "confidenceLow": "Low",
+      "columnGene": "Gene",
+      "columnFeature": "Feature",
+      "columnAvailable": "Available",
+      "start": "Start",
+      "end": "End",
+      "query": "Query",
+      "yes": "Yes",
+      "no": "No",
+      "loadFailedTitle": "Load failed",
+      "loadError": "Unable to load preview data. This endpoint is only served on a local dev machine.",
+      "saveError": "Unable to save the availability flag.",
+      "toggleAria": "Toggle availability for {{key}}",
+      "resultCount": "{{count}} rows"
+    },
     "importsHint": "Every import task this deployment has accepted, server-filtered by status.",
+    "contentTab": {
+      "news": "News",
+      "publication": "Publications",
+      "page": "Pages"
+    },
+    "status": {
+      "releaseDraft": "Draft",
+      "releaseImporting": "Importing",
+      "releaseValidating": "Validating",
+      "releaseActive": "Active",
+      "releaseArchived": "Archived",
+      "taskPending": "Pending",
+      "taskRunning": "Running",
+      "taskCompleted": "Completed",
+      "taskFailed": "Failed",
+      "taskCancelled": "Cancelled"
+    },
     "releasesHint": "Release versions, publication status and database counts.",
     "media": {
       "description": "Uploaded assets referenced by news and pages. Archiving removes an asset from the picker without breaking published references.",
@@ -1946,6 +2665,12 @@
       "uploadFirst": "Upload a file to get started.",
       "clearFilters": "Clear filters",
       "searchPlaceholder": "Search by file name or caption…",
+      "purposes": {
+        "news": "News",
+        "editor": "Editor",
+        "about": "About"
+      },
+      "uploadPurpose": "Upload purpose",
       "filterPurpose": "Filter by purpose",
       "altPlaceholder": "Alt text",
       "missingAlt": "Missing alt text",
@@ -1990,16 +2715,12 @@
         "selectedImage": "Selected image",
         "noAltText": "Enter alt text",
         "missingAlt": "Missing alt text"
-      },
-      "purposes": {
-        "news": "News",
-        "editor": "Editor",
-        "about": "About"
       }
     },
     "shell": {
       "overview": "Overview",
       "dataManagement": "Data Management",
+      "dataViews": "Data views",
       "content": "Content",
       "presentation": "Presentation",
       "administration": "Administration",
@@ -2043,7 +2764,15 @@
       "publications": "Publications",
       "settings": "Settings",
       "featureFlags": "Feature Flags",
-      "analytics": "Analytics"
+      "analytics": "Analytics",
+      "dashboards": "Dashboards",
+      "allImports": "All imports",
+      "newImport": "New import",
+      "pagesGroup": "Pages",
+      "newsGroup": "News",
+      "newArticle": "New article",
+      "newsTrash": "Trash",
+      "settingsOverview": "Settings overview"
     },
     "commandPalette": {
       "dialogLabel": "Command palette",
@@ -2141,6 +2870,9 @@
       "savedDraftsUnavailable": "Saved drafts are unavailable. Existing imports are unaffected.",
       "resume": "Resume",
       "noDrafts": "No server-backed import drafts are available to resume.",
+      "draftCounts": "{{rows}} rows · {{columns}} columns",
+      "emptyTitle": "No import tasks",
+      "emptyDescription": "Submit a new import to get started.",
       "searchPlaceholder": "Search import tasks…",
       "importType": "Import Type",
       "datasetId": "Data Set ID",
@@ -2167,12 +2899,33 @@
       "cancelSucceeded": "The import task was cancelled.",
       "retrySucceeded": "The import task was queued for a retry.",
       "loadError": "The import tasks could not be loaded.",
-      "cancelTaskConfirmLabel": "Cancel task"
+      "cancelTaskConfirmLabel": "Cancel task",
+      "columns": {
+        "file": "File",
+        "status": "Status",
+        "progress": "Progress",
+        "submittedBy": "Submitted by",
+        "submitted": "Submitted",
+        "actions": "Actions"
+      },
+      "viewError": "View error",
+      "details": "Details",
+      "capabilitiesLoading": "Loading import capabilities…",
+      "capabilitiesError": "Unable to load import capabilities. Import actions remain unavailable.",
+      "moduleImportsDisabled": "Module imports are disabled.",
+      "downloadTemplate": "Download template",
+      "templateHint": "Starter template for a module schema (genes). Formats: TSV / CSV / XLSX.",
+      "xlsxDisabled": "XLSX is currently disabled by an administrator.",
+      "templateDownloadFailed": "Template download failed.",
+      "moduleKeyRequired": "Module key is required.",
+      "emptySearchTitle": "No matching import tasks",
+      "emptySearchDescription": "Clear the search to see every import task."
     },
     "charts": {
       "imported": "Imported",
       "failed": "Failed",
       "records": "Records",
+      "running": "In progress",
       "importThroughput": "Import Throughput",
       "importThroughputAria": "Import throughput chart",
       "noData": "No chart data",
@@ -2185,6 +2938,39 @@
       "storage": "Storage",
       "storageGrowth": "Storage Growth",
       "storageGrowthAria": "Storage growth chart"
+    },
+    "analysis": {
+      "title": "Analysis",
+      "subtitle": "Import throughput and query performance over time.",
+      "date": "Date",
+      "imported": "Imported",
+      "failed": "Failed",
+      "totalImported": "Records imported",
+      "totalFailed": "Failed records",
+      "importThroughput": "Import throughput",
+      "queryLatency": "Query latency",
+      "storageGrowth": "Storage growth",
+      "throughputDetail": "Import throughput detail"
+    },
+    "monitor": {
+      "title": "Monitor",
+      "subtitle": "Live pipeline and query health, refreshed every 30 seconds.",
+      "file": "File",
+      "type": "Type",
+      "status": "Status",
+      "records": "Records",
+      "submitted": "Submitted",
+      "activeReleases": "Active releases",
+      "activeImports": "Active imports",
+      "services": "Service state",
+      "healthy": "Healthy",
+      "degraded": "Degraded",
+      "checking": "Checking",
+      "apiHealthy": "Metrics API is responding",
+      "apiDown": "Metrics API is not responding",
+      "apiChecking": "Checking metrics API…",
+      "apiHint": "The console refreshes automatically; use Refresh for an immediate snapshot.",
+      "recentImports": "Recent import tasks"
     },
     "confirm": {
       "confirm": "Confirm",
@@ -2201,6 +2987,7 @@
       "fileMimeRequired": "File MIME type is required",
       "presignMustUsePost": "Upload presign response must use POST",
       "importPreviewAria": "Import preview",
+      "openRow": "Open row",
       "featureFlagsTitle": "\\\"Feature Flags\\\"",
       "featureFlagsSubtitle": "\\\"Enable or disable registered capabilities atomically. Disabling rejects new requests and does not kill running jobs.\\\"",
       "loadFeatureFlagsFailed": "Failed to load feature flags.",
@@ -2210,6 +2997,9 @@
       "badgePublic": "public",
       "badgeInternal": "internal",
       "disableBehavior": "disable: {{behavior}}",
+      "disableBehaviorValue": {
+        "reject_new_requests": "reject new requests; running jobs continue"
+      },
       "toggleFeatureAria": "{{action}} {{key}}",
       "disable": "Disable",
       "enable": "Enable",
@@ -2261,6 +3051,65 @@
       "selectFile": "Select a file",
       "sizeExceeded": "The file is too large",
       "uploadFailed": "Upload failed"
+    },
+    "importDraft": {
+      "operationFailed": "The draft operation failed.",
+      "intro": "Mapping, patches, validation, and publication operate on this persisted draft. Immutable source metadata and row counts are not editable here.",
+      "committedLocked": "This draft is committed; all editing controls are locked.",
+      "publishableLocked": "This draft is {{status}}; mapping, patches, and validation are locked. Publication is available below.",
+      "readOnlyLocked": "This draft is {{status}}; mapping, patches, validation, and publication are unavailable.",
+      "fieldMapping": "Field mapping (JSON array)",
+      "dataPatches": "Data patches (JSON array)",
+      "saveMapping": "Save mapping",
+      "mappingSaved": "Mapping saved to the draft.",
+      "savePatches": "Save patches",
+      "patchesSaved": "Patches saved to the draft.",
+      "validate": "Validate persisted draft",
+      "validationCompleted": "Draft validation completed.",
+      "validationState": "Validation state: {{state}}",
+      "publicationTitle": "Explicit publication confirmation",
+      "publicationSourceId": "Publication source id",
+      "publicationSourceIdPlaceholder": "Source ID",
+      "publicationKind": "Publication kind",
+      "publicationKindPlaceholder": "Publication kind",
+      "publicationConfig": "Publication config JSON",
+      "publishConfirm": "Publish this validated draft? This action is explicit and cannot be undone from the draft editor.",
+      "committed": "Draft committed successfully.",
+      "confirmCommit": "Confirm and commit draft",
+      "status": {
+        "draft": "Draft",
+        "validated": "Validated",
+        "ready": "Ready",
+        "committed": "Committed"
+      },
+      "summary": "{{rows}} rows · {{columns}} columns · {{fields}} mapped fields",
+      "fieldMappingLabel": "Field mapping",
+      "dataPatchesLabel": "Data patches",
+      "publicationConfigLabel": "Publication config"
+    },
+    "newsForm": {
+      "externalSourceUrlAria": "External article source URL",
+      "externalSourcePlaceholder": "No external source is attached"
+    },
+    "releasesEmpty": {
+      "title": "No releases yet",
+      "description": "A release groups the data imported for one assembly version. Create one from the import workflow, then publish it to serve it on the public site.",
+      "openImports": "Open imports",
+      "openSiteControl": "Site control"
+    },
+    "releasesSummary": {
+      "total": "Total releases",
+      "published": "Published",
+      "draft": "Drafts",
+      "active": "Active release",
+      "activeVariants": "{{count}} variants served",
+      "noActive": "No active release pointer"
+    },
+    "releasesFilter": {
+      "search": "Search by name, version, or ID",
+      "status": "Filter by status",
+      "matching": "{{shown}} / {{total}} matching",
+      "empty": "No releases match the current filters."
     }
   },
   "news": {
@@ -2312,7 +3161,12 @@
     "title": "About SoyMutDB",
     "empty": "About content has not been published yet.",
     "loadErrorTitle": "Failed to load about page",
-    "loadErrorSubtitle": "The about service is temporarily unavailable. Please try again later."
+    "loadErrorSubtitle": "The about service is temporarily unavailable. Please try again later.",
+    "emptyExplain": "The about text is written and published by an administrator. Until it is published this page keeps the useful entry points instead of showing an empty box.",
+    "emptySearchTitle": "Search by gene ID",
+    "emptySearchBody": "Find published gene records within a named genome assembly and data release.",
+    "emptyAssembliesTitle": "Browse genome assemblies",
+    "emptyAssembliesBody": "See which assemblies the current release publishes and how many genes each holds."
   },
   "publications": {
     "title": "Publications",
@@ -2400,6 +3254,12 @@
       "a": "Release versions and publication dates are announced on the News and Downloads pages. SoyMutDB does not promise a fixed release cadence on this Help page."
     },
     "supportEmail": "support@soymutdb.org"
+  },
+  "guide": {
+    "notPublishedTitle": "This guide is not published yet",
+    "notPublishedDesc": "The NCBI retrieval guide will appear here once an editor publishes it in the admin console.",
+    "loadErrorTitle": "The guide could not be loaded",
+    "loadErrorDesc": "Check your connection and try again."
   },
   "tools": {
     "title": "Tools",
@@ -2609,7 +3469,127 @@
     "cardSubtitle": "Extract assembly-scoped reference sequences for gene lists or genomic regions.",
     "seqfetchCard": "Download FASTA for up to 200 genes or one 1-based inclusive region from a selected assembly.",
     "exppatternCard": "Compare expression across libraries for up to 50 genes in one selected assembly.",
-    "enrichmentCard": "Run over-representation or ranked enrichment analysis with assembly-scoped annotations."
+    "enrichmentCard": "Run over-representation or ranked enrichment analysis with assembly-scoped annotations.",
+    "popgen": {
+      "title": "Population genetics",
+      "regionLabel": "Region",
+      "regionHelp": "Choose exactly one mode: a gene accession, or an explicit assembly interval.",
+      "modeGene": "By gene",
+      "modeInterval": "By interval",
+      "geneLabel": "Gene accession",
+      "genePlaceholder": "e.g. Glyma.01G000100",
+      "assemblyLabel": "Assembly",
+      "assemblyPlaceholder": "Select an assembly",
+      "assembliesError": "Assemblies could not be loaded.",
+      "chromosomeLabel": "Chromosome",
+      "chromosomePlaceholder": "e.g. chr01",
+      "startLabel": "Start (1-based)",
+      "endLabel": "End",
+      "formTitle": "Query",
+      "submit": "Run analysis",
+      "summaryTitle": "Query summary",
+      "emptyTitle": "No result yet",
+      "errorTitle": "The analysis failed",
+      "notRecorded": "Not recorded",
+      "variantCount": "{{count}} variants",
+      "sourceGene": "Gene region",
+      "sourceInterval": "Interval",
+      "columns": {
+        "variant": "Variant",
+        "position": "Position",
+        "alleles": "Alleles",
+        "type": "Type",
+        "alleleFrequency": "Allele frequency",
+        "variantScope": "Release-scoped",
+        "variantScopeHelp": "This number identifies a variant only inside one release. It is not a permanent public identifier — a later release may reuse it for a different record."
+      },
+      "errors": {
+        "geneRequired": "Enter a gene accession.",
+        "geneTooLong": "A gene accession is at most 64 characters.",
+        "assemblyRequired": "Choose an assembly.",
+        "chromosomeRequired": "Enter a chromosome name.",
+        "startInvalid": "Start must be a whole number ≥ 1.",
+        "endInvalid": "End must be a whole number ≥ 1.",
+        "order": "End must be at or after start.",
+        "span": "A single interval may not exceed {{max}} bp."
+      },
+      "allelefreq": {
+        "title": "Allele frequency",
+        "subtitle": "Per-variant allele frequencies for a gene or an interval",
+        "formDesc": "Frequencies come from the released variant store.",
+        "emptyDesc": "Choose a gene or an interval to list allele frequencies.",
+        "resultsTitle": "Variant frequencies",
+        "resultsDesc": "Three decimals. A variant with no recorded frequency is marked as such, not as zero.",
+        "noRowsTitle": "No variant in this region",
+        "noRowsDesc": "The released variant store holds no record for this region."
+      },
+      "diversity": {
+        "title": "Nucleotide diversity",
+        "subtitle": "π and Watterson's θ for a gene or an interval",
+        "formDesc": "π is reported per base pair; θ needs a sample size.",
+        "emptyDesc": "Choose a gene or an interval to estimate diversity.",
+        "sampleSizeLabel": "Sample size (optional)",
+        "sampleSizePlaceholder": "e.g. 30",
+        "sampleSizeHelp": "Only used for Watterson's θ; θ is undefined without it.",
+        "windowLabel": "Window size, bp (optional)",
+        "windowPlaceholder": "e.g. 5000",
+        "windowHelp": "Splits π into sliding windows for the plot below.",
+        "errorSampleSize": "Sample size must be a whole number between 2 and 1000000.",
+        "errorWindow": "Window size must be a whole number ≥ 0.",
+        "span": "{{bp}} bp",
+        "segregating": "{{count}} segregating sites",
+        "segregatingShort": "Segregating sites",
+        "resultsTitle": "Diversity estimates",
+        "piLabel": "π",
+        "piPerSiteLabel": "π per polymorphic site",
+        "thetaLabel": "Watterson's θ",
+        "piHelp": "Sum of 2p(1−p) over polymorphic sites, divided by the region length; monomorphic positions contribute zero.",
+        "piPerSiteHelp": "2p(1−p) averaged over polymorphic sites only.",
+        "piNoPolymorphism": "Not defined: the region holds no polymorphic site.",
+        "thetaHelp": "S / a_n per base pair, computed from the sample size you supplied.",
+        "thetaNullNoSampleSize": "Not computed: no sample size was supplied, so θ is undefined.",
+        "thetaNullNoSites": "Not defined: the region holds no segregating site.",
+        "noVariantsTitle": "No variant in this region",
+        "noVariantsDesc": "The released variant store holds no record for this region, so no diversity estimate exists.",
+        "windowsTitle": "π per window",
+        "windowsDesc": "Diversity within each window of the requested size.",
+        "windowsAxis": "π",
+        "windowsEmpty": "No window contains a polymorphic site.",
+        "windowStart": "Window start",
+        "windowEnd": "Window end"
+      },
+      "ld": {
+        "title": "Linkage disequilibrium",
+        "subtitle": "Variant coordinates and an r² matrix for a gene or an interval",
+        "formDesc": "Coordinates come from the released variant store; r² needs genotypes.",
+        "emptyDesc": "Choose a gene or an interval to inspect linkage disequilibrium.",
+        "boundaryTitle": "r² is only computable with genotypes",
+        "boundaryBody": "The released store carries per-variant allele frequencies but no per-sample genotype calls. Without a genotype matrix this tool returns the variant coordinates and reports r² as not computable — it does not report zero LD.",
+        "genotypesLabel": "Genotype matrix (optional)",
+        "genotypesPlaceholder": "sample\tv1\tv2…\ns1\t0\t2\ns2\t1\t1",
+        "genotypesHelp": "Header row: 'sample' then one column per variant. Then one row per sample with a dosage of 0, 1 or 2 — no missing calls.",
+        "genotypeError": {
+          "empty": "Enter at least a header row and one sample.",
+          "shape": "Every row must have the same number of columns as the header.",
+          "value": "Dosages must be 0, 1 or 2 — missing calls are not allowed.",
+          "labels": "At least two samples are required."
+        },
+        "stateComputed": "r² computed",
+        "stateNotComputable": "r² not computable",
+        "r2NullExplanation": "r² is null here: the store has allele frequencies only, so pairwise LD cannot be derived from the database. Supply a genotype matrix to compute it.",
+        "noGenotypesTitle": "No r² matrix to draw",
+        "noGenotypesDesc": "The {{count}} variants in this region have coordinates but no genotype data, so pairwise r² is unknown. This is not the same as r² = 0.",
+        "noVariantsTitle": "No variant in this region",
+        "noVariantsDesc": "The released variant store holds no record for this region, so there is nothing to plot.",
+        "heatmapTitle": "r² matrix",
+        "heatmapDesc": "Pairwise r² between the variants of the region, computed from the genotype matrix you supplied.",
+        "heatmapLegend": "Variant",
+        "resultsTitle": "Linkage results",
+        "heatmapEmpty": "The r² matrix is empty.",
+        "variantsTitle": "Variants in the region",
+        "variantsDesc": "Coordinates of every variant the query resolved."
+      }
+    }
   },
   "commandPalette": {
     "label": "Quick search",
@@ -2950,12 +3930,18 @@
     "truncationNotice": "Graph is limited to {{nodes}} nodes and {{edges}} relationships."
   },
   "site": {
+    "databaseKind": {
+      "gene_ontology": "Gene Ontology Database",
+      "transcription_factor": "Transcription Factor Database"
+    },
     "internalBadgeTitle": "Private internal site artifact",
     "internalBadge": "Internal"
   },
   "errorBoundary": {
     "title": "Something went wrong",
-    "description": "An unexpected error occurred while rendering this section."
+    "description": "An unexpected error occurred while rendering this section.",
+    "retry": "Retry",
+    "backToDashboard": "Back to dashboard"
   },
   "a11y": {
     "skipToContent": "Skip to content"
@@ -2984,8 +3970,21 @@
     "tracks": {
       "all": "All",
       "genes": "Genes",
-      "markers": "Markers"
-    }
+      "markers": "Markers",
+      "selected": "Selected gene",
+      "context": "Neighbouring genes ({{total}})",
+      "sites": "Sites ({{total}})",
+      "transcripts": "Transcripts ({{total}})"
+    },
+    "pointer": "Cursor",
+    "contextWindow": "{{window}} · ±{{flank}} bp context · {{total}} neighbouring genes",
+    "contextUnavailable": "Neighbouring genes could not be loaded, so only this gene is drawn.",
+    "geneAriaLabel": "Genome view of {{geneId}}, window {{chromosome}}:{{start}}–{{end}}",
+    "contextTableCaption": "Genes in the {{window}} window around {{geneId}}",
+    "contextTableCoordinates": "Coordinates",
+    "contextTableRole": "Role",
+    "contextTableSelected": "This gene",
+    "contextTableContext": "Neighbouring gene"
   },
   "dataTable": {
     "title": "Data table",
@@ -3072,6 +4071,333 @@
     "resultsAria": "Mutant line search results",
     "subtitle": "Search published mutant lines by cultivar, mutagen and phenotype.",
     "title": "Mutant lines",
-    "resultCount": "{{count}} mutant lines"
+    "resultCount": "{{count}} mutant lines",
+    "pageWindow": "Showing {{start}}–{{end}} · page {{page}}"
+  },
+  "blastPublic": {
+    "eyebrow": "Public sequence search",
+    "title": "Anonymous BLAST",
+    "subtitle": "Run one protein search without creating an account. Keep this tab open while your result is processed.",
+    "formTitle": "Search a protein database",
+    "sequencePlaceholder": "Paste a protein FASTA sequence",
+    "submit": "Run BLAST",
+    "newSearch": "New search",
+    "databaseRequired": "Choose a protein database.",
+    "sequenceRequired": "Enter a protein sequence with at least 10 characters.",
+    "submitFailed": "Could not submit the public BLAST job.",
+    "databasesFailed": "Could not load public BLAST databases.",
+    "statusTitle": "Job status",
+    "accessFailed": "This public result is unavailable or the access token is invalid.",
+    "expired": "Public BLAST access expired",
+    "expiredHint": "Submit a new search to receive a new temporary result token.",
+    "running": "The worker is processing your sequence…",
+    "resultsTitle": "Public BLAST results",
+    "download": "Download raw results",
+    "release": "Release",
+    "loginWorkflow": "Use the signed-in workflow for personal job history.",
+    "resultsNotReady": "The public result is not ready yet.",
+    "engine": "Search engine",
+    "program": "Search program",
+    "fastaDetected": "{{count}} FASTA records",
+    "noArtifact": "This job stored no downloadable artifact.",
+    "resultsFor": "Results for job {{job}}",
+    "artifactHint": "Raw aligner output (tab-separated) for this job.",
+    "sequenceTooShort": "Enter a sequence with at least 10 characters."
+  },
+  "blastSearch": {
+    "proteinInput": "Protein FASTA query",
+    "nucleotideInput": "Nucleotide FASTA query",
+    "nucleotidePlaceholder": "Paste nucleotide FASTA records",
+    "queryId": "Query ID",
+    "subjectCoordinates": "Subject alignment positions",
+    "incompatible": "This engine/program combination is not supported.",
+    "invalidParameters": "Use a positive E-value up to 1000 and 1–500 maximum hits.",
+    "engineUnknown": "Engine unavailable",
+    "engineNcbi": "NCBI BLAST+",
+    "engineDiamond": "DIAMOND",
+    "provenance": "Database context",
+    "invalidAlphabet": "The query alphabet does not match the selected program.",
+    "fasta": {
+      "emptyRecord": "A FASTA record has a header but no sequence."
+    },
+    "downloadFilenameHint": "Raw aligner output (tab-separated)",
+    "engineDiamondBlastp": "DIAMOND (blastp)"
+  },
+  "comparative": {
+    "title": "Comparative genomics",
+    "subtitle": "Gene families and orthologous groups imported from a named source, with its method and version stated on every record.",
+    "filters": {
+      "assembly": "Assembly",
+      "allAssemblies": "All assemblies",
+      "level": "Level",
+      "allLevels": "All levels",
+      "clear": "Clear filters",
+      "searchParamsNote": "Filters are kept in the URL, so this view can be linked and shared."
+    },
+    "level": {
+      "gene_family": "Gene family",
+      "gene_subfamily": "Subfamily"
+    },
+    "list": {
+      "family": "Family",
+      "name": "Name",
+      "members": "Members",
+      "method": "Method",
+      "source": "Source",
+      "release": "Release",
+      "empty": "No gene families are imported for this release and filter.",
+      "emptyHint": "An absent family table is not a family count of zero: nothing was imported for the selected scope.",
+      "total": "{{total}} families",
+      "pageInfo": "Page {{page}} of {{pages}}",
+      "loadError": "The family list could not be loaded."
+    },
+    "detail": {
+      "backToList": "All families",
+      "externalId": "Source accession",
+      "method": "Method",
+      "methodVersion": "Method version",
+      "sourceName": "Source",
+      "sourceVersion": "Source version",
+      "sourceUrl": "Source link",
+      "release": "Release",
+      "assembly": "Assembly",
+      "memberCount": "Members",
+      "relationshipTypes": "Relationship types",
+      "membersTitle": "Members",
+      "memberGene": "Gene",
+      "memberSpecies": "Species",
+      "memberRelationship": "Relationship",
+      "memberMethod": "Method",
+      "memberConfidence": "Confidence",
+      "membersEmpty": "This family has no imported member rows.",
+      "provenanceTitle": "Provenance",
+      "provenanceNote": "A family is a computational grouping. The method that produced it is part of the record, not an optional annotation.",
+      "loadError": "The family could not be loaded.",
+      "notFound": "No such family in this release.",
+      "artifactsTitle": "Alignment and tree",
+      "artifactsNote": "An alignment or tree is computed asynchronously and is only valid for the exact member set hashed below.",
+      "requestMsa": "Compute alignment",
+      "requestTree": "Build tree",
+      "polling": "Waiting for the worker…",
+      "inputSha": "Input sha256",
+      "inputMembers": "Frozen members",
+      "download": "Download result",
+      "downloadUnavailable": "The worker finished without publishing a downloadable object.",
+      "requestFailed": "The request was rejected.",
+      "pollTimedOut": "Stopped polling after {{seconds}}s. The job may still be running; reload to check again."
+    },
+    "coverage": {
+      "title": "Species coverage",
+      "species": "Species",
+      "state": "State",
+      "members": "Members",
+      "available": "Imported",
+      "no_data": "No record for this species in the source",
+      "no_dataHint": "The source has no row for this species. It is not a measured zero.",
+      "not_imported": "No snapshot for this family in this release",
+      "not_importedHint": "This release never imported this family's snapshot, so absence here says nothing about the species."
+    },
+    "relationship": {
+      "one_to_one": "one_to_one",
+      "one_to_many": "one_to_many",
+      "many_to_many": "many_to_many"
+    },
+    "orthologs": {
+      "title": "Orthologs and paralogs",
+      "hint": "Relationship types come from the imported rows, not from sequence similarity.",
+      "gene": "Gene",
+      "species": "Species",
+      "type": "Relationship",
+      "method": "Method",
+      "source": "Source",
+      "no_data": "The source has no homolog record for this gene in this release.",
+      "not_imported": "This release never imported a homolog snapshot for this assembly.",
+      "empty": "No rows for this gene.",
+      "loadError": "The homolog record could not be loaded."
+    },
+    "geneLink": {
+      "title": "Comparative genomics",
+      "body": "Gene families and orthologous groups for this gene, with the source's own relationship classification.",
+      "open": "Open orthologs and paralogs"
+    }
+  },
+  "expression": {
+    "eyebrow": "Expression",
+    "title": "Expression libraries",
+    "subtitle": "Browse released expression libraries and the genes measured in each one. Every library is bound to the published release and to its own assembly.",
+    "loading": "Loading expression libraries…",
+    "error": "The expression library list could not be loaded",
+    "empty": "No expression libraries are available in this release",
+    "emptyFiltered": "No expression library matches these filters",
+    "resultCount": "{{count}} libraries in total",
+    "pageOf": "Page {{page}} of {{total}}",
+    "resultsAria": "Expression library results",
+    "filters": {
+      "aria": "Expression library filters",
+      "tissue": "Tissue",
+      "tissuePlaceholder": "e.g. root",
+      "treatment": "Treatment",
+      "treatmentPlaceholder": "e.g. drought",
+      "assembly": "Assembly",
+      "assemblyPlaceholder": "Any assembly",
+      "apply": "Apply filters",
+      "clear": "Clear filters"
+    },
+    "list": {
+      "sample": "Sample",
+      "library": "Library",
+      "tissue": "Tissue",
+      "treatment": "Treatment",
+      "assembly": "Assembly",
+      "assemblyUnknown": "Assembly not recorded",
+      "study": "Study",
+      "noStudyRef": "No study reference",
+      "measurements": "Measured genes"
+    },
+    "detail": {
+      "back": "Back to expression libraries",
+      "loading": "Loading expression library…",
+      "notFound": "This expression library was not found, or it is not part of the published release.",
+      "provenance": "Provenance",
+      "studyRef": "Study reference",
+      "source": "Source",
+      "assembly": "Assembly",
+      "assemblyUnknown": "Assembly not recorded",
+      "developmentalStage": "Developmental stage",
+      "tissue": "Tissue",
+      "treatment": "Treatment",
+      "missing": "Not recorded",
+      "extraMetadata": "Additional metadata",
+      "extraMetadataEmpty": "This library carries no additional metadata.",
+      "measurementsTitle": "Measured genes",
+      "measurementsDesc": "One row per gene accession measured in this library.",
+      "rowCount": "{{count}} genes",
+      "rowsLoading": "Loading expression values…",
+      "rowsError": "The expression values could not be loaded",
+      "rowsEmptyTitle": "No measured genes",
+      "rowsEmptyDesc": "This library has no expression rows in the published release.",
+      "rowsTruncated": "Showing the first {{shown}} of {{total}} genes.",
+      "distributionTitle": "Abundance distribution",
+      "distributionDesc": "Genes measured in this library, tallest first. Values that were not measured are omitted rather than plotted as zero.",
+      "distributionEmpty": "No measured value is available for this unit.",
+      "unitSwitchAria": "Normalisation unit",
+      "unitFpkm": "FPKM",
+      "unitTpm": "TPM",
+      "geneColumn": "Gene",
+      "fpkmColumn": "FPKM (fragments per kb per million)",
+      "tpmColumn": "TPM (transcripts per million)",
+      "rawCountColumn": "Raw read count"
+    }
+  },
+  "phenotypes": {
+    "eyebrow": "Phenotypes",
+    "title": "Phenotype browser",
+    "subtitle": "Recorded trait observations across released mutant lines, with a link back to the line that carries each one.",
+    "loading": "Reading phenotype observations…",
+    "error": "Phenotype observations could not be loaded",
+    "empty": "No phenotype observation is available in this release",
+    "emptyFiltered": "No phenotype observation matches these filters",
+    "resultCount": "{{count}} observations",
+    "notRecorded": "Not recorded",
+    "resultsAria": "Phenotype observation results",
+    "noLinesTitle": "No public mutant line in this release",
+    "noLinesDesc": "There is no released mutant line to read phenotype observations from.",
+    "boundary": {
+      "title": "How this page is populated",
+      "body": "The API serves phenotype observations per mutant line, one line at a time. This page therefore reads the first {{budget}} public lines (of at most {{limit}}) and filters what it read. It is not an exhaustive cross-line search; a recorded observation in a line beyond that budget does not appear here."
+    },
+    "filters": {
+      "aria": "Phenotype filters",
+      "category": "Trait category",
+      "categoryPlaceholder": "Any category",
+      "trait": "Trait",
+      "traitPlaceholder": "Search a trait name or description…",
+      "apply": "Apply filters",
+      "clear": "Clear filters"
+    },
+    "scan": {
+      "linesRead": "Lines read",
+      "observations": "Observations found",
+      "coverage": "Coverage",
+      "partial": "Partial",
+      "complete": "Complete",
+      "truncatedTitle": "This view is partial",
+      "truncatedDesc": "More public lines exist than the {{budget}} this page reads (the API returns at most {{limit}} per request). Observations in the unread lines are not shown.",
+      "failedTitle": "{{count}} line(s) could not be read",
+      "failedDesc": "Their observations are missing from this view; the remaining lines were read normally."
+    },
+    "columns": {
+      "line": "Mutant line",
+      "category": "Trait category",
+      "trait": "Trait",
+      "value": "Value",
+      "unit": "Unit",
+      "description": "Description"
+    },
+    "detail": {
+      "back": "Back to the phenotype browser",
+      "loading": "Loading the mutant line…",
+      "notFound": "This mutant line was not found, or it is not public in the published release.",
+      "context": "Line context",
+      "observations": "Phenotype observations",
+      "boundary": "These are recorded observations, not yet ontology-, environment- or protocol-qualified evidence.",
+      "noObservationsTitle": "No phenotype observation",
+      "noObservationsDesc": "This mutant line carries no phenotype observation in the published release.",
+      "openLine": "Open the mutant line"
+    }
+  },
+  "assemblies": {
+    "title": "Genome assemblies",
+    "subtitle": "Assemblies in the current release. Every count is aggregated from that assembly's own rows, so two assemblies never share one number.",
+    "default": "Default",
+    "release": "Release",
+    "releaseUnavailable": "Not stated",
+    "empty": "This release has no assemblies.",
+    "loadFailed": "Assemblies could not be loaded.",
+    "notFound": "No such assembly in this release.",
+    "noChromosomes": "This assembly has no chromosome rows.",
+    "backToList": "All assemblies",
+    "columns": {
+      "assembly": "Assembly",
+      "version": "Version",
+      "genes": "Genes",
+      "transcripts": "Transcripts",
+      "chromosomes": "Chromosomes",
+      "length": "Total length (bp)",
+      "chromosome": "Chromosome",
+      "downloads": "Downloads"
+    },
+    "metric": {
+      "unknown": "Not counted",
+      "reason": {
+        "no_chromosomes": "No chromosome rows are recorded for this assembly.",
+        "no_genes": "No annotation has been imported for this assembly.",
+        "no_linked_downloads": "No download file is linked to this assembly."
+      }
+    }
+  },
+  "errors": {
+    "pageUnavailable": "Page temporarily unavailable",
+    "notFound": "Page not found",
+    "pageUnavailableHint": "The page could not be loaded. Please try again later.",
+    "notFoundHint": "Check the address, or use search to find a record."
+  },
+  "pageBuilder": {
+    "pageNavigation": "Page navigation",
+    "geneIdPlaceholder": "Enter a gene ID",
+    "buttonFallback": "Button",
+    "newsUnavailable": "News is temporarily unavailable",
+    "noNews": "No news yet",
+    "assembliesUnavailable": "Assemblies are temporarily unavailable",
+    "selectAssembly": "Select a genome assembly",
+    "openJbrowse": "Open JBrowse 2",
+    "openBlast": "Run BLAST",
+    "graphUnavailable": "Ontology graph is temporarily unavailable",
+    "ontologyGraph": "Ontology relationship graph",
+    "graphTruncated": "The graph was truncated to the configured node/edge limits."
+  },
+  "ui": {
+    "searchButton": "Search",
+    "noResults": "No results found"
   }
 }

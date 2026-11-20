@@ -13,6 +13,7 @@ from ...schemas.features import (
     PluginCapabilityResponse,
     PublicCapabilitiesResponse,
 )
+from ...services import sequence_tools_service
 from ...services.plugin_service import PluginService
 
 router = APIRouter(prefix="/capabilities", tags=["capabilities"])
@@ -37,4 +38,5 @@ async def get_capabilities(db: AsyncSession = Depends(get_db)) -> PublicCapabili
             for key, state in plugin_states.items()
         },
         databases=DatabaseCapabilitiesResponse(),
+        sequence=sequence_tools_service.capabilities(),
     )

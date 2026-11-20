@@ -51,7 +51,15 @@ function importedFromFacade(source: string): string[] {
   return names;
 }
 
-/** Names the facade actually re-exports (value exports and `export type` names). */
+/**
+ * Names the facade actually exports.
+ *
+ * Two forms count: a `export { … } from` re-export block, and a declaration
+ * made in the facade itself (`export function X` / `export const X`). The
+ * second form is how `PageContainer` is now defined -- it wraps the pro
+ * component to expose the page title as a level-one heading -- and a guard
+ * that only understood re-export blocks would report a real export as missing.
+ */
 function facadeExports(): Set<string> {
   const names = new Set<string>();
   for (const match of facadeSource.matchAll(/export\s+(?:type\s+)?\{([^}]*)\}\s+from/g)) {
@@ -59,6 +67,9 @@ function facadeExports(): Set<string> {
       const name = raw.trim().replace(/^type\s+/, "").split(/\s+as\s+/).pop()?.trim();
       if (name) names.add(name);
     }
+  }
+  for (const match of facadeSource.matchAll(/export\s+(?:async\s+)?(?:function|const|class)\s+(\w+)/g)) {
+    names.add(match[1]);
   }
   return names;
 }

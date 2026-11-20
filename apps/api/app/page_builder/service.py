@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.exceptions import (
@@ -141,18 +142,23 @@ async def create_page(
         raise ConflictError(f"Route {route!r} already exists")
 
     page = PageDefinition(route=route, title_key=title_key)
-    db.add(page)
-    await db.flush()
-
-    version = PageDefinitionVersion(
-        page_id=page.id,
-        version=1,
-        status=PageDefinitionStatus.DRAFT,
-        definition=cleaned,
-        edited_by=edited_by,
-    )
-    db.add(version)
-    await db.commit()
+    try:
+        db.add(page)
+        await db.flush()
+        version = PageDefinitionVersion(
+            page_id=page.id,
+            version=1,
+            status=PageDefinitionStatus.DRAFT,
+            definition=cleaned,
+            edited_by=edited_by,
+        )
+        db.add(version)
+        await db.commit()
+    except IntegrityError as exc:
+        # A concurrent create won the unique ``route`` constraint. Report the
+        # same 409 the pre-check produces instead of leaking a 500.
+        await db.rollback()
+        raise ConflictError(f"Route {route!r} already exists") from exc
     await db.refresh(page)
     await db.refresh(version)
     return page, version
@@ -204,7 +210,25 @@ async def update_draft(
         edit_comment=edit_comment,
     )
     db.add(version)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError as exc:
+        # Another editor inserted the same (page_id, version) between our read
+        # and commit. Re-read the winner and surface the usual 409.
+        await db.rollback()
+        latest_now = (
+            await db.execute(
+                select(PageDefinitionVersion)
+                .where(PageDefinitionVersion.page_id == page_id)
+                .order_by(PageDefinitionVersion.version.desc())
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        actual = latest_now.version if latest_now is not None else 0
+        raise ConflictError(
+            f"Version conflict: expected base {actual}, got {base_version}",
+            details={"expected": actual, "received": base_version},
+        ) from exc
     await db.refresh(version)
     await db.refresh(page)
     return page, version
@@ -218,11 +242,11 @@ async def preview(
     definition: dict,
     plugin_states: dict[str, Any] | None = None,
 ) -> dict:
-    """Validate (and, if a page is referenced, snapshot) a preview definition.
+    """Validate a preview definition without persisting anything.
 
-    Returns the cleaned definition plus a preview version number.  Preview
-    never mutates the public tree; when a page is referenced the cleaned
-    definition is persisted as a ``preview`` version.
+    Returns the cleaned definition plus the version number the next save would
+    create. Preview never mutates the page or the public tree; the Admin
+    preview panel renders the response directly.
     """
     cleaned = validate_definition(definition)
     if plugin_states is not None:
@@ -287,13 +311,29 @@ async def publish_request(
     """
     page = await get_page(db, page_id)
 
+    # Lock the row before deciding the transition. Without this, a concurrent
+    # ``publish_now`` (or the publication worker) can publish the version
+    # between our read and commit, and we would write PUBLISHED back to
+    # REQUESTED. ``populate_existing`` forces a fresh read past the identity map.
+    statement = select(PageDefinitionVersion).where(
+        PageDefinitionVersion.page_id == page_id
+    )
     if version_id is not None:
-        version = await get_version(db, page_id, version_id)
+        statement = statement.where(PageDefinitionVersion.id == version_id)
     else:
-        latest = await _latest_version(db, page)
-        if latest is None:
-            raise NotFoundError(f"Page {page_id} has no versions")
-        version = latest
+        statement = statement.order_by(PageDefinitionVersion.version.desc()).limit(1)
+    version = (
+        await db.execute(
+            statement.with_for_update(of=PageDefinitionVersion).execution_options(
+                populate_existing=True
+            )
+        )
+    ).scalar_one_or_none()
+
+    if version is None:
+        if version_id is not None:
+            raise NotFoundError(f"Version {version_id} not found for page {page_id}")
+        raise NotFoundError(f"Page {page_id} has no versions")
 
     if version.status == PageDefinitionStatus.PUBLISHED:
         raise ConflictError(f"Version {version.version} is already published")
@@ -335,6 +375,52 @@ async def publish_version(db: AsyncSession, version: PageDefinitionVersion) -> N
     version.status = PageDefinitionStatus.PUBLISHED
     version.published_at = datetime.now(UTC)
     await db.commit()
+
+
+async def publish_now(
+    db: AsyncSession,
+    *,
+    page_id: uuid.UUID,
+    version_id: uuid.UUID | None,
+    reason: str | None,
+    edited_by: uuid.UUID,
+    plugin_states: dict[str, Any] | None = None,
+) -> tuple[PageDefinition, PageDefinitionVersion]:
+    """Validate and publish a version immediately, within the admin request.
+
+    The row lock keeps this idempotent against a concurrent worker
+    ``publish_definition`` for the same version: exactly one transition wins.
+    """
+    page = await get_page(db, page_id)
+    statement = select(PageDefinitionVersion).where(
+        PageDefinitionVersion.page_id == page_id
+    )
+    if version_id is not None:
+        statement = statement.where(PageDefinitionVersion.id == version_id)
+    else:
+        statement = statement.order_by(PageDefinitionVersion.version.desc())
+    version = (
+        await db.execute(
+            statement.limit(1).with_for_update(of=PageDefinitionVersion)
+        )
+    ).scalar_one_or_none()
+    if version is None:
+        raise NotFoundError(f"Page {page_id} has no versions")
+
+    if version.status == PageDefinitionStatus.PUBLISHED:
+        raise ConflictError(f"Version {version.version} is already published")
+
+    cleaned = validate_definition(version.definition)
+    if plugin_states is not None:
+        validate_plugin_launchers(cleaned, plugin_states)
+    version.definition = cleaned
+    version.status = PageDefinitionStatus.PUBLISHED
+    version.published_at = datetime.now(UTC)
+    version.edit_comment = version.edit_comment or reason
+    await db.commit()
+    await db.refresh(version)
+    await db.refresh(page)
+    return page, version
 
 
 async def get_published(

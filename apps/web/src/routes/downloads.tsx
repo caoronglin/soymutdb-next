@@ -11,7 +11,7 @@
  */
 import type * as React from "react";
 import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useSiteContent } from "../lib/site-content-react";
@@ -24,13 +24,29 @@ import {
   FileTextOutlined as FileText,
   PartitionOutlined as Layers,
 } from "@ant-design/icons";
-import { Button, Card, Select, Skeleton, Table, Tag, Typography, type TableColumnsType } from "@/lib/antd";
+import {
+  Alert,
+  Button,
+  Card,
+  Empty,
+  Modal,
+  Select,
+  Skeleton,
+  Table,
+  Tag,
+  Typography,
+  type TableColumnsType,
+} from "@/lib/antd";
 import { FadeUp, Stagger } from "../components/route-motion";
 import { getDownloadFiles, getDownloadUrl } from "@soymutdb/api-client";
 import type { DownloadFile } from "@soymutdb/api-client";
+import { ExportQueryCard } from "../components/export-query-card";
+import { SequenceFormatConverter } from "../components/sequence-format-converter";
 import { FilePreviewDialog } from "../components/file-viewer/file-preview-dialog";
+import type { PreviewFile } from "../components/file-viewer/file-preview-dialog";
 import { VariantExportControls } from "../components/variant-export-controls";
 import { safeExternalUrl } from "../lib/url-safety";
+import { REMOTE_PREVIEW_CONFIG } from "../lib/remote-preview";
 import { assembliesQueryOptions } from "../lib/query-options";
 import { assemblyOptionLabel } from "../lib/assembly-selection";
 import { SITE_VARIANT } from "../lib/site-variant";
@@ -72,6 +88,21 @@ function formatDate(dateStr: string): string {
   }
 }
 
+function shortChecksum(sha256: string | null): string {
+  // A legacy file has no digest. Rendering "not recorded" instead of a
+  // truncated string is what keeps it from being mistaken for a verified
+  // checksum; an empty string would be the same lie in a quieter form.
+  return sha256 ? sha256.slice(0, 12) : "—";
+}
+
+/** Sequence formats the converter can read. */
+const SEQUENCE_EXTENSIONS = [".fa", ".fasta", ".fna", ".fas"];
+
+function isSequenceFile(file: DownloadFile): boolean {
+  const lowered = file.name.toLowerCase();
+  return SEQUENCE_EXTENSIONS.some((extension) => lowered.endsWith(extension));
+}
+
 function getFileFormat(name: string): string {
   const parts = name.toLowerCase().split(".");
   if (parts.length < 2) return "Unknown";
@@ -85,9 +116,12 @@ function getFileFormat(name: string): string {
 function DownloadsComponent() {
   const { t } = useTranslation();
   const { get } = useSiteContent();
-  const [preview, setPreview] = useState<{ files: DownloadFile[]; index: number } | null>(null);
+  const [preview, setPreview] = useState<{ files: PreviewFile[]; index: number } | null>(null);
+  // Conversion fetches the file body into the page, so it is bounded by the
+  // same size cap the preview uses and only offered for sequence formats.
+  const [convert, setConvert] = useState<{ file: DownloadFile; text: string } | null>(null);
 
-  const { data: files, isLoading, error } = useQuery({
+  const { data: files, isLoading, error, refetch } = useQuery({
     queryKey: ["downloads"],
     queryFn: () => getDownloadFiles(),
     staleTime: 60_000,
@@ -127,11 +161,37 @@ function DownloadsComponent() {
     }
   };
 
-  const handlePreview = (file: DownloadFile) => {
+  const handlePreview = async (file: DownloadFile) => {
     // Offer the whole group for in-dialog switching (same-category files).
     const group = groups.find((g) => g.files.some((f) => f.id === file.id));
-    const files = group?.files ?? [file];
-    setPreview({ files, index: files.findIndex((f) => f.id === file.id) });
+    const groupFiles = group?.files ?? [file];
+
+    // A remote preview hands the artifact to a third party, so only a
+    // time-limited signed location may enter it. If signing fails the
+    // catalogue location is kept; the preview policy then keeps it local.
+    const entries = await Promise.all(
+      groupFiles.map(async (f) => {
+        let url = safeExternalUrl(f.file_url) ?? "";
+        try {
+          const signed = await getDownloadUrl(f.id);
+          url = safeExternalUrl(signed.url) ?? url;
+        } catch {
+          // Fall through with the catalogue location.
+        }
+        return {
+          name: f.name,
+          url,
+          size: f.file_size ?? 0,
+          format: getFileFormat(f.name),
+          // The catalogue lists only files of the resolved published release.
+          visibility: "public" as const,
+        };
+      }),
+    );
+    setPreview({
+      files: entries,
+      index: groupFiles.findIndex((f) => f.id === file.id),
+    });
   };
 
   // Group files by category
@@ -139,6 +199,24 @@ function DownloadsComponent() {
 
   // antd's native table replaces the hand-rolled <table>: same columns, but it
   // inherits the theme's header/row/hover tokens and the responsive scroll.
+  /**
+   * Fetch a sequence artifact and open the converter.
+   *
+   * The body is read here rather than in the component so the 10 MB cap and the
+   * "no paths, only text" rule stay next to the existing preview policy.
+   */
+  const handleConvert = async (file: DownloadFile) => {
+    if (!isSequenceFile(file)) return;
+    if (file.file_size !== null && file.file_size > MAX_PREVIEW_SIZE) return;
+    try {
+      const response = await fetch(file.file_url);
+      if (!response.ok) throw new Error(String(response.status));
+      setConvert({ file, text: await response.text() });
+    } catch {
+      setConvert({ file, text: "" });
+    }
+  };
+
   const downloadColumns: TableColumnsType<DownloadFile> = [
     {
       title: get("downloads.fileName", t("downloads.fileName")),
@@ -178,6 +256,40 @@ function DownloadsComponent() {
       render: (_, file) => <span className="font-mono text-xs">{formatDate(file.created_at)}</span>,
     },
     {
+      title: get("downloads.checksum", t("downloads.checksum")),
+      key: "sha256",
+      width: 150,
+      render: (_, file) => (
+        <span
+          className="font-mono text-xs"
+          data-testid={`download-checksum-${file.id}`}
+          title={file.sha256 ?? ""}
+        >
+          {shortChecksum(file.sha256)}
+        </span>
+      ),
+    },
+    {
+      title: get("downloads.license", t("downloads.license")),
+      key: "license",
+      width: 120,
+      render: (_, file) => (
+        <span className="text-xs" data-testid={`download-license-${file.id}`}>
+          {file.license ?? "—"}
+        </span>
+      ),
+    },
+    {
+      title: get("downloads.generatedAt", t("downloads.generatedAt")),
+      key: "generated_at",
+      width: 150,
+      render: (_, file) => (
+        <span className="font-mono text-xs">
+          {file.generated_at ? formatDate(file.generated_at) : "—"}
+        </span>
+      ),
+    },
+    {
       title: t("common.actions"),
       key: "actions",
       align: "right",
@@ -189,10 +301,26 @@ function DownloadsComponent() {
             {tooLarge ? (
               <Tag className="text-[10px]">{get("downloads.too_large", t("downloads.too_large"))}</Tag>
             ) : (
-              <Button type="text" size="small" onClick={() => handlePreview(file)}>
-                <Eye className="size-3.5" aria-hidden />
-                <span className="hidden sm:inline">{get("downloads.preview", t("downloads.preview"))}</span>
-              </Button>
+              <>
+                {/* Only a sequence artifact can be converted, and only when it
+                    is small enough to read into the page. */}
+                {isSequenceFile(file) ? (
+                  <Button
+                    type="text"
+                    size="small"
+                    onClick={() => void handleConvert(file)}
+                    data-testid={`download-convert-${file.id}`}
+                  >
+                    {get("downloads.convert.action", t("downloads.convert.action"))}
+                  </Button>
+                ) : null}
+                <Button type="text" size="small" onClick={() => handlePreview(file)}>
+                  <Eye className="size-3.5" aria-hidden />
+                  <span className="hidden sm:inline">
+                    {get("downloads.preview", t("downloads.preview"))}
+                  </span>
+                </Button>
+              </>
             )}
             <Button
               type="text"
@@ -226,14 +354,31 @@ function DownloadsComponent() {
       )}
 
       {error && (
-        <div className="mt-10 rounded-md border border-destructive/30 bg-destructive/5 p-6 text-center text-sm text-destructive">
-          {t("common.errorDescription")}
-        </div>
+        <Alert
+          className="mt-10"
+          data-testid="downloads-error"
+          type="error"
+          showIcon
+          title={t("downloads.loadError")}
+          action={
+            <Button
+              size="small"
+              data-testid="downloads-retry"
+              onClick={() => void refetch()}
+            >
+              {t("common.retry")}
+            </Button>
+          }
+        />
       )}
 
       {!isLoading && !error && groups.length === 0 && (
-        <div className="mt-10 text-center text-sm text-muted-foreground">
-          {t("common.noData")}
+        <div data-testid="downloads-empty" className="mt-10">
+          <Empty description={t("downloads.empty")}>
+            <Link to="/search" className="text-sm font-medium text-primary hover:underline">
+              {t("home.databaseSearch")} →
+            </Link>
+          </Empty>
         </div>
       )}
 
@@ -310,18 +455,34 @@ function DownloadsComponent() {
         </div>
       </Card>
 
+      <ExportQueryCard
+        assemblies={assemblies}
+        defaultAssemblyId={exportAssembly ? String(exportAssembly.id) : undefined}
+      />
+
+      {convert ? (
+        <Modal
+          open
+          title={convert.file.name}
+          footer={null}
+          width={720}
+          onCancel={() => setConvert(null)}
+          data-testid="download-convert-dialog"
+        >
+          <SequenceFormatConverter
+            text={convert.text}
+            sourceFormat="fasta"
+            fileName={convert.file.name}
+          />
+        </Modal>
+      ) : null}
+
       {preview && (
         <FilePreviewDialog
-          files={preview.files.map((f) => ({
-            name: f.name,
-            // An unusable location yields an empty url so the dialog renders
-            // it as non-openable instead of an unsafe anchor.
-            url: safeExternalUrl(f.file_url) ?? "",
-            size: f.file_size ?? 0,
-            format: getFileFormat(f.name),
-          }))}
+          files={preview.files}
           initialIndex={preview.index}
           open={Boolean(preview)}
+          remotePreview={REMOTE_PREVIEW_CONFIG}
           onOpenChange={(open: boolean) => {
             if (!open) setPreview(null);
           }}

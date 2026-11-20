@@ -4,7 +4,7 @@ import { createMemoryHistory, createRootRoute, createRoute, createRouter, Outlet
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import AdminLayout from "../routes/__root";
-import { NAV_SECTIONS } from "../components/admin-sidebar";
+import { NAV_SECTIONS, type NavItem } from "../components/admin-sidebar";
 
 const viewport = vi.hoisted(() => ({ desktop: true }));
 
@@ -18,41 +18,77 @@ vi.mock("../components/admin-header", () => ({
     <header data-testid="shell-header"><button aria-label="Toggle sidebar" onClick={onToggleSidebar} /></header>
   ),
 }));
-// The shell renders native antd 6 `Layout`/`Menu` now. Only the presentational
-// antd surface is doubled here: the real Router and `Link` stay in place, so the
+// The shell is built on ProLayout. The double keeps the contract the shell
+// relies on — `menuDataRender` supplies nested items, `menuItemRender` wraps a
+// leaf in the router `Link`, and the mobile drawer is driven by the controlled
+// `collapsed` prop — while the real Router and `Link` stay in place, so the
 // click-cancellation and reachability assertions still exercise production code.
 vi.mock("../lib/antd", () => {
   // A React component's first argument is its props, so the passthrough has to
   // read `children` off them — rendering the props object itself would drop the
   // router outlet.
   const passthrough = () => ({ children }: { children?: React.ReactNode }) => <div>{children}</div>;
+  interface MenuItem {
+    key: string;
+    name: string;
+    icon?: React.ReactNode;
+    path?: string;
+    children?: MenuItem[];
+  }
+  function renderMenu(
+    items: MenuItem[],
+    menuItemRender?: (item: MenuItem, dom: React.ReactNode) => React.ReactNode,
+  ): React.ReactNode {
+    return items.map((item) => {
+      if (item.children?.length) {
+        return (
+          <div key={item.key} data-submenu={item.name}>
+            <div>{item.name}</div>
+            {renderMenu(item.children, menuItemRender)}
+          </div>
+        );
+      }
+      const dom = <span>{item.name}</span>;
+      return <React.Fragment key={item.key}>{menuItemRender ? menuItemRender(item, dom) : dom}</React.Fragment>;
+    });
+  }
   return {
     ConfigProvider: passthrough(),
     Grid: { useBreakpoint: () => ({ lg: viewport.desktop }) },
-    Drawer: ({ open, children, onClose }: {
-      open?: boolean; children?: React.ReactNode; onClose?: () => void;
-    }) => open ? <div role="dialog"><button aria-label="Close navigation" onClick={onClose} />{children}</div> : null,
-    Layout: Object.assign(passthrough(), { Sider: passthrough(), Content: passthrough() }),
-    Menu: ({ items, children }: {
-      items?: Array<{
-        key: string;
-        label?: React.ReactNode;
-        type?: string;
-        children?: Array<{ key: string; label?: React.ReactNode }>;
-      }>;
+    ProLayout: ({
+      children,
+      menuDataRender,
+      menuItemRender,
+      menuHeaderRender,
+      collapsed,
+      onCollapse,
+    }: {
       children?: React.ReactNode;
-    }) => (
-      <nav data-menu="inline">
-        {items?.filter((item) => item.children).map((item) => (
-          <div key={item.key}>{item.label}</div>
-        ))}
-        {items?.flatMap((item) => item.children ?? [item]).map((entry) => (
-          <React.Fragment key={entry.key}>{entry.label}</React.Fragment>
-        ))}
-        {children}
-      </nav>
-    ),
-    theme: { defaultAlgorithm: () => ({}), darkAlgorithm: () => ({}), useToken: () => ({ token: { colorPrimary: "#000", colorTextLightSolid: "#fff", colorBorderSecondary: "#eee" } }) },
+      menuDataRender?: () => MenuItem[];
+      menuItemRender?: (item: MenuItem, dom: React.ReactNode) => React.ReactNode;
+      menuHeaderRender?: () => React.ReactNode;
+      collapsed?: boolean;
+      onCollapse?: (collapsed: boolean) => void;
+    }) => {
+      const items = menuDataRender?.() ?? [];
+      const menu = <nav data-menu="inline">{renderMenu(items, menuItemRender)}</nav>;
+      const drawerOpen = !viewport.desktop && !collapsed;
+      return (
+        <div>
+          {menuHeaderRender?.()}
+          {viewport.desktop ? (
+            menu
+          ) : drawerOpen ? (
+            <div role="dialog">
+              <button aria-label="Close navigation" onClick={() => onCollapse?.(true)} />
+              {menu}
+            </div>
+          ) : null}
+          <main>{children}</main>
+        </div>
+      );
+    },
+    theme: { defaultAlgorithm: () => ({}), darkAlgorithm: () => ({}), useToken: () => ({ token: { colorPrimary: "#000", colorTextLightSolid: "#fff", colorBorderSecondary: "#eee", marginXS: 4, paddingLG: 24, paddingMD: 16 } }) },
   };
 });
 
@@ -84,28 +120,24 @@ describe("admin root navigation rendering", () => {
 
   it("announces the current destination after client navigation", async () => {
     const router = await renderNavigation();
-    const dashboard = screen.getByRole("link", { name: "Dashboard" });
+    const welcome = screen.getByRole("link", { name: "Welcome" });
     const guide = screen.getByRole("link", { name: "Usage guide" });
-    expect(dashboard.getAttribute("aria-current")).toBe("page");
+    expect(welcome.getAttribute("aria-current")).toBe("page");
     expect(guide.hasAttribute("aria-current")).toBe(false);
 
     await act(async () => { guide.click(); });
     await waitFor(() => expect(router.state.location.pathname).toBe("/guide"));
     expect(guide.getAttribute("aria-current")).toBe("page");
-    expect(dashboard.hasAttribute("aria-current")).toBe(false);
+    expect(welcome.hasAttribute("aria-current")).toBe(false);
   });
 
-  it("updates the collapse control state and icon when toggled", async () => {
+  it("closes the mobile drawer from its own close control", async () => {
+    viewport.desktop = false;
     await renderNavigation();
-    const collapse = screen.getByRole("button", { name: "Collapse sidebar" });
-    expect(collapse.getAttribute("aria-expanded")).toBe("true");
-    expect(collapse.getAttribute("aria-controls")).toBe("admin-navigation");
-    expect(collapse.querySelector('[data-icon="menu-fold"]')).toBeTruthy();
-
-    await act(async () => { collapse.click(); });
-    const expand = screen.getByRole("button", { name: "Expand sidebar" });
-    expect(expand.getAttribute("aria-expanded")).toBe("false");
-    expect(expand.querySelector('[data-icon="menu-unfold"]')).toBeTruthy();
+    await act(async () => { screen.getByRole("button", { name: "Toggle sidebar" }).click(); });
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    await act(async () => { screen.getByRole("button", { name: "Close navigation" }).click(); });
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("provides a keyboard skip link to main content", async () => {
@@ -130,15 +162,30 @@ describe("admin root navigation rendering", () => {
     // The sider also carries a brand link back to "/", so this asserts that
     // every destination is reachable, not that these are the only links.
     const hrefs = screen.getAllByRole("link").map((link) => link.getAttribute("href"));
-    for (const item of NAV_SECTIONS.flatMap((section) => section.items)) {
+    const flatten = (items: NavItem[]): NavItem[] =>
+      items.flatMap((item) => [item, ...(item.children ? flatten(item.children) : [])]);
+    const leaves = NAV_SECTIONS.flatMap((section) => flatten(section.items)).filter((item) => item.path);
+    for (const item of leaves) {
       expect(hrefs).toContain(item.path);
     }
     // The old shell flattened NAV_SECTIONS, so the sidebar rendered as one
-    // undifferentiated list of 19 destinations with no group headings. Grouping
+    // undifferentiated list of destinations with no group headings. Grouping
     // is the point of the section list, so it is asserted rather than assumed.
-    expect(screen.getByText("Overview")).toBeTruthy();
-    expect(screen.getByText("Data Management")).toBeTruthy();
-    expect(screen.getByText("Administration")).toBeTruthy();
+    // "Overview" is both a section heading and the first `/settings/*`
+    // destination, so the headings are asserted by presence, not by uniqueness.
+    for (const heading of ["Overview", "Data Management", "Content", "Administration"]) {
+      expect(screen.getAllByText(heading).length).toBeGreaterThan(0);
+    }
+    // Multi-level navigation: each submenu renders as its own branch above its
+    // children, instead of every destination sitting at the top level. The
+    // branch marker is asserted rather than the label text, because "Pages" is
+    // both a submenu and one of its destinations.
+    const submenus = Array.from(document.querySelectorAll("[data-submenu]")).map((node) =>
+      node.getAttribute("data-submenu"),
+    );
+    for (const label of ["Dashboards", "Pages", "News", "Settings"]) {
+      expect(submenus).toContain(label);
+    }
   });
 
   it("leaves the page name to the page, not the shell", async () => {

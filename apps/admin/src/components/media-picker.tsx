@@ -19,7 +19,8 @@ export interface MediaPickerProps {
   value?: string | null;
   previewUrl?: string | null;
   previewAlt?: string | null;
-  purpose?: string;
+  /** Upload purpose to filter by; `null` lists every ready asset. */
+  purpose?: string | null;
   disabled?: boolean;
   onChange?: (asset: MediaAsset | null) => void;
 }
@@ -53,6 +54,7 @@ export function MediaPicker({
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const purposeFilter = purpose === null ? undefined : purpose;
 
   useEffect(() => {
     if (!open) return;
@@ -61,7 +63,7 @@ export function MediaPicker({
     setError(null);
     listMediaAssets({
       search: search.trim() || undefined,
-      purpose,
+      purpose: purposeFilter,
       status: "ready",
       page,
       page_size: PAGE_SIZE,
@@ -82,7 +84,7 @@ export function MediaPicker({
     return () => {
       cancelled = true;
     };
-  }, [open, page, purpose, reloadToken, search]);
+  }, [open, page, purposeFilter, reloadToken, search]);
 
   const selectAsset = (asset: MediaAsset) => {
     onChange?.(asset);
@@ -137,6 +139,7 @@ export function MediaPicker({
             allowClear
             prefix={<SearchOutlined />}
             value={search}
+            aria-label={t("admin.media.picker.searchPlaceholder")}
             placeholder={t("admin.media.picker.searchPlaceholder")}
             onChange={(event) => {
               setSearch(event.target.value);

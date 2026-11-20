@@ -22,9 +22,11 @@
 | `COMPOSE_PROFILES` | compose 能力 profile（`core,blast,analyses,mcp`） | compose | 同上 |
 | `*_IMAGE_REF` | 镜像 **immutable digest** 引用（`image@sha256:...`） | compose / upgrade.sh | 同上 |
 | `POSTGRES_PASSWORD` 等 | 数据存储容器级密码（compose `:?` 必填校验） | postgres / clickhouse / redis / minio / grafana | 同上 |
-| `VITE_*` | 前端构建期变量（**不**作用于后端/运行时） | apps/web 构建 | 根目录 `.env.example` |
+| `VITE_*` | 前端构建期历史变量名（**不**作用于后端/运行时） | apps/web / admin 构建 | 根目录 `.env.example` |
+| `SOYMUTDB_*`（前端） | 前端构建期新变量名（同样会打进产物，禁止放 secret） | apps/web / admin 构建 | `deploy/cloudflare.md` §5 |
 
-> 注意：根目录 `.env.example` 是前端 `VITE_*` 模板，**不**生效于后端；后端一律读取 `SOYMUTDB_*`。
+> 注意：根目录 `.env.example` 是前端历史 `VITE_*` 模板，**不**生效于后端；后端一律读取 `SOYMUTDB_*`。
+> 新增的前端构建期变量使用 `SOYMUTDB_*` 前缀，旧 `VITE_*` 名称按别名继续兼容，见 [ADR-0016](../adr/0016-build-time-public-config-prefix.md)。
 
 ### 1.2 应用级必填变量（生产 fail-fast 强制）
 
@@ -102,7 +104,7 @@
 - 无统一的**秘密轮换周期**与轮换标准操作流程（JWT、DB、MINIO、SMTP）。
 - 生产仍以**明文 `.env`** 承载全部秘密，未接任何密钥管理/密文存储（Vault/SOPS 等）；若暴露 `/opt/soymutdb/.env` 即全量泄露。
 - `BACKUP_S3_ACCESS_KEY` / `BACKUP_S3_SECRET_KEY`（异站备份凭据）走环境变量，属受限敏感配置，应纳入轮换与最小权限（只写目标桶）。
-- 静态发布目标 token（GitHub/Cloudflare Pages）目前建议放 `.env`；如已上 S3 中转桶，`SOYMUTDB_PUBLICATION_ARTIFACT_BUCKET` 配置字段存在但三适配器均未消费，属「待决策」项。
+- 静态发布目标 token（GitHub/Cloudflare Pages）目前建议放 `.env`。
 
 ---
 

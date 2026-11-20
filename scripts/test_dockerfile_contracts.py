@@ -13,6 +13,7 @@ These checks need no Docker daemon: they read the Dockerfiles and the list.
 from __future__ import annotations
 
 import gzip
+import json
 import os
 import re
 import subprocess
@@ -282,6 +283,74 @@ def test_images_copy_every_workspace_path_dependency_before_sync() -> None:
                     f"{dockerfile} COPYs packages/{name} after `uv sync --frozen`; "
                     "the venv would be built without it"
                 )
+
+
+FRONTEND_DOCKERFILES = {
+    "infra/docker/Dockerfile.web": "apps/web",
+    "infra/docker/Dockerfile.admin": "apps/admin",
+    "apps/jbrowse/Dockerfile": "apps/jbrowse",
+}
+
+
+def _workspace_packages() -> dict[str, str]:
+    """`@soymutdb/<name>` -> its directory, from committed package.json files."""
+    packages: dict[str, str] = {}
+    for parent in ("apps", "packages"):
+        for manifest in sorted((ROOT / parent).glob("*/package.json")):
+            name = json.loads(manifest.read_text(encoding="utf-8")).get("name", "")
+            if name.startswith("@soymutdb/"):
+                packages[name] = manifest.parent.relative_to(ROOT).as_posix()
+    return packages
+
+
+def _workspace_closure(app_dir: str) -> set[str]:
+    packages = _workspace_packages()
+    seen: set[str] = set()
+    pending = [packages[f"@soymutdb/{Path(app_dir).name}"]]
+    while pending:
+        directory = pending.pop()
+        manifest = json.loads(
+            (ROOT / directory / "package.json").read_text(encoding="utf-8")
+        )
+        for field in ("dependencies", "devDependencies"):
+            for name in manifest.get(field, {}):
+                dependency = packages.get(name)
+                if dependency is not None and dependency not in seen:
+                    seen.add(dependency)
+                    pending.append(dependency)
+    return seen
+
+
+def test_frontend_deps_stages_copy_the_full_workspace_closure() -> None:
+    """`pnpm install` can only link workspaces whose package.json is present.
+
+    The deps stage installs from a partial tree and the builder then overlays the
+    full source, so a package missing from the deps COPY list has source but no
+    `node_modules`. That built web/admin images with:
+    Module not found: Error: Can't resolve '@antv/g2/esm/coordinate/index'
+    in '/app/packages/charts/src'
+    after `@soymutdb/charts` was added to those apps but not to their Dockerfiles.
+    """
+    for dockerfile, app_dir in FRONTEND_DOCKERFILES.items():
+        text = _instructions((ROOT / dockerfile).read_text(encoding="utf-8"))
+        stage_start = text.index(" AS deps")
+        stage = text[stage_start : text.index("\nFROM ", stage_start)]
+        copied = set(
+            re.findall(r"COPY (apps|packages)/([a-z0-9-]+)/package\.json", stage)
+        )
+        copied_dirs = {f"{parent}/{name}" for parent, name in copied}
+        required = _workspace_closure(app_dir) | {app_dir}
+        missing = sorted(required - copied_dirs)
+        assert not missing, (
+            f"{dockerfile} deps stage does not COPY the package.json of "
+            f"{', '.join(missing)}; pnpm cannot link them, and the app build "
+            "fails resolving their imports"
+        )
+        install = stage.index("pnpm install")
+        for directory in required:
+            assert stage.index(f"COPY {directory}/package.json") < install, (
+                f"{dockerfile} COPYs {directory}/package.json after `pnpm install`"
+            )
 
 
 def test_static_app_images_supply_their_build_time_origins() -> None:
@@ -632,10 +701,12 @@ def test_worker_runtime_installs_the_libraries_the_source_builds_do_not_vendor()
     The builder's -dev packages die with the builder stage, so each shared
     library the compiled extensions link needs a name in the runtime stage.
     Those names track what the compiled objects actually need: Debian's g++
-    links the C++ runtime dynamically, h5py links libhdf5_serial.so.310 (Debian
-    trixie ships HDF5 1.14.5), and leidenalg/python-igraph need the OpenMP
-    runtime. A Debian release that moves HDF5 to a new series has to rename
-    libhdf5-310 here, and this assertion is what makes that rename deliberate.
+    links the C++ runtime dynamically, h5py links libhdf5_serial.so.310 and
+    libhdf5_serial_hl.so.310 (Debian trixie ships HDF5 1.14.5; the two SONAMEs
+    live in separate packages, libhdf5-310 and libhdf5-hl-310), and
+    leidenalg/python-igraph need the OpenMP runtime. A Debian release that
+    moves HDF5 to a new series has to rename both libhdf5 packages here, and
+    this assertion is what makes that rename deliberate.
     """
     runtime = _worker_runtime_instructions()
 
@@ -643,6 +714,10 @@ def test_worker_runtime_installs_the_libraries_the_source_builds_do_not_vendor()
         ("libstdc++6", "the C++ extensions libarrow, matplotlib and cyvcf2"),
         ("libgomp1", "the OpenMP runtime of leidenalg/python-igraph"),
         ("libhdf5-310", "h5py's libhdf5_serial.so.310"),
+        (
+            "libhdf5-hl-310",
+            "h5py's libhdf5_serial_hl.so.310, which libhdf5-310 does not pull in",
+        ),
     ):
         assert package in runtime, (
             f"{package} is missing from the runtime stage, but {builds_against} "
@@ -761,8 +836,10 @@ def test_worker_builder_resolves_python_through_pkg_config() -> None:
         "the builder must check which python3 pkg-config resolves; a Debian "
         "python3-dev silently breaks the meson-python builds otherwise"
     )
-    assert "/usr/local/include/python3" in builder, (
-        "the guard must accept this image's own CPython include directory"
+    assert "/usr/local/include | /usr/local/include/python3*" in builder, (
+        "the guard must accept this image's own CPython include directory; the "
+        "official image's python3.pc reports the bare /usr/local/include and "
+        "keeps the version in Cflags"
     )
 
 
@@ -800,4 +877,25 @@ def test_worker_build_width_is_a_build_arg_not_the_host_core_count() -> None:
     assert "UV_CONCURRENT_BUILDS=1" in sync, (
         "the six sdists must build one at a time; running them concurrently "
         "peaks at the same memory with less headroom"
+    )
+
+
+def test_worker_hdf5_link_probe_reads_libs_only_L_not_an_empty_libdir() -> None:
+    """The trixie serial .pc has no ``libdir`` variable; ``--variable=libdir``
+    expands to empty and leaves a bare ``-L`` that swallows ``-lhdf5`` as its
+    argument. Build cnb-fq5-1k6k4qig0-004 died here with
+    ``ld: cannot find -lhdf5_hl`` on amd64 and arm64, which in turn blocked
+    release/publish. The probe must take the search path from ``Libs:`` -- the
+    same field h5py reads -- and the build must fail if it ever regresses to a
+    literal empty ``-L``.
+    """
+    text = _instructions(WORKER_DOCKERFILE.read_text(encoding="utf-8"))
+
+    assert "pkg-config --libs-only-L hdf5-serial" in text, (
+        "the HDF5 link probe must read -L from the .pc Libs: field; "
+        "--variable=libdir is empty on Debian trixie hdf5-serial.pc"
+    )
+    assert "--variable=libdir" not in text, (
+        "hdf5-serial.pc defines no libdir variable; expanding it yields a bare "
+        "-L that consumes the following -lhdf5 as its directory argument"
     )

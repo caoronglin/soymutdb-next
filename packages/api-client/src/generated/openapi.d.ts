@@ -358,6 +358,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/assemblies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Assemblies
+         * @description List the resolved release's assemblies with their own aggregate counts.
+         *
+         *     Not cached: an assembly with a wrong gene count is worse than an assembly
+         *     fetched twice, and the numbers change when data is imported rather than on
+         *     their own.
+         */
+        get: operations["list_assemblies_api_v1_assemblies_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assemblies/{assembly_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Assembly
+         * @description Return one assembly of the resolved release, with its chromosomes.
+         *
+         *     A 404 is returned both for an unknown assembly and for one that belongs to
+         *     another release: the endpoint reveals nothing about assemblies outside the
+         *     resolved release.
+         */
+        get: operations["get_assembly_api_v1_assemblies__assembly_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/gwas/uploads": {
         parameters: {
             query?: never;
@@ -446,6 +494,31 @@ export interface paths {
         get: operations["get_gwas_results_api_v1_gwas__job_id__results_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/jobs/sse-ticket": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Sse Ticket
+         * @description Exchange an authenticated session for one single-use stream ticket.
+         *
+         *     ``EventSource`` cannot send an ``Authorization`` header, but the access
+         *     token must not travel in the stream URL (nginx logs the query string).
+         *     This endpoint returns an opaque ticket that ``GET /jobs/events?ticket=``
+         *     accepts exactly once, within :data:`SSE_TICKET_TTL_SECONDS`.
+         */
+        post: operations["create_sse_ticket_api_v1_jobs_sse_ticket_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -770,6 +843,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/variants/export/{export_id}/manifest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Variant Export Manifest
+         * @description Return citable provenance for one export (submitter or administrator).
+         *
+         *     A legacy artifact with no checksum is reported with ``sha256: null`` and
+         *     ``sha256_state='not_recorded'``; the response never invents a digest.
+         */
+        get: operations["get_variant_export_manifest_api_v1_variants_export__export_id__manifest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/variants/export/{export_id}/download": {
         parameters: {
             query?: never;
@@ -812,6 +908,305 @@ export interface paths {
          *     pre-signed ``download_url`` (600 s) instead of inline FASTA.
          */
         post: operations["seqfetch_api_v1_tools_seqfetch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Sequence Capabilities
+         * @description Supported algorithms, formats, limits and engine availability.
+         */
+        get: operations["sequence_capabilities_api_v1_tools_sequence_capabilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/reverse-complement": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reverse Complement */
+        post: operations["reverse_complement_api_v1_tools_sequence_reverse_complement_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/match": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sequence Match */
+        post: operations["sequence_match_api_v1_tools_sequence_match_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/align": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sequence Align */
+        post: operations["sequence_align_api_v1_tools_sequence_align_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sequence Stats */
+        post: operations["sequence_stats_api_v1_tools_sequence_stats_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/orfs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sequence Orfs */
+        post: operations["sequence_orfs_api_v1_tools_sequence_orfs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/translate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sequence Translate */
+        post: operations["sequence_translate_api_v1_tools_sequence_translate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/kmers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sequence Kmers */
+        post: operations["sequence_kmers_api_v1_tools_sequence_kmers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/inspect": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Inspect Format
+         * @description Validate a bounded FASTA/FASTQ/BED payload; never accepts a path or URL.
+         */
+        post: operations["inspect_format_api_v1_tools_sequence_inspect_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/convert": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Convert Sequence Format
+         * @description Convert records between FASTA / GenBank / EMBL / tabular text.
+         */
+        post: operations["convert_sequence_format_api_v1_tools_sequence_convert_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/restriction-sites": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restriction Sites
+         * @description Report the cut sites of one or more restriction enzymes.
+         */
+        post: operations["restriction_sites_api_v1_tools_sequence_restriction_sites_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/protein-properties": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Protein Properties
+         * @description Molecular weight, isoelectric point, extinction and hydrophobicity.
+         */
+        post: operations["protein_properties_api_v1_tools_sequence_protein_properties_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/melting-temp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Melting Temp
+         * @description Primer melting temperature by Wallace, GC or nearest-neighbour.
+         */
+        post: operations["melting_temp_api_v1_tools_sequence_melting_temp_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/multiple-alignment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Multiple Alignment
+         * @description Progressively align several sequences and return the distance matrix.
+         */
+        post: operations["multiple_alignment_api_v1_tools_sequence_multiple_alignment_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/sequence/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Neighbor Joining Tree
+         * @description Neighbour-joining tree over the sequences, as Newick text.
+         */
+        post: operations["neighbor_joining_tree_api_v1_tools_sequence_tree_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/tools/intervals/overlap": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Interval Overlap
+         * @description Overlap user regions with published gene annotations of one assembly.
+         */
+        post: operations["interval_overlap_api_v1_tools_intervals_overlap_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1155,6 +1550,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/blast/databases/{database_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Blast Database State
+         * @description Enable/disable a published BLAST index (administrator only).
+         *
+         *     Disabling an index only removes it from *new* searches. Submitted jobs keep
+         *     the provenance frozen at submission time and are never rewritten. There is
+         *     no delete route: a published index is an immutable, auditable record.
+         */
+        patch: operations["update_blast_database_state_api_v1_blast_databases__database_id__patch"];
+        trace?: never;
+    };
     "/api/v1/blast/jobs": {
         parameters: {
             query?: never;
@@ -1202,6 +1621,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/blast/jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Blast Job
+         * @description Cancel a pending/running BLAST job owned by the caller.
+         *
+         *     The worker re-checks the row before launching the aligner, so a queued
+         *     Celery message that arrives after cancellation cannot start a search.
+         */
+        post: operations["cancel_blast_job_api_v1_blast_jobs__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/jobs/{job_id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry Blast Job
+         * @description Re-dispatch a failed BLAST job with its original frozen provenance.
+         */
+        post: operations["retry_blast_job_api_v1_blast_jobs__job_id__retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/blast/jobs/{job_id}/results": {
         parameters: {
             query?: never;
@@ -1217,6 +1679,168 @@ export interface paths {
          *     jobs carry a hit list (empty means a genuine zero-hit result).
          */
         get: operations["get_blast_results_api_v1_blast_jobs__job_id__results_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/index-builds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Blast Index Build
+         * @description Request an immutable NCBI index build (admin only).
+         *
+         *     Records the catalog/build rows and one transactional-outbox event in a
+         *     single transaction. ``makeblastdb`` never runs inside this HTTP request;
+         *     the worker on the ``blast`` queue owns construction and publication.
+         */
+        post: operations["create_blast_index_build_api_v1_blast_index_builds_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/index-builds/{build_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Blast Index Build
+         * @description Poll one build's state; no filesystem path or binary name is exposed.
+         */
+        get: operations["get_blast_index_build_api_v1_blast_index_builds__build_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/jobs/{job_id}/hits/{subject_id}/genome-target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Blast Hit Genome Target
+         * @description Resolve a subject to a gene locus in the job's release/assembly.
+         *
+         *     Never derives genomic coordinates from amino-acid alignment positions.
+         *     An unresolved subject returns an explicit reason and no locus.
+         */
+        get: operations["get_blast_hit_genome_target_api_v1_blast_jobs__job_id__hits__subject_id__genome_target_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/public/jobs/{job_id}/hits/{subject_id}/genome-target": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Public Blast Hit Genome Target */
+        get: operations["get_public_blast_hit_genome_target_api_v1_blast_public_jobs__job_id__hits__subject_id__genome_target_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/public/jobs/{job_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Public Blast Job
+         * @description Anonymous capability holder may cancel only its own pending job.
+         */
+        post: operations["cancel_public_blast_job_api_v1_blast_public_jobs__job_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/public/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit Public Blast Job
+         * @description Submit an explicitly anonymous job, even when a bearer session is present.
+         *
+         *     Save the returned capability and send it as X-Blast-Token when polling.
+         *     There is no public listing. Publication/release validation and execution
+         *     reuse the same service, outbox and worker as private jobs.
+         */
+        post: operations["submit_public_blast_job_api_v1_blast_public_jobs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/public/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Public Blast Job */
+        get: operations["get_public_blast_job_api_v1_blast_public_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/blast/public/jobs/{job_id}/results": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Public Blast Results */
+        get: operations["get_public_blast_results_api_v1_blast_public_jobs__job_id__results_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1349,7 +1973,7 @@ export interface paths {
         };
         /**
          * List Tracks
-         * @description List tracks (optionally filtered by assembly / category).
+         * @description List the selected release's tracks (optionally filtered by assembly/category).
          */
         get: operations["list_tracks_api_v1_tracks_get"];
         put?: never;
@@ -1416,7 +2040,7 @@ export interface paths {
         };
         /**
          * Get Track
-         * @description Get track detail.
+         * @description Get track detail scoped to the selected release.
          */
         get: operations["get_track_api_v1_tracks__track_id__get"];
         put?: never;
@@ -1998,6 +2622,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/exports/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit Export Query
+         * @description Submit a whitelisted filter set as one asynchronous variant export.
+         *
+         *     Unknown or unbacked filters are refused by ``ExportQueryRequest`` before
+         *     any record or outbox event is written, so a downloader never receives an
+         *     artifact that silently ignored a constraint they set.
+         */
+        post: operations["submit_export_query_api_v1_exports_query_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/news": {
         parameters: {
             query?: never;
@@ -2505,8 +3153,9 @@ export interface paths {
          * Dashboard trend series
          * @description Time series for the admin dashboard charts.
          *
-         *     - ``import_throughput``: daily import tasks (completed vs. failed) from
-         *       the PostgreSQL ``import_tasks`` table.
+         *     - ``import_throughput``: daily import tasks from the PostgreSQL
+         *       ``import_tasks`` table, split into completed vs. failed/cancelled vs.
+         *       still queued or running.
          *     - ``query_latency``: daily p50/p95/p99 percentiles from the PostgreSQL
          *       analytics events (empty when that query is unavailable).
          *     - ``storage_growth``: no reliable storage source exists yet — empty.
@@ -3098,6 +3747,26 @@ export interface paths {
         put?: never;
         /** Publish Request */
         post: operations["publish_request_api_v1_admin_page_builder_pages__page_id__publish_request_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/page-builder/pages/{page_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish Now
+         * @description Publish a version immediately without the asynchronous task round-trip.
+         */
+        post: operations["publish_now_api_v1_admin_page_builder_pages__page_id__publish_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3961,6 +4630,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/data-views/sources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Data View Sources */
+        get: operations["list_data_view_sources_api_v1_admin_data_views_sources_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/data-views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Data Views */
+        get: operations["list_data_views_api_v1_admin_data_views_get"];
+        put?: never;
+        /** Create Data View */
+        post: operations["create_data_view_api_v1_admin_data_views_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/data-views/{view_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Data View */
+        put: operations["update_data_view_api_v1_admin_data_views__view_id__put"];
+        post?: never;
+        /** Delete Data View */
+        delete: operations["delete_data_view_api_v1_admin_data_views__view_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/uploads/presign": {
         parameters: {
             query?: never;
@@ -4161,6 +4883,138 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/comparative/families": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Families
+         * @description List gene families/subfamilies in the resolved release.
+         */
+        get: operations["list_families_api_v1_comparative_families_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comparative/families/{family_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Family
+         * @description One family with its members and per-species coverage.
+         *
+         *     ``coverage`` names the species the family knows about; a species that
+         *     contributed no member is ``state="no_data"`` with ``member_count: null``,
+         *     never an empty member list that would read as "present but empty".
+         */
+        get: operations["get_family_api_v1_comparative_families__family_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comparative/families/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Compare Families
+         * @description Compare two families: shared members, and the members unique to each.
+         */
+        get: operations["compare_families_api_v1_comparative_families_compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comparative/genes/{gene_id}/orthologs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Gene Orthologs
+         * @description Ortholog/paralog rows for one gene, with the relationship type stated.
+         *
+         *     ``relationship_type`` summarises how many counterparts the source recorded
+         *     per species. It is not derived from sequence similarity: this endpoint never
+         *     reads BLAST hits.
+         */
+        get: operations["get_gene_orthologs_api_v1_comparative_genes__gene_id__orthologs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comparative/artifacts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Artifact
+         * @description Queue an alignment or tree for a family.
+         *
+         *     The response is the pending artifact, not a result: the aligner runs in the
+         *     worker through the shared outbox, and the finished object is fetched through
+         *     ``GET /comparative/artifacts/{job_id}``.
+         */
+        post: operations["request_artifact_api_v1_comparative_artifacts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/comparative/artifacts/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Artifact
+         * @description Status of an alignment/tree, with a pre-signed URL once it succeeded.
+         */
+        get: operations["get_artifact_api_v1_comparative_artifacts__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/analytics/summary": {
         parameters: {
             query?: never;
@@ -4212,6 +5066,46 @@ export interface paths {
          * @description Return a bilingual brand snapshot for one explicit site artifact.
          */
         get: operations["get_site_branding_api_v1_site_branding_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/site/navigation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Site Navigation
+         * @description Return the editable primary navigation, filtered by feature flags.
+         */
+        get: operations["get_site_navigation_api_v1_site_navigation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/site/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Site Profile
+         * @description Return the configured database kind and public feature availability.
+         */
+        get: operations["get_site_profile_api_v1_site_profile_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4602,18 +5496,36 @@ export interface components {
          * @description Editable "About us" content backed by ``system_settings``.
          */
         AboutContentResponse: {
-            /** Title En */
-            title_en?: string | null;
-            /** Title Zh */
-            title_zh?: string | null;
-            /** Summary En */
-            summary_en?: string | null;
-            /** Summary Zh */
-            summary_zh?: string | null;
-            /** Content En */
-            content_en?: string | null;
-            /** Content Zh */
-            content_zh?: string | null;
+            /**
+             * Title En
+             * @default null
+             */
+            title_en: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
+            /**
+             * Summary En
+             * @default null
+             */
+            summary_en: string | null;
+            /**
+             * Summary Zh
+             * @default null
+             */
+            summary_zh: string | null;
+            /**
+             * Content En
+             * @default null
+             */
+            content_en: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
         };
         /**
          * ActiveReleaseResponse
@@ -4629,12 +5541,21 @@ export interface components {
          *     already embedded in the served page, so this discloses nothing new.
          */
         ActiveReleaseResponse: {
-            /** Release Id */
-            release_id?: string | null;
-            /** Version */
-            version?: string | null;
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: string | null;
+            /**
+             * Version
+             * @default null
+             */
+            version: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
         };
         /**
          * AdminDashboardSeries
@@ -4697,6 +5618,228 @@ export interface components {
              */
             queryP95Change: number;
         };
+        /** AdminDataViewCreate */
+        AdminDataViewCreate: {
+            /** Name */
+            name: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "genes" | "variants" | "mutant_lines";
+            /**
+             * View Type
+             * @default grid
+             * @enum {string}
+             */
+            view_type: "grid" | "kanban" | "gallery";
+            /** Visible Fields */
+            visible_fields: string[];
+            /** Searchable Fields */
+            searchable_fields?: string[];
+            /** Filters */
+            filters?: {
+                [key: string]: string;
+            };
+            /**
+             * Sort Field
+             * @default null
+             */
+            sort_field: string | null;
+            /**
+             * Sort Dir
+             * @default null
+             */
+            sort_dir: ("asc" | "desc") | null;
+            /**
+             * Group Field
+             * @default null
+             */
+            group_field: string | null;
+            /**
+             * Title Field
+             * @default null
+             */
+            title_field: string | null;
+            /**
+             * Page Size
+             * @default 25
+             */
+            page_size: number;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
+            /**
+             * Visibility
+             * @default visible
+             * @enum {string}
+             */
+            visibility: "visible" | "hidden";
+        };
+        /** AdminDataViewListResponse */
+        AdminDataViewListResponse: {
+            /** Items */
+            items: components["schemas"]["AdminDataViewResponse"][];
+            /** Total */
+            total: number;
+        };
+        /** AdminDataViewResponse */
+        AdminDataViewResponse: {
+            /** Name */
+            name: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "genes" | "variants" | "mutant_lines";
+            /**
+             * View Type
+             * @default grid
+             * @enum {string}
+             */
+            view_type: "grid" | "kanban" | "gallery";
+            /** Visible Fields */
+            visible_fields: string[];
+            /** Searchable Fields */
+            searchable_fields?: string[];
+            /** Filters */
+            filters?: {
+                [key: string]: string;
+            };
+            /**
+             * Sort Field
+             * @default null
+             */
+            sort_field: string | null;
+            /**
+             * Sort Dir
+             * @default null
+             */
+            sort_dir: ("asc" | "desc") | null;
+            /**
+             * Group Field
+             * @default null
+             */
+            group_field: string | null;
+            /**
+             * Title Field
+             * @default null
+             */
+            title_field: string | null;
+            /**
+             * Page Size
+             * @default 25
+             */
+            page_size: number;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
+            /**
+             * Visibility
+             * @default visible
+             * @enum {string}
+             */
+            visibility: "visible" | "hidden";
+            /** Id */
+            id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * AdminDataViewUpdate
+         * @description Partial update. ``source`` is immutable, so the vocabulary stays fixed.
+         */
+        AdminDataViewUpdate: {
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * View Type
+             * @default null
+             */
+            view_type: ("grid" | "kanban" | "gallery") | null;
+            /**
+             * Visible Fields
+             * @default null
+             */
+            visible_fields: string[] | null;
+            /**
+             * Searchable Fields
+             * @default null
+             */
+            searchable_fields: string[] | null;
+            /**
+             * Filters
+             * @default null
+             */
+            filters: {
+                [key: string]: string;
+            } | null;
+            /**
+             * Sort Field
+             * @default null
+             */
+            sort_field: string | null;
+            /**
+             * Sort Dir
+             * @default null
+             */
+            sort_dir: ("asc" | "desc") | null;
+            /**
+             * Group Field
+             * @default null
+             */
+            group_field: string | null;
+            /**
+             * Title Field
+             * @default null
+             */
+            title_field: string | null;
+            /**
+             * Page Size
+             * @default null
+             */
+            page_size: number | null;
+            /**
+             * Is Default
+             * @default null
+             */
+            is_default: boolean | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
+            /**
+             * Visibility
+             * @default null
+             */
+            visibility: ("visible" | "hidden") | null;
+        };
         /** AdminFeaturesResponse */
         AdminFeaturesResponse: {
             /**
@@ -4712,7 +5855,8 @@ export interface components {
             /** Key */
             key: string;
             status: components["schemas"]["PluginCapabilityResponse"];
-            manifest?: components["schemas"]["PluginManifestMetadata"] | null;
+            /** @default null */
+            manifest: components["schemas"]["PluginManifestMetadata"] | null;
         };
         /** AdminPluginsResponse */
         AdminPluginsResponse: {
@@ -4756,24 +5900,48 @@ export interface components {
         AdminPublicationResponse: {
             /** Title */
             title: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Authors */
             authors: string;
-            /** Authors Zh */
-            authors_zh?: string | null;
-            /** Journal */
-            journal?: string | null;
-            /** Year */
-            year?: number | null;
-            /** Doi */
-            doi?: string | null;
-            /** Pmid */
-            pmid?: string | null;
-            /** Abstract */
-            abstract?: string | null;
-            /** Abstract Zh */
-            abstract_zh?: string | null;
+            /**
+             * Authors Zh
+             * @default null
+             */
+            authors_zh: string | null;
+            /**
+             * Journal
+             * @default null
+             */
+            journal: string | null;
+            /**
+             * Year
+             * @default null
+             */
+            year: number | null;
+            /**
+             * Doi
+             * @default null
+             */
+            doi: string | null;
+            /**
+             * Pmid
+             * @default null
+             */
+            pmid: string | null;
+            /**
+             * Abstract
+             * @default null
+             */
+            "abstract": string | null;
+            /**
+             * Abstract Zh
+             * @default null
+             */
+            abstract_zh: string | null;
             /**
              * Is Featured
              * @default false
@@ -4806,16 +5974,31 @@ export interface components {
          * @description Allele-frequency query (per locus / gene / interval).
          */
         AlleleFreqRequest: {
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Assembly */
-            assembly?: string | null;
-            /** Chromosome */
-            chromosome?: string | null;
-            /** Start */
-            start?: number | null;
-            /** End */
-            end?: number | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
+            /**
+             * Chromosome
+             * @default null
+             */
+            chromosome: string | null;
+            /**
+             * Start
+             * @default null
+             */
+            start: number | null;
+            /**
+             * End
+             * @default null
+             */
+            end: number | null;
             /**
              * Max Variants
              * @default 10000
@@ -4826,8 +6009,11 @@ export interface components {
         AlleleFreqResponse: {
             /** Source */
             source: string;
-            /** Gene Id */
-            gene_id?: string | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
             /** Assembly */
             assembly: string;
             /** Chromosome */
@@ -4845,6 +6031,14 @@ export interface components {
         AlleleFreqVariant: {
             /** Variant Id */
             variant_id: string;
+            /**
+             * Assembly
+             * @description Assembly namespace the variant was read from.
+             *
+             *     `variant_id` is only unique per (release, assembly); a row that travels
+             *     without its namespace cannot be identified once two scopes meet.
+             */
+            assembly: string;
             /** Chromosome */
             chromosome: string;
             /** Position */
@@ -4860,8 +6054,11 @@ export interface components {
              * @default SNP
              */
             variant_type: string;
-            /** Gene Id */
-            gene_id?: string | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
         };
         /** AnalysesDownloadResponse */
         AnalysesDownloadResponse: {
@@ -4884,10 +6081,16 @@ export interface components {
             job_id: string;
             analysis_type: components["schemas"]["AnalysisType"];
             status: components["schemas"]["AnalysisJobStatus"];
-            /** Error Message */
-            error_message?: string | null;
-            /** Result */
-            result?: {
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
+            /**
+             * Result
+             * @default null
+             */
+            result: {
                 [key: string]: unknown;
             } | null;
             /**
@@ -4926,8 +6129,11 @@ export interface components {
             filename: string;
             /** Size */
             size: number;
-            /** Content Type */
-            content_type?: string | null;
+            /**
+             * Content Type
+             * @default null
+             */
+            content_type: string | null;
             /** Checksum Sha256 */
             checksum_sha256: string;
         };
@@ -5020,6 +6226,217 @@ export interface components {
             /** Events By Day Available */
             events_by_day_available: boolean;
         };
+        /**
+         * AnnotationSection
+         * @description The gene's GO/KEGG section, or the reason it is absent.
+         */
+        AnnotationSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Terms */
+            terms?: components["schemas"]["AnnotationTerm"][];
+            /**
+             * Source Name
+             * @default null
+             */
+            source_name: string | null;
+            /**
+             * Source Version
+             * @default null
+             */
+            source_version: string | null;
+            /**
+             * Source Url
+             * @default null
+             */
+            source_url: string | null;
+        };
+        /**
+         * AnnotationTerm
+         * @description One GO/KEGG assertion with the evidence code its source carried.
+         */
+        AnnotationTerm: {
+            /**
+             * Ontology
+             * @enum {string}
+             */
+            ontology: "go" | "kegg";
+            /** Term Id */
+            term_id: string;
+            /** Term Name */
+            term_name: string;
+            /**
+             * Evidence Code
+             * @default null
+             */
+            evidence_code: string | null;
+            /**
+             * Kind
+             * @default unknown
+             * @enum {string}
+             */
+            kind: "experimental" | "curated" | "predicted" | "transferred" | "imported" | "unknown";
+            /**
+             * Reference
+             * @default null
+             */
+            reference: string | null;
+            /**
+             * Qualifier
+             * @default null
+             */
+            qualifier: string | null;
+        };
+        /**
+         * ArtifactRequest
+         * @description Request to compute an alignment or tree for a family.
+         */
+        ArtifactRequest: {
+            /** Family Id */
+            family_id: number;
+            /**
+             * Artifact Type
+             * @enum {string}
+             */
+            artifact_type: "msa" | "tree";
+            /** Method */
+            method: string;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: number | null;
+        };
+        /**
+         * ArtifactResponse
+         * @description An asynchronous alignment or tree, identified by its job.
+         */
+        ArtifactResponse: {
+            /**
+             * Artifact Type
+             * @enum {string}
+             */
+            artifact_type: "msa" | "tree";
+            /**
+             * Job Id
+             * Format: uuid
+             */
+            job_id: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "running" | "succeeded" | "failed";
+            /** Method */
+            method: string;
+            /** Input Sha256 */
+            input_sha256: string;
+            /** Input Member Ids */
+            input_member_ids?: string[];
+            /**
+             * Download Url
+             * @default null
+             */
+            download_url: string | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
+        };
+        /**
+         * AssemblyDetailResponse
+         * @description One assembly, its counts, and its chromosomes.
+         *
+         *     The chromosome list is what makes "the assembly does not exist" and "the
+         *     assembly exists but has no chromosomes" distinguishable answers rather
+         *     than two identical empty payloads.
+         */
+        AssemblyDetailResponse: {
+            /** Id */
+            id: number | string;
+            /** Name */
+            name: string;
+            /** Species */
+            species: string;
+            /** Version */
+            version: string;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: string | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Release Version
+             * @default null
+             */
+            release_version: string | null;
+            statistics: components["schemas"]["AssemblyStatistics"];
+            /** Chromosomes */
+            chromosomes?: components["schemas"]["ChromosomeResponse"][];
+        };
+        /**
+         * AssemblyMetric
+         * @description One assembly-level statistic, with the reason it is unknown.
+         *
+         *     ``value`` is ``None`` whenever the number could not be derived from the
+         *     authoritative tables, and a machine-readable ``reason`` then says why. It is
+         *     never defaulted to ``0``: an assembly whose annotation was never imported and
+         *     an assembly that genuinely has no genes are different facts, and once both
+         *     are printed as zero nobody can tell them apart. The two fields are mutually
+         *     exclusive on purpose -- a number with a reason ("we did not count it, but
+         *     here it is") would be a contradiction.
+         */
+        AssemblyMetric: {
+            /**
+             * Value
+             * @default null
+             */
+            value: number | null;
+            /** @default null */
+            reason: components["schemas"]["AssemblyMetricReason"] | null;
+        };
+        /**
+         * AssemblyMetricReason
+         * @description Why an assembly statistic has no value.
+         *
+         *     A closed set. The reason reaches the reader as translated text, so it has to
+         *     be a code the client can look up; a sentence written by the service would be
+         *     shown untranslated and cannot be covered by a locale check. Keeping the set
+         *     closed on the server is also what stops a new free-text reason from being
+         *     introduced without a client-side translation.
+         * @enum {string}
+         */
+        AssemblyMetricReason: "no_genes" | "no_chromosomes" | "no_linked_downloads";
         /** AssemblyResponse */
         AssemblyResponse: {
             /** Id */
@@ -5030,17 +6447,106 @@ export interface components {
             species: string;
             /** Version */
             version: string;
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /**
              * Is Default
              * @default false
              */
             is_default: boolean;
-            /** Created At */
-            created_at?: string | null;
-            /** Updated At */
-            updated_at?: string | null;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: string | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: string | null;
+        };
+        /**
+         * AssemblyStatistics
+         * @description Counts derived from real rows, scoped to one assembly.
+         *
+         *     Every number here is a ``COUNT``/``SUM`` over rows that carry an
+         *     ``assembly_id`` of their own. Nothing is read from ``Release.gene_count`` or
+         *     any other denormalised counter: a release owns several assemblies, so a
+         *     release-level total copied onto each assembly would report the whole
+         *     release's genes once per assembly.
+         *
+         *     Each count is an :class:`AssemblyMetric` rather than a bare ``int`` so that
+         *     "we could not count this" survives the trip to the client. A histogram over
+         *     an empty assembly and an assembly whose statistics were never computed both
+         *     used to arrive as ``0``; with the metric shape the second arrives as
+         *     ``{"value": null, "reason": "..."}`` and the page can say so.
+         *
+         *     ``download_count`` is always unknown. ``download_files`` has no assembly
+         *     column -- it is linked to a release and its ``category`` is free text -- so
+         *     there is no relation to aggregate over. Guessing an assembly from a category
+         *     string would invent a number, and borrowing the release's download total
+         *     would be the same mistake as borrowing its gene count.
+         *
+         *     All five fields are required on purpose. A default of ``AssemblyMetric()``
+         *     is ``value=None, reason=None``, which the metric's own validator rejects, so
+         *     a defaulted field could not even be constructed -- and any value that *did*
+         *     construct would be an unstated measurement. Requiring them moves "somebody
+         *     forgot to say" from the reader's guess to a schema error at write time.
+         */
+        AssemblyStatistics: {
+            gene_count: components["schemas"]["AssemblyMetric"];
+            transcript_count: components["schemas"]["AssemblyMetric"];
+            chromosome_count: components["schemas"]["AssemblyMetric"];
+            total_length: components["schemas"]["AssemblyMetric"];
+            download_count: components["schemas"]["AssemblyMetric"];
+        };
+        /**
+         * AssemblySummaryResponse
+         * @description An assembly in the resolved release, with its own real counts.
+         */
+        AssemblySummaryResponse: {
+            /** Id */
+            id: number | string;
+            /** Name */
+            name: string;
+            /** Species */
+            species: string;
+            /** Version */
+            version: string;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: string | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Release Version
+             * @default null
+             */
+            release_version: string | null;
+            statistics: components["schemas"]["AssemblyStatistics"];
         };
         /** BlastDatabaseResponse */
         BlastDatabaseResponse: {
@@ -5059,17 +6565,192 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
-            /** Assembly Name */
-            assembly_name?: string | null;
-            /** Assembly Version */
-            assembly_version?: string | null;
-            /** Assembly Is Default */
-            assembly_is_default?: boolean | null;
-            /** Release Id */
-            release_id?: number | null;
+            /**
+             * Assembly Name
+             * @default null
+             */
+            assembly_name: string | null;
+            /**
+             * Assembly Version
+             * @default null
+             */
+            assembly_version: string | null;
+            /**
+             * Assembly Is Default
+             * @default null
+             */
+            assembly_is_default: boolean | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Engine
+             * @default diamond
+             * @enum {string}
+             */
+            engine: "diamond" | "ncbi_blast";
+            /**
+             * Sequence Type
+             * @default null
+             */
+            sequence_type: ("genome" | "cds" | "transcript" | "protein" | "repeat_masked" | "pan_genome" | "family_consensus" | "custom") | null;
+            /**
+             * Annotation Version
+             * @default null
+             */
+            annotation_version: string | null;
+            /**
+             * Source Url
+             * @default null
+             */
+            source_url: string | null;
+            /**
+             * Sequence Count
+             * @default null
+             */
+            sequence_count: number | null;
+            /**
+             * Total Length
+             * @default null
+             */
+            total_length: number | null;
+            /**
+             * Fasta Sha256
+             * @default null
+             */
+            fasta_sha256: string | null;
+            /**
+             * Index Version
+             * @default null
+             */
+            index_version: string | null;
+            /**
+             * Build Status
+             * @default pending
+             * @enum {string}
+             */
+            build_status: "pending" | "building" | "validating" | "publishing" | "published" | "failed" | "ready";
+            /**
+             * Is Default
+             * @default false
+             */
+            is_default: boolean;
+            /**
+             * License
+             * @default null
+             */
+            license: string | null;
+        };
+        /**
+         * BlastDatabaseStateResponse
+         * @description Narrow acknowledgement of a state toggle.
+         *
+         *     ``BlastDatabaseResponse`` is the public discovery shape: it is scoped to a
+         *     published release and carries catalog metadata. This control-plane reply
+         *     must work for *any* catalog row (including one already disabled, or one in
+         *     another release) and must never expose the worker-local ``file_path``.
+         */
+        BlastDatabaseStateResponse: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Is Active */
+            is_active: boolean;
+        };
+        /**
+         * BlastDatabaseStateUpdate
+         * @description Admin toggle for one published catalog row.
+         *
+         *     The only mutable field is ``is_active``. A published index is immutable:
+         *     disabling it stops *new* searches from selecting it, but never deletes the
+         *     row, rewrites a submitted job, or changes the frozen index identity. The
+         *     request is deliberately narrow (``extra="forbid"``) so a caller cannot
+         *     smuggle in a path, a build state or a name through the same route.
+         */
+        BlastDatabaseStateUpdate: {
+            /** Is Active */
+            is_active: boolean;
+        };
+        /**
+         * BlastGenomeTargetResponse
+         * @description JBrowse target for one BLAST subject, resolved through an explicit relation.
+         *
+         *     ``status == "unresolved"`` carries ``reason`` and no locus: the caller must
+         *     say the mapping is unavailable instead of guessing a genomic coordinate.
+         *     Amino-acid alignment coordinates from blastp/blastx are never used here.
+         */
+        BlastGenomeTargetResponse: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "resolved" | "unresolved";
+            /**
+             * Reason
+             * @default null
+             */
+            reason: ("job_not_completed" | "authorization_failed" | "unsupported_program" | "subject_not_found" | "ambiguous_subject" | "assembly_mismatch" | "no_genomic_coordinates" | "invalid_subject_id") | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Chromosome
+             * @default null
+             */
+            chromosome: string | null;
+            /**
+             * Start
+             * @default null
+             */
+            start: number | null;
+            /**
+             * End
+             * @default null
+             */
+            end: number | null;
+            /**
+             * Strand
+             * @default null
+             */
+            strand: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: number | null;
+            /**
+             * Assembly Name
+             * @default null
+             */
+            assembly_name: string | null;
+            /**
+             * Locus
+             * @default null
+             */
+            locus: string | null;
+            /**
+             * Resolution
+             * @default null
+             */
+            resolution: ("gene_accession" | "gene_alias" | "transcript_id") | null;
         };
         /** BlastHit */
         BlastHit: {
+            /**
+             * Query Id
+             * @default null
+             */
+            query_id: string | null;
             /** Hsp Num */
             hsp_num: number;
             /** Subject Id */
@@ -5109,6 +6790,106 @@ export interface components {
              * @default plus
              */
             subject_strand: string;
+            /**
+             * Genome Resolution
+             * @default null
+             */
+            genome_resolution: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * BlastIndexBuildRequest
+         * @description Admin request to build one immutable NCBI index in a worker.
+         *
+         *     The source FASTA is an object-store key under ``blast-sources/`` that was
+         *     uploaded and reviewed beforehand. No local path, binary name or output
+         *     directory is accepted from a client. Rebuilds create a new catalog row and
+         *     a new content-addressed identity; they never overwrite a published index.
+         */
+        BlastIndexBuildRequest: {
+            /** Source Object Key */
+            source_object_key: string;
+            /**
+             * Db Type
+             * @enum {string}
+             */
+            db_type: "nucl" | "prot";
+            /** Assembly Name */
+            assembly_name: string;
+            /** Annotation Version */
+            annotation_version: string;
+            /** Source Version */
+            source_version: string;
+            /** Source Url */
+            source_url: string;
+            /** License */
+            license: string;
+            /** Name */
+            name: string;
+            /**
+             * Sequence Type
+             * @default genome
+             * @enum {string}
+             */
+            sequence_type: "genome" | "cds" | "transcript" | "protein" | "repeat_masked" | "pan_genome" | "family_consensus" | "custom";
+        };
+        /**
+         * BlastIndexBuildResponse
+         * @description Status of one build; no filesystem path or binary name is exposed.
+         */
+        BlastIndexBuildResponse: {
+            /** Build Id */
+            build_id: string;
+            /** Database Id */
+            database_id: number;
+            /** Name */
+            name: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "pending" | "building" | "validating" | "publishing" | "published" | "failed" | "ready";
+            /**
+             * Db Type
+             * @enum {string}
+             */
+            db_type: "nucl" | "prot";
+            /**
+             * Index Identity
+             * @default null
+             */
+            index_identity: string | null;
+            /**
+             * Sequence Count
+             * @default null
+             */
+            sequence_count: number | null;
+            /**
+             * Total Length
+             * @default null
+             */
+            total_length: number | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Started At
+             * @default null
+             */
+            started_at: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
         };
         /** BlastJobListResponse */
         BlastJobListResponse: {
@@ -5123,16 +6904,28 @@ export interface components {
         };
         /** BlastJobResponse */
         BlastJobResponse: {
+            /**
+             * Engine
+             * @default diamond
+             * @enum {string}
+             */
+            engine: "ncbi_blast" | "diamond";
             /** Job Id */
             job_id: string;
             status: components["schemas"]["BlastJobStatus"];
             program: components["schemas"]["BlastProgram"];
             /** Database Id */
             database_id: number;
-            /** Database */
-            database?: string | null;
-            /** Query Sequence */
-            query_sequence?: string | null;
+            /**
+             * Database
+             * @default null
+             */
+            database: string | null;
+            /**
+             * Query Sequence
+             * @default null
+             */
+            query_sequence: string | null;
             /** Parameters */
             parameters?: {
                 [key: string]: unknown;
@@ -5147,18 +6940,36 @@ export interface components {
              * Format: date-time
              */
             submitted_at: string;
-            /** Started At */
-            started_at?: string | null;
-            /** Completed At */
-            completed_at?: string | null;
-            /** Error Message */
-            error_message?: string | null;
-            /** Result Url */
-            result_url?: string | null;
-            /** Release Id */
-            release_id?: number | null;
-            /** Assembly Name */
-            assembly_name?: string | null;
+            /**
+             * Started At
+             * @default null
+             */
+            started_at: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
+            /**
+             * Result Url
+             * @default null
+             */
+            result_url: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Assembly Name
+             * @default null
+             */
+            assembly_name: string | null;
         };
         /**
          * BlastJobStatus
@@ -5177,29 +6988,45 @@ export interface components {
              * @default 50
              */
             max_target_seqs: number;
-            /** Gap Open */
-            gap_open?: number | null;
-            /** Gap Extend */
-            gap_extend?: number | null;
-            /** Matrix */
-            matrix?: string | null;
-            /** Percent Identity */
-            percent_identity?: number | null;
-            /** Word Size */
-            word_size?: number | null;
-            /** Dust */
-            dust?: boolean | null;
-            /** Soft Masking */
-            soft_masking?: boolean | null;
+            /**
+             * Gap Open
+             * @default null
+             */
+            gap_open: number | null;
+            /**
+             * Gap Extend
+             * @default null
+             */
+            gap_extend: number | null;
+            /**
+             * Matrix
+             * @default null
+             */
+            matrix: string | null;
+            /**
+             * Word Size
+             * @default null
+             */
+            word_size: number | null;
+            /**
+             * Dust
+             * @default null
+             */
+            dust: boolean | null;
+            /**
+             * Soft Masking
+             * @default null
+             */
+            soft_masking: boolean | null;
+            /**
+             * Percent Identity
+             * @default null
+             */
+            percent_identity: number | null;
         };
         /**
          * BlastProgram
-         * @description Every program value that can appear in a *stored* job row.
-         *
-         *     This is a storage/response vocabulary, not a submission contract. The
-         *     search engine is DIAMOND ``blastp`` only; the other values remain here so
-         *     that jobs persisted before the engine was reduced can still be read and
-         *     rendered. :class:`BlastSubmitProgram` is what new requests must use.
+         * @description Program vocabulary shared by stored jobs and current responses.
          * @enum {string}
          */
         BlastProgram: "blastn" | "blastp" | "blastx" | "tblastn" | "tblastx";
@@ -5218,39 +7045,75 @@ export interface components {
             program: components["schemas"]["BlastProgram"];
             /** Database Id */
             database_id: number;
-            /** Query Id */
-            query_id?: string | null;
-            /** Query Len */
-            query_len?: number | null;
-            /** Hits */
-            hits?: components["schemas"]["BlastHit"][] | null;
-            /** Total Hits */
-            total_hits?: number | null;
-            /** Search Stats */
-            search_stats?: {
+            /**
+             * Query Id
+             * @default null
+             */
+            query_id: string | null;
+            /**
+             * Query Len
+             * @default null
+             */
+            query_len: number | null;
+            /**
+             * Hits
+             * @default null
+             */
+            hits: components["schemas"]["BlastHit"][] | null;
+            /**
+             * Total Hits
+             * @default null
+             */
+            total_hits: number | null;
+            /**
+             * Search Stats
+             * @default null
+             */
+            search_stats: {
                 [key: string]: unknown;
             } | null;
-            /** Error Message */
-            error_message?: string | null;
-            /** Completed At */
-            completed_at?: string | null;
-            /** Download Url */
-            download_url?: string | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
+            /**
+             * Download Url
+             * @default null
+             */
+            download_url: string | null;
         };
         /**
          * BlastSubmitProgram
-         * @description The only program this deployment can execute: DIAMOND ``blastp``.
+         * @description Programs supported by the explicit NCBI BLAST+ engine.
          * @enum {string}
          */
-        BlastSubmitProgram: "blastp";
+        BlastSubmitProgram: "blastn" | "blastp" | "blastx" | "tblastn" | "tblastx";
         /** BlastSubmitRequest */
         BlastSubmitRequest: {
+            /**
+             * Engine
+             * @default ncbi_blast
+             * @enum {string}
+             */
+            engine: "ncbi_blast" | "diamond";
             /** @default blastp */
             program: components["schemas"]["BlastSubmitProgram"];
-            /** Database Id */
-            database_id?: number | null;
-            /** Database */
-            database?: string | null;
+            /**
+             * Database Id
+             * @default null
+             */
+            database_id: number | null;
+            /**
+             * Database
+             * @default null
+             */
+            database: string | null;
             /** Query Sequence */
             query_sequence: string;
             parameters?: components["schemas"]["BlastParameters"];
@@ -5373,23 +7236,76 @@ export interface components {
             version: number;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Content En */
             content_en: string;
-            /** Content Zh */
-            content_zh?: string | null;
-            /** Summary */
-            summary?: string | null;
-            /** Edited By */
-            edited_by?: string | null;
-            /** Edit Comment */
-            edit_comment?: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
+            /**
+             * Summary
+             * @default null
+             */
+            summary: string | null;
+            /**
+             * Edited By
+             * @default null
+             */
+            edited_by: string | null;
+            /**
+             * Edit Comment
+             * @default null
+             */
+            edit_comment: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+        };
+        /** ConvertFormatRequest */
+        ConvertFormatRequest: {
+            /** Data */
+            data: string;
+            /**
+             * Source Format
+             * @default fasta
+             * @enum {string}
+             */
+            source_format: "fasta" | "genbank" | "embl" | "tab";
+            /**
+             * Target Format
+             * @default genbank
+             * @enum {string}
+             */
+            target_format: "fasta" | "genbank" | "embl" | "tab";
+            /**
+             * Max Records
+             * @default 100
+             */
+            max_records: number;
+        };
+        /** ConvertFormatResponse */
+        ConvertFormatResponse: {
+            /** Source Format */
+            source_format: string;
+            /** Target Format */
+            target_format: string;
+            /** Record Count */
+            record_count: number;
+            /** Total Records */
+            total_records: number;
+            /** Limited */
+            limited: boolean;
+            /** Output */
+            output: string;
+            engine: components["schemas"]["EngineMetadata"];
         };
         /**
          * CrossVersionLink
@@ -5405,12 +7321,21 @@ export interface components {
         CrossVersionLink: {
             /** Gene Accession */
             gene_accession: string;
-            /** Assembly Id */
-            assembly_id?: number | null;
-            /** Assembly Name */
-            assembly_name?: string | null;
-            /** Assembly Version */
-            assembly_version?: string | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: number | null;
+            /**
+             * Assembly Name
+             * @default null
+             */
+            assembly_name: string | null;
+            /**
+             * Assembly Version
+             * @default null
+             */
+            assembly_version: string | null;
             /** Relation Type */
             relation_type: string;
             /** Provenance Source */
@@ -5432,8 +7357,11 @@ export interface components {
             total_users: number;
             /** Assemblies Count */
             assemblies_count: number;
-            /** Current Release */
-            current_release?: string | null;
+            /**
+             * Current Release
+             * @default null
+             */
+            current_release: string | null;
             /**
              * Last Updated
              * Format: date-time
@@ -5462,6 +7390,28 @@ export interface components {
              */
             patch_type: "set" | "clear" | "format";
         };
+        /**
+         * DataViewSourceInfo
+         * @description The vocabulary the console uses to build view editors.
+         */
+        DataViewSourceInfo: {
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "genes" | "variants" | "mutant_lines";
+            /** Fields */
+            fields: string[];
+            /** Filter Fields */
+            filter_fields: string[];
+            /** Default Fields */
+            default_fields: string[];
+        };
+        /** DataViewSourceListResponse */
+        DataViewSourceListResponse: {
+            /** Items */
+            items: components["schemas"]["DataViewSourceInfo"][];
+        };
         /** DatabaseCapabilitiesResponse */
         DatabaseCapabilitiesResponse: {
             /**
@@ -5488,8 +7438,11 @@ export interface components {
             checksum_sha256: string;
             /** Source */
             source: string;
-            /** License */
-            license?: string | null;
+            /**
+             * License
+             * @default null
+             */
+            license: string | null;
             /**
              * Mime Type
              * @default application/octet-stream
@@ -5509,8 +7462,11 @@ export interface components {
             source_objects?: {
                 [key: string]: unknown;
             }[];
-            /** Module Key */
-            module_key?: string | null;
+            /**
+             * Module Key
+             * @default null
+             */
+            module_key: string | null;
         };
         /** DatasetVersionResponse */
         DatasetVersionResponse: {
@@ -5531,8 +7487,11 @@ export interface components {
             checksum_sha256: string;
             /** Source */
             source: string;
-            /** License */
-            license?: string | null;
+            /**
+             * License
+             * @default null
+             */
+            license: string | null;
             /** Mime Type */
             mime_type: string;
             /** Row Count */
@@ -5543,16 +7502,25 @@ export interface components {
             source_objects: {
                 [key: string]: unknown;
             }[];
-            /** Manifest */
-            manifest?: {
+            /**
+             * Manifest
+             * @default null
+             */
+            manifest: {
                 [key: string]: unknown;
             } | null;
             /** Status */
             status: string;
-            /** Created At */
-            created_at?: unknown | null;
-            /** Updated At */
-            updated_at?: unknown | null;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: unknown | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: unknown | null;
         };
         /**
          * DeletedNewsListResponse
@@ -5577,16 +7545,25 @@ export interface components {
             id: string;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Slug */
             slug: string;
-            /** Category */
-            category?: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
             /** @default draft */
             status: components["schemas"]["NewsStatus"];
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -5632,18 +7609,36 @@ export interface components {
          *     window for plotting.
          */
         DiversityRequest: {
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Assembly */
-            assembly?: string | null;
-            /** Chromosome */
-            chromosome?: string | null;
-            /** Start */
-            start?: number | null;
-            /** End */
-            end?: number | null;
-            /** Sample Size */
-            sample_size?: number | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
+            /**
+             * Chromosome
+             * @default null
+             */
+            chromosome: string | null;
+            /**
+             * Start
+             * @default null
+             */
+            start: number | null;
+            /**
+             * End
+             * @default null
+             */
+            end: number | null;
+            /**
+             * Sample Size
+             * @default null
+             */
+            sample_size: number | null;
             /**
              * Window Size
              * @default 0
@@ -5654,8 +7649,11 @@ export interface components {
         DiversityResponse: {
             /** Source */
             source: string;
-            /** Gene Id */
-            gene_id?: string | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
             /** Assembly */
             assembly: string;
             /** Chromosome */
@@ -5676,8 +7674,11 @@ export interface components {
             pi_per_site: number | null;
             /** Theta */
             theta: number | null;
-            /** Windows */
-            windows?: components["schemas"]["DiversityWindow"][] | null;
+            /**
+             * Windows
+             * @default null
+             */
+            windows: components["schemas"]["DiversityWindow"][] | null;
         };
         /** DiversityWindow */
         DiversityWindow: {
@@ -5698,14 +7699,23 @@ export interface components {
             id: string;
             /** Name */
             name: string;
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /** File Url */
             file_url: string;
-            /** File Size */
-            file_size?: number | null;
-            /** Category */
-            category?: string | null;
+            /**
+             * File Size
+             * @default null
+             */
+            file_size: number | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
             /**
              * Download Count
              * @default 0
@@ -5716,6 +7726,41 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /**
+             * Sha256
+             * @default null
+             */
+            sha256: string | null;
+            /**
+             * License
+             * @default null
+             */
+            license: string | null;
+            /**
+             * Generated At
+             * @default null
+             */
+            generated_at: string | null;
+            /**
+             * Source Ref
+             * @default null
+             */
+            source_ref: string | null;
+        };
+        /**
+         * EngineMetadata
+         * @description Implementation identity; distinct from a biological data release.
+         */
+        EngineMetadata: {
+            /** Engine */
+            engine: string;
+            /** Engine Version */
+            engine_version: string;
+            /**
+             * Request Id
+             * @default null
+             */
+            request_id: string | null;
         };
         /**
          * EnrichmentGseaResponse
@@ -5751,8 +7796,9 @@ export interface components {
             /**
              * Message
              * @description Explanatory note, e.g. when no term passes min_genes
+             * @default null
              */
-            message?: string | null;
+            message: string | null;
             /** Assembly Id */
             assembly_id: number;
             /** Release Id */
@@ -5842,8 +7888,9 @@ export interface components {
             /**
              * Values
              * @description Per-gene numeric values (e.g. log2 fold-changes) used to rank genes in 'gsea' mode; required there and must align with 'genes' 1:1
+             * @default null
              */
-            values?: number[] | null;
+            values: number[] | null;
             /**
              * Ontology
              * @description Annotation source: 'go' or 'kegg'
@@ -5904,8 +7951,9 @@ export interface components {
             /**
              * Message
              * @description Explanatory note, e.g. when no input gene has annotations
+             * @default null
              */
-            message?: string | null;
+            message: string | null;
             /** Assembly Id */
             assembly_id: number;
             /** Release Id */
@@ -6049,6 +8097,19 @@ export interface components {
                 };
             };
         };
+        /**
+         * EvidenceTag
+         * @description Provenance of one displayed assertion.
+         */
+        EvidenceTag: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "experimental" | "curated" | "predicted" | "transferred" | "imported" | "unknown";
+            /** Source */
+            source: string;
+        };
         /** ExonResponse */
         ExonResponse: {
             /** Id */
@@ -6078,8 +8139,9 @@ export interface components {
             /**
              * Conditions
              * @description Expression library names to use as matrix columns; defaults to all libraries (max 200).
+             * @default null
              */
-            conditions?: string[] | null;
+            conditions: string[] | null;
             /**
              * Cluster Rows
              * @description Reorder matrix rows by clustering (hierarchical when SciPy is available, otherwise mean-expression sort).
@@ -6153,6 +8215,127 @@ export interface components {
             expires_in_seconds: number;
         };
         /**
+         * ExportManifestResponse
+         * @description Citable provenance for a produced variant-export artifact.
+         *
+         *     The manifest mirrors the owner-visible status record but adds the byte
+         *     identity and licence. ``sha256`` is ``None`` when the artifact predates
+         *     checksum recording; a client must not display that as a valid digest.
+         *     ``filters`` carries only the public, non-secret filter keys the submitter
+         *     set — never the worker-only resolved mutant-line name or any internal id.
+         *     The top-level ``assembly_key`` is likewise server-resolved (the one
+         *     assembly namespace the artifact was built from), not a client-supplied
+         *     filter value.
+         */
+        ExportManifestResponse: {
+            /** Export Id */
+            export_id: string;
+            /** Status */
+            status: string;
+            /** Format */
+            format: string;
+            /** Release Key */
+            release_key: string;
+            /**
+             * Assembly Key
+             * @default null
+             */
+            assembly_key: string | null;
+            /**
+             * Record Count
+             * @default null
+             */
+            record_count: number | null;
+            /**
+             * File Size
+             * @default null
+             */
+            file_size: number | null;
+            /**
+             * Sha256
+             * @default null
+             */
+            sha256: string | null;
+            /**
+             * Sha256 State
+             * @description 'recorded' when sha256 is a real digest; 'not_recorded' when the artifact was produced before checksum recording shipped.
+             * @default recorded
+             */
+            sha256_state: string;
+            /**
+             * License
+             * @default null
+             */
+            license: string | null;
+            /**
+             * Generated At
+             * @default null
+             */
+            generated_at: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
+            /**
+             * Expires At
+             * @default null
+             */
+            expires_at: string | null;
+            /** Filters */
+            filters?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * ExportQueryRequest
+         * @description A whitelisted filter set for one variant-export artifact.
+         *
+         *     ``extra='forbid'`` is the core of the contract: an unknown key is a 422,
+         *     not a parameter that quietly vanishes. Release/assembly are resolved by
+         *     the server from the published release context, never trusted from the
+         *     body as a provenance claim.
+         */
+        ExportQueryRequest: {
+            /**
+             * Format
+             * @default tsv
+             */
+            format: string;
+            /**
+             * Compress
+             * @default true
+             */
+            compress: boolean;
+            /** Filters */
+            filters?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * ExportQueryResponse
+         * @description The durable export record the query builder submitted.
+         *
+         *     ``applied_filters`` echoes exactly what was accepted. There is no
+         *     "unsupported filters" echo: an unknown or unbacked filter is a 422, so a
+         *     successful response cannot have carried one, and a field that is always
+         *     empty would invite a client to read it as "the rest was ignored".
+         */
+        ExportQueryResponse: {
+            /** Export Id */
+            export_id: string;
+            /** Status */
+            status: string;
+            /** Message */
+            message: string;
+            /** Format */
+            format: string;
+            /** Applied Filters */
+            applied_filters?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
          * ExportRequest
          * @description Payload for requesting an asynchronous variant export.
          */
@@ -6199,25 +8382,92 @@ export interface components {
             format: string;
             /** Release Key */
             release_key: string;
-            /** Assembly Key */
-            assembly_key?: string | null;
-            /** Record Count */
-            record_count?: number | null;
-            /** File Size */
-            file_size?: number | null;
-            /** Error Message */
-            error_message?: string | null;
+            /**
+             * Assembly Key
+             * @default null
+             */
+            assembly_key: string | null;
+            /**
+             * Record Count
+             * @default null
+             */
+            record_count: number | null;
+            /**
+             * File Size
+             * @default null
+             */
+            file_size: number | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-            /** Started At */
-            started_at?: string | null;
-            /** Completed At */
-            completed_at?: string | null;
-            /** Expires At */
-            expires_at?: string | null;
+            /**
+             * Started At
+             * @default null
+             */
+            started_at: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
+            /**
+             * Expires At
+             * @default null
+             */
+            expires_at: string | null;
+        };
+        /**
+         * ExpressionRecord
+         * @description One expression measurement. Absent values stay absent, never 0.
+         */
+        ExpressionRecord: {
+            /** Library Id */
+            library_id: string;
+            /** Library Name */
+            library_name: string;
+            /**
+             * Tissue
+             * @default null
+             */
+            tissue: string | null;
+            /**
+             * Treatment
+             * @default null
+             */
+            treatment: string | null;
+            /**
+             * Stage
+             * @default null
+             */
+            stage: string | null;
+            /**
+             * Tpm
+             * @default null
+             */
+            tpm: number | null;
+            /**
+             * Fpkm
+             * @default null
+             */
+            fpkm: number | null;
+            /**
+             * Raw Count
+             * @default null
+             */
+            raw_count: number | null;
+        };
+        /** ExpressionSection */
+        ExpressionSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Records */
+            records?: components["schemas"]["ExpressionRecord"][];
         };
         /**
          * ExternalArticlePlatform
@@ -6251,8 +8501,147 @@ export interface components {
             content_html: string;
             /** Source Preview Token */
             source_preview_token: string;
-            /** Source Published At */
-            source_published_at?: string | null;
+            /**
+             * Source Published At
+             * @default null
+             */
+            source_published_at: string | null;
+        };
+        /**
+         * FamilyDetailResponse
+         * @description A family with its members and per-species coverage.
+         *
+         *     ``coverage`` names every species the release knows about for this family,
+         *     including species with no row (``state="no_data"``), so a presence/absence
+         *     view can be drawn without the client inventing the missing species.
+         */
+        FamilyDetailResponse: {
+            /** Family Id */
+            family_id: number;
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "gene_family" | "gene_subfamily";
+            /** External Id */
+            external_id: string;
+            /** Name */
+            name: string;
+            /** Method */
+            method: string;
+            /**
+             * Method Version
+             * @default null
+             */
+            method_version: string | null;
+            /** Source Name */
+            source_name: string;
+            /** Source Version */
+            source_version: string;
+            /** Source Url */
+            source_url: string;
+            /** Release Id */
+            release_id: number;
+            /** Assembly Id */
+            assembly_id: number;
+            /**
+             * Member Count
+             * @default 0
+             */
+            member_count: number;
+            evidence: components["schemas"]["EvidenceTag"];
+            /** Members */
+            members?: components["schemas"]["FamilyMemberResponse"][];
+            /** Coverage */
+            coverage?: components["schemas"]["SpeciesCoverageResponse"][];
+            /** Relationship Types */
+            relationship_types?: string[];
+        };
+        /** FamilyListResponse */
+        FamilyListResponse: {
+            /** Items */
+            items?: components["schemas"]["FamilyResponse"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Page
+             * @default 1
+             */
+            page: number;
+            /**
+             * Page Size
+             * @default 20
+             */
+            page_size: number;
+        };
+        /** FamilyMemberResponse */
+        FamilyMemberResponse: {
+            /** Gene Accession */
+            gene_accession: string;
+            /** Species */
+            species: string;
+            /**
+             * Relationship Type
+             * @enum {string}
+             */
+            relationship_type: "one_to_one" | "one_to_many" | "many_to_many";
+            /**
+             * Method
+             * @default null
+             */
+            method: string | null;
+            /**
+             * Confidence
+             * @default null
+             */
+            confidence: number | null;
+            /**
+             * Evidence
+             * @default null
+             */
+            evidence: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /** FamilyResponse */
+        FamilyResponse: {
+            /** Family Id */
+            family_id: number;
+            /**
+             * Level
+             * @enum {string}
+             */
+            level: "gene_family" | "gene_subfamily";
+            /** External Id */
+            external_id: string;
+            /** Name */
+            name: string;
+            /** Method */
+            method: string;
+            /**
+             * Method Version
+             * @default null
+             */
+            method_version: string | null;
+            /** Source Name */
+            source_name: string;
+            /** Source Version */
+            source_version: string;
+            /** Source Url */
+            source_url: string;
+            /** Release Id */
+            release_id: number;
+            /** Assembly Id */
+            assembly_id: number;
+            /**
+             * Member Count
+             * @default 0
+             */
+            member_count: number;
+            evidence: components["schemas"]["EvidenceTag"];
         };
         /** FeatureDefinitionResponse */
         FeatureDefinitionResponse: {
@@ -6320,32 +8709,71 @@ export interface components {
          * @description Variant-specific, plain-text footer content and visible navigation.
          */
         FooterContentResponse: {
-            /** Contact Person */
-            contact_person?: string | null;
-            /** Contact Phone */
-            contact_phone?: string | null;
-            /** Contact Email */
-            contact_email?: string | null;
-            /** Copyright */
-            copyright?: string | null;
-            /** Address */
-            address?: string | null;
-            /** Contact Person En */
-            contact_person_en?: string | null;
-            /** Contact Person Zh */
-            contact_person_zh?: string | null;
-            /** Contact Phone Value */
-            contact_phone_value?: string | null;
-            /** Contact Email Value */
-            contact_email_value?: string | null;
-            /** Address En */
-            address_en?: string | null;
-            /** Address Zh */
-            address_zh?: string | null;
-            /** Copyright En */
-            copyright_en?: string | null;
-            /** Copyright Zh */
-            copyright_zh?: string | null;
+            /**
+             * Contact Person
+             * @default null
+             */
+            contact_person: string | null;
+            /**
+             * Contact Phone
+             * @default null
+             */
+            contact_phone: string | null;
+            /**
+             * Contact Email
+             * @default null
+             */
+            contact_email: string | null;
+            /**
+             * Copyright
+             * @default null
+             */
+            copyright: string | null;
+            /**
+             * Address
+             * @default null
+             */
+            address: string | null;
+            /**
+             * Contact Person En
+             * @default null
+             */
+            contact_person_en: string | null;
+            /**
+             * Contact Person Zh
+             * @default null
+             */
+            contact_person_zh: string | null;
+            /**
+             * Contact Phone Value
+             * @default null
+             */
+            contact_phone_value: string | null;
+            /**
+             * Contact Email Value
+             * @default null
+             */
+            contact_email_value: string | null;
+            /**
+             * Address En
+             * @default null
+             */
+            address_en: string | null;
+            /**
+             * Address Zh
+             * @default null
+             */
+            address_zh: string | null;
+            /**
+             * Copyright En
+             * @default null
+             */
+            copyright_en: string | null;
+            /**
+             * Copyright Zh
+             * @default null
+             */
+            copyright_zh: string | null;
             /** Navigation */
             navigation?: components["schemas"]["FooterNavigationGroup"][];
         };
@@ -6390,22 +8818,85 @@ export interface components {
             /** Order */
             order: number;
         };
+        /**
+         * FormatInspectRequest
+         * @description Bounded raw bytes as a list of integers (no file paths / URLs).
+         */
+        FormatInspectRequest: {
+            /**
+             * Fmt
+             * @enum {string}
+             */
+            fmt: "fasta" | "fastq" | "bed";
+            /**
+             * Data
+             * @description Base64-encoded file content, ≤1 MiB
+             */
+            data: string;
+        };
+        /** FormatInspectResponse */
+        FormatInspectResponse: {
+            /**
+             * Fmt
+             * @enum {string}
+             */
+            fmt: "fasta" | "fastq" | "bed";
+            /** Valid */
+            valid: boolean;
+            /** Record Count */
+            record_count: number;
+            /** Truncated */
+            truncated: boolean;
+            /** Records */
+            records?: {
+                [key: string]: unknown;
+            }[];
+            engine: components["schemas"]["EngineMetadata"];
+        };
         /** GeneDetail */
         GeneDetail: {
-            /** Id */
-            id?: string | null;
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Assembly Id */
-            assembly_id?: string | null;
-            /** Assembly Name */
-            assembly_name?: string | null;
+            /**
+             * Id
+             * @default null
+             */
+            id: string | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: string | null;
+            /**
+             * Assembly Name
+             * @default null
+             */
+            assembly_name: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: string | null;
+            /**
+             * Release Name
+             * @default null
+             */
+            release_name: string | null;
             /** Chromosome */
             chromosome: string;
-            /** Name */
-            name?: string | null;
-            /** Symbol */
-            symbol?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * Symbol
+             * @default null
+             */
+            symbol: string | null;
             /**
              * Biotype
              * @default protein_coding
@@ -6420,8 +8911,11 @@ export interface components {
             /** End Pos */
             end_pos: number;
             strand: components["schemas"]["Strand"];
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /**
              * Variant Count
              * @default 0
@@ -6431,17 +8925,42 @@ export interface components {
             transcripts?: components["schemas"]["TranscriptResponse"][];
             /** Aliases */
             aliases?: string[];
-            /** Created At */
-            created_at?: string | null;
-            /** Updated At */
-            updated_at?: string | null;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: string | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: string | null;
+            /** Sequences */
+            sequences?: components["schemas"]["SequenceAvailability"][];
+            /** @default null */
+            model_evidence: components["schemas"]["EvidenceTag"] | null;
+            /** @default null */
+            annotation_section: components["schemas"]["AnnotationSection"] | null;
+            /** @default null */
+            homolog_section: components["schemas"]["HomologSection"] | null;
+            /** @default null */
+            expression_section: components["schemas"]["ExpressionSection"] | null;
+            /** @default null */
+            variants_section: components["schemas"]["VariantSection"] | null;
+            /** @default null */
+            phenotype_section: components["schemas"]["PhenotypeSection"] | null;
+            /** @default null */
+            literature_section: components["schemas"]["LiteratureSection"] | null;
         };
         /** GeneListResponse */
         GeneListResponse: {
             /** Items */
             items?: components["schemas"]["GeneResponse"][];
-            /** Next Cursor */
-            next_cursor?: string | null;
+            /**
+             * Next Cursor
+             * @default null
+             */
+            next_cursor: string | null;
             /**
              * Has More
              * @default false
@@ -6470,20 +8989,48 @@ export interface components {
         };
         /** GeneResponse */
         GeneResponse: {
-            /** Id */
-            id?: string | null;
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Assembly Id */
-            assembly_id?: string | null;
-            /** Assembly Name */
-            assembly_name?: string | null;
+            /**
+             * Id
+             * @default null
+             */
+            id: string | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: string | null;
+            /**
+             * Assembly Name
+             * @default null
+             */
+            assembly_name: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: string | null;
+            /**
+             * Release Name
+             * @default null
+             */
+            release_name: string | null;
             /** Chromosome */
             chromosome: string;
-            /** Name */
-            name?: string | null;
-            /** Symbol */
-            symbol?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * Symbol
+             * @default null
+             */
+            symbol: string | null;
             /**
              * Biotype
              * @default protein_coding
@@ -6498,8 +9045,11 @@ export interface components {
             /** End Pos */
             end_pos: number;
             strand: components["schemas"]["Strand"];
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /**
              * Variant Count
              * @default 0
@@ -6541,10 +9091,16 @@ export interface components {
              * @default false
              */
             ambiguous: boolean;
-            /** Cursor */
-            cursor?: string | null;
-            /** Next Cursor */
-            next_cursor?: string | null;
+            /**
+             * Cursor
+             * @default null
+             */
+            cursor: string | null;
+            /**
+             * Next Cursor
+             * @default null
+             */
+            next_cursor: string | null;
             /**
              * Has More
              * @default false
@@ -6580,14 +9136,26 @@ export interface components {
              * Format: date-time
              */
             submitted_at: string;
-            /** Started At */
-            started_at?: string | null;
-            /** Completed At */
-            completed_at?: string | null;
-            /** Error Message */
-            error_message?: string | null;
-            /** Result */
-            result?: {
+            /**
+             * Started At
+             * @default null
+             */
+            started_at: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
+            /**
+             * Result
+             * @default null
+             */
+            result: {
                 [key: string]: unknown;
             } | null;
         };
@@ -6617,20 +9185,41 @@ export interface components {
             job_id: string;
             method: components["schemas"]["GwasMethod"];
             status: components["schemas"]["GwasJobStatus"];
-            /** Manhattan Url */
-            manhattan_url?: string | null;
-            /** Qq Url */
-            qq_url?: string | null;
-            /** Report Url */
-            report_url?: string | null;
-            /** Assoc Url */
-            assoc_url?: string | null;
-            /** N Variants */
-            n_variants?: number | null;
-            /** Error Message */
-            error_message?: string | null;
-            /** Completed At */
-            completed_at?: string | null;
+            /**
+             * Manhattan Url
+             * @default null
+             */
+            manhattan_url: string | null;
+            /**
+             * Qq Url
+             * @default null
+             */
+            qq_url: string | null;
+            /**
+             * Report Url
+             * @default null
+             */
+            report_url: string | null;
+            /**
+             * Assoc Url
+             * @default null
+             */
+            assoc_url: string | null;
+            /**
+             * N Variants
+             * @default null
+             */
+            n_variants: number | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
+            /**
+             * Completed At
+             * @default null
+             */
+            completed_at: string | null;
         };
         /** GwasSubmitRequest */
         GwasSubmitRequest: {
@@ -6639,12 +9228,21 @@ export interface components {
             object_type: components["schemas"]["GwasFileType"];
             /** Phenotype Object Key */
             phenotype_object_key: string;
-            /** Genotype Object Key */
-            genotype_object_key?: string | null;
-            /** Kinship Object Key */
-            kinship_object_key?: string | null;
-            /** Covariate Object Key */
-            covariate_object_key?: string | null;
+            /**
+             * Genotype Object Key
+             * @default null
+             */
+            genotype_object_key: string | null;
+            /**
+             * Kinship Object Key
+             * @default null
+             */
+            kinship_object_key: string | null;
+            /**
+             * Covariate Object Key
+             * @default null
+             */
+            covariate_object_key: string | null;
             /** Params */
             params?: {
                 [key: string]: unknown;
@@ -6675,6 +9273,52 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * HeaderNavigationGroup
+         * @description A bilingual group rendered as one dropdown (or direct link).
+         */
+        HeaderNavigationGroup: {
+            /** Id */
+            id: string;
+            /** Title En */
+            title_en: string;
+            /** Title Zh */
+            title_zh: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Order */
+            order: number;
+            /** Links */
+            links: components["schemas"]["HeaderNavigationLink"][];
+        };
+        /**
+         * HeaderNavigationLink
+         * @description One editable, bilingual primary-navigation destination.
+         */
+        HeaderNavigationLink: {
+            /** Id */
+            id: string;
+            /** Label En */
+            label_en: string;
+            /** Label Zh */
+            label_zh: string;
+            /**
+             * Target
+             * @enum {string}
+             */
+            target: "internal" | "external";
+            /** Href */
+            href: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Order */
+            order: number;
+            /**
+             * Feature
+             * @default null
+             */
+            feature: string | null;
+        };
+        /**
          * HomeContentResponse
          * @description Editable homepage welcome block backed by ``system_settings``.
          *
@@ -6683,10 +9327,16 @@ export interface components {
          *     settings API can never serve untrusted markup.
          */
         HomeContentResponse: {
-            /** Welcome En */
-            welcome_en?: string | null;
-            /** Welcome Zh */
-            welcome_zh?: string | null;
+            /**
+             * Welcome En
+             * @default null
+             */
+            welcome_en: string | null;
+            /**
+             * Welcome Zh
+             * @default null
+             */
+            welcome_zh: string | null;
         };
         /**
          * HomepageStats
@@ -6738,10 +9388,58 @@ export interface components {
              * @default 0
              */
             seed_accessions: number;
-            /** Last Release Date */
-            last_release_date?: string | null;
-            /** Last Release Name */
-            last_release_name?: string | null;
+            /**
+             * Last Release Date
+             * @default null
+             */
+            last_release_date: string | null;
+            /**
+             * Last Release Name
+             * @default null
+             */
+            last_release_name: string | null;
+        };
+        /**
+         * HomologRecord
+         * @description One ortholog/paralog assertion, with cross-assembly context.
+         */
+        HomologRecord: {
+            /** Homolog Species */
+            homolog_species: string;
+            /** Homolog Gene Id */
+            homolog_gene_id: string;
+            /**
+             * Homolog Type
+             * @enum {string}
+             */
+            homolog_type: "ortholog" | "paralog";
+            /**
+             * Method
+             * @default null
+             */
+            method: string | null;
+            /**
+             * Source
+             * @default null
+             */
+            source: string | null;
+            /**
+             * Kind
+             * @default transferred
+             * @enum {string}
+             */
+            kind: "experimental" | "curated" | "predicted" | "transferred" | "imported" | "unknown";
+            /**
+             * Confidence
+             * @default null
+             */
+            confidence: number | null;
+        };
+        /** HomologSection */
+        HomologSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Records */
+            records?: components["schemas"]["HomologRecord"][];
         };
         /**
          * ImpactLevel
@@ -6763,8 +9461,11 @@ export interface components {
         };
         /** ImportCommitRequest */
         ImportCommitRequest: {
-            /** Page Id */
-            page_id?: string | null;
+            /**
+             * Page Id
+             * @default null
+             */
+            page_id: string | null;
             /**
              * Source Id
              * @default dataset
@@ -6795,24 +9496,51 @@ export interface components {
              * @enum {string}
              */
             type: "vcf" | "gff3" | "fasta" | "blast_db" | "seed_data" | "expression_csv" | "homolog_csv" | "module_tsv";
-            /** File Path */
-            file_path?: string | null;
-            /** Object Key */
-            object_key?: string | null;
-            /** Data Set Id */
-            data_set_id?: number | null;
-            /** Release Id */
-            release_id?: number | null;
-            /** Assembly */
-            assembly?: string | null;
-            /** Module Key */
-            module_key?: string | null;
-            /** Schema Version */
-            schema_version?: number | null;
-            /** Checksum */
-            checksum?: string | null;
-            /** Import Draft Id */
-            import_draft_id?: string | null;
+            /**
+             * File Path
+             * @default null
+             */
+            file_path: string | null;
+            /**
+             * Object Key
+             * @default null
+             */
+            object_key: string | null;
+            /**
+             * Data Set Id
+             * @default null
+             */
+            data_set_id: number | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
+            /**
+             * Module Key
+             * @default null
+             */
+            module_key: string | null;
+            /**
+             * Schema Version
+             * @default null
+             */
+            schema_version: number | null;
+            /**
+             * Checksum
+             * @default null
+             */
+            checksum: string | null;
+            /**
+             * Import Draft Id
+             * @default null
+             */
+            import_draft_id: string | null;
             /** Idempotency Key */
             idempotency_key: string;
         };
@@ -6823,8 +9551,11 @@ export interface components {
              * Format: uuid
              */
             dataset_version_id: string;
-            /** Module Key */
-            module_key?: string | null;
+            /**
+             * Module Key
+             * @default null
+             */
+            module_key: string | null;
             /** Row Count */
             row_count: number;
             /** Column Count */
@@ -6842,8 +9573,11 @@ export interface components {
              * Format: uuid
              */
             dataset_version_id: string;
-            /** Module Key */
-            module_key?: string | null;
+            /**
+             * Module Key
+             * @default null
+             */
+            module_key: string | null;
             /** Filename */
             filename: string;
             /** Row Count */
@@ -6852,8 +9586,11 @@ export interface components {
             column_count: number;
             /** Status */
             status: string;
-            /** Updated At */
-            updated_at?: unknown | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: unknown | null;
         };
         /** ImportDraftResponse */
         ImportDraftResponse: {
@@ -6867,8 +9604,11 @@ export interface components {
              * Format: uuid
              */
             dataset_version_id: string;
-            /** Module Key */
-            module_key?: string | null;
+            /**
+             * Module Key
+             * @default null
+             */
+            module_key: string | null;
             /** Filename */
             filename: string;
             /** Object Key */
@@ -6877,8 +9617,11 @@ export interface components {
             checksum_sha256: string;
             /** Source */
             source: string;
-            /** License */
-            license?: string | null;
+            /**
+             * License
+             * @default null
+             */
+            license: string | null;
             /** Mime Type */
             mime_type: string;
             /** Row Count */
@@ -6895,19 +9638,31 @@ export interface components {
             };
             /** Status */
             status: string;
-            /** Committed At */
-            committed_at?: unknown | null;
-            /** Created At */
-            created_at?: unknown | null;
-            /** Updated At */
-            updated_at?: unknown | null;
+            /**
+             * Committed At
+             * @default null
+             */
+            committed_at: unknown | null;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: unknown | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: unknown | null;
         };
         /** ImportInspectionErrorResponse */
         ImportInspectionErrorResponse: {
             /** Code */
             code: string;
-            /** Row */
-            row?: number | null;
+            /**
+             * Row
+             * @default null
+             */
+            row: number | null;
             /** Message */
             message: string;
         };
@@ -6932,12 +9687,21 @@ export interface components {
             filename: string;
             /** Format */
             format: string;
-            /** Encoding */
-            encoding?: string | null;
-            /** Delimiter */
-            delimiter?: string | null;
-            /** Sheet Name */
-            sheet_name?: string | null;
+            /**
+             * Encoding
+             * @default null
+             */
+            encoding: string | null;
+            /**
+             * Delimiter
+             * @default null
+             */
+            delimiter: string | null;
+            /**
+             * Sheet Name
+             * @default null
+             */
+            sheet_name: string | null;
             /** Headers */
             headers?: string[];
             /** Row Count */
@@ -6963,7 +9727,12 @@ export interface components {
         };
         /**
          * ImportThroughputPoint
-         * @description Daily import task throughput (success vs. failure).
+         * @description Daily import task throughput.
+         *
+         *     ``imported`` and ``failed`` are the terminal outcomes. ``running`` counts
+         *     every task of that day that is still queued or executing: the first version
+         *     of this aggregate dropped them silently, so a day whose tasks had not
+         *     finished yet looked like a day with no imports at all.
          */
         ImportThroughputPoint: {
             /** Date */
@@ -6978,6 +9747,11 @@ export interface components {
              * @default 0
              */
             failed: number;
+            /**
+             * Running
+             * @default 0
+             */
+            running: number;
         };
         /** ImportValidationRequest */
         ImportValidationRequest: {
@@ -6987,8 +9761,21 @@ export interface components {
             column_count: number;
             /** Field Mapping */
             field_mapping?: components["schemas"]["FieldMappingItem"][];
-            /** Module Key */
-            module_key?: string | null;
+            /**
+             * Module Key
+             * @default null
+             */
+            module_key: string | null;
+        };
+        /** InlineTarget */
+        InlineTarget: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "inline";
+            /** Sequence */
+            sequence: string;
         };
         /** InternalGeneSearchItem */
         InternalGeneSearchItem: {
@@ -6998,18 +9785,30 @@ export interface components {
             gene_id: string;
             /** Internal Id */
             internal_id: string;
-            /** Name */
-            name?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
             /** Matched Field */
             matched_field: string;
             /** @default text */
             match_type: components["schemas"]["MatchType"];
-            /** Assembly Id */
-            assembly_id?: number | null;
-            /** Release Id */
-            release_id?: number | null;
-            /** Url */
-            url?: string | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: number | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Url
+             * @default null
+             */
+            url: string | null;
         };
         /**
          * InternalMutantSearchItem
@@ -7033,10 +9832,16 @@ export interface components {
             match_type: components["schemas"]["MatchType"];
             /** Is Public */
             is_public: boolean;
-            /** Release Id */
-            release_id?: number | null;
-            /** Url */
-            url?: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Url
+             * @default null
+             */
+            url: string | null;
         };
         /** InternalSearchResponse */
         InternalSearchResponse: {
@@ -7052,12 +9857,81 @@ export interface components {
              */
             total_count: number;
         };
+        /** IntervalRegion */
+        IntervalRegion: {
+            /**
+             * Start
+             * @description 1-based inclusive start
+             */
+            start: number;
+            /**
+             * End
+             * @description 1-based inclusive end
+             */
+            end: number;
+        };
+        /** KmerItem */
+        KmerItem: {
+            /** Kmer */
+            kmer: string;
+            /** Count */
+            count: number;
+        };
+        /** KmerRequest */
+        KmerRequest: {
+            /** Sequence */
+            sequence: string;
+            /**
+             * K
+             * @default 4
+             */
+            k: number;
+            /**
+             * Canonical
+             * @default true
+             */
+            canonical: boolean;
+            /**
+             * Ambiguity Policy
+             * @default skip
+             * @enum {string}
+             */
+            ambiguity_policy: "skip" | "reject";
+            /**
+             * Max Items
+             * @default 1000
+             */
+            max_items: number;
+        };
+        /** KmerResponse */
+        KmerResponse: {
+            /** K */
+            k: number;
+            /** Canonical */
+            canonical: boolean;
+            /** Total Windows */
+            total_windows: number;
+            /** Valid Windows */
+            valid_windows: number;
+            /** Skipped Windows */
+            skipped_windows: number;
+            /** Distinct Kmers */
+            distinct_kmers: number;
+            /** Items */
+            items: components["schemas"]["KmerItem"][];
+            /** Limited */
+            limited: boolean;
+            engine: components["schemas"]["EngineMetadata"];
+        };
         /** LayoutResponse */
         LayoutResponse: {
             /** Page Name */
             page_name: string;
-            /** Display Name */
-            display_name?: string | null;
+            /**
+             * Display Name
+             * @default null
+             */
+            display_name: string | null;
             /** Widgets */
             widgets?: components["schemas"]["WidgetDescriptor"][];
         };
@@ -7065,10 +9939,16 @@ export interface components {
         LayoutUpdateRequest: {
             /** Widget Order */
             widget_order?: string[];
-            /** Display Name */
-            display_name?: string | null;
-            /** Is Active */
-            is_active?: boolean | null;
+            /**
+             * Display Name
+             * @default null
+             */
+            display_name: string | null;
+            /**
+             * Is Active
+             * @default null
+             */
+            is_active: boolean | null;
         };
         /**
          * LdRequest
@@ -7082,24 +9962,43 @@ export interface components {
          *     returned for plotting).
          */
         LdRequest: {
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Assembly */
-            assembly?: string | null;
-            /** Chromosome */
-            chromosome?: string | null;
-            /** Start */
-            start?: number | null;
-            /** End */
-            end?: number | null;
-            genotypes?: components["schemas"]["GenotypeMatrix"] | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
+            /**
+             * Chromosome
+             * @default null
+             */
+            chromosome: string | null;
+            /**
+             * Start
+             * @default null
+             */
+            start: number | null;
+            /**
+             * End
+             * @default null
+             */
+            end: number | null;
+            /** @default null */
+            genotypes: components["schemas"]["GenotypeMatrix"] | null;
         };
         /** LdResponse */
         LdResponse: {
             /** Source */
             source: string;
-            /** Gene Id */
-            gene_id?: string | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
             /** Assembly */
             assembly: string;
             /** Chromosome */
@@ -7112,12 +10011,21 @@ export interface components {
             n_variants: number;
             /** Variants */
             variants: components["schemas"]["LdVariant"][];
-            /** R Squared */
-            r_squared?: number[][] | null;
-            /** Note */
-            note?: string | null;
-            /** Details */
-            details?: {
+            /**
+             * R Squared
+             * @default null
+             */
+            r_squared: number[][] | null;
+            /**
+             * Note
+             * @default null
+             */
+            note: string | null;
+            /**
+             * Details
+             * @default null
+             */
+            details: {
                 [key: string]: unknown;
             } | null;
         };
@@ -7125,6 +10033,11 @@ export interface components {
         LdVariant: {
             /** Variant Id */
             variant_id: string;
+            /**
+             * Assembly
+             * @description Assembly namespace the variant was read from (see AlleleFreqVariant).
+             */
+            assembly: string;
             /** Chromosome */
             chromosome: string;
             /** Position */
@@ -7133,6 +10046,45 @@ export interface components {
             ref_allele: string;
             /** Alt Allele */
             alt_allele: string;
+        };
+        /**
+         * LiteratureRecord
+         * @description One publication, identified by DOI/PMID rather than its row key.
+         */
+        LiteratureRecord: {
+            /** Title */
+            title: string;
+            /**
+             * Authors
+             * @default null
+             */
+            authors: string | null;
+            /**
+             * Journal
+             * @default null
+             */
+            journal: string | null;
+            /**
+             * Year
+             * @default null
+             */
+            year: number | null;
+            /**
+             * Doi
+             * @default null
+             */
+            doi: string | null;
+            /**
+             * Pmid
+             * @default null
+             */
+            pmid: string | null;
+        };
+        /** LiteratureSection */
+        LiteratureSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Records */
+            records?: components["schemas"]["LiteratureRecord"][];
         };
         /** LocalTestPreviewMeta */
         LocalTestPreviewMeta: {
@@ -7176,15 +10128,17 @@ export interface components {
             /**
              * Username
              * @description Email address or username
+             * @default null
              * @example researcher@univ.edu
              */
-            username?: string | null;
+            username: string | null;
             /**
              * Email
              * @description Email address (alternative to ``username``)
+             * @default null
              * @example researcher@univ.edu
              */
-            email?: string | null;
+            email: string | null;
             /**
              * Password
              * @example S3cureP@ss!
@@ -7196,8 +10150,11 @@ export interface components {
          * @description Mark a subset of notifications read (``ids``) or all of them (``all``).
          */
         MarkReadRequest: {
-            /** Ids */
-            ids?: string[] | null;
+            /**
+             * Ids
+             * @default null
+             */
+            ids: string[] | null;
             /**
              * All
              * @default false
@@ -7211,6 +10168,29 @@ export interface components {
         MarkReadResponse: {
             /** Marked */
             marked: number;
+        };
+        /** MatchHit */
+        MatchHit: {
+            /**
+             * Start
+             * @description 1-based inclusive start
+             */
+            start: number;
+            /**
+             * End
+             * @description 1-based inclusive end
+             */
+            end: number;
+            /**
+             * Strand
+             * @enum {string}
+             */
+            strand: "+" | "-";
+            /**
+             * Edit Distance
+             * @default 0
+             */
+            edit_distance: number;
         };
         /**
          * MatchType
@@ -7272,16 +10252,31 @@ export interface components {
             size_bytes: number;
             /** Checksum Sha256 */
             checksum_sha256: string;
-            /** Width */
-            width?: number | null;
-            /** Height */
-            height?: number | null;
-            /** Alt Text */
-            alt_text?: string | null;
-            /** Caption */
-            caption?: string | null;
-            /** Credit */
-            credit?: string | null;
+            /**
+             * Width
+             * @default null
+             */
+            width: number | null;
+            /**
+             * Height
+             * @default null
+             */
+            height: number | null;
+            /**
+             * Alt Text
+             * @default null
+             */
+            alt_text: string | null;
+            /**
+             * Caption
+             * @default null
+             */
+            caption: string | null;
+            /**
+             * Credit
+             * @default null
+             */
+            credit: string | null;
             /**
              * Is Decorative
              * @default false
@@ -7293,10 +10288,16 @@ export interface components {
              * Format: uuid
              */
             uploaded_by: string;
-            /** Verified At */
-            verified_at?: string | null;
-            /** Archived At */
-            archived_at?: string | null;
+            /**
+             * Verified At
+             * @default null
+             */
+            verified_at: string | null;
+            /**
+             * Archived At
+             * @default null
+             */
+            archived_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -7323,14 +10324,84 @@ export interface components {
          * @description Editable accessibility metadata; object identity is immutable.
          */
         MediaAssetUpdateRequest: {
-            /** Alt Text */
-            alt_text?: string | null;
-            /** Caption */
-            caption?: string | null;
-            /** Credit */
-            credit?: string | null;
-            /** Is Decorative */
-            is_decorative?: boolean | null;
+            /**
+             * Alt Text
+             * @default null
+             */
+            alt_text: string | null;
+            /**
+             * Caption
+             * @default null
+             */
+            caption: string | null;
+            /**
+             * Credit
+             * @default null
+             */
+            credit: string | null;
+            /**
+             * Is Decorative
+             * @default null
+             */
+            is_decorative: boolean | null;
+        };
+        /** MeltingTempRequest */
+        MeltingTempRequest: {
+            /** Sequence */
+            sequence: string;
+            /**
+             * Method
+             * @default nearest_neighbor
+             * @enum {string}
+             */
+            method: "wallace" | "gc" | "nearest_neighbor";
+            /**
+             * Dna Conc Nm
+             * @default 50
+             */
+            dna_conc_nm: number;
+            /**
+             * Salt Conc Mm
+             * @default 50
+             */
+            salt_conc_mm: number;
+        };
+        /** MeltingTempResponse */
+        MeltingTempResponse: {
+            /** Method */
+            method: string;
+            /** Length */
+            length: number;
+            /** Gc Fraction */
+            gc_fraction: number;
+            /** Melting Temp C */
+            melting_temp_c: number;
+            /** Dna Conc Nm */
+            dna_conc_nm: number;
+            /** Salt Conc Mm */
+            salt_conc_mm: number;
+            engine: components["schemas"]["EngineMetadata"];
+        };
+        /**
+         * MemberComparisonResponse
+         * @description Two families side by side: shared and unique members.
+         *
+         *     ``shared`` is set intersection of gene accessions; ``only_left`` /
+         *     ``only_right`` are the differences. Species coverage is reported per side so
+         *     a species missing from one family is visible as ``no_data``, not as "absent
+         *     from the comparison".
+         */
+        MemberComparisonResponse: {
+            left: components["schemas"]["FamilyResponse"];
+            right: components["schemas"]["FamilyResponse"];
+            /** Shared */
+            shared?: components["schemas"]["FamilyMemberResponse"][];
+            /** Only Left */
+            only_left?: components["schemas"]["FamilyMemberResponse"][];
+            /** Only Right */
+            only_right?: components["schemas"]["FamilyMemberResponse"][];
+            /** Coverage */
+            coverage?: components["schemas"]["SpeciesCoverageResponse"][];
         };
         /** MultipartCompletePathRequest */
         MultipartCompletePathRequest: {
@@ -7338,8 +10409,11 @@ export interface components {
             object_key: string;
             /** Parts */
             parts: components["schemas"]["MultipartPart"][];
-            /** Sha256 */
-            sha256?: string | null;
+            /**
+             * Sha256
+             * @default null
+             */
+            sha256: string | null;
         };
         /** MultipartPart */
         MultipartPart: {
@@ -7364,8 +10438,46 @@ export interface components {
              * @default application/octet-stream
              */
             content_type: string;
-            /** Data Set Id */
-            data_set_id?: number | null;
+            /**
+             * Data Set Id
+             * @default null
+             */
+            data_set_id: number | null;
+        };
+        /** MultipleAlignmentRequest */
+        MultipleAlignmentRequest: {
+            /** Sequences */
+            sequences: string[];
+            /**
+             * Alphabet
+             * @default dna
+             * @enum {string}
+             */
+            alphabet: "dna" | "rna" | "protein";
+            /**
+             * Mode
+             * @default global
+             * @enum {string}
+             */
+            mode: "local" | "global" | "semiglobal";
+        };
+        /** MultipleAlignmentResponse */
+        MultipleAlignmentResponse: {
+            /** Aligned Sequences */
+            aligned_sequences: string[];
+            /** Column Count */
+            column_count: number;
+            /** Sequence Count */
+            sequence_count: number;
+            /** Method */
+            method: string;
+            /** Mode */
+            mode: string;
+            /** Distance Matrix */
+            distance_matrix: number[][];
+            /** Identity Matrix */
+            identity_matrix: number[][];
+            engine: components["schemas"]["EngineMetadata"];
         };
         /**
          * MutagenCount
@@ -7389,8 +10501,11 @@ export interface components {
             public_id: string;
             /** Name */
             name: string;
-            /** Mutagen */
-            mutagen?: string | null;
+            /**
+             * Mutagen
+             * @default null
+             */
+            mutagen: string | null;
             /**
              * Cultivar
              * @default Williams 82
@@ -7406,12 +10521,21 @@ export interface components {
              * @default Glycine max
              */
             species: string;
-            /** Description */
-            description?: string | null;
-            /** Generation */
-            generation?: string | null;
-            /** Phenotype Summary */
-            phenotype_summary?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
+            /**
+             * Generation
+             * @default null
+             */
+            generation: string | null;
+            /**
+             * Phenotype Summary
+             * @default null
+             */
+            phenotype_summary: string | null;
             /**
              * Is Public
              * @default true
@@ -7440,8 +10564,11 @@ export interface components {
             public_id: string;
             /** Name */
             name: string;
-            /** Mutagen */
-            mutagen?: string | null;
+            /**
+             * Mutagen
+             * @default null
+             */
+            mutagen: string | null;
             /**
              * Cultivar
              * @default Williams 82
@@ -7457,29 +10584,50 @@ export interface components {
         NewsCreate: {
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Content En */
             content_en: string;
-            /** Content Zh */
-            content_zh?: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
             /** Slug */
             slug: string;
-            /** Category */
-            category?: string | null;
-            /** Cover Url */
-            cover_url?: string | null;
-            /** Cover Asset Id */
-            cover_asset_id?: string | null;
-            /** Cover Alt Text */
-            cover_alt_text?: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Cover Url
+             * @default null
+             */
+            cover_url: string | null;
+            /**
+             * Cover Asset Id
+             * @default null
+             */
+            cover_asset_id: string | null;
+            /**
+             * Cover Alt Text
+             * @default null
+             */
+            cover_alt_text: string | null;
             /**
              * Featured Sort
              * @default 0
              */
             featured_sort: number;
-            /** Carousel Group */
-            carousel_group?: string | null;
+            /**
+             * Carousel Group
+             * @default null
+             */
+            carousel_group: string | null;
             /**
              * Carousel Sort
              * @default 0
@@ -7487,17 +10635,26 @@ export interface components {
             carousel_sort: number;
             /** @default draft */
             status: components["schemas"]["NewsStatus"];
-            /** Visible From */
-            visible_from?: string | null;
-            /** Visible To */
-            visible_to?: string | null;
+            /**
+             * Visible From
+             * @default null
+             */
+            visible_from: string | null;
+            /**
+             * Visible To
+             * @default null
+             */
+            visible_to: string | null;
             /**
              * Is Published
              * @default false
              */
             is_published: boolean;
-            /** Source Preview Token */
-            source_preview_token?: string | null;
+            /**
+             * Source Preview Token
+             * @default null
+             */
+            source_preview_token: string | null;
         };
         /**
          * NewsDetailResponse
@@ -7508,25 +10665,43 @@ export interface components {
             id: string;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Slug */
             slug: string;
-            /** Category */
-            category?: string | null;
-            /** Cover Url */
-            cover_url?: string | null;
-            /** Cover Asset Id */
-            cover_asset_id?: string | null;
-            /** Cover Alt Text */
-            cover_alt_text?: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Cover Url
+             * @default null
+             */
+            cover_url: string | null;
+            /**
+             * Cover Asset Id
+             * @default null
+             */
+            cover_asset_id: string | null;
+            /**
+             * Cover Alt Text
+             * @default null
+             */
+            cover_alt_text: string | null;
             /**
              * Featured Sort
              * @default 0
              */
             featured_sort: number;
-            /** Carousel Group */
-            carousel_group?: string | null;
+            /**
+             * Carousel Group
+             * @default null
+             */
+            carousel_group: string | null;
             /**
              * Carousel Sort
              * @default 0
@@ -7539,8 +10714,11 @@ export interface components {
              * @default false
              */
             is_published: boolean;
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -7553,19 +10731,38 @@ export interface components {
             updated_at: string;
             /** Content En */
             content_en: string;
-            /** Content Zh */
-            content_zh?: string | null;
-            /** Visible From */
-            visible_from?: string | null;
-            /** Visible To */
-            visible_to?: string | null;
-            source_platform?: components["schemas"]["ExternalArticlePlatform"] | null;
-            /** Source Url */
-            source_url?: string | null;
-            /** Source Published At */
-            source_published_at?: string | null;
-            /** Source Synced At */
-            source_synced_at?: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
+            /**
+             * Visible From
+             * @default null
+             */
+            visible_from: string | null;
+            /**
+             * Visible To
+             * @default null
+             */
+            visible_to: string | null;
+            /** @default null */
+            source_platform: components["schemas"]["ExternalArticlePlatform"] | null;
+            /**
+             * Source Url
+             * @default null
+             */
+            source_url: string | null;
+            /**
+             * Source Published At
+             * @default null
+             */
+            source_published_at: string | null;
+            /**
+             * Source Synced At
+             * @default null
+             */
+            source_synced_at: string | null;
         };
         /**
          * NewsFeaturedResponse
@@ -7614,16 +10811,25 @@ export interface components {
             id: string;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Slug */
             slug: string;
-            /** Category */
-            category?: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
             /** Is Published */
             is_published: boolean;
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -7649,25 +10855,43 @@ export interface components {
             id: string;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Slug */
             slug: string;
-            /** Category */
-            category?: string | null;
-            /** Cover Url */
-            cover_url?: string | null;
-            /** Cover Asset Id */
-            cover_asset_id?: string | null;
-            /** Cover Alt Text */
-            cover_alt_text?: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Cover Url
+             * @default null
+             */
+            cover_url: string | null;
+            /**
+             * Cover Asset Id
+             * @default null
+             */
+            cover_asset_id: string | null;
+            /**
+             * Cover Alt Text
+             * @default null
+             */
+            cover_alt_text: string | null;
             /**
              * Featured Sort
              * @default 0
              */
             featured_sort: number;
-            /** Carousel Group */
-            carousel_group?: string | null;
+            /**
+             * Carousel Group
+             * @default null
+             */
+            carousel_group: string | null;
             /**
              * Carousel Sort
              * @default 0
@@ -7680,8 +10904,11 @@ export interface components {
              * @default false
              */
             is_published: boolean;
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -7695,39 +10922,88 @@ export interface components {
         };
         /** NewsUpdate */
         NewsUpdate: {
-            /** Title En */
-            title_en?: string | null;
-            /** Title Zh */
-            title_zh?: string | null;
-            /** Content En */
-            content_en?: string | null;
-            /** Content Zh */
-            content_zh?: string | null;
-            /** Slug */
-            slug?: string | null;
-            /** Category */
-            category?: string | null;
-            /** Cover Url */
-            cover_url?: string | null;
-            /** Cover Asset Id */
-            cover_asset_id?: string | null;
-            /** Cover Alt Text */
-            cover_alt_text?: string | null;
-            /** Featured Sort */
-            featured_sort?: number | null;
-            /** Carousel Group */
-            carousel_group?: string | null;
-            /** Carousel Sort */
-            carousel_sort?: number | null;
-            status?: components["schemas"]["NewsStatus"] | null;
-            /** Visible From */
-            visible_from?: string | null;
-            /** Visible To */
-            visible_to?: string | null;
-            /** Is Published */
-            is_published?: boolean | null;
-            /** Source Preview Token */
-            source_preview_token?: string | null;
+            /**
+             * Title En
+             * @default null
+             */
+            title_en: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
+            /**
+             * Content En
+             * @default null
+             */
+            content_en: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
+            /**
+             * Slug
+             * @default null
+             */
+            slug: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Cover Url
+             * @default null
+             */
+            cover_url: string | null;
+            /**
+             * Cover Asset Id
+             * @default null
+             */
+            cover_asset_id: string | null;
+            /**
+             * Cover Alt Text
+             * @default null
+             */
+            cover_alt_text: string | null;
+            /**
+             * Featured Sort
+             * @default null
+             */
+            featured_sort: number | null;
+            /**
+             * Carousel Group
+             * @default null
+             */
+            carousel_group: string | null;
+            /**
+             * Carousel Sort
+             * @default null
+             */
+            carousel_sort: number | null;
+            /** @default null */
+            status: components["schemas"]["NewsStatus"] | null;
+            /**
+             * Visible From
+             * @default null
+             */
+            visible_from: string | null;
+            /**
+             * Visible To
+             * @default null
+             */
+            visible_to: string | null;
+            /**
+             * Is Published
+             * @default null
+             */
+            is_published: boolean | null;
+            /**
+             * Source Preview Token
+             * @default null
+             */
+            source_preview_token: string | null;
             /**
              * Clear Source Provenance
              * @default false
@@ -7759,10 +11035,16 @@ export interface components {
             title: string;
             /** Body */
             body: string;
-            /** Link */
-            link?: string | null;
-            /** Read At */
-            read_at?: string | null;
+            /**
+             * Link
+             * @default null
+             */
+            link: string | null;
+            /**
+             * Read At
+             * @default null
+             */
+            read_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -7778,8 +11060,11 @@ export interface components {
             source: string;
             /** Target */
             target: string;
-            /** Label */
-            label?: string | null;
+            /**
+             * Label
+             * @default null
+             */
+            label: string | null;
         };
         /**
          * OntologyRelationshipGraphNode
@@ -7788,8 +11073,11 @@ export interface components {
         OntologyRelationshipGraphNode: {
             /** Iri */
             iri: string;
-            /** Label */
-            label?: string | null;
+            /**
+             * Label
+             * @default null
+             */
+            label: string | null;
             /**
              * Is Obsolete
              * @default false
@@ -7819,8 +11107,11 @@ export interface components {
         OntologySearchResponse: {
             /** Query */
             query: string;
-            /** Ontology */
-            ontology?: string | null;
+            /**
+             * Ontology
+             * @default null
+             */
+            ontology: string | null;
             /** Count */
             count: number;
             /** Items */
@@ -7828,14 +11119,23 @@ export interface components {
         };
         /** OntologySearchResult */
         OntologySearchResult: {
-            /** Term Id */
-            term_id?: string | null;
-            /** Label */
-            label?: string | null;
+            /**
+             * Term Id
+             * @default null
+             */
+            term_id: string | null;
+            /**
+             * Label
+             * @default null
+             */
+            label: string | null;
             /** Iri */
             iri: string;
-            /** Ontology Name */
-            ontology_name?: string | null;
+            /**
+             * Ontology Name
+             * @default null
+             */
+            ontology_name: string | null;
             /** Description */
             description?: string[];
             /** Synonyms */
@@ -7850,10 +11150,16 @@ export interface components {
         OntologyTermResponse: {
             /** Iri */
             iri: string;
-            /** Label */
-            label?: string | null;
-            /** Ontology Name */
-            ontology_name?: string | null;
+            /**
+             * Label
+             * @default null
+             */
+            label: string | null;
+            /**
+             * Ontology Name
+             * @default null
+             */
+            ontology_name: string | null;
             /** Description */
             description?: string[];
             /** Synonyms */
@@ -7867,6 +11173,185 @@ export interface components {
             parents?: string[];
             /** Children */
             children?: string[];
+        };
+        /** OrfCandidate */
+        OrfCandidate: {
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /**
+             * Strand
+             * @enum {string}
+             */
+            strand: "+" | "-";
+            /** Frame */
+            frame: number;
+        };
+        /** OrfRequest */
+        OrfRequest: {
+            /** Sequence */
+            sequence: string;
+            /**
+             * Min Len
+             * @default 90
+             */
+            min_len: number;
+            /**
+             * Limit
+             * @default 1000
+             */
+            limit: number;
+        };
+        /** OrfResponse */
+        OrfResponse: {
+            /** Candidates */
+            candidates: components["schemas"]["OrfCandidate"][];
+            /** Count */
+            count: number;
+            engine: components["schemas"]["EngineMetadata"];
+        };
+        /**
+         * OrthologRecord
+         * @description One directional ortholog/paralog assertion.
+         *
+         *     ``similarity`` deliberately does not appear: a BLAST hit is a similarity
+         *     measurement, not an orthology assignment, and this record exists only for
+         *     rows the source itself classified.
+         */
+        OrthologRecord: {
+            /** Gene Accession */
+            gene_accession: string;
+            /**
+             * Counterpart Species
+             * @default null
+             */
+            counterpart_species: string | null;
+            /** Counterpart Gene Id */
+            counterpart_gene_id: string;
+            /**
+             * Homolog Type
+             * @enum {string}
+             */
+            homolog_type: "ortholog" | "paralog";
+            /**
+             * Relationship Type
+             * @enum {string}
+             */
+            relationship_type: "one_to_one" | "one_to_many" | "many_to_many";
+            /**
+             * Method
+             * @default null
+             */
+            method: string | null;
+            /**
+             * Source
+             * @default null
+             */
+            source: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Confidence
+             * @default null
+             */
+            confidence: number | null;
+            evidence: components["schemas"]["EvidenceTag"];
+        };
+        /** OrthologResponse */
+        OrthologResponse: {
+            /** Gene Id */
+            gene_id: string;
+            /** Assembly Id */
+            assembly_id: number;
+            /** Release Id */
+            release_id: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "available" | "no_data" | "not_imported";
+            /** Records */
+            records?: components["schemas"]["OrthologRecord"][];
+        };
+        /** OverlapHit */
+        OverlapHit: {
+            /** Public Id */
+            public_id: string;
+            /** Start */
+            start: number;
+            /** End */
+            end: number;
+            /** Overlap Bp */
+            overlap_bp: number;
+            /** Source */
+            source: string;
+        };
+        /** OverlapQueryResult */
+        OverlapQueryResult: {
+            query: components["schemas"]["IntervalRegion"];
+            /** Overlap Count */
+            overlap_count: number;
+            /** Covered Bp */
+            covered_bp: number;
+            /**
+             * Hits
+             * @default null
+             */
+            hits: components["schemas"]["OverlapHit"][] | null;
+            /** Limited */
+            limited: boolean;
+        };
+        /** OverlapRequest */
+        OverlapRequest: {
+            /** Assembly */
+            assembly: string;
+            /** Reference Name */
+            reference_name: string;
+            /** Regions */
+            regions: components["schemas"]["IntervalRegion"][];
+            /**
+             * Coordinate System
+             * @default 1-based-inclusive
+             * @constant
+             */
+            coordinate_system: "1-based-inclusive";
+            /**
+             * Annotation Type
+             * @default gene
+             * @constant
+             */
+            annotation_type: "gene";
+            /**
+             * Mode
+             * @default hits
+             * @enum {string}
+             */
+            mode: "hits" | "count";
+            /**
+             * Max Hits
+             * @default 100
+             */
+            max_hits: number;
+        };
+        /** OverlapResponse */
+        OverlapResponse: {
+            /** Assembly */
+            assembly: string;
+            /** Release */
+            release: string;
+            /**
+             * Coordinate System
+             * @default 1-based-inclusive
+             * @constant
+             */
+            coordinate_system: "1-based-inclusive";
+            /** Queries */
+            queries: components["schemas"]["OverlapQueryResult"][];
+            engine: components["schemas"]["EngineMetadata"];
         };
         /** PageDefinitionCreate */
         PageDefinitionCreate: {
@@ -7964,8 +11449,11 @@ export interface components {
             definition: {
                 [key: string]: unknown;
             };
-            /** Edit Comment */
-            edit_comment?: string | null;
+            /**
+             * Edit Comment
+             * @default null
+             */
+            edit_comment: string | null;
         };
         /** PageDefinitionVersionResponse */
         PageDefinitionVersionResponse: {
@@ -7986,12 +11474,21 @@ export interface components {
             definition: {
                 [key: string]: unknown;
             };
-            /** Edited By */
-            edited_by?: string | null;
-            /** Edit Comment */
-            edit_comment?: string | null;
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Edited By
+             * @default null
+             */
+            edited_by: string | null;
+            /**
+             * Edit Comment
+             * @default null
+             */
+            edit_comment: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -8014,8 +11511,11 @@ export interface components {
             key: string;
             /** Label */
             label: string;
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /**
              * Category
              * @default general
@@ -8025,8 +11525,11 @@ export interface components {
             definition: {
                 [key: string]: unknown;
             };
-            /** Preview Image Id */
-            preview_image_id?: string | null;
+            /**
+             * Preview Image Id
+             * @default null
+             */
+            preview_image_id: string | null;
             /**
              * Sort Order
              * @default 0
@@ -8081,20 +11584,38 @@ export interface components {
         };
         /** PageTemplateUpdate */
         PageTemplateUpdate: {
-            /** Label */
-            label?: string | null;
-            /** Description */
-            description?: string | null;
-            /** Category */
-            category?: string | null;
-            /** Definition */
-            definition?: {
+            /**
+             * Label
+             * @default null
+             */
+            label: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Definition
+             * @default null
+             */
+            definition: {
                 [key: string]: unknown;
             } | null;
-            /** Preview Image Id */
-            preview_image_id?: string | null;
-            /** Sort Order */
-            sort_order?: number | null;
+            /**
+             * Preview Image Id
+             * @default null
+             */
+            preview_image_id: string | null;
+            /**
+             * Sort Order
+             * @default null
+             */
+            sort_order: number | null;
         };
         /** PageTemplateValidationResponse */
         PageTemplateValidationResponse: {
@@ -8119,6 +11640,35 @@ export interface components {
             new_password: string;
         };
         /**
+         * PhenotypeRecord
+         * @description One phenotype observation linked to the gene through a mutant line.
+         */
+        PhenotypeRecord: {
+            /** Mutant Public Id */
+            mutant_public_id: string;
+            /** Mutant Name */
+            mutant_name: string;
+            /** Trait Category */
+            trait_category: string;
+            /** Trait Name */
+            trait_name: string;
+            /**
+             * Trait Value
+             * @default null
+             */
+            trait_value: string | null;
+            /**
+             * Unit
+             * @default null
+             */
+            unit: string | null;
+            /**
+             * Measurement Method
+             * @default null
+             */
+            measurement_method: string | null;
+        };
+        /**
          * PhenotypeResponse
          * @description Public representation of a phenotype observation.
          */
@@ -8131,12 +11681,27 @@ export interface components {
             trait_category: string;
             /** Trait Name */
             trait_name: string;
-            /** Trait Value */
-            trait_value?: string | null;
-            /** Unit */
-            unit?: string | null;
-            /** Description */
-            description?: string | null;
+            /**
+             * Trait Value
+             * @default null
+             */
+            trait_value: string | null;
+            /**
+             * Unit
+             * @default null
+             */
+            unit: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
+        };
+        /** PhenotypeSection */
+        PhenotypeSection: {
+            status: components["schemas"]["SectionStatus"];
+            /** Records */
+            records?: components["schemas"]["PhenotypeRecord"][];
         };
         /** PluginApiCompatibility */
         PluginApiCompatibility: {
@@ -8147,8 +11712,11 @@ export interface components {
         };
         /** PluginCapabilityResponse */
         PluginCapabilityResponse: {
-            /** Version */
-            version?: string | null;
+            /**
+             * Version
+             * @default null
+             */
+            version: string | null;
             /**
              * Installed
              * @default false
@@ -8169,12 +11737,18 @@ export interface components {
              * @default false
              */
             healthy: boolean;
-            /** Public Url */
-            public_url?: string | null;
+            /**
+             * Public Url
+             * @default null
+             */
+            public_url: string | null;
             /** Assemblies */
             assemblies?: string[];
-            /** Reason */
-            reason?: string | null;
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
         };
         /** PluginHealthcheck */
         PluginHealthcheck: {
@@ -8366,12 +11940,21 @@ export interface components {
             feature: string;
             /** Available */
             available: boolean;
-            /** Gene V2 */
-            gene_v2?: string | null;
-            /** Gene V4 */
-            gene_v4?: string | null;
-            /** Gene Dn53 */
-            gene_dn53?: string | null;
+            /**
+             * Gene V2
+             * @default null
+             */
+            gene_v2: string | null;
+            /**
+             * Gene V4
+             * @default null
+             */
+            gene_v4: string | null;
+            /**
+             * Gene Dn53
+             * @default null
+             */
+            gene_dn53: string | null;
         };
         /** PreviewMutationSiteSearchResponse */
         PreviewMutationSiteSearchResponse: {
@@ -8449,11 +12032,52 @@ export interface components {
             /** Url */
             url: string;
         };
+        /** ProteinPropertiesRequest */
+        ProteinPropertiesRequest: {
+            /** Protein */
+            protein: string;
+        };
+        /** ProteinPropertiesResponse */
+        ProteinPropertiesResponse: {
+            /** Length */
+            length: number;
+            /** Molecular Weight */
+            molecular_weight: number;
+            /** Isoelectric Point */
+            isoelectric_point: number;
+            /** Aromaticity */
+            aromaticity: number;
+            /** Instability Index */
+            instability_index: number;
+            /** Gravy */
+            gravy: number;
+            /** Extinction Coefficient */
+            extinction_coefficient: number[];
+            /** Amino Acid Composition */
+            amino_acid_composition: {
+                [key: string]: number;
+            };
+            engine: components["schemas"]["EngineMetadata"];
+        };
+        /**
+         * PublicBlastSubmission
+         * @description The capability is returned once; send it only in X-Blast-Token.
+         */
+        PublicBlastSubmission: {
+            job: components["schemas"]["BlastJobResponse"];
+            /** Access Token */
+            access_token: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+        };
         /** PublicCapabilitiesResponse */
         PublicCapabilitiesResponse: {
             /**
              * Version
-             * @default 2
+             * @default 3
              */
             version: number;
             /** Features */
@@ -8465,6 +12089,7 @@ export interface components {
                 [key: string]: components["schemas"]["PluginCapabilityResponse"];
             };
             databases?: components["schemas"]["DatabaseCapabilitiesResponse"];
+            sequence: components["schemas"]["SequenceCapabilitiesResponse"];
         };
         /**
          * PublicPageDefinitionResponse
@@ -8485,24 +12110,48 @@ export interface components {
         PublicationCreate: {
             /** Title */
             title: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Authors */
             authors: string;
-            /** Authors Zh */
-            authors_zh?: string | null;
-            /** Journal */
-            journal?: string | null;
-            /** Year */
-            year?: number | null;
-            /** Doi */
-            doi?: string | null;
-            /** Pmid */
-            pmid?: string | null;
-            /** Abstract */
-            abstract?: string | null;
-            /** Abstract Zh */
-            abstract_zh?: string | null;
+            /**
+             * Authors Zh
+             * @default null
+             */
+            authors_zh: string | null;
+            /**
+             * Journal
+             * @default null
+             */
+            journal: string | null;
+            /**
+             * Year
+             * @default null
+             */
+            year: number | null;
+            /**
+             * Doi
+             * @default null
+             */
+            doi: string | null;
+            /**
+             * Pmid
+             * @default null
+             */
+            pmid: string | null;
+            /**
+             * Abstract
+             * @default null
+             */
+            "abstract": string | null;
+            /**
+             * Abstract Zh
+             * @default null
+             */
+            abstract_zh: string | null;
             /**
              * Is Featured
              * @default false
@@ -8538,18 +12187,27 @@ export interface components {
             manifest: {
                 [key: string]: unknown;
             };
-            /** Published At */
-            published_at?: unknown | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: unknown | null;
         };
         /** PublicationRequest */
         PublicationRequest: {
             target: components["schemas"]["PublicationTarget"];
             /** Release Id */
             release_id: number;
-            /** Page Definition Version */
-            page_definition_version?: number | null;
-            /** Build Artifact Url */
-            build_artifact_url?: string | null;
+            /**
+             * Page Definition Version
+             * @default null
+             */
+            page_definition_version: number | null;
+            /**
+             * Build Artifact Url
+             * @default null
+             */
+            build_artifact_url: string | null;
         };
         /** PublicationRollbackRequest */
         PublicationRollbackRequest: {
@@ -8584,38 +12242,77 @@ export interface components {
         };
         /** PublicationUpdate */
         PublicationUpdate: {
-            /** Title */
-            title?: string | null;
-            /** Title Zh */
-            title_zh?: string | null;
-            /** Authors */
-            authors?: string | null;
-            /** Authors Zh */
-            authors_zh?: string | null;
-            /** Journal */
-            journal?: string | null;
-            /** Year */
-            year?: number | null;
-            /** Doi */
-            doi?: string | null;
-            /** Pmid */
-            pmid?: string | null;
-            /** Abstract */
-            abstract?: string | null;
-            /** Abstract Zh */
-            abstract_zh?: string | null;
-            /** Is Featured */
-            is_featured?: boolean | null;
+            /**
+             * Title
+             * @default null
+             */
+            title: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
+            /**
+             * Authors
+             * @default null
+             */
+            authors: string | null;
+            /**
+             * Authors Zh
+             * @default null
+             */
+            authors_zh: string | null;
+            /**
+             * Journal
+             * @default null
+             */
+            journal: string | null;
+            /**
+             * Year
+             * @default null
+             */
+            year: number | null;
+            /**
+             * Doi
+             * @default null
+             */
+            doi: string | null;
+            /**
+             * Pmid
+             * @default null
+             */
+            pmid: string | null;
+            /**
+             * Abstract
+             * @default null
+             */
+            "abstract": string | null;
+            /**
+             * Abstract Zh
+             * @default null
+             */
+            abstract_zh: string | null;
+            /**
+             * Is Featured
+             * @default null
+             */
+            is_featured: boolean | null;
         };
         /**
          * PublishRequest
          * @description Request publication of the latest draft/preview version.
          */
         PublishRequest: {
-            /** Version Id */
-            version_id?: string | null;
-            /** Reason */
-            reason?: string | null;
+            /**
+             * Version Id
+             * @default null
+             */
+            version_id: string | null;
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
         };
         /** PublishRequestResponse */
         PublishRequestResponse: {
@@ -8632,8 +12329,11 @@ export interface components {
             /** Version */
             version: number;
             status: components["schemas"]["PageDefinitionStatusEnum"];
-            /** Event Id */
-            event_id?: string | null;
+            /**
+             * Event Id
+             * @default null
+             */
+            event_id: string | null;
         };
         /**
          * PublishedPageDefinitionRoute
@@ -8680,8 +12380,11 @@ export interface components {
         RegionGeneResponse: {
             /** Gene Id */
             gene_id: string;
-            /** Name */
-            name?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
             /** Chromosome */
             chromosome: string;
             /** Start */
@@ -8735,8 +12438,11 @@ export interface components {
         RegionTranscriptResponse: {
             /** Id */
             id: string;
-            /** Name */
-            name?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
             /**
              * Biotype
              * @default mRNA
@@ -8776,10 +12482,16 @@ export interface components {
             version: string;
             /** Name */
             name: string;
-            /** Description */
-            description?: string | null;
-            /** Assembly */
-            assembly?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
             /** Data Set Ids */
             data_set_ids: number[];
         };
@@ -8802,8 +12514,11 @@ export interface components {
             version: string;
             /** Name */
             name: string;
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /**
              * Variant Count
              * @default 0
@@ -8820,8 +12535,11 @@ export interface components {
              */
             mutant_line_count: number;
             status: components["schemas"]["ReleaseStatus"];
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -8889,6 +12607,106 @@ export interface components {
             columns: components["schemas"]["TableColumn"][];
             actions: components["schemas"]["TableActions"];
         };
+        /** RestrictionEnzymeResult */
+        RestrictionEnzymeResult: {
+            /** Enzyme */
+            enzyme: string;
+            /** Site */
+            site: string;
+            /** Cut Positions */
+            cut_positions: number[];
+            /** Site Starts */
+            site_starts: number[];
+            /** Count */
+            count: number;
+            /** Limited */
+            limited: boolean;
+        };
+        /** RestrictionRequest */
+        RestrictionRequest: {
+            /** Sequence */
+            sequence: string;
+            /** Enzymes */
+            enzymes?: string[];
+            /**
+             * Circular
+             * @default false
+             */
+            circular: boolean;
+            /**
+             * Max Hits
+             * @default 1000
+             */
+            max_hits: number;
+        };
+        /** RestrictionResponse */
+        RestrictionResponse: {
+            /** Sequence Length */
+            sequence_length: number;
+            /** Circular */
+            circular: boolean;
+            /** Enzyme Count */
+            enzyme_count: number;
+            /** Total Cut Sites */
+            total_cut_sites: number;
+            /** Enzymes */
+            enzymes: components["schemas"]["RestrictionEnzymeResult"][];
+            /** Limited */
+            limited: boolean;
+            engine: components["schemas"]["EngineMetadata"];
+        };
+        /** ReverseComplementRequest */
+        ReverseComplementRequest: {
+            /** Sequence */
+            sequence: string;
+            /**
+             * Alphabet
+             * @default dna
+             * @enum {string}
+             */
+            alphabet: "dna" | "rna" | "protein";
+            /**
+             * Preserve Case
+             * @default false
+             */
+            preserve_case: boolean;
+        };
+        /** ReverseComplementResponse */
+        ReverseComplementResponse: {
+            /** Sequence */
+            sequence: string;
+            /** Length */
+            length: number;
+            /**
+             * Alphabet
+             * @enum {string}
+             */
+            alphabet: "dna" | "rna" | "protein";
+            engine: components["schemas"]["EngineMetadata"];
+        };
+        /** ScoringConfig */
+        ScoringConfig: {
+            /**
+             * Match
+             * @default 2
+             */
+            match: number;
+            /**
+             * Mismatch
+             * @default -3
+             */
+            mismatch: number;
+            /**
+             * Gap Open
+             * @default -5
+             */
+            gap_open: number;
+            /**
+             * Gap Extend
+             * @default -1
+             */
+            gap_extend: number;
+        };
         /**
          * SearchResultItem
          * @description A single global-search hit (stable public contract).
@@ -8901,10 +12719,16 @@ export interface components {
             type: components["schemas"]["SearchResultType"];
             /** Id */
             id: string;
-            /** Name */
-            name?: string | null;
-            /** Description */
-            description?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /**
              * Score
              * @default 0
@@ -8912,19 +12736,31 @@ export interface components {
             score: number;
             /** @default text */
             match_type: components["schemas"]["MatchType"];
-            /** Url */
-            url?: string | null;
+            /**
+             * Url
+             * @default null
+             */
+            url: string | null;
             /**
              * Source
              * @default internal
              */
             source: string;
-            /** Release Id */
-            release_id?: number | null;
-            /** Assembly Id */
-            assembly_id?: number | null;
-            /** Assembly */
-            assembly?: string | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: number | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
             /** Cross Version */
             cross_version?: components["schemas"]["CrossVersionLink"][];
         };
@@ -8933,6 +12769,35 @@ export interface components {
          * @enum {string}
          */
         SearchResultType: "gene" | "variant" | "mutant_line" | "phenotype" | "publication";
+        /**
+         * SectionStatus
+         * @description Presence, provenance and evidence strength of one gene-detail section.
+         */
+        SectionStatus: {
+            /**
+             * Section
+             * @enum {string}
+             */
+            section: "annotation" | "homolog" | "expression" | "variants" | "phenotype" | "literature";
+            /**
+             * State
+             * @default not_imported
+             * @enum {string}
+             */
+            state: "available" | "empty" | "not_imported";
+            /**
+             * Count
+             * @default null
+             */
+            count: number | null;
+            /** @default null */
+            evidence: components["schemas"]["EvidenceTag"] | null;
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
+        };
         /**
          * SeedInventoryResponse
          * @description Public seed-inventory projection.
@@ -8949,14 +12814,26 @@ export interface components {
             seed_lot: string;
             /** Quantity Grams */
             quantity_grams: number;
-            /** Location */
-            location?: string | null;
-            /** Harvest Date */
-            harvest_date?: string | null;
-            /** Viability Pct */
-            viability_pct?: number | null;
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Location
+             * @default null
+             */
+            location: string | null;
+            /**
+             * Harvest Date
+             * @default null
+             */
+            harvest_date: string | null;
+            /**
+             * Viability Pct
+             * @default null
+             */
+            viability_pct: number | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
             /**
              * Created At
              * Format: date-time
@@ -9015,18 +12892,21 @@ export interface components {
             /**
              * Genes
              * @description Gene IDs to extract (≤200).
+             * @default null
              */
-            genes?: string[] | null;
+            genes: string[] | null;
             /**
              * Assembly
              * @description Assembly name (see /genes/assemblies) for region mode.
+             * @default null
              */
-            assembly?: string | null;
+            assembly: string | null;
             /**
              * Region
              * @description 1-based interval, e.g. 'chr1:1000-2000'.
+             * @default null
              */
-            region?: string | null;
+            region: string | null;
         };
         /**
          * SeqFetchResponse
@@ -9046,8 +12926,9 @@ export interface components {
             /**
              * Sequence
              * @description Inline FASTA text when under the size cap.
+             * @default null
              */
-            sequence?: string | null;
+            sequence: string | null;
             /**
              * Count
              * @description Number of extracted sequences.
@@ -9068,13 +12949,287 @@ export interface components {
             /**
              * Download Url
              * @description Pre-signed download URL for large results.
+             * @default null
              */
-            download_url?: string | null;
+            download_url: string | null;
             /**
              * Expires In
              * @description download_url lifetime in seconds.
+             * @default null
              */
-            expires_in?: number | null;
+            expires_in: number | null;
+        };
+        /** SequenceAlignRequest */
+        SequenceAlignRequest: {
+            /** Query */
+            query: string;
+            /** Target */
+            target: string;
+            /**
+             * Alphabet
+             * @default dna
+             * @enum {string}
+             */
+            alphabet: "dna" | "rna" | "protein";
+            /**
+             * Mode
+             * @default local
+             * @enum {string}
+             */
+            mode: "local" | "global" | "semiglobal";
+            scoring?: components["schemas"]["ScoringConfig"];
+        };
+        /** SequenceAlignResponse */
+        SequenceAlignResponse: {
+            /** Score */
+            score: number;
+            /** Query Range */
+            query_range: [
+                number,
+                number
+            ];
+            /** Target Range */
+            target_range: [
+                number,
+                number
+            ];
+            /** Cigar */
+            cigar: string;
+            /** Identity */
+            identity: number;
+            /**
+             * Mode
+             * @enum {string}
+             */
+            mode: "local" | "global" | "semiglobal";
+            /**
+             * Coordinate System
+             * @default 1-based-inclusive
+             * @constant
+             */
+            coordinate_system: "1-based-inclusive";
+            engine: components["schemas"]["EngineMetadata"];
+        };
+        /**
+         * SequenceAvailability
+         * @description Per-molecule availability for a gene's sequences.
+         *
+         *     The platform currently has no FASTA store: ``genes``/``transcripts`` carry
+         *     coordinates, not residues. Rather than fabricate a ``sequence`` string (a
+         *     gene page that silently shows a made-up nucleotide string is worse than one
+         *     that says "not imported"), the contract reports availability plus the
+         *     reason. When a sequence store is added, only ``availability`` flips and
+         *     the residue fields populate — consumers do not change shape.
+         */
+        SequenceAvailability: {
+            /**
+             * Molecule
+             * @enum {string}
+             */
+            molecule: "genomic" | "cds" | "transcript" | "protein";
+            /**
+             * Availability
+             * @default unavailable
+             * @enum {string}
+             */
+            availability: "available" | "unavailable";
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
+            /**
+             * Length
+             * @default null
+             */
+            length: number | null;
+            /**
+             * Checksum
+             * @default null
+             */
+            checksum: string | null;
+            /**
+             * Sequence
+             * @default null
+             */
+            sequence: string | null;
+        };
+        /**
+         * SequenceCapabilitiesResponse
+         * @description Supported algorithms, formats and limits; never internal paths.
+         */
+        SequenceCapabilitiesResponse: {
+            /** Available */
+            available: boolean;
+            /**
+             * Engine
+             * @default null
+             */
+            engine: string | null;
+            /**
+             * Engine Version
+             * @default null
+             */
+            engine_version: string | null;
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
+            /**
+             * Max Inline Sequence
+             * @default 1048576
+             */
+            max_inline_sequence: number;
+            /**
+             * Max Pattern
+             * @default 256
+             */
+            max_pattern: number;
+            /**
+             * Max Hits
+             * @default 1000
+             */
+            max_hits: number;
+            /**
+             * Max Regions
+             * @default 1000
+             */
+            max_regions: number;
+            /**
+             * Max Alignment Cells
+             * @default 10000000
+             */
+            max_alignment_cells: number;
+            /**
+             * K Range
+             * @default [
+             *       1,
+             *       32
+             *     ]
+             */
+            k_range: [
+                number,
+                number
+            ];
+            /** Genetic Codes */
+            genetic_codes?: number[];
+            /**
+             * Coordinate System Internal
+             * @default 0-based-half-open
+             */
+            coordinate_system_internal: string;
+            /**
+             * Coordinate System Public
+             * @default 1-based-inclusive
+             */
+            coordinate_system_public: string;
+            /** Programs */
+            programs?: string[];
+            /** Formats */
+            formats?: string[];
+        };
+        /** SequenceMatchRequest */
+        SequenceMatchRequest: {
+            /** Pattern */
+            pattern: string;
+            /** Target */
+            target: components["schemas"]["InlineTarget"];
+            /**
+             * Alphabet
+             * @default dna
+             * @enum {string}
+             */
+            alphabet: "dna" | "rna" | "protein";
+            /**
+             * Mode
+             * @default exact
+             * @enum {string}
+             */
+            mode: "exact" | "approximate";
+            /**
+             * Both Strands
+             * @default true
+             */
+            both_strands: boolean;
+            /**
+             * Max Edits
+             * @default 0
+             */
+            max_edits: number;
+            /**
+             * Iupac Mode
+             * @default literal
+             * @constant
+             */
+            iupac_mode: "literal";
+            /**
+             * Max Hits
+             * @default 100
+             */
+            max_hits: number;
+        };
+        /** SequenceMatchResponse */
+        SequenceMatchResponse: {
+            /** Matches */
+            matches: components["schemas"]["MatchHit"][];
+            /** Count */
+            count: number;
+            /** Limited */
+            limited: boolean;
+            /**
+             * Coordinate System
+             * @default 1-based-inclusive
+             * @constant
+             */
+            coordinate_system: "1-based-inclusive";
+            /**
+             * Method
+             * @enum {string}
+             */
+            method: "exact" | "approximate";
+            engine: components["schemas"]["EngineMetadata"];
+        };
+        /** SequenceStatsRequest */
+        SequenceStatsRequest: {
+            /** Sequence */
+            sequence: string;
+            /**
+             * Alphabet
+             * @default dna
+             * @enum {string}
+             */
+            alphabet: "dna" | "rna" | "protein";
+            /**
+             * Ambiguous Gc Policy
+             * @default exclude
+             * @enum {string}
+             */
+            ambiguous_gc_policy: "exclude" | "include";
+        };
+        /** SequenceStatsResponse */
+        SequenceStatsResponse: {
+            /** Length */
+            length: number;
+            /** Gc Count */
+            gc_count: number;
+            /** At Count */
+            at_count: number;
+            /** Ambiguous Count */
+            ambiguous_count: number;
+            /** A */
+            a: number;
+            /** C */
+            c: number;
+            /** G */
+            g: number;
+            /** T */
+            t: number;
+            /** Denominator */
+            denominator: number;
+            /** Gc Fraction */
+            gc_fraction: number;
+            engine: components["schemas"]["EngineMetadata"];
         };
         /** SettingFieldSchema */
         SettingFieldSchema: {
@@ -9083,7 +13238,8 @@ export interface components {
              * @enum {string}
              */
             kind: "string" | "color" | "integer" | "boolean" | "enum" | "email" | "url" | "uuid";
-            default: components["schemas"]["SettingValue"] | null;
+            /** Default */
+            default: string | number | boolean | null;
             /**
              * Permission
              * @constant
@@ -9107,14 +13263,19 @@ export interface components {
             allowed_values?: string[];
             /** Allowed Url Hosts */
             allowed_url_hosts?: string[];
-            /** Minimum */
-            minimum?: number | null;
-            /** Maximum */
-            maximum?: number | null;
+            /**
+             * Minimum
+             * @default null
+             */
+            minimum: number | null;
+            /**
+             * Maximum
+             * @default null
+             */
+            maximum: number | null;
             /** Max Length */
             max_length: number;
         };
-        SettingValue: string | number | boolean;
         /** SettingsDocumentResponse */
         SettingsDocumentResponse: {
             /** Section */
@@ -9123,7 +13284,7 @@ export interface components {
             version: number;
             /** Values */
             values: {
-                [key: string]: components["schemas"]["SettingValue"];
+                [key: string]: string | number | boolean;
             };
         };
         /** SettingsHistoryItem */
@@ -9137,23 +13298,32 @@ export interface components {
             action: "patch" | "put_compat" | "rollback";
             /** Values */
             values: {
-                [key: string]: components["schemas"]["SettingValue"];
+                [key: string]: string | number | boolean;
             };
             /** Changes */
             changes: {
-                [key: string]: components["schemas"]["SettingValue"] | null;
+                [key: string]: string | number | boolean | null;
             };
-            /** Actor Id */
-            actor_id?: string | null;
+            /**
+             * Actor Id
+             * @default null
+             */
+            actor_id: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-            /** Rollback From Version */
-            rollback_from_version?: number | null;
-            /** Reason */
-            reason?: string | null;
+            /**
+             * Rollback From Version
+             * @default null
+             */
+            rollback_from_version: number | null;
+            /**
+             * Reason
+             * @default null
+             */
+            reason: string | null;
         };
         /** SettingsHistoryResponse */
         SettingsHistoryResponse: {
@@ -9170,7 +13340,7 @@ export interface components {
             expected_version: number;
             /** Values */
             values: {
-                [key: string]: components["schemas"]["SettingValue"];
+                [key: string]: string | number | boolean;
             };
         };
         /** SettingsRollbackRequest */
@@ -9208,7 +13378,7 @@ export interface components {
             section: string;
             /** Values */
             values: {
-                [key: string]: components["schemas"]["SettingValue"];
+                [key: string]: string | number | boolean;
             };
         };
         /** SettingsValidateResponse */
@@ -9223,7 +13393,7 @@ export interface components {
             valid: true;
             /** Values */
             values: {
-                [key: string]: components["schemas"]["SettingValue"];
+                [key: string]: string | number | boolean;
             };
         };
         /**
@@ -9233,15 +13403,21 @@ export interface components {
         SignedUrlResponse: {
             /** Url */
             url: string;
-            /** Index Url */
-            index_url?: string | null;
+            /**
+             * Index Url
+             * @default null
+             */
+            index_url: string | null;
             /**
              * Expires In
              * @description URL validity in seconds.
              */
             expires_in: number;
-            /** Request Id */
-            request_id?: string | null;
+            /**
+             * Request Id
+             * @default null
+             */
+            request_id: string | null;
         };
         /** SiteBrandPatchRequest */
         SiteBrandPatchRequest: {
@@ -9254,12 +13430,21 @@ export interface components {
          * @description Sparse site-brand patch. An explicit null icon clears the selection.
          */
         SiteBrandPatchValues: {
-            /** Name Zh */
-            name_zh?: string | null;
-            /** Name En */
-            name_en?: string | null;
-            /** Icon Url */
-            icon_url?: string | null;
+            /**
+             * Name Zh
+             * @default null
+             */
+            name_zh: string | null;
+            /**
+             * Name En
+             * @default null
+             */
+            name_en: string | null;
+            /**
+             * Icon Url
+             * @default null
+             */
+            icon_url: string | null;
         };
         /**
          * SiteBrandResponse
@@ -9270,8 +13455,11 @@ export interface components {
             name_zh: string;
             /** Name En */
             name_en: string;
-            /** Icon Url */
-            icon_url?: string | null;
+            /**
+             * Icon Url
+             * @default null
+             */
+            icon_url: string | null;
             /**
              * Variant
              * @enum {string}
@@ -9287,8 +13475,44 @@ export interface components {
             name_zh: string;
             /** Name En */
             name_en: string;
-            /** Icon Url */
-            icon_url?: string | null;
+            /**
+             * Icon Url
+             * @default null
+             */
+            icon_url: string | null;
+        };
+        /**
+         * SiteNavigationResponse
+         * @description Feature-gated primary navigation for one explicit site variant.
+         */
+        SiteNavigationResponse: {
+            /**
+             * Variant
+             * @enum {string}
+             */
+            variant: "external" | "internal";
+            /** Groups */
+            groups?: components["schemas"]["HeaderNavigationGroup"][];
+        };
+        /**
+         * SiteProfileResponse
+         * @description Database identity and public feature availability for the web client.
+         */
+        SiteProfileResponse: {
+            /**
+             * Variant
+             * @enum {string}
+             */
+            variant: "external" | "internal";
+            /**
+             * Database Kind
+             * @enum {string}
+             */
+            database_kind: "genome" | "gene_ontology" | "transcription_factor";
+            /** Features */
+            features?: {
+                [key: string]: boolean;
+            };
         };
         /**
          * SiteVariant
@@ -9296,6 +13520,28 @@ export interface components {
          * @enum {string}
          */
         SiteVariant: "external" | "internal";
+        /**
+         * SpeciesCoverageResponse
+         * @description Per-species presence in one family.
+         *
+         *     ``state`` is what the client renders. ``member_count`` is ``None`` whenever
+         *     no member row exists -- never 0 with ``state="available"``, because that
+         *     would turn "not imported/not present" into a measured zero.
+         */
+        SpeciesCoverageResponse: {
+            /** Species */
+            species: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "available" | "no_data" | "not_imported";
+            /**
+             * Member Count
+             * @default null
+             */
+            member_count: number | null;
+        };
         /** SpeciesInstanceCreate */
         SpeciesInstanceCreate: {
             /** Code */
@@ -9306,10 +13552,16 @@ export interface components {
             species: string;
             /** Api Base Url */
             api_base_url: string;
-            /** Jbrowse Base Url */
-            jbrowse_base_url?: string | null;
-            /** Portal Base Url */
-            portal_base_url?: string | null;
+            /**
+             * Jbrowse Base Url
+             * @default null
+             */
+            jbrowse_base_url: string | null;
+            /**
+             * Portal Base Url
+             * @default null
+             */
+            portal_base_url: string | null;
             /**
              * Is Enabled
              * @default true
@@ -9320,8 +13572,11 @@ export interface components {
              * @default false
              */
             is_local: boolean;
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
         };
         /** SpeciesInstanceHealthResponse */
         SpeciesInstanceHealthResponse: {
@@ -9339,14 +13594,23 @@ export interface components {
              * Format: date-time
              */
             checked_at: string;
-            /** Last Checked At */
-            last_checked_at?: string | null;
-            /** Last Error At */
-            last_error_at?: string | null;
+            /**
+             * Last Checked At
+             * @default null
+             */
+            last_checked_at: string | null;
+            /**
+             * Last Error At
+             * @default null
+             */
+            last_error_at: string | null;
             /** Is Stale */
             is_stale: boolean;
-            /** Error Code */
-            error_code?: string | null;
+            /**
+             * Error Code
+             * @default null
+             */
+            error_code: string | null;
             /**
              * Remote Management
              * @enum {string}
@@ -9370,10 +13634,16 @@ export interface components {
             species: string;
             /** Api Base Url */
             api_base_url: string;
-            /** Jbrowse Base Url */
-            jbrowse_base_url?: string | null;
-            /** Portal Base Url */
-            portal_base_url?: string | null;
+            /**
+             * Jbrowse Base Url
+             * @default null
+             */
+            jbrowse_base_url: string | null;
+            /**
+             * Portal Base Url
+             * @default null
+             */
+            portal_base_url: string | null;
             /**
              * Is Enabled
              * @default true
@@ -9384,22 +13654,34 @@ export interface components {
              * @default false
              */
             is_local: boolean;
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
             /** Id */
             id: number;
-            /** Site Url */
-            site_url?: string | null;
+            /**
+             * Site Url
+             * @default null
+             */
+            site_url: string | null;
             /**
              * Connection State
              * @default unknown
              * @enum {string}
              */
             connection_state: "unknown" | "healthy" | "unhealthy" | "disabled" | "unconfigured";
-            /** Last Checked At */
-            last_checked_at?: string | null;
-            /** Last Error At */
-            last_error_at?: string | null;
+            /**
+             * Last Checked At
+             * @default null
+             */
+            last_checked_at: string | null;
+            /**
+             * Last Error At
+             * @default null
+             */
+            last_error_at: string | null;
             /**
              * Is Stale
              * @default true
@@ -9423,20 +13705,61 @@ export interface components {
         };
         /** SpeciesInstanceUpdate */
         SpeciesInstanceUpdate: {
-            /** Name */
-            name?: string | null;
-            /** Api Base Url */
-            api_base_url?: string | null;
-            /** Jbrowse Base Url */
-            jbrowse_base_url?: string | null;
-            /** Portal Base Url */
-            portal_base_url?: string | null;
-            /** Is Enabled */
-            is_enabled?: boolean | null;
-            /** Is Local */
-            is_local?: boolean | null;
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * Api Base Url
+             * @default null
+             */
+            api_base_url: string | null;
+            /**
+             * Jbrowse Base Url
+             * @default null
+             */
+            jbrowse_base_url: string | null;
+            /**
+             * Portal Base Url
+             * @default null
+             */
+            portal_base_url: string | null;
+            /**
+             * Is Enabled
+             * @default null
+             */
+            is_enabled: boolean | null;
+            /**
+             * Is Local
+             * @default null
+             */
+            is_local: boolean | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
+        };
+        /**
+         * SseTicketResponse
+         * @description A single-use credential for one SSE subscription.
+         *
+         *     The ticket is opaque and bound server-side to the authenticated caller. It
+         *     is presented as ``?ticket=`` on ``GET /api/v1/jobs/events`` and stops
+         *     working after its first use or after ``expires_in`` seconds.
+         */
+        SseTicketResponse: {
+            /**
+             * Ticket
+             * @description Opaque single-use ticket for the `ticket` query parameter of the job event stream.
+             */
+            ticket: string;
+            /**
+             * Expires In
+             * @description Seconds until the ticket expires (at most 60); it is also invalidated by its first use.
+             */
+            expires_in: number;
         };
         /**
          * StaticBuildRequest
@@ -9447,8 +13770,11 @@ export interface components {
          *     build exactly as the administrator wrote it and simply not be counted.
          */
         StaticBuildRequest: {
-            /** Gene Ids */
-            gene_ids?: string[] | null;
+            /**
+             * Gene Ids
+             * @default null
+             */
+            gene_ids: string[] | null;
         };
         /** StaticPageCreate */
         StaticPageCreate: {
@@ -9456,16 +13782,28 @@ export interface components {
             slug: string;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Content En */
             content_en: string;
-            /** Content Zh */
-            content_zh?: string | null;
-            /** Summary */
-            summary?: string | null;
-            /** Category */
-            category?: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
+            /**
+             * Summary
+             * @default null
+             */
+            summary: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
             /**
              * Sort Order
              * @default 0
@@ -9473,8 +13811,11 @@ export interface components {
             sort_order: number;
             /** @default draft */
             status: components["schemas"]["PageStatus"];
-            /** Edit Comment */
-            edit_comment?: string | null;
+            /**
+             * Edit Comment
+             * @default null
+             */
+            edit_comment: string | null;
         };
         /**
          * StaticPageDetailResponse
@@ -9487,18 +13828,30 @@ export interface components {
             slug: string;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Content En */
             content_en: string;
-            /** Content Zh */
-            content_zh?: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
             /** @default draft */
             status: components["schemas"]["PageStatus"];
-            /** Category */
-            category?: string | null;
-            /** Summary */
-            summary?: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Summary
+             * @default null
+             */
+            summary: string | null;
             /**
              * Sort Order
              * @default 0
@@ -9514,10 +13867,16 @@ export interface components {
              * Format: date-time
              */
             updated_at: string;
-            /** Author Name */
-            author_name?: string | null;
-            /** Published At */
-            published_at?: string | null;
+            /**
+             * Author Name
+             * @default null
+             */
+            author_name: string | null;
+            /**
+             * Published At
+             * @default null
+             */
+            published_at: string | null;
             /**
              * Current Version
              * @default 1
@@ -9529,8 +13888,11 @@ export interface components {
          * @description Optional unique StaticPage slug selection for a non-mutating preview.
          */
         StaticPageMigrationDryRunRequest: {
-            /** Slugs */
-            slugs?: string[] | null;
+            /**
+             * Slugs
+             * @default null
+             */
+            slugs: string[] | null;
         };
         /** StaticPageMigrationDryRunResponse */
         StaticPageMigrationDryRunResponse: {
@@ -9555,10 +13917,16 @@ export interface components {
             route: string;
             /** Outcome */
             outcome: string;
-            /** Error Code */
-            error_code?: string | null;
-            /** Message */
-            message?: string | null;
+            /**
+             * Error Code
+             * @default null
+             */
+            error_code: string | null;
+            /**
+             * Message
+             * @default null
+             */
+            message: string | null;
         };
         /** StaticPageResponse */
         StaticPageResponse: {
@@ -9568,18 +13936,30 @@ export interface components {
             slug: string;
             /** Title En */
             title_en: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Content En */
             content_en: string;
-            /** Content Zh */
-            content_zh?: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
             /** @default draft */
             status: components["schemas"]["PageStatus"];
-            /** Category */
-            category?: string | null;
-            /** Summary */
-            summary?: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Summary
+             * @default null
+             */
+            summary: string | null;
             /**
              * Sort Order
              * @default 0
@@ -9598,22 +13978,46 @@ export interface components {
         };
         /** StaticPageUpdate */
         StaticPageUpdate: {
-            /** Title En */
-            title_en?: string | null;
-            /** Title Zh */
-            title_zh?: string | null;
-            /** Content En */
-            content_en?: string | null;
-            /** Content Zh */
-            content_zh?: string | null;
-            /** Summary */
-            summary?: string | null;
-            /** Category */
-            category?: string | null;
-            /** Sort Order */
-            sort_order?: number | null;
-            /** Edit Comment */
-            edit_comment?: string | null;
+            /**
+             * Title En
+             * @default null
+             */
+            title_en: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
+            /**
+             * Content En
+             * @default null
+             */
+            content_en: string | null;
+            /**
+             * Content Zh
+             * @default null
+             */
+            content_zh: string | null;
+            /**
+             * Summary
+             * @default null
+             */
+            summary: string | null;
+            /**
+             * Category
+             * @default null
+             */
+            category: string | null;
+            /**
+             * Sort Order
+             * @default null
+             */
+            sort_order: number | null;
+            /**
+             * Edit Comment
+             * @default null
+             */
+            edit_comment: string | null;
         };
         /**
          * StorageGrowthPoint
@@ -9689,8 +14093,11 @@ export interface components {
              * @enum {string}
              */
             site_variant: "external" | "internal";
-            /** Release Id */
-            release_id?: number | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
             /**
              * Is Default
              * @default false
@@ -9699,8 +14106,11 @@ export interface components {
             /** Columns */
             columns: components["schemas"]["TableColumn"][];
             actions?: components["schemas"]["TableActions"];
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
             /**
              * Kind
              * @default mutation_sites
@@ -9730,8 +14140,11 @@ export interface components {
              * @enum {string}
              */
             site_variant: "external" | "internal";
-            /** Release Id */
-            release_id?: number | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
             /**
              * Is Default
              * @default false
@@ -9740,8 +14153,11 @@ export interface components {
             /** Columns */
             columns: components["schemas"]["TableColumn"][];
             actions?: components["schemas"]["TableActions"];
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
             /** Id */
             id: number;
             /** Kind */
@@ -9759,17 +14175,33 @@ export interface components {
         };
         /** TableViewTemplateUpdate */
         TableViewTemplateUpdate: {
-            /** Name */
-            name?: string | null;
-            /** Columns */
-            columns?: components["schemas"]["TableColumn"][] | null;
-            actions?: components["schemas"]["TableActions"] | null;
-            /** Is Default */
-            is_default?: boolean | null;
-            /** Release Id */
-            release_id?: number | null;
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
+            /**
+             * Columns
+             * @default null
+             */
+            columns: components["schemas"]["TableColumn"][] | null;
+            /** @default null */
+            actions: components["schemas"]["TableActions"] | null;
+            /**
+             * Is Default
+             * @default null
+             */
+            is_default: boolean | null;
+            /**
+             * Release Id
+             * @default null
+             */
+            release_id: number | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
         };
         /**
          * TokenResponse
@@ -9819,8 +14251,11 @@ export interface components {
             id: string;
             /** Gene Id */
             gene_id: string;
-            /** Name */
-            name?: string | null;
+            /**
+             * Name
+             * @default null
+             */
+            name: string | null;
             /**
              * Biotype
              * @default mRNA
@@ -9838,6 +14273,69 @@ export interface components {
             is_canonical: boolean;
             /** Exons */
             exons?: components["schemas"]["ExonResponse"][];
+        };
+        /** TranslateRequest */
+        TranslateRequest: {
+            /** Sequence */
+            sequence: string;
+            /**
+             * Genetic Code Id
+             * @default 1
+             */
+            genetic_code_id: number;
+            /**
+             * Frame
+             * @default 0
+             */
+            frame: number;
+        };
+        /** TranslateResponse */
+        TranslateResponse: {
+            /** Protein */
+            protein: string;
+            /** Genetic Code Id */
+            genetic_code_id: number;
+            /** Frame */
+            frame: number;
+            /** Warnings */
+            warnings: string[];
+            /** Codons */
+            codons: number;
+            /** Trailing Bases */
+            trailing_bases: number;
+            engine: components["schemas"]["EngineMetadata"];
+        };
+        /** TreeRequest */
+        TreeRequest: {
+            /** Sequences */
+            sequences: string[];
+            /**
+             * Labels
+             * @default null
+             */
+            labels: string[] | null;
+            /**
+             * Alphabet
+             * @default dna
+             * @enum {string}
+             */
+            alphabet: "dna" | "rna" | "protein";
+        };
+        /** TreeResponse */
+        TreeResponse: {
+            /** Newick */
+            newick: string;
+            /** Leaf Count */
+            leaf_count: number;
+            /** Labels */
+            labels: string[];
+            /** Distance Model */
+            distance_model: string;
+            /** Method */
+            method: string;
+            /** Caveat */
+            caveat: string;
+            engine: components["schemas"]["EngineMetadata"];
         };
         /**
          * UnreadCountResponse
@@ -9914,8 +14412,11 @@ export interface components {
              * @example Jane Doe
              */
             full_name: string;
-            /** Organization Id */
-            organization_id?: number | null;
+            /**
+             * Organization Id
+             * @default null
+             */
+            organization_id: number | null;
             /**
              * Role Name
              * @description Public registration always creates a viewer account.
@@ -9942,19 +14443,28 @@ export interface components {
             is_active: boolean;
             /** Is Superuser */
             is_superuser: boolean;
-            /** Role Name */
-            role_name?: string | null;
+            /**
+             * Role Name
+             * @default null
+             */
+            role_name: string | null;
             /** Effective Roles */
             effective_roles?: string[];
-            /** Organization Id */
-            organization_id?: number | null;
+            /**
+             * Organization Id
+             * @default null
+             */
+            organization_id: number | null;
             /**
              * Joined At
              * Format: date-time
              */
             joined_at: string;
-            /** Last Login At */
-            last_login_at?: string | null;
+            /**
+             * Last Login At
+             * @default null
+             */
+            last_login_at: string | null;
             /**
              * Created At
              * Format: date-time
@@ -10052,14 +14562,26 @@ export interface components {
          * @description Extended variant information with annotation and linked entities.
          */
         VariantDetail: {
-            /** Id */
-            id?: string | null;
-            /** Assembly Id */
-            assembly_id?: string | null;
-            /** Assembly */
-            assembly?: string | null;
-            /** Variant Id */
-            variant_id?: string | null;
+            /**
+             * Id
+             * @default null
+             */
+            id: string | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: string | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
+            /**
+             * Variant Id
+             * @default null
+             */
+            variant_id: string | null;
             /** Chromosome */
             chromosome: string;
             /** Position */
@@ -10069,39 +14591,80 @@ export interface components {
             /** Alt Allele */
             alt_allele: string;
             variant_type: components["schemas"]["VariantType"];
-            /** Quality */
-            quality?: number | null;
+            /**
+             * Quality
+             * @default null
+             */
+            quality: number | null;
             /**
              * Filter Status
              * @default PASS
              */
             filter_status: string;
-            /** Allele Frequency */
-            allele_frequency?: number | null;
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Gene Symbol */
-            gene_symbol?: string | null;
-            consequence?: components["schemas"]["ConsequenceType"] | null;
-            impact?: components["schemas"]["ImpactLevel"] | null;
-            /** Transcript Id */
-            transcript_id?: string | null;
-            /** Hgvs C */
-            hgvs_c?: string | null;
-            /** Hgvs P */
-            hgvs_p?: string | null;
-            /** Sift Score */
-            sift_score?: number | null;
-            /** Sift Prediction */
-            sift_prediction?: string | null;
-            /** Depth */
-            depth?: number | null;
-            /** Genotype */
-            genotype?: string | null;
-            /** Created At */
-            created_at?: string | null;
-            /** Updated At */
-            updated_at?: string | null;
+            /**
+             * Allele Frequency
+             * @default null
+             */
+            allele_frequency: number | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Gene Symbol
+             * @default null
+             */
+            gene_symbol: string | null;
+            /** @default null */
+            consequence: components["schemas"]["ConsequenceType"] | null;
+            /** @default null */
+            impact: components["schemas"]["ImpactLevel"] | null;
+            /**
+             * Transcript Id
+             * @default null
+             */
+            transcript_id: string | null;
+            /**
+             * Hgvs C
+             * @default null
+             */
+            hgvs_c: string | null;
+            /**
+             * Hgvs P
+             * @default null
+             */
+            hgvs_p: string | null;
+            /**
+             * Sift Score
+             * @default null
+             */
+            sift_score: number | null;
+            /**
+             * Sift Prediction
+             * @default null
+             */
+            sift_prediction: string | null;
+            /**
+             * Depth
+             * @default null
+             */
+            depth: number | null;
+            /**
+             * Genotype
+             * @default null
+             */
+            genotype: string | null;
+            /**
+             * Created At
+             * @default null
+             */
+            created_at: string | null;
+            /**
+             * Updated At
+             * @default null
+             */
+            updated_at: string | null;
         };
         /**
          * VariantExportFilters
@@ -10111,39 +14674,72 @@ export interface components {
             /**
              * Assembly
              * @description Assembly namespace of the exported file (e.g. ``Wm82.a4.v1``). A named assembly wins; when the request names none, the resolved release's own assembly scope is used; a request whose release declares no scope is refused. One export carries exactly one assembly namespace. The name is checked for length (at most 64 characters) and against the release's own facts: a namespace the release publishes no variants in is refused, because an artifact without rows would claim a namespace the release does not have.
+             * @default null
              */
-            assembly?: string | null;
-            /** Chromosome */
-            chromosome?: string | null;
-            /** Start */
-            start?: number | null;
-            /** End */
-            end?: number | null;
-            /** Ref */
-            ref?: string | null;
-            /** Alt */
-            alt?: string | null;
-            /** Gene Id */
-            gene_id?: string | null;
-            variant_type?: components["schemas"]["VariantType"] | null;
-            consequence?: components["schemas"]["ConsequenceType"] | null;
-            impact?: components["schemas"]["ImpactLevel"] | null;
-            /** Min Af */
-            min_af?: number | null;
-            /** Max Af */
-            max_af?: number | null;
+            assembly: string | null;
+            /**
+             * Chromosome
+             * @default null
+             */
+            chromosome: string | null;
+            /**
+             * Start
+             * @default null
+             */
+            start: number | null;
+            /**
+             * End
+             * @default null
+             */
+            end: number | null;
+            /**
+             * Ref
+             * @default null
+             */
+            ref: string | null;
+            /**
+             * Alt
+             * @default null
+             */
+            alt: string | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /** @default null */
+            variant_type: components["schemas"]["VariantType"] | null;
+            /** @default null */
+            consequence: components["schemas"]["ConsequenceType"] | null;
+            /** @default null */
+            impact: components["schemas"]["ImpactLevel"] | null;
+            /**
+             * Min Af
+             * @default null
+             */
+            min_af: number | null;
+            /**
+             * Max Af
+             * @default null
+             */
+            max_af: number | null;
             /**
              * Cursor
              * @description Opaque signed keyset cursor.
+             * @default null
              */
-            cursor?: string | null;
+            cursor: string | null;
             /**
              * Limit
              * @description Accepted for compatibility with the variant query filters, but not applied to an export: an artifact contains every record that matches the other filters, bounded by the export budget. A caller that wants a page of rows uses the variant list endpoint.
+             * @default null
              */
-            limit?: number | null;
-            /** Mutant Line Public Id */
-            mutant_line_public_id?: string | null;
+            limit: number | null;
+            /**
+             * Mutant Line Public Id
+             * @default null
+             */
+            mutant_line_public_id: string | null;
         };
         /**
          * VariantListResponse
@@ -10152,13 +14748,17 @@ export interface components {
         VariantListResponse: {
             /** Items */
             items?: components["schemas"]["VariantResponse"][];
-            /** Next Cursor */
-            next_cursor?: string | null;
+            /**
+             * Next Cursor
+             * @default null
+             */
+            next_cursor: string | null;
             /**
              * Total Count
              * @description May be null for large result sets.
+             * @default null
              */
-            total_count?: number | null;
+            total_count: number | null;
             /**
              * Has More
              * @default false
@@ -10170,14 +14770,26 @@ export interface components {
          * @description Compact variant representation for list endpoints.
          */
         VariantResponse: {
-            /** Id */
-            id?: string | null;
-            /** Assembly Id */
-            assembly_id?: string | null;
-            /** Assembly */
-            assembly?: string | null;
-            /** Variant Id */
-            variant_id?: string | null;
+            /**
+             * Id
+             * @default null
+             */
+            id: string | null;
+            /**
+             * Assembly Id
+             * @default null
+             */
+            assembly_id: string | null;
+            /**
+             * Assembly
+             * @default null
+             */
+            assembly: string | null;
+            /**
+             * Variant Id
+             * @default null
+             */
+            variant_id: string | null;
             /** Chromosome */
             chromosome: string;
             /** Position */
@@ -10187,21 +14799,51 @@ export interface components {
             /** Alt Allele */
             alt_allele: string;
             variant_type: components["schemas"]["VariantType"];
-            /** Quality */
-            quality?: number | null;
+            /**
+             * Quality
+             * @default null
+             */
+            quality: number | null;
             /**
              * Filter Status
              * @default PASS
              */
             filter_status: string;
-            /** Allele Frequency */
-            allele_frequency?: number | null;
-            /** Gene Id */
-            gene_id?: string | null;
-            /** Gene Symbol */
-            gene_symbol?: string | null;
-            consequence?: components["schemas"]["ConsequenceType"] | null;
-            impact?: components["schemas"]["ImpactLevel"] | null;
+            /**
+             * Allele Frequency
+             * @default null
+             */
+            allele_frequency: number | null;
+            /**
+             * Gene Id
+             * @default null
+             */
+            gene_id: string | null;
+            /**
+             * Gene Symbol
+             * @default null
+             */
+            gene_symbol: string | null;
+            /** @default null */
+            consequence: components["schemas"]["ConsequenceType"] | null;
+            /** @default null */
+            impact: components["schemas"]["ImpactLevel"] | null;
+        };
+        /**
+         * VariantSection
+         * @description Release- and assembly-scoped variant totals for the gene.
+         */
+        VariantSection: {
+            status: components["schemas"]["SectionStatus"];
+            /**
+             * Total
+             * @default null
+             */
+            total: number | null;
+            /** By Impact */
+            by_impact?: {
+                [key: string]: number;
+            };
         };
         /**
          * VariantType
@@ -10266,14 +14908,20 @@ export interface components {
             name: string;
             /** Display Name */
             display_name: string;
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             /** @default custom */
             category: components["schemas"]["WidgetCategoryEnum"];
             /** Template Path */
             template_path: string;
-            /** Data Source */
-            data_source?: string | null;
+            /**
+             * Data Source
+             * @default null
+             */
+            data_source: string | null;
             /** Params Schema */
             params_schema?: {
                 [key: string]: unknown;
@@ -10420,13 +15068,19 @@ export interface components {
             name: string;
             /** Display Name */
             display_name: string;
-            /** Description */
-            description?: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
             category: components["schemas"]["WidgetCategoryEnum"];
             /** Template Path */
             template_path: string;
-            /** Data Source */
-            data_source?: string | null;
+            /**
+             * Data Source
+             * @default null
+             */
+            data_source: string | null;
             /** Params Schema */
             params_schema?: {
                 [key: string]: unknown;
@@ -10460,28 +15114,54 @@ export interface components {
         };
         /** WidgetUpdate */
         WidgetUpdate: {
-            /** Display Name */
-            display_name?: string | null;
-            /** Description */
-            description?: string | null;
-            category?: components["schemas"]["WidgetCategoryEnum"] | null;
-            /** Template Path */
-            template_path?: string | null;
-            /** Data Source */
-            data_source?: string | null;
-            /** Params Schema */
-            params_schema?: {
+            /**
+             * Display Name
+             * @default null
+             */
+            display_name: string | null;
+            /**
+             * Description
+             * @default null
+             */
+            description: string | null;
+            /** @default null */
+            category: components["schemas"]["WidgetCategoryEnum"] | null;
+            /**
+             * Template Path
+             * @default null
+             */
+            template_path: string | null;
+            /**
+             * Data Source
+             * @default null
+             */
+            data_source: string | null;
+            /**
+             * Params Schema
+             * @default null
+             */
+            params_schema: {
                 [key: string]: unknown;
             } | null;
-            /** Cache Ttl */
-            cache_ttl?: number | null;
-            /** Admin Config */
-            admin_config?: {
+            /**
+             * Cache Ttl
+             * @default null
+             */
+            cache_ttl: number | null;
+            /**
+             * Admin Config
+             * @default null
+             */
+            admin_config: {
                 [key: string]: unknown;
             } | null;
-            permissions?: components["schemas"]["WidgetPermissionEnum"] | null;
-            /** Is Active */
-            is_active?: boolean | null;
+            /** @default null */
+            permissions: components["schemas"]["WidgetPermissionEnum"] | null;
+            /**
+             * Is Active
+             * @default null
+             */
+            is_active: boolean | null;
         };
         /**
          * SeedRequestStatus
@@ -10501,24 +15181,48 @@ export interface components {
         app__schemas__content__PublicationResponse: {
             /** Title */
             title: string;
-            /** Title Zh */
-            title_zh?: string | null;
+            /**
+             * Title Zh
+             * @default null
+             */
+            title_zh: string | null;
             /** Authors */
             authors: string;
-            /** Authors Zh */
-            authors_zh?: string | null;
-            /** Journal */
-            journal?: string | null;
-            /** Year */
-            year?: number | null;
-            /** Doi */
-            doi?: string | null;
-            /** Pmid */
-            pmid?: string | null;
-            /** Abstract */
-            abstract?: string | null;
-            /** Abstract Zh */
-            abstract_zh?: string | null;
+            /**
+             * Authors Zh
+             * @default null
+             */
+            authors_zh: string | null;
+            /**
+             * Journal
+             * @default null
+             */
+            journal: string | null;
+            /**
+             * Year
+             * @default null
+             */
+            year: number | null;
+            /**
+             * Doi
+             * @default null
+             */
+            doi: string | null;
+            /**
+             * Pmid
+             * @default null
+             */
+            pmid: string | null;
+            /**
+             * Abstract
+             * @default null
+             */
+            "abstract": string | null;
+            /**
+             * Abstract Zh
+             * @default null
+             */
+            abstract_zh: string | null;
             /**
              * Is Featured
              * @default false
@@ -10540,24 +15244,51 @@ export interface components {
             status: components["schemas"]["PublicationStatus"];
             /** Release Id */
             release_id: number;
-            /** Page Definition Version */
-            page_definition_version?: number | null;
-            /** Manifest Digest */
-            manifest_digest?: string | null;
-            /** Artifact Url */
-            artifact_url?: string | null;
-            /** Build Artifact Url */
-            build_artifact_url?: string | null;
-            /** Remote Id */
-            remote_id?: string | null;
-            /** Previous Publication Id */
-            previous_publication_id?: number | null;
-            /** Superseded By Publication Id */
-            superseded_by_publication_id?: number | null;
-            /** Error Message */
-            error_message?: string | null;
-            /** Requested By */
-            requested_by?: string | null;
+            /**
+             * Page Definition Version
+             * @default null
+             */
+            page_definition_version: number | null;
+            /**
+             * Manifest Digest
+             * @default null
+             */
+            manifest_digest: string | null;
+            /**
+             * Artifact Url
+             * @default null
+             */
+            artifact_url: string | null;
+            /**
+             * Build Artifact Url
+             * @default null
+             */
+            build_artifact_url: string | null;
+            /**
+             * Remote Id
+             * @default null
+             */
+            remote_id: string | null;
+            /**
+             * Previous Publication Id
+             * @default null
+             */
+            previous_publication_id: number | null;
+            /**
+             * Superseded By Publication Id
+             * @default null
+             */
+            superseded_by_publication_id: number | null;
+            /**
+             * Error Message
+             * @default null
+             */
+            error_message: string | null;
+            /**
+             * Requested By
+             * @default null
+             */
+            requested_by: string | null;
             /**
              * Created At
              * Format: date-time
@@ -10602,8 +15333,11 @@ export interface components {
             /** Mutant Line Public Id */
             mutant_line_public_id: string;
             status: components["schemas"]["app__schemas__seed__SeedRequestStatus"];
-            /** Quantity Requested */
-            quantity_requested?: number | null;
+            /**
+             * Quantity Requested
+             * @default null
+             */
+            quantity_requested: number | null;
             /** Requester Name */
             requester_name: string;
             /** Requester Email */
@@ -10612,17 +15346,26 @@ export interface components {
             requester_institution: string;
             /** Purpose */
             purpose: string;
-            /** Tracking Number */
-            tracking_number?: string | null;
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Tracking Number
+             * @default null
+             */
+            tracking_number: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-            /** Reviewed At */
-            reviewed_at?: string | null;
+            /**
+             * Reviewed At
+             * @default null
+             */
+            reviewed_at: string | null;
         };
         /**
          * SeedRequestStatus
@@ -10632,10 +15375,16 @@ export interface components {
         /** SeedRequestUpdate */
         app__schemas__seed__SeedRequestUpdate: {
             status: components["schemas"]["app__schemas__seed__SeedRequestStatus"];
-            /** Tracking Number */
-            tracking_number?: string | null;
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Tracking Number
+             * @default null
+             */
+            tracking_number: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
         };
         /**
          * SeedRequestCreate
@@ -10655,8 +15404,11 @@ export interface components {
             country: string;
             /** Gene Ids */
             gene_ids: string[];
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
         };
         /**
          * SeedRequestResponse
@@ -10675,18 +15427,27 @@ export interface components {
             country: string;
             /** Gene Ids */
             gene_ids: string[];
-            /** Notes */
-            notes?: string | null;
+            /**
+             * Notes
+             * @default null
+             */
+            notes: string | null;
             status: components["schemas"]["app__models__seed_request__SeedRequestStatus"];
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-            /** Processed At */
-            processed_at?: string | null;
-            /** Processed By */
-            processed_by?: string | null;
+            /**
+             * Processed At
+             * @default null
+             */
+            processed_at: string | null;
+            /**
+             * Processed By
+             * @default null
+             */
+            processed_by: string | null;
         };
         /**
          * SeedRequestUpdate
@@ -10812,7 +15573,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -10854,7 +15615,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Rate limit exceeded; retry after the indicated number of seconds. */
@@ -11017,7 +15778,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11059,7 +15820,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11103,7 +15864,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11156,7 +15917,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11204,7 +15965,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11249,7 +16010,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11298,7 +16059,93 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_assemblies_api_v1_assemblies_get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssemblySummaryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_assembly_api_v1_assemblies__assembly_id__get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                assembly_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssemblyDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11340,7 +16187,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11382,7 +16229,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11422,7 +16269,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11462,7 +16309,45 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_sse_ticket_api_v1_jobs_sse_ticket_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SseTicketResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11546,7 +16431,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11592,7 +16477,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11638,7 +16523,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11717,7 +16602,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11760,7 +16645,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11801,7 +16686,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11845,7 +16730,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11903,7 +16788,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11951,7 +16836,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -11995,7 +16880,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12081,7 +16966,47 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_variant_export_manifest_api_v1_variants_export__export_id__manifest_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportManifestResponse"];
+                };
+            };
+            /** @description Validation Error. The path parameter is not a well-formed export identifier; the response carries the unified envelope with field-level ``errors``. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12121,7 +17046,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12167,7 +17092,679 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sequence_capabilities_api_v1_tools_sequence_capabilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SequenceCapabilitiesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    reverse_complement_api_v1_tools_sequence_reverse_complement_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReverseComplementRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReverseComplementResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sequence_match_api_v1_tools_sequence_match_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SequenceMatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SequenceMatchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sequence_align_api_v1_tools_sequence_align_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SequenceAlignRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SequenceAlignResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sequence_stats_api_v1_tools_sequence_stats_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SequenceStatsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SequenceStatsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sequence_orfs_api_v1_tools_sequence_orfs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrfRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrfResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sequence_translate_api_v1_tools_sequence_translate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TranslateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    sequence_kmers_api_v1_tools_sequence_kmers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KmerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["KmerResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    inspect_format_api_v1_tools_sequence_inspect_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FormatInspectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FormatInspectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    convert_sequence_format_api_v1_tools_sequence_convert_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConvertFormatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConvertFormatResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    restriction_sites_api_v1_tools_sequence_restriction_sites_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestrictionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestrictionResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    protein_properties_api_v1_tools_sequence_protein_properties_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProteinPropertiesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProteinPropertiesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    melting_temp_api_v1_tools_sequence_melting_temp_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MeltingTempRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MeltingTempResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    multiple_alignment_api_v1_tools_sequence_multiple_alignment_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MultipleAlignmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MultipleAlignmentResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    neighbor_joining_tree_api_v1_tools_sequence_tree_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TreeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TreeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    interval_overlap_api_v1_tools_intervals_overlap_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OverlapRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OverlapResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12214,7 +17811,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12260,7 +17857,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12301,7 +17898,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12343,7 +17940,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12381,7 +17978,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12424,7 +18021,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12466,7 +18063,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12508,7 +18105,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12550,7 +18147,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12593,7 +18190,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12673,7 +18270,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12719,7 +18316,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12761,7 +18358,51 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_blast_database_state_api_v1_blast_databases__database_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                database_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlastDatabaseStateUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastDatabaseStateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12803,7 +18444,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12849,7 +18490,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12889,7 +18530,91 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_blast_job_api_v1_blast_jobs__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    retry_blast_job_api_v1_blast_jobs__job_id__retry_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12932,7 +18657,352 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_blast_index_build_api_v1_blast_index_builds_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlastIndexBuildRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastIndexBuildResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_blast_index_build_api_v1_blast_index_builds__build_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                build_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastIndexBuildResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_blast_hit_genome_target_api_v1_blast_jobs__job_id__hits__subject_id__genome_target_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+                subject_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastGenomeTargetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_public_blast_hit_genome_target_api_v1_blast_public_jobs__job_id__hits__subject_id__genome_target_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Blast-Token"?: string | null;
+            };
+            path: {
+                job_id: string;
+                subject_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastGenomeTargetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cancel_public_blast_job_api_v1_blast_public_jobs__job_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Blast-Token"?: string | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    submit_public_blast_job_api_v1_blast_public_jobs_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BlastSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicBlastSubmission"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_public_blast_job_api_v1_blast_public_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-Blast-Token"?: string | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastJobResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_public_blast_results_api_v1_blast_public_jobs__job_id__results_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: {
+                "X-Blast-Token"?: string | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlastResultResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -12972,7 +19042,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13014,7 +19084,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13058,7 +19128,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13098,7 +19168,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13140,7 +19210,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13159,8 +19229,11 @@ export interface operations {
             query?: {
                 assembly_id?: number | null;
                 category_id?: number | null;
+                release_id?: number | null;
             };
-            header?: never;
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -13183,7 +19256,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13269,7 +19342,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13285,8 +19358,12 @@ export interface operations {
     };
     get_track_api_v1_tracks__track_id__get: {
         parameters: {
-            query?: never;
-            header?: never;
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
             path: {
                 track_id: number;
             };
@@ -13311,7 +19388,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13351,7 +19428,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13392,7 +19469,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13472,7 +19549,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13518,7 +19595,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13562,7 +19639,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13606,7 +19683,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13652,7 +19729,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13696,7 +19773,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13740,7 +19817,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13780,7 +19857,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13826,7 +19903,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13870,7 +19947,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13912,7 +19989,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13953,7 +20030,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -13995,7 +20072,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14039,7 +20116,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14083,7 +20160,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14123,7 +20200,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14163,7 +20240,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14203,7 +20280,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14243,7 +20320,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14321,7 +20398,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14364,7 +20441,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14408,7 +20485,53 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    submit_export_query_api_v1_exports_query_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportQueryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportQueryResponse"];
+                };
+            };
+            /** @description Unprocessable Content */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14450,7 +20573,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14531,7 +20654,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14571,7 +20694,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14651,7 +20774,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14693,7 +20816,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14734,7 +20857,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14777,7 +20900,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14857,7 +20980,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14901,7 +21024,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14943,7 +21066,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -14989,7 +21112,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15035,7 +21158,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15081,7 +21204,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15123,7 +21246,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15172,7 +21295,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15216,7 +21339,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15258,7 +21381,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15303,7 +21426,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15350,7 +21473,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15468,7 +21591,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15548,7 +21671,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15593,7 +21716,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15635,7 +21758,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15677,7 +21800,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15717,7 +21840,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15761,7 +21884,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15799,7 +21922,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15839,7 +21962,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15879,7 +22002,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15919,7 +22042,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -15960,7 +22083,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16001,7 +22124,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16046,7 +22169,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16086,7 +22209,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16124,7 +22247,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16168,7 +22291,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16215,7 +22338,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16257,7 +22380,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16298,7 +22421,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16340,7 +22463,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16384,7 +22507,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16422,7 +22545,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16462,7 +22585,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16500,7 +22623,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16542,7 +22665,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16582,7 +22705,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16700,7 +22823,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16740,7 +22863,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16784,7 +22907,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16822,7 +22945,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16862,7 +22985,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16904,7 +23027,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16946,7 +23069,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -16986,7 +23109,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17030,7 +23153,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17074,7 +23197,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17114,7 +23237,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17158,7 +23281,51 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    publish_now_api_v1_admin_page_builder_pages__page_id__publish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                page_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishRequestResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17236,7 +23403,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17280,7 +23447,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17360,7 +23527,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17402,7 +23569,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17442,7 +23609,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17486,7 +23653,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17529,7 +23696,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17571,7 +23738,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17615,7 +23782,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17653,7 +23820,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17699,7 +23866,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17743,7 +23910,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17785,7 +23952,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17823,7 +23990,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17865,7 +24032,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17909,7 +24076,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17955,7 +24122,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -17997,7 +24164,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18037,7 +24204,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18079,7 +24246,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18159,7 +24326,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18199,7 +24366,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18243,7 +24410,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18287,7 +24454,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18331,7 +24498,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18375,7 +24542,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18415,7 +24582,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18459,7 +24626,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18503,7 +24670,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18545,7 +24712,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18625,7 +24792,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18665,7 +24832,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18718,7 +24885,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18758,7 +24925,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18800,7 +24967,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18848,7 +25015,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18901,7 +25068,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18943,7 +25110,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -18996,7 +25163,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19040,7 +25207,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19121,7 +25288,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19163,7 +25330,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19207,7 +25374,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19245,7 +25412,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19325,7 +25492,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19369,7 +25536,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19407,7 +25574,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19447,7 +25614,211 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_data_view_sources_api_v1_admin_data_views_sources_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataViewSourceListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_data_views_api_v1_admin_data_views_get: {
+        parameters: {
+            query?: {
+                source?: ("genes" | "variants" | "mutant_lines") | null;
+                /** @description Include views whose visibility is 'hidden'. Hidden views are kept and stay readable by id; they are only withheld from this list. */
+                include_hidden?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDataViewListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    create_data_view_api_v1_admin_data_views_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDataViewCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDataViewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    update_data_view_api_v1_admin_data_views__view_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDataViewUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDataViewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    delete_data_view_api_v1_admin_data_views__view_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                view_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19489,7 +25860,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19531,7 +25902,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19580,7 +25951,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19626,7 +25997,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19681,7 +26052,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19734,7 +26105,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19784,7 +26155,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19837,7 +26208,281 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    list_families_api_v1_comparative_families_get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                level?: string | null;
+                page?: number;
+                page_size?: number;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FamilyListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_family_api_v1_comparative_families__family_id__get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                family_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FamilyDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    compare_families_api_v1_comparative_families_compare_get: {
+        parameters: {
+            query: {
+                /** @description Family id on the left side. */
+                left: number;
+                /** @description Family id on the right side. */
+                right: number;
+                assembly_id?: number | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemberComparisonResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_gene_orthologs_api_v1_comparative_genes__gene_id__orthologs_get: {
+        parameters: {
+            query?: {
+                assembly_id?: number | null;
+                homolog_type?: string | null;
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                gene_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrthologResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    request_artifact_api_v1_comparative_artifacts_post: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ArtifactRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_artifact_api_v1_comparative_artifacts__job_id__get: {
+        parameters: {
+            query?: {
+                release_id?: number | null;
+            };
+            header?: {
+                "X-SoyMutDB-Release"?: number | null;
+            };
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtifactResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19877,7 +26522,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19917,7 +26562,87 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_site_navigation_api_v1_site_navigation_get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteNavigationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    get_site_profile_api_v1_site_profile_get: {
+        parameters: {
+            query?: {
+                variant?: components["schemas"]["SiteVariant"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19957,7 +26682,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -19997,7 +26722,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -20037,7 +26762,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -20081,7 +26806,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -20161,7 +26886,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -20247,7 +26972,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -20293,7 +27018,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -20333,7 +27058,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -20376,7 +27101,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -20418,7 +27143,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -20460,7 +27185,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -20500,7 +27225,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -20544,7 +27269,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -20582,7 +27307,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -20626,7 +27351,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */
@@ -20708,7 +27433,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ValidationErrorResponse"];
                 };
             };
             /** @description Internal Server Error */

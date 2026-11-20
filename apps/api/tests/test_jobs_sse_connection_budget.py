@@ -28,7 +28,10 @@ import asyncio
 import json
 import uuid
 from collections import namedtuple
+from collections.abc import AsyncGenerator, AsyncIterator
 from datetime import UTC, datetime
+from typing import Any, cast
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import delete, inspect, text
@@ -39,6 +42,10 @@ from app.api.v1 import jobs as jobs_module
 from app.core.security import create_access_token
 from app.models.auth import User
 from app.models.gwas import GwasJob, GwasJobStatus, GwasMethod
+from app.services import sse_ticket
+from app.services.sse_ticket import issue_ticket
+
+from .test_jobs_sse_ticket import FakeTicketStore
 
 Row = namedtuple("Row", ["job_type", "job_id", "status", "updated_at"])
 
@@ -215,11 +222,13 @@ class TestPollSessionLifecycle:
         _install(monkeypatch, recorder, [_FakePollSession(recorder, rows=rows)])
 
         request_session = _SpyRequestSession(recorder)
-        response = await jobs_module.job_events(_AlwaysConnected(), request_session, None)
+        response = await jobs_module.job_events(
+            cast(Request, _AlwaysConnected()), request_session, None
+        )
         try:
             frames = await _read_frames(response.body_iterator, 1)
         finally:
-            await response.body_iterator.aclose()  # type: ignore[attr-defined]
+            await cast(AsyncGenerator[Any], response.body_iterator).aclose()  # type: ignore[attr-defined]
 
         assert frames[0].startswith("event: job_update\n")
         # The request-scoped session was never queried ...
@@ -239,7 +248,7 @@ class TestPollSessionLifecycle:
         try:
             await _read_frames(response.body_iterator, 2)
         finally:
-            await response.body_iterator.aclose()  # type: ignore[attr-defined]
+            await cast(AsyncGenerator[Any], response.body_iterator).aclose()  # type: ignore[attr-defined]
 
         kinds = recorder.kinds()
         assert kinds[:6] == [
@@ -253,9 +262,7 @@ class TestPollSessionLifecycle:
         # Nothing is checked out while the stream waits for the next cycle.
         assert recorder.open_sessions == set()
 
-    async def test_a_single_client_never_holds_more_than_one_connection(
-        self, monkeypatch
-    ) -> None:
+    async def test_a_single_client_never_holds_more_than_one_connection(self, monkeypatch) -> None:
         """One stream must not accumulate connections over its cycles."""
         recorder = _Recorder()
         _install(monkeypatch, recorder, [_FakePollSession(recorder, rows=[])])
@@ -266,7 +273,7 @@ class TestPollSessionLifecycle:
         try:
             await _read_frames(response.body_iterator, 4)
         finally:
-            await response.body_iterator.aclose()  # type: ignore[attr-defined]
+            await cast(AsyncGenerator[Any], response.body_iterator).aclose()  # type: ignore[attr-defined]
 
         assert recorder.max_open == 1
         assert recorder.open_sessions == set()
@@ -279,11 +286,13 @@ class TestPollSessionLifecycle:
         _install(monkeypatch, recorder, [_FakePollSession(recorder, rows=[])])
 
         request_session = _SpyRequestSession(recorder)
-        response = await jobs_module.job_events(_AlwaysConnected(), request_session, None)
+        response = await jobs_module.job_events(
+            cast(Request, _AlwaysConnected()), request_session, None
+        )
         try:
             await _read_frames(response.body_iterator, 1)
         finally:
-            await response.body_iterator.aclose()  # type: ignore[attr-defined]
+            await cast(AsyncGenerator[Any], response.body_iterator).aclose()  # type: ignore[attr-defined]
 
         assert request_session.rollbacks == 1
         kinds = recorder.kinds()
@@ -299,48 +308,69 @@ class TestPollSessionLifecycle:
 @pytest.mark.integration
 @pytest.mark.asyncio
 class TestPoolIsNotHeldByTheStream:
-    @pytest.mark.parametrize("auth_mode", ["header", "query", "anonymous"])
+    @pytest.mark.parametrize("auth_mode", ["header", "ticket", "anonymous"])
     async def test_auth_identity_survives_request_rollback_without_private_job_leaks(
         self, test_engine, monkeypatch, auth_mode
     ) -> None:
         factory = async_sessionmaker(test_engine, expire_on_commit=False)
         monkeypatch.setattr(jobs_module, "get_session_factory", lambda: factory)
+        fake_ticket_store = FakeTicketStore()
+        monkeypatch.setattr(sse_ticket, "get_redis", lambda: fake_ticket_store)
         monkeypatch.setattr(jobs_module, "_POLL_INTERVAL_SECONDS", 0)
         user_ids = [uuid.uuid4(), uuid.uuid4()]
         job_ids = [uuid.uuid4() for _ in range(3)]
         async with factory() as session:
-            session.add_all([
-                User(
-                    id=user_id, username=f"sse-{user_id}",
-                    email=f"{user_id}@sse.test", password_hash="unused",
-                )
-                for user_id in user_ids
-            ])
+            session.add_all(
+                [
+                    User(
+                        id=user_id,
+                        username=f"sse-{user_id}",
+                        email=f"{user_id}@sse.test",
+                        password_hash="unused",
+                    )
+                    for user_id in user_ids
+                ]
+            )
             await session.flush()
-            session.add_all([
-                GwasJob(
-                    id=job_id, user_id=owner_id,
-                    phenotype_file_path="s3://soymutdb/private/phenotype.txt",
-                    method=GwasMethod.EMMAX, status=GwasJobStatus.RUNNING,
-                    params={}, submitted_at=datetime.now(UTC),
-                )
-                for job_id, owner_id in zip(job_ids, [*user_ids, None], strict=True)
-            ])
+            session.add_all(
+                [
+                    GwasJob(
+                        id=job_id,
+                        user_id=owner_id,
+                        phenotype_file_path="s3://soymutdb/private/phenotype.txt",
+                        method=GwasMethod.EMMAX,
+                        status=GwasJobStatus.RUNNING,
+                        params={},
+                        submitted_at=datetime.now(UTC),
+                    )
+                    for job_id, owner_id in zip(job_ids, [*user_ids, None], strict=True)
+                ]
+            )
             await session.commit()
 
         try:
             async with factory() as request_session:
                 token = create_access_token(str(user_ids[0]))
-                request = Request({
-                    "type": "http",
-                    "headers": [(b"authorization", f"Bearer {token}".encode())]
-                    if auth_mode == "header" else [],
-                    "query_string": f"access_token={token}".encode()
-                    if auth_mode == "query" else b"",
-                })
+                # A raw access token in the query string is refused outright
+                # (the edge proxy logs the request line), so the URL credential
+                # is the single-use ticket.
+                ticket = ""
+                if auth_mode == "ticket":
+                    ticket = await issue_ticket(user_ids[0], redis=fake_ticket_store)
+                request = Request(
+                    {
+                        "type": "http",
+                        "headers": [(b"authorization", f"Bearer {token}".encode())]
+                        if auth_mode == "header"
+                        else [],
+                        "query_string": f"ticket={ticket}".encode()
+                        if auth_mode == "ticket"
+                        else b"",
+                    }
+                )
                 user = await jobs_module.get_optional_sse_user(request, request_session)
                 response = await jobs_module.job_events(
-                    _AlwaysConnected(), request_session, user
+                    cast(Request, _AlwaysConnected()), request_session, user
                 )
                 if user is not None:
                     # Rollback expires even the PK despite expire_on_commit=False.
@@ -349,18 +379,19 @@ class TestPoolIsNotHeldByTheStream:
                 try:
                     frames = []
                     for _ in range(3):
-                        frames.append(await anext(response.body_iterator))
+                        frames.append(await anext(cast(AsyncIterator[Any], response.body_iterator)))
                         # Check while suspended on each yield, not just after close.
                         assert test_engine.sync_engine.pool.checkedout() == 0
                 finally:
-                    await response.body_iterator.aclose()
+                    await cast(AsyncGenerator[Any], response.body_iterator).aclose()
                 expected_id = job_ids[2] if auth_mode == "anonymous" else job_ids[0]
                 assert all(frame.startswith("event: job_update\n") for frame in frames)
                 payloads = [json.loads(frame.split("\ndata: ", 1)[1]) for frame in frames]
                 assert {payload["job_id"] for payload in payloads} == {str(expected_id)}
-                assert all(set(payload) == {
-                    "job_type", "job_id", "status", "updated_at"
-                } for payload in payloads)
+                assert all(
+                    set(payload) == {"job_type", "job_id", "status", "updated_at"}
+                    for payload in payloads
+                )
                 assert response.headers["cache-control"] == "private, no-store"
                 assert response.headers["vary"] == "Authorization"
                 assert test_engine.sync_engine.pool.checkedout() == 0
@@ -378,9 +409,7 @@ class TestPoolIsNotHeldByTheStream:
         self, test_engine, monkeypatch
     ) -> None:
         """The live stream keeps zero pooled connections checked out."""
-        factory = async_sessionmaker(
-            test_engine, class_=AsyncSession, expire_on_commit=False
-        )
+        factory = async_sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
         monkeypatch.setattr(jobs_module, "get_session_factory", lambda: factory)
         monkeypatch.setattr(jobs_module, "_POLL_INTERVAL_SECONDS", 0.01)
 
@@ -391,9 +420,7 @@ class TestPoolIsNotHeldByTheStream:
             await request_session.execute(text("SELECT 1"))
             assert test_engine.sync_engine.pool.checkedout() == 1
 
-            response = await jobs_module.job_events(
-                _AlwaysConnected(), request_session, None
-            )
+            response = await jobs_module.job_events(_AlwaysConnected(), request_session, None)
             # The request-scoped connection was returned to the pool before
             # the stream started.
             assert test_engine.sync_engine.pool.checkedout() == 0
@@ -401,7 +428,7 @@ class TestPoolIsNotHeldByTheStream:
             try:
                 frames = await _read_frames(response.body_iterator, 30)
             finally:
-                await response.body_iterator.aclose()  # type: ignore[attr-defined]
+                await cast(AsyncGenerator[Any], response.body_iterator).aclose()  # type: ignore[attr-defined]
 
             # The stream still sees the job (the poll query really ran).
             assert any(str(job_id) in frame for frame in frames)
@@ -431,3 +458,27 @@ async def _delete_gwas_job(factory, job_id: uuid.UUID) -> None:
     async with factory() as session:
         await session.execute(delete(GwasJob).where(GwasJob.id == job_id))
         await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_access_token_in_the_query_string_is_refused() -> None:
+    """A raw access token in the URL is refused, header or no header.
+
+    The edge proxy logs the request line, so `?access_token=` writes a live
+    session credential to `access.log`. The stream accepts only the
+    `Authorization` header or the single-use ticket, and this pins the
+    refusal rather than leaving it to the endpoint's incidental behaviour.
+    """
+    from app.core.exceptions import AuthenticationError
+
+    token = create_access_token(str(uuid.uuid4()))
+    request = Request(
+        {
+            "type": "http",
+            "headers": [],
+            "query_string": f"access_token={token}".encode(),
+        }
+    )
+
+    with pytest.raises(AuthenticationError, match="single-use ticket"):
+        await jobs_module.get_optional_sse_user(request, MagicMock())

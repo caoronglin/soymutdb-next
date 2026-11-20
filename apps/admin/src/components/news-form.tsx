@@ -156,8 +156,8 @@ export function NewsForm({
                   <Input
                     value={sourceUrl ?? ""}
                     readOnly
-                    aria-label="External article source URL"
-                    placeholder="No external source is attached"
+                    aria-label={t("admin.newsForm.externalSourceUrlAria", { defaultValue: "External article source URL" })}
+                    placeholder={t("admin.newsForm.externalSourcePlaceholder", { defaultValue: "No external source is attached" })}
                     prefix={sourcePlatform === "wechat" ? "WeChat" : sourcePlatform === "xmol" ? "X-MOL" : undefined}
                   />
                   {sourceUrl ? (

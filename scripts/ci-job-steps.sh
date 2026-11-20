@@ -157,8 +157,8 @@ ensure_contracts_python() {
   local spec
   for spec in "${required[@]}"; do
     case "${spec}" in
-      pytest*) "${interpreter}" -m pytest --version >/dev/null 2>&1 || missing+=("${spec}") ;;
-      *) "${interpreter}" -c "import yaml" >/dev/null 2>&1 || missing+=("${spec}") ;;
+    pytest*) "${interpreter}" -m pytest --version >/dev/null 2>&1 || missing+=("${spec}") ;;
+    *) "${interpreter}" -c "import yaml" >/dev/null 2>&1 || missing+=("${spec}") ;;
     esac
   done
   if [[ ${#missing[@]} -gt 0 ]]; then
@@ -233,6 +233,8 @@ ensure_governance_python() {
 # -----------------------------------------------------------------------------
 JOBS=(
   frontend
+  system-deps
+  bio-core
   api-tests
   smoke-contracts
   dependency-governance
@@ -246,6 +248,29 @@ JOBS=(
 
 list_jobs() {
   printf '%s\n' "${JOBS[@]}"
+}
+
+# -----------------------------------------------------------------------------
+# system-deps — the compiler prerequisites a later stage's pip install needs
+# -----------------------------------------------------------------------------
+# CPython 3.15 publishes no manylinux wheels for the worker's science stack
+# (h5py, cyvcf2, pandas, numcodecs, ...), so every `pip install apps/worker[dev]`
+# compiles sdists. The backend test gate and the dependency governance gate both
+# reach scripts/install-worker-science-build-deps.sh: that one script owns the
+# package list (matching infra/docker/Dockerfile.worker) and is idempotent, so
+# CNB's fresh-container stages and the GitHub mirror install identical bytes.
+#
+# Real build cnb-8sk-1k6gv3vju-002 died in the backend gate with
+#   error: libhdf5.so: cannot open shared object file: No such file or directory
+# and the governance license analyzer died building cyvcf2's bundled htslib
+# with only the HDF5 packages present. Both are covered by the shared recipe.
+#
+# NOTE: CNB gives each stage a fresh container, so this job body does NOT prepare
+# the stages after it. `dependency_governance_step` calls the same prerequisite
+# script itself for exactly that reason.
+system_deps_run() {
+  export HDF5_PKGCONFIG_NAME="${HDF5_PKGCONFIG_NAME:-hdf5-serial}"
+  bash "${REPO_ROOT}/scripts/install-worker-science-build-deps.sh"
 }
 
 # -----------------------------------------------------------------------------
@@ -324,8 +349,8 @@ ensure_api_venv() {
 
 frontend_build_demo() {
   VITE_DEPLOYMENT_MODE="${SOYMUTDB_CI_DEMO_MODE}" \
-  VITE_API_BASE_URL="${SOYMUTDB_CI_DEMO_API_URL}" \
-  VITE_JBROWSE_BASE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL}" \
+    VITE_API_BASE_URL="${SOYMUTDB_CI_DEMO_API_URL}" \
+    VITE_JBROWSE_BASE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL}" \
     pnpm build
 }
 
@@ -421,6 +446,32 @@ dependency_governance_env() {
 # -----------------------------------------------------------------------------
 # smoke-contracts — repo contract suites (the gate that had no CI coverage)
 # -----------------------------------------------------------------------------
+# -----------------------------------------------------------------------------
+# bio-core — Rust kernel gates (fmt / clippy / tests / wheel / import smoke)
+# -----------------------------------------------------------------------------
+# Added with packages/bio-core (0.1.2).  The job body is a single delegation to
+# scripts/verify-bio-core.sh so CNB and the GitHub mirror execute identical
+# bytes; no Rust logic is inlined into either provider's YAML.
+#
+# The wheel-boundary citation below names a real heading in the bio-core wheel
+# doc. check_bio_core_wheel.py --static and test_ci_job_contracts.py resolve that
+# quoted label against the doc's headings, so renaming the heading is a gate
+# change, not an editorial fix: update the citation and both gates together.
+# On main (before this PR) neither gate reads the doc.
+# This job is the ONLY producer of artifacts/wheels/soymutdb_bio_core-*-cp315-*.whl.
+# scripts/verify-backend-tests.sh (the api-tests stage, a bare python:3.15 with
+# no Rust toolchain or C linker) only CONSUMES that file. The boundary is closed
+# per provider: on CNB the two stages are in one pipeline, so /workspace carries
+# artifacts/wheels/ across (docs/ops/bio-core-wheel.md, "CI：构建一次，消费一次");
+# on GitHub the bio-core job uploads an artifact that api-tests downloads.
+bio_core_run() {
+  bash "${REPO_ROOT}/scripts/verify-bio-core.sh"
+  # The same job owns the Rust dependency scanners. Running them here (and
+  # only here) keeps one consolidated finding set for the release lane instead
+  # of a second, potentially contradictory report from the governance gate.
+  bash "${REPO_ROOT}/scripts/verify-bio-core-supply-chain.sh"
+}
+
 smoke_contracts_run() {
   # scripts/test_ci_job_contracts.py asserts, among other things, that every
   # shared script is executable and strict. It runs only under
@@ -429,10 +480,22 @@ smoke_contracts_run() {
   # scripts/check-production-artifact.sh passed every pipeline and reached main.
   # This job is the coverage that made that class of regression shippable.
   #
-  # The contracts layer is plain pytest under scripts/; it needs no workspace
-  # install, no API venv and no service, which is why it can run as its own cheap
-  # stage instead of being appended to a heavier job.
+  # The contracts layer is plain pytest plus stdlib-only guards under scripts/;
+  # it needs no workspace install, no API venv and no service, which is why it
+  # can run as its own cheap stage instead of being appended to a heavier job.
+  # The one Node-backed gate it used to call (the React i18n self-test) had a
+  # module-level `import ts from "typescript"` and only passed because the
+  # Frontend stage had already left node_modules in the shared /workspace.
+  # It now lives in verify-frontend-artifacts.sh, which bootstraps the workspace
+  # on both providers; scripts/test_contracts_layer_self_containment.py keeps
+  # that boundary from regressing (issue #125).
   ensure_contracts_python
+  python3 "${REPO_ROOT}/scripts/check_contracts_registry_collection.py" --self-test
+  # The registry guard proves the *suites* are collectible; it cannot see a
+  # layer that answers an empty plan with exit 0. Pin that verdict before the
+  # layer runs, so the Contract suites stage cannot report a green gate that
+  # collected nothing.
+  python3 "${REPO_ROOT}/scripts/check_contracts_empty_layer_verdict.py" --self-test
   bash "${REPO_ROOT}/scripts/smoke.sh" --profile contracts
 }
 
@@ -443,13 +506,26 @@ dependency_governance_step() {
   ensure_governance_python
   dependency_governance_env
 
+  # The `python-licenses-worker` analyzer runs `uv run --locked --no-dev
+  # --project apps/worker --with pip-licenses …`, which resolves the worker's
+  # whole runtime graph. On CPython 3.15 there are no wheels for the science
+  # stack, so uv compiles those sdists and needs the same system prerequisites as
+  # infra/docker/Dockerfile.worker. CNB gives every stage a fresh container, so
+  # the `Compiler prerequisites` stage's apt installs do NOT reach this one;
+  # without them the analyzer crashes while building cyvcf2's bundled htslib and
+  # the fail-closed gate reports `normalization_unavailable:license-expressions`
+  # — a toolchain error wearing the costume of a license finding. Provision the
+  # same idempotent recipe here and point h5py at Debian's serial flavour.
+  local rc=0
+  export HDF5_PKGCONFIG_NAME="${HDF5_PKGCONFIG_NAME:-hdf5-serial}"
+  bash "${REPO_ROOT}/scripts/install-worker-science-build-deps.sh" || rc=$?
+
   # e2e/ is intentionally outside the pnpm workspace, but Knip 5 discovers
   # its Playwright config via package.json and imports it to analyze entrypoints.
   # Without the independent npm lock installation, Knip exits 2 before any
   # code-quality findings can be generated (Cannot find '@playwright/test').
   # Install exactly the locked independent dependencies rather than ignoring
   # the whole workspace or disabling the analysis.
-  local rc=0
   npm ci --prefix "${REPO_ROOT}/e2e" --ignore-scripts \
     --registry=https://registry.npmjs.org/ || rc=$?
   # Separate npm package does not belong to root pnpm audit; security-scan it
@@ -492,6 +568,7 @@ compose_acceptance_run() {
     "MIGRATE_CLICKHOUSE_IMAGE_REF=soymutdb-validation/migrate-clickhouse:local"
     "JBROWSE_IMAGE_REF=soymutdb-validation/jbrowse:local"
     "MCP_IMAGE_REF=soymutdb-validation/mcp-server:local"
+    "GATEWAY_IMAGE_REF=soymutdb-validation/gateway:local"
     "POSTGRES_PASSWORD=ci-validation"
     "CLICKHOUSE_PASSWORD=ci-validation"
     "REDIS_PASSWORD=ci-validation"
@@ -514,6 +591,7 @@ compose_acceptance_run() {
     "core,analyses"
     "core,mcp"
     "core,cloudflare-tunnel"
+    "core,gateway"
   )
   local profile_set
   for profile_set in "${profile_sets[@]}"; do
@@ -539,21 +617,29 @@ db_ab_run() {
 clickhouse_migration_run() {
   local container="soymutdb-ci-clickhouse"
   docker rm -f "${container}" >/dev/null 2>&1 || true
+  # Ephemeral per-run password: a literal default here would be a published
+  # credential that every pipeline shares, and it would also be baked into the
+  # container's environment on a shared runner. An explicit caller value still
+  # wins, so a developer can attach to their own instance.
+  if [[ -z "${SOYMUTDB_CLICKHOUSE_PASSWORD:-}" ]]; then
+    SOYMUTDB_CLICKHOUSE_PASSWORD="$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 32)"
+    export SOYMUTDB_CLICKHOUSE_PASSWORD
+  fi
   docker run -d --name "${container}" -p 8123:8123 \
     -e CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1 \
-    -e CLICKHOUSE_PASSWORD="${SOYMUTDB_CLICKHOUSE_PASSWORD:-ci-ch-password}" \
+    -e CLICKHOUSE_PASSWORD="${SOYMUTDB_CLICKHOUSE_PASSWORD}" \
     "${SOYMUTDB_CLICKHOUSE_CI_IMAGE:-clickhouse/clickhouse-server:24.8-alpine}" >/dev/null
 
   local attempt
   for attempt in $(seq 1 60); do
     if curl --fail --silent \
-      -u "default:${SOYMUTDB_CLICKHOUSE_PASSWORD:-ci-ch-password}" \
+      -u "default:${SOYMUTDB_CLICKHOUSE_PASSWORD}" \
       http://127.0.0.1:8123/ping >/dev/null; then
       break
     fi
     sleep 2
   done
-  curl --fail --silent -u "default:${SOYMUTDB_CLICKHOUSE_PASSWORD:-ci-ch-password}" \
+  curl --fail --silent -u "default:${SOYMUTDB_CLICKHOUSE_PASSWORD}" \
     http://127.0.0.1:8123/ping >/dev/null || {
     docker logs "${container}" >&2 || true
     return 1
@@ -562,7 +648,8 @@ clickhouse_migration_run() {
   export SOYMUTDB_CLICKHOUSE_HOST=127.0.0.1
   export SOYMUTDB_CLICKHOUSE_PORT=8123
   export SOYMUTDB_CLICKHOUSE_USER=default
-  export SOYMUTDB_CLICKHOUSE_PASSWORD="${SOYMUTDB_CLICKHOUSE_PASSWORD:-ci-ch-password}"
+  # Set by clickhouse_migration_run above; never defaulted to a literal.
+  export SOYMUTDB_CLICKHOUSE_PASSWORD
   export SOYMUTDB_CLICKHOUSE_DATABASE=soymutdb
   export CLICKHOUSE_MIGRATION_PYTHON="${CLICKHOUSE_MIGRATION_PYTHON:-python}"
 
@@ -642,20 +729,27 @@ USAGE
 main() {
   local command="${1:-}"
   case "${command}" in
-    list) list_jobs ;;
-    run)
-      local job="${2:-}"
-      [[ -n "${job}" ]] || { usage >&2; exit 2; }
-      local function_name="${job//-/_}_run"
-      declare -F "${function_name}" >/dev/null || {
-        echo "unknown job: ${job}" >&2
-        exit 2
-      }
-      log "run ${job}"
-      "${function_name}"
-      ;;
-    -h|--help|"") usage ;;
-    *) echo "unknown command: ${command}" >&2; usage >&2; exit 2 ;;
+  list) list_jobs ;;
+  run)
+    local job="${2:-}"
+    [[ -n "${job}" ]] || {
+      usage >&2
+      exit 2
+    }
+    local function_name="${job//-/_}_run"
+    declare -F "${function_name}" >/dev/null || {
+      echo "unknown job: ${job}" >&2
+      exit 2
+    }
+    log "run ${job}"
+    "${function_name}"
+    ;;
+  -h | --help | "") usage ;;
+  *)
+    echo "unknown command: ${command}" >&2
+    usage >&2
+    exit 2
+    ;;
   esac
 }
 

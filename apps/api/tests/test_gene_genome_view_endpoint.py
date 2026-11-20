@@ -215,6 +215,40 @@ async def test_render_failure_to_load_sites_still_serves_the_gene(stub_gene, mon
     assert "Glyma.01G066600.Wm82.a6.v1" in body
 
 
+async def test_preview_sites_never_reach_the_public_picture(
+    stub_gene, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The unpublished preview dataset must stay behind the dev-only flag.
+
+    This response is served publicly and edge-cached for an hour, so merging
+    draft mutation rows into it would publish them and let a shared cache keep
+    them long after the flag is turned off.
+    """
+    from types import SimpleNamespace
+
+    site = SimpleNamespace(
+        source_site_key="site-1",
+        position=10685340,
+        mutant_line_name="HX-1",
+        confidence="H",
+    )
+    stub_gene(_gene(), sites=[site])
+
+    monkeypatch.setattr(
+        genes_module,
+        "get_settings",
+        lambda: SimpleNamespace(local_test_preview_enabled=False),
+    )
+    assert "HX-1" not in (await _call()).body.decode("utf-8")
+
+    monkeypatch.setattr(
+        genes_module,
+        "get_settings",
+        lambda: SimpleNamespace(local_test_preview_enabled=True),
+    )
+    assert "HX-1" in (await _call()).body.decode("utf-8")
+
+
 async def test_hostile_gene_label_cannot_escape_the_svg(stub_gene) -> None:
     """Escaping is a security boundary, not cosmetics."""
     stub_gene(_gene(gene_id='</svg><script>alert(1)</script>'))

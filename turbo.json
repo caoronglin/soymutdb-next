@@ -40,7 +40,9 @@
         "VITE_SW_ENABLED",
         "VITE_SITE_VARIANT",
         "SOYMUTDB_EMIT_GZ",
-        "SOYMUTDB_VUE_DIST_DIR"
+        "SOYMUTDB_VUE_DIST_DIR",
+        "SOYMUTDB_CLOUDFLARE_ANALYTICS_TOKEN",
+        "SOYMUTDB_ANALYTICS_PROVIDER"
       ]
     },
     "build:web": {

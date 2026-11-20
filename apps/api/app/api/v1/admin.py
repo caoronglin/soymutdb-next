@@ -22,6 +22,7 @@ from ...core.config import get_settings
 from ...core.database import get_db, get_session_factory
 from ...core.exceptions import ConflictError, NotFoundError, ValidationError
 from ...core.security import require_admin_roles
+from ...core.spreadsheet import neutralize_spreadsheet_cell
 from ...models.auth import AuditLog, User
 from ...models.content import Release, ReleaseStatus
 from ...models.data_publishing import ActiveRelease, DataSet, ReleaseDataSet
@@ -528,12 +529,16 @@ async def export_audit_logs(
                     writer.writerow(
                         [
                             log.timestamp.isoformat() if log.timestamp else "",
-                            actor,
-                            log.action,
-                            log.resource_type,
-                            log.resource_id or "",
-                            log.ip_address or "",
-                            json.dumps(details) if details is not None else "",
+                            neutralize_spreadsheet_cell(actor),
+                            neutralize_spreadsheet_cell(log.action),
+                            neutralize_spreadsheet_cell(log.resource_type),
+                            # `resource_id` carries the caller's raw search
+                            # query, so it is the cell an outsider controls.
+                            neutralize_spreadsheet_cell(log.resource_id or ""),
+                            neutralize_spreadsheet_cell(log.ip_address or ""),
+                            neutralize_spreadsheet_cell(
+                                json.dumps(details) if details is not None else ""
+                            ),
                         ]
                     )
                 yield buffer.getvalue()
@@ -582,6 +587,7 @@ async def export_audit_logs_excel(
     _require_admin(current_user)
     import openpyxl  # noqa: PLC0415 — lazy import
     from openpyxl.styles import Font, PatternFill  # noqa: PLC0415
+    from openpyxl.utils import get_column_letter  # noqa: PLC0415 — lazy import
 
     factory = get_session_factory()
     async with factory() as session:
@@ -604,6 +610,7 @@ async def export_audit_logs_excel(
 
         wb = openpyxl.Workbook()
         ws = wb.active
+        assert ws is not None, "a new Workbook always has an active sheet"
         ws.title = "Audit Logs"
 
         # Header styling.
@@ -620,20 +627,26 @@ async def export_audit_logs_excel(
 
         for row_idx, log in enumerate(logs, start=2):
             ws.cell(row=row_idx, column=1, value=log.timestamp.isoformat() if log.timestamp else "")
-            ws.cell(row=row_idx, column=2, value=log.user.username if log.user else "")
-            ws.cell(row=row_idx, column=3, value=log.action)
-            ws.cell(row=row_idx, column=4, value=log.resource_type)
-            ws.cell(row=row_idx, column=5, value=log.resource_id or "")
-            ws.cell(row=row_idx, column=6, value=log.ip_address or "")
+            ws.cell(
+                row=row_idx,
+                column=2,
+                value=neutralize_spreadsheet_cell(log.user.username if log.user else ""),
+            )
+            ws.cell(row=row_idx, column=3, value=neutralize_spreadsheet_cell(log.action))
+            ws.cell(row=row_idx, column=4, value=neutralize_spreadsheet_cell(log.resource_type))
+            ws.cell(row=row_idx, column=5, value=neutralize_spreadsheet_cell(log.resource_id or ""))
+            ws.cell(row=row_idx, column=6, value=neutralize_spreadsheet_cell(log.ip_address or ""))
             ws.cell(
                 row=row_idx,
                 column=7,
-                value=json.dumps(log.new_value) if log.new_value is not None else "",
+                value=neutralize_spreadsheet_cell(
+                    json.dumps(log.new_value) if log.new_value is not None else ""
+                ),
             )
 
         # Auto-adjust column widths.
         for col_idx, header in enumerate(headers, start=1):
-            ws.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = max(
+            ws.column_dimensions[get_column_letter(col_idx)].width = max(
                 len(header) + 4, 20
             )
 
@@ -796,8 +809,9 @@ async def admin_dashboard_series(
 ) -> AdminDashboardSeries:
     """Time series for the admin dashboard charts.
 
-    - ``import_throughput``: daily import tasks (completed vs. failed) from
-      the PostgreSQL ``import_tasks`` table.
+    - ``import_throughput``: daily import tasks from the PostgreSQL
+      ``import_tasks`` table, split into completed vs. failed/cancelled vs.
+      still queued or running.
     - ``query_latency``: daily p50/p95/p99 percentiles from the PostgreSQL
       analytics events (empty when that query is unavailable).
     - ``storage_growth``: no reliable storage source exists yet — empty.
@@ -817,14 +831,24 @@ async def admin_dashboard_series(
     )
     rows = (await db.execute(import_stmt)).all()
 
+    # Every status lands in a bucket. The first version only counted COMPLETED
+    # and FAILED, so queued/validating/ingesting tasks vanished: a day whose
+    # imports were still executing rendered as a day with no activity at all.
+    # Anything that is not a terminal outcome is counted as in flight, so a
+    # status added to `ImportStatus` later cannot silently under-report again.
+    completed_states = {ImportTaskStatus.COMPLETED.value}
+    failed_states = {ImportTaskStatus.FAILED.value}
     by_day: dict[str, dict[str, int]] = {}
     for day, status_val, count in rows:
         key = day.isoformat() if hasattr(day, "isoformat") else str(day)
-        entry = by_day.setdefault(key, {"imported": 0, "failed": 0})
-        if str(status_val) == ImportTaskStatus.COMPLETED.value:
+        entry = by_day.setdefault(key, {"imported": 0, "failed": 0, "running": 0})
+        status_text = str(status_val)
+        if status_text in completed_states:
             entry["imported"] += int(count)
-        elif str(status_val) == ImportTaskStatus.FAILED.value:
+        elif status_text in failed_states:
             entry["failed"] += int(count)
+        else:
+            entry["running"] += int(count)
 
     import_throughput = [
         ImportThroughputPoint(date=day, **entry) for day, entry in sorted(by_day.items())

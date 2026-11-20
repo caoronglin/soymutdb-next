@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminSettingsApi, type SettingsHistoryItem } from "@soymutdb/api-client";
@@ -10,15 +10,24 @@ export interface SettingsHistorySection {
   label: string;
 }
 
+const HISTORY_PAGE_SIZE = 50;
+
 export function SettingsRevisionHistory({ sections }: { sections: SettingsHistorySection[] }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [section, setSection] = useState(sections[0]?.id ?? "");
+  const [limit, setLimit] = useState(HISTORY_PAGE_SIZE);
   const [target, setTarget] = useState<SettingsHistoryItem | null>(null);
   const [reason, setReason] = useState("");
+
+  // A new section starts from the first window again.
+  useEffect(() => {
+    setLimit(HISTORY_PAGE_SIZE);
+  }, [section]);
+
   const historyQuery = useQuery({
-    queryKey: ["admin-settings-history", section],
-    queryFn: () => adminSettingsApi.history(section),
+    queryKey: ["admin-settings-history", section, limit],
+    queryFn: () => adminSettingsApi.history(section, limit),
     enabled: Boolean(section),
   });
   const rollbackMutation = useMutation({
@@ -73,6 +82,15 @@ export function SettingsRevisionHistory({ sections }: { sections: SettingsHistor
             </li>
           ))}
         </ol>
+        {(historyQuery.data?.items.length ?? 0) >= limit ? (
+          <Button
+            type="default"
+            loading={historyQuery.isFetching}
+            onClick={() => setLimit((current) => current + HISTORY_PAGE_SIZE)}
+          >
+            {t("admin.settings.revision.loadMore", { defaultValue: "Load older revisions" })}
+          </Button>
+        ) : null}
       </div>
       {target ? (
         <ConfirmDialog

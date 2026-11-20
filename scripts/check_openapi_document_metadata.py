@@ -1,0 +1,1333 @@
+#!/usr/bin/env python3
+"""Freeze the published OpenAPI document-level metadata against a golden lock.
+
+``packages/api-client/scripts/check-contract.sh`` proves a self-consistency
+property: a fresh export equals the committed ``openapi.json``, and the
+generated ``openapi.d.ts`` equals a regeneration from it. It does not prove
+the published document still *says the reviewed contract*. The 422 guard, the
+behavior guard (#166), the auth-surface guard (#169), the envelope-shape guard
+(#171) and the body-integrity guard (#168) pin per-operation or per-schema
+facts; none reads the top-level ``info``/``tags`` block.
+
+The top-level ``openapi`` dialect string (``"3.1.0"``) is the one fact in
+this block with no source literal in this repo: FastAPI owns it as
+``app.openapi_version`` and ``main.py`` only forwards it into
+``get_openapi(...)``. So the golden lock is its only value anchor, and the
+parsed ``get_openapi(openapi_version=app.openapi_version)`` wiring is its only
+source-side anchor. A coordinated snapshot+golden+source co-revert that blesses
+``3.0.3`` stays green on every equality door and is named by that wiring pin.
+
+That block is client-visible and lives in exactly one committed artifact:
+``openapi-typescript`` drops ``info`` and top-level ``tags`` entirely, so
+``openapi.d.ts`` carries neither. ``normalize()`` in ``export_contract.py``
+only walks ``components.schemas``, so the export-normalizer fixed-point test
+cannot see it either. A coordinated edit -- change ``main.py``'s
+``OPENAPI_DESCRIPTION`` / ``OPENAPI_TAGS`` / ``version`` constant, re-export
+the snapshot -- keeps *every* existing gate green while the published metadata
+drifts. Both halves agree with each other by construction.
+
+This is the same genus #162 names for the kernel error codes: **a derived
+expectation cannot freeze a value**. Pinning "published == source" is vacuous
+against a co-revert of both. The fix is a hand-written, reviewed lock that
+sits *downstream* of the source:
+
+    packages/api-client/openapi-document-metadata.golden.json
+
+It is NOT generated from ``main.py`` or ``openapi.json``. Any deliberate
+change to the title / version / description prose / tag catalog is an explicit,
+reviewable edit to that file, followed by regenerating the snapshot. The guard
+compares three things against committed bytes, all stdlib only (no Python 3.15
+venv, no FastAPI import, no service, no pydantic inference to copy):
+
+1. the published ``info``/``tags`` == the golden (catches a source+snapshot
+   co-revert, which leaves the golden stale);
+2. the source constants in ``main.py``/``core/config.py`` == the golden
+   (catches a source-only drift that would mislead a regeneration);
+3. ``create_app()`` still feeds those constants into ``FastAPI(...)``
+   (catches a rewiring that would make the snapshot's metadata diverge from
+   what the running app exports). It also rejects a rebinding of those names
+   in ``create_app``'s scope and an in-place mutation of the watched
+   constants: both leave the call-site text and the module literal intact
+   while changing what ``FastAPI(...)`` actually receives.
+
+Unlike the error envelope's ``required`` rules, these facts are plain literals
+(a triple-quoted string, a list of dicts, a version string, a config default),
+so pinning them does not mean re-deriving pydantic's behaviour and cannot rot
+across pydantic versions.
+
+The tag catalog has a SECOND, different property. ``info.title`` /
+``info.version`` / ``info.description`` are invariants: their *value* is the
+contract, so a lock is the right authority. The catalog's *completeness* is a
+derived quantity: it moves whenever a router adds or drops a tag. A lock can
+freeze the six names it was written with, but it cannot notice that a seventh
+router showed up -- the stale lock stays green. So this guard also asserts a
+non-constant invariant, with an authority that does NOT move with the catalog:
+
+    every tag a router emits (``tags=[...]`` literals in ``apps/api/app``)
+      == every tag the published operations carry (``paths.*.*.tags[]``)
+      == the declared catalog (top-level ``tags[]``)
+
+Both sides are read from committed bytes. The router source is upstream of the
+export, and the snapshot's operation tags are downstream of it, so a
+source+snapshot+golden co-revert that invents a tag still fails here: no router
+emits it. Conversely a legitimate new router plus a catalog entry stays green,
+which is the whole point -- a lock would have gone stale. This invariant reads
+NO golden content; blessing the golden cannot move it. It also reports the
+``declared-but-unused`` direction, which a byte lock cannot see.
+
+The completeness invariant is a SET of tag names, so it cannot see which
+operation carries which tag. A byte-preserving permutation that swaps two
+operations' tags keeps the name set, the catalog, the router literals and the
+golden lock identical -- yet it changes the published grouping, which is
+client-visible. ``_OPERATION_TAG_DIGEST`` is a second hand-written sha256 over
+the canonical sorted ``(METHOD, path, sorted-tags)`` tuple set. It is a
+reviewed literal, not derived from either artifact under guard, so a
+co-revert of both halves still changes it. A legitimate retag moves the digest
+in the same commit as the snapshot, with a reason.
+
+Usage:
+    python3 scripts/check_openapi_document_metadata.py
+    python3 scripts/check_openapi_document_metadata.py --self-test
+"""
+
+from __future__ import annotations
+
+import argparse
+import ast
+import copy
+import functools
+import hashlib
+import json
+import symtable
+import sys
+from pathlib import Path
+from typing import Any
+
+ROOT = Path(__file__).resolve().parents[1]
+SNAPSHOT = ROOT / "packages/api-client/openapi.json"
+GENERATED = ROOT / "packages/api-client/src/generated/openapi.d.ts"
+GOLDEN = ROOT / "packages/api-client/openapi-document-metadata.golden.json"
+MAIN = ROOT / "apps/api/app/main.py"
+CONFIG = ROOT / "apps/api/app/core/config.py"
+SMOKE = ROOT / "scripts/smoke.sh"
+ROUTER_ROOT = ROOT / "apps/api/app"
+SELF = Path(__file__).name
+WIRED_AS = "scripts/test_openapi_document_metadata_guard.py"
+
+# Keys the golden locks. ``_comment`` is documentation, not contract.
+LOCKED_KEYS = ("openapi", "title", "version", "description", "tags")
+REQUIRED_TAG_KEYS = ("name", "description")
+
+# Independent, hand-written fixed point on the published ``info`` key set. The
+# golden lock above pins four *values*; it never says which keys ``info`` is
+# allowed to carry. A regenerate that adds one client-visible key (``license``,
+# ``contact``, ``termsOfService``, ...) with the four reviewed values untouched
+# and both provenance blob ids honestly re-pinned leaves every wired gate green:
+# the byte lock agrees, the source lock agrees, and the generated client drops
+# ``info`` entirely. Issue #1 forbids fabricating a license, so the shape is a
+# contract. Read from nowhere; re-pin in the same commit as an intentional
+# metadata change, with a reason.
+_INFO_KEYS = frozenset({"title", "version", "description"})
+_EXPECTED_INFO_KEYS = 3
+
+METHODS = frozenset(
+    {"get", "put", "post", "patch", "delete", "options", "head", "trace"}
+)
+
+# Independent fixed point for the operation -> tag assignment. sha256 of
+# "\n".join(["soymutdb-operation-tags/v1"] +
+#   sorted(f"{method}|{path}|{','.join(sorted(tags))}")). Regenerate with
+# _operation_tag_digest() after an intentional, reviewed retag and update in
+# the same commit, with a reason.
+#
+# Re-pinned 2026-11-09 with the regenerated snapshot: the site control plane
+# added `GET /site/profile`, `GET /site/branding` and `GET /site/navigation`,
+# and the multi-view workspace added five `/admin/data-views` operations
+# (sources, list, create, update, delete), all tagged as reviewed above. No
+# existing operation changed tags.
+_OPERATION_TAG_DIGEST = "d991b226764675b56c4ba5bf96c75303b00aca15f780e8f84a836aa57d9746b8"
+
+# Independent fixed point for the per-operation tag ORDER. The digest above
+# sorts tags inside each row, so swapping two tags on one operation (same
+# multiset, same counts) moves no row and stays green. Swagger UI groups an
+# operation under its first tag and renders the rest in published order, so
+# that sequence is client-visible. This literal reads (METHOD, path, index,
+# tag) in document order from nowhere; re-pin in the same commit as a reviewed
+# reorder, with a reason.
+_OPERATION_TAG_ORDER_DIGEST = (
+    "792f77e8c63d90c4b90a0aa1ebbfea783b3e7c5768bb9a82d73e854f37f4ad10"
+)
+_EXPECTED_OPERATION_TAG_ROWS = 278
+
+
+def _operation_tag_rows(document: dict[str, Any]) -> list[tuple[str, str, str]]:
+    """Canonical (METHOD, path, sorted-tags) rows from the published document."""
+    rows: list[tuple[str, str, str]] = []
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for method, operation in item.items():
+            if method not in METHODS or not isinstance(operation, dict):
+                continue
+            tags = sorted(
+                tag for tag in (operation.get("tags") or []) if isinstance(tag, str)
+            )
+            rows.append((method.upper(), path, ",".join(tags)))
+    return rows
+
+
+def _operation_tag_digest(rows: list[tuple[str, str, str]]) -> str:
+    blob = "\n".join(
+        ["soymutdb-operation-tags/v1"]
+        + ["|".join(row) for row in sorted(rows)]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _operation_tag_order_rows(document: dict[str, Any]) -> list[tuple[str, str, str, str]]:
+    """Canonical (METHOD, path, index, tag) rows in PUBLISHED order."""
+    rows: list[tuple[str, str, str, str]] = []
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for method, operation in item.items():
+            if method not in METHODS or not isinstance(operation, dict):
+                continue
+            for index, tag in enumerate(operation.get("tags") or []):
+                if isinstance(tag, str):
+                    rows.append((method.upper(), path, str(index), tag))
+    return rows
+
+
+def _operation_tag_order_digest(rows: list[tuple[str, str, str, str]]) -> str:
+    blob = "\n".join(
+        ["soymutdb-operation-tag-order/v1"]
+        + ["|".join(row) for row in sorted(rows)]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+# ---------------------------------------------------------------------------
+# Source-side reading (stdlib ast, no imports of the app)
+# ---------------------------------------------------------------------------
+
+
+def _assignments(tree: ast.Module) -> dict[str, ast.expr]:
+    """Map name -> value expression for module-level simple assignments."""
+    out: dict[str, ast.expr] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            value = node.value
+            if value is None:
+                continue
+            for target in targets:
+                if isinstance(target, ast.Name):
+                    out[target.id] = value
+    return out
+
+
+def _fastapi_kwargs(tree: ast.Module) -> dict[str, ast.expr]:
+    """Keyword arguments of the ``FastAPI(...)`` call inside ``create_app``."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and (
+            (isinstance(node.func, ast.Name) and node.func.id == "FastAPI")
+            or (isinstance(node.func, ast.Attribute) and node.func.attr == "FastAPI")
+        ):
+            return {kw.arg: kw.value for kw in node.keywords if kw.arg}
+    return {}
+
+
+def _get_openapi_kwargs(tree: ast.Module) -> dict[str, ast.expr]:
+    """Keyword arguments of the ``get_openapi(...)`` call that builds the schema."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call) and (
+            (isinstance(node.func, ast.Name) and node.func.id == "get_openapi")
+            or (isinstance(node.func, ast.Attribute) and node.func.attr == "get_openapi")
+        ):
+            return {kw.arg: kw.value for kw in node.keywords if kw.arg}
+    return {}
+
+
+def _config_default(tree: ast.Module, name: str) -> ast.expr | None:
+    """An annotated assignment default, e.g. ``app_name: str = "SoyMutDB"``.
+
+    ``config.py`` declares these as pydantic ``BaseSettings`` fields inside a
+    class, not at module level, so walk the whole tree.
+    """
+    for node in ast.walk(tree):
+        if (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == name
+            and node.value is not None
+        ):
+            return node.value
+    return None
+
+
+def _literal(expr: ast.expr | None) -> Any:
+    return None if expr is None else ast.literal_eval(expr)
+
+
+_ROUTE_METHODS = frozenset(
+    {"get", "post", "put", "patch", "delete", "head", "options", "trace", "api_route"}
+)
+
+
+def router_sources() -> dict[str, str]:
+    """Committed router source bytes. These are upstream of every export."""
+    out: dict[str, str] = {}
+    for path in sorted(ROUTER_ROOT.rglob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        if "tags=" in text:
+            out[str(path.relative_to(ROOT))] = text
+    return out
+
+
+def router_tag_names(sources: dict[str, str]) -> set[str]:
+    """Tag names a router actually emits, from ``tags=[...]`` literals.
+
+    ``APIRouter(tags=[...])`` and route decorators are the origin of
+    ``paths.*.*.tags[]``; ``export_contract.py`` copies them verbatim. Only
+    those call shapes are read, so an unrelated ``tags=`` kwarg (e.g.
+    ``bleach.clean(..., tags=[...])``) cannot be mistaken for a tag. A
+    non-literal ``tags=`` (e.g. ``tags=app.openapi_tags``) is a pass-through,
+    not a declaration, and is deliberately skipped.
+    """
+    names: set[str] = set()
+    for path, text in sources.items():
+        try:
+            tree = ast.parse(text)
+        except SyntaxError as exc:
+            raise ValueError(f"{path} no longer parses: {exc}") from exc
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            is_router = (isinstance(func, ast.Name) and func.id == "APIRouter") or (
+                isinstance(func, ast.Attribute) and func.attr == "APIRouter"
+            )
+            is_route = isinstance(func, ast.Attribute) and func.attr in _ROUTE_METHODS
+            if not (is_router or is_route):
+                continue
+            for keyword in node.keywords:
+                if keyword.arg != "tags" or not isinstance(
+                    keyword.value, (ast.List, ast.Tuple)
+                ):
+                    continue
+                for value in ast.literal_eval(keyword.value):
+                    if isinstance(value, str):
+                        names.add(value)
+    return names
+
+
+def _kw_expr(kwargs: dict[str, ast.expr], name: str) -> str | None:
+    """Unparsed value of a ``FastAPI(...)`` keyword, or None if absent."""
+    value = kwargs.get(name)
+    return ast.unparse(value) if value is not None else None
+
+
+# The three keyword values whose *spelling* ``_kw_expr`` pins. An in-scope
+# binding of any root of these expressions inside ``create_app`` would make
+# the running app export different metadata while leaving the call-site text
+# (and therefore the byte lock and the parsed-call check) unchanged.
+_WATCHED_KWARGS = ("title", "description", "openapi_tags")
+
+
+def _watched_names(main: str) -> set[str]:
+    """Root names referenced by the watched ``FastAPI(...)`` keyword values."""
+    kwargs = _fastapi_kwargs(ast.parse(main))
+    names: set[str] = set()
+    for name in _WATCHED_KWARGS:
+        value = kwargs.get(name)
+        if value is None:
+            continue
+        for node in ast.walk(value):
+            if isinstance(node, ast.Name):
+                names.add(node.id)
+    return names
+
+
+def _shadowed_wiring_names(main: str) -> list[str]:
+    """Watched names bound by a statement inside ``create_app``'s own scope.
+
+    ``_kw_expr`` only proves the keyword still *reads* ``OPENAPI_DESCRIPTION``.
+    A binding statement in ``create_app`` (assignment, parameter, import,
+    augmented assign, ``del``, loop/``with``/``except`` target, walrus) makes
+    that name resolve elsewhere, so the running app publishes different bytes
+    while every other check stays green. This is an in-scope binding, not
+    necessarily a *local* one: ``global NAME`` + ``NAME = ...`` also binds here
+    (``is_assigned()`` is true) and is caught. A bare ``global NAME`` declares
+    an intent but binds nothing, so it is deliberately not flagged. The check
+    is scope-wide, not positional -- a binding after ``FastAPI(...)`` is caught
+    too. Use the standard library symbol table, not a textual walk, so a
+    same-name local in a nested helper is not a false positive.
+
+    In-place mutation (``OPENAPI_TAGS.clear()``) is not a binding; it is
+    outside what a symbol-table read of one scope can prove. See
+    ``docs/dev/openapi-document-metadata.md``.
+    """
+    watched = _watched_names(main)
+    if not watched:
+        return []
+    table = symtable.symtable(main, "<main>", "exec")
+    create_app = next(
+        (child for child in table.get_children() if child.get_name() == "create_app"),
+        None,
+    )
+    if create_app is None:
+        return []
+    return sorted(
+        symbol.get_name()
+        for symbol in create_app.get_symbols()
+        if symbol.get_name() in watched and (symbol.is_local() or symbol.is_assigned())
+    )
+
+
+# A watched constant can drift without any rebinding: ``OPENAPI_TAGS.clear()``
+# or ``OPENAPI_TAGS[0] = {...}`` mutates the same object the module-level
+# literal points at, so ``FastAPI(...)`` publishes a hollow catalog while the
+# spelling, the module literal, the snapshot and the golden all stay put.
+# Scope resolution cannot see this. Fail closed: any method call on a watched
+# root must be in this reviewed read-only allowlist, and any subscript or
+# attribute store rooted at a watched name is rejected. The committed
+# ``create_app`` uses none of these, so a new unknown shape reddens the guard
+# instead of silently passing.
+_READONLY_METHODS = frozenset(
+    ("copy", "count", "index", "get", "items", "keys", "values")
+)
+
+
+def _root_name(node: ast.expr) -> str | None:
+    """Innermost Name at the base of an attribute/subscript chain, if any."""
+    while isinstance(node, (ast.Subscript, ast.Attribute)):
+        node = node.value
+    return node.id if isinstance(node, ast.Name) else None
+
+
+def _mutated_wiring_names(main: str) -> list[str]:
+    """Watched names mutated in place anywhere inside ``create_app``."""
+    tree = ast.parse(main)
+    create_app = next(
+        (n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "create_app"),
+        None,
+    )
+    if create_app is None:
+        return []
+    watched = _watched_names(main)
+    found: set[str] = set()
+    for node in ast.walk(create_app):
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+            root = _root_name(node.func.value)
+            if root in watched and node.func.attr not in _READONLY_METHODS:
+                found.add(f"{root}.{node.func.attr}()")
+        if isinstance(node, (ast.Subscript, ast.Attribute)) and isinstance(
+            node.ctx, (ast.Store, ast.Del)
+        ):
+            root = _root_name(node.value)
+            if root in watched:
+                found.add(f"assignment via {root}")
+    return sorted(found)
+
+
+def _uncompilable_wiring(main: str) -> str | None:
+    """A clean-FAIL reason if ``create_app`` would not run at all.
+
+    The scope and mutation passes read the AST. ``ast.parse`` and ``symtable``
+    both accept ``__debug__ = 1``; only ``compile()`` rejects it. So a module
+    that cannot even be imported reads GREEN on those passes. ``compile()`` is
+    the authority that matches the runtime, so it is asked directly; anything
+    it rejects is a clean FAIL, not an escaping traceback.
+    """
+    try:
+        compile(main, "<main.py>", "exec")
+    except SyntaxError as exc:
+        return f"create_app() would not run: {exc}"
+    return None
+
+
+def source_facts(main: str, config: str) -> dict[str, Any]:
+    """Derive the metadata the backend *intends* to publish from source bytes."""
+    main_tree = ast.parse(main)
+    cfg_tree = ast.parse(config)
+    assignments = _assignments(main_tree)
+    kwargs = _fastapi_kwargs(main_tree)
+    title_expr = kwargs.get("title")
+    return {
+        "title": _literal(_config_default(cfg_tree, "app_name")),
+        "version": _literal(kwargs.get("version")),
+        "description": _literal(assignments.get("OPENAPI_DESCRIPTION")),
+        "tags": _literal(assignments.get("OPENAPI_TAGS")),
+        "title_expr": ast.unparse(title_expr) if title_expr is not None else None,
+        "has_create_app": any(
+            isinstance(n, ast.FunctionDef) and n.name == "create_app"
+            for n in main_tree.body
+        ),
+        "description_expr": _kw_expr(kwargs, "description"),
+        "tags_expr": _kw_expr(kwargs, "openapi_tags"),
+        "openapi_version_expr": _kw_expr(
+            _get_openapi_kwargs(main_tree), "openapi_version"
+        ),
+    }
+
+
+def published_facts(document: dict[str, Any]) -> dict[str, Any]:
+    info = document.get("info")
+    if not isinstance(info, dict):
+        return {}
+    return {
+        "openapi": document.get("openapi"),
+        "title": info.get("title"),
+        "version": info.get("version"),
+        "description": info.get("description"),
+        "tags": document.get("tags"),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Checks
+# ---------------------------------------------------------------------------
+
+
+def failures(
+    snapshot: str,
+    generated: str,
+    golden: str,
+    main: str,
+    config: str,
+    smoke: str,
+    routers: dict[str, str],
+    tag_digest: str | None = None,
+    tag_order_digest: str | None = None,
+    expected_tag_order_rows: int | None = None,
+) -> list[str]:
+    found: list[str] = []
+    try:
+        document: dict[str, Any] = json.loads(snapshot)
+    except json.JSONDecodeError as exc:
+        return [f"openapi.json is not valid JSON: {exc}"]
+    try:
+        locked: dict[str, Any] = json.loads(golden)
+    except json.JSONDecodeError as exc:
+        return [f"openapi-document-metadata.golden.json is not valid JSON: {exc}"]
+    try:
+        facts = source_facts(main, config)
+    except (SyntaxError, ValueError) as exc:
+        return [f"main.py/config.py no longer parse as the metadata source: {exc}"]
+
+    # Reject a hollow / duplicated-key lock: a truncated golden must fail loudly
+    # rather than read as "no drift". object_pairs_hook keeps duplicate keys.
+    def _no_dupes(pairs):
+        out: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in out:
+                raise ValueError(f"duplicate key {key!r}")
+            out[key] = value
+        return out
+    try:
+        json.loads(golden, object_pairs_hook=_no_dupes)
+    except ValueError as exc:
+        return [f"golden lock has duplicate keys: {exc}"]
+    for key in LOCKED_KEYS:
+        if key not in locked:
+            found.append(f"golden lock is missing the reviewed `{key}`")
+    if any(
+        isinstance(locked.get(k), str) and not locked[k]
+        for k in ("openapi", "title", "version", "description")
+    ):
+        found.append("golden lock carries an empty openapi/title/version/description")
+
+    published = published_facts(document)
+    if not published:
+        return ["openapi.json has no `info` object"]
+
+    # 0. Published ``info`` SHAPE. The golden lock below compares four values;
+    #    it cannot see an extra key. An exact set + count door are both needed:
+    #    a same-count substitution keeps the count green but moves the set.
+    info = document.get("info")
+    if not isinstance(info, dict):
+        found.append("openapi.json has no `info` object")
+    else:
+        actual_info_keys = frozenset(info)
+        if actual_info_keys != _INFO_KEYS:
+            extra = sorted(actual_info_keys - _INFO_KEYS)
+            missing = sorted(_INFO_KEYS - actual_info_keys)
+            found.append(
+                "published info key set drifted: _INFO_KEYS pins "
+                f"{sorted(_INFO_KEYS)} but the snapshot publishes "
+                f"{sorted(actual_info_keys)} "
+                f"(extra={extra}, missing={missing}). The four locked values "
+                "are unchanged, so no golden/source/byte gate can see this. "
+                "Re-pin the literal in the same commit as the snapshot, with "
+                "a reason."
+            )
+        if len(info) != _EXPECTED_INFO_KEYS:
+            found.append(
+                f"openapi.json info carries {len(info)} key(s), "
+                f"_EXPECTED_INFO_KEYS pins {_EXPECTED_INFO_KEYS}: a key was "
+                "added or dropped without moving the fixed point"
+            )
+
+    # 1. Published == golden. This is the authority a co-revert cannot move:
+    #    changing main.py + re-exporting the snapshot keeps them agreeing with
+    #    each other, but not with the reviewed lock.
+    for key in LOCKED_KEYS:
+        if key in locked and published.get(key) != locked[key]:
+            location = key if key == "openapi" else f"info/{key}"
+            found.append(f"published `{location}` no longer matches the golden lock")
+
+    # Tag catalog well-formedness (independent of the golden): an empty
+    # catalog or a hollowed tag is a regression even if someone edited the lock.
+    tags = published.get("tags")
+    if not isinstance(tags, list) or not tags:
+        found.append("openapi.json publishes an empty or missing tag catalog")
+    else:
+        for index, tag in enumerate(tags):
+            if not isinstance(tag, dict) or any(
+                not tag.get(key) for key in REQUIRED_TAG_KEYS
+            ):
+                found.append(f"tags[{index}] is missing a name or description")
+
+    # 2. Source == golden. A source-only drift would mislead the next
+    #    regeneration into publishing a contract nobody reviewed.
+    for key in LOCKED_KEYS:
+        # `openapi` is FastAPI's own dialect attribute, not a module-level
+        # constant in this repo; its source-side anchor is the get_openapi(...)
+        # wiring checked below, not a literal in main.py.
+        if key == "openapi":
+            continue
+        if key in locked and facts.get(key) != locked[key]:
+            found.append(f"source constant for `{key}` no longer matches the golden lock")
+
+    # 3. create_app still feeds those constants into FastAPI. Without this, a
+    #    rewiring (hardcoded title / dropped description / dropped tags) makes
+    #    the running app export metadata that diverges from the snapshot.
+    if not facts["has_create_app"]:
+        found.append("main.py no longer defines create_app()")
+    if facts["title_expr"] != "settings.app_name":
+        found.append("create_app() no longer sets the title from settings.app_name")
+    if facts["description_expr"] != "OPENAPI_DESCRIPTION":
+        found.append("create_app() no longer passes OPENAPI_DESCRIPTION as description")
+    if facts["tags_expr"] != "OPENAPI_TAGS":
+        found.append("create_app() no longer passes OPENAPI_TAGS as openapi_tags")
+    # The dialect string is FastAPI's own ``app.openapi_version`` attribute,
+    # not a reviewed constant in this repo. Pin the wiring that carries it into
+    # the export, so a rewrite that hardcodes a different dialect (or drops
+    # the keyword and lets a future FastAPI default change it) is named. The
+    # golden lock remains the only anchor on the published *value*.
+    if facts["openapi_version_expr"] != "app.openapi_version":
+        found.append(
+            "_build_openapi_schema() no longer passes app.openapi_version into "
+            "get_openapi(openapi_version=...)"
+        )
+    try:
+        shadowed = _shadowed_wiring_names(main)
+    except (SyntaxError, ValueError) as exc:
+        # ``symtable`` compiles, so it rejects a few shapes ``ast.parse``
+        # accepts (e.g. duplicate parameters). Report a clean FAIL instead of
+        # letting the exception escape the guard (the #166 StopIteration class).
+        found.append(f"main.py does not compile as a metadata source: {exc}")
+    else:
+        if shadowed:
+            found.append(
+                "create_app() binds metadata names inside its own scope ("
+                + ", ".join(shadowed)
+                + "): the FastAPI(...) call would read a different value than "
+                "the locked module-level constant"
+            )
+        mutated = _mutated_wiring_names(main)
+        if mutated:
+            found.append(
+                "create_app() mutates metadata constants in place ("
+                + ", ".join(mutated)
+                + "): the FastAPI(...) call would read a different value than "
+                "the locked module-level constant"
+            )
+        # 3c. Both passes above read the AST. A statement ``ast.parse`` accepts
+        #     but the compiler rejects (``__debug__ = 1``) leaves them silent
+        #     while the module cannot be imported at all -- guard GREEN on bytes
+        #     that could never run. compile() is the authority for "runs".
+        unrunnable = _uncompilable_wiring(main)
+        if unrunnable:
+            found.append(unrunnable)
+
+    # 4. The generated client must NOT start encoding this metadata. Its
+    #    absence is the premise for "one committed artifact"; if a future
+    #    generator emits info/tags, a human must re-derive the wiring. Use the
+    #    full description / a structural marker as the needle -- the bare app
+    #    name legitimately appears in per-operation prose.
+    distinctive = (locked.get("description"), "export interface info", "export type info")
+    for needle in distinctive:
+        if isinstance(needle, str) and needle and needle in generated:
+            found.append(
+                "openapi.d.ts now carries document-level metadata; the "
+                "single-artifact premise of this guard is stale"
+            )
+            break
+
+    # 5. Wiring: a guard nothing calls is worse than none.
+    if WIRED_AS not in smoke and f"scripts/{SELF}" not in smoke:
+        found.append("contracts smoke layer no longer collects the metadata guard")
+
+    # 6. Catalog COMPLETENESS -- a derived invariant, not a frozen value.
+    #    Checks 1-3 freeze the catalog's bytes; they cannot tell whether those
+    #    bytes still describe the document. The router source is upstream of
+    #    the export, so it is an authority that does not move with the lock.
+    #    This block deliberately reads no golden content.
+    try:
+        emitted = router_tag_names(routers)
+    except ValueError as exc:
+        found.append(str(exc))
+        return found
+    published_tags = published.get("tags")
+    entries = (
+        [t for t in published_tags if isinstance(t, dict)]
+        if isinstance(published_tags, list)
+        else []
+    )
+    names = [t.get("name") for t in entries]
+    catalog = {n for n in names if isinstance(n, str)}
+    if len(names) != len(catalog):
+        found.append("openapi.json publishes duplicate or non-string tag names")
+
+    operation_tags: set[str] = set()
+    for path_item in document.get("paths", {}).values():
+        if not isinstance(path_item, dict):
+            continue
+        for operation in path_item.values():
+            if isinstance(operation, dict):
+                operation_tags.update(
+                    tag
+                    for tag in (operation.get("tags") or [])
+                    if isinstance(tag, str)
+                )
+
+    missing = (emitted | operation_tags) - catalog
+    if missing:
+        found.append(
+            "tag catalog is incomplete (routers/operations emit undeclared tags): "
+            + ", ".join(sorted(missing))
+        )
+    phantom = catalog - (emitted | operation_tags)
+    if phantom:
+        found.append(
+            "tag catalog declares names no router emits (phantom entries): "
+            + ", ".join(sorted(phantom))
+        )
+    unpublished = operation_tags - emitted
+    if unpublished:
+        found.append(
+            "openapi.json publishes operation tags no router declares: "
+            + ", ".join(sorted(unpublished))
+        )
+
+    # 7. The operation -> tag assignment is a fixed point, not a set. A
+    #    same-multiset permutation between two operations keeps every check
+    #    above green (the name set, the catalog, the router literals and the
+    #    golden lock are all unchanged) while the published grouping moves.
+    rows = _operation_tag_rows(document)
+    actual = _operation_tag_digest(rows)
+    pinned = _OPERATION_TAG_DIGEST if tag_digest is None else tag_digest
+    if actual != pinned:
+        found.append(
+            "published operation tag assignment drifted: _OPERATION_TAG_DIGEST "
+            f"pins {pinned} but the snapshot derives {actual}. "
+            "Re-pin the literal in the same commit as the snapshot, with a "
+            "reason -- do not make the guard agree with itself."
+        )
+
+    # 8. Per-operation tag ORDER. The set digest above sorts tags inside each
+    #    row, so a same-set reorder on one operation moves nothing it can see.
+    order_rows = _operation_tag_order_rows(document)
+    order_actual = _operation_tag_order_digest(order_rows)
+    order_pinned = (
+        _OPERATION_TAG_ORDER_DIGEST
+        if tag_order_digest is None
+        else tag_order_digest
+    )
+    if order_actual != order_pinned:
+        found.append(
+            "published operation tag order drifted: _OPERATION_TAG_ORDER_DIGEST "
+            f"pins {order_pinned} but the snapshot derives {order_actual}. "
+            "Re-pin the literal in the same commit as the snapshot, with a "
+            "reason -- do not make the guard agree with itself."
+        )
+    expected_rows = (
+        _EXPECTED_OPERATION_TAG_ROWS
+        if expected_tag_order_rows is None
+        else expected_tag_order_rows
+    )
+    if len(order_rows) != expected_rows:
+        found.append(
+            f"published operation tag row count is {len(order_rows)}, "
+            f"_EXPECTED_OPERATION_TAG_ROWS pins {expected_rows}"
+        )
+
+    return found
+
+
+# ---------------------------------------------------------------------------
+# Self-test: each case is a real regression class, not a mock of the guard
+# ---------------------------------------------------------------------------
+
+
+def _load() -> tuple[str, str, str, str, str, str, dict[str, str]]:
+    return (
+        SNAPSHOT.read_text(encoding="utf-8"),
+        GENERATED.read_text(encoding="utf-8"),
+        GOLDEN.read_text(encoding="utf-8"),
+        MAIN.read_text(encoding="utf-8"),
+        CONFIG.read_text(encoding="utf-8"),
+        SMOKE.read_text(encoding="utf-8"),
+        router_sources(),
+    )
+
+
+def run() -> list[str]:
+    return failures(*_load())
+
+
+def self_test() -> tuple[list[str], int, int, frozenset[str]]:
+    problems: list[str] = []
+    base = _load()
+
+    def check(label: str, mutate, needle: str) -> None:
+        parts = copy.deepcopy(base)
+        found = failures(*mutate(*parts))
+        if not any(needle in item for item in found):
+            problems.append(
+                f"{label}: guard stayed green (or missed `{needle}`); got {found}"
+            )
+
+    def check_only(label: str, mutate, needle: str, absent: tuple[str, ...]) -> None:
+        """The derived invariant fires AND every golden-lock check stays green."""
+        parts = copy.deepcopy(base)
+        found = failures(*mutate(*parts))
+        if not any(needle in item for item in found):
+            problems.append(f"{label}: missed `{needle}`; got {found}")
+        for word in absent:
+            if any(word in item for item in found):
+                problems.append(
+                    f"{label}: golden lock also fired (`{word}`), not isolated; got {found}"
+                )
+        if any("duplicate or non-string" in item for item in found):
+            problems.append(f"{label}: catalog shape check noise; got {found}")
+
+    def check_clean(label: str, mutate) -> None:
+        """A legitimate co-change must stay green -- the invariant is not a lock."""
+        parts = copy.deepcopy(base)
+        args = mutate(*parts)
+        found = failures(*args)
+        if found:
+            problems.append(f"{label}: legitimate co-change was rejected; got {found}")
+
+    def router_safe(fn):
+        """Adapt a legacy six-input ablator to the seven-input signature."""
+        @functools.wraps(fn)
+        def wrapper(snapshot, generated, golden, main, config, smoke, routers):
+            return (*fn(snapshot, generated, golden, main, config, smoke), routers)
+        return wrapper
+
+    def edit_snapshot(fn):
+        def mutate(snapshot, generated, golden, main, config, smoke):
+            document = json.loads(snapshot)
+            fn(document)
+            return json.dumps(document, ensure_ascii=False), generated, golden, main, config, smoke
+        return mutate
+
+    def edit_golden(fn):
+        def mutate(snapshot, generated, golden, main, config, smoke):
+            document = json.loads(golden)
+            fn(document)
+            return snapshot, generated, json.dumps(document, ensure_ascii=False), main, config, smoke
+        return mutate
+
+    def drop_title(document):
+        document["info"]["title"] = "NotSoyMutDB"
+
+    def drop_version(document):
+        document["info"]["version"] = "0.0.0"
+
+    def drop_description(document):
+        document["info"]["description"] = "placeholder"
+
+    def drop_tags(document):
+        document["tags"] = []
+
+    def invented_info_key(document):
+        """A client-visible key the four golden values know nothing about."""
+        document["info"]["license"] = {"name": "CC0-1.0"}
+
+    def reorder_tags(document):
+        document["tags"] = list(reversed(document["tags"]))
+
+    def hollow_tag(document):
+        document["tags"][0] = {"name": "health"}
+
+    def permute_operation_tags(document):
+        """Swap two operations' tags: same name multiset, different grouping."""
+        first = second = None
+        for path, item in document["paths"].items():
+            for method, operation in item.items():
+                if method not in METHODS or not isinstance(operation, dict):
+                    continue
+                tags = operation.get("tags") or []
+                if first is None and tags == ["health"]:
+                    first = operation
+                elif second is None and tags == ["auth"]:
+                    second = operation
+        assert first is not None and second is not None
+        first["tags"], second["tags"] = second["tags"], first["tags"]
+
+    def reorder_operation_tag_order(document):
+        """Reverse one operation's tag array: same set, changed published order."""
+        for path, item in document["paths"].items():
+            for method, operation in item.items():
+                if method not in METHODS or not isinstance(operation, dict):
+                    continue
+                tags = operation.get("tags") or []
+                if len(tags) > 1:
+                    operation["tags"] = list(reversed(tags))
+                    return
+        raise AssertionError("self-test fixture: no multi-tag operation remains")
+
+    def invented_tag(document):
+        document["tags"].append({"name": "made-up", "description": "x"})
+
+    def coordinated_co_revert(snapshot, generated, golden, main, config, smoke):
+        # THE adversarial case: source AND snapshot change to the SAME new
+        # value, so export==snapshot stays green and a published==source guard
+        # would be vacuous. Only the golden lock makes this fail.
+        new = "A completely rewritten description both halves now agree on."
+        start = main.index("OPENAPI_DESCRIPTION = \"\"\"") + len("OPENAPI_DESCRIPTION = \"\"\"")
+        end = main.index("\"\"\"", start)
+        main = main[:start] + "\n" + new + "\n" + main[end:]
+        document = json.loads(snapshot)
+        document["info"]["description"] = "\n" + new + "\n"
+        return json.dumps(document, ensure_ascii=False), generated, golden, main, config, smoke
+
+    def golden_edited(snapshot, generated, golden, main, config, smoke):
+        # Someone moves the lock to bless a drift without review -> the source
+        # and snapshot must then disagree with each other's derived value.
+        document = json.loads(golden)
+        document["version"] = "9.9.9"
+        return snapshot, generated, json.dumps(document, ensure_ascii=False), main, config, smoke
+
+    def golden_hollow(snapshot, generated, golden, main, config, smoke):
+        return snapshot, generated, "{}", main, config, smoke
+
+    def source_constant_drift(snapshot, generated, golden, main, config, smoke):
+        main = main.replace('version="2.0.0"', 'version="3.0.0"', 1)
+        return snapshot, generated, golden, main, config, smoke
+
+    def source_title_unwired(snapshot, generated, golden, main, config, smoke):
+        main = main.replace("title=settings.app_name,", 'title="Hardcoded",', 1)
+        return snapshot, generated, golden, main, config, smoke
+
+    def source_description_unwired(snapshot, generated, golden, main, config, smoke):
+        main = main.replace("description=OPENAPI_DESCRIPTION,", 'description="x",', 1)
+        return snapshot, generated, golden, main, config, smoke
+
+    def source_wiring_unwired_with_decoy_comment(snapshot, generated, golden, main, config, smoke):
+        # Unwire the real FastAPI kwargs but keep the wiring literals present as
+        # an inert comment. A whole-file substring check stays green; the AST
+        # keyword check must not.
+        main = main.replace(
+            "description=OPENAPI_DESCRIPTION,", 'description="A rewritten description",', 1
+        ).replace(
+            "openapi_tags=OPENAPI_TAGS,", 'openapi_tags=[{"name": "x", "description": "y"}],', 1
+        )
+        main = main.replace(
+            "    app = FastAPI(",
+            "    # description=OPENAPI_DESCRIPTION, openapi_tags=OPENAPI_TAGS,\n"
+            "    app = FastAPI(",
+            1,
+        )
+        return snapshot, generated, golden, main, config, smoke
+
+    def source_wiring_shadowed_by_in_scope_binding(
+        snapshot, generated, golden, main, config, smoke
+    ):
+        # Keep every FastAPI(...) keyword byte-for-byte as committed; bind the
+        # names it references in create_app's own scope, BEFORE the call. The
+        # running app then exports "(rewritten)" / a hollow tag list, while the
+        # module-level literals (and the golden/snapshot) are untouched. A
+        # parsed-call / substring guard cannot see this: the expression text is
+        # still OPENAPI_DESCRIPTION / OPENAPI_TAGS, it just resolves elsewhere.
+        # A ``global`` declaration + assignment is the same class of binding.
+        main = main.replace(
+            '    """Create and configure the FastAPI application."""\n    app = FastAPI(',
+            '    """Create and configure the FastAPI application."""\n'
+            '    OPENAPI_DESCRIPTION = "(rewritten)"\n'
+            '    OPENAPI_TAGS = [{"name": "x"}]\n'
+            '    app = FastAPI(',
+            1,
+        )
+        return snapshot, generated, golden, main, config, smoke
+
+    def source_wiring_mutated_in_place(snapshot, generated, golden, main, config, smoke):
+        # No rebinding at all: mutate the same object the module-level literal
+        # points at, before FastAPI(...). The keyword spelling, the module
+        # literal, the snapshot and the golden are all byte-for-byte unchanged;
+        # only the running app's published catalog is hollow. A scope-resolution
+        # guard cannot see this, so this row pins the in-place check.
+        main = main.replace(
+            '    """Create and configure the FastAPI application."""\n    app = FastAPI(',
+            '    """Create and configure the FastAPI application."""\n'
+            '    OPENAPI_TAGS.clear()\n'
+            '    OPENAPI_TAGS.append({"name": "x", "description": "y"})\n'
+            '    app = FastAPI(',
+            1,
+        )
+        return snapshot, generated, golden, main, config, smoke
+
+    def source_wiring_unrunnable(snapshot, generated, golden, main, config, smoke):
+        # ``ast.parse`` and ``symtable`` both accept a stray ``break``; only
+        # ``compile()`` rejects it (``'break' outside loop``). Every AST pass
+        # stays silent, so this row pins the compile probe. The module would
+        # never import: GREEN on bytes that cannot run is the hole. Do not use
+        # ``__debug__ = 1`` here: since Python 3.15 ``symtable`` rejects it too,
+        # which routes the ablation through the compile-source check first and
+        # never reaches the probe this row exists to defend.
+        main = main.replace(
+            '    """Create and configure the FastAPI application."""\n    app = FastAPI(',
+            '    """Create and configure the FastAPI application."""\n'
+            "    break\n"
+            "    app = FastAPI(",
+            1,
+        )
+        return snapshot, generated, golden, main, config, smoke
+
+    def source_wiring_uncompilable(snapshot, generated, golden, main, config, smoke):
+        # ast.parse accepts duplicate parameters; symtable (which compiles)
+        # rejects them. A guard that called symtable without guarding would let
+        # a SyntaxError escape as a traceback instead of a clean FAIL.
+        main = main.replace(
+            "def create_app() -> FastAPI:", "def create_app(x, x) -> FastAPI:", 1
+        )
+        return snapshot, generated, golden, main, config, smoke
+
+    def source_config_renamed(snapshot, generated, golden, main, config, smoke):
+        config = config.replace('app_name: str = "SoyMutDB"', 'app_name: str = "OtherDB"', 1)
+        return snapshot, generated, golden, main, config, smoke
+
+    def delete_create_app(snapshot, generated, golden, main, config, smoke):
+        main = main.replace("def create_app() -> FastAPI:", "def _retired_create_app() -> FastAPI:", 1)
+        return snapshot, generated, golden, main, config, smoke
+
+    def generated_leaks_metadata(snapshot, generated, golden, main, config, smoke):
+        generated += "\n// " + json.loads(snapshot)["info"]["description"] + " leaked\n"
+        return snapshot, generated, golden, main, config, smoke
+
+    def smoke_unwired(snapshot, generated, golden, main, config, smoke):
+        return snapshot, generated, golden, main, config, smoke.replace(WIRED_AS, "", 1)
+
+    def drop_openapi_version(document):
+        document["openapi"] = "3.0.3"
+
+    def source_openapi_version_unwired(
+        snapshot, generated, golden, main, config, smoke
+    ):
+        main = main.replace(
+            "openapi_version=app.openapi_version,",
+            'openapi_version="3.0.3",',
+            1,
+        )
+        return snapshot, generated, golden, main, config, smoke
+
+    def openapi_version_blessed_everywhere(
+        snapshot, generated, golden, main, config, smoke
+    ):
+        # The decisive shape: snapshot + golden + a source rewrite all agree on
+        # a different dialect. The three-way lock is green by construction;
+        # only the reviewed wiring pin on get_openapi(...) can name it.
+        document = json.loads(snapshot)
+        document["openapi"] = "3.0.3"
+        lock = json.loads(golden)
+        lock["openapi"] = "3.0.3"
+        main = main.replace(
+            "openapi_version=app.openapi_version,",
+            'openapi_version="3.0.3",',
+            1,
+        )
+        return (
+            json.dumps(document, ensure_ascii=False), generated,
+            json.dumps(lock, ensure_ascii=False), main, config, smoke,
+        )
+
+    ablations = [
+        (
+            "openapi dialect drift",
+            edit_snapshot(drop_openapi_version),
+            "no longer matches the golden lock",
+        ),
+        (
+            "openapi dialect blessed in snapshot + golden + source",
+            openapi_version_blessed_everywhere,
+            "no longer passes app.openapi_version",
+        ),
+        (
+            "get_openapi dialect wiring dropped",
+            source_openapi_version_unwired,
+            "no longer passes app.openapi_version",
+        ),
+        ("info.title drift", edit_snapshot(drop_title), "no longer matches the golden lock"),
+        ("info.version drift", edit_snapshot(drop_version), "no longer matches the golden lock"),
+        ("info.description drift", edit_snapshot(drop_description), "no longer matches the golden lock"),
+        ("tag catalog emptied", edit_snapshot(drop_tags), "no longer matches the golden lock"),
+        ("tag order changed", edit_snapshot(reorder_tags), "no longer matches the golden lock"),
+        ("tag hollowed", edit_snapshot(hollow_tag), "no longer matches the golden lock"),
+        ("tag invented", edit_snapshot(invented_tag), "no longer matches the golden lock"),
+        (
+            "phantom info key added",
+            edit_snapshot(invented_info_key),
+            "published info key set drifted",
+        ),
+        (
+            "operation tag assignment permuted",
+            edit_snapshot(permute_operation_tags),
+            "published operation tag assignment drifted",
+        ),
+        (
+            "operation tag order reversed",
+            edit_snapshot(reorder_operation_tag_order),
+            "published operation tag order drifted",
+        ),
+        ("coordinated co-revert (source+snapshot)", coordinated_co_revert, "no longer matches the golden lock"),
+        ("golden edited to bless drift", golden_edited, "no longer matches the golden lock"),
+        ("golden hollowed", golden_hollow, "missing the reviewed"),
+        ("source version drift", source_constant_drift, "no longer matches the golden lock"),
+        ("title unwired from settings", source_title_unwired, "settings.app_name"),
+        ("description unwired", source_description_unwired, "OPENAPI_DESCRIPTION"),
+        (
+            "description/tags unwired with decoy comment",
+            source_wiring_unwired_with_decoy_comment,
+            "OPENAPI_DESCRIPTION as description",
+        ),
+        (
+            "description/tags shadowed by in-scope binding",
+            source_wiring_shadowed_by_in_scope_binding,
+            "binds metadata names inside its own scope",
+        ),
+        (
+            "description/tags mutated in place",
+            source_wiring_mutated_in_place,
+            "mutates metadata constants in place",
+        ),
+        (
+            "create_app would not run (compiler rejects it)",
+            source_wiring_unrunnable,
+            "would not run",
+        ),
+        (
+            "create_app does not compile under symtable",
+            source_wiring_uncompilable,
+            "does not compile as a metadata source",
+        ),
+        ("config app_name renamed", source_config_renamed, "no longer matches the golden lock"),
+        ("create_app deleted", delete_create_app, "no longer defines create_app"),
+        ("generated client leaks metadata", generated_leaks_metadata, "single-artifact premise"),
+        ("smoke wiring dropped", smoke_unwired, "no longer collects the metadata guard"),
+    ]
+    for label, mutate, needle in ablations:
+        check(label, router_safe(mutate), needle)
+
+    def new_router_without_catalog(snapshot, generated, golden, main, config, smoke, routers):
+        routers = dict(routers)
+        routers["apps/api/app/api/v1/brand_new.py"] = (
+            "from fastapi import APIRouter\n"
+            'router = APIRouter(prefix="/brand-new", tags=["brand-new"])\n'
+        )
+        return snapshot, generated, golden, main, config, smoke, routers
+
+    def invented_tag_blessed_everywhere(snapshot, generated, golden, main, config, smoke, routers):
+        # THE bless channel: source + snapshot + golden agree on a tag no router
+        # emits. The three-way lock is green by construction; only the
+        # router-derived completeness invariant can see it.
+        entry = {"name": "made-up", "description": "x"}
+        main = main.replace(
+            "OPENAPI_TAGS = [\n",
+            'OPENAPI_TAGS = [\n    {"name": "made-up", "description": "x"},\n',
+            1,
+        )
+        document = json.loads(snapshot)
+        document["tags"].insert(0, entry)
+        snapshot = json.dumps(document, ensure_ascii=False)
+        lock = json.loads(golden)
+        lock["tags"].insert(0, entry)
+        return (
+            snapshot, generated, json.dumps(lock, ensure_ascii=False),
+            main, config, smoke, routers,
+        )
+
+    def operation_tag_hand_edited(snapshot, generated, golden, main, config, smoke, routers):
+        document = json.loads(snapshot)
+        operation = next(
+            op
+            for item in document["paths"].values()
+            for op in item.values()
+            if isinstance(op, dict) and op.get("tags")
+        )
+        operation["tags"] = operation["tags"] + ["hand-edited"]
+        return (
+            json.dumps(document, ensure_ascii=False), generated, golden,
+            main, config, smoke, routers,
+        )
+
+    def phantom_catalog_entry(snapshot, generated, golden, main, config, smoke, routers):
+        # A router is retired: its file is gone and no operation carries the
+        # tag, but the reviewed catalog (main/golden/snapshot) is untouched.
+        # A byte lock cannot see a stale entry; the derived invariant can.
+        routers = {k: v for k, v in routers.items() if "table_views.py" not in k}
+        document = json.loads(snapshot)
+        for item in document["paths"].values():
+            for op in item.values():
+                if isinstance(op, dict) and "table-views" in (op.get("tags") or []):
+                    op["tags"] = [t for t in op["tags"] if t != "table-views"]
+        return (
+            json.dumps(document, ensure_ascii=False), generated, golden,
+            main, config, smoke, routers,
+        )
+
+    def duplicate_catalog_name(snapshot, generated, golden, main, config, smoke, routers):
+        document = json.loads(snapshot)
+        document["tags"].append(dict(document["tags"][0]))
+        return (
+            json.dumps(document, ensure_ascii=False), generated, golden,
+            main, config, smoke, routers,
+        )
+
+    derived = [
+        (
+            "new router, catalog not updated",
+            new_router_without_catalog,
+            "tag catalog is incomplete",
+        ),
+        ("operation tag hand-edited", operation_tag_hand_edited, "tag catalog is incomplete"),
+        ("phantom catalog entry", phantom_catalog_entry, "phantom entries"),
+        ("duplicate catalog name", duplicate_catalog_name, "duplicate or non-string"),
+    ]
+    for label, mutate, needle in derived:
+        check(label, mutate, needle)
+
+    check_only(
+        "invented tag blessed in all three artifacts",
+        invented_tag_blessed_everywhere,
+        "phantom entries",
+        (
+            "golden lock",
+            "no longer matches",
+            "tag catalog is incomplete",
+            "duplicate or non-string",
+        ),
+    )
+
+    def legitimate_new_router(snapshot, generated, golden, main, config, smoke, routers):
+        # The positive control: a real new router plus a catalog entry in main,
+        # golden AND snapshot. A frozen name table would go stale here; the
+        # invariant must stay green.
+        routers = dict(routers)
+        routers["apps/api/app/api/v1/brand_new.py"] = (
+            "from fastapi import APIRouter\n"
+            'router = APIRouter(prefix="/brand-new", tags=["brand-new"])\n'
+        )
+        main = main.replace(
+            "OPENAPI_TAGS = [\n",
+            "OPENAPI_TAGS = [\n"
+            '    {"name": "brand-new", "description": "A newly registered router."},\n',
+            1,
+        )
+        document = json.loads(snapshot)
+        document["tags"].insert(
+            0, {"name": "brand-new", "description": "A newly registered router."}
+        )
+        document["paths"]["/api/v1/brand-new"] = {
+            "get": {"tags": ["brand-new"], "responses": {"200": {"description": "OK"}}}
+        }
+        snapshot = json.dumps(document, ensure_ascii=False)
+        lock = json.loads(golden)
+        lock["tags"].insert(
+            0, {"name": "brand-new", "description": "A newly registered router."}
+        )
+        return (
+            snapshot, generated, json.dumps(lock, ensure_ascii=False),
+            main, config, smoke, routers,
+            _operation_tag_digest(_operation_tag_rows(document)),
+            _operation_tag_order_digest(_operation_tag_order_rows(document)),
+            len(_operation_tag_order_rows(document)),
+        )
+
+    check_clean("legitimate new router + catalog entry", legitimate_new_router)
+
+    def legitimate_retag(snapshot, generated, golden, main, config, smoke, routers):
+        """A reviewed retag moves the snapshot and the literal in one commit."""
+        document = json.loads(snapshot)
+        for path, item in document["paths"].items():
+            for method, operation in item.items():
+                if method not in METHODS or not isinstance(operation, dict):
+                    continue
+                if operation.get("tags") == ["health"]:
+                    operation["tags"] = ["auth"]
+                    break
+            else:
+                continue
+            break
+        new_digest = _operation_tag_digest(_operation_tag_rows(document))
+        new_order_digest = _operation_tag_order_digest(
+            _operation_tag_order_rows(document)
+        )
+        found = failures(
+            json.dumps(document, ensure_ascii=False), generated, golden,
+            main, config, smoke, routers, tag_digest=new_digest,
+            tag_order_digest=new_order_digest,
+        )
+        assert not found, found
+        return snapshot, generated, golden, main, config, smoke, routers
+
+    check_clean("legitimate retag with re-pinned literal", legitimate_retag)
+
+    positive_labels = (
+        "legitimate new router + catalog entry",
+        "legitimate retag with re-pinned literal",
+    )
+    labels = frozenset(
+        [label for label, _, _ in ablations]
+        + [label for label, _, _ in derived]
+        + ["invented tag blessed in all three artifacts"]
+        + list(positive_labels)
+    )
+    count = len(ablations) + len(derived) + 1
+    if len(labels) != count + len(positive_labels):
+        problems.append("self-test has duplicate case labels")
+    return problems, count, len(positive_labels), labels
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--self-test", action="store_true")
+    args = parser.parse_args(argv)
+
+    if args.self_test:
+        problems, ablations, positives, _labels = self_test()
+        for problem in problems:
+            print(f"openapi-document-metadata: FAIL: {problem}", file=sys.stderr)
+        if problems:
+            return 1
+        print(
+            f"openapi-document-metadata: OK "
+            f"({ablations} ablations, {positives} positive control)"
+        )
+        return 0
+
+    found = run()
+    for item in found:
+        print(f"openapi-document-metadata: FAIL: {item}", file=sys.stderr)
+    if found:
+        return 1
+    print("openapi-document-metadata: OK (document metadata frozen)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

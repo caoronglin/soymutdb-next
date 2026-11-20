@@ -131,95 +131,95 @@ export function Toolbar({ editor, onDocxImported, onMarkdownPasted, onSourceMode
       <BubbleMenu editor={editor} shouldShow={({ editor: e, state }) => !e.isActive("link") && !state.selection.empty}>
         <div className="rl-editor-toolbar" style={{ border: "1px solid var(--ant-color-border, #d9d9d9)", boxShadow: "var(--ant-box-shadow, 0 2px 8px rgba(0,0,0,0.12))" }}>
           <Tooltip title={t("admin.editor.bold")}>
-            <Button type="text" size="small" icon={<BoldOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleBold().run()} />
+            <Button type="text" size="small" icon={<BoldOutlined />} aria-label={t("admin.editor.bold")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleBold().run()} />
           </Tooltip>
           <Tooltip title={t("admin.editor.italic")}>
-            <Button type="text" size="small" icon={<ItalicOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleItalic().run()} />
+            <Button type="text" size="small" icon={<ItalicOutlined />} aria-label={t("admin.editor.italic")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleItalic().run()} />
           </Tooltip>
           <Tooltip title={t("admin.editor.strike")}>
-            <Button type="text" size="small" icon={<StrikethroughOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleStrike().run()} />
+            <Button type="text" size="small" icon={<StrikethroughOutlined />} aria-label={t("admin.editor.strike")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleStrike().run()} />
           </Tooltip>
           <Divider orientation="vertical" />
           <Tooltip title={t("admin.editor.heading1")}>
-            <Button type="text" size="small" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
+            <Button type="text" size="small" aria-label={t("admin.editor.heading1")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
               H1
             </Button>
           </Tooltip>
           <Tooltip title={t("admin.editor.heading2")}>
-            <Button type="text" size="small" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
+            <Button type="text" size="small" aria-label={t("admin.editor.heading2")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
               H2
             </Button>
           </Tooltip>
           <Tooltip title={t("admin.editor.heading3")}>
-            <Button type="text" size="small" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>
+            <Button type="text" size="small" aria-label={t("admin.editor.heading3")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>
               H3
             </Button>
           </Tooltip>
           <Divider orientation="vertical" />
           <Tooltip title={t("admin.editor.bulletList")}>
-            <Button type="text" size="small" icon={<UnorderedListOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()} />
+            <Button type="text" size="small" icon={<UnorderedListOutlined />} aria-label={t("admin.editor.bulletList")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()} />
           </Tooltip>
           <Tooltip title={t("admin.editor.orderedList")}>
-            <Button type="text" size="small" icon={<OrderedListOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
+            <Button type="text" size="small" icon={<OrderedListOutlined />} aria-label={t("admin.editor.orderedList")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
           </Tooltip>
         </div>
       </BubbleMenu>
 
       <Tooltip title={t("admin.editor.bold")}>
-        <Button type="text" size="small" icon={<BoldOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleBold().run()} />
+        <Button type="text" size="small" icon={<BoldOutlined />} aria-label={t("admin.editor.bold")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleBold().run()} />
       </Tooltip>
       <Tooltip title={t("admin.editor.italic")}>
-        <Button type="text" size="small" icon={<ItalicOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleItalic().run()} />
+        <Button type="text" size="small" icon={<ItalicOutlined />} aria-label={t("admin.editor.italic")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleItalic().run()} />
       </Tooltip>
       <Tooltip title={t("admin.editor.strike")}>
-        <Button type="text" size="small" icon={<StrikethroughOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleStrike().run()} />
+        <Button type="text" size="small" icon={<StrikethroughOutlined />} aria-label={t("admin.editor.strike")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleStrike().run()} />
       </Tooltip>
       <Divider orientation="vertical" />
       <Tooltip title={t("admin.editor.heading1")}>
-        <Button type="text" size="small" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
+        <Button type="text" size="small" aria-label={t("admin.editor.heading1")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>
           H1
         </Button>
       </Tooltip>
       <Tooltip title={t("admin.editor.heading2")}>
-        <Button type="text" size="small" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
+        <Button type="text" size="small" aria-label={t("admin.editor.heading2")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>
           H2
         </Button>
       </Tooltip>
       <Tooltip title={t("admin.editor.heading3")}>
-        <Button type="text" size="small" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>
+        <Button type="text" size="small" aria-label={t("admin.editor.heading3")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>
           H3
         </Button>
       </Tooltip>
       <Divider orientation="vertical" />
       <Tooltip title={t("admin.editor.bulletList")}>
-        <Button type="text" size="small" icon={<UnorderedListOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()} />
+        <Button type="text" size="small" icon={<UnorderedListOutlined />} aria-label={t("admin.editor.bulletList")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleBulletList().run()} />
       </Tooltip>
       <Tooltip title={t("admin.editor.orderedList")}>
-        <Button type="text" size="small" icon={<OrderedListOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
+        <Button type="text" size="small" icon={<OrderedListOutlined />} aria-label={t("admin.editor.orderedList")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
       </Tooltip>
       <Divider orientation="vertical" />
       <Tooltip title={t("admin.editor.table")}>
-        <Button type="text" size="small" icon={<TableOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} />
+        <Button type="text" size="small" icon={<TableOutlined />} aria-label={t("admin.editor.table")} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} />
       </Tooltip>
       <Tooltip title={t("admin.editor.image")}>
-        <Button type="text" size="small" icon={<PictureOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => setImageModalOpen(true)} />
+        <Button type="text" size="small" icon={<PictureOutlined />} aria-label={t("admin.editor.image")} onMouseDown={(e) => e.preventDefault()} onClick={() => setImageModalOpen(true)} />
       </Tooltip>
       <Tooltip title={t("admin.editor.link")}>
-        <Button type="text" size="small" icon={<LinkOutlined />} onMouseDown={(e) => e.preventDefault()} onClick={() => setLinkModalOpen(true)} />
+        <Button type="text" size="small" icon={<LinkOutlined />} aria-label={t("admin.editor.link")} onMouseDown={(e) => e.preventDefault()} onClick={() => setLinkModalOpen(true)} />
       </Tooltip>
       <Divider orientation="vertical" />
       <Tooltip title={t("admin.editor.undo")}>
-        <Button type="text" size="small" icon={<UndoOutlined />} disabled={!editor.can().chain().focus().undo().run()} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().undo().run()} />
+        <Button type="text" size="small" icon={<UndoOutlined />} aria-label={t("admin.editor.undo")} disabled={!editor.can().chain().focus().undo().run()} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().undo().run()} />
       </Tooltip>
       <Tooltip title={t("admin.editor.redo")}>
-        <Button type="text" size="small" icon={<RedoOutlined />} disabled={!editor.can().chain().focus().redo().run()} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().redo().run()} />
+        <Button type="text" size="small" icon={<RedoOutlined />} aria-label={t("admin.editor.redo")} disabled={!editor.can().chain().focus().redo().run()} onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().redo().run()} />
       </Tooltip>
       <Divider orientation="vertical" />
       <Tooltip title={t("admin.editor.pasteMarkdown")}>
-        <Button type="text" size="small" icon={<FileMarkdownOutlined />} onClick={handlePasteMarkdown} />
+        <Button type="text" size="small" icon={<FileMarkdownOutlined />} aria-label={t("admin.editor.pasteMarkdown")} onClick={handlePasteMarkdown} />
       </Tooltip>
       <Tooltip title={t("admin.editor.sourceMode")}>
-        <Button type="text" size="small" icon={<CodeOutlined />} onClick={() => onSourceMode?.()} />
+        <Button type="text" size="small" icon={<CodeOutlined />} aria-label={t("admin.editor.sourceMode")} onClick={() => onSourceMode?.()} />
       </Tooltip>
       <Upload
         accept=".docx"
@@ -227,7 +227,7 @@ export function Toolbar({ editor, onDocxImported, onMarkdownPasted, onSourceMode
         beforeUpload={handleDocxFile}
       >
         <Tooltip title={t("admin.editor.importDocx")}>
-          <Button type="text" size="small" icon={<FileWordOutlined />} />
+          <Button type="text" size="small" icon={<FileWordOutlined />} aria-label={t("admin.editor.importDocx")} />
         </Tooltip>
       </Upload>
 
@@ -253,6 +253,7 @@ export function Toolbar({ editor, onDocxImported, onMarkdownPasted, onSourceMode
         />
         <Input
           placeholder={t("admin.editor.imagePlaceholder")}
+          aria-label={t("admin.editor.imagePlaceholder")}
           value={imageUrl}
           onChange={(e) => {
             setImageAssetId(null);
@@ -263,6 +264,7 @@ export function Toolbar({ editor, onDocxImported, onMarkdownPasted, onSourceMode
         />
         <Input
           placeholder={t("admin.editor.imageAltPlaceholder")}
+          aria-label={t("admin.editor.imageAltPlaceholder")}
           value={imageAlt}
           onChange={(e) => setImageAlt(e.target.value)}
           style={{ marginBottom: 8 }}
@@ -296,6 +298,7 @@ export function Toolbar({ editor, onDocxImported, onMarkdownPasted, onSourceMode
       >
         <Input
           placeholder={t("admin.editor.linkPlaceholder")}
+          aria-label={t("admin.editor.linkPlaceholder")}
           value={linkUrl}
           onChange={(e) => setLinkUrl(e.target.value)}
           onPressEnter={handleLinkSet}

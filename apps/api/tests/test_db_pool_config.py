@@ -123,6 +123,8 @@ def test_settings_expose_pool_defaults_and_celery_ttl() -> None:
     assert settings.db_pool_timeout == 30
     assert settings.db_pool_recycle == 1800
     assert settings.db_pool_pre_ping is True
+    assert settings.db_pool_use_lifo is True
+    assert settings.redis_max_connections == 64
     # Broker and result backend are separate Redis databases/instances.
     assert settings.celery_broker_url == "redis://localhost:6379/1"
     assert settings.celery_result_backend == "redis://localhost:6379/2"
@@ -160,19 +162,45 @@ def test_statement_timeout_sent_as_server_setting(monkeypatch) -> None:
     )
 
     assert captured["connect_args"] == {
-        "server_settings": {"statement_timeout": "30000"}
+        "server_settings": {"statement_timeout": "30000", "jit": "off"}
     }
 
 
-def test_statement_timeout_zero_disables_connect_args(monkeypatch) -> None:
-    """``db_statement_timeout=0`` sends no server settings at all."""
+def test_statement_timeout_zero_still_sends_jit_setting(monkeypatch) -> None:
+    """``db_statement_timeout=0`` omits only the timeout, not ``jit``."""
     monkeypatch.delenv("SOYMUTDB_DATABASE_URL", raising=False)
     captured = _capture_engine_kwargs(
         monkeypatch,
         Settings(_env_file=None, app_env="dev", db_statement_timeout=0),
     )
 
-    assert captured["connect_args"] == {}
+    assert captured["connect_args"] == {"server_settings": {"jit": "off"}}
+
+
+def test_jit_disabled_by_default_at_connection_level(monkeypatch) -> None:
+    """JIT is turned off on every pooled connection, not per transaction.
+
+    The stats path opens a second session through the shared session factory,
+    so a ``SET LOCAL`` on the request session would not reach it; the setting
+    must therefore be part of ``server_settings``.
+    """
+    monkeypatch.delenv("SOYMUTDB_DATABASE_URL", raising=False)
+    captured = _capture_engine_kwargs(
+        monkeypatch, Settings(_env_file=None, app_env="dev")
+    )
+
+    assert captured["connect_args"]["server_settings"]["jit"] == "off"
+
+
+def test_jit_can_be_enabled_per_deployment(monkeypatch) -> None:
+    """``db_jit_enabled=True`` stops overriding the server's JIT default."""
+    monkeypatch.delenv("SOYMUTDB_DATABASE_URL", raising=False)
+    captured = _capture_engine_kwargs(
+        monkeypatch,
+        Settings(_env_file=None, app_env="dev", db_jit_enabled=True),
+    )
+
+    assert "jit" not in captured["connect_args"]["server_settings"]
 
 
 def test_redis_client_has_bounded_socket_timeouts(monkeypatch) -> None:
@@ -196,6 +224,46 @@ def test_redis_client_has_bounded_socket_timeouts(monkeypatch) -> None:
     assert captured["socket_timeout"] == 2.0
     assert captured["socket_connect_timeout"] == 2.0
     assert captured["decode_responses"] is True
+    assert captured["max_connections"] == 64
+    assert captured["socket_keepalive"] is True
+
+
+def test_redis_pool_size_follows_settings(monkeypatch) -> None:
+    """The Redis pool bound is configurable instead of unbounded."""
+    captured: dict = {}
+    database._redis = None
+
+    def _fake_from_url(url, **kwargs):
+        captured.update(kwargs)
+        return MagicMock(spec=Redis)
+
+    monkeypatch.setattr(database, "from_url", _fake_from_url)
+    original_settings = database.settings
+    database.settings = Settings(
+        _env_file=None, app_env="dev", redis_max_connections=8
+    )
+    try:
+        database.get_redis()
+    finally:
+        database._redis = None
+        database.settings = original_settings
+
+    assert captured["max_connections"] == 8
+
+
+def test_pool_use_lifo_is_configurable(monkeypatch) -> None:
+    """LIFO checkout is on by default and can be disabled."""
+    monkeypatch.delenv("SOYMUTDB_DATABASE_URL", raising=False)
+
+    default_pool = _build_engine_pool(Settings(_env_file=None, app_env="dev"))
+    # QueuePool forwards the flag to its queue, which is where it is stored;
+    # the pool object itself never keeps a ``_use_lifo`` attribute.
+    assert getattr(default_pool, "_pool").use_lifo is True
+
+    fifo_pool = _build_engine_pool(
+        Settings(_env_file=None, app_env="dev", db_pool_use_lifo=False)
+    )
+    assert getattr(fifo_pool, "_pool").use_lifo is False
 
 
 @pytest.mark.asyncio

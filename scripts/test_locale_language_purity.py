@@ -17,6 +17,7 @@ import json
 import pathlib
 import re
 import sys
+from named_guard_diagnostics import describe_assertion
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
 LOCALES = REPO_ROOT / "packages" / "i18n-core" / "src" / "locales"
@@ -43,28 +44,112 @@ EXEMPT = {
     "home.databaseEyebrow",
     # Vendor product name, identical in both bundles by design.
     "admin.analyticsSettings.badgeCloudflare",
+    # Upstream tool names (the NCBI search engine and DIAMOND). A BLAST user
+    # searches for "NCBI BLAST+" and "DIAMOND", not for a translation, and
+    # neither key exists under `blastPublic`: that namespace carries
+    # `blastPublic.engine`, not per-engine labels.
+    "blastSearch.engineNcbi",
+    "blastSearch.engineDiamond",
 }
 
 
-def _load(locale: str) -> dict:
-    path = LOCALES / locale / "common.json"
-    return json.loads(path.read_text(encoding="utf-8"))
+# The portal merges three module-level bundles over the shared catalogs with
+# `addResourceBundle(..., deep: true)` in `apps/web/src/lib/i18n.ts`. A key that
+# lives only in one of them is visible in the running UI, so a guard that reads
+# `common.json` alone reports correct copy as missing (87 `tools.sequence.*`
+# keys did exactly that) and would also miss a real defect parked in a runtime
+# bundle. Read the same merge the app performs.
+PORTAL_RESOURCES = REPO_ROOT / "apps" / "web" / "src" / "lib" / "i18n-resources.ts"
+RUNTIME_BUNDLES = ("EXTRA_RESOURCES", "TOOLS_RESOURCES", "HOME_RESOURCES")
 
 
-def _walk(node: dict, prefix: str = ""):
+def _object_literal(source: str, name: str) -> str:
+    """Return the brace-balanced body of `export const <name>: ... = {...}`."""
+    marker = f"export const {name}:"
+    start = source.find(marker)
+    if start < 0:
+        raise AssertionError(f"{name} is missing from {PORTAL_RESOURCES.name}")
+    start = source.index("= {", start) + 2
+    depth = 0
+    for index in range(start, len(source)):
+        char = source[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return source[start : index + 1]
+    raise AssertionError(f"{name} object literal is unbalanced")
+
+
+def _flatten(node: dict, prefix: str = "") -> dict:
+    flat: dict[str, str] = {}
     for key, value in node.items():
         path = f"{prefix}.{key}" if prefix else key
         if isinstance(value, dict):
-            yield from _walk(value, path)
-        elif isinstance(value, str):
-            yield path, value
+            flat.update(_flatten(value, path))
+        else:
+            flat[path] = value
+    return flat
+
+
+# `key: value` / `key: {...}` — an unquoted object key as TypeScript writes it.
+BARE_KEY = re.compile(r"([{,]\s*)([A-Za-z_$][\w$]*)(\s*:)")
+
+
+def _json_compatible(body: str, name: str) -> str:
+    """Quote bare object keys and drop trailing commas, leaving values alone.
+
+    The bundles are plain data, but they are TypeScript, not JSON. Anything this
+    cannot make parseable is reported instead of silently skipped.
+    """
+    text = BARE_KEY.sub(r'\1"\2"\3', body)
+    text = re.sub(r",(\s*[}\]])", r"\1", text)
+    for token in ("`", "=>", " ?? ", "?.", " + "):
+        if token in text:  # pragma: no cover - shape guard
+            raise AssertionError(
+                f"{name} in {PORTAL_RESOURCES.name} contains {token!r}; this guard "
+                "reads plain object literals, so it needs a real parser now"
+            )
+    return text
+
+
+def _runtime_bundles() -> dict[str, dict[str, str]]:
+    """Parse the portal's runtime bundles out of the TypeScript module.
+
+    They are plain data, so they are read without a TypeScript parser or a
+    `node_modules` checkout -- which matters, because this layer must run on a
+    clean tree that has not been installed.
+    """
+    source = PORTAL_RESOURCES.read_text(encoding="utf-8")
+    merged: dict[str, dict[str, str]] = {}
+    for name in RUNTIME_BUNDLES:
+        body = _json_compatible(_object_literal(source, name), name)
+        try:
+            parsed = json.loads(body)
+        except json.JSONDecodeError as error:  # pragma: no cover - shape guard
+            raise AssertionError(
+                f"{name} in {PORTAL_RESOURCES.name} is no longer JSON-compatible "
+                f"({error}); this guard parses it directly"
+            ) from error
+        for locale, bundle in parsed.items():
+            merged.setdefault(locale, {}).update(_flatten(bundle))
+    return merged
+
+
+def _load(locale: str) -> dict:
+    """The catalog the UI actually renders: shared bundle + runtime overlay."""
+    path = LOCALES / locale / "common.json"
+    shared = _flatten(json.loads(path.read_text(encoding="utf-8")))
+    shared.update(_runtime_bundles().get(locale, {}))
+    return shared
 
 
 def test_english_bundle_has_no_chinese() -> None:
     """An English UI must not leak Chinese, except CJK text that is data."""
     offenders = [
         (path, value)
-        for path, value in _walk(_load("en"))
+        for path, value in _load("en").items()
         if CJK.search(value) and path not in EXEMPT
     ]
     assert offenders == [], "Chinese text in the English bundle: " + repr(offenders[:8])
@@ -78,7 +163,7 @@ def test_chinese_bundle_has_no_english_sentences() -> None:
     """
     offenders = [
         (path, value)
-        for path, value in _walk(_load("zh"))
+        for path, value in _load("zh").items()
         if not CJK.search(value)
         and LATIN_SENTENCE.search(value)
         and path not in EXEMPT
@@ -88,8 +173,8 @@ def test_chinese_bundle_has_no_english_sentences() -> None:
 
 def test_both_locales_define_the_same_keys() -> None:
     """A key present in one locale and absent in the other silently falls back."""
-    zh = dict(_walk(_load("zh")))
-    en = dict(_walk(_load("en")))
+    zh = _load("zh")
+    en = _load("en")
     missing_in_en = sorted(set(zh) - set(en))
     missing_in_zh = sorted(set(en) - set(zh))
     assert missing_in_en == [], f"present in zh, missing in en: {missing_in_en[:8]}"
@@ -105,7 +190,7 @@ def test_every_translated_key_exists_in_the_bundle() -> None:
     English `defaultValue`. Neither locale was "missing" the other, so the
     key-parity test above could not see it.
     """
-    bundles = {locale: dict(_walk(_load(locale))) for locale in ("zh", "en")}
+    bundles = {locale: _load(locale) for locale in ("zh", "en")}
     roots = [REPO_ROOT / "apps" / "admin" / "src", REPO_ROOT / "apps" / "web" / "src"]
     # t("a.b.c", ...) and t("a.b.c", "text") — the defaultValue form.
     call = re.compile(r"""\bt\(\s*["']([a-zA-Z][a-zA-Z0-9]*(?:\.[a-zA-Z0-9_]+)+)["']""")
@@ -154,5 +239,5 @@ if __name__ == "__main__":
                 print(f"PASS {name}")
             except AssertionError as error:
                 failures += 1
-                print(f"FAIL {name}: {error}")
+                print(f"FAIL {name}: {describe_assertion(error, check)}")
     sys.exit(1 if failures else 0)

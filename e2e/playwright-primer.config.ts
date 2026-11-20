@@ -35,7 +35,9 @@ export default defineConfig({
     // Route-reveal animations move the antd Select portal while Playwright is
     // resolving option positions; reduced motion makes the form geometry static
     // and the interaction deterministic.
-    reducedMotion: "reduce",
+    // `reducedMotion` is a browser-context option; the type surface accepts it
+    // only under `contextOptions`, not as a top-level `use` key.
+    contextOptions: { reducedMotion: "reduce" },
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     viewport: { width: 1440, height: 900 },

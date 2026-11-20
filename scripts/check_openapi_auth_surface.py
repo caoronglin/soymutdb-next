@@ -1,0 +1,769 @@
+#!/usr/bin/env python3
+"""Pin the published OpenAPI authentication surface against committed bytes.
+
+``check-contract.sh`` proves that a *fresh* export equals the committed
+snapshot. That is self-consistency, not correctness: reverting ``app/main.py``
+and ``packages/api-client/openapi.json`` together drops the security schemes
+and per-operation ``security`` while the export still equals the snapshot, so
+the gate stays green. The live-export test (``apps/api/tests/
+test_openapi_contract.py``) only asserts two schemes are *present* and two
+hardcoded admin paths are secured; it needs a 3.15 venv and cannot run in the
+offline contracts layer.
+
+What neither pins: which operations carry ``security`` *at all*.
+
+``NON_ADMIN_PROTECTED`` covers 48 non-admin operations and checks 2 is a
+one-directional ``all(admin)`` sweep -- it names admin operations that *lost*
+the requirement and stays silent about admin operations missing from the
+document entirely. ``check_openapi_response_surface.py`` /
+``_OPERATION_ID_DIGEST`` / ``_PARAMETER_DIGEST`` walk every operation but never
+read ``security``; ``test_openapi_behavior_contracts.py`` reads
+``x-idempotent``, ``x-pagination``, the envelope and the 429/500 sets, not
+this. And ``openapi-typescript`` drops ``security`` from the generated client
+on purpose, so there is **no second half to compare**: the snapshot is the only
+artifact that publishes it.
+
+Decisive ablation on live bytes: delete ``security`` from all 170 operations in
+the snapshot, leave ``main.py``'s projection exactly as it is and re-pin the
+two provenance blob ids as ``test_openapi_snapshot_body_integrity.py``
+documents for one reviewed regenerate. Every operation count, operationId,
+parameter, response, summary, annotation, field-constraint and inline-body pin
+stays ``rc=0``; so does ``test_openapi_behavior_contracts.py`` (26 passed).
+Only this guard reddens, and only because of ``NON_ADMIN_PROTECTED`` -- its own
+``--self-test`` then dies in its *setup control*, which is how the hole was
+found: the one place with a signal cannot measure the surface it guards.
+
+``_SECURITY_PROJECTION_DIGEST`` is a hand-written sha256 over the canonical
+sorted ``(METHOD, path, operationId, protected)`` tuples for **all 268**
+operations, read from nowhere. It moves when an operation is added to or
+dropped from a protected set, when a protected operation loses ``security``,
+and when an operation is moved between protected and public -- the last one
+being invisible to every count-preserving check above. ``_EXPECTED_PROJECTED``
+/ ``_EXPECTED_HIDDEN_OPS`` are exact count doors so a same-count permutation
+cannot satisfy the doors alone.
+
+The projection digest pins a **boolean**: ``str(bool(operation["security"]))``.
+It cannot see *what* a requirement says. ``openapi-typescript`` drops the whole
+``security`` array, so the published requirement content -- which scheme is
+named, its OAuth scopes, and whether several alternatives are OR-ed -- has no
+generated half to disagree with. Every landed door reads either the boolean or
+the scheme's *name*: ``_bearer()`` asks only whether ``"HTTPBearer"`` occurs,
+and the four source pins check that a scheme is injected, not what each
+operation requires. A coordinated co-revert that injects a scope into one
+operation (``[{"HTTPBearer": ["release:read"]}]``), or turns one bearer
+requirement into an OR-alternative (``[{"HTTPBearer": []}, {"refreshCookie": []}]``),
+re-pins the two provenance blob ids, and leaves all 12 wired ``check_openapi_*``
+guards plus the whole contracts layer ``SMOKE PASS``. That is a client-visible
+contract change with zero fixed points.
+
+``_SECURITY_REQUIREMENT_DIGEST`` is a third hand-written sha256 over canonical
+sorted ``(METHOD, path, operationId, requirement)`` rows, where ``requirement``
+is the exact canonical JSON of the published ``security`` array (or
+``"absent"``). Read from nowhere; a co-revert of the snapshot and source still
+moves it. ``_EXPECTED_SECURITY_REQUIREMENT_ROWS`` and
+``_EXPECTED_PROTECTED_REQUIREMENTS`` are exact count doors. Kept separate from
+the projection digest so a dropped requirement and a retyped requirement keep
+distinct failure names.
+
+The two ``securitySchemes`` descriptions are a separate, smaller surface.
+Check 1 pins each scheme's *shape* (http/bearer, cookie apiKey, runtime cookie
+name) but never reads its ``description`` prose. ``openapi-typescript`` drops
+``security`` and ``securitySchemes`` entirely, so there is no generated half
+to disagree, and no other digest walks ``components.securitySchemes``. A
+byte-preserving co-revert of a description in the snapshot and its source
+literal in ``main.py`` -- with both provenance blob ids honestly re-pinned --
+leaves every other wired guard and the whole contracts layer green.
+``_SECURITY_SCHEME_DESCRIPTION_DIGEST`` is a hand-written sha256 over the
+canonical sorted ``(scheme, description)`` rows, read from nowhere;
+``_EXPECTED_SECURITY_SCHEME_DESCRIPTIONS`` is the exact count door; and a
+source cross-check pins the two literals in ``main.py`` so the published prose
+cannot be re-exported from unreviewed source text.
+
+This guard reads committed bytes only -- the snapshot and the four source
+files that actually decide the surface. It needs no API import, no 3.15 venv,
+no wheel, and no database. Run directly or via ``--self-test``.
+"""
+
+from __future__ import annotations
+
+import argparse
+import copy
+import hashlib
+import json
+import re
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+SNAPSHOT = ROOT / "packages" / "api-client" / "openapi.json"
+MAIN = ROOT / "apps" / "api" / "app" / "main.py"
+DEPS = ROOT / "apps" / "api" / "app" / "api" / "v1" / "deps.py"
+AUTH = ROOT / "apps" / "api" / "app" / "api" / "v1" / "auth.py"
+CONFIG = ROOT / "apps" / "api" / "app" / "core" / "config.py"
+
+METHODS = {"get", "post", "put", "patch", "delete", "head", "options", "trace"}
+
+# The refresh cookie name is a runtime setting, not a hardcoded string in the
+# snapshot. Derive it from the committed default so the two cannot drift.
+_COOKIE_NAME = re.compile(r'refresh_cookie_name:\s*str\s*=\s*"([^"]+)"')
+
+# The three auth bootstrap operations are deliberately public: they are how a
+# client obtains (or rotates) the credentials the protected surface needs.
+PUBLIC_AUTH = {
+    ("/api/v1/auth/register", "post"),
+    ("/api/v1/auth/login", "post"),
+    ("/api/v1/auth/refresh", "post"),
+}
+
+# Reviewed literal floor: the non-admin operations that must require
+# HTTPBearer in the published snapshot. This is NOT derived from
+# openapi.json -- a co-revert that drops `security` from these ops and
+# re-exports the snapshot keeps every export==snapshot gate green, and
+# the old `protected < len(admin)` bound can never fire because admin
+# is a subset of protected. Any deliberate change is an explicit,
+# reviewable edit to this set in the same commit as the re-export.
+NON_ADMIN_PROTECTED = frozenset({
+    ("/api/v1/analyses", "get"),
+    ("/api/v1/analyses/uploads", "post"),
+    ("/api/v1/analyses/{analysis_type}/submit", "post"),
+    ("/api/v1/analyses/{job_id}", "get"),
+    ("/api/v1/analyses/{job_id}/download", "get"),
+    ("/api/v1/auth/change-password", "post"),
+    ("/api/v1/auth/logout", "post"),
+    ("/api/v1/auth/me", "get"),
+    ("/api/v1/blast/databases/{database_id}", "patch"),
+    ("/api/v1/blast/index-builds", "post"),
+    ("/api/v1/blast/index-builds/{build_id}", "get"),
+    ("/api/v1/blast/jobs", "get"),
+    ("/api/v1/blast/jobs", "post"),
+    ("/api/v1/blast/jobs/{job_id}", "get"),
+    ("/api/v1/blast/jobs/{job_id}/cancel", "post"),
+    ("/api/v1/blast/jobs/{job_id}/hits/{subject_id}/genome-target", "get"),
+    ("/api/v1/blast/jobs/{job_id}/results", "get"),
+    ("/api/v1/blast/jobs/{job_id}/retry", "post"),
+    ("/api/v1/comparative/artifacts", "post"),
+    ("/api/v1/content/snapshot", "get"),
+    ("/api/v1/exports/query", "post"),
+    ("/api/v1/gwas/submit", "post"),
+    ("/api/v1/gwas/uploads", "post"),
+    ("/api/v1/gwas/{job_id}", "get"),
+    ("/api/v1/gwas/{job_id}/results", "get"),
+    ("/api/v1/notifications", "get"),
+    ("/api/v1/notifications/read", "post"),
+    ("/api/v1/notifications/unread-count", "get"),
+    ("/api/v1/releases", "get"),
+    ("/api/v1/releases/{release_id}", "get"),
+    ("/api/v1/search/internal", "get"),
+    ("/api/v1/seeds/requests", "get"),
+    ("/api/v1/seeds/requests/{request_id}", "patch"),
+    ("/api/v1/site/about", "get"),
+    ("/api/v1/site/branding", "get"),
+    ("/api/v1/site/content", "get"),
+    ("/api/v1/site/footer", "get"),
+    ("/api/v1/site/home", "get"),
+    ("/api/v1/site/navigation", "get"),
+    ("/api/v1/site/profile", "get"),
+    ("/api/v1/table-views/{kind}", "get"),
+    ("/api/v1/tracks", "get"),
+    ("/api/v1/tracks/jbrowse-config", "get"),
+    ("/api/v1/tracks/{track_id}", "get"),
+    ("/api/v1/tracks/{track_id}/signed-url", "get"),
+    ("/api/v1/variants/export", "post"),
+    ("/api/v1/variants/export/{export_id}", "get"),
+    ("/api/v1/variants/export/{export_id}/download", "get"),
+    ("/api/v1/variants/export/{export_id}/manifest", "get"),
+    ("/api/v1/widget/{name}", "get"),
+})
+# pinned count: 50 non-admin protected, checked below
+
+_LITERAL_FLOOR_LINE = re.compile(
+    r"^NON_ADMIN_PROTECTED = frozenset\(\{$", re.MULTILINE
+)
+
+# Independent fixed point on *which* operations publish ``security`` at all.
+# sha256 of "\n".join(["soymutdb-security-projection/v1"] +
+#   sorted(f"{METHOD}|{path}|{operationId}|{protected}")). Read from nowhere:
+# regenerating it from the snapshot would make it self-referential, which is the
+# entire failure this pin replaces. Re-pin in the same commit as an intentional
+# contract change, with a reason.
+# Re-pinned 2026-11-09 for the site-control + multi-view slice: three GET
+# /site/* operations are anonymous and five /admin/data-views operations are
+# protected, moving the projection 268 -> 276 rows and protected 170 -> 178.
+_SECURITY_PROJECTION_DIGEST = (
+    "5389a953a8a1a11297179a541926a3260391d96040df4f63c5d04ab742213d2c"
+)
+_EXPECTED_PROJECTED = 178
+_EXPECTED_HIDDEN_OPS = 98
+
+# Independent fixed point on the *content* of each published security
+# requirement, not just its presence. sha256 over canonical sorted
+# "METHOD|path|operationId|<canonical-json-or-absent>" rows. Read from nowhere:
+# deriving it from the snapshot it guards would be self-referential. Re-pin in
+# the same commit as an intentional contract change, with a reason.
+_SECURITY_REQUIREMENT_DIGEST = (
+    "8ed0c7a6b77d42dec638c0ffa8a7c0359155576a070c34845572efd0fd3bd4ff"
+)
+_EXPECTED_SECURITY_REQUIREMENT_ROWS = 276
+_EXPECTED_PROTECTED_REQUIREMENTS = 178
+
+# Reviewed, hand-written fixed point on the two securityScheme descriptions.
+# sha256 of "\n".join(["soymutdb-security-scheme-descriptions/v1"] +
+#   sorted(f"{scheme}|{description}")) over every component.securitySchemes
+# entry that publishes a description. Read from nowhere: re-deriving it from
+# the snapshot it checks would make the pin self-referential. Re-pin in the
+# same commit as an intentional prose change, with a reason.
+_SECURITY_SCHEME_DESCRIPTION_DIGEST = (
+    "6c85c60177c095afaa5f2e7980f184c567b48dc3cb52ed39a7189ecd8ee43358"
+)
+_EXPECTED_SECURITY_SCHEME_DESCRIPTIONS = 2
+
+# The two source halves in main.py. Pinning them keeps a co-revert honest: the
+# snapshot and the export source must carry the same reviewed prose.
+_SCHEME_DESCRIPTION_LITERALS = (
+    '"JWT access token. Obtain one via POST /api/v1/auth/login "',
+    '"HttpOnly refresh session cookie (path-scoped to /api/v1/auth); "',
+)
+
+
+def _projection_rows(
+    document: dict,
+) -> list[tuple[str, str, str, str]]:
+    """Canonical (METHOD, path, operationId, protected) rows for every operation.
+
+    ``protected`` is the published *fact* -- does this operation declare a
+    ``security`` requirement -- deliberately not "does it name HTTPBearer", so
+    the pin also moves when the scheme changes, not only when presence does.
+    """
+    rows: list[tuple[str, str, str, str]] = []
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for method, operation in item.items():
+            if method not in METHODS or not isinstance(operation, dict):
+                continue
+            rows.append(
+                (
+                    method.upper(),
+                    path,
+                    str(operation.get("operationId", "")),
+                    str(bool(operation.get("security"))),
+                )
+            )
+    return rows
+
+
+def _projection_digest(rows: list[tuple[str, str, str, str]]) -> str:
+    blob = "\n".join(
+        ["soymutdb-security-projection/v1"] + ["|".join(row) for row in sorted(rows)]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _requirement_rows(document: dict) -> list[tuple[str, str, str, str]]:
+    """Canonical (METHOD, path, operationId, requirement) rows for every operation.
+
+    ``requirement`` is the exact canonical JSON of the published ``security``
+    array (sorted keys, no whitespace), or ``"absent"`` for a public operation.
+    The generated client drops ``security`` entirely, so this reads the one
+    half that publishes the contract and nothing else.
+    """
+    rows: list[tuple[str, str, str, str]] = []
+    for path, item in document.get("paths", {}).items():
+        if not isinstance(item, dict):
+            continue
+        for method, operation in item.items():
+            if method not in METHODS or not isinstance(operation, dict):
+                continue
+            requirement = operation.get("security")
+            rendered = (
+                json.dumps(requirement, sort_keys=True, separators=(",", ":"))
+                if requirement is not None
+                else "absent"
+            )
+            rows.append(
+                (
+                    method.upper(),
+                    path,
+                    str(operation.get("operationId", "")),
+                    rendered,
+                )
+            )
+    return rows
+
+
+def _requirement_digest(rows: list[tuple[str, str, str, str]]) -> str:
+    canonical = sorted("|".join(row) for row in rows)
+    blob = "\n".join(["soymutdb-security-requirements/v1", *canonical])
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _literal_floor_errors(source: str) -> list[str]:
+    """The floor must be a hand-written source literal, not a derived value.
+
+    Re-computing NON_ADMIN_PROTECTED from openapi.json is self-referential: a
+    co-revert that drops ``security`` and re-exports moves both halves together,
+    so every export==snapshot gate stays green. The companion pytest suite pins
+    this too, but no CI stage collects that suite -- a plain ``pytest scripts/``
+    run is a local hand-run. This check therefore lives in the guard's own
+    ``--self-test``, which ``smoke.sh`` invokes as a standalone gate.
+    """
+    match = _LITERAL_FLOOR_LINE.search(source)
+    if match is None:
+        return [
+            "NON_ADMIN_PROTECTED is not declared as a hand-written frozenset "
+            "literal in the guard source (a snapshot-derived floor is a tautology)"
+        ]
+    block = source[match.end():].split("\n})", 1)[0]
+    rows = [line for line in block.splitlines() if line.startswith('    ("/api/v1/')]
+    if len(rows) != len(NON_ADMIN_PROTECTED):
+        return [
+            f"the literal floor declares {len(rows)} source rows but the constant "
+            f"has {len(NON_ADMIN_PROTECTED)} entries"
+        ]
+    return []
+
+
+def _mutate_source(source: str, *, kind: str) -> str:
+    """Source-level ablations proving the literal pin itself has teeth."""
+    if kind == "derived_floor_source":
+        return source.replace(
+            "NON_ADMIN_PROTECTED = frozenset({",
+            "NON_ADMIN_PROTECTED = frozenset(\n"
+            "    (p, m) for p, m in _derived_from_snapshot()\n"
+            ")\n_OLD_LITERAL = frozenset({",
+            1,
+        )
+    if kind == "shrunken_floor_source":
+        return source.replace('    ("/api/v1/analyses", "get"),\n', "", 1)
+    raise ValueError(kind)
+
+
+def _operations(document: dict) -> list[tuple[str, str, dict]]:
+    out = []
+    for path, item in document.get("paths", {}).items():
+        for method, operation in item.items():
+            if method in METHODS and isinstance(operation, dict):
+                out.append((path, method, operation))
+    return out
+
+
+def _scheme_description_rows(document: dict) -> list[tuple[str, str]]:
+    """Canonical (scheme name, description) rows for components.securitySchemes."""
+    schemes = document.get("components", {}).get("securitySchemes", {})
+    return sorted(
+        (name, body["description"])
+        for name, body in schemes.items()
+        if isinstance(body, dict) and isinstance(body.get("description"), str)
+    )
+
+
+def _scheme_description_digest(rows: list[tuple[str, str]]) -> str:
+    blob = "\n".join(
+        ["soymutdb-security-scheme-descriptions/v1"]
+        + ["|".join(row) for row in sorted(rows)]
+    )
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _bearer(operation: dict) -> bool:
+    """Whether the operation declares the HTTPBearer requirement."""
+    return any("HTTPBearer" in req for req in operation.get("security", []))
+
+
+def failures(snapshot: str, main: str, deps: str, auth: str, config: str) -> list[str]:
+    found: list[str] = []
+    document = json.loads(snapshot)
+    schemes = document.get("components", {}).get("securitySchemes", {})
+
+    # 1. Both schemes must be declared with the exact runtime shape. Presence
+    #    alone (what the live-export test asserts) is not a contract: a scheme
+    #    retyped as http/basic or with a different cookie name still "exists".
+    bearer = schemes.get("HTTPBearer")
+    if not isinstance(bearer, dict) or bearer.get("type") != "http" or bearer.get("scheme") != "bearer":
+        found.append("HTTPBearer is not declared as an http/bearer security scheme")
+    cookie_name = _COOKIE_NAME.search(config)
+    if cookie_name is None:
+        found.append("config.py no longer declares the refresh cookie name")
+    else:
+        refresh = schemes.get("refreshCookie")
+        if not isinstance(refresh, dict) or refresh.get("type") != "apiKey" or refresh.get("in") != "cookie":
+            found.append("refreshCookie is not declared as a cookie apiKey security scheme")
+        elif refresh.get("name") != cookie_name.group(1):
+            found.append(
+                f"refreshCookie declares {refresh.get('name')!r}; config.py declares "
+                f"{cookie_name.group(1)!r}"
+            )
+
+    # 1b. The published securityScheme description prose. Check 1 pins each
+    #     scheme's shape, not its client-facing prose; openapi-typescript drops
+    #     securitySchemes entirely, so no generated half can disagree. A
+    #     coordinated co-revert of snapshot + source + provenance re-pin moves
+    #     nothing above -- only this independent literal and the source pin.
+    scheme_rows = _scheme_description_rows(document)
+    actual = _scheme_description_digest(scheme_rows)
+    if actual != _SECURITY_SCHEME_DESCRIPTION_DIGEST:
+        found.append(
+            "published securityScheme descriptions drifted: "
+            f"_SECURITY_SCHEME_DESCRIPTION_DIGEST pins "
+            f"{_SECURITY_SCHEME_DESCRIPTION_DIGEST} but the snapshot derives "
+            f"{actual}. Re-pin the literal in the same commit as both "
+            "artifacts, with a reason."
+        )
+    if len(scheme_rows) != _EXPECTED_SECURITY_SCHEME_DESCRIPTIONS:
+        found.append(
+            f"{len(scheme_rows)} security schemes publish a description, "
+            "_EXPECTED_SECURITY_SCHEME_DESCRIPTIONS pins "
+            f"{_EXPECTED_SECURITY_SCHEME_DESCRIPTIONS}: a description was "
+            "added or dropped without moving the fixed point"
+        )
+    for literal in _SCHEME_DESCRIPTION_LITERALS:
+        if literal not in main:
+            found.append(
+                f"main.py no longer carries the reviewed securityScheme "
+                f"description literal {literal}"
+            )
+
+    # 2. Every /api/v1/admin/* operation must require HTTPBearer. Admin routers
+    #    enforce get_current_user + require_admin_roles per route; the published
+    #    document is the only machine-readable statement of that boundary, and
+    #    the generated client deliberately drops `security` entirely.
+    operations = _operations(document)
+    admin = [(p, m, o) for p, m, o in operations if p.startswith("/api/v1/admin/")]
+    if not admin:
+        found.append("openapi.json declares no /api/v1/admin/* operations at all")
+    for path, method, operation in admin:
+        if not _bearer(operation):
+            found.append(f"{method.upper()} {path} does not require HTTPBearer")
+
+    # 3. A reviewed literal floor on the non-admin protected surface. The old
+    #    `protected < len(admin)` bound could never fire: admin is a subset of
+    #    protected, so protected >= len(admin) by construction. Stripping
+    #    `security` from every one of the 48 non-admin operations left the
+    #    count equal to len(admin) and kept this guard green. Compare the exact
+    #    published set against an independent hand-written lock instead, so a
+    #    co-revert (or a re-export that drops one) is caught in both directions.
+    published_non_admin = {
+        (p, m)
+        for p, m, o in operations
+        if not p.startswith("/api/v1/admin/") and _bearer(o)
+    }
+    if published_non_admin != NON_ADMIN_PROTECTED:
+        missing = sorted(NON_ADMIN_PROTECTED - published_non_admin)
+        extra = sorted(published_non_admin - NON_ADMIN_PROTECTED)
+        if missing:
+            found.append(
+                f"{len(missing)} pinned non-admin operations no longer require "
+                f"HTTPBearer (e.g. {missing[0][1].upper()} {missing[0][0]}): "
+                "a published-operation co-revert is not allowed"
+            )
+        if extra:
+            found.append(
+                f"{len(extra)} non-admin operations now require HTTPBearer but "
+                "are not in the reviewed floor: update NON_ADMIN_PROTECTED in "
+                "the same commit as the re-export"
+            )
+
+    # 4. The auth bootstrap endpoints must stay public. A blanket top-level
+    #    `security` (or a hand-edit adding it to login/register/refresh) would
+    #    make the platform unusable, and no byte-diff gate names that cause.
+    if document.get("security"):
+        found.append("openapi.json declares a global security requirement")
+    for path, method, operation in operations:
+        if (path, method) in PUBLIC_AUTH and _bearer(operation):
+            found.append(f"{method.upper()} {path} is public by design but requires HTTPBearer")
+
+    # 5. Source pins: the four files that actually decide the surface must
+    #    still contain the behavior the snapshot claims. A co-revert of
+    #    snapshot + source is exactly the class this guard exists to catch.
+    if 'security_schemes.setdefault(\n        "refreshCookie"' not in main:
+        found.append("main.py no longer injects the refreshCookie security scheme")
+    if '"HTTPBearer" in security_schemes' not in main:
+        found.append("main.py no longer binds the HTTPBearer description")
+    if "bearer_scheme = HTTPBearer(auto_error=False)" not in deps:
+        found.append("deps.py no longer defines the bearer scheme")
+    if "request.cookies.get(settings.refresh_cookie_name)" not in auth:
+        found.append("auth.py no longer reads the refresh token from the cookie")
+
+    # 6. Independent fixed point over the whole projection. Checks 2 and 3 name
+    #    operations that *lost* the requirement (3 only on the 48-row floor);
+    #    nothing above reads "which of the 268 operations publish `security`".
+    #    A snapshot-only deletion of a protected set keeps every count, every
+    #    operationId, every parameter and every response identical, and there is
+    #    no generated half to disagree with. Only an independent literal moves.
+    rows = _projection_rows(document)
+    actual = _projection_digest(rows)
+    if actual != _SECURITY_PROJECTION_DIGEST:
+        projected = sum(1 for row in rows if row[3] == "True")
+        found.append(
+            f"published security projection drifted: _SECURITY_PROJECTION_DIGEST "
+            f"pins {_SECURITY_PROJECTION_DIGEST} but the snapshot derives "
+            f"{actual} ({projected} protected of {len(rows)} operations). The "
+            "generated client drops `security` on purpose, so there is no "
+            "second half to compare: re-pin the literal in the same commit as "
+            "the re-export, with a reason."
+        )
+    projected = sum(1 for row in rows if row[3] == "True")
+    if projected != _EXPECTED_PROJECTED:
+        found.append(
+            f"{projected} operations publish a security requirement, "
+            f"_EXPECTED_PROJECTED pins {_EXPECTED_PROJECTED}: an operation "
+            "moved into or out of a protected set"
+        )
+    hidden = len(rows) - projected
+    if hidden != _EXPECTED_HIDDEN_OPS:
+        found.append(
+            f"{hidden} operations publish no security requirement, "
+            f"_EXPECTED_HIDDEN_OPS pins {_EXPECTED_HIDDEN_OPS}: the public "
+            "surface moved"
+        )
+
+    # 7. Independent fixed point over the *content* of each published
+    #    ``security`` requirement. Check 2 asks whether "HTTPBearer" occurs,
+    #    check 3 pins a 48-row floor, and check 6 collapses the whole surface
+    #    into a boolean -- none of them reads the scheme's scopes or whether
+    #    several alternatives are OR-ed. ``openapi-typescript`` drops the
+    #    array entirely, so there is no generated half to disagree with: a
+    #    coordinated co-revert of snapshot + source + provenance re-pin moves
+    #    nothing above. Only an independent literal over the canonical rows
+    #    sees a scope injection, an OR-alternative, or a same-count rotation.
+    requirement_rows = _requirement_rows(document)
+    actual_requirement = _requirement_digest(requirement_rows)
+    if actual_requirement != _SECURITY_REQUIREMENT_DIGEST:
+        found.append(
+            "published security requirements drifted: "
+            f"_SECURITY_REQUIREMENT_DIGEST pins "
+            f"{_SECURITY_REQUIREMENT_DIGEST} but the snapshot derives "
+            f"{actual_requirement}. The generated client drops `security` on "
+            "purpose, so no second half can disagree: re-pin the literal in "
+            "the same commit as the re-export, with a reason."
+        )
+    if len(requirement_rows) != _EXPECTED_SECURITY_REQUIREMENT_ROWS:
+        found.append(
+            f"{len(requirement_rows)} operations publish a security-requirement "
+            f"row, _EXPECTED_SECURITY_REQUIREMENT_ROWS pins "
+            f"{_EXPECTED_SECURITY_REQUIREMENT_ROWS}: the operation surface moved"
+        )
+    protected_requirements = sum(
+        1 for row in requirement_rows if row[3] != "absent"
+    )
+    if protected_requirements != _EXPECTED_PROTECTED_REQUIREMENTS:
+        found.append(
+            f"{protected_requirements} operations publish a non-absent security "
+            f"requirement, _EXPECTED_PROTECTED_REQUIREMENTS pins "
+            f"{_EXPECTED_PROTECTED_REQUIREMENTS}: the protected surface moved"
+        )
+
+    return found
+
+
+def _load() -> tuple[str, str, str, str, str]:
+    return (
+        SNAPSHOT.read_text(encoding="utf-8"),
+        MAIN.read_text(encoding="utf-8"),
+        DEPS.read_text(encoding="utf-8"),
+        AUTH.read_text(encoding="utf-8"),
+        CONFIG.read_text(encoding="utf-8"),
+    )
+
+
+def _mutate(snapshot: str, main: str, deps: str, auth: str, config: str, *, kind: str):
+    """Return a copy with one specific regression applied."""
+    doc = json.loads(snapshot)
+    if kind == "drop_refresh_scheme":
+        doc["components"]["securitySchemes"].pop("refreshCookie", None)
+    elif kind == "retype_bearer":
+        doc["components"]["securitySchemes"]["HTTPBearer"] = {
+            "type": "http", "scheme": "basic"
+        }
+    elif kind == "rename_cookie":
+        doc["components"]["securitySchemes"]["refreshCookie"]["name"] = "wrong"
+    elif kind == "drop_admin_security":
+        for p, item in doc["paths"].items():
+            if p.startswith("/api/v1/admin/"):
+                for m, op in item.items():
+                    if m in METHODS:
+                        op.pop("security", None)
+    elif kind == "global_security":
+        doc["security"] = [{"HTTPBearer": []}]
+    elif kind == "secure_login":
+        doc["paths"]["/api/v1/auth/login"]["post"]["security"] = [{"HTTPBearer": []}]
+    elif kind == "co_revert_source":
+        main = main.replace(
+            'security_schemes.setdefault(\n        "refreshCookie"',
+            'security_schemes.setdefault(\n        "_removed"',
+        )
+    elif kind == "strip_non_admin_security":
+        # The whole co-revert the old `protected < len(admin)` bound missed:
+        # drop `security` from EVERY non-admin protected operation, keep admin.
+        for path, item in doc["paths"].items():
+            if path.startswith("/api/v1/admin/"):
+                continue
+            for method, op in item.items():
+                if method in METHODS and isinstance(op, dict):
+                    op.pop("security", None)
+    elif kind == "drop_one_non_admin_security":
+        target = sorted(NON_ADMIN_PROTECTED)[0]
+        doc["paths"][target[0]][target[1]].pop("security", None)
+    elif kind == "drop_all_security":
+        # The published projection, deleted whole. Every operation count,
+        # operationId, parameter and response stays identical, the generated
+        # client has no `security` half at all, and main.py still projects the
+        # same set -- so only the independent literal can name it.
+        for item in doc["paths"].values():
+            if not isinstance(item, dict):
+                continue
+            for method, op in item.items():
+                if method in METHODS and isinstance(op, dict):
+                    op.pop("security", None)
+    elif kind == "move_one_protected_operation":
+        # Count-preserving: one operation leaves the protected set and another
+        # enters it, so the two count doors do not move and only the tuple
+        # digest can see the swap.
+        admin = sorted(
+            (p, m) for p, m, o in _operations(doc) if p.startswith("/api/v1/admin/")
+        )
+        public = sorted(
+            (p, m)
+            for p, m, o in _operations(doc)
+            if not _bearer(o) and (p, m) not in PUBLIC_AUTH and not p.startswith("/api/v1/")
+        )
+        if not admin or not public:
+            raise ValueError(kind)
+        doc["paths"][admin[0][0]][admin[0][1]].pop("security", None)
+        doc["paths"][public[0][0]][public[0][1]]["security"] = [{"HTTPBearer": []}]
+    elif kind == "drift_bearer_description":
+        doc["components"]["securitySchemes"]["HTTPBearer"]["description"] = (
+            doc["components"]["securitySchemes"]["HTTPBearer"]["description"]
+            .replace("JWT access token", "JWT access tokeX")
+        )
+    elif kind == "drift_cookie_description":
+        doc["components"]["securitySchemes"]["refreshCookie"]["description"] = (
+            doc["components"]["securitySchemes"]["refreshCookie"]["description"]
+            .replace("HttpOnly", "HttpOnlx")
+        )
+    elif kind == "swap_scheme_descriptions":
+        schemes = doc["components"]["securitySchemes"]
+        bearer = schemes["HTTPBearer"]["description"]
+        schemes["HTTPBearer"]["description"] = schemes["refreshCookie"][
+            "description"
+        ]
+        schemes["refreshCookie"]["description"] = bearer
+    elif kind == "drop_scheme_description":
+        doc["components"]["securitySchemes"]["HTTPBearer"].pop("description")
+    elif kind == "co_revert_scheme_description_source":
+        main = main.replace(
+            '"JWT access token. Obtain one via POST /api/v1/auth/login "',
+            '"JWT access tokeX. Obtain one via POST /api/v1/auth/login "',
+        )
+        doc["components"]["securitySchemes"]["HTTPBearer"]["description"] = (
+            doc["components"]["securitySchemes"]["HTTPBearer"]["description"]
+            .replace("JWT access token", "JWT access tokeX")
+        )
+    elif kind == "phantom_non_admin_security":
+        # A genuinely public non-admin operation gains HTTPBearer without the
+        # floor being reviewed. Pick one outside PUBLIC_AUTH so check 4 does not
+        # fire and check 3's `extra` direction is the one that bites.
+        doc["paths"]["/api/v1/assemblies"]["get"]["security"] = [
+            {"HTTPBearer": []}
+        ]
+    elif kind == "inject_scope":
+        # Published requirement content changes, presence and scheme name do
+        # not. Every landed door (boolean projection, _bearer name check,
+        # NON_ADMIN_PROTECTED floor, source pins) stays silent.
+        doc["paths"]["/api/v1/admin/seed-requests"]["get"]["security"] = [
+            {"HTTPBearer": ["release:read"]}
+        ]
+    elif kind == "or_alternative":
+        # One bearer requirement becomes "bearer OR refresh cookie": a caller
+        # can now authenticate with the refresh cookie alone. _bearer() still
+        # sees "HTTPBearer" in the first alternative, so check 2 stays green.
+        doc["paths"]["/api/v1/admin/seed-requests"]["get"]["security"] = [
+            {"HTTPBearer": []},
+            {"refreshCookie": []},
+        ]
+    elif kind == "same_count_scope_rotation":
+        # Count-preserving: move a scope from one protected operation to
+        # another. Both the row count and the protected count stay at 268/170.
+        first = "/api/v1/admin/seed-requests"
+        second = "/api/v1/admin/features"
+        doc["paths"][first]["get"]["security"] = [
+            {"HTTPBearer": ["release:read"]}
+        ]
+        doc["paths"][second]["get"]["security"] = [
+            {"HTTPBearer": ["seed:read"]}
+        ]
+    elif kind == "drop_one_requirement_content":
+        # Only the *content* digest can name this: the requirement array is
+        # emptied (still present, still named HTTPBearer, still protected), so
+        # the projection boolean, _bearer() and both count doors are silent.
+        doc["paths"]["/api/v1/admin/seed-requests"]["get"]["security"] = [{}]
+    else:
+        raise ValueError(kind)
+    return (json.dumps(doc), main, deps, auth, config)
+
+
+def _self_test() -> int:
+    base = _load()
+    clean = failures(*base)
+    if clean:
+        print("openapi-auth-surface: self-test setup is dirty: " + "; ".join(clean), file=sys.stderr)
+        return 1
+    source = Path(__file__).read_text(encoding="utf-8")
+    source_cases = {"derived_floor_source", "shrunken_floor_source"}
+    cases = [
+        "drop_refresh_scheme",
+        "retype_bearer",
+        "rename_cookie",
+        "drop_admin_security",
+        "global_security",
+        "secure_login",
+        "co_revert_source",
+        "strip_non_admin_security",
+        "drop_one_non_admin_security",
+        "phantom_non_admin_security",
+        "drop_all_security",
+        "move_one_protected_operation",
+        "drift_bearer_description",
+        "drift_cookie_description",
+        "swap_scheme_descriptions",
+        "drop_scheme_description",
+        "co_revert_scheme_description_source",
+        "inject_scope",
+        "or_alternative",
+        "same_count_scope_rotation",
+        "drop_one_requirement_content",
+        *sorted(source_cases),
+    ]
+    problems = [f"literal floor: {item}" for item in _literal_floor_errors(source)]
+    for kind in cases:
+        if kind in source_cases:
+            result = _literal_floor_errors(_mutate_source(source, kind=kind))
+        else:
+            result = failures(*_mutate(*base, kind=kind))
+        if not result:
+            problems.append(f"{kind}: regression was NOT detected")
+    if problems:
+        for problem in problems:
+            print(f"openapi-auth-surface: FAIL self-test: {problem}", file=sys.stderr)
+        return 1
+    print(f"openapi-auth-surface: OK ({len(cases)} ablations)")
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--self-test", action="store_true", help="run in-file ablations")
+    args = parser.parse_args()
+    if args.self_test:
+        return _self_test()
+    found = failures(*_load())
+    if found:
+        for problem in found:
+            print(f"openapi-auth-surface: FAIL: {problem}", file=sys.stderr)
+        return 1
+    print("openapi-auth-surface: OK (auth surface pinned)")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

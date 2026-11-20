@@ -293,13 +293,18 @@
       "command": [
         "bash",
         "-c",
-        "uv export --locked --project {root}/apps/api --format requirements-txt --no-dev --no-emit-project --no-emit-local --output-file /tmp/soymutdb-api-audit-requirements.txt && uvx --from pip-audit==2.9.0 pip-audit --cache-dir /tmp/soymutdb-pip-audit-cache --strict --format json --output {output_dir}/pip-audit-api.json --requirement /tmp/soymutdb-api-audit-requirements.txt"
+        "uv export --locked --project {root}/apps/api --format requirements-txt --no-dev --no-emit-project --no-emit-local --no-header --output-file /tmp/soymutdb-api-audit-requirements.txt && uvx --from pip-audit==2.9.0 pip-audit --cache-dir /tmp/soymutdb-pip-audit-cache --strict --no-deps --disable-pip --format json --output {output_dir}/pip-audit-api.json --requirement /tmp/soymutdb-api-audit-requirements.txt"
       ],
       "report": {
         "mode": "file",
         "path": "pip-audit-api.json",
         "format": "json"
-      }
+      },
+      "normalize": "accepted-advisories",
+      "accept_file": "security/advisory-acceptances.json",
+      "mutating_command": "uv export --locked --project {root}/apps/api --format requirements-txt --no-dev --no-emit-project --no-emit-local --no-header --output-file /tmp/soymutdb-api-audit-requirements.txt && uvx --from pip-audit==2.9.0 pip-audit --cache-dir /tmp/soymutdb-pip-audit-cache --strict --no-deps --disable-pip --format json --output {output_dir}/pip-audit-api.json --requirement /tmp/soymutdb-api-audit-requirements.txt",
+      "normalize_recipe": "/tmp/soymutdb-api-audit-requirements.txt",
+      "normalize_recipe_note": "pip-audit writes the normalized requirement file back as its `--fix` pass. With `--disable-pip --no-deps` it does not, so the normalized file this check names is produced here from the exported pins instead."
     },
     {
       "name": "pip-audit-worker",
@@ -307,13 +312,18 @@
       "command": [
         "bash",
         "-c",
-        "uv export --locked --project {root}/apps/worker --format requirements-txt --no-dev --no-emit-project --no-emit-local --output-file /tmp/soymutdb-worker-audit-requirements.txt && uvx --from pip-audit==2.9.0 pip-audit --cache-dir /tmp/soymutdb-pip-audit-cache --strict --format json --output {output_dir}/pip-audit-worker.json --requirement /tmp/soymutdb-worker-audit-requirements.txt"
+        "uv export --locked --project {root}/apps/worker --format requirements-txt --no-dev --no-emit-project --no-emit-local --no-header --output-file /tmp/soymutdb-worker-audit-requirements.txt && uvx --from pip-audit==2.9.0 pip-audit --cache-dir /tmp/soymutdb-pip-audit-cache --strict --no-deps --disable-pip --format json --output {output_dir}/pip-audit-worker.json --requirement /tmp/soymutdb-worker-audit-requirements.txt"
       ],
       "report": {
         "mode": "file",
         "path": "pip-audit-worker.json",
         "format": "json"
-      }
+      },
+      "normalize": "accepted-advisories",
+      "accept_file": "security/advisory-acceptances.json",
+      "mutating_command": "uv export --locked --project {root}/apps/worker --format requirements-txt --no-dev --no-emit-project --no-emit-local --no-header --output-file /tmp/soymutdb-worker-audit-requirements.txt && uvx --from pip-audit==2.9.0 pip-audit --cache-dir /tmp/soymutdb-pip-audit-cache --strict --no-deps --disable-pip --format json --output {output_dir}/pip-audit-worker.json --requirement /tmp/soymutdb-worker-audit-requirements.txt",
+      "normalize_recipe": "/tmp/soymutdb-worker-audit-requirements.txt",
+      "normalize_recipe_note": "pip-audit writes the normalized requirement file back as its `--fix` pass. With `--disable-pip --no-deps` it does not, so the normalized file this check names is produced here from the exported pins instead."
     },
     {
       "name": "pip-audit-mcp-server",
@@ -321,13 +331,18 @@
       "command": [
         "bash",
         "-c",
-        "uv export --locked --project {root}/apps/mcp-server --format requirements-txt --no-dev --no-emit-project --no-emit-local --output-file /tmp/soymutdb-mcp-audit-requirements.txt && uvx --from pip-audit==2.9.0 pip-audit --cache-dir /tmp/soymutdb-pip-audit-cache --strict --format json --output {output_dir}/pip-audit-mcp-server.json --requirement /tmp/soymutdb-mcp-audit-requirements.txt"
+        "uv export --locked --project {root}/apps/mcp-server --format requirements-txt --no-dev --no-emit-project --no-emit-local --no-header --output-file /tmp/soymutdb-mcp-audit-requirements.txt && uvx --from pip-audit==2.9.0 pip-audit --cache-dir /tmp/soymutdb-pip-audit-cache --strict --no-deps --disable-pip --format json --output {output_dir}/pip-audit-mcp-server.json --requirement /tmp/soymutdb-mcp-audit-requirements.txt"
       ],
       "report": {
         "mode": "file",
         "path": "pip-audit-mcp-server.json",
         "format": "json"
-      }
+      },
+      "normalize": "accepted-advisories",
+      "accept_file": "security/advisory-acceptances.json",
+      "mutating_command": "uv export --locked --project {root}/apps/mcp-server --format requirements-txt --no-dev --no-emit-project --no-emit-local --no-header --output-file /tmp/soymutdb-mcp-audit-requirements.txt && uvx --from pip-audit==2.9.0 pip-audit --cache-dir /tmp/soymutdb-pip-audit-cache --strict --no-deps --disable-pip --format json --output {output_dir}/pip-audit-mcp-server.json --requirement /tmp/soymutdb-mcp-audit-requirements.txt",
+      "normalize_recipe": "/tmp/soymutdb-mcp-audit-requirements.txt",
+      "normalize_recipe_note": "pip-audit writes the normalized requirement file back as its `--fix` pass. With `--disable-pip --no-deps` it does not, so the normalized file this check names is produced here from the exported pins instead."
     }
   ]
 }

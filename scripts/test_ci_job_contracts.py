@@ -10,12 +10,15 @@ Run with: python3 -m unittest scripts.test_ci_job_contracts -v
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
 import tempfile
+import unicodedata
 import unittest
 from pathlib import Path
 
@@ -42,6 +45,43 @@ SHARED_SCRIPTS = (
     "scripts/stage-pages-publication.sh",
     "scripts/verify-frontend-artifacts.sh",
     "scripts/verify-backend-tests.sh",
+    "scripts/verify-bio-core.sh",
+    "scripts/check_bio_core_wheel.py",
+    "scripts/install-worker-science-build-deps.sh",
+    "scripts/with-postgres-service.sh",
+    "scripts/build-static-apps.sh",
+    "scripts/build-all-static-apps.sh",
+    "scripts/ci-nightly-artifact-gate.sh",
+    "scripts/build-release-image.sh",
+    "scripts/release-contract.golden.sh",
+    "scripts/build-pages-artifact.sh",
+    "scripts/verify-pages-artifact.sh",
+    "scripts/verify-site-variant-artifacts.sh",
+    "scripts/verify-artifact-e2e.sh",
+    "scripts/mcp-transport-smoke.sh",
+    "scripts/assert-clickhouse-migration.py",
+    "scripts/smoke.sh",
+    "scripts/start-cloud-dev.sh",
+    "scripts/acceptance.sh",
+)
+
+# Independent floor for the tuple above. Every assertion keyed on SHARED_SCRIPTS
+# derives its expectation FROM that tuple, so deleting an entry deletes the
+# assertion with it and the whole suite stays green while a gate goes
+# unguarded. This list is written out by hand on purpose: it must not be
+# computed from SHARED_SCRIPTS, or it inherits the same blind spot. Entries are
+# the scripts whose disappearance would silently remove a gate, not merely a
+# convenience wrapper.
+REQUIRED_SHARED_SCRIPTS = (
+    "scripts/ci-job-steps.sh",
+    "scripts/setup-workspace.sh",
+    "scripts/install_python_workspace.py",
+    "scripts/stage-pages-publication.sh",
+    "scripts/verify-frontend-artifacts.sh",
+    "scripts/verify-backend-tests.sh",
+    "scripts/verify-bio-core.sh",
+    "scripts/check_bio_core_wheel.py",
+    "scripts/install-worker-science-build-deps.sh",
     "scripts/with-postgres-service.sh",
     "scripts/build-static-apps.sh",
     "scripts/build-all-static-apps.sh",
@@ -402,6 +442,37 @@ def _is_executable(script: str) -> bool:
     return len(fields) >= 2 and fields[0] == "100755"
 
 
+_DOC_SECTION_CITATION = re.compile(r'\((docs/[\w./-]+\.md),\s*"([^"]+)"\)', re.DOTALL)
+_COMMENT_WRAP = re.compile(r"\n[ \t]*#[ \t]*")
+
+
+def _fold_comment_wrap(match: re.Match[str]) -> str:
+    """Replacement for one wrapped comment continuation (``\n# ``).
+
+    ASCII prose needs a space when a line break stands in for one
+    (``"build once,\n# consume"`` -> ``"build once, consume"``). CJK headings
+    carry no inter-word spaces, so a wrap there must vanish instead
+    (``"构建一次，\n# 消费一次"`` -> ``"构建一次，消费一次"``). Wide/fullwidth
+    characters mark the latter case; everything else keeps the space.
+    """
+    prev = match.string[match.start() - 1]
+    return "" if unicodedata.east_asian_width(prev) in ("W", "F") else " "
+
+
+def _doc_section_citations(text: str) -> list[tuple[str, str]]:
+    """Return every ``(docs/*.md, "label")`` citation, wrapped lines included.
+
+    Shared scripts wrap long shell comments mid-citation. Fold the continuation
+    prefixes first, then whitespace-normalize the label. Kept as a helper so
+    the gate and its regression tests exercise the same parsing, not a copy.
+    """
+    folded = _COMMENT_WRAP.sub(_fold_comment_wrap, text)
+    return [
+        (doc, " ".join(label.split()))
+        for doc, label in _DOC_SECTION_CITATION.findall(folded)
+    ]
+
+
 class DeliveryArchitectureTests(unittest.TestCase):
     """The CNB pipeline is authoritative and the GitHub workflows mirror it."""
 
@@ -461,6 +532,46 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertIn("scripts/ci-job-steps.sh run image-build", text)
         self.assertIn("scripts/ci-job-steps.sh run release", text)
 
+    def test_shared_script_catalog_cannot_shrink_without_a_failure(self) -> None:
+        """The derived tuple must never silently lose a gate.
+
+        `SHARED_SCRIPTS` drives ~a dozen assertions, each of which builds its
+        expectation by walking that same tuple. Deleting an entry therefore
+        deletes the assertion: on fb601eb3, dropping
+        `scripts/check_bio_core_wheel.py` kept the suite at 92 OK. The floor is
+        declared independently so a shrink has to be argued for in the diff.
+        """
+        self.assertEqual(
+            sorted(set(REQUIRED_SHARED_SCRIPTS) & set(SHARED_SCRIPTS)),
+            sorted(REQUIRED_SHARED_SCRIPTS),
+            "SHARED_SCRIPTS lost entries the delivery contract still requires",
+        )
+        self.assertEqual(
+            sorted(SHARED_SCRIPTS),
+            sorted(set(SHARED_SCRIPTS)),
+            "SHARED_SCRIPTS must not repeat an entry",
+        )
+        for script in REQUIRED_SHARED_SCRIPTS:
+            self.assertTrue((ROOT / script).is_file(), f"missing shared script: {script}")
+
+    def test_shared_script_catalog_ablation_is_detected(self) -> None:
+        """Prove the floor bites: remove one required entry and assert failure.
+
+        The ablation runs in a scratch copy of the module's own constants so it
+        needs no filesystem mutation and cannot disturb the real suite.
+        """
+        survivors = tuple(
+            script for script in SHARED_SCRIPTS
+            if script != "scripts/check_bio_core_wheel.py"
+        )
+        self.assertNotIn("scripts/check_bio_core_wheel.py", survivors)
+        lost = set(REQUIRED_SHARED_SCRIPTS) - set(survivors)
+        self.assertEqual(
+            lost,
+            {"scripts/check_bio_core_wheel.py"},
+            "the floor must name the ablated script, or the guard is toothless",
+        )
+
     def test_cnb_job_catalog_matches_the_scripts_on_disk(self) -> None:
         for script in SHARED_SCRIPTS:
             self.assertTrue((ROOT / script).is_file(), f"missing shared script: {script}")
@@ -476,6 +587,7 @@ class DeliveryArchitectureTests(unittest.TestCase):
         self.assertLessEqual(
             {
                 "frontend",
+                "bio-core",
                 "api-tests",
                 "dependency-governance",
                 "compose-acceptance",
@@ -487,11 +599,930 @@ class DeliveryArchitectureTests(unittest.TestCase):
             jobs,
         )
 
+    def test_shared_script_catalog_does_not_silently_shrink(self) -> None:
+        """Deleting a SHARED_SCRIPTS entry must fail, not stay green.
+
+        Every loop over SHARED_SCRIPTS proves a property of the scripts that
+        ARE listed (is_file, executable, strict mode, no credential echo).
+        None prove the reverse -- that a script the delivery pipeline calls is
+        still listed. Deleting one entry makes every loop skip that script and
+        the whole suite stays green: on dfa5915b, removing the
+        ``with-postgres-service.sh`` line leaves 88 tests OK and
+        ``check_bio_core_wheel.py --static`` green, because both gates then
+        scan one fewer shared script. PR #124's two smoke.sh assertions pin
+        the *call sites*, not this registration half (its commit message says
+        "mutation-tested each half"; the registration half was not tested).
+
+        This is the reverse half, following the shape of
+        ``test_worker_science_build_deps_are_provisioned_before_the_worker_install``:
+        a typed floor the catalog must still cover. Subset, not equality --
+        adding a new shared script is allowed, but it must not displace an
+        existing one silently. The plant below proves the assertion is
+        load-bearing for the real tuple shape, not a vacuous pass.
+        """
+        expected = frozenset({
+            "scripts/ci-job-steps.sh",
+            "scripts/setup-workspace.sh",
+            "scripts/install_python_workspace.py",
+            "scripts/stage-pages-publication.sh",
+            "scripts/verify-frontend-artifacts.sh",
+            "scripts/verify-backend-tests.sh",
+            "scripts/verify-bio-core.sh",
+            "scripts/check_bio_core_wheel.py",
+            "scripts/install-worker-science-build-deps.sh",
+            "scripts/with-postgres-service.sh",
+            "scripts/build-static-apps.sh",
+            "scripts/build-all-static-apps.sh",
+            "scripts/ci-nightly-artifact-gate.sh",
+            "scripts/build-release-image.sh",
+            "scripts/release-contract.golden.sh",
+            "scripts/build-pages-artifact.sh",
+            "scripts/verify-pages-artifact.sh",
+            "scripts/verify-site-variant-artifacts.sh",
+            "scripts/verify-artifact-e2e.sh",
+            "scripts/mcp-transport-smoke.sh",
+            "scripts/assert-clickhouse-migration.py",
+            "scripts/smoke.sh",
+            "scripts/start-cloud-dev.sh",
+            "scripts/acceptance.sh",
+        })
+        missing = sorted(expected - set(SHARED_SCRIPTS))
+        self.assertEqual(
+            missing, [],
+            "these shared scripts dropped out of SHARED_SCRIPTS, so the "
+            "is_file/executable/strict loops silently stopped checking them",
+        )
+        self.assertEqual(
+            len(SHARED_SCRIPTS), len(set(SHARED_SCRIPTS)),
+            "SHARED_SCRIPTS contains duplicate entries",
+        )
+
+        # Load-bearing: planting a deletion in the committed tuple must remove
+        # the entry from the parsed catalog. Scope to the tuple block -- the
+        # same 4-space string also appears in 12-space assertIn lines
+        # elsewhere in this file, and a bare sed-style plant there fakes a red.
+        source = (ROOT / "scripts" / "test_ci_job_contracts.py").read_text(
+            encoding="utf-8"
+        )
+        match = re.search(r"SHARED_SCRIPTS\s*=\s*\((.*?)\n\)", source, re.DOTALL)
+        self.assertIsNotNone(match, "SHARED_SCRIPTS tuple must be parseable")
+        assert match is not None
+        line_re = re.compile(
+            r'^    "scripts/with-postgres-service\.sh",\n?', re.MULTILINE
+        )
+        self.assertEqual(len(line_re.findall(match.group(1))), 1)
+        mutated = (
+            source[: match.start(1)]
+            + line_re.sub("", match.group(1), count=1)
+            + source[match.end(1) :]
+        )
+        parsed = re.search(r"SHARED_SCRIPTS\s*=\s*\((.*?)\n\)", mutated, re.DOTALL)
+        self.assertIsNotNone(parsed)
+        assert parsed is not None
+        self.assertNotIn(
+            "scripts/with-postgres-service.sh",
+            re.findall(r'"([^"]+)"', parsed.group(1)),
+            "the plant must actually drop the entry from the parsed catalog",
+        )
+
+    def test_bio_core_gate_is_delegated_by_both_providers(self) -> None:
+        """The Rust kernel gate must be one shared job body, not two YAML copies."""
+        steps = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        self.assertIn("bio_core_run()", steps)
+        self.assertIn("scripts/verify-bio-core.sh", steps)
+        self.assertIn("run bio-core", _workflow_text("ci.yml"))
+        self.assertIn("run bio-core", _flatten(_cnb()))
+        # The wheel gate is real: it must build AND import, not just build.
+        verify = (ROOT / "scripts/verify-bio-core.sh").read_text(encoding="utf-8")
+        self.assertIn("maturin build", verify)
+        self.assertIn("import soymutdb_bio_core", verify)
+        self.assertIn("-m pytest", verify)
+        # Regression for cnb-6e3-1k6jsptrg: the CNB system Python 3.15 has
+        # no pytest, so the wheel gate must build its own throwaway venv.
+        self.assertIn("-m venv", verify)
+        self.assertIn("--locked", verify)
+        # Both smoke layers must keep invoking the wheel checker. Without these
+        # two assertions, deleting either call from smoke.sh stays green.
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        self.assertIn("check_bio_core_wheel.py --static", smoke)
+        self.assertIn("check_bio_core_wheel.py --runtime", smoke)
+        # PR #135 landed scripts/test_bio_core_capability_parity_wiring.py but
+        # no gate collected it, so removing the parity guard's two invocations
+        # from verify-bio-core.sh stayed green. Pin the suite into the layer.
+        self.assertIn("test_bio_core_capability_parity_wiring.py", smoke)
+        # The crate pins its own compiler; no second Rust version in the YAML.
+        pin = (ROOT / "packages/bio-core/rust-toolchain.toml").read_text(encoding="utf-8")
+        self.assertIn("channel", pin)
+
+    # The Rust bio-core job the spec (docs/dev/rust-core-development-spec-
+    # 2026-11-05.md §13.1) requires. The two tests above are SUBSET assertions
+    # (`assertLessEqual`), so they stay green no matter what a new job does --
+    # including a job that is registered in `.cnb.yml` but never dispatched
+    # through the shared entrypoint, or one that only one provider knows about.
+    # This one is deliberately ordered the other way: the job must exist and
+    # must be reachable from both providers through the same script.
+    BIO_CORE_JOB = "bio-core"
+
+    def test_bio_core_job_is_dispatched_through_the_shared_entrypoint(self) -> None:
+        invocation = f"scripts/ci-job-steps.sh run {self.BIO_CORE_JOB}"
+
+        # CNB is authoritative, and the GitHub workflows are its mirror: both
+        # must dispatch the job by name through ci-job-steps.sh, or the two
+        # providers stop executing the same bytes.
+        for provider, text in (
+            (".cnb.yml", _cnb_text()),
+            (".github/workflows/ci.yml", _workflow_text("ci.yml")),
+        ):
+            self.assertIn(invocation, text, f"{provider} does not dispatch {self.BIO_CORE_JOB}")
+
+        # Dispatch is not registration. `run <job>` forwards to `<job>_run`, so a
+        # pipeline calling an unregistered name fails at runtime with a shell
+        # error instead of a review-time failure here.
+        catalog = subprocess.run(
+            ["bash", "scripts/ci-job-steps.sh", "list"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        self.assertIn(
+            self.BIO_CORE_JOB,
+            catalog.stdout.split(),
+            f"{self.BIO_CORE_JOB} is not in the `ci-job-steps.sh list` catalog",
+        )
+
+    def test_bio_core_job_body_does_not_hide_in_a_provider_config(self) -> None:
+        """§13.1: no standalone rust.yml, and no cargo/maturin in a wrapper.
+
+        The shared job body owns the toolchain commands; the provider configs
+        only sequence jobs. If `cargo`/`maturin` appears in `.cnb.yml` or in the
+        GitHub mirror, the same gate runs from two places and drifts.
+        """
+        for provider, text in (
+            (".cnb.yml", _cnb_text()),
+            (".github/workflows/ci.yml", _workflow_text("ci.yml")),
+        ):
+            for command in ("cargo ", "maturin "):
+                self.assertNotIn(
+                    command,
+                    text,
+                    f"{provider} inlines `{command}`; it belongs in the shared job body",
+                )
+
+        # The spec explicitly forbids a second, provider-specific Rust pipeline.
+        rust_pipelines = sorted(
+            path.name
+            for path in (ROOT / ".cnb" / "pipelines").glob("*rust*.yml")
+        )
+        self.assertEqual(
+            rust_pipelines,
+            [],
+            "the Rust gate extends .cnb.yml + ci-job-steps.sh; a separate "
+            "pipeline is what §13.1 forbids",
+        )
+    def test_bio_core_wheel_is_built_once_and_only_consumed_by_the_backend_gate(self) -> None:
+        """The backend gate installs the wheel; it never builds one.
+
+        Regression for a real review finding on PR #105: the api-tests CNB
+        stage is a bare `python:3.15` (no curl / cargo / C linker), so a
+        `maturin build` inside scripts/verify-backend-tests.sh dies on the first
+        CI run for a reason unrelated to the change, and an uncached native
+        build (bio / noodles / rust-lapper / bio-seq, thin LTO) would add
+        minutes to every PR push. The wheel must be built ONCE by the bio-core
+        job and only CONSUMED by the backend gate (spec §13.5: install, do not
+        merely build). A missing wheel must still fail closed, never skip.
+        """
+        producer = (ROOT / "scripts/verify-bio-core.sh").read_text(encoding="utf-8")
+        backend = (ROOT / "scripts/verify-backend-tests.sh").read_text(encoding="utf-8")
+
+        # The producer owns the only maturin build and writes the wheel to the
+        # directory both gates agree on.
+        self.assertIn("maturin build", producer)
+        self.assertIn("artifacts/wheels", producer)
+        self.assertIn("SOYMUTDB_BIO_CORE_WHEEL_DIR", producer)
+
+        # The backend gate must NOT bootstrap a Rust toolchain or build the
+        # crate: that is the whole point of crossing the job boundary.
+        for forbidden in (
+            "sh.rustup.rs",
+            "maturin build",
+            "pip install --quiet \"maturin",
+            "RUSTUP_HOME",
+            "CARGO_HOME",
+            "command -v cc",
+            "command -v cargo",
+        ):
+            self.assertNotIn(forbidden, backend, forbidden)
+
+        # It still installs the exact artifact, imports it, and runs the wheel
+        # contract pytest — §13.5 is preserved, not weakened.
+        self.assertIn("--force-reinstall --no-deps", backend)
+        self.assertIn("import soymutdb_bio_core as c", backend)
+        self.assertIn("packages/bio-core/python_tests", backend)
+        self.assertIn("soymutdb_bio_core-*-cp315-*.whl", backend)
+
+        # Fail-closed: absent / ambiguous wheel is a hard exit, not a skip.
+        self.assertIn("expected exactly one cp315 bio-core wheel", backend)
+        self.assertIn("#BIO_CORE_WHEELS[@]} -ne 1", backend)
+        for skip in ("pytest.skip", "SKIPPED", "exit 0 #"):
+            self.assertNotIn(skip, backend, skip)
+
+    def test_doc_section_citations_resolve_to_real_headings(self) -> None:
+        """A quoted doc section must name a heading that actually exists.
+
+        Regression for two consecutive review findings on PR #116: a comment in
+        scripts/ci-job-steps.sh cited docs/build/script-vs-plugin.md#file-sharing
+        (a file that never existed), then cited an English translation of a
+        Chinese heading ("CI: build once, consume once") that no text search or
+        HTML anchor could resolve. Neither was caught because no gate validates
+        prose citations. This guard covers the general form: any (path, "label")
+        citation in a shared script must match a real file and a real heading.
+        Wrapped comment lines are folded first, so reformatting the citation
+        across lines cannot silently remove it from the checked set.
+        """
+        citations = [
+            (script, doc, label)
+            for script in SHARED_SCRIPTS
+            for doc, label in _doc_section_citations(
+                (ROOT / script).read_text(encoding="utf-8")
+            )
+        ]
+
+        self.assertTrue(citations, "no doc-section citations found to validate")
+        for script, path, label in citations:
+            doc = ROOT / path
+            self.assertTrue(doc.is_file(), f"{script}: cited missing doc {path}")
+            headings = [
+                line.lstrip("#").strip()
+                for line in doc.read_text(encoding="utf-8").splitlines()
+                if line.startswith("#")
+            ]
+            self.assertIn(
+                label,
+                headings,
+                f"{script}: cites {path} section {label!r}, which is not a heading "
+                f"(headings: {headings})",
+            )
+
+    def test_doc_section_citation_wrap_tolerance(self) -> None:
+        """Wrapping a real citation across comment lines must not dissolve the gate.
+
+        The heading is Chinese and has now been re-quoted twice; a plain rewrap
+        of that comment line is the most likely next edit. Folding must keep a
+        correct citation green and keep a dangling label red, so the signal
+        never inverts. CJK text has no inter-word spaces, hence the no-space
+        join in _fold_comment_wrap.
+        """
+        script = "scripts/ci-job-steps.sh"
+        original = (ROOT / script).read_text(encoding="utf-8")
+        doc = "docs/ops/bio-core-wheel.md"
+        good = "CI：构建一次，消费一次"
+        headings = [
+            line.lstrip("#").strip()
+            for line in (ROOT / doc).read_text(encoding="utf-8").splitlines()
+            if line.startswith("#")
+        ]
+        self.assertIn(good, headings)
+
+        # The committed tree itself must parse. Without this assertion the
+        # regression is only self-contained in the neighbouring guard: a
+        # mutation that drops the citation entirely would leave this test's
+        # wrapped/dangling derivations silently empty.
+        self.assertEqual(_doc_section_citations(original), [(doc, good)])
+
+        wrapped = original.replace(f'"{good}"', '"CI：构建一次，\n# 消费一次"')
+        self.assertNotEqual(wrapped, original)
+        self.assertEqual(_doc_section_citations(wrapped), [(doc, good)])
+
+        # A wrap right after the ASCII "CI" takes the space-keeping branch and
+        # yields a spurious space in BOTH gates. Pin the shape so a future
+        # "fix" to one fold cannot silently diverge from the other.
+        after_ci = original.replace(f'"{good}"', '"CI\n# ：构建一次，消费一次"')
+        self.assertEqual(
+            _doc_section_citations(after_ci), [(doc, "CI ：构建一次，消费一次")]
+        )
+
+        dangling = original.replace(f'"{good}"', '"CI: build once,\n# consume once"')
+        self.assertEqual(
+            _doc_section_citations(dangling),
+            [(doc, "CI: build once, consume once")],
+        )
+        self.assertNotIn("CI: build once, consume once", headings)
+
+    def test_github_mirror_hands_the_wheel_from_bio_core_to_api_tests(self) -> None:
+        """GitHub jobs do not share a filesystem: the wheel crosses as an artifact.
+
+        CNB shares /workspace between stages of one pipeline; GitHub Actions
+        needs an explicit upload/download pair plus a `needs` edge, otherwise
+        the api-tests job would fail closed on a wheel nobody produced there.
+        """
+        workflow = _workflow_text("ci.yml")
+        parsed = yaml.safe_load(workflow)
+        jobs = parsed["jobs"]
+
+        bio_core = jobs["bio-core"]
+        api_tests = jobs["api-tests"]
+        upload_steps = [
+            step for step in bio_core["steps"]
+            if "upload-artifact" in str(step.get("uses", ""))
+        ]
+        self.assertEqual(len(upload_steps), 1, "bio-core must upload exactly one wheel artifact")
+        upload = upload_steps[0]
+        self.assertEqual(upload["with"]["name"], "bio-core-wheel")
+        self.assertIn("artifacts/wheels/soymutdb_bio_core-*-cp315-*.whl", upload["with"]["path"])
+        self.assertEqual(upload["with"]["if-no-files-found"], "error")
+
+        download_steps = [
+            step for step in api_tests["steps"]
+            if "download-artifact" in str(step.get("uses", ""))
+        ]
+        self.assertEqual(len(download_steps), 1, "api-tests must download the wheel artifact")
+        download = download_steps[0]
+        self.assertEqual(download["with"]["name"], "bio-core-wheel")
+        self.assertEqual(download["with"]["path"], "artifacts/wheels")
+
+        # Ordering is explicit, so a failed producer stops the consumer instead
+        # of letting it fail on a stale or missing wheel.
+        self.assertEqual(api_tests["needs"], "bio-core")
+
+    def test_cnb_verify_pipelines_build_the_wheel_before_the_backend_gate(self) -> None:
+        """CNB shares /workspace: the producer stage must precede the consumer.
+
+        Every verify pipeline (PR / main push / manual) runs bio-core then
+        api-tests as ordered stages. If the order flips or the bio-core stage is
+        dropped, the backend gate fails closed on a wheel nobody produced. The
+        backend stage stays on the bare python:3.15 image — that is precisely
+        why it must not own a Rust toolchain.
+        """
+        for branch, event in (
+            ("main", "pull_request"),
+            ("main", "push"),
+            ("$", "web_trigger_verify"),
+        ):
+            pipelines = [
+                pipeline
+                for pipeline in _cnb_pipelines(branch, event)
+                if pipeline.get("name") == "verify"
+                or (event == "web_trigger_verify" and pipeline.get("name") == "verify-manual")
+            ]
+            self.assertTrue(pipelines, f"missing verify pipeline for {branch}/{event}")
+            for pipeline in pipelines:
+                stages = pipeline.get("stages", [])
+                names = [str(stage.get("name", "")) for stage in stages]
+                self.assertIn("Rust bio-core", names, f"{branch}/{event}: no wheel producer")
+                self.assertIn(
+                    "API + Worker verification", names,
+                    f"{branch}/{event}: no backend gate",
+                )
+                self.assertLess(
+                    names.index("Rust bio-core"),
+                    names.index("API + Worker verification"),
+                    f"{branch}/{event}: bio-core must run before api-tests",
+                )
+                api_stage = stages[names.index("API + Worker verification")]
+                self.assertEqual(
+                    api_stage.get("image"), "python:3.15",
+                    f"{branch}/{event}: api-tests must stay on the toolchain-free image",
+                )
+
+    def test_check_bio_core_wheel_static_parses_cargo_manifest(self) -> None:
+        """The static gate must parse Cargo.toml, not grep literal strings.
+
+        A string-match gate breaks on a reformat or a workspace-inherited
+        `pyo3.workspace = true`; tomllib is the real parser and is stdlib on the
+        pinned 3.15.
+        """
+        checker = (ROOT / "scripts/check_bio_core_wheel.py").read_text(encoding="utf-8")
+        self.assertIn("import tomllib", checker)
+        self.assertIn("tomllib.loads", checker)
+        self.assertIn('cargo.get("dependencies", {})', checker)
+        self.assertNotIn('"bio ="', checker)
+
+    def test_bio_core_static_gate_rejects_dangling_doc_citations(self) -> None:
+        """--static must check that every cited docs/ path exists.
+
+        The section-heading guard above only matches `(path, "label")` pairs:
+        a bare dangling path (the shape the squash regression actually had)
+        yields zero citations, and a dangling path next to a valid labeled one
+        is not checked at all. This is the narrower, stronger assertion: every
+        docs/*.md path in ci-job-steps.sh must resolve, so a squash cannot
+        silently drop a path fix again. The loop below now spans every
+        shared script, not just the dispatcher.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_under_test",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        steps = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        self.assertEqual(
+            checker.doc_ref_errors(steps), [],
+            "--static must pass on the committed tree",
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs/ops").mkdir(parents=True)
+            (root / "docs/ops/bio-core-wheel.md").write_text(
+                "# Wheel\n\n## CI：构建一次，消费一次\n", encoding="utf-8"
+            )
+            good = '# see docs/ops/bio-core-wheel.md, "CI：构建一次，消费一次"'
+            self.assertEqual(checker.doc_ref_errors(good, root), [], good)
+            # A wrap inside the quoted label must fold the same way in both
+            # gates: CJK carries no inter-word space, so the join must vanish.
+            wrapped = (
+                '# see docs/ops/bio-core-wheel.md, "CI：构建一次，\n'
+                '# 消费一次"'
+            )
+            self.assertEqual(checker.doc_ref_errors(wrapped, root), [], wrapped)
+            # A bare dangling path, with no label at all.
+            dangling = "# see docs/build/script-vs-plugin.md#file-sharing"
+            self.assertTrue(
+                checker.doc_ref_errors(dangling, root),
+                "a docs/ path that is not committed must fail --static",
+            )
+            # ...and one hiding next to a perfectly valid labeled citation.
+            alongside = (
+                '# see docs/ops/bio-core-wheel.md, "CI：构建一次，消费一次" and '
+                'docs/build/script-vs-plugin.md#file-sharing'
+            )
+            self.assertTrue(
+                checker.doc_ref_errors(alongside, root),
+                "a dangling path beside a valid citation must fail --static",
+            )
+            stale = '# see docs/ops/bio-core-wheel.md, section "renamed heading"'
+            self.assertTrue(
+                checker.doc_ref_errors(stale, root),
+                "a section hint naming no heading must fail --static",
+            )
+
+    def test_doc_section_hint_is_checked_before_the_path_too(self) -> None:
+        """A section named *before* the path must resolve, not pass silently.
+
+        Regression for #141. SECTION_HINT only searched the 120 chars after a
+        docs/ path, so `section "NOPE" in docs/ops/bio-core-wheel.md` parsed as
+        zero citations and --static stayed green on a label naming no heading.
+        DOC_REF has no leading anchor, so the path was always found; the miss
+        was entirely on the hint side. Both orderings now share one checker.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_pre_path",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        good = "CI：构建一次，消费一次"
+        doc = "bio-core-wheel.md"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs" / "ops").mkdir(parents=True)
+            (root / "docs" / "ops" / doc).write_text(
+                f"# Wheel\n\n## {good}\n", encoding="utf-8"
+            )
+            shipped = [
+                f'# see docs/ops/{doc}, "{good}"',
+                f'# see docs/ops/{doc}, section "{good}"',
+                f'# see section "{good}" in docs/ops/{doc}',
+            ]
+            for text in shipped:
+                self.assertEqual(
+                    checker.doc_ref_errors(text, root), [],
+                    f"a real section must stay green in every form: {text}",
+                )
+
+            dangling = [
+                f'# see section "NOPE" in docs/ops/{doc}',
+                # Wrapped across comment lines, the shape the shipped citation
+                # in ci-job-steps.sh already takes.
+                f'# see section \n# "NOPE" in docs/ops/{doc}',
+            ]
+            for text in dangling:
+                self.assertTrue(
+                    checker.doc_ref_errors(text, root),
+                    f"a pre-path label naming no heading must fail: {text}",
+                )
+
+            # A dangling path stays red on the pre-path form as well, so the
+            # widened hint cannot mask the path check.
+            self.assertTrue(
+                checker.doc_ref_errors('# see section "X" in docs/ghost/gone.md', root),
+                "a pre-path citation of a missing doc must fail",
+            )
+            # A quoted string with no comma or `section` in front of a path is
+            # not a citation: widening must not turn any quote into a heading.
+            self.assertEqual(
+                checker.doc_ref_errors(f'# "{good}" is unrelated to docs/ops/{doc}', root),
+                [],
+                "an unrelated quoted string beside a path is not a section hint",
+            )
+
+    def test_section_hint_window_is_a_deliberate_boundary(self) -> None:
+        """A label far from its path is out of scope — decided, not overlooked.
+
+        #141 gap 3: SECTION_HINT only ever searched 120 chars either side of a
+        docs/ path, so a quoted label beyond that returned zero hints. That
+        bound is kept on purpose. There is no delimiter telling the gate that a
+        distant quoted string belongs to the path, so searching the whole line
+        turns `see docs/a.md ... , "anything"` into a heading claim. In-window
+        labels stay checked in both word orders; beyond the window the label is
+        prose, and the shipped citations are all well inside it.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_hint_window",
+            ROOT / "scripts" / "check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        doc = "docs/ops/bio-core-wheel.md"
+        window = checker.PRE_PATH_WINDOW
+        self.assertEqual(window, 120, "the pinned window changed; re-decide the scope")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs" / "ops").mkdir(parents=True)
+            (root / "docs" / "ops" / "bio-core-wheel.md").write_text(
+                "# Wheel\n\n## CI：构建一次，消费一次\n", encoding="utf-8"
+            )
+            # Inside the window: a dangling label must fail, in both orders.
+            near = f'# see {doc}, "NOPE"'
+            before = f'# see section "NOPE" in {doc}'
+            for text in (near, before):
+                self.assertTrue(
+                    checker.doc_ref_errors(text, root),
+                    f"a label inside the window must be checked: {text}",
+                )
+            # Just past the window, in both orders, the same label is prose.
+            far = f'# see {doc} ' + "x" * (window + 1) + ', "NOPE"'
+            far_before = '# see section "NOPE" ' + "x" * (window + 1) + f" {doc}"
+            for text in (far, far_before):
+                self.assertEqual(
+                    checker.doc_ref_errors(text, root), [],
+                    f"a label beyond the window is out of scope by decision: {text}",
+                )
+            # Widening the search would fabricate a citation from an unrelated
+            # quoted string; the bound is what keeps that from happening.
+            unrelated = f'# see {doc} ' + "x" * (window + 1) + ', "unrelated"'
+            self.assertEqual(
+                checker.doc_ref_errors(unrelated, root), [],
+                "a distant unrelated quote must not become a section claim",
+            )
+            # The shipped citation is comfortably inside the bound, so this
+            # decision does not relax a citation the committed tree relies on.
+            shipped = f'# see {doc}, "CI：构建一次，消费一次"'
+            self.assertEqual(checker.doc_ref_errors(shipped, root), [], shipped)
+
+    def test_unquoted_section_heading_is_not_a_citation(self) -> None:
+        """Unquoted headings stay out of scope — decided, not overlooked.
+
+        #141 asked for a deliberate call. A citation is checked only when its
+        label is quoted and sits beside a docs/ path behind a comma or the word
+        `section`. An unquoted heading (`see the section 构建一次 消费一次 in
+        docs/…`) has no delimiter telling the gate where the heading ends, so
+        accepting it would mean guessing at prose extent and red-flagging any
+        sentence that happens to contain a path. Out of scope: writers must
+        quote the label, which the shipped citations already do.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_unquoted",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        good = "CI：构建一次，消费一次"
+        doc = "bio-core-wheel.md"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs" / "ops").mkdir(parents=True)
+            (root / "docs" / "ops" / doc).write_text(
+                f"# Wheel\n\n## {good}\n", encoding="utf-8"
+            )
+            for text in (
+                f"# see the section {good} in docs/ops/{doc}",
+                f"# see the section 完全不存在 的标题 in docs/ops/{doc}",
+            ):
+                self.assertEqual(
+                    checker.doc_ref_errors(text, root), [],
+                    f"unquoted heading is out of scope by decision: {text}",
+                )
+            # The quoted form of the same sentence IS checked, so the scope
+            # boundary is the quotation, not the word order.
+            self.assertTrue(
+                checker.doc_ref_errors(f'# see the section "完全不存在 的标题" in docs/ops/{doc}', root),
+                "quoting the label puts it back in scope",
+            )
+
+    def test_prose_mentions_of_a_doc_path_are_not_citations(self) -> None:
+        """A path named inside a sentence must not be followed as a citation.
+
+        Regression for the first CI run of #142: the gate scans every shared
+        script, and it is one, so --static read its own docstrings -- where it
+        says "every docs/ citation ... resolves". Those example paths were
+        chased as links, and the Contract suites stage failed on a file the
+        checker itself had invented. Line-leading paths and real citations stay
+        checked; prose stays prose.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_prose",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs" / "ops").mkdir(parents=True)
+            (root / "docs" / "ops" / "bio-core-wheel.md").write_text(
+                "# Wheel\n\n## CI：构建一次，消费一次\n", encoding="utf-8"
+            )
+            # Prose: the shape the checker's own docstrings take.
+            for text in (
+                "# --static reads every docs/ghost/gone.md path in a sentence",
+                "# a dangling docs/ghost/gone.md citation must fail",
+                "# cited in docs/ghost/gone.md only as an example path",
+                '"""Fail when a docs/ghost/gone.md citation is dangling."""',
+            ):
+                self.assertEqual(
+                    checker.doc_ref_errors(text, root), [],
+                    f"prose is not a citation: {text}",
+                )
+            # Citations stay checked in every shape the gate documents.
+            for text in (
+                "# see docs/ghost/gone.md",
+                '# see (docs/ghost/gone.md, "CI：构建一次，消费一次")',
+                '# see docs/ops/bio-core-wheel.md, "renamed heading"',
+                '# see section "renamed heading" in docs/ops/bio-core-wheel.md',
+                "        # docs/ghost/gone.md",
+            ):
+                self.assertTrue(
+                    checker.doc_ref_errors(text, root),
+                    f"a citation must still be resolved: {text}",
+                )
+
+    def test_bio_core_static_gate_passes_on_its_own_source(self) -> None:
+        """--static must be green on every shared script, this checker included.
+
+        The checker is one of the files it reads, so its own docstrings are part
+        of the input. Pinning the committed tree keeps a future explanatory
+        example from failing the gate it explains.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_selfscan",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        for script in SHARED_SCRIPTS:
+            self.assertEqual(
+                checker.doc_ref_errors(
+                    (ROOT / script).read_text(encoding="utf-8"), source=script
+                ),
+                [],
+                f"--static must be green on {script}",
+            )
+        # The checker is not itself in SHARED_SCRIPTS, but --static reads its own
+        # docstrings through check_static(), so prose there must stay prose.
+        self.assertEqual(
+            checker.doc_ref_errors(
+                (ROOT / "scripts" / "check_bio_core_wheel.py").read_text(
+                    encoding="utf-8"
+                ),
+                source="scripts/check_bio_core_wheel.py",
+            ),
+            [],
+            "--static must be green on its own source",
+        )
+
+    def test_a_quoted_label_is_never_vetoed_by_prose_in_front_of_the_path(
+        self,
+    ) -> None:
+        """A cited label is a citation whatever prose word precedes the path.
+
+        `fb601eb3` added an `is_doc_citation()` prose-word veto to keep the
+        checker's own docstrings green. Applied before the label is read, it
+        also discards a genuine reference: `section "NOPE" in docs/…` stayed
+        green while `see section "NOPE" in docs/…` was red, decided only by
+        the comment's first word. A quoted label beside the path is decisive
+        evidence and must bypass the prose veto; prose without a label stays
+        out of scope.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_label_veto",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "docs" / "ops").mkdir(parents=True)
+            (root / "docs" / "ops" / "bio-core-wheel.md").write_text(
+                "# Wheel\n\n## CI：构建一次，消费一次\n", encoding="utf-8"
+            )
+            doc = "docs/ops/bio-core-wheel.md"
+            # Same bad label, two wordings: both must be red. On the unfixed
+            # tree the bare pre-path form is the one that goes silently green.
+            for text in (
+                f'# see section "NOPE" in {doc}',
+                f'# section "NOPE" in {doc}',
+                f'# the file {doc}, "NOPE"',
+                f'# a {doc}, "NOPE"',
+            ):
+                self.assertTrue(
+                    checker.doc_ref_errors(text, root),
+                    f"a quoted label must not be vetoed by prose: {text}",
+                )
+            # A dangling doc with a label must be red in the same shapes.
+            for text in (
+                '# section "NOPE" in docs/ops/gone.md',
+                '# the file docs/ops/gone.md, "NOPE"',
+            ):
+                self.assertTrue(
+                    checker.doc_ref_errors(text, root),
+                    f"a labelled dangling path must fail: {text}",
+                )
+            # Prose without a label stays out of scope; the shipped citation
+            # with a correct heading stays green.
+            self.assertEqual(
+                checker.doc_ref_errors(
+                    "# --static reads every docs/ghost/gone.md path", root
+                ),
+                [],
+                "prose without a label is still not a citation",
+            )
+            self.assertEqual(
+                checker.doc_ref_errors(
+                    f'# see ({doc}, "CI：构建一次，消费一次")', root
+                ),
+                [],
+                "the shipped citation stays green",
+            )
+            # A quote ending a trailing prose clause is not attached to the
+            # path. When the label veto is bypassed unconditionally, this prose
+            # is promoted to a section claim — the regression that broke the
+            # composition with the wider post-path window on PR #163.
+            self.assertEqual(
+                checker.doc_ref_errors(
+                    f"# Resolve every {doc} reference before shipping, "
+                    '"hello"',
+                    root,
+                ),
+                [],
+                "a quote at the end of a prose clause is not a section label",
+            )
+
+    def test_bio_core_static_gate_scans_every_shared_script(self) -> None:
+        """--static must cover the same file set as the contract citation guard.
+
+        Regression for a review finding on PR #120: doc_ref_errors() was called
+        on scripts/ci-job-steps.sh only, while the contract gate scans all
+        SHARED_SCRIPTS. A dangling citation planted in any of the other shared
+        scripts made the contract gate red but left --static green. Both gates
+        now read the same canonical list and must fail on the same plant.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_coverage",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        self.assertEqual(
+            checker.shared_scripts(),
+            list(SHARED_SCRIPTS),
+            "--static and the contract gate must scan the same shared scripts",
+        )
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            # A minimal but complete synthetic tree, so check_static() itself
+            # (not just doc_ref_errors) runs its loop over every shared script.
+            (root / "scripts").mkdir(parents=True)
+            (root / "docs" / "ops").mkdir(parents=True)
+            (root / "docs" / "ops" / "bio-core-wheel.md").write_text(
+                "# Wheel\n\n## CI：构建一次，消费一次\n", encoding="utf-8"
+            )
+            (root / "packages" / "bio-core").mkdir(parents=True)
+            for name in ("Cargo.toml", "Cargo.lock", "rust-toolchain.toml",
+                         "pyproject.toml"):
+                # rust-toolchain.toml pins under a [toolchain] table; a bare
+                # `channel` key is the wrong TOML shape and --static (correctly)
+                # rejects it, so the "clean" baseline stopped being clean.
+                (root / "packages" / "bio-core" / name).write_text(
+                    '[toolchain]\nchannel = "1.99.1"\n'
+                    if name == "rust-toolchain.toml"
+                    else "",
+                    encoding="utf-8",
+                )
+            (root / "packages" / "bio-core" / "src").mkdir()
+            (root / "packages" / "bio-core" / "src" / "lib.rs").write_text(
+                "", encoding="utf-8"
+            )
+            (root / "packages" / "bio-core" / "Cargo.toml").write_text(
+                "[dependencies]\n"
+                'bio = "4"\nnoodles = "0"\nrust-lapper = "1"\n'
+                'bio-seq = "0"\npyo3 = "0"\n', encoding="utf-8"
+            )
+            (root / "scripts" / "test_ci_job_contracts.py").write_text(
+                (ROOT / "scripts" / "test_ci_job_contracts.py").read_text(
+                    encoding="utf-8"
+                ), encoding="utf-8"
+            )
+            for script in SHARED_SCRIPTS:
+                target = root / script
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text("", encoding="utf-8")
+            # The dispatcher still needs its job markers to stay quiet.
+            (root / "scripts" / "ci-job-steps.sh").write_text(
+                "bio-core\nbio_core_run()\n", encoding="utf-8"
+            )
+            (root / "scripts" / "verify-bio-core.sh").write_text(
+                "maturin build\nimport soymutdb_bio_core\n-m pytest\n--locked\n",
+                encoding="utf-8",
+            )
+            (root / "scripts" / "verify-backend-tests.sh").write_text(
+                "soymutdb_bio_core-*-cp315-*.whl\n"
+                "--force-reinstall --no-deps\n"
+                "import soymutdb_bio_core as c\n", encoding="utf-8",
+            )
+
+            checker.ROOT = root
+            checker.CRATE = root / "packages" / "bio-core"
+
+            # Baseline: no dangling citations anywhere -> --static green.
+            self.assertEqual(checker.check_static(), 0, "synthetic tree must be clean")
+
+            # Plant a dangling path in a NON-dispatcher shared script. The whole
+            # point of the fix: --static must see it, not just the contract gate.
+            planted = root / "scripts" / "verify-bio-core.sh"
+            planted.write_text(
+                planted.read_text(encoding="utf-8")
+                + "# see docs/build/never-existed.md\n",
+                encoding="utf-8",
+            )
+            with contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(
+                    checker.check_static(), 1,
+                    "a dangling path in a non-dispatcher script must fail --static",
+                )
+
+    def test_doc_citation_gates_agree_on_wrapped_citations(self) -> None:
+        """The contract guard and --static must never give opposite signals.
+
+        Both parse wrapped comments with their own copy of the fold. A correct
+        rewrap must stay green in both, and a dangling label must stay red in
+        both; otherwise a future edit to one parser silently reintroduces the
+        inverted signal this guard was added to prevent.
+        """
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "bio_core_wheel_checker_consistency",
+            ROOT / "scripts/check_bio_core_wheel.py",
+        )
+        checker = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(checker)
+
+        original = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        good = "CI：构建一次，消费一次"
+        doc = "docs/ops/bio-core-wheel.md"
+        wrapped = original.replace(f'"{good}"', '"CI：构建一次，\n# 消费一次"')
+        dangling = original.replace(f'"{good}"', '"CI: build once,\n# consume once"')
+
+        self.assertEqual(_doc_section_citations(wrapped), [(doc, good)])
+        self.assertEqual(checker.doc_ref_errors(wrapped), [], "false positive in --static")
+        self.assertEqual(
+            _doc_section_citations(dangling),
+            [(doc, "CI: build once, consume once")],
+        )
+        self.assertTrue(checker.doc_ref_errors(dangling), "dangling label must stay red")
+
     def test_github_workflows_delegate_instead_of_inlining_gates(self) -> None:
         ci = _workflow_text("ci.yml")
         for delegation in (
             "scripts/verify-frontend-artifacts.sh",
             "scripts/verify-backend-tests.sh",
+            "scripts/ci-job-steps.sh run bio-core",
             "scripts/ci-job-steps.sh run dependency-governance",
             "scripts/ci-job-steps.sh run clickhouse-migration",
             "scripts/ci-job-steps.sh run mcp-e2e",
@@ -637,6 +1668,368 @@ class DeliveryArchitectureTests(unittest.TestCase):
             "web_trigger_publish",
         ):
             self.assertIn(event, fallback, event)
+
+    def test_npc_events_resolve_a_role_declared_in_settings(self) -> None:
+        """An NPC event needs a role; `.cnb/settings.yml` is where it lives.
+
+        The `$` -> `issue.comment@npc` pipeline is this repository's NPC entry
+        point, and the platform resolves the mentioned role *by name* against
+        `npc.roles` before the container starts. With no roles declared, the
+        `npc go` stage aborts with "No roles defined in .cnb/settings.yml" and
+        the pipeline body in `.cnb.yml` never runs -- so the failure looks like
+        a broken CI pipeline when in fact no CI job was involved. Two of them
+        (no NPC pipeline at all, or a pipeline with no role list) are cheap to
+        keep apart here.
+        """
+        fallback = _cnb().get("$", {})
+        npc_events = [
+            event
+            for event in fallback
+            if isinstance(event, str) and event.startswith("issue.comment@npc")
+        ]
+        if not npc_events:
+            return
+
+        settings = yaml.safe_load(
+            (ROOT / ".cnb/settings.yml").read_text(encoding="utf-8")
+        ) or {}
+        roles = (settings.get("npc") or {}).get("roles") or []
+        self.assertTrue(
+            roles,
+            ".cnb.yml declares an NPC pipeline but .cnb/settings.yml defines "
+            "no npc.roles, so the platform stops at "
+            "'No roles defined in .cnb/settings.yml'",
+        )
+        names = [role.get("name") for role in roles]
+        for name in names:
+            self.assertTrue(name, "every npc role needs a name")
+        self.assertEqual(
+            len(names),
+            len(set(names)),
+            f"npc role names must be unique, got {names}",
+        )
+        self.assertIn("CodeBuddy", names)
+
+    def test_delivery_pipelines_are_named_and_off_pr_agents(self) -> None:
+        """Every pipeline in the delivery chain carries a `name`, and no agent runs on PRs.
+
+        Twice now a hand edit has dropped an `npc:go` block into `main` ->
+        `pull_request`. The block arrives without a `name` key, so it does not
+        sit *next to* `verify`; it replaces it: `main/pull_request` lost the
+        verification gate and every `pipeline["name"]` consumer raised
+        `KeyError: 'name'`. The same block also named a role the settings file
+        never declared, which the platform rejects before any container starts
+        (`Role "..." not found in .cnb/settings.yml`).
+
+        Two independent invariants, both cheap to check:
+          * pull_request is the verification gate -- no `npc:go` stage there;
+          * a role named in `npc:go` is declared under `npc.roles`, since the
+            platform resolves it by name before the job exists.
+        """
+        settings = yaml.safe_load(
+            (ROOT / ".cnb/settings.yml").read_text(encoding="utf-8")
+        ) or {}
+        declared = {
+            role.get("name") for role in (settings.get("npc") or {}).get("roles") or []
+        }
+
+        for branch, event in (
+            ("main", "pull_request"),
+            ("main", "push"),
+            ("$", "pull_request"),
+            ("$", "push"),
+            ("$", "tag_push"),
+            ("$", "web_trigger_verify"),
+            ("$", "issue.comment@npc"),
+            ("$", "pull_request.comment@npc"),
+        ):
+            for pipeline in _cnb_pipelines(branch, event):
+                self.assertTrue(
+                    pipeline.get("name"),
+                    f"{branch}/{event}: a pipeline needs an explicit `name`; an "
+                    "unnamed block does not sit beside the delivery chain, it "
+                    "replaces it",
+                )
+                for stage in pipeline.get("stages", []):
+                    if stage.get("type") != "npc:go":
+                        continue
+                    self.assertNotEqual(
+                        (branch, event),
+                        ("main", "pull_request"),
+                        "pull_request is the verification gate; an agent session "
+                        "there turns every push into an npc run instead of CI",
+                    )
+                    if str(event).endswith("@npc"):
+                        # An `@` mention supplies the role: the platform injects
+                        # it from the mentioned role and ignores `options`, so
+                        # requiring `options.role` here would demand a value that
+                        # can never take effect.
+                        continue
+                    role = (stage.get("options") or {}).get("role")
+                    self.assertTrue(
+                        role,
+                        f"{branch}/{event}/{pipeline['name']}: npc:go needs a role",
+                    )
+                    self.assertIn(
+                        role,
+                        declared,
+                        f"{branch}/{event}/{pipeline['name']}: role {role!r} is not "
+                        f"declared in .cnb/settings.yml npc.roles (declared: "
+                        f"{sorted(declared)}); the platform resolves the role by "
+                        "name before the container starts",
+                    )
+
+    def test_npc_events_run_the_npc_task_instead_of_a_placeholder(self) -> None:
+        """An `@` mention must reach `npc:go`, and both NPC events must be declared.
+
+        The body used to be `script: echo "Handled by the .cnb.yml npc pipeline"`.
+        That failure is the expensive kind: the pipeline goes green, the mention
+        is acknowledged, and no agent ever reads the thread. Nothing downstream
+        noticed, because a placeholder that exits 0 is indistinguishable from a
+        task that succeeded.
+
+        Declaring only `issue.comment@npc` is the second half: NPC config merges
+        per event, so a missing `pull_request.comment@npc` silently falls back to
+        the platform default and the two entry points drift apart.
+
+        Prompt text is deliberately not asserted. For `@` mentions the platform
+        injects the role prompt and ignores `options`, so a prompt asserted here
+        would pin a value with no effect.
+        """
+        fallback = _cnb().get("$", {})
+        events = ("issue.comment@npc", "pull_request.comment@npc")
+        for event in events:
+            self.assertTrue(
+                fallback.get(event),
+                f"{event} must be declared; NPC config merges per event, so a "
+                "missing one falls back to the platform default",
+            )
+            for pipeline in _cnb_pipelines("$", event):
+                bodies = [
+                    stage.get("script") or stage.get("type") or ""
+                    for stage in pipeline.get("stages", [])
+                ]
+                self.assertTrue(
+                    any(
+                        stage.get("type") == "npc:go"
+                        for stage in pipeline.get("stages", [])
+                    ),
+                    f"$/{event}: stages {bodies} carry no `type: npc:go`, so the "
+                    "mention is acknowledged and then nothing happens",
+                )
+
+
+    def test_bio_core_wheel_abi_ledger_is_enforced_by_the_contracts_layer(self) -> None:
+        """The per-arch wheel tag guard must be wired, not merely committed.
+
+        A guard that no gate calls is decoration: an arm64 image shipping an
+        x86_64 wheel would still pass every existing check. Both the static
+        ledger validator and the synthetic-negative suite have to be reachable
+        from `smoke.sh --profile contracts`, and the Rust supply-chain scan has
+        to run in the single bio-core job (one finding set, not two).
+        """
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        self.assertIn("scripts/check_bio_core_wheel_abi.py --ledger --self-test", smoke)
+        self.assertIn("scripts/test_bio_core_wheel_abi.py", smoke)
+
+        steps = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        self.assertIn("verify-bio-core-supply-chain.sh", steps)
+        scanner = (ROOT / "scripts/verify-bio-core-supply-chain.sh").read_text(encoding="utf-8")
+        self.assertIn("cargo audit", scanner)
+        self.assertIn("cargo deny", scanner)
+        self.assertIn("cargo-supply-chain.json", scanner)
+        # ci-job-steps.sh runs each script as a separate `bash` child, so the
+        # wheel builder's exported toolchain PATH does not reach the scanner.
+        # Both must resolve the same bootstrapped rustup storage; see the
+        # byte-identical-default guard in check_bio_core_wheel_abi.py.
+        self.assertIn('export PATH="${CARGO_HOME}/bin:${PATH}"', scanner)
+        # rustup is bootstrapped with `--default-toolchain none`: cargo only
+        # resolves a channel from CRATE_DIR's rust-toolchain.toml. A bare
+        # `cargo install` at the repo root fails with "no default is configured"
+        # (cnb-h85-1k6kahbov). Every cargo command must run inside CRATE_DIR.
+        for line in scanner.splitlines():
+            stripped = line.lstrip()
+            if stripped.startswith("#") or "command -v cargo" in line:
+                continue
+            if any(stripped.startswith(f"cargo {cmd}") or f"&& cargo {cmd}" in line
+                   for cmd in ("install", "audit", "deny")):
+                self.assertIn('(cd "${CRATE_DIR}" && cargo ', line, line)
+
+        # A scanner that cannot read the advisory database aborts before it
+        # reports anything, so its version pin is part of the gate. 0.21.2 is
+        # the measured CVSS 4.0 red gate (cnb-k4a-1k6kbhl3c, runner L4405 --
+        # that run installed 0.21.2). 0.22.1 also died (cnb-7qb-1k6kbvp1e)
+        # with its reason redirected out of the stage log. 0.22.2 is the
+        # first runner log showing the audit scan completing clean.
+        audit_pin = re.search(r"SOYMUTDB_BIO_CORE_CARGO_AUDIT:-(\d+(?:\.\d+)*)", scanner)
+        self.assertIsNotNone(audit_pin, "cargo-audit version pin is gone")
+        self.assertEqual(
+            audit_pin.group(1),
+            "0.22.2",
+            "cargo-audit must stay pinned to the exact 0.22.2 resolution; "
+            "a floor-only guard lets a later release drift the finding set",
+        )
+
+        # cargo-deny hits the same parse wall and needs the same floor:
+        # 0.18.4 links rustsec 0.30.x -> cvss 2.1.0, so the run dies on the
+        # first CVSS 4.0 advisory (cnb-qf2-1k6kc4hoo). 0.18.9 is the first
+        # release whose published Cargo.lock carries rustsec 0.31.0 -> cvss
+        # 2.2.0.
+        deny_pin = re.search(r"SOYMUTDB_BIO_CORE_CARGO_DENY:-(\d+(?:\.\d+)*)", scanner)
+        self.assertIsNotNone(deny_pin, "cargo-deny version pin is gone")
+        self.assertEqual(
+            deny_pin.group(1),
+            "0.18.9",
+            "cargo-deny must stay pinned to the exact 0.18.9 resolution; "
+            "a floor-only guard lets a later release drift the finding set",
+        )
+
+        # The pin compares the committed DECLARATION. A bare
+        # `--version "0.22.2"` is a caret requirement (^0.22.2), so cargo
+        # could install 0.22.99 at run time. The "=" operator makes it an
+        # exact requirement; the source guard in check_bio_core_wheel_abi.py
+        # owns the general form, this is the second reader.
+        self.assertIn('--version "=${AUDIT_VERSION}"', scanner)
+        self.assertIn('--version "=${DENY_VERSION}"', scanner)
+
+        # The loop above catches a command that was left at the repo root; this
+        # pins the other escape hatch, an explicit channel pin, so a future
+        # rewrite has to keep at least one of the two. The source guard in
+        # check_bio_core_wheel_abi.py owns the general form.
+        self.assertTrue(
+            "export RUSTUP_TOOLCHAIN=" in scanner or 'cd "${CRATE_DIR}" && cargo ' in scanner,
+            "the supply-chain scanner must resolve a rustup channel",
+        )
+
+        # cargo deny without a config falls back to an empty license allowlist
+        # and rejects every crate. The policy is committed next to Cargo.lock
+        # and auto-discovered because the scanner runs inside the crate dir.
+        deny_cfg = ROOT / "packages" / "bio-core" / "deny.toml"
+        self.assertTrue(deny_cfg.is_file(), "packages/bio-core/deny.toml is missing")
+        text = deny_cfg.read_text(encoding="utf-8")
+        self.assertIn("allow = [", text)
+        # Lint levels are parsed VALUES, not byte substrings. A substring
+        # survives in a comment while the real key flips to a fail-open level;
+        # measured on 11c3971d, all seven such assertions passed GREEN on that
+        # mutation. This mirrors check_bio_core_wheel_abi.source_failures().
+        import tomllib
+        from collections import defaultdict
+        policy = tomllib.loads(text)
+        sources = policy.get("sources", {})
+        self.assertEqual(sources.get("unknown-registry"), "deny")
+        self.assertEqual(sources.get("unknown-git"), "deny")
+        # The three unfixable advisories are ignored by ID: a scope spelling is
+        # a blanket (measured: "transitive" fails them anyway because their
+        # direct dependent is `bio`; "workspace" hides every unmaintained crate
+        # behind a direct dependency).
+        advisories = policy.get("advisories", {})
+        self.assertEqual(advisories.get("unmaintained"), "all")
+        self.assertIn("RUSTSEC-2024-0436", text)
+        self.assertEqual(advisories.get("yanked"), "deny")
+        # Existing duplicates are named in `skip`; a new one must still fail.
+        bans = policy.get("bans", {})
+        self.assertEqual(bans.get("multiple-versions"), "deny")
+        self.assertEqual(bans.get("wildcards"), "deny")
+        exceptions = policy.get("licenses", {}).get("exceptions")
+        bsl = [
+            entry for entry in (exceptions if isinstance(exceptions, list) else [])
+            if isinstance(entry, dict) and "BSL-1.0" in (entry.get("allow") or [])
+        ]
+        self.assertEqual(len(bsl), 1, "deny.toml must grant BSL-1.0 to one crate")
+        self.assertEqual(bsl[0].get("crate"), "ryu@1.0.23")
+        # The same substring class survives in four more keys that the seven
+        # parsed levels above do not cover. Each one is a fail-open in the
+        # direction that matters: an unused allow-list entry stops being
+        # reported, a private workspace crate starts being skipped from the
+        # license check, and a 0.0 confidence threshold accepts a license match
+        # on any evidence at all. All four stayed GREEN before this block.
+        licenses = policy.get("licenses", {})
+        self.assertEqual(licenses.get("unused-allowed-license"), "warn")
+        private = licenses.get("private", {})
+        self.assertEqual(private.get("ignore"), False)
+        self.assertEqual(licenses.get("confidence-threshold"), 0.8)
+        # The one license outside the allow-list is granted to exactly one
+        # crate; a wholesale swap to an allow-listed SPDX id is invisible to
+        # the crate/allow pair check above if the pair itself is edited.
+        self.assertEqual(
+            sorted(
+                entry.get("crate") for entry in (exceptions or [])
+                if isinstance(entry, dict)
+            ),
+            ["ryu@1.0.23", "unicode-ident"],
+        )
+        self.assertEqual(
+            sorted(
+                tuple(entry.get("allow") or []) for entry in (exceptions or [])
+                if isinstance(entry, dict)
+            ),
+            [("BSL-1.0",), ("Unicode-3.0",)],
+        )
+        self.assertIn("skip = [", text)
+        # The skip list names exactly the duplicate versions in Cargo.lock;
+        # a bare "skip = [" substring let one entry be deleted.
+        lock = tomllib.loads((ROOT / "packages/bio-core/Cargo.lock").read_text(encoding="utf-8"))
+        seen: dict[str, list[str]] = defaultdict(list)
+        for pkg in lock["package"]:
+            seen[pkg["name"]].append(pkg["version"])
+        expected = {
+            f"{name}@{version}"
+            for name, versions in seen.items()
+            if len(versions) > 1
+            for version in versions
+        }
+        named = {entry["crate"] for entry in policy["bans"]["skip"]}
+        self.assertEqual(named, expected, "deny.toml skip list drifted from Cargo.lock")
+
+        # The verdict is exit-status based and lives in a real module. A
+        # heredoc that read `found` as a count or matched "error" in stdout
+        # was fail-open on three shapes and no gate could import it to check.
+        verdict = ROOT / "scripts" / "check_bio_core_supply_chain.py"
+        self.assertTrue(verdict.is_file(), "check_bio_core_supply_chain.py is missing")
+        module = verdict.read_text(encoding="utf-8")
+        for token in ("audit_rc", "deny_rc", "count", "audit_findings"):
+            self.assertIn(token, module)
+        self.assertNotIn('vulnerabilities.get("found"', scanner)
+        self.assertNotIn('"error" in deny_text', scanner)
+        self.assertIn("check_bio_core_supply_chain.py", scanner)
+        for arg in ('"${AUDIT_RC}"', '"${DENY_RC}"'):
+            self.assertIn(arg, scanner)
+        # The signed report must name the binaries that ran, not a hardcoded
+        # "pinned" placeholder. `=` is an install contract; only each tool's
+        # own --version proves which release produced the clean verdict.
+        for token in ("def read_observations(", "def validate_observations(",
+                      "def parse_scanner_version(", "executed as"):
+            self.assertIn(token, module, f"the verdict lost {token!r}")
+        import ast  # local: this module uses ast in several disjoint checks
+        verdict_ast = ast.parse(module)
+        constants = {
+            node.value for node in ast.walk(verdict_ast)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        self.assertNotIn("pinned", constants, "the verdict re-hardcoded a placeholder version")
+        for probe in ("cargo audit --version", "cargo deny --version"):
+            self.assertIn(probe, scanner, f"the scanner stopped observing {probe!r}")
+        for arg in ("--audit-version-file", "--deny-version-file",
+                    "--expect-audit", "--expect-deny"):
+            self.assertIn(arg, scanner, f"the scanner stopped passing {arg!r} to the verdict")
+        self.assertIn(
+            "scripts/test_bio_core_supply_chain.py",
+            (ROOT / "scripts" / "smoke.sh").read_text(encoding="utf-8"),
+        )
+
+        # Exactly one Rust finding set: no second cargo-* analyzer in the
+        # governance policy, which would produce a contradictory report. Parse
+        # the checks structurally; a literal "cargo audit" substring check
+        # misses a check named `cargo-deny` (PR #180's hole).
+        from scripts.check_bio_core_wheel_abi import foreign_cargo_analyzers
+
+        registered = foreign_cargo_analyzers(ROOT / "dependency-governance.json")
+        self.assertEqual(
+            registered,
+            [],
+            "a second Rust cargo analyzer was registered in the governance "
+            "policy; the release lane must have exactly one Rust finding set",
+        )
 
     def test_contracts_job_provisions_every_import_it_needs(self) -> None:
         """The contracts stage must provision the layer's whole dependency set.
@@ -1216,6 +2609,55 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 continue
             self.assertTrue(pipeline.get("stages"), pipeline["name"])
 
+    def test_pull_request_pipelines_are_named_verification_only(self) -> None:
+        """PR builds must stay verifiable and never resolve an undefined NPC role.
+
+        A stray `npc:go` reviewer stage once became `main.pull_request[0]`. It
+        carried no `name`, so the contract helpers that index `[0]` for the
+        `verify` pipeline broke, and its `role: 代码审查员` resolved against a
+        `.cnb/settings.yml` with no `npc.roles` — CI failed in Prepare with
+        "No roles defined in .cnb/settings.yml" before any verification ran.
+        """
+        for branch, event in (("main", "pull_request"), ("$", "pull_request")):
+            pipelines = _cnb_pipelines(branch, event)
+            if branch == "main":
+                self.assertTrue(pipelines, "main/pull_request must run verify")
+            for index, pipeline in enumerate(pipelines):
+                self.assertIn(
+                    "name", pipeline,
+                    f"{branch}/{event}[{index}]: every pipeline needs a name; "
+                    "an unnamed pipeline displaces `verify` from index [0]",
+                )
+                for stage in pipeline.get("stages", []) or []:
+                    self.assertNotEqual(
+                        stage.get("type"), "npc:go",
+                        f"{branch}/{event}/{pipeline['name']}: an `npc:go` "
+                        "stage needs an `npc.roles` definition in "
+                        ".cnb/settings.yml and runs AI before the verification "
+                        "gate; PR builds are verification-only",
+                    )
+
+        # If an NPC stage is ever added deliberately, its `role` must resolve.
+        settings = yaml.safe_load(
+            (ROOT / ".cnb/settings.yml").read_text(encoding="utf-8")
+        ) or {}
+        defined_roles = {
+            role.get("name")
+            for role in (settings.get("npc") or {}).get("roles", []) or []
+            if isinstance(role, dict)
+        }
+        for pipeline in _iter_pipelines(_cnb()):
+            for stage in pipeline.get("stages", []) or []:
+                if stage.get("type") != "npc:go":
+                    continue
+                role = (stage.get("options") or {}).get("role")
+                if role is not None:
+                    self.assertIn(
+                        role, defined_roles,
+                        f"npc:go role {role!r} is not defined in "
+                        ".cnb/settings.yml npc.roles",
+                    )
+
     def test_no_duplicate_verification_logic_between_providers(self) -> None:
         """Shared logic must be scripted once, not copy-pasted per provider.
 
@@ -1631,6 +3073,49 @@ class DeliveryArchitectureTests(unittest.TestCase):
         gate = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
         self.assertIn("SOYMUTDB_CI_DEMO_API_URL", gate)
 
+    def test_variant_row_key_guard_is_wired_into_both_gates(self) -> None:
+        """A source+test co-reversion must fail, not stay green.
+
+        A stale-base branch carried an older ``rowKey`` together with the two
+        test cases that match it: vitest reported 2/2 and the OpenAPI gate has
+        no opinion about frontend source. The guard reads the committed sources
+        independently of the test runner, so deleting tests cannot make it
+        greener. Both the frontend gate and the contracts layer must invoke it.
+        """
+        frontend = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
+        self.assertIn("scripts/check_variant_row_key_contract.py", frontend)
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        self.assertIn("scripts/test_variant_row_key_contract.py", smoke)
+        self.assertTrue((ROOT / "scripts/check_variant_row_key_contract.py").is_file())
+        self.assertTrue((ROOT / "scripts/test_variant_row_key_contract.py").is_file())
+
+    def test_api_client_base_path_guard_is_wired_into_both_gates(self) -> None:
+        """PR #117 doubled /api/v1 in the sequence client; a source guard is
+        the only gate that reads .ts path construction. Both the frontend gate
+        and the contracts smoke layer must run it, and its regression suite
+        must prove the doubled-BASE shape fails."""
+        frontend = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
+        self.assertIn("scripts/check_api_client_base_path.py --self-test", frontend)
+        self.assertIn("scripts/check_api_client_base_path.py", frontend)
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        self.assertIn("scripts/test_api_client_base_path_guard.py", smoke)
+        self.assertTrue((ROOT / "scripts/check_api_client_base_path.py").is_file())
+        self.assertTrue((ROOT / "scripts/test_api_client_base_path_guard.py").is_file())
+
+    def test_antd_design_scan_runs_its_self_test_from_the_frontend_gate(self) -> None:
+        """`antd lint` exits 0 even when it reports findings.
+
+        A bare CLI invocation would therefore be a gate that cannot fail. The
+        frontend gate must call the JSON-parsing wrapper, and the wrapper must
+        self-test against a bad fixture so a scanner that stops reading the
+        target fails loudly instead of passing silently.
+        """
+        frontend = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
+        self.assertIn("scripts/check-antd-design.mjs --self-test", frontend)
+        scanner = (ROOT / "scripts/check-antd-design.mjs").read_text(encoding="utf-8")
+        self.assertIn("report.partial === true", scanner)
+        self.assertIn("process.exit(1)", scanner)
+
     def test_package_script_invocations_do_not_double_up_the_separator(self) -> None:
         """`pnpm run <script> -- --flag` forwards a literal "--" to the script.
 
@@ -1835,6 +3320,22 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # `ModuleNotFoundError: No module named 'yaml'`.
         self.assertIn("ensure_governance_python", bodies["dependency_governance_step"])
         governance_python = bodies["ensure_governance_python"]
+
+        # python-licenses-worker runs `uv run --locked --project apps/worker`,
+        # which resolves the worker science stack (h5py has no CPython 3.15
+        # wheel) and therefore needs HDF5 headers + pkg-config in THIS stage's
+        # container. "Compiler prerequisites" is a separate container, so its
+        # apt install does not survive here. Without the shared prerequisite
+        # script the analyzer never starts, no report is written, and the gate
+        # fails with `normalization_unavailable:license-expressions`.
+        governance_step = bodies["dependency_governance_step"]
+        self.assertIn("install-worker-science-build-deps.sh", governance_step)
+        self.assertIn("HDF5_PKGCONFIG_NAME", governance_step)
+        self.assertLess(
+            governance_step.index("install-worker-science-build-deps.sh"),
+            governance_step.index("deps:audit"),
+            "HDF5 prerequisites must be installed before uv builds h5py",
+        )
         self.assertIn("import yaml", governance_python)
         self.assertIn("PyYAML==", governance_python)
         # `uv`/`uvx` drive the Deptry/license analyzers; without it every one is
@@ -2108,6 +3609,54 @@ class DeliveryArchitectureTests(unittest.TestCase):
                 r"(?m)^FROM node:",
                 f"{dockerfile_path} cannot be built on a node: base and also "
                 "provide Python 3.15 from python: via COPY --from",
+            )
+
+    def test_openapi_contract_gate_is_never_skipped_in_ci(self) -> None:
+        """No CI caller may mention the flag that bypasses the contract gate.
+
+        ``verify-frontend-artifacts.sh`` ends with
+        ``pnpm --filter @soymutdb/api-client check:contract``, guarded by
+        ``SOYMUTDB_CI_SKIP_CONTRACT``. That gate is the only check that
+        re-exports ``app.main:app`` and diffs the fresh document against the
+        committed snapshot, so setting the flag in a CI caller would hide a
+        stale ``openapi.json`` while every unit guard stays green. Local and
+        build-only callers may still use it; the assertion covers CI configs
+        and the shared job bodies they delegate to.
+
+        The name is forbidden outright rather than matched as an assignment:
+        YAML ``key: "1"``, shell ``key=1`` and ``export key=1`` all have to
+        redden, and a commented-out assignment is one edit away from a real
+        one. Document why it stays unset in the script's header instead.
+
+        The companion assertion in
+        ``test_frontend_stage_can_reach_the_openapi_contract_gate`` pins the
+        opposite direction -- that the flag exists and bypasses only this one
+        gate -- so it must stay.
+        """
+        flag = "SOYMUTDB_CI_SKIP_CONTRACT"
+        configs = list(_cnb_config_files())
+        # LEGACY_WORKFLOWS is the mirror's *dispatch* list, not an inventory of
+        # every workflow file: dependency-lock-candidates.yml is a workflow too,
+        # so enumerate the directory instead of trusting a hand-kept tuple.
+        configs += sorted((ROOT / ".github/workflows").glob("*.yml"))
+        configs.append(ROOT / "scripts/ci-job-steps.sh")
+        self.assertEqual(
+            len(configs),
+            len(set(configs)),
+            "a CI caller is listed twice; check the config inventory",
+        )
+        # A guard over an empty or stale inventory is vacuously green. Pin the
+        # floor so deleting or renaming a config cannot silently shrink it.
+        self.assertGreaterEqual(len(configs), 16, "CI config inventory shrank")
+        for config in configs:
+            self.assertTrue(config.is_file(), f"missing CI caller: {config}")
+            body = config.read_text(encoding="utf-8")
+            self.assertNotIn(
+                flag,
+                body,
+                f"{config.relative_to(ROOT)} mentions {flag}; no CI caller may "
+                "set it, because the OpenAPI contract gate is the only check "
+                "that can see a stale snapshot",
             )
 
     def test_no_stage_image_is_a_dockerfile_path(self) -> None:
@@ -3398,6 +4947,110 @@ class DeliveryArchitectureTests(unittest.TestCase):
         # lines, for the same reason.
         self.assertNotIn("printf 'export SOYMUTDB_TEST_DATABASE_URL", resolver)
 
+    def test_worker_science_build_deps_are_provisioned_before_the_worker_install(self) -> None:
+        """Python 3.15 has no h5py wheel: the backend gate must install HDF5 first.
+
+        Regression for real CNB build cnb-7cn-1k6gvafcf. The `api-tests` stage
+        runs on a bare `python:3.15` image. `verify-backend-tests.sh` editable-
+        installs `apps/worker[dev]`, which pulls scanpy -> anndata -> h5py;
+        h5py 3.16 has no cp315 wheel, so pip builds it from sdist and needs
+        system HDF5 headers. The image has none, so the stage died with:
+
+            error: libhdf5.so: cannot open shared object file: No such file
+            ERROR: Failed building wheel for h5py
+
+        The production image (infra/docker/Dockerfile.worker) already solves
+        this with `libhdf5-dev` + `pkg-config` and HDF5_PKGCONFIG_NAME pointing
+        at Debian/Ubuntu's serial flavour. The CI gate must apply the same
+        recipe BEFORE the worker install, and both providers reach it through
+        this one script so the prerequisite cannot drift.
+        """
+        backend = (ROOT / "scripts/verify-backend-tests.sh").read_text(encoding="utf-8")
+        prereq = (ROOT / "scripts/install-worker-science-build-deps.sh").read_text(
+            encoding="utf-8"
+        )
+        dockerfile = (ROOT / "infra/docker/Dockerfile.worker").read_text(encoding="utf-8")
+
+        # The gate must provision the system deps and set the pkg-config name
+        # before running the worker editable install.
+        self.assertIn("scripts/install-worker-science-build-deps.sh", backend)
+        self.assertIn("export HDF5_PKGCONFIG_NAME=", backend)
+        self.assertIn("hdf5-serial", backend)
+        self.assertLess(
+            backend.index("install-worker-science-build-deps.sh"),
+            backend.index('"apps/worker[dev]"'),
+            "HDF5 prerequisites must be installed BEFORE pip builds h5py",
+        )
+
+        # Same package names and pkg-config flavour as the production image.
+        # The full recipe matters: `uv run --locked` in the governance gate
+        # builds h5py/cyvcf2/pandas/numcodecs from sdists, so it needs the C
+        # toolchain, HDF5 and htslib's compression headers too, not just the
+        # two packages the pip-based backend gate needs.
+        for package in (
+            "build-essential",
+            "libhdf5-dev",
+            "pkg-config",
+            "zlib1g-dev",
+            "libbz2-dev",
+            "liblzma-dev",
+        ):
+            self.assertIn(package, prereq, package)
+            self.assertIn(package, dockerfile, package)
+        # cyvcf2's bundled htslib runs `autoreconf -i` at build time, which
+        # `uv run --locked` reaches but the pip-based backend gate does not;
+        # these are CI-only prerequisites, so they live in the script alone.
+        for package in ("autoconf", "automake", "libtool"):
+            self.assertIn(package, prereq, package)
+        self.assertIn("HDF5_PKGCONFIG_NAME=hdf5-serial", dockerfile)
+
+        # Every CNB stage is a fresh container, so the governance stage cannot
+        # inherit the backend stage's apt installs. It must provision the same
+        # prerequisites for its own `uv run` license/pip-audit analyzers.
+        steps = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        start = steps.index("dependency_governance_step() {")
+        governance = steps[start : steps.index("\n}\n", start)]
+        self.assertIn(
+            "scripts/install-worker-science-build-deps.sh", governance,
+            "the governance stage must provision worker science build deps",
+        )
+        self.assertIn("export HDF5_PKGCONFIG_NAME=", governance)
+
+        # The prerequisite script is a real, strict, executable shared script.
+        self.assertIn("set -euo pipefail", prereq)
+        self.assertIn(
+            "scripts/install-worker-science-build-deps.sh",
+            SHARED_SCRIPTS,
+            "register the prerequisite script so the shared-script gates cover it",
+        )
+
+    def test_dependency_governance_provisions_hdf5_before_the_worker_license_probe(self) -> None:
+        """The governance license analyzer resolves the worker runtime too.
+
+        Real CNB build cnb-9gi-1k6h3mikv failed Dependency governance with
+        `python-licenses-worker: failed (normalization_unavailable:license-expressions)`.
+        `uv run --locked --project apps/worker --with pip-licenses` builds h5py
+        3.16 from its sdist on Python 3.15 (scanpy -> anndata -> h5py), so it
+        needs the same system HDF5 headers + pkg-config the backend gate already
+        installs. Without them pip-licenses crashes before writing a report and
+        the fail-closed gate has nothing to normalize. The governance stage must
+        provision them through the shared script BEFORE `pnpm deps:audit` runs,
+        and both providers reach it through this one job body.
+        """
+        shared = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        step = shared[shared.index("dependency_governance_step() {") :]
+        step = step[: step.index("\ndependency_governance_run()")]
+
+        self.assertIn("export HDF5_PKGCONFIG_NAME=", step)
+        self.assertIn("hdf5-serial", step)
+        self.assertIn("scripts/install-worker-science-build-deps.sh", step)
+        self.assertIn("pnpm deps:audit", step)
+        self.assertLess(
+            step.index("install-worker-science-build-deps.sh"),
+            step.index("pnpm deps:audit"),
+            "HDF5 prerequisites must be installed BEFORE the worker license probe",
+        )
+
     def test_acceptance_entry_point_never_reports_a_missing_prerequisite_as_a_pass(self) -> None:
         """The acceptance/smoke difference is deliberate and must stay visible.
 
@@ -3816,8 +5469,212 @@ class CnbVolumeGrammarTests(unittest.TestCase):
             _cnb_volume_path("a:b:c:d", "loc")
 
 
+class ContractsRegistryWiringTests(unittest.TestCase):
+    """The registry guard is wired into BOTH entry points of the contracts layer.
+
+    Historical hole: deleting the CI-side ``--self-test`` line left the whole
+    collected contracts suite green -- the guard lived on another branch and
+    no assertion in this file named it. This is the independent second door
+    measured at 06:17Z; it reads committed bytes, not the guard's own
+    self-test, so it stays red even if that guard is edited to lie.
+    """
+
+    def test_ci_side_self_test_is_wired_as_a_bare_statement(self) -> None:
+        shared = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        body = shared.split("smoke_contracts_run() {", 1)[1].split("\n}\n", 1)[0]
+        line = (
+            '  python3 "${REPO_ROOT}/scripts/'
+            'check_contracts_registry_collection.py" --self-test'
+        )
+        self.assertIn(
+            line, body,
+            "the CI-side registry --self-test line was dropped from "
+            "smoke_contracts_run(); the Contract suites stage would lose the "
+            "guard without any collected test turning red",
+        )
+        self.assertRegex(
+            body,
+            r'(?m)^[ \t]*python3[ \t]+"\$\{REPO_ROOT\}/scripts/'
+            r'check_contracts_registry_collection\.py"[ \t]+--self-test[ \t]*$',
+            "the CI-side --self-test call must be a standalone statement so "
+            "its exit status reaches the pipeline",
+        )
+
+    def test_ci_layer_call_is_not_neutralised(self) -> None:
+        shared = (ROOT / "scripts/ci-job-steps.sh").read_text(encoding="utf-8")
+        body = shared.split("smoke_contracts_run() {", 1)[1].split("\n}\n", 1)[0]
+        self.assertRegex(
+            body,
+            r'(?m)^[ \t]*bash[ \t]+"\$\{REPO_ROOT\}/scripts/smoke\.sh"'
+            r'(?:[ \t]+--profile[ \t]+contracts)?[ \t]*$',
+            "the contracts layer call must stay a bare statement: a trailing "
+            "operator, pipe, redirection or comment turns a red layer into a "
+            "green CI stage",
+        )
+
+    @staticmethod
+    def _companion_row_is_gating(smoke: str) -> bool:
+        """Whether the companion is an active bare row in the gating array.
+
+        ``smoke_contracts()`` owns two arrays: ``tests=()`` (passed to the
+        gating pytest call) and ``environment_bound=()`` (reported, not
+        gating). Only a row in the first slice is collected evidence.
+        """
+        companion = "scripts/test_contracts_registry_collection.py"
+        body = smoke.split("smoke_contracts() {", 1)[1]
+        gating = body.split("environment_bound=(", 1)[0]
+        return re.search(
+            r"(?m)^    " + companion.replace(".", r"\.") + r"[ \t]*$", gating
+        ) is not None
+
+    def test_registry_companion_suite_is_collected(self) -> None:
+        """The guard's second-file assertions must actually run in the layer.
+
+        The dedicated "fails for the pin alone" report lives in one file; only
+        ``scripts/test_contracts_registry_collection.py`` names its ``len == 1``
+        and ``in[0]`` clauses. If that suite is not a gating row, a single-file
+        edit weakening the report to a generic ``any(...)`` keeps ``--self-test``
+        at ``46 cases, 0 failure(s)``, the teeth guard green, and the whole
+        layer at SMOKE PASS. Pin the row from this independent, already-collected
+        door: removing it (even together with its ``PINNED_SUITES`` entry) must
+        fail here rather than silently retire the only second-file evidence.
+
+        Read the same slice the guard reads -- ``smoke_contracts()`` up to
+        ``environment_bound=(`` -- and require a bare, active row. A whole-file
+        substring search is satisfied by a row parked in the non-gating
+        ``environment_bound=()`` array, where the companion's red is reported
+        but cannot turn the layer red.
+        """
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        self.assertTrue(
+            self._companion_row_is_gating(smoke),
+            "the registry guard's companion suite is no longer an active bare "
+            "row in the gating tests=() array: its second-file assertions "
+            "cannot gate CI",
+        )
+
+    def test_registry_companion_row_must_be_in_the_gating_array(self) -> None:
+        """A row in environment_bound=() is not collected evidence.
+
+        Regression for the shape measured on the #292 head (``67a91ec2``):
+        move the companion row out of ``tests=()`` into the non-gating
+        ``environment_bound=()`` array, drop its ``PINNED_SUITES`` entry so
+        the guard stays ``OK``, and a whole-file second door still passes --
+        while a weakened pin report ships on ``SMOKE PASS``. This test runs
+        the real reader against that planted shape, not a separate assertion.
+        """
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        companion = "scripts/test_contracts_registry_collection.py"
+        self.assertTrue(self._companion_row_is_gating(smoke))
+        planted = smoke.replace(
+            f"    {companion}\n", "", 1
+        ).replace(
+            "  local environment_bound=(\n",
+            f"  local environment_bound=(\n    {companion}\n",
+            1,
+        )
+        self.assertIn(f"    {companion}\n", planted)
+        self.assertFalse(
+            self._companion_row_is_gating(planted),
+            "a companion parked in environment_bound=() cannot gate the "
+            "layer, so the second door must reject it",
+        )
+
+    def test_driver_level_guard_failure_reaches_the_exit_status(self) -> None:
+        smoke = (ROOT / "scripts/smoke.sh").read_text(encoding="utf-8")
+        self.assertRegex(
+            smoke,
+            r'(?m)^[ \t]*"\$\{PYTHON_BIN\}"[ \t]+scripts/'
+            r'check_contracts_registry_collection\.py[ \t]+\|\|[ \t]+'
+            r'FAILED\+=\("contracts registry"\)',
+            "a bare `|| rc=$?` at top-level scope never reaches SMOKE's exit "
+            "status; only the FAILED array decides it",
+        )
+
+
 if __name__ == "__main__":  # pragma: no cover - unittest entry point
     unittest.main()
+
+
+def test_worker_native_suite_urls_are_exported_by_the_resolver() -> None:
+    """The worker's PostgreSQL suites must be given a URL, not a skip.
+
+    Regression for ISSUE #51: three worker suites read
+    ``SOYMUTDB_NATIVE_TEST_DATABASE_URL`` / ``SOYMUTDB_STATIC_TEST_DATABASE_URL``
+    and answered a missing value with ``pytest.skip``. Nothing in the repository
+    produced those variables, so 25 identity, atomicity and export-claim
+    assertions were reported as ``skipped`` on every build while the gate
+    exported ``SOYMUTDB_RUN_POSTGRES_INTEGRATION=1`` to assert a real database
+    was present. A skip is indistinguishable from a pass in the pytest summary;
+    that is the hole this pins shut from both ends.
+
+    Both ends matter and neither is sufficient alone:
+      * the resolver must produce the variables (otherwise them being required
+        below is a guaranteed failure), and
+      * the suites must fail closed (otherwise a future producer regression
+        silently returns to skipping).
+    """
+    root = Path(__file__).resolve().parents[1]
+    resolver = (root / "scripts/with-postgres-service.sh").read_text(encoding="utf-8")
+
+    for variable in (
+        "SOYMUTDB_NATIVE_TEST_DATABASE_URL",
+        "SOYMUTDB_STATIC_TEST_DATABASE_URL",
+        "SOYMUTDB_WORKER_TEST_DATABASE_URL",
+    ):
+        # Exported through the shared print/ensure path, so both consumption
+        # styles the gate supports (`--print-exports` and `--ensure`) carry it.
+        assert f"printf '{variable}=%s\\n'" in resolver, (
+            f"{variable} must be part of the resolver's exported KEY=VALUE lines"
+        )
+        assert f"export {variable}" in resolver, (
+            f"{variable} must be exported by the resolver, not only printed"
+        )
+
+    # The suites must fail closed. A skip here is a merge-gate hole, so the
+    # contract forbids the construct outright rather than trusting review.
+    for suite in (
+        "apps/worker/tests/test_postgres_variant_store.py",
+        "apps/worker/tests/test_export_claim_postgres.py",
+        "apps/worker/tests/test_static_page_postgres.py",
+    ):
+        source = (root / suite).read_text(encoding="utf-8")
+        assert "pytest.skip" not in source, f"{suite} must not skip on a missing URL"
+        assert "pytest.fail" in source, f"{suite} must fail closed on a missing URL"
+
+    # The two BLAST suites carry a second, genuinely optional precondition next
+    # to the database one: real NCBI binaries, which CI does not have and should
+    # not pretend to have. Skipping on that is correct. Skipping on the database
+    # URL is the same hole as the three suites above, only latent behind the
+    # binary skip -- so the assertion here is narrower on purpose: the binary
+    # skip may stay, the URL skip may not.
+    for suite in (
+        "apps/worker/tests/test_blast_index_build_real.py",
+        "apps/worker/tests/test_blast_ncbi_pipeline.py",
+    ):
+        source = (root / suite).read_text(encoding="utf-8")
+        assert "SOYMUTDB_WORKER_TEST_DATABASE_URL" in source, (
+            f"{suite} must still read the database variable"
+        )
+        url_blocks = [
+            block
+            for block in source.split("pytest.skip(")[1:]
+            if "SOYMUTDB_WORKER_TEST_DATABASE_URL" in block.split(")", 1)[0]
+        ]
+        assert not url_blocks, (
+            f"{suite} must not skip when SOYMUTDB_WORKER_TEST_DATABASE_URL is missing"
+        )
+        assert (
+            'SOYMUTDB_WORKER_TEST_DATABASE_URL is required' in source
+            and "pytest.fail(" in source
+        ), f"{suite} must fail closed on a missing database URL"
+
+    # The derived URL has to be usable by the worker environment: those suites
+    # build a synchronous engine, so an asyncpg URL would fail at connect time
+    # instead of at collection time.
+    assert "postgresql+psycopg2://" in resolver, (
+        "the worker suite URL must use the synchronous psycopg2 driver"
+    )
 
 
 def test_postgres_service_script_remains_executable() -> None:
@@ -3861,3 +5718,150 @@ def test_pr_artifact_browser_acceptance_covers_frontend_changes() -> None:
     )
     assert workflow["jobs"]["pr-artifact"]["if"] == "github.event_name == 'pull_request'"
     assert "github.event_name != 'pull_request'" in workflow["jobs"]["e2e"]["if"]
+
+
+def _cnb_runner_declarations(template_path: Path):
+    """Yield ``(where, cpus, event, depth)`` per runner declaration.
+
+    ``.cnb.yml`` nests events under the ``main`` / ``$`` root branches, so the
+    event has to be read from the inner map: at top level every event looks like
+    a pull request.
+    """
+    config = yaml.safe_load(template_path.read_text(encoding="utf-8"))
+
+    def walk_stages(stages):
+        """Yield every stage dict in a ``stages`` list, including nested ones."""
+        for stage in stages or []:
+            if not isinstance(stage, dict):
+                continue
+            yield stage
+            yield from walk_stages(stage.get("stages"))
+
+    for branches in config.values():
+        if not isinstance(branches, dict):
+            continue
+        for event_name, pipelines in branches.items():
+            if not isinstance(pipelines, list):
+                continue
+            for pipeline in pipelines:
+                if not isinstance(pipeline, dict):
+                    continue
+                name = f"{event_name}/{pipeline.get('name')}"
+                runner = pipeline.get("runner") or {}
+                # ``None`` is a declaration too: a pipeline that forgets a
+                # runner pays the platform default, which cannot be counted.
+                yield name, runner.get("cpus"), str(event_name), 1
+                for stage in walk_stages(pipeline.get("stages")):
+                    stage_runner = stage.get("runner") or {}
+                    where = f"{name}/{stage.get('name')}"
+                    yield where, stage_runner.get("cpus"), str(event_name), 2
+
+
+def test_cnb_runner_declarations_are_honest_and_measurable() -> None:
+    """A runner is a charge, not a preference: declare it or inherit nothing.
+
+    The only red reading on a pull request every time Prepare dies is
+    ``Root Group's events CPU core-hours are insufficient for pre-freezing``.
+    Nothing in the changed files causes it -- CNB freezes a reservation per
+    stage before the first one starts, so a template that declares 16 cores on
+    more stages than the org can freeze dies before any script is reachable and
+    reports it as a pipeline ``error`` rendered next to the commit. The cost is
+    paid during review, on somebody else's PR, attributed to their diff.
+
+    The gate is deliberately shallow, and it is scored twice over, because a
+    depth-2-only walk has already gone green against a planted ``cpus: 32``:
+
+    1. Every value under a ``cpus:`` key anywhere in the template must be one
+       of the sizes this repo actually schedules. This half is a text scan, not
+       a walk, so a shape the walker cannot descend into still cannot smuggle
+       in ``cpus: 160``.
+    2. The number of 16-core stages the repository declares must stay inside a
+       small, counted budget, and the ``pull_request`` family inside its own.
+       The reservation is frozen per stage, before the first one starts, and the
+       balance is organisation-wide: push, tag and the manual buttons spend it
+       exactly like ``pull_request`` does, so "it only runs on a tag" is not a
+       discount.
+
+    It does not try to predict the org balance; that number is invisible here.
+    """
+    template = ROOT / ".cnb.yml"
+    text = template.read_text(encoding="utf-8")
+
+    # (1) Text scan: no nesting shape, anchor or merge key can hide a
+    # declaration from a regex over `cpus:` values.
+    seen = re.findall(r"^\s*cpus:\s*['\"]?(\d+)['\"]?\s*$", text, re.MULTILINE)
+    assert seen, "no `cpus:` value found in .cnb.yml; the scan is broken"
+    allowed = {"4", "8", "16"}
+    offenders = sorted({value for value in seen if value not in allowed})
+    assert not offenders, (
+        f".cnb.yml declares runner sizes this repo never schedules: {offenders} "
+        f"(allowed: {sorted(allowed)})"
+    )
+
+    # (2) Walk: what an event actually freezes.
+    declarations = list(_cnb_runner_declarations(template))
+    # Guard the guard: a walk that descends into nothing passes everything
+    # above, which is exactly how a stage override stayed invisible.
+    assert len(declarations) >= 15, (
+        f"only {len(declarations)} runner declarations walked from .cnb.yml; "
+        "the walk is broken"
+    )
+    assert any(depth == 2 for _w, _c, _e, depth in declarations), (
+        "the walk found no stage declaration; it is not descending into `stages`"
+    )
+    # Only pipelines are scored for a missing runner: a stage inherits the
+    # pipeline's, so `None` there is the normal case, not a hole.
+    assert any(depth == 1 for _w, _c, _e, depth in declarations), (
+        "no pipeline declares a runner"
+    )
+    assert any(event == "pull_request" for _w, _c, event, _d in declarations), (
+        "the pull_request event left the walk; it is the event this gate exists for"
+    )
+    # A reservation is frozen per stage before the first one starts, and the
+    # balance is organisation-wide, so what has to stay bounded is the whole
+    # template -- not the per-PR reading, which is the cheapest one and would
+    # have gone green against the state that failed.
+    #
+    # Only the 16-core declarations are counted. An 8-core runner is how the
+    # single-suite lanes are already written (clickhouse migration, mcp e2e,
+    # publication, the nightly sweep), and demoting one changes its failure
+    # mode without moving the bill; the fan-out gates are the ones that
+    # genuinely need the machine, and they are the ones that got copied.
+    #
+    # The budget is the current 16-core shape plus one:
+    #   * 2 fan-out verifiers (push, pull_request),
+    #   * 6 release-lane resolvers (amd64 + arm64 on push / tag / the image
+    #     button / the release button),
+    #   * 2 manual image sessions (the "build images only" button),
+    #   * 1 manual verifier,
+    #   * 1 spare, so a new legitimate lane does not have to rewrite this gate.
+    # Anything past 12 is a rounding-up pass over existing stages, which is the
+    # shape of the regression this gate exists for.
+    #
+    # It does not predict the org balance; that number is invisible from inside
+    # the repository. It only keeps the pre-frozen area at the size that was
+    # measured to work.
+    sixteen = [
+        where
+        for where, cpus, _event, _depth in declarations
+        if str(cpus) == "16"
+    ]
+    assert len(sixteen) <= 12, (
+        f"{len(sixteen)} stages declare `cpus: 16`; the organisation pre-freezes "
+        f"every one of them on every event: {sixteen}"
+    )
+    # Keep the cheapest reading honest too: the PR family fans out into six
+    # gates, so it is one 16-core pipeline and that is all.
+    pr_cores = sum(
+        int(str(cpus))
+        for _where, cpus, event, depth in declarations
+        if event == "pull_request" and depth == 1 and str(cpus).isdigit()
+    )
+    assert pr_cores <= 24, (
+        f"the pull_request pipeline family reserves {pr_cores} cores per run; "
+        "prepare freezes that on every push to a review branch"
+    )
+
+
+if __name__ == "__main__":  # pragma: no cover - unittest entry point
+    unittest.main()

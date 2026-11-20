@@ -22,7 +22,7 @@
     "clean": "rimraf dist .turbo"
   },
   "devDependencies": {
-    "typescript": "^5.9.3",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   }
 }

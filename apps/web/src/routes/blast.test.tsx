@@ -16,7 +16,7 @@ const runtime = vi.hoisted(() => ({
   currentUser: { email: "user@example.org", is_superuser: false, effective_roles: ["researcher"] as string[] } as { email: string; is_superuser: boolean; effective_roles: string[] } | null,
   submit: vi.fn(),
 }));
-vi.mock("@tanstack/react-router", () => ({ createFileRoute: () => (options: unknown) => ({ options }), useNavigate: () => runtime.navigate }));
+vi.mock("@tanstack/react-router", () => ({ createFileRoute: () => (options: unknown) => ({ options }), useNavigate: () => runtime.navigate, Link: ({ children }: { children: React.ReactNode }) => <a href="/search/blast">{children}</a> }));
 vi.mock("react-i18next", () => {
   // These boundary tests assert keys; keep their translator stable across renders.
   const translation = { t: (key: string) => key };
@@ -25,16 +25,22 @@ vi.mock("react-i18next", () => {
 vi.mock("../lib/site-content-react", () => ({ useSiteContent: () => ({ get: (_key: string, fallback: string) => fallback }) }));
 vi.mock("../components/route-motion", () => ({ FadeUp: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock("../lib/release-scope", () => ({ useReleaseId: () => runtime.currentRelease }));
+// The stream transport (ticket exchange, EventSource URL) is pinned by
+// lib/job-event-stream.test.ts; this route test only needs the stream to open.
+vi.mock("../lib/job-event-stream", () => ({
+  openJobEventStream: async () => ({ addEventListener() {}, close() {} }),
+}));
 vi.mock("../lib/use-current-user", () => ({
   useCurrentUser: () => ({ user: runtime.currentUser, isLoading: false }),
   grantsResearcher: (user: { is_superuser?: boolean; effective_roles?: string[] }) => user.is_superuser === true || user.effective_roles?.includes("researcher") === true,
 }));
-vi.mock("@soymutdb/api-client", () => ({
-  BLAST_PROGRAMS: [{ value: "blastp", label: "BLASTP" }], apiBaseUrl: "/api/v1", getAccessToken: () => null,
+vi.mock("@soymutdb/api-client", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@soymutdb/api-client")>(),
+  apiBaseUrl: "/api/v1", getAccessToken: () => null,
   // The database list belongs to the ACTIVE release (release 9) — it must
   // never be used to re-label a job that was computed against another one.
   getBlastDatabases: async () => [
-    { id: 1, name: "protein-v4", is_active: true, assembly_name: runtime.activeAssembly, release_id: 9 },
+    { id: 1, name: "protein-v4", db_type: "prot", engine: "ncbi_blast", build_status: "ready", is_active: true, assembly_name: runtime.activeAssembly, release_id: 9 },
   ],
   getBlastJobs: async () => ({
     items: [{
@@ -65,7 +71,18 @@ beforeEach(() => {
   runtime.resolveTarget.mockReset().mockImplementation(async (job: { release_id: number; assembly_name: string }) => ({ release: String(job.release_id), assembly: job.assembly_name, locus: "chr01:12000-15000" }));
   runtime.hits.mockReset().mockResolvedValue({ items: [{ subject_id: "Glyma.01G000100", subject_start: 1, subject_end: 100 }] });
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(async () => {
+  // Ant Design Select opens its dropdown through a delayed state update. Let
+  // that pending timer fire while jsdom is still installed: a callback that
+  // runs after the fork tears the environment down reaches react-dom's
+  // resolveUpdatePriority(), which reads `window` and throws an unhandled
+  // "window is not defined" error (4 of them failed the frontend gate).
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 /** Render the page and open the (single) completed job's hits table. */
 async function renderHits(): Promise<QueryClient> {
@@ -235,4 +252,81 @@ it("distinguishes a failed hits query from no hits and recovers on retry", async
     cleanup();
     client.clear();
   }
+});
+
+it("offers the raw alignment download only when the job exposes one", async () => {
+  runtime.hits.mockResolvedValue({
+    items: [{ subject_id: "Glyma.01G000100", subject_start: 1, subject_end: 100 }],
+    download_url: "https://objects.example/blast-results/job.txt",
+  });
+  const client = await renderHits();
+  const link = await screen.findByTestId("blast-download");
+  expect(link.getAttribute("href")).toBe("https://objects.example/blast-results/job.txt");
+  // The artifact is the aligner's tabular text, whatever the storage suffix says.
+  expect(link.getAttribute("download")).toBe("job-ncbi_blast-blastp.tsv");
+  client.clear();
+});
+
+it("shows no download control when the job has no stored artifact", async () => {
+  const client = await renderHits();
+  await screen.findByRole("button", { name: "Glyma.01G000100" });
+  expect(screen.queryByTestId("blast-download")).toBeNull();
+  client.clear();
+});
+
+it("submits several FASTA records and rejects a record without a sequence", async () => {
+  {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><Page /></QueryClientProvider>);
+    const sequence = await screen.findByTestId("blast-sequence");
+    fireEvent.change(sequence, { target: { value: ">q1\nMKVLAAGIVGLNLGGK\n>q2" } });
+    fireEvent.click(await screen.findByTestId("blast-submit"));
+    expect(await screen.findByText("blastSearch.fasta.emptyRecord")).toBeTruthy();
+    expect(runtime.submit).not.toHaveBeenCalled();
+
+    fireEvent.change(sequence, { target: { value: ">q1\nMKVLAAGIVGLNLGGK\n>q2\nMKVLAAGIVGL" } });
+    fireEvent.click(screen.getByTestId("blast-submit"));
+    await waitFor(() => expect(runtime.submit).toHaveBeenCalledOnce());
+    expect(runtime.submit.mock.calls[0][0]).toMatchObject({
+      program: "blastp",
+      engine: "ncbi_blast",
+      database: "protein-v4",
+    });
+    client.clear();
+  }
+});
+
+it("offers both search engines from the catalog", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><Page /></QueryClientProvider>);
+  await screen.findByTestId("blast-submit");
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "blastPublic.engine" }));
+  // Both labels come from blastSearch.* — an inline literal here is exactly what
+  // the visible-copy gate rejects.
+  expect((await screen.findAllByText("blastSearch.engineNcbi")).length).toBeGreaterThan(0);
+  expect((await screen.findAllByText("blastSearch.engineDiamondBlastp")).length).toBeGreaterThan(0);
+  client.clear();
+});
+
+it("opens the newest completed job's results without a second click", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><Page /></QueryClientProvider>);
+  // The hits of the most recent job are already on the page: a reader sees
+  // whether the search returned anything without hunting for a button.
+  expect((await screen.findAllByRole("button", { name: "Glyma.01G000100" })).length).toBeGreaterThan(0);
+  expect(runtime.hits).toHaveBeenCalledOnce();
+  client.clear();
+});
+
+it("attaches parameter errors to the parameter fields instead of the sequence", async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><Page /></QueryClientProvider>);
+  fireEvent.change(await screen.findByTestId("blast-sequence"), { target: { value: "MKVLAAGIVGLNLGGK" } });
+  fireEvent.change(document.getElementById("e_value") as HTMLInputElement, { target: { value: "5000" } });
+  fireEvent.click(screen.getByTestId("blast-submit"));
+  // The shared range rule is the same one the anonymous route applies, so the
+  // signed-in entry no longer accepts a query the anonymous entry rejects.
+  expect(await screen.findByText("blastSearch.invalidParameters")).toBeTruthy();
+  expect(runtime.submit).not.toHaveBeenCalled();
+  client.clear();
 });

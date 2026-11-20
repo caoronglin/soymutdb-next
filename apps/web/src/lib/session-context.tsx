@@ -14,6 +14,7 @@ import * as React from "react";
 import { QueryClient } from "@tanstack/react-query";
 import {
   clearAuth,
+  clearSessionHint,
   onAuthLogout,
   restoreSessionResult,
   refreshAccessTokenResult,
@@ -125,6 +126,9 @@ export function SessionProvider({
 
   const signOut = React.useCallback(() => {
     clearAuth();
+    // An explicit sign-out ends this browser's session: the next boot must not
+    // ask the server for a session that no longer exists.
+    clearSessionHint();
     queryClient.removeQueries({ queryKey: PERSONAL_QUERY_KEY });
     setSession((current) => snapshotFor("anonymous", current.sessionId));
   }, [queryClient]);

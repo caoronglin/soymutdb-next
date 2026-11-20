@@ -40,6 +40,7 @@ export interface PortalRouteDefinition {
     | "downloads"
     | "tools"
     | "seqfetch"
+    | "sequence"
     | "exppattern"
     | "enrichment"
     | "news"
@@ -49,10 +50,8 @@ export interface PortalRouteDefinition {
     | "primer"
     | "gbrowse"
     | "search-tools"
-    | "analyses"
-    | "analyses-fastp"
-    | "analyses-scanpy"
-    | "analyses-job"
+    | "assemblies"
+    | "assembly"
     | "sra"
     | "seed-request"
     | "guide"
@@ -61,7 +60,16 @@ export interface PortalRouteDefinition {
     | "publications"
     | "login"
     | "analytics"
-    | "compare";
+    | "comparative"
+    | "family"
+    | "compare"
+    | "expression"
+    | "expression-sample"
+    | "phenotypes"
+    | "phenotype-line"
+    | "ld"
+    | "diversity"
+    | "allelefreq";
   meta: PortalRouteMeta;
 }
 
@@ -209,6 +217,26 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
     },
   },
   {
+    path: "/assemblies",
+    name: "assemblies",
+    componentKey: "assemblies",
+    meta: {
+      title: "Assemblies — SoyMutDB",
+      description: "Genome assemblies in the current release, each with its own gene, transcript and chromosome counts.",
+      prerender: true,
+      sitemap: true,
+    },
+  },
+  {
+    path: "/assemblies/:assemblyId",
+    name: "assembly",
+    componentKey: "assembly",
+    meta: {
+      title: "Assembly — SoyMutDB",
+      description: "One genome assembly: its chromosomes, total length and the counts derived from its own rows.",
+    },
+  },
+  {
     path: "/browser",
     name: "browser",
     componentKey: "browser",
@@ -229,35 +257,6 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
       prerender: true,
       sitemap: true,
     },
-  },
-  {
-    path: "/analyses",
-    name: "analyses",
-    componentKey: "analyses",
-    meta: {
-      title: "Analyses — SoyMutDB",
-      description: "Run read QC and single-cell clustering on your own data.",
-      prerender: true,
-      sitemap: false,
-    },
-  },
-  {
-    path: "/analyses/fastp",
-    name: "analyses-fastp",
-    componentKey: "analyses-fastp",
-    meta: { title: "fastp — SoyMutDB" },
-  },
-  {
-    path: "/analyses/scanpy",
-    name: "analyses-scanpy",
-    componentKey: "analyses-scanpy",
-    meta: { title: "scanpy — SoyMutDB" },
-  },
-  {
-    path: "/analyses/:jobId",
-    name: "analyses-job",
-    componentKey: "analyses-job",
-    meta: { title: "Analysis job — SoyMutDB" },
   },
   {
     path: "/sra",
@@ -315,6 +314,26 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
     },
   },
   {
+    // Gene-family browser. `/compare` below is *variant* comparison and is a
+    // different feature entirely — do not merge the two entries.
+    path: "/comparative",
+    name: "comparative",
+    componentKey: "comparative",
+    meta: {
+      title: "Comparative genomics — SoyMutDB",
+      description:
+        "Browse gene families and orthologous groups with their source method, version and per-species coverage.",
+      prerender: true,
+      sitemap: true,
+    },
+  },
+  {
+    path: "/comparative/:familyId",
+    name: "family",
+    componentKey: "family",
+    meta: { title: "Gene family — SoyMutDB" },
+  },
+  {
     path: "/compare",
     name: "compare",
     componentKey: "compare",
@@ -324,6 +343,42 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
       prerender: true,
       sitemap: false,
     },
+  },
+  {
+    path: "/expression",
+    name: "expression",
+    componentKey: "expression",
+    meta: {
+      title: "Expression libraries — SoyMutDB",
+      description:
+        "Browse released expression libraries with their study, source, assembly and developmental stage, and the genes measured in each one.",
+      prerender: true,
+      sitemap: true,
+    },
+  },
+  {
+    path: "/expression/:sampleId",
+    name: "expression-sample",
+    componentKey: "expression-sample",
+    meta: { title: "Expression library — SoyMutDB" },
+  },
+  {
+    path: "/phenotypes",
+    name: "phenotypes",
+    componentKey: "phenotypes",
+    meta: {
+      title: "Phenotype browser — SoyMutDB",
+      description:
+        "Recorded trait observations across released mutant lines, each traceable to the line that carries it.",
+      prerender: true,
+      sitemap: true,
+    },
+  },
+  {
+    path: "/phenotypes/:lineId",
+    name: "phenotype-line",
+    componentKey: "phenotype-line",
+    meta: { title: "Mutant line phenotypes — SoyMutDB" },
   },
   {
     path: "/about",
@@ -381,6 +436,18 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
     },
   },
   {
+    path: "/tools/sequence",
+    name: "sequence",
+    componentKey: "sequence",
+    meta: {
+      title: "Sequence toolkit — SoyMutDB",
+      description:
+        "Reverse complement, pattern matching, composition, translation, k-mers, ORF scanning, pairwise alignment and FASTA/FASTQ/BED validation on sequence text you supply.",
+      prerender: true,
+      sitemap: true,
+    },
+  },
+  {
     path: "/tools/exppattern",
     name: "exppattern",
     componentKey: "exppattern",
@@ -400,6 +467,37 @@ export const PORTAL_ROUTES: readonly PortalRouteDefinition[] = [
       description: "Run GO or KEGG enrichment analysis within a selected genome assembly.",
       prerender: true,
       sitemap: true,
+    },
+  },
+  {
+    path: "/tools/ld",
+    name: "ld",
+    componentKey: "ld",
+    meta: {
+      title: "Linkage disequilibrium — SoyMutDB",
+      description:
+        "Variant coordinates and pairwise r² for a gene or interval. r² is reported as not computable when no genotype data exists.",
+      sitemap: false,
+    },
+  },
+  {
+    path: "/tools/diversity",
+    name: "diversity",
+    componentKey: "diversity",
+    meta: {
+      title: "Nucleotide diversity — SoyMutDB",
+      description: "Nucleotide diversity (π) and Watterson's θ for a gene or an interval.",
+      sitemap: false,
+    },
+  },
+  {
+    path: "/tools/allelefreq",
+    name: "allelefreq",
+    componentKey: "allelefreq",
+    meta: {
+      title: "Allele frequency — SoyMutDB",
+      description: "Per-variant allele frequencies for a gene or an interval.",
+      sitemap: false,
     },
   },
   {

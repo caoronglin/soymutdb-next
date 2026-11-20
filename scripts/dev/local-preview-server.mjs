@@ -93,7 +93,22 @@ function proxy(req, res, url) {
   req.pipe(upstream);
 }
 
-function serveStatic(res, pathname, root = APP_ROOT) {
+/**
+ * True when the client accepts gzip and a pre-compressed sibling exists.
+ *
+ * The build writes `.gz` siblings next to every compressible file
+ * (`apps/web/scripts/gzip-compress.ts`); serving them here is what makes the
+ * local preview and the artifact E2E measure the delivery a real host gives,
+ * instead of the uncompressed bytes off disk.
+ */
+function gzipSibling(req, filePath) {
+  const accepted = String(req.headers["accept-encoding"] ?? "").toLowerCase();
+  if (!accepted.includes("gzip")) return null;
+  const candidate = `${filePath}.gz`;
+  return existsSync(candidate) ? candidate : null;
+}
+
+function serveStatic(req, res, pathname, root = APP_ROOT) {
   let filePath = join(root, normalize(pathname));
   if (!filePath.startsWith(root)) {
     res.writeHead(403).end();
@@ -108,7 +123,18 @@ function serveStatic(res, pathname, root = APP_ROOT) {
     res.end("not found");
     return;
   }
-  res.writeHead(200, { "content-type": MIME[extname(filePath)] ?? "application/octet-stream" });
+  const headers = {
+    "content-type": MIME[extname(filePath)] ?? "application/octet-stream",
+    // A pre-compressed body is only valid for a request that negotiated it.
+    vary: "Accept-Encoding",
+  };
+  const gz = gzipSibling(req, filePath);
+  if (gz) {
+    res.writeHead(200, { ...headers, "content-encoding": "gzip" });
+    createReadStream(gz).pipe(res);
+    return;
+  }
+  res.writeHead(200, headers);
   createReadStream(filePath).pipe(res);
 }
 
@@ -129,10 +155,10 @@ createServer((req, res) => {
   // the header alone.
   if (url.pathname === JBROWSE_PREFIX || url.pathname.startsWith(`${JBROWSE_PREFIX}/`)) {
     const stripped = url.pathname.slice(JBROWSE_PREFIX.length) || "/";
-    serveStatic(res, stripped, JBROWSE_ROOT);
+    serveStatic(req, res, stripped, JBROWSE_ROOT);
     return;
   }
-  serveStatic(res, url.pathname);
+  serveStatic(req, res, url.pathname);
 }).listen(PORT, "0.0.0.0", () => {
   console.log(`[${appName}] http://localhost:${PORT}  (app + /api/v1 proxy)`);
 });

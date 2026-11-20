@@ -35,29 +35,24 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("public footer contract", () => {
-  it("renders bilingual API values, safe contacts and grouped navigation for the explicit variant", async () => {
+  it("renders bilingual API values and safe contacts for the explicit variant", async () => {
     const view = mount();
     expect(await screen.findByText(/English person/)).toBeTruthy();
     expect(runtime.getFooter).toHaveBeenCalledWith(SITE_VARIANT);
     expect(screen.getByRole("link", { name: "+86 (25) 1234-5678" }).getAttribute("href")).toBe("tel:+862512345678");
     expect(screen.getByRole("link", { name: "contact@example.org" }).getAttribute("href")).toBe("mailto:contact@example.org");
-    expect(screen.getByRole("link", { name: "Genes" }).getAttribute("href")).toBe("/genes");
-    expect(screen.getByRole("link", { name: "Reference" }).getAttribute("rel")).toBe("noopener noreferrer");
-    expect(screen.queryByText("Disabled")).toBeNull();
+    expect(screen.queryByText("Resources")).toBeNull();
     runtime.language = "zh-CN";
     view.rerender(<QueryClientProvider client={new QueryClient()}><SiteFooter /></QueryClientProvider>);
     expect(await screen.findByText(/中文联系人/)).toBeTruthy();
-    expect(screen.getByText("资源")).toBeTruthy();
-    expect(screen.getByRole("link", { name: "基因" })).toBeTruthy();
     expect(screen.queryByText("English address")).toBeNull();
   });
 
-  it("suppresses unsafe destinations and contact links without interpreting HTML", async () => {
+  it("suppresses unsafe contact links without interpreting HTML", async () => {
     const poisoned = structuredClone(data);
     poisoned.contact_person_en = "<img src=x onerror=alert(1)>";
     poisoned.contact_phone_value = "javascript:alert(1)";
     poisoned.contact_email_value = "user@example.org?subject=injected";
-    poisoned.navigation[0].links = ["javascript:alert(1)", "http://example.org", "https://user:password@example.org", "//example.org", "/\\example.org", "/\nexample.org"].map((href, index) => ({ id: String(index), label_en: `Unsafe ${index}`, label_zh: "危险", target: index < 3 ? "external" : "internal", href, enabled: true, order: index }));
     runtime.getFooter.mockResolvedValue(poisoned);
     mount();
     expect(await screen.findByText(/<img src=x onerror=alert\(1\)>/)).toBeTruthy();
@@ -75,7 +70,9 @@ describe("public footer contract", () => {
     runtime.getFooter.mockRejectedValue(new Error("private transport diagnostic"));
     mount();
     await waitFor(() => expect(runtime.getFooter).toHaveBeenCalledTimes(2));
-    expect(screen.getByText("Local address")).toBeTruthy();
+    // No address was published, so no address line may appear -- and the
+    // transport error must never surface as copy.
+    expect(screen.queryByText("Local address")).toBeNull();
     expect(screen.queryByText("private transport diagnostic")).toBeNull();
     expect(screen.queryByRole("link")).toBeNull();
   });

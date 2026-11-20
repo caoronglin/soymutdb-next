@@ -87,6 +87,22 @@ python_version = "3.15"
 warn_return_any = true
 warn_unused_configs = true
 
+# Runtime dependencies that ship no type information and have no stub package:
+# celery (task decorators), cyvcf2 (VCF reader), clickhouse_connect (the retired
+# legacy lane, imported lazily in its own optional image), and openpyxl (the
+# .xlsx branch). Declaring them untyped keeps the check on our own code.
+[[tool.mypy.overrides]]
+module = [
+    "celery",
+    "celery.*",
+    "cyvcf2",
+    "clickhouse_connect",
+    "clickhouse_connect.*",
+    "openpyxl",
+    "openpyxl.*",
+]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 markers = [
     "slow: capacity or integration acceptance test; the 2M-row tier requires SOYMUTDB_RUN_2M_IMPORT_PERF=1",

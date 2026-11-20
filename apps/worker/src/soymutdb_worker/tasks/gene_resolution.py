@@ -31,7 +31,7 @@ class AssemblyResolutionError(RuntimeError):
     """
 
 
-def _resolve_assembly_id(session: Any, assembly: str) -> int:
+def resolve_assembly_id(session: Any, assembly: str) -> int:
     """Map an assembly name (or version) to exactly one ``assemblies.id``."""
     matcher: ColumnElement[bool] = or_(
         assemblies.c.name == assembly,
@@ -51,7 +51,7 @@ def _resolve_assembly_id(session: Any, assembly: str) -> int:
 
 
 def resolve_gene_accessions(
-    session: Any, *, assembly: str = ""
+    session: Any, *, assembly: str = "", assembly_id: int | None = None
 ) -> tuple[dict[str, int], set[str]]:
     """Return ``(accession -> gene_pk, ambiguous accessions)`` for the scope.
 
@@ -60,12 +60,16 @@ def resolve_gene_accessions(
     so any duplicate there is a uniqueness-contract violation and raises.
     Without it, accessions shared across assemblies are returned in the
     ambiguous set so callers can reject or disambiguate instead of guessing.
+
+    ``assembly_id`` lets a caller that already resolved the assembly avoid a
+    second lookup.
     """
+    if assembly and assembly_id is None:
+        assembly_id = resolve_assembly_id(session, assembly)
+
     statement = select(genes.c.accession, genes.c.gene_pk)
-    if assembly:
-        statement = statement.where(
-            genes.c.assembly_id == _resolve_assembly_id(session, assembly)
-        )
+    if assembly_id is not None:
+        statement = statement.where(genes.c.assembly_id == assembly_id)
 
     rows = session.execute(statement).all()
     counts: dict[str, int] = {}
@@ -76,7 +80,7 @@ def resolve_gene_accessions(
     ambiguous: set[str] = set()
     for accession, gene_pk in rows:
         if counts[accession] != 1:
-            if assembly:
+            if assembly_id is not None:
                 raise AssemblyResolutionError(
                     f"ambiguous gene accession {accession!r} in assembly "
                     f"{assembly!r}: {counts[accession]} rows share it; "
@@ -94,4 +98,9 @@ def resolve_gene_pk_map(session: Any, *, assembly: str = "") -> dict[str, int]:
     return resolved
 
 
-__all__ = ["AssemblyResolutionError", "resolve_gene_accessions", "resolve_gene_pk_map"]
+__all__ = [
+    "AssemblyResolutionError",
+    "resolve_assembly_id",
+    "resolve_gene_accessions",
+    "resolve_gene_pk_map",
+]

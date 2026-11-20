@@ -5,13 +5,16 @@ from importlib.metadata import version
 import soymutdb_jobs
 from soymutdb_worker.main import celery_app
 
-
 EXPECTED_TASKS = {
     "soymutdb_worker.tasks.analyses.run_fastp",
     "soymutdb_worker.tasks.analyses.run_scanpy",
     "soymutdb_worker.tasks.blast.run_blast",
+    "soymutdb_worker.tasks.blast_index.build_index",
+    "soymutdb_worker.tasks.blast_index_tasks.build_blast_index",
+    "soymutdb_worker.tasks.blast_index_tasks.check_blast_index_health",
     "soymutdb_worker.tasks.cleanup.cleanup_expired_blast_jobs",
     "soymutdb_worker.tasks.cleanup.cleanup_temp_files",
+    "soymutdb_worker.tasks.comparative.build_artifact",
     "soymutdb_worker.tasks.email.send_seed_request_email",
     "soymutdb_worker.tasks.export.cleanup_old_exports",
     "soymutdb_worker.tasks.export.export_variants",

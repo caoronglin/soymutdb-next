@@ -212,3 +212,11 @@ export function useAnimation(): AnimationContextValue {
     }
     return ctx;
 }
+
+/**
+ * Context read for leaf components that may render in isolation (unit tests,
+ * standalone widgets). Callers must supply sensible defaults when it is null.
+ */
+export function useAnimationOptional(): AnimationContextValue | null {
+    return React.useContext(AnimationContext);
+}

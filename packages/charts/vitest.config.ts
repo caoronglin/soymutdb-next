@@ -10,8 +10,9 @@ export default defineConfig({
     environment: "jsdom",
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     pool: "forks",
-
     maxWorkers: 1,
-
-      },
+    // ChartFigure waits up to 30s for the first engine render (cold module
+    // transform); the default 5s test timeout would cut that wait short.
+    testTimeout: 30_000,
+  },
 });

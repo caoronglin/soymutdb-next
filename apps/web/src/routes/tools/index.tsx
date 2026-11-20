@@ -1,10 +1,22 @@
 /**
- * Tools hub — entry cards for SeqFetch, Enrichment and ExpPattern.
+ * Tools hub — entry cards for SeqFetch, the sequence toolkit, Enrichment,
+ * ExpPattern and the three population-genetics tools (linkage disequilibrium,
+ * nucleotide diversity, allele frequency).
  */
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
-import { DeploymentUnitOutlined, NodeIndexOutlined, RiseOutlined, ArrowRightOutlined } from "@ant-design/icons";
+import {
+  ArrowRightOutlined,
+  DeploymentUnitOutlined,
+  LineChartOutlined,
+  NodeIndexOutlined,
+  PartitionOutlined,
+  PieChartOutlined,
+  RiseOutlined,
+  ThunderboltOutlined,
+} from "@ant-design/icons";
 import { Breadcrumb, Tag, Typography } from "@/lib/antd";
+import { useSiteContent } from "../../lib/site-content-react";
 import * as React from "react";
 
 type IconComponent = React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
@@ -43,22 +55,51 @@ const TOOLS: ToolCard[] = [
     descKey: "tools.exppattern.cardDesc",
     statusKey: "tools.exppattern.status",
   },
+  {
+    to: "/tools/sequence",
+    icon: ThunderboltOutlined,
+    titleKey: "tools.sequence.title",
+    descKey: "tools.sequence.cardDesc",
+    statusKey: "tools.sequence.status",
+  },
+  {
+    to: "/tools/ld",
+    icon: PartitionOutlined,
+    titleKey: "tools.popgen.ld.title",
+    descKey: "tools.popgen.ld.subtitle",
+    statusKey: "tools.popgen.title",
+  },
+  {
+    to: "/tools/diversity",
+    icon: LineChartOutlined,
+    titleKey: "tools.popgen.diversity.title",
+    descKey: "tools.popgen.diversity.subtitle",
+    statusKey: "tools.popgen.title",
+  },
+  {
+    to: "/tools/allelefreq",
+    icon: PieChartOutlined,
+    titleKey: "tools.popgen.allelefreq.title",
+    descKey: "tools.popgen.allelefreq.subtitle",
+    statusKey: "tools.popgen.title",
+  },
 ];
 
 function ToolsIndexComponent() {
   const { t } = useTranslation();
+  const { get } = useSiteContent();
 
   return (
     <div className="container-prose section-rhythm">
       <header className="flex flex-col gap-4">
-        <Breadcrumb items={[{ title: <Link to="/">{t("nav.home")}</Link> }, { title: t("tools.title") }]} />
+        <Breadcrumb items={[{ title: <Link to="/">{get("nav.home", t("nav.home"))}</Link> }, { title: t("tools.title") }]} />
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-3.5">
             <span className="flex size-11 items-center justify-center rounded-xl border bg-card shadow-sm">
               <DeploymentUnitOutlined className="size-5" aria-hidden />
             </span>
             <div>
-              <Typography.Title level={2} style={{ margin: 0 }}>{t("tools.title")}</Typography.Title>
+              <Typography.Title level={1} style={{ margin: 0 }}>{t("tools.title")}</Typography.Title>
               <Typography.Paragraph type="secondary" style={{ margin: 0 }}>
                 {t("tools.subtitle")}
               </Typography.Paragraph>
@@ -67,7 +108,7 @@ function ToolsIndexComponent() {
         </div>
       </header>
 
-      <div className="mt-10 grid gap-6 md:grid-cols-3">
+      <div className="mt-10 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
         {TOOLS.map((tool) => {
           const Icon = tool.icon;
           return (

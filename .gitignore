@@ -20,6 +20,15 @@ pages-dist/
 # `dist/` above matches only a directory named exactly `dist`, not the
 # `dist-internal` tree some build paths stage; ignore it explicitly.
 dist-internal/
+# One file under a dist path has to be committed: the external build's manifest
+# is the artifact `scripts/check_published_route_manifest.py` pins against a
+# hand-written literal. Everything else the build emits stays ignored.
+!/apps/web/dist/
+/apps/web/dist/*
+!/apps/web/dist/external/
+/apps/web/dist/external/*
+!/apps/web/dist/external/routes.json
+!/apps/web/dist/external/robots.txt
 # `build/` above matches at any depth, so it silently swallowed
 # packages/shared/src/build/ — the shared CSP composer and inline-script hasher
 # that apps/web/scripts/finalize-csp.ts, apps/jbrowse/scripts/inject-headers-origins.ts
@@ -30,6 +39,7 @@ dist-internal/
 !packages/shared/src/build/
 .turbo/
 **/.umi*/
+**/.dumi*/
 target/
 *.tsbuildinfo
 *.pyc
@@ -103,6 +113,8 @@ test-results-*/
 # Cache
 # ---------------------------------------------------------------------------
 .cache/
+# The coding agent's own session state (goals, task output). Never published.
+.pi/
 .parcel-cache/
 .vite/
 .eslintcache
@@ -111,12 +123,14 @@ test-results-*/
 # Deepwork session state (local OpenCode context, never commit)
 .slim/deepwork/
 .opencode/
+.qoder/
 
 # ---------------------------------------------------------------------------
 # Hermes runtime (NOT project code)
 # ---------------------------------------------------------------------------
 .hermes/
 skills/
+skills-lock.json
 .agent-loop-runner.cjs
 .cursor-openai-bridge.cjs
 .ark-crowdtest-display-prompt.txt

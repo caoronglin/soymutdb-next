@@ -63,7 +63,9 @@ def _json(*groups: dict[str, object], schema_version: object = 1) -> str:
 def test_default_navigation_matches_the_active_header_snapshot() -> None:
     groups = DEFAULT_FOOTER_NAVIGATION.groups
     assert [group.id for group in groups] == ["explore", "tools", "downloads", "resources"]
-    assert len([link for group in groups for link in group.links]) == 20
+    # 19, not 20: the default footer no longer advertises `/analyses`, because
+    # the public portal stopped shipping that route.
+    assert len([link for group in groups for link in group.links]) == 19
     assert all(link.target == "internal" for group in groups for link in group.links)
     assert any(link.href == "/tools/seqfetch" for group in groups for link in group.links)
     assert parse_footer_navigation(DEFAULT_FOOTER_NAVIGATION_JSON) == DEFAULT_FOOTER_NAVIGATION
@@ -205,10 +207,10 @@ def test_navigation_rejects_unsafe_or_malformed_destinations(target: str, href: 
 def test_optional_email_and_phone_values_are_validated_without_rewriting_display_text() -> None:
     assert validate_footer_setting("contact_email_value", "") == ""
     assert validate_footer_setting("contact_email_value", "help@example.org") == "help@example.org"
-    phone = "+86 (025)-84391957"
+    phone = "+86 (555) 0100"
     assert validate_footer_setting("contact_phone_value", phone) == phone
 
     with pytest.raises(FooterContentValidationError):
         validate_footer_setting("contact_email_value", "not-an-email")
     with pytest.raises(FooterContentValidationError):
-        validate_footer_setting("contact_phone_value", "025-84391957<script>")
+        validate_footer_setting("contact_phone_value", "555-0100<script>")

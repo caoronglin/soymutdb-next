@@ -6,6 +6,7 @@ import {
   isMinimalDeploymentMode,
   normalizeBasePath,
   requireDeploymentOrigin,
+  resolveAnalyticsProvider,
   resolveDevAllowedHosts,
 } from "@soymutdb/shared/deployment";
 import { resolveSiteVariant } from "../src/lib/site-variant";
@@ -35,10 +36,47 @@ const jbrowseOrigin = jbrowseBaseUrl
       allowInsecureHttp: allowInsecureDevOrigins,
     })
   : undefined;
-const analyticsToken = env.VITE_CLOUDFLARE_ANALYTICS_TOKEN?.trim();
+// Remote file preview is opt-in per variant. `build-sites.ts` maps only the
+// building variant's non-VITE input into this pair, so neither artifact can
+// carry the other variant's viewer. A viewer without an allowlisted artifact
+// origin stays disabled at runtime (preview-policy.ts fails closed).
+const fileViewerUrl = env.VITE_FILE_VIEWER_URL?.trim() || undefined;
+const fileViewerFrameOrigins = fileViewerUrl
+  ? [
+      requireDeploymentOrigin(fileViewerUrl, "File viewer", {
+        allowInsecureHttp: allowInsecureDevOrigins,
+      }),
+    ]
+  : [];
+const fileViewerArtifactOrigins = (env.VITE_FILE_VIEWER_ARTIFACT_ORIGINS ?? "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter((origin) => origin.length > 0)
+  .map((origin) =>
+    requireDeploymentOrigin(origin, "File viewer artifact", {
+      allowInsecureHttp: allowInsecureDevOrigins,
+    }),
+  );
+// The VITE_* spelling is a legacy alias from the pre-Umi build; keep reading it
+// so existing Cloudflare Pages projects do not silently lose analytics.
+const analyticsToken = (
+  env.SOYMUTDB_CLOUDFLARE_ANALYTICS_TOKEN ?? env.VITE_CLOUDFLARE_ANALYTICS_TOKEN
+)?.trim();
+// The platform's own `/track.gif` collector is the default; the Cloudflare
+// beacon is opt-in. Resolved through the shared helper so this config and the
+// CSP finalizer cannot disagree about which provider a build selected.
+const analytics = resolveAnalyticsProvider(env.SOYMUTDB_ANALYTICS_PROVIDER, analyticsToken);
+if (analytics.reason.startsWith("legacy:")) {
+  // Build-time notice only: the reason describes how this artifact was
+  // configured, so it must never reach the emitted page bytes.
+  process.stderr.write(`[analytics] ${analytics.reason}\n`);
+}
 const configuredDevHosts = resolveDevAllowedHosts(env.SOYMUTDB_DEV_ALLOWED_HOSTS);
-const csp = buildCsp({ apiOrigin, jbrowseOrigin }, Boolean(analyticsToken));
-const headScripts = analyticsToken
+const csp = buildCsp(
+  { apiOrigin, jbrowseOrigin, frameOrigins: fileViewerFrameOrigins },
+  analytics.cloudflare,
+);
+const headScripts = analytics.cloudflare
   ? [
       `<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='${JSON.stringify({ token: analyticsToken })}'></script>`,
     ]
@@ -53,6 +91,8 @@ const viteEnv = {
   VITE_BASE_URL: base,
   VITE_DEMO_MODE: String(deploymentMode === "demo"),
   VITE_DEPLOYMENT_MODE: deploymentMode,
+  VITE_FILE_VIEWER_ARTIFACT_ORIGINS: fileViewerArtifactOrigins.join(","),
+  VITE_FILE_VIEWER_URL: fileViewerUrl || "",
   VITE_JBROWSE_BASE_URL: jbrowseBaseUrl || "",
   VITE_JBROWSE_ENABLED: String(!minimalDeployment),
   VITE_JBROWSE_URL: jbrowseBaseUrl || "",

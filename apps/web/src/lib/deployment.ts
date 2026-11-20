@@ -68,7 +68,7 @@ export function resolveJbrowseOrigin(value: unknown, portalOrigin: string): stri
  * Optional-service feature gate.
  *
  * A core-only deployment ships the portal without services it does not run
- * (JBrowse, BLAST, analyses, …). Absent or any value other than an explicit
+ * (JBrowse, BLAST, …). Absent or any value other than an explicit
  * off-token keeps the service enabled, so existing deployments are unchanged;
  * only an explicit ``0``/``false``/``off``/``no`` disables it.
  */

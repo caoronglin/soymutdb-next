@@ -1,0 +1,800 @@
+#!/usr/bin/env python3
+"""Regression contract for the wired --self-test teeth guard.
+
+A second file must pin the wiring and the probe's teeth from outside the
+guard, so a single-file edit cannot drop both the behaviour and its own
+self-test plant. Collected by ``scripts/smoke.sh`` (``tests=()``).
+"""
+
+from __future__ import annotations
+
+import importlib.util
+import re
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+SMOKE = ROOT / "scripts" / "smoke.sh"
+GUARD = ROOT / "scripts" / "check_contracts_self_test_teeth.py"
+
+spec = importlib.util.spec_from_file_location("teeth_guard", GUARD)
+assert spec and spec.loader
+guard = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(guard)
+
+
+def _smoke() -> str:
+    return SMOKE.read_text(encoding="utf-8")
+
+
+# One real probe per test process. Every test that needs clean results reuses
+# it instead of spawning every wired guard again; the guard's own --self-test still
+# runs its own probe when invoked as a process by smoke.sh.
+_RESULTS: dict[str, tuple[int, str]] = {}
+
+
+def _results() -> dict[str, tuple[int, str]]:
+    if not _RESULTS:
+        _RESULTS.update(guard.probe(guard.wired_self_tests(_smoke())))
+    return dict(_RESULTS)
+
+
+class TeethGuardContract(unittest.TestCase):
+    def test_committed_tree_is_clean(self) -> None:
+        self.assertEqual(guard.check(smoke=_smoke(), results=_results()), [])
+
+    def test_the_guard_is_wired_into_the_contracts_layer(self) -> None:
+        smoke = _smoke()
+        call = (
+            '  "${PYTHON_BIN}" scripts/check_contracts_self_test_teeth.py '
+            "--self-test || rc=$?\n"
+        )
+        self.assertIn(call, smoke, "standalone --self-test call was dropped")
+        body = smoke.split("smoke_contracts() {", 1)[1].split("\n}\n", 1)[0]
+        self.assertIn(call, body, "the call sits outside smoke_contracts()")
+        self.assertIn(
+            "scripts/test_contracts_self_test_teeth.py",
+            body,
+            "companion suite is not collected in tests=()",
+        )
+
+    def test_the_wire_propagates_its_status(self) -> None:
+        call = (
+            '  "${PYTHON_BIN}" scripts/check_contracts_self_test_teeth.py '
+            "--self-test || rc=$?\n"
+        )
+        self.assertIn(call, _smoke())
+        self.assertNotIn(
+            '  "${PYTHON_BIN}" scripts/check_contracts_self_test_teeth.py '
+            "--self-test || true\n",
+            _smoke(),
+            "a swallowed status keeps SMOKE PASS while the probe is dead",
+        )
+
+    def test_the_guard_is_pinned_in_the_registry_floor(self) -> None:
+        registry = importlib.util.spec_from_file_location(
+            "registry_guard", ROOT / "scripts" / "check_contracts_registry_collection.py"
+        )
+        assert registry and registry.loader
+        mod = importlib.util.module_from_spec(registry)
+        registry.loader.exec_module(mod)
+        self.assertIn(
+            "scripts/check_contracts_self_test_teeth.py",
+            mod.REQUIRED_GUARD_CALLS,
+            "a wired guard outside REQUIRED_GUARD_CALLS fails #223's floor",
+        )
+
+    def test_the_literal_floor_cannot_be_derived_from_the_layer(self) -> None:
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("_WIRED_SELF_TESTS: frozenset[str] = frozenset(", source)
+        self.assertIn("_SIGNATURES: dict[str, re.Pattern[str]] = {", source)
+        self.assertGreaterEqual(len(guard._WIRED_SELF_TESTS), 10)
+
+    def test_a_no_op_self_test_is_rejected(self) -> None:
+        wired = guard.wired_self_tests(_smoke())
+        gutted = dict(_results())
+        gutted["scripts/check_app_shell_assets.py"] = (0, "")
+        found = guard.teeth_errors(wired, gutted)
+        self.assertTrue(
+            any("no pinned evidence" in f for f in found),
+            "a no-op self-test must not be accepted",
+        )
+
+    def test_a_failing_self_test_is_rejected(self) -> None:
+        wired = guard.wired_self_tests(_smoke())
+        results = dict(_results())
+        results["scripts/check_openapi_baseline_sync.py"] = (1, "boom")
+        self.assertTrue(
+            any(
+                "check_openapi_baseline_sync.py" in f
+                for f in guard.teeth_errors(wired, results)
+            )
+        )
+
+    def test_dropping_a_wire_is_rejected(self) -> None:
+        smoke = _smoke()
+        dropped = smoke.replace(
+            '  "${PYTHON_BIN}" scripts/check_visible_i18n.py --self-test || rc=$?\n',
+            "",
+            1,
+        )
+        self.assertNotEqual(dropped, smoke, "setup is not a control")
+        self.assertTrue(
+            any(
+                "was dropped" in f
+                for f in guard.floor_errors(guard.wired_self_tests(dropped))
+            )
+        )
+
+    def test_an_unpinned_wire_is_rejected(self) -> None:
+        smoke = _smoke()
+        added = smoke.replace(
+            '  "${PYTHON_BIN}" scripts/check_visible_i18n.py --self-test || rc=$?\n',
+            '  "${PYTHON_BIN}" scripts/check_visible_i18n.py --self-test || rc=$?\n'
+            '  "${PYTHON_BIN}" scripts/check_new_guard.py --self-test || rc=$?\n',
+            1,
+        )
+        self.assertNotEqual(added, smoke, "setup is not a control")
+        self.assertTrue(
+            any(
+                "not pinned" in f
+                for f in guard.floor_errors(guard.wired_self_tests(added))
+            )
+        )
+
+    def test_removing_a_signature_is_rejected(self) -> None:
+        smoke = _smoke()
+        source = GUARD.read_text(encoding="utf-8")
+        # A guard pinned in the floor but with no success signature is a
+        # fail-closed error, not a silent skip.
+        removed = source.replace(
+            '    "scripts/check_visible_i18n.py": re.compile(r"visible i18n self-test passed"),\n',
+            "",
+            1,
+        )
+        self.assertNotEqual(removed, source, "setup is not a control")
+        # Re-evaluate floor_errors with the signature table emptied for one key.
+        original = guard._SIGNATURES
+        guard._SIGNATURES = dict(original)
+        guard._SIGNATURES.pop("scripts/check_visible_i18n.py")
+        try:
+            found = guard.floor_errors(guard.wired_self_tests(smoke))
+        finally:
+            guard._SIGNATURES = original
+        self.assertTrue(any("no success signature" in f for f in found))
+
+    def test_a_reachable_but_unreached_ablation_set_is_rejected(self) -> None:
+        """The #256-forgery: keep the cases dict, empty the loop, print a count.
+
+        A signature can only pin the shape of the success line, and the guard
+        writes that line from a number it chooses. This shape is what the
+        printed evidence cannot distinguish from a real run, so the source is
+        read instead: the declared ablations have to be *reached*.
+        """
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp)
+            target = tree / "scripts/check_error_code_catalog.py"
+            target.parent.mkdir(parents=True)
+            text = (ROOT / "scripts/check_error_code_catalog.py").read_text(encoding="utf-8")
+            forged = text.replace(
+                "    for name, plant in cases.items():", "    for name, plant in []:", 1
+            )
+            self.assertNotEqual(forged, text, "setup is not a control")
+            target.write_text(forged, encoding="utf-8")
+            found = guard.declared_case_errors(tree)
+        self.assertTrue(
+            any("no longer iterates its cases mapping" in f for f in found),
+            f"an emptied self-test loop must be rejected, got {found}",
+        )
+
+    def test_the_case_floor_is_read_from_source_not_from_output(self) -> None:
+        """Dropping the ablations entirely is the other half of the same hole."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp)
+            target = tree / "scripts/check_error_code_catalog.py"
+            target.parent.mkdir(parents=True)
+            text = (ROOT / "scripts/check_error_code_catalog.py").read_text(encoding="utf-8")
+            start = text.index("    cases = {")
+            end = text.index("\n    }\n", start) + len("\n    }\n")
+            target.write_text(text[:start] + "    cases = {}\n" + text[end:], encoding="utf-8")
+            found = guard.declared_case_errors(tree)
+        self.assertTrue(
+            any("exact reviewed count" in f for f in found),
+            f"an emptied cases dict must be rejected, got {found}",
+        )
+
+    def test_the_committed_tree_declares_its_ablations(self) -> None:
+        self.assertEqual(guard.declared_case_errors(), [])
+
+    def test_a_summary_only_self_test_is_rejected(self) -> None:
+        """The evidence floor: N declared cases need N per-case lines.
+
+        A body gutted to ``print(<pinned summary>); return 0`` keeps both the
+        signature and the count, because both are strings a mutator copies. The
+        lines it does not print are the only thing a stub cannot fake.
+        """
+        target = "scripts/check_openapi_response_surface.py"
+        self.assertIn(target, guard.EVIDENCE_MEMBERS, "setup is not a control")
+        forged = (0, "self-test: 10 cases, 0 failure(s)\n")
+        self.assertEqual(guard.evidence_lines(forged[1]), (10, 0))
+        found = guard.evidence_errors({target: forged})
+        self.assertTrue(
+            any("printed 0 per-case line(s)" in f for f in found),
+            f"a summary-only self-test must be rejected, got {found}",
+        )
+
+    def test_the_evidence_floor_is_clean_on_the_committed_tree(self) -> None:
+        self.assertEqual(guard.evidence_errors(_results()), [])
+
+    def test_every_evidence_row_states_its_declared_count(self) -> None:
+        """A row whose success line declares nothing enforces nothing."""
+        for path, (rc, output) in sorted(_results().items()):
+            if path not in guard.EVIDENCE_MEMBERS or rc != 0:
+                continue
+            self.assertIsNotNone(
+                guard._declared_case_count(output),
+                f"{path} is in EVIDENCE_MEMBERS but declares no case count",
+            )
+
+    def test_evidence_for_guards_outside_the_floor_is_not_audited(self) -> None:
+        """Otherwise this becomes a format audit of every wired self-test."""
+        thin = "scripts/check_app_shell_assets.py"
+        self.assertNotIn(thin, guard.EVIDENCE_MEMBERS, "setup is not a control")
+        self.assertEqual(guard.evidence_errors({thin: (0, "self-test: 9 cases\n")}), [])
+        self.assertNotIn("check_app_shell_assets.py", str(guard.evidence_errors(_results())))
+
+    def test_a_legitimate_count_increase_stays_green(self) -> None:
+        """An added ablation moves both numbers; neither is pinned."""
+        target = "scripts/check_openapi_response_surface.py"
+        declared, emitted = guard.evidence_lines(_results()[target][1])
+        self.assertGreaterEqual(emitted, declared or 0, "setup is not a control")
+        widened = f"self-test: {emitted + 5} cases, 0 failure(s)\n" + "\n".join(
+            f"PASS self-test: case {i} is caught -> 1 failure(s)" for i in range(emitted + 5)
+        )
+        self.assertEqual(guard.evidence_errors({target: (0, widened)}), [])
+
+    def test_a_loop_shrunken_below_the_reviewed_floor_is_rejected(self) -> None:
+        """A loop-counter summary shrinks declared and emitted together.
+
+        ``check_openapi_operation_id_floor.py`` prints ``{results}``, so an
+        edited loop that runs N-1 cases prints ``N-1 cases`` with N-1 per-case
+        lines. ``emitted < declared`` never fires; the literal ``_CASE_FLOOR``
+        is what still names it. Both limbs are asserted: the short run is
+        coherent on the one-sided check, and the floor reports it.
+        """
+        target = "scripts/check_openapi_operation_id_floor.py"
+        self.assertIn(target, guard.EVIDENCE_MEMBERS, "setup is not a control")
+        floor = guard._CASE_FLOOR[target][3]
+        few = floor - 1
+        output = f"self-test: {few} cases, 0 failure(s)\n" + "\n".join(
+            f"PASS self-test: case {i} is caught -> 1 failure(s)" for i in range(few)
+        )
+        self.assertEqual(guard.evidence_lines(output), (few, few))
+        found = guard.evidence_errors({target: (0, output)})
+        self.assertEqual(len(found), 1, "one cause, one owner")
+        self.assertIn(f"below its reviewed floor of {floor}", found[0])
+
+    def test_a_failing_evidence_row_is_reported_by_teeth_not_here(self) -> None:
+        """One cause, one owner: an unreachable self-test is teeth_errors'."""
+        target = "scripts/check_openapi_response_surface.py"
+        self.assertEqual(guard.evidence_errors({target: (1, "boom")}), [])
+
+    def test_an_ambiguous_count_is_rejected(self) -> None:
+        """``5 cases`` next to ``7 cases`` is not one answer to "how many"."""
+        self.assertIsNone(guard._declared_case_count("self-test: 5 cases, 7 cases\n"))
+        self.assertEqual(guard._declared_case_count("self-test: 5 cases\n"), 5)
+        self.assertEqual(guard._declared_case_count("self-test: 12 negative cases + clean\n"), 12)
+        self.assertEqual(guard._declared_case_count("SELF-TEST PASS: 9 mutations\n"), 9)
+
+    def test_every_wire_carries_both_plants(self) -> None:
+        # A guard whose plain run can be gutted while its self-test replays
+        # PASS lines is the shape the signature floor cannot see. Nothing is
+        # exempt: the two sets are checked against each other and the wire set.
+        wired = guard.wired_self_tests(_smoke())
+        for path in sorted(wired):
+            self.assertIn(path, guard._DRIFT_COVERED, f"{path} has no detection plant")
+            self.assertIn(path, guard._GUT_COVERED, f"{path} has no self-test plant")
+        self.assertEqual(guard.drift_floor_errors(), [])
+
+    def test_a_gutted_entry_point_keeps_the_self_test_green(self) -> None:
+        # Two limbs, or the case tests the detection plant twice: the replayed
+        # self-test must still satisfy the signature floor, and the plain run
+        # must be the thing that catches it.
+        wired = guard.wired_self_tests(_smoke())
+        gutted = "scripts/check_error_code_catalog.py"
+        replayed = (
+            0,
+            "  ok: planted 'extra code' -> caught (1 problem(s))\n"
+            "error-code catalog self-test passed (12 negative cases + clean tree)\n",
+        )
+        self.assertEqual(guard.teeth_errors(wired, {**_results(), gutted: replayed}), [])
+        planted = {(gutted, "self-test"): replayed, (gutted, "plain"): (1, "")}
+        caught = guard.gut_errors(wired, planted)
+        self.assertTrue(any(gutted in f for f in caught), caught)
+
+    def test_an_unplanted_entry_point_gut_is_reported(self) -> None:
+        # One cause, one owner: the plain run staying green after the plant is
+        # the failure this leg exists for.
+        self.assertIn(
+            "still failed its plain run",
+            " ".join(
+                guard.gut_errors(
+                    guard.wired_self_tests(_smoke()),
+                    {
+                        ("scripts/check_error_code_catalog.py", "self-test"): (0, ""),
+                        ("scripts/check_error_code_catalog.py", "plain"): (1, ""),
+                    },
+                )
+            ),
+        )
+
+    def test_every_evidence_member_pins_a_case_floor(self) -> None:
+        """An audited per-case guard with no _CASE_FLOOR row fails closed."""
+        self.assertEqual(guard.evidence_floor_errors(), [])
+        self.assertEqual(set(guard._CASE_FLOOR), set(guard.EVIDENCE_MEMBERS))
+        original = guard._CASE_FLOOR
+        guard._CASE_FLOOR = dict(original)
+        guard._CASE_FLOOR.pop("scripts/check_openapi_operation_id_floor.py")
+        try:
+            found = guard.evidence_floor_errors()
+        finally:
+            guard._CASE_FLOOR = original
+        self.assertTrue(
+            any("has no _CASE_FLOOR row" in f for f in found),
+            f"an audited guard without a floor must be named, got {found}",
+        )
+
+    def test_a_deleted_case_is_reported_by_name(self) -> None:
+        """Both plants disable a check or an entry point, not a case."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp)
+            target = tree / "scripts/check_openapi_operation_id_floor.py"
+            target.parent.mkdir(parents=True)
+            text = (ROOT / "scripts/check_openapi_operation_id_floor.py").read_text(
+                encoding="utf-8"
+            )
+            anchor = (
+                '    cases.append(\n        (\n'
+                '            "a coordinated operationId retype in both halves"'
+            )
+            start = text.index(anchor)
+            end = text.index("    # 2. Snapshot-only retype", start)
+            deleted = text[:start] + text[end:]
+            self.assertNotEqual(deleted, text, "setup is not a control")
+            target.write_text(deleted, encoding="utf-8")
+            found = guard.declared_case_errors(tree)
+        self.assertTrue(
+            any("exact reviewed count" in f for f in found),
+            f"a deleted case must be named, got {found}",
+        )
+
+    def test_the_case_count_pins_are_exact_on_the_committed_tree(self) -> None:
+        """A stale lower bound lets a deleted case through: pin equality."""
+        import tempfile
+
+        for guard_path, (source, function, mapping, count) in sorted(
+            guard._CASE_FLOOR.items()
+        ):
+            with self.subTest(guard=guard_path):
+                declared = guard._declared_cases(ROOT / source, function, mapping)
+                self.assertEqual(
+                    declared,
+                    count,
+                    f"{source} declares {declared} case(s) but the reviewed "
+                    f"literal pins {count}: deleting {declared - count} case(s) "
+                    "would stay green under a lower-bound check",
+                )
+
+    def test_a_single_deleted_case_is_named_by_the_exact_pin(self) -> None:
+        """The stale-floor hole, from the second file, on real source bytes."""
+        import tempfile
+
+        victim = "scripts/check_openapi_response_surface.py"
+        count = guard._CASE_FLOOR[victim][3]
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp)
+            for guard_path, (source, _fn, _map, _n) in guard._CASE_FLOOR.items():
+                text = (ROOT / source).read_text(encoding="utf-8")
+                if source == victim:
+                    needle = '    cases["one-sided snapshot status rename"] = ('
+                    start = text.index(needle)
+                    end = text.index("\n    )\n", start) + len("\n    )\n")
+                    text = text[:start] + text[end:]
+                (tree / source).parent.mkdir(parents=True, exist_ok=True)
+                (tree / source).write_text(text, encoding="utf-8")
+            found = guard.declared_case_errors(tree)
+        self.assertEqual(guard.declared_case_errors(ROOT), [])
+        self.assertEqual(len(found), 1, f"one cause, one owner: {found}")
+        self.assertIn(victim, found[0])
+        self.assertIn(f"exact reviewed count of {count}", found[0])
+
+    def test_the_case_floor_is_a_literal_not_derived_from_output(self) -> None:
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("_CASE_FLOOR: dict[str, tuple[str, str, str, int]] = {", source)
+        self.assertIn("declared = _declared_cases(target, function, mapping)", source)
+        self.assertIn("evidence_floor_errors()", source)
+        self.assertIn("floor = _CASE_FLOOR.get(path)", source)
+        self.assertIn("emitted < floor[3]", source)
+        self.assertIn("declared != floor", source)
+
+    def test_the_re_pin_case_is_load_bearing_from_a_second_file(self) -> None:
+        """Both limbs of the coordinated retype must live in the case list."""
+        for name in (
+            "check_openapi_operation_id_floor.py",
+            "check_openapi_operation_parameter_floor.py",
+        ):
+            source = (ROOT / "scripts" / name).read_text(encoding="utf-8")
+            self.assertIn("with its digest re-pinned", source)
+            self.assertIn("expect_clean=True", source)
+            self.assertIn('kwargs.pop("expect_clean", False)', source)
+    def test_every_gut_anchor_sits_on_the_plain_run_path(self) -> None:
+        # A gut registered against self_test() cannot reach the plain run, and
+        # gut_probe() only reads exit codes: plain_rc == 0 then means either
+        # "the guard survived" or "the plant never ran". Fail closed on the
+        # source shape so a new wire cannot reintroduce the empty leg silently.
+        self.assertEqual(guard.gut_anchor_errors(), [])
+        for path, _fragment, _replacement in guard._SELF_TEST_GUTS:
+            source = (ROOT / path).read_text(encoding="utf-8")
+            self.assertIn(
+                "def main(", source, f"{path} has no plain-run entry point"
+            )
+
+    def test_a_self_test_scoped_gut_anchor_is_reported_by_name(self) -> None:
+        # From a second file: point one registered anchor back at self_test()
+        # and the structural check must name it, not stay green on exit codes.
+        path = "scripts/check_error_code_catalog.py"
+        original = guard._SELF_TEST_GUTS
+        try:
+            guard._SELF_TEST_GUTS = tuple(
+                (p, "    clean = check_tree(ROOT)\n", r) if p == path else (p, f, r)
+                for p, f, r in original
+            )
+            found = guard.gut_anchor_errors()
+            self.assertTrue(any(path in f and "not in main()" in f for f in found), found)
+        finally:
+            guard._SELF_TEST_GUTS = original
+
+    def test_the_guards_own_self_test_has_teeth(self) -> None:
+        # The --self-test must actually plant a no-op and catch it. A body that
+        # only prints PASS lines without asserting would still exit 0.
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("control = probe(wired)", source)
+        self.assertIn("if teeth_errors(wired, control):", source)
+        self.assertIn("len(lost) == 1 and not others", source)
+
+    def test_both_calls_floor_is_a_hand_written_literal(self) -> None:
+        """A floor derived from the layer would green-light its own deletion."""
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("BOTH_CALLS: frozenset[str] = frozenset(", source)
+        self.assertIn("both_call_errors(text, wired)", source)
+        self.assertEqual(
+            guard.BOTH_CALLS,
+            {
+                "scripts/check_api_error_code_vocabulary.py",
+                "scripts/check_error_code_catalog.py",
+                "scripts/check_variant_summary_assembly_consistency.py",
+                "scripts/check_published_route_manifest.py",
+                "scripts/check_contracts_empty_layer_verdict.py",
+            },
+        )
+
+    def test_committed_layer_has_every_pinned_plain_run(self) -> None:
+        smoke = _smoke()
+        self.assertIn(
+            "scripts/check_variant_summary_assembly_consistency.py",
+            guard.plain_guard_calls(smoke),
+        )
+        self.assertEqual(
+            guard.both_call_errors(smoke, guard.wired_self_tests(smoke)), []
+        )
+
+    def test_deleting_a_pinned_plain_run_is_named(self) -> None:
+        """The registry floor pins a path, not a call count: deletion is green."""
+        smoke = _smoke()
+        victim = "scripts/check_variant_summary_assembly_consistency.py"
+        dropped = "\n".join(
+            line for line in smoke.splitlines()
+            if line.strip() != f'"${{PYTHON_BIN}}" {victim} || rc=$?'
+        ) + "\n"
+        self.assertNotEqual(dropped, smoke, "setup is not a control")
+        found = guard.both_call_errors(dropped, guard.wired_self_tests(dropped))
+        self.assertTrue(any(victim in f and "lost its plain run" in f for f in found), found)
+
+    def test_an_unpinned_plain_run_fails_closed(self) -> None:
+        """A new second call without a pin is reported, not silently adopted."""
+        smoke = _smoke()
+        extra = (
+            '  "${PYTHON_BIN}" scripts/check_openapi_response_surface.py '
+            '|| rc=$?\n'
+        )
+        added = smoke.replace(
+            '  "${PYTHON_BIN}" scripts/check_openapi_response_surface.py '
+            '--self-test || rc=$?\n',
+            '  "${PYTHON_BIN}" scripts/check_openapi_response_surface.py '
+            '--self-test || rc=$?\n' + extra,
+            1,
+        )
+        self.assertNotEqual(added, smoke, "setup is not a control")
+        found = guard.both_call_errors(added, guard.wired_self_tests(added))
+        self.assertTrue(any("not in BOTH_CALLS" in f for f in found), found)
+
+    def test_the_deletion_ablation_reaches_the_guards_own_self_test(self) -> None:
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("dropped_plain != smoke", source)
+        self.assertIn("both_call_errors(dropped_plain, wired)", source)
+
+    def test_both_calls_cardinality_is_a_reviewed_literal(self) -> None:
+        """Membership alone is data: a row and its plain call can drop together."""
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("BOTH_CALLS_SIZE = 5", source)
+        self.assertIn("len(BOTH_CALLS) != BOTH_CALLS_SIZE", source)
+        self.assertEqual(len(guard.BOTH_CALLS), guard.BOTH_CALLS_SIZE)
+        self.assertEqual(guard.BOTH_CALLS_SIZE, 5)
+        self.assertEqual(guard.both_call_errors(_smoke(), guard.wired_self_tests(_smoke())), [])
+
+    def test_shrinking_the_both_calls_floor_is_named(self) -> None:
+        """The coordinated edit is invisible to every membership rule."""
+        victim = "scripts/check_api_error_code_vocabulary.py"
+        smoke = _smoke()
+        dropped = "\n".join(
+            line for line in smoke.splitlines()
+            if line.strip() != f'"${{PYTHON_BIN}}" {victim} || rc=$?'
+        ) + "\n"
+        self.assertNotEqual(dropped, smoke, "setup is not a control")
+        original = guard.BOTH_CALLS
+        guard.BOTH_CALLS = frozenset(p for p in original if p != victim)
+        try:
+            found = guard.both_call_errors(dropped, guard.wired_self_tests(dropped))
+            self.assertFalse(
+                any("lost its plain run" in f or "not in BOTH_CALLS" in f for f in found),
+                found,
+            )
+            self.assertTrue(any("BOTH_CALLS has" in f for f in found), found)
+        finally:
+            guard.BOTH_CALLS = original
+        self.assertEqual(guard.both_call_errors(smoke, guard.wired_self_tests(smoke)), [])
+
+    def test_a_deleted_drift_plant_anchor_is_not_read_as_detection(self) -> None:
+        # The probe's own failure used to share a channel with a caught drift:
+        # rc!=0 from _plant was read as "the guard went red". Deleting a plant's
+        # anchor therefore immunised the injection against this very probe.
+        wired = guard.wired_self_tests(_smoke())
+        victim = "scripts/check_error_code_catalog.py"
+        pre_fix = guard.drift_errors(wired, {(victim, "wire"): (1, "anchor missing")})
+        self.assertFalse(
+            any(victim in f for f in pre_fix),
+            "rc=1 (pre-fix shape) proves nothing and must stay silent here",
+        )
+        found = guard.drift_errors(
+            wired, {(victim, "wire"): (None, "drift plant anchor missing")}
+        )
+        self.assertTrue(
+            any(victim in f and "drift plant was not run" in f for f in found), found
+        )
+        self.assertIn("rc is None", GUARD.read_text(encoding="utf-8"))
+
+    def test_a_deleted_gut_plant_anchor_is_not_read_as_a_survivor(self) -> None:
+        wired = guard.wired_self_tests(_smoke())
+        victim = "scripts/check_error_code_catalog.py"
+        found = guard.gut_errors(
+            wired,
+            {
+                (victim, "self-test"): (None, "gut plant anchor missing"),
+                (victim, "plain"): (0, ""),
+            },
+        )
+        self.assertTrue(
+            any(victim in f and "gut plant was not run" in f for f in found), found
+        )
+
+    def test_the_repaired_enum_plant_anchor_is_present(self) -> None:
+        # A stale anchor silently disabled one of the registered plants on main:
+        # _plant returned "anchor missing" and drift_errors read rc=1 as caught.
+        source = (ROOT / "scripts/check_openapi_published_enums.py").read_text(
+            encoding="utf-8"
+        )
+        for path, fragment, _replacement, _why in guard._DRIFT_PLANTS:
+            if path.endswith("check_openapi_published_enums.py"):
+                self.assertIn(fragment, source, "the enum drift plant anchor drifted")
+                break
+        else:
+            self.fail("published_enums has no registered drift plant")
+
+    def test_the_cardinality_ablation_reaches_the_guards_own_self_test(self) -> None:
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("BOTH_CALLS has", source)
+        self.assertIn("membership_blind", source)
+
+    def test_the_printed_total_pins_are_exact_on_the_committed_tree(self) -> None:
+        """Second-file: every audited guard must pin its exact printed total."""
+        self.assertEqual(set(guard._PRINTED_CASE_TOTAL), set(guard.EVIDENCE_MEMBERS))
+        results = _results()
+        for path, exact in guard._PRINTED_CASE_TOTAL.items():
+            rc, output = results[path]
+            self.assertEqual(rc, 0, path)
+            self.assertEqual(guard._declared_case_count(output), exact, path)
+        self.assertEqual(guard.printed_total_errors(results), [])
+
+    def test_the_printed_total_literal_is_not_derived_from_output(self) -> None:
+        """The pin must be a hand-written module-level literal."""
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("_PRINTED_CASE_TOTAL: dict[str, int] = {", source)
+        self.assertIn('"scripts/check_openapi_field_constraints.py": 35', source)
+        self.assertNotIn("len(cases)", source.split("_PRINTED_CASE_TOTAL")[1][:400])
+
+    def test_deleting_a_secondary_case_is_named_by_the_printed_total(self) -> None:
+        """The decisive shape: a deletion from a secondary container."""
+        victim = "scripts/check_openapi_field_constraints.py"
+        results = _results()
+        rc, output = results[victim]
+        exact = guard._PRINTED_CASE_TOTAL[victim]
+        drifted = dict(results)
+        drifted[victim] = (
+            rc,
+            output.replace(
+                f"self-test: {exact} cases",
+                f"self-test: {exact - 1} cases",
+                1,
+            ),
+        )
+        found = guard.printed_total_errors(drifted)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn(f"exact reviewed printed total of {exact}", found[0])
+        self.assertIn(victim, found[0])
+        self.assertEqual(guard.printed_total_errors(results), [])
+
+    def test_the_printed_total_ablation_reaches_the_guards_own_self_test(self) -> None:
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("a deleted secondary case is named by the exact printed total", source)
+        self.assertIn("printed_total_errors(drifted)", source)
+
+
+    # --- Aux exact printed totals (7): the seven wired guards whose success
+    # line prints a total derived from the container they iterate and which are
+    # not ``EVIDENCE_MEMBERS``, so #368's pin did not reach them.
+
+    def test_the_aux_total_literals_are_hand_written(self) -> None:
+        """Both tables are literals, and neither is read back from the guards."""
+        source = GUARD.read_text(encoding="utf-8")
+        self.assertIn("_AUX_PRINTED_CASE_TOTAL: dict[str, int] = {", source)
+        self.assertIn("_AUX_CHECK_TOTAL: dict[str, int] = {", source)
+        for table in ("_AUX_PRINTED_CASE_TOTAL", "_AUX_CHECK_TOTAL"):
+            tail = source.split(table + ": dict[str, int] = {", 1)[1][:900]
+            tail = tail.split("\n}\n", 1)[0]
+            for derived in ("len(cases", "len(tests", "len(GATES", "results"):
+                self.assertNotIn(derived, tail, f"{table} row is derived: {derived}")
+        self.assertEqual(len(guard._AUX_PRINTED_CASE_TOTAL), 5)
+        self.assertEqual(len(guard._AUX_CHECK_TOTAL), 2)
+
+    def test_the_committed_tree_prints_exactly_the_aux_totals(self) -> None:
+        """The committed tree must print the reviewed numbers, not merely match shape."""
+        results = _results()
+        for path, exact in guard._AUX_PRINTED_CASE_TOTAL.items():
+            rc, output = results[path]
+            self.assertEqual(rc, 0, path)
+            self.assertEqual(guard._declared_case_count(output), exact, path)
+        for path, exact in guard._AUX_CHECK_TOTAL.items():
+            rc, output = results[path]
+            self.assertEqual(rc, 0, path)
+            self.assertEqual(guard._aux_check_count(output), exact, path)
+        self.assertEqual(guard.aux_printed_total_errors(results), [])
+
+    def test_the_aux_pins_are_disjoint_from_the_evidence_floor(self) -> None:
+        """Two owners for one number makes the reviewed row set meaningless."""
+        aux = set(guard._AUX_PRINTED_CASE_TOTAL) | set(guard._AUX_CHECK_TOTAL)
+        self.assertEqual(aux & guard.EVIDENCE_MEMBERS, set())
+        self.assertEqual(aux & set(guard._PRINTED_CASE_TOTAL), set())
+        self.assertFalse(
+            set(guard._AUX_PRINTED_CASE_TOTAL) & set(guard._AUX_CHECK_TOTAL)
+        )
+        self.assertEqual(guard.evidence_floor_errors(), [])
+
+    def test_every_countable_signature_is_owned_by_an_exact_total(self) -> None:
+        """A new wired guard with a bare ``d+`` would open a fresh free cell."""
+        aux = set(guard._AUX_PRINTED_CASE_TOTAL) | set(guard._AUX_CHECK_TOTAL)
+        exact = aux | set(guard._PRINTED_CASE_TOTAL)
+        wired = guard.wired_self_tests(_smoke())
+        self.assertEqual(guard._NUMERIC_SIGNATURES - exact, set())
+        self.assertEqual(exact - guard._NUMERIC_SIGNATURES, set())
+        self.assertEqual(guard._NUMERIC_SIGNATURES - set(wired), set())
+        original = guard._NUMERIC_SIGNATURES
+        guard._NUMERIC_SIGNATURES = original | {"scripts/check_new_guard.py"}
+        try:
+            found = guard.evidence_floor_errors()
+        finally:
+            guard._NUMERIC_SIGNATURES = original
+        self.assertTrue(
+            any(
+                "check_new_guard.py" in f and "exact printed-total pin" in f
+                for f in found
+            ),
+            found,
+        )
+
+    def test_an_aux_pin_for_an_unwired_or_signatureless_guard_fails_closed(self) -> None:
+        for table, message in (
+            ("_AUX_PRINTED_CASE_TOTAL", "has no success signature"),
+            ("_AUX_CHECK_TOTAL", "has no success signature"),
+        ):
+            with self.subTest(table=table):
+                original = getattr(guard, table)
+                setattr(guard, table, {**original, "scripts/check_unwired.py": 1})
+                try:
+                    found = guard.evidence_floor_errors()
+                finally:
+                    setattr(guard, table, original)
+                self.assertTrue(
+                    any("check_unwired.py" in f and message in f for f in found),
+                    found,
+                )
+                # Wired, but its signature row removed: the pin would then be
+                # the only reader of a number a gutted body can write.
+                victim = "scripts/check_visible_i18n.py"
+                saved = guard._SIGNATURES
+                guard._SIGNATURES = {
+                    k: v for k, v in saved.items() if k != victim
+                }
+                setattr(guard, table, {**original, victim: 1})
+                try:
+                    found = guard.evidence_floor_errors()
+                finally:
+                    setattr(guard, table, original)
+                    guard._SIGNATURES = saved
+                self.assertTrue(
+                    any(victim in f and message in f for f in found), found
+                )
+
+    def test_a_deleted_plant_outside_the_evidence_floor_is_named(self) -> None:
+        """The decisive shape, from the second file, on the real printed line."""
+        victim = "scripts/check_openapi_published_enums.py"
+        self.assertNotIn(victim, guard.EVIDENCE_MEMBERS, "setup is not a control")
+        results = _results()
+        rc, output = results[victim]
+        exact = guard._AUX_PRINTED_CASE_TOTAL[victim]
+        drifted = dict(results)
+        drifted[victim] = (
+            rc,
+            output.replace(f"OK ({exact} ablations)", f"OK ({exact - 1} ablations)", 1),
+        )
+        found = guard.aux_printed_total_errors(drifted)
+        self.assertEqual(len(found), 1, f"one cause, one owner: {found}")
+        self.assertIn(victim, found[0])
+        self.assertIn(f"exact reviewed printed total of {exact}", found[0])
+        self.assertEqual(guard.aux_printed_total_errors(results), [])
+
+    def test_the_ok_checks_decoder_does_not_measure_the_plain_run(self) -> None:
+        """``OK (N baselines)`` is a different entry point, not a second total."""
+        self.assertIsNone(
+            guard._aux_check_count("openapi-baseline-sync: OK (4 baselines)\n")
+        )
+        self.assertIsNone(
+            guard._aux_check_count(
+                "openapi-inline-bodies: OK (75 pinned bodies, 60 inline body "
+                "titles pinned)\n"
+            )
+        )
+        self.assertEqual(
+            guard._aux_check_count("openapi-inline-bodies: OK (17 checks)\n"), 17
+        )
+        victim = "scripts/check_openapi_baseline_sync.py"
+        results = _results()
+        rc, output = results[victim]
+        exact = guard._AUX_CHECK_TOTAL[victim]
+        drifted = dict(results)
+        drifted[victim] = (
+            rc,
+            output.replace(f"OK ({exact} checks)", f"OK ({exact - 1} checks)", 1),
+        )
+        found = guard.aux_printed_total_errors(drifted)
+        self.assertEqual(len(found), 1, found)
+        self.assertIn(f"exact reviewed printed total of {exact}", found[0])
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -46,6 +46,8 @@ celery_app = Celery(
     backend=RESULT_BACKEND,
     include=[
         "soymutdb_worker.tasks.blast",
+        "soymutdb_worker.tasks.blast_index",
+        "soymutdb_worker.tasks.blast_index_tasks",
         "soymutdb_worker.tasks.export",
         "soymutdb_worker.tasks.ingest",
         "soymutdb_worker.tasks.stats",
@@ -56,6 +58,7 @@ celery_app = Celery(
         "soymutdb_worker.tasks.gwas",
         "soymutdb_worker.tasks.static_pages",
         "soymutdb_worker.tasks.analyses",
+        "soymutdb_worker.tasks.comparative",
         "soymutdb_worker.tasks.email",
         "soymutdb_worker.tasks.release",
         "soymutdb_worker.tasks.static_publish",
@@ -103,6 +106,10 @@ celery_app.conf.update(
             "task": "soymutdb_worker.tasks.cleanup.cleanup_expired_blast_jobs",
             "schedule": 3600,  # every hour
         },
+        "check-blast-index-health": {
+            "task": "soymutdb_worker.tasks.blast_index_tasks.check_blast_index_health",
+            "schedule": 3600,  # hourly re-verification of published indexes
+        },
         "cleanup-temp-files": {
             "task": "soymutdb_worker.tasks.cleanup.cleanup_temp_files",
             "schedule": 3600 * 6,  # every 6 hours
@@ -114,12 +121,20 @@ celery_app.conf.update(
         "soymutdb_worker.tasks.expression.*": {"queue": "ingest"},
         "soymutdb_worker.tasks.homolog.*": {"queue": "ingest"},
         "soymutdb_worker.tasks.blast.*": {"queue": "blast"},
+        "soymutdb_worker.tasks.blast_index_tasks.check_blast_index_health": {
+            "queue": "cleanup"
+        },
+        "soymutdb_worker.tasks.blast_index_tasks.*": {"queue": "blast"},
         "soymutdb_worker.tasks.export.*": {"queue": "export"},
         "soymutdb_worker.tasks.stats.*": {"queue": "stats"},
         "soymutdb_worker.tasks.static_pages.*": {"queue": "stats"},
         "soymutdb_worker.tasks.cleanup.*": {"queue": "cleanup"},
         "soymutdb_worker.tasks.analyses.*": {"queue": "analyses"},
         "soymutdb_worker.tasks.gwas.*": {"queue": "analyses"},
+        # Alignments and trees share the analyses queue: they are the same kind
+        # of work (a bounded pipeline over stored inputs), and a second queue
+        # would be a second thing to size and monitor.
+        "soymutdb_worker.tasks.comparative.*": {"queue": "analyses"},
         # Email tasks intentionally have NO route: they run on the default queue.
     },
     task_default_queue="default",
@@ -135,6 +150,8 @@ celery_app.autodiscover_tasks(
     [
         "soymutdb_worker.tasks.ingest",
         "soymutdb_worker.tasks.blast",
+        "soymutdb_worker.tasks.blast_index",
+        "soymutdb_worker.tasks.blast_index_tasks",
         "soymutdb_worker.tasks.export",
         "soymutdb_worker.tasks.stats",
         "soymutdb_worker.tasks.cleanup",

@@ -104,6 +104,47 @@ async function readBody(req) {
   return Buffer.concat(chunks).toString("utf-8");
 }
 
+function gzipSibling(req, file) {
+  const accepted = String(req.headers["accept-encoding"] ?? "").toLowerCase();
+  if (!accepted.includes("gzip")) return null;
+  const candidate = `${file}.gz`;
+  return existsSync(candidate) ? candidate : null;
+}
+
+/**
+ * Serve one file, preferring the build's `.gz` sibling when the client
+ * negotiated gzip.
+ *
+ * The artifact carries a `.gz` next to every compressible file
+ * (`apps/web/scripts/gzip-compress.ts`), exactly as the nginx `gzip_static`
+ * deployment consumes them. Answering `Accept-Encoding: gzip` with the sibling
+ * is what makes these suites measure the delivery a real host gives; leaving it
+ * out served the uncompressed bytes to every request and hid a missing
+ * `Content-Encoding` from every gate.
+ */
+function sendFile(req, res, file) {
+  const gz = gzipSibling(req, file);
+  if (gz) {
+    res.writeHead(200, {
+      "Content-Type": MIME[extname(file)] ?? "application/octet-stream",
+      "Content-Encoding": "gzip",
+      Vary: "Accept-Encoding",
+    });
+    createReadStream(gz).pipe(res);
+    return;
+  }
+  // Resource Timing needs a body length to report static asset sizes. This is
+  // also what a production static host normally sends for immutable artifacts.
+  // (A pre-compressed body is streamed without a length: the `Content-Length`
+  // of the `.gz` is not the length of the representation.)
+  res.writeHead(200, {
+    "Content-Type": MIME[extname(file)] ?? "application/octet-stream",
+    "Content-Length": statSync(file).size,
+    Vary: "Accept-Encoding",
+  });
+  createReadStream(file).pipe(res);
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
   let pathname = decodeURIComponent(url.pathname);
@@ -390,8 +431,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (pathname === `${PREFIX}/` || pathname === PREFIX) {
-    res.writeHead(200, { "Content-Type": MIME[".html"] });
-    createReadStream(join(ROOT, "index.html")).pipe(res);
+    sendFile(req, res, join(ROOT, "index.html"));
     return;
   }
 
@@ -416,8 +456,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (pathname === "/") {
-    res.writeHead(200, { "Content-Type": MIME[".html"] });
-    createReadStream(join(ROOT, "index.html")).pipe(res);
+    sendFile(req, res, join(ROOT, "index.html"));
     return;
   }
 
@@ -426,8 +465,19 @@ const server = createServer(async (req, res) => {
     if (existsSync(withHtml)) pathname += ".html";
   }
 
+  // A prerendered route is a *directory* document: GitHub Pages, Cloudflare
+  // Pages and nginx all answer `/path` with `/path/index.html`. GitHub Pages and
+  // nginx do this by asking the filesystem, not by inspecting the extension —
+  // which matters here, because a gene accession such as
+  // `/genes/Glyma.01G000100` looks like it has the extension `.01G000100`.
+  // Probing the directory after the direct file keeps real assets winning.
   let file = join(ROOT, normalize(pathname).replace(/^\/+/, ""));
   if (!existsSync(file) || statSync(file).isDirectory()) {
+    const directoryIndex = join(file, "index.html");
+    if (existsSync(directoryIndex)) {
+      sendFile(req, res, directoryIndex);
+      return;
+    }
     // SPA fallback: index.html for unknown extensionless routes; real 404 for
     // assets and API paths (mirrors GitHub Pages behaviour).
     //
@@ -443,11 +493,7 @@ const server = createServer(async (req, res) => {
     file = join(ROOT, "index.html");
   }
 
-  const mime = MIME[extname(file)] ?? "application/octet-stream";
-  // Resource Timing needs a body length to report static asset sizes. This is
-  // also what a production static host normally sends for immutable artifacts.
-  res.writeHead(200, { "Content-Type": mime, "Content-Length": statSync(file).size });
-  createReadStream(file).pipe(res);
+  sendFile(req, res, file);
 });
 
 server.listen(PORT, () => {

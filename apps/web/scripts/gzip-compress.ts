@@ -5,8 +5,10 @@
  * Finds all .html, .css, .js, .svg, .json, .xml files in dist/ and
  * creates pre-compressed .gz equivalents alongside them (like `gzip -k`).
  *
- * Web servers (nginx, Caddy, Cloudflare, etc.) can serve these files
- * directly with Content-Encoding: gzip for zero-CPU static delivery.
+ * Web servers (nginx `gzip_static`, Caddy, Cloudflare, etc.) and this repo's
+ * two static preview servers (`e2e/static-server.mjs`,
+ * `scripts/dev/local-preview-server.mjs`) serve these files directly with
+ * `Content-Encoding: gzip` for zero-CPU static delivery.
  *
  * Skips files that already have a newer .gz counterpart and compresses
  * at level 9 (maximum) since build time is not latency-sensitive.
@@ -22,14 +24,19 @@ import { gzipSync } from "node:zlib";
 
 const DIST_DIR = resolve(process.cwd(), process.env.SOYMUTDB_DIST_DIR ?? "dist");
 /**
- * `.gz` siblings are only produced for the container path.
+ * `.gz` siblings are produced for every build path by default.
  *
- * They exist for nginx `gzip_static` (infra/docker/Dockerfile.{web,admin}); the
- * Cloudflare Pages / gh-pages path does not read them and would otherwise ship
- * a second copy of every asset. `build:sites` therefore leaves this unset and
- * the container builds set `SOYMUTDB_EMIT_GZ=1`.
+ * They exist for nginx `gzip_static` (infra/docker/Dockerfile.{web,admin}) and
+ * for the local preview servers, which now answer `Accept-Encoding: gzip` with
+ * the sibling instead of re-compressing per request. A tree that carries them
+ * is therefore correct everywhere it is served from here; the cost is a second
+ * copy of the compressible assets in the published artifact.
+ *
+ * `SOYMUTDB_EMIT_GZ=0` opts out and removes stale siblings, for a target that
+ * compresses on the fly (or for a size-bounded artifact). Any other value, and
+ * the variable being unset, means "emit".
  */
-const EMIT_GZ = process.env.SOYMUTDB_EMIT_GZ === "1";
+const EMIT_GZ = process.env.SOYMUTDB_EMIT_GZ !== "0";
 const COMPRESS_EXTENSIONS = new Set([
     ".html",
     ".css",
@@ -78,13 +85,13 @@ function compress() {
     }
 
     if (!EMIT_GZ) {
-        // Fail-safe for the Pages/gh-pages path: an artifact built earlier on the
-        // container path must not leak its .gz copies into a published tree, and
-        // a stale sw.js.gz would otherwise be picked up by gzip_static later.
+        // Fail-safe for an opted-out tree: an artifact built earlier with .gz
+        // siblings must not leak them into that tree, and a stale sw.js.gz would
+        // otherwise be picked up by gzip_static later.
         const stale = walk(DIST_DIR).filter((filePath) => filePath.endsWith(".gz"));
         for (const filePath of stale) rmSync(filePath, { force: true });
         console.log(
-            `[ssg:compress] SOYMUTDB_EMIT_GZ is not 1 — skipping pre-compression` +
+            `[ssg:compress] SOYMUTDB_EMIT_GZ=0 — skipping pre-compression` +
                 (stale.length > 0 ? ` and removed ${stale.length} stale .gz file(s).` : "."),
         );
         return;

@@ -10,7 +10,9 @@
 import { test, expect } from "@playwright/test";
 import { gotoReady, mockEntityApis, MOCK_PREVIEW_ASSEMBLY, MOCK_GENE_ID, MOCK_RELEASE_ID } from "./helpers";
 
-const BASE = "";
+// Empty for the standard-base sweep; set E2E_BASE_PATH for a
+// sub-path deployment artifact.
+const BASE = (process.env.E2E_BASE_PATH ?? "").replace(/\/+$/, "");
 
 test.describe("genes — form and URL state", () => {
   test("gene ID form restores q from URL", async ({ page }) => {

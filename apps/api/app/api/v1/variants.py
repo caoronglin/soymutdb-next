@@ -9,7 +9,7 @@ from __future__ import annotations
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
@@ -18,6 +18,7 @@ from ...core.public_ids import normalize_public_id
 from ...core.security import RoleName
 from ...core.task_contract import EXPORT_VARIANTS_TASK
 from ...models.auth import User
+from ...models.genomic import Assembly
 from ...models.variant import MutantLine
 from ...models.variant_facts import variant_facts
 from ...schemas.error import ValidationErrorResponse
@@ -25,6 +26,7 @@ from ...schemas.variant import (
     MAX_ASSEMBLY_KEY_LENGTH,
     ConsequenceType,
     ExportDownloadResponse,
+    ExportManifestResponse,
     ExportRequest,
     ExportResponse,
     ExportStatusResponse,
@@ -75,7 +77,7 @@ def _looks_like_public_id(value: str) -> bool:
     candidate = normalize_public_id(value)
     if not candidate.startswith(_PUBLIC_ID_PREFIX):
         return False
-    body = candidate[len(_PUBLIC_ID_PREFIX):]
+    body = candidate[len(_PUBLIC_ID_PREFIX) :]
     if not body:
         return False
     return all(char in _CROCKFORD_BODY for char in body)
@@ -161,23 +163,12 @@ def _export_assembly_scope(
     return candidate
 
 
-async def _assembly_namespace_exists(
+async def _fact_namespace_exists(
     db: AsyncSession,
     release_id: int,
     assembly: str,
 ) -> bool:
-    """Whether the release actually holds variants in this namespace.
-
-    The namespace of a fact is the assembly key it was imported under, which
-    is the assembly's name *or* its version — both vocabularies occur in
-    the data. So the question "does this export have anything to export?"
-    can only be answered by the facts themselves.
-
-    Without this check a misspelled assembly name produces an export that
-    is recorded as ``succeeded`` with zero rows: the record advertises a
-    release/assembly pair that does not exist, and the download is an empty
-    file. A refused request is the honest answer.
-    """
+    """Whether the release holds any variant facts under *assembly* exactly."""
     result = await db.execute(
         select(variant_facts.c.variant_id)
         .where(
@@ -187,6 +178,48 @@ async def _assembly_namespace_exists(
         .limit(1)
     )
     return result.first() is not None
+
+
+async def _resolve_export_namespace(
+    db: AsyncSession,
+    release_id: int,
+    assembly: str,
+) -> str | None:
+    """Return the fact namespace *assembly* names, accepting either label.
+
+    The namespace of a fact is the assembly key it was imported under, which
+    is the assembly's name *or* its version — both vocabularies occur in
+    the data. So the question "does this export have anything to export?"
+    can only be answered by the facts themselves.
+
+    Only an explicit ``assemblies`` row links the two labels. Similar-looking
+    strings are never treated as the same namespace: if the alias is
+    ambiguous the export is refused rather than guessing which coordinate
+    system the caller meant.
+    """
+    if await _fact_namespace_exists(db, release_id, assembly):
+        return assembly
+
+    rows = (
+        await db.execute(
+            select(Assembly.name, Assembly.version).where(
+                or_(Assembly.name == assembly, Assembly.version == assembly)
+            )
+        )
+    ).all()
+    aliases = {version if name == assembly else name for name, version in rows} - {assembly}
+    matches = [
+        alias
+        for alias in sorted(aliases)
+        if alias and await _fact_namespace_exists(db, release_id, alias)
+    ]
+    if len(matches) > 1:
+        raise ValidationError(
+            f"Assembly {assembly!r} matches more than one variant namespace in "
+            "this release. The export was refused: one artifact cannot span "
+            "assembly namespaces."
+        )
+    return matches[0] if matches else None
 
 
 @router.get("", response_model=VariantListResponse)
@@ -227,21 +260,21 @@ async def list_variants(
     requested_public_id = mutant_line_public_id or mutant_line_id
     try:
         params = VariantFilterParams(
-        assembly=assembly,
-        chromosome=chromosome,
-        start=start,
-        end=end,
-        ref=ref,
-        alt=alt,
-        gene_id=gene_id,
-        variant_type=variant_type,
-        consequence=consequence,
-        impact=impact,
-        min_af=min_af,
-        max_af=max_af,
-        cursor=cursor,
-        limit=limit,
-    )
+            assembly=assembly,
+            chromosome=chromosome,
+            start=start,
+            end=end,
+            ref=ref,
+            alt=alt,
+            gene_id=gene_id,
+            variant_type=variant_type,
+            consequence=consequence,
+            impact=impact,
+            min_af=min_af,
+            max_af=max_af,
+            cursor=cursor,
+            limit=limit,
+        )
     except ValueError as exc:
         # An unknown filter value is client input, not a server error.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -260,6 +293,41 @@ async def list_variants(
     )
 
 
+async def _require_known_assembly(
+    db: AsyncSession,
+    release_id: int,
+    assembly: str,
+) -> str:
+    """Return the canonical assembly name, or refuse the request.
+
+    The region endpoint addresses an assembly by name while the rest of the
+    API addresses it by id. Both labels the release knows are accepted -- the
+    assembly's name and its version -- and both resolve to the same
+    namespace, so neither is a second, interchangeable coordinate system.
+    """
+    rows = (
+        await db.execute(
+            select(Assembly.name, Assembly.version).where(
+                # The assembly must belong to the release being read; an
+                # assembly from another release is not "unknown", it is out of
+                # scope, and both deserve a 404 rather than an empty result
+                # set.
+                Assembly.release_id == release_id,
+                or_(Assembly.name == assembly, Assembly.version == assembly),
+            )
+        )
+    ).all()
+    if not rows:
+        raise NotFoundError(f"Assembly {assembly!r} is not available in this release")
+    names = {name for name, _version in rows if name}
+    if len(names) > 1:
+        raise ValidationError(
+            f"Assembly {assembly!r} matches more than one assembly in this release; "
+            "supply the exact assembly name"
+        )
+    return next(iter(names))
+
+
 @router.get("/region", response_model=list[VariantResponse])
 async def get_variants_by_region(
     db: AsyncSession = Depends(get_db),
@@ -273,6 +341,12 @@ async def get_variants_by_region(
     """Query variants in a genomic region (assembly is required)."""
     if end < start:
         raise ValidationError("end must be greater than or equal to start")
+    # An assembly that does not exist in this release must not look like a
+    # region that happens to hold no variants: the sibling endpoints
+    # (`/genes/{id}`, `/chromosomes`, `/region-structure`, `/assemblies/{id}`)
+    # all answer 404 for an unknown assembly, and a silent 200 `[]` here let a
+    # typo or a stale assembly name read as "this assembly has no variants".
+    await _require_known_assembly(db, release_context.release_id, assembly)
     return await service.get_variants_by_region(
         db,
         assembly=assembly,
@@ -294,6 +368,92 @@ async def get_variant(
         variant_id,
         release_context=release_context,
     )
+
+
+async def _submit_export(
+    db: AsyncSession,
+    *,
+    export_request: ExportRequest,
+    release_context: ReleaseContext,
+    current_user: User,
+) -> uuid.UUID:
+    """Record one export request and queue it — the only place that does so.
+
+    Both ``POST /variants/export`` and ``POST /exports/query`` call this.
+    Splitting it (resolving filters here, writing the record and the outbox
+    event at each call site) would be two places where release scoping,
+    assembly resolution, provenance and the command payload could drift
+    apart, and the query builder would quietly gain its own semantics.
+    Returns the new export id; the caller commits.
+    """
+    filters = export_request.filters.model_dump(
+        mode="json",
+        exclude_none=True,
+        exclude={"cursor", "limit", "mutant_line_public_id"},
+    )
+    if export_request.filters.mutant_line_public_id is not None:
+        filters["mutant_line_name"] = await _resolve_mutant_line_name(
+            db,
+            export_request.filters.mutant_line_public_id,
+            release_context=release_context,
+        )
+    filters["release_key"] = release_context.release_key
+    # One namespace per artifact. The effective assembly is written into the
+    # filters the worker receives, so the worker's SQL, the artifact's
+    # provenance and the export record all state the same assembly instead
+    # of the record advertising a namespace the file does not use.
+    assembly_scope = _export_assembly_scope(export_request.filters.assembly, release_context)
+    # An artifact that would contain no rows must not be recorded as a
+    # successful export: the request is refused instead, so the submitter
+    # learns that the namespace is empty rather than downloading an empty
+    # file that claims to be the release's data.
+    #
+    # The request names the public assembly label (usually the name); the
+    # facts may have been imported under the version label. Resolve through
+    # the assemblies row so both labels reach the same namespace, and record
+    # the namespace the artifact is actually built from.
+    resolved_scope = await _resolve_export_namespace(db, release_context.release_id, assembly_scope)
+    if resolved_scope is None:
+        raise ValidationError(
+            f"No variants are published for assembly {assembly_scope!r} in this "
+            "release. The export was refused: an artifact with no rows would "
+            "claim a namespace the release does not have."
+        )
+    assembly_scope = resolved_scope
+    filters["assembly"] = assembly_scope
+
+    export_id = uuid.uuid4()
+    # The export record is the durable, owner-visible state of the request;
+    # it is written in the same transaction as the outbox event, so a
+    # committed request always has both the command and the record.
+    # ``assembly_key`` records the assembly the *artifact* is built from
+    # (the resolved one), not merely the release default, so the status
+    # endpoint cannot advertise a namespace the file does not use.
+    await export_service.create_record(
+        db,
+        export_id=export_id,
+        user_id=current_user.id,
+        release_key=release_context.release_key,
+        assembly_key=assembly_scope,
+        export_format=export_request.format,
+        compress=export_request.compress,
+        filters=filters,
+    )
+    # The dispatcher owns all broker I/O after commit.
+    await enqueue_task_event(
+        db,
+        event_type="variant_export_requested",
+        aggregate_type="variant_export",
+        aggregate_id=str(export_id),
+        task_name=EXPORT_VARIANTS_TASK,
+        kwargs={
+            "export_id": str(export_id),
+            "filters": filters,
+            "format": export_request.format,
+            "compress": export_request.compress,
+        },
+    )
+    return export_id
 
 
 @router.post(
@@ -332,62 +492,11 @@ async def export_variants(
     request with neither is refused. See ``filters.assembly`` for the exact
     rule and its limits.
     """
-    export_id = uuid.uuid4()
-    filters = request.filters.model_dump(
-        mode="json", exclude_none=True, exclude={"cursor", "limit", "mutant_line_public_id"}
-    )
-    if request.filters.mutant_line_public_id is not None:
-        filters["mutant_line_name"] = await _resolve_mutant_line_name(
-            db, request.filters.mutant_line_public_id, release_context=release_context,
-        )
-    filters["release_key"] = release_context.release_key
-    # One namespace per artifact. The effective assembly is written into the
-    # filters the worker receives, so the worker's SQL, the artifact's
-    # provenance and the export record all state the same assembly instead
-    # of the record advertising a namespace the file does not use.
-    assembly_scope = _export_assembly_scope(request.filters.assembly, release_context)
-    # An artifact that would contain no rows must not be recorded as a
-    # successful export: the request is refused instead, so the submitter
-    # learns that the namespace is empty rather than downloading an empty
-    # file that claims to be the release's data.
-    if not await _assembly_namespace_exists(
-        db, release_context.release_id, assembly_scope
-    ):
-        raise ValidationError(
-            f"No variants are published for assembly {assembly_scope!r} in this "
-            "release. The export was refused: an artifact with no rows would "
-            "claim a namespace the release does not have."
-        )
-    filters["assembly"] = assembly_scope
-    # The export record is the durable, owner-visible state of the request;
-    # it is written in the same transaction as the outbox event, so a
-    # committed request always has both the command and the record.
-    # ``assembly_key`` records the assembly the *artifact* is built from
-    # (the resolved one), not merely the release default, so the status
-    # endpoint cannot advertise a namespace the file does not use.
-    await export_service.create_record(
+    export_id = await _submit_export(
         db,
-        export_id=export_id,
-        user_id=current_user.id,
-        release_key=release_context.release_key,
-        assembly_key=assembly_scope,
-        export_format=request.format,
-        compress=request.compress,
-        filters=filters,
-    )
-    # The dispatcher owns all broker I/O after commit.
-    await enqueue_task_event(
-        db,
-        event_type="variant_export_requested",
-        aggregate_type="variant_export",
-        aggregate_id=str(export_id),
-        task_name=EXPORT_VARIANTS_TASK,
-        kwargs={
-            "export_id": str(export_id),
-            "filters": filters,
-            "format": request.format,
-            "compress": request.compress,
-        },
+        export_request=request,
+        release_context=release_context,
+        current_user=current_user,
     )
     await db.commit()
 
@@ -408,6 +517,44 @@ async def get_variant_export_status(
     """Return the state of one export (submitter or administrator only)."""
     _private(response)
     return await export_service.get_status(
+        db,
+        export_id,
+        user_id=current_user.id,
+        user_roles=get_user_roles(current_user),
+    )
+
+
+@router.get(
+    "/export/{export_id}/manifest",
+    response_model=ExportManifestResponse,
+    # Same reason as ``/exports/query``: a 422 declared here is the one
+    # ``_build_openapi_schema`` retypes to ``ValidationErrorResponse``; without
+    # it the operation publishes FastAPI's ``HTTPValidationError`` and the
+    # generated client types a body the handler never sends.
+    responses={
+        422: {
+            "model": ValidationErrorResponse,
+            "description": (
+                "Validation Error. The path parameter is not a well-formed "
+                "export identifier; the response carries the unified envelope "
+                "with field-level ``errors``."
+            ),
+        }
+    },
+)
+async def get_variant_export_manifest(
+    export_id: uuid.UUID,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(RoleName.RESEARCHER)),
+) -> ExportManifestResponse:
+    """Return citable provenance for one export (submitter or administrator).
+
+    A legacy artifact with no checksum is reported with ``sha256: null`` and
+    ``sha256_state='not_recorded'``; the response never invents a digest.
+    """
+    _private(response)
+    return await export_service.get_manifest(
         db,
         export_id,
         user_id=current_user.id,

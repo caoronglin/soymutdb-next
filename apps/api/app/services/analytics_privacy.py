@@ -61,19 +61,20 @@ _STATIC_PAGE_TEMPLATES: tuple[str, ...] = (
     "/",
     "/about",
     "/analytics",
-    "/analyses",
-    "/analyses/fastp",
-    "/analyses/scanpy",
+    "/assemblies",
     "/blast",
     "/browser",
+    "/comparative",
     "/compare",
     "/downloads",
+    "/expression",
     "/genes",
     "/guide",
     "/help",
     "/login",
     "/mutants",
     "/news",
+    "/phenotypes",
     "/publications",
     "/search",
     "/search/blast",
@@ -85,19 +86,26 @@ _STATIC_PAGE_TEMPLATES: tuple[str, ...] = (
     "/seed-request",
     "/sra",
     "/tools",
+    "/tools/allelefreq",
+    "/tools/diversity",
     "/tools/enrichment",
     "/tools/exppattern",
+    "/tools/ld",
     "/tools/seqfetch",
+    "/tools/sequence",
     "/variants",
 )
 
 #: Parameter names are fixed and match the router; a template segment never
 #: accepts a caller-chosen parameter name.
 _DYNAMIC_PAGE_TEMPLATES: tuple[str, ...] = (
-    "/analyses/:jobId",
+    "/assemblies/:assemblyId",
+    "/comparative/:familyId",
+    "/expression/:sampleId",
     "/genes/:geneId",
     "/mutants/:publicId",
     "/news/:slug",
+    "/phenotypes/:lineId",
 )
 
 CANONICAL_PAGE_TEMPLATES: frozenset[str] = frozenset(_STATIC_PAGE_TEMPLATES) | frozenset(

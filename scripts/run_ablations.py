@@ -46,6 +46,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# The allowlist's first pattern exempts strings made only of punctuation and
+# digits. `\W` also matches every CJK code point, so the bare form silently
+# exempted all Chinese copy; the shipped form excludes CJK explicitly.
+CJK_PATTERN_LINE = '    "^(?![\\\\s\\\\S]*[\\\\u3400-\\\\u4dbf\\\\u4e00-\\\\u9fff\\\\uf900-\\\\ufaff])[\\\\W\\\\d_]+$",'
+ORIGINAL_PATTERN_LINE = '    "^[\\\\W\\\\d_]+$",'
+
 # The host cannot sustain many concurrent CPU-heavy processes (argon2 and ruff both
 # fail with thread-creation errors under load), so every subprocess here is pinned to
 # one thread and the runner is strictly serial.
@@ -228,6 +234,18 @@ SCENARIOS: list[Scenario] = [
         layer="source-guard",
         path=Path("scripts/check_visible_i18n_react.mjs"),
         mutate='const VISIBLE_ATTRIBUTES = new Set([\n  "alt",\n||const VISIBLE_ATTRIBUTES = new Set([\n',
+        control=["node", "scripts/test_visible_i18n_react_guard.mjs"],
+        mutant=["node", "scripts/test_visible_i18n_react_guard.mjs"],
+    ),
+    Scenario(
+        id="A-06",
+        requirement="中文可见文案必须被报出（CJK 字符集豁免的扫描盲区）",
+        entry="scripts/visible-i18n-allowlist.json :: patterns[0]",
+        protection="允许列表的标点/数字豁免不得吞掉 CJK 文案",
+        layer="source-guard",
+        path=Path("scripts/visible-i18n-allowlist.json"),
+        # CJK-aware pattern -> the original punctuation-only pattern.
+        mutate=CJK_PATTERN_LINE + "\n||" + ORIGINAL_PATTERN_LINE + "\n",
         control=["node", "scripts/test_visible_i18n_react_guard.mjs"],
         mutant=["node", "scripts/test_visible_i18n_react_guard.mjs"],
     ),

@@ -21,6 +21,12 @@ from .footer_content import (
     FooterContentValidationError,
     validate_footer_setting,
 )
+from .header_navigation import (
+    DEFAULT_HEADER_NAVIGATION_JSON,
+    MAX_HEADER_NAVIGATION_BYTES,
+    HeaderContentValidationError,
+    validate_header_setting,
+)
 from .site_variant import SITE_VARIANT_BASE_SECTIONS, SITE_VARIANTS, SiteVariant, variant_section
 
 
@@ -49,7 +55,15 @@ class SettingRedaction(StrEnum):
     OMIT = "omit"
 
 
-type SettingDefault = str | int | bool | None
+#: Spelled without ``type`` on purpose. The value is serialised straight into
+#: ``SettingFieldSchema.default`` (see ``/admin/settings/schema``), so it must
+#: stay byte-identical to that field's inline union
+#: (``str | int | bool | None``). A PEP 695 ``type`` alias is a referenceable
+#: object: pydantic hoists it into ``components/schemas`` and emits ``$ref``, and
+#: the OpenAPI normaliser then deletes the component -- which is how 8 dangling
+#: ``$ref``s reached the generated client. Two spellings of one union in the same
+#: response is the drift this exists to prevent.
+SettingDefault = str | int | bool | None
 
 
 @dataclass(frozen=True)
@@ -89,7 +103,14 @@ def _definition(
     hot_reload: bool,
     redaction: SettingRedaction,
     requires_approval: bool,
-    **kwargs: object,
+    # Named instead of `**kwargs: object`: the pass-through form erases every
+    # option's type, so each of the nine constructions above reported an
+    # argument-type error against the dataclass it was building.
+    allowed_values: frozenset[str] = frozenset(),
+    allowed_url_hosts: frozenset[str] = frozenset(),
+    minimum: int | None = None,
+    maximum: int | None = None,
+    max_length: int = 10_000,
 ) -> SettingDefinition:
     return SettingDefinition(
         section=section,
@@ -101,11 +122,18 @@ def _definition(
         hot_reload=hot_reload,
         redaction=redaction,
         requires_approval=requires_approval,
-        **kwargs,
+        allowed_values=allowed_values,
+        allowed_url_hosts=allowed_url_hosts,
+        minimum=minimum,
+        maximum=maximum,
+        max_length=max_length,
     )
 
 
-_DEFINITIONS = (
+# Annotated as an open tuple: this constant is extended in three later
+# reassignments, and letting the checker infer a fixed-length tuple made every
+# extension a spurious type error whose message printed all 175 elements.
+_DEFINITIONS: tuple[SettingDefinition, ...] = (
     _definition(
         "general",
         "siteName",
@@ -127,6 +155,18 @@ _DEFINITIONS = (
         redaction=SettingRedaction.NONE,
         requires_approval=False,
         max_length=2_000,
+    ),
+    _definition(
+        "general",
+        "databaseKind",
+        SettingKind.ENUM,
+        default="genome",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        allowed_values=frozenset({"genome", "gene_ontology", "transcription_factor"}),
     ),
     _definition(
         "general",
@@ -164,12 +204,19 @@ _DEFINITIONS = (
         requires_approval=False,
         max_length=7,
     ),
-    # Footer contact block — editable by admins at runtime and served to
-    # the public site footer via GET /site/footer.
+    # Footer contact block — editable by admins at runtime and served to the
+    # public site footer via GET /site/footer.
+    #
+    # The defaults are empty on purpose. A contact block is one deployment's
+    # operational detail (a person's name, a phone number, a mailbox, a street
+    # address); shipping one in the source would publish that person's details
+    # from every checkout, and a fork would inherit them. An empty value renders
+    # no line at all, so a fresh install shows the brand and the copyright and
+    # the operator fills in what they want to publish.
     _definition(
         "footer",
         "contact_person",
-        default="联系人: 周玲",
+        default="",
         permission=SettingPermission.ADMINISTRATOR,
         scope=SettingScope.GLOBAL,
         hot_reload=True,
@@ -180,7 +227,7 @@ _DEFINITIONS = (
     _definition(
         "footer",
         "contact_phone",
-        default="电话: 025-84391957",
+        default="",
         permission=SettingPermission.ADMINISTRATOR,
         scope=SettingScope.GLOBAL,
         hot_reload=True,
@@ -191,7 +238,7 @@ _DEFINITIONS = (
     _definition(
         "footer",
         "contact_email",
-        default="电子邮件: zlingxiaoyao@163.com",
+        default="",
         permission=SettingPermission.ADMINISTRATOR,
         scope=SettingScope.GLOBAL,
         hot_reload=True,
@@ -213,7 +260,7 @@ _DEFINITIONS = (
     _definition(
         "footer",
         "address",
-        default="地址: 南京市玄武区钟灵街50号 邮编210014",
+        default="",
         permission=SettingPermission.ADMINISTRATOR,
         scope=SettingScope.GLOBAL,
         hot_reload=True,
@@ -320,6 +367,17 @@ _DEFINITIONS = (
         redaction=SettingRedaction.NONE,
         requires_approval=False,
         max_length=MAX_FOOTER_NAVIGATION_BYTES,
+    ),
+    _definition(
+        "header",
+        "navigation_json",
+        default=DEFAULT_HEADER_NAVIGATION_JSON,
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=MAX_HEADER_NAVIGATION_BYTES,
     ),
     _definition(
         "about",
@@ -913,40 +971,6 @@ _DEFINITIONS = (
     ),
     _definition(
         "content",
-        "tool.primer.label",
-        default="Primer Design",
-        permission=SettingPermission.ADMINISTRATOR,
-        scope=SettingScope.GLOBAL,
-        hot_reload=True,
-        redaction=SettingRedaction.NONE,
-        requires_approval=False,
-        max_length=512,
-    ),
-    _definition(
-        "content",
-        "tool.primer.desc",
-        default="Design and check PCR primers",
-        permission=SettingPermission.ADMINISTRATOR,
-        scope=SettingScope.GLOBAL,
-        hot_reload=True,
-        redaction=SettingRedaction.NONE,
-        requires_approval=False,
-        max_length=512,
-    ),
-    _definition(
-        "content",
-        "tool.primer.image",
-        default="",
-        permission=SettingPermission.ADMINISTRATOR,
-        scope=SettingScope.GLOBAL,
-        hot_reload=True,
-        redaction=SettingRedaction.NONE,
-        requires_approval=False,
-        max_length=2_048,
-    ),
-    # Gene-ID and physical-location search pages.
-    _definition(
-        "content",
         "search.genes.title",
         default="Gene ID Search",
         permission=SettingPermission.ADMINISTRATOR,
@@ -1022,7 +1046,87 @@ _DEFINITIONS = (
         requires_approval=False,
         max_length=256,
     ),
+    _definition(
+        "content",
+        "search.tabGenes",
+        default="Gene ID",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=256,
+    ),
+    _definition(
+        "content",
+        "search.tabLocation",
+        default="Physical Location",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=256,
+    ),
+    _definition(
+        "content",
+        "search.tabGbrowse",
+        default="JBrowse 2",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=256,
+    ),
+    _definition(
+        "content",
+        "tools.seqfetch.title",
+        default="Sequence Fetch",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=256,
+    ),
+    _definition(
+        "content",
+        "tools.enrichment.title",
+        default="GO / KEGG Enrichment",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=256,
+    ),
+    _definition(
+        "content",
+        "tools.exppattern.title",
+        default="Expression Pattern",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=256,
+    ),
     # BLAST form + results table headers.
+    _definition(
+        "content",
+        "blastPublic.subtitle",
+        default=(
+            "Run one protein search without creating an account. "
+            "Keep this tab open while your result is processed."
+        ),
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=512,
+    ),
     _definition(
         "content",
         "blast.searchType",
@@ -1038,28 +1142,6 @@ _DEFINITIONS = (
         "content",
         "blast.database",
         default="Reference sequence type",
-        permission=SettingPermission.ADMINISTRATOR,
-        scope=SettingScope.GLOBAL,
-        hot_reload=True,
-        redaction=SettingRedaction.NONE,
-        requires_approval=False,
-        max_length=256,
-    ),
-    _definition(
-        "content",
-        "blast.input",
-        default="Input Sequence",
-        permission=SettingPermission.ADMINISTRATOR,
-        scope=SettingScope.GLOBAL,
-        hot_reload=True,
-        redaction=SettingRedaction.NONE,
-        requires_approval=False,
-        max_length=256,
-    ),
-    _definition(
-        "content",
-        "blast.inputSequence",
-        default="Input Sequence",
         permission=SettingPermission.ADMINISTRATOR,
         scope=SettingScope.GLOBAL,
         hot_reload=True,
@@ -1491,8 +1573,30 @@ _DEFINITIONS = (
     ),
     _definition(
         "content",
-        "nav.analyses",
-        default="Analyze",
+        "nav.comparative",
+        default="Comparative",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=256,
+    ),
+    _definition(
+        "content",
+        "nav.expression",
+        default="Expression",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=256,
+    ),
+    _definition(
+        "content",
+        "nav.phenotypes",
+        default="Phenotypes",
         permission=SettingPermission.ADMINISTRATOR,
         scope=SettingScope.GLOBAL,
         hot_reload=True,
@@ -1570,72 +1674,6 @@ _DEFINITIONS = (
         "content",
         "nav.about",
         default="About",
-        permission=SettingPermission.ADMINISTRATOR,
-        scope=SettingScope.GLOBAL,
-        hot_reload=True,
-        redaction=SettingRedaction.NONE,
-        requires_approval=False,
-        max_length=256,
-    ),
-    _definition(
-        "content",
-        "common.loading",
-        default="Loading...",
-        permission=SettingPermission.ADMINISTRATOR,
-        scope=SettingScope.GLOBAL,
-        hot_reload=True,
-        redaction=SettingRedaction.NONE,
-        requires_approval=False,
-        max_length=256,
-    ),
-    _definition(
-        "content",
-        "common.retry",
-        default="Retry",
-        permission=SettingPermission.ADMINISTRATOR,
-        scope=SettingScope.GLOBAL,
-        hot_reload=True,
-        redaction=SettingRedaction.NONE,
-        requires_approval=False,
-        max_length=256,
-    ),
-    _definition(
-        "content",
-        "common.submit",
-        default="Submit",
-        permission=SettingPermission.ADMINISTRATOR,
-        scope=SettingScope.GLOBAL,
-        hot_reload=True,
-        redaction=SettingRedaction.NONE,
-        requires_approval=False,
-        max_length=256,
-    ),
-    _definition(
-        "content",
-        "common.clear",
-        default="Clear",
-        permission=SettingPermission.ADMINISTRATOR,
-        scope=SettingScope.GLOBAL,
-        hot_reload=True,
-        redaction=SettingRedaction.NONE,
-        requires_approval=False,
-        max_length=256,
-    ),
-    _definition(
-        "content",
-        "common.reset",
-        default="Reset",
-        permission=SettingPermission.ADMINISTRATOR,
-        scope=SettingScope.GLOBAL,
-        hot_reload=True,
-        redaction=SettingRedaction.NONE,
-        requires_approval=False,
-        max_length=256,
-    ),
-    _definition(
-        "content",
-        "common.error",
-        default="Error",
         permission=SettingPermission.ADMINISTRATOR,
         scope=SettingScope.GLOBAL,
         hot_reload=True,
@@ -1825,6 +1863,39 @@ _PORTAL_CONSUMED_CONTENT_DEFINITIONS = (
         "content",
         "downloads.download",
         default="Download",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=256,
+    ),
+    _definition(
+        "content",
+        "downloads.checksum",
+        default="Checksum",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=256,
+    ),
+    _definition(
+        "content",
+        "downloads.generatedAt",
+        default="Generated",
+        permission=SettingPermission.ADMINISTRATOR,
+        scope=SettingScope.GLOBAL,
+        hot_reload=True,
+        redaction=SettingRedaction.NONE,
+        requires_approval=False,
+        max_length=256,
+    ),
+    _definition(
+        "content",
+        "downloads.license",
+        default="License",
         permission=SettingPermission.ADMINISTRATOR,
         scope=SettingScope.GLOBAL,
         hot_reload=True,
@@ -2251,7 +2322,10 @@ def validate_setting_update(section: str, key: str, value: object) -> str:
         if isinstance(value, bool):
             raise SettingValidationError(f"Setting '{definition.full_key}' must be an integer")
         try:
-            parsed = int(value)  # type: ignore[arg-type]
+            # `value` is the raw stored payload; the integer branch is the only
+            # place that accepts it, and a non-integral object must be a
+            # validation error rather than a TypeError escaping to the caller.
+            parsed = int(str(value)) if not isinstance(value, (int, float)) else int(value)
         except (TypeError, ValueError) as exc:
             raise SettingValidationError(
                 f"Setting '{definition.full_key}' must be an integer"
@@ -2273,6 +2347,13 @@ def validate_setting_update(section: str, key: str, value: object) -> str:
         try:
             return validate_footer_setting(key, string_value)
         except FooterContentValidationError as exc:
+            raise SettingValidationError(
+                f"Setting '{definition.full_key}' is invalid: {exc}"
+            ) from exc
+    if definition.section in {"header", "header_external", "header_internal"}:
+        try:
+            return validate_header_setting(key, string_value)
+        except HeaderContentValidationError as exc:
             raise SettingValidationError(
                 f"Setting '{definition.full_key}' is invalid: {exc}"
             ) from exc

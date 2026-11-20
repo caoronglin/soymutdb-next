@@ -1,0 +1,428 @@
+# Contracts-layer registry / collection contract
+
+## What is pinned
+
+`scripts/smoke.sh` wires the contracts layer through two independent
+mechanisms, both inside `smoke_contracts()`:
+
+1. `local tests=( ... )` — a literal array of paths handed to
+   `"${PYTHON_BIN}" -m pytest "${tests[@]}" -q`.
+2. A floor of standalone guards invoked as
+   `"${PYTHON_BIN}" scripts/check_*.py ... || rc=$?`.
+
+`scripts/check_contracts_registry_collection.py` reads both from the
+committed `smoke.sh` bytes and asserts:
+
+- every array entry exists, parses, and defines at least one collectible test;
+- every active array row is a **bare path** (no flags/arguments),
+  because the array is expanded verbatim into the ``pytest`` argv;
+- no array entry is duplicated;
+- the pinned standalone guard calls are still present, and no wired call
+  sits outside `REQUIRED_GUARD_CALLS`;
+- every called guard still exists on disk;
+- the driver-level invocation registers its failure in `FAILED`, so a failing
+  guard cannot print `SMOKE PASS` (see below).
+
+## Why
+
+A registered path that pytest collects **zero** tests from is silently
+ignored. The layer still prints `SMOKE PASS` with an unchanged collected
+count, so a hand-merge that keeps a bogus entry, a rename that turns a suite
+into a non-test module, or a stale path looks exactly like a healthy gate.
+This is the same "registered but not collected" shape seen in hardcoded
+counts, `Ran 0 tests, OK`, and the interval-visibility guard's two wiring
+slots — where the `tests[]` entry conflicts visibly but the standalone call
+can be dropped without any conflict marker.
+
+Demonstrated on the tree that would actually land (`main + #150`): adding a
+registry entry whose module defines no `test_*` leaves
+`SMOKE PASS / 427 passed / 0 failed`. The guard reports it by name.
+
+## The driver must not swallow the guard
+
+`smoke.sh` sets `set -uo pipefail` and decides its exit status from the
+`FAILED` array, not from a top-level `rc`. A driver-level call ending in
+`|| rc=$?` therefore prints the guard's diagnostics but still exits 0 with
+`SMOKE PASS` -- the exact silent no-op this guard exists to prevent. The
+driver registers the failure in `FAILED` instead, and the guard's
+`--self-test` includes a mutation that restores `|| rc=$?` and asserts it is
+caught.
+
+## The CI entry point and its ordering
+
+`ci-job-steps.sh`'s `smoke_contracts_run()` invokes the guard with
+`--self-test` before running `bash smoke.sh --profile contracts`. That line is
+a third wiring slot: a `keep one side` hand-merge of the add/add conflict in
+this function can drop it while the local `smoke.sh` dispatch stays intact --
+and a validator that reads only `smoke.sh` cannot see it. The guard therefore
+reads `ci-job-steps.sh` too and requires the invocation inside that function
+body.
+
+The line must use `python3`, the exact guard path and `--self-test`, it must
+appear **before** the `bash smoke.sh` call -- otherwise the layer would already
+have run by the time the gate fires -- and it must be a bare statement, not
+merely a substring of one. If that `bash smoke.sh` call disappears or is
+renamed, the ordering assertion has no reference point, so the guard fails
+closed rather than silently skipping it. Those are separate properties, and a
+pin that reads bytes instead of shell semantics has failed on each of them in
+turn:
+
+| Shape | What a substring pin sees | What bash does |
+| --- | --- | --- |
+| `... --self-test` | the invocation | gates the layer |
+| `... --self-test \|\| true` | the invocation | discards the status |
+| `... --self-test 2>/dev/null` | the invocation | discards the output, keeps the status |
+| `... --self-test \| tail -1` | the invocation | reports `tail`'s status |
+| `... --self-test  # note` | the invocation | fine, but a stale-looking line |
+| `dead() { ...; }` | the invocation | never runs |
+| `if false; then ...; fi` | the invocation | never runs |
+| `( ... ) &` | the invocation | runs detached, status dropped |
+
+The pin is therefore anchored to the whole line -- an end anchor with no
+`re.MULTILINE` alternative, so any trailing operator, redirection, comment or
+wrapper stops matching and is reported rather than accepted. Indentation is
+read structurally instead of by width: re-indenting the function body moves
+every line and is accepted, while a line sitting a level deeper than the
+statement before it is inside a compound command and is reported. The mix of
+tabs and spaces in this repository is why width alone cannot decide.
+
+`--self-test` carries ten mutations for this shape alone: five trailing
+operators, four dead-command wrappers and one duplicate, plus four indentation
+variants that must be reported and the uniform re-indent that must stay green.
+
+The **layer call** is pinned the same way. `ci_wiring_errors()` uses the
+`bash .../smoke.sh` line as the ordering reference, but a reference is not a
+gate: appending `|| true`, `2>/dev/null`, `| tail -1` or a trailing comment
+keeps the line present and its position unchanged while `set -e` sees success
+even when the layer prints `SMOKE FAIL`. `CI_LAYER_BARE` requires that line to
+be a standalone statement too; `--self-test` injects five such neutralisations
+and asserts each is reported by name. Without it the only signal was an
+`AssertionError` from the self-test's own literal-line lookup -- a crash, not a
+named failure.
+
+An independent second door lives in `scripts/test_ci_job_contracts.py`:
+`ContractsRegistryWiringTests` reads the committed bytes of both entry points
+directly. Deleting the CI-side `--self-test` line used to leave the whole
+collected contracts suite green (95 passed), because no assertion in that file
+named the guard. Those three checks stay red even if this guard is edited to
+lie about itself.
+
+The regression suite **is** a collected `tests=()` row (see "The companion
+suite is a collected row" below). An earlier rationale kept it out on the
+grounds that "the guard's `--self-test` already provides the mutation
+coverage"; that was wrong in the one direction that matters: the self-test
+*emits* the pin evidence, but nothing *read* the output. The door reads the
+same slice the guard reads — `smoke_contracts()` up to `environment_bound=(`
+— and requires an active bare row there. A whole-file search is satisfied by
+a row parked in the non-gating `environment_bound=()` array, where the
+companion's red is reported but cannot turn the layer red.
+
+## The companion suite is a collected row
+
+`scripts/test_contracts_registry_collection.py` — the guard's own regression
+suite — **is** a row in `smoke.sh`'s `tests=()`, pinned in `PINNED_SUITES`
+like any other. Measured on live `main` before this landed (`ebfa4c5f`),
+weakening the dedicated "fails for the pin alone" report from
+`len(unpinned_found) == 1 and "not pinned in PINNED_SUITES" in
+unpinned_found[0]` to a bare `any("not pinned in PINNED_SUITES" in f for f in
+unpinned_found)` left four doors green: `--self-test` `46 cases, 0
+failure(s)`, plain `OK (59 gating suites, 32 guard calls)`, teeth `OK (20
+wired guards probed)`, and `smoke.sh --profile contracts` **SMOKE PASS**. The
+guard is not in the teeth guard's `_WIRED_SELF_TESTS` (its success signature
+says `cases`, not `mutations`), and the companion was not collected, so no
+wired reader could turn red: the evidence chain was one file deep.
+
+Two things were fixed together, and neither alone is enough:
+
+1. **The row**, so the existing assertion actually runs. With the string
+   weakened, `test_the_unpinned_probe_fails_for_the_pin_only` now fails and
+   the whole layer reports `SMOKE FAIL`.
+2. **The second door**, so the row cannot be retired quietly. Deleting the row
+   and its `PINNED_SUITES` entry in one commit is self-consistent for this
+   guard — `PINNED_SUITES == set(registry())` compares two sides that move
+   together, so it prints `OK`. The independent door goes red.
+
+### The row must be in the gating array, not just anywhere in `smoke.sh`
+
+`smoke_contracts()` has two arrays: `tests=()` (handed to the gating pytest
+call, whose result decides `SMOKE PASS`/`SMOKE FAIL`) and
+`environment_bound=()` (reported separately, explicitly "not gating here").
+A second door that searches the whole file for the companion path — even with
+a "bare active path" regex — is satisfied by a row parked in
+`environment_bound=()`, where pytest still runs it but its failure cannot
+redden the layer. Measured on the #292 head (`67a91ec2`): move the row from
+`tests=()` to `environment_bound=()`, drop its `PINNED_SUITES` entry so the
+guard stays self-consistent, and weaken the dedicated report to `any(...)`:
+
+| Gate | Reading |
+| --- | --- |
+| guard plain / `--self-test` | `OK (59 gating suites, 32 guard calls)` / `46 cases, 0 failure(s)` |
+| `check_contracts_self_test_teeth.py` | `OK (20 wired guards probed)` |
+| second door (whole-file search) | green |
+| `smoke.sh --profile contracts` | **SMOKE PASS** (companion's red is reported, not gating) |
+
+So the door must read the same slice the guard reads: the body of
+`smoke_contracts()` up to `environment_bound=(`, and assert the companion is
+an **active bare path** inside `tests=()` there.
+`test_registry_companion_row_must_be_in_the_gating_array` plants the
+`environment_bound` shape as a regression against the real reader.
+
+## A tests=() row must be a bare path
+
+``registry()`` matches a row with ``ARRAY_ENTRY``, which ends at ``.py``. A
+row such as ``scripts/check_x.py --self-test`` therefore does not match and is
+silently skipped -- but it is still a real element of the array, and
+``"${PYTHON_BIN}" -m pytest "${tests[@]}" -q`` passes it verbatim to pytest.
+pytest rejects the unknown flag with ``unrecognized arguments`` and **exit 4**,
+before collecting a single suite: the entire contracts layer is unrunnable,
+and the only diagnostic is a bare pytest usage error that names neither the
+array nor the row.
+
+This is not hypothetical. PR #175 planted exactly such a row
+(``scripts/check_mcp_release_binding.py --self-test``) in ``tests=()``; PR
+#184 moved it out to the standalone-guard floor. On the tree between those two
+landings, ``smoke.sh --profile contracts`` died at collection and the guard
+still reported ``OK (41 gating suites ... wired)`` -- the row was invisible to
+the very guard that exists to keep the array honest.
+
+``array_line_errors()`` re-reads the same array slice and full-matches every
+active, non-comment row against ``ARRAY_LINE`` (a lone path). ``--self-test``
+replays the #175 shape and a pytest-flag variant, asserting each is reported
+by name. A clean array stays green; a uniformly re-indented or commented row
+is still accepted. The regression file covers the same two directions with
+synthetic smoke text.
+
+## Boundary
+
+The guard is a **static** proxy, not a pytest subprocess. It recognises
+module-level `def test_*` and `unittest.TestCase` methods via `ast`. pytest's
+real discovery also handles fixtures, parametrization, dynamic collection
+hooks and `pytest_collect_file`; a suite relying on those would need a
+different assertion. It deliberately does not enumerate every
+`scripts/test_*.py` on disk: 16 such files are owned by other gates
+(frontend, bio-core, backend) and are intentionally absent from this array.
+One-to-one *set equality* would therefore be wrong; the pinned direction is
+"everything registered must really collect something".
+
+`REQUIRED_GUARD_CALLS` is pinned to exactly the set of standalone calls in
+`smoke_contracts()`: `check()` reports both a wired call missing from the set
+and a set member no longer wired. This is deliberate. A guard added to the
+layer without being pinned here can be dropped later with a green `SMOKE PASS`
+-- its only wiring probe may live inside the very call that was dropped, as
+with the inline-body guard. `--self-test` plants an unpinned addition and
+asserts it fails **for the pin alone** (exactly one failure naming
+`PINNED_SUITES`): a generic "was caught" check also passes when the
+plant is dropped, because the missing-file error fires first. A control
+shows a same-change pin stays green.
+Retire a call and remove its pin in the same commit; set-equality fails
+closed on drift in either direction.
+
+The `--self-test` summary is counted from the result lines it actually emits,
+not from a hardcoded `len(cases) + N`: that constant drifts the moment a probe
+is added and would report a case count nothing ran. A regression pins reported
+== emitted against the committed tree.
+
+Counting emitted results is honest but not sufficient. A `cases[:8]` edit
+shrinks the declared count *and* the per-case lines together, so
+`reported == emitted` still holds, the guard's own `OK` plain run never reads
+the self-test output, and the teeth guard does not audit this guard at all
+(its `--self-test` is wired in `ci-job-steps.sh`, not `smoke.sh`, and its
+success signature says `cases`, not `mutations`). Measured on live
+`9a7c3e52`: slicing the loop to 8 printed `33 cases, 0 failure(s)` while the
+plain guard, `check_contracts_self_test_teeth.py`, the companion suite and
+`smoke.sh --profile contracts` all stayed green.
+
+Two independent reviewed literals close it, both at **46**:
+
+- `_REVIEWED_CASE_FLOOR` in the guard holds its own emitted count before the
+  summary is printed, so the guard names a shrunken loop itself;
+- `_EXPECTED_SELF_TEST_CASES` in the collected companion
+  (`scripts/test_contracts_registry_collection.py`) runs the real
+  `self_test()`, asserts `reported == emitted >= floor`, and pins that the
+  guard's literal has not drifted. The companion is the second file, so a
+  one-file edit that weakens the guard cannot move the floor with it.
+
+A third companion test pins the loop shape (`for ... in cases:` with no
+slice) via AST, and a decisive A/B ablation proves both limbs: with the floor
+itself gutted the shrunken loop is a clean-looking `0 failure(s)` short run,
+and with the floor intact the same bytes go red naming the reviewed floor.
+Raise **both** literals in one reviewed commit when a case is added, and say
+why. This is the same genus as the per-case floor in
+`check_contracts_self_test_teeth.py`, applied to the one guard that floor
+deliberately excludes.
+
+Every wiring match starts at the command itself, never at a `#`: a
+commented-out line still contains the right text and passes `bash -n`, but
+executes nothing. The standalone `${PYTHON_BIN}` guard calls and the
+driver-level dispatch are anchored to the start of a line, and
+`driver_propagates()` skips comment lines. `--self-test` injects a
+commented-out variant for each of the three slots (CI `--self-test` line,
+standalone guard call, driver dispatch) and asserts the guard reports it.
+
+## The next cell: auditing the whole set, not just each row
+
+`#192` made every active `tests=()` row full-match a bare path. That fixed
+"the row is wrong". It did **not** fix "a row is gone": `registry()` is an
+*extractor*, so deleting a suite lowers both the input and the output. An
+equality such as `active_rows == len(registry())` is therefore **redundant**
+(the bare-row check already rejects every non-bare active row) and **green on
+deletion** (both sides drop together) -- the same co-reversion shape a
+consistency check cannot see.
+
+Measured on live `main` with the guard still printing
+`OK (46 gating suites, 19 guard calls)` and `SMOKE PASS`:
+
+| Drift | What the layer actually did |
+| --- | --- |
+| delete a `tests=()` row | `45 gating suites`, `SMOKE PASS`, 8 tests gone |
+| `-k "not interval"` on the gating pytest line | `718 passed, 8 deselected`, `SMOKE PASS` |
+| delete the whole gating pytest line | `SMOKE PASS`, zero gating suites collected |
+
+Two controls matter. `>/dev/null` on a **standalone** guard call does **not**
+drop it: `GUARD_CALL`'s `[^|]*?` tolerates internal redirection and
+`|| rc=$?` still propagates the exit status -- diagnostics are swallowed, the
+gate is live. And `--ignore=<path>` does **not** deselect an explicitly listed
+argv path: pytest still collects that suite. `--ignore` is rejected here only
+as a deviation from the reviewed bare form, not because it deselects anything.
+The standalone guard calls themselves are already fully pinned on live `main`
+(`REQUIRED_GUARD_CALLS` covers all 19, plus an assertion that any newly wired
+call must be pinned in the same change), so that half of the original report
+is closed.
+
+The fix is two independent pins, reached through `wiring_errors()` so the
+synthetic unit-test fixtures keep calling the extraction-only `check()`:
+
+- `PINNED_SUITES`: a literal frozenset of the committed set, compared against
+  what was extracted. A fixed point must not be derived from the bytes it
+  audits. It is an **allowlist, not a floor**: adding a suite pins it in the
+  same change, retiring one removes its entry.
+
+  The distinction is not cosmetic. `REQUIRED_GUARD_CALLS` is a floor because
+  `check()` independently fails closed on a wired call it does not name, so an
+  addition is caught by the other half. Rows have no such second half:
+  `tests=()` is exactly the bytes under audit. Measured on live `main` on
+  2026-11-05, three rows had landed after the literal was written -- `#228`'s
+  fallback-declaration suite, `#232`'s error-code contract suite and
+  `#231`'s operationId floor suite. Deleting any one of them left
+  `OK (48 gating suites, 22 guard calls, CI --self-test wired)` with exit
+  status 0, while the control row `test_error_code_doc_counts.py` was named.
+  A floor protects the set it measured and nothing that arrives later.
+- `GATING_PYTEST`: the gating pytest invocation must be exactly one bare
+  statement. This is the `CI_LAYER_BARE` shape brought one layer down; pinning
+  the reviewed form catches `-k`, `--deselect`, `--ignore`, redirection,
+  `|| true` and deletion without enumerating pytest flags.
+
+`--self-test` adds the mutations for these shapes (including an unpinned row);
+its summary stays measured from emitted result lines.
+
+## Running
+
+```bash
+python3 scripts/check_contracts_registry_collection.py --self-test
+python3 scripts/check_contracts_registry_collection.py
+python3 -m pytest scripts/test_contracts_registry_collection.py -q
+```
+
+No Python 3.15, wheel, database, Rust toolchain or workspace install needed.
+The guard is invoked by `smoke.sh --profile contracts` (local runs) and by
+`ci-job-steps.sh`'s `smoke_contracts_run()` (the CI Contract suites stage,
+with `--self-test`), so it gates both entry points before any suite is
+collected. The regression file **is** collected by `tests=()`. The guard's
+`--self-test` is a single file: a one-file edit can weaken its dedicated
+"fails for the pin alone" report to a generic `any(...)` and still print
+`50 cases, 0 failure(s)` while the whole contracts layer stays green,
+because nothing else reads that report. Only the second-file assertions in
+`scripts/test_contracts_registry_collection.py` name the `len == 1` and
+`in[0]` clauses, so collecting them is what makes the pin two-file. Add the
+row **and** its `PINNED_SUITES` entry in the same change (see below); the
+guard rejects an unpinned addition.
+
+## Changing the layer
+
+- Adding a suite: put the path in `tests=()`, keep at least one `test_*`
+  name, **and** add it to `PINNED_SUITES` in the same change. The guard
+  rejects an unpinned addition; `--self-test` plants one and proves it.
+- Adding a standalone guard: add the `|| rc=$?` call **and** its path to
+  `REQUIRED_GUARD_CALLS` in the same change. The guard rejects an unpinned
+  addition; `--self-test` proves it.
+- Retiring a suite: remove the row **and** its `PINNED_SUITES` entry.
+- Retiring a called guard: remove the call **and** its pin from
+  `REQUIRED_GUARD_CALLS`. A green `SMOKE PASS` after deleting a guard
+  file must not be possible.
+- Never change the driver's guard call back to `|| rc=$?`; `--self-test`
+  fails on that mutation.
+
+## The frontend gate's `unittest` plan
+
+`packages/api-client/scripts/check-contract.sh` runs a third collection plan:
+
+```
+python3 -m unittest discover -s "$PKG_DIR/python_tests" -p "test_*.py"
+```
+
+`unittest.TestLoader` collects only `unittest.TestCase` subclasses. A suite made
+of module-level `def test_*` functions — or a plain class with `test_*` methods —
+is invisible to it: the loader collects 0 cases, the runner executes 0, and the
+process still prints `Ran 0 tests in 0.000s` / `OK` and exits `rc=0`. The green
+verdict is the runner affirming an empty plan, not a passing suite. This is the
+`Ran 0 tests, OK` shape the doc above listed as historical; it now has a reader.
+
+`check_contracts_registry_collection.py` reads the committed `check-contract.sh`
+bytes and the plan's `test_*.py` files. It requires exactly one bare `unittest
+discover` statement (a dropped, chained, redirected, piped, commented or
+re-patterned line is named) and at least one `TestCase` method collected by a
+reader that is deliberately **not** the pytest-shaped `collectible_tests()`.
+
+Both entry points are already wired to this guard and both go through
+`wiring_errors()`: the local contracts layer invokes the plain run from
+`smoke.sh`, and `ci-job-steps.sh` invokes `--self-test` before that layer. The
+companion `scripts/test_contracts_registry_collection.py` pins the two wirings
+from a second file, plants the empty-plan ablation, and asserts the pytest
+reader stays green on the very bytes the unittest reader calls empty. The plain
+run's `OK` line reports the collected unittest case count, so a suite that
+silently loses its `TestCase` base cannot hide behind an unchanged `OK`.
+
+### A counted case whose body never runs
+
+An empty plan is not the only green verdict over zero assertions. An
+`async def test_*` method on a **plain** `unittest.TestCase` subclass is
+collected by name (`countTestCases() == 1`), but `TestCase.run()` calls it
+without awaiting: the coroutine is discarded, the body — including every
+`assert` — never executes, and the runner still prints `Ran 1 test` / `OK` /
+`rc=0` (only a `RuntimeWarning: coroutine ... was never awaited` reaches
+stderr). Verified on CPython 3.11 with the committed suite: one `def test_*`
+→ `async def test_*` gives `Ran 10 tests` / `OK` / `rc=0` with the assertion
+skipped. This is the same false green one layer up: a plan that *looks*
+populated and cannot fail.
+
+`unittest.IsolatedAsyncioTestCase` does await async tests (an `AssertionError`
+there correctly fails the run), so a blanket ban on async test methods would
+reject a valid suite. `_is_testcase()` recognises only `TestCase` by name, so
+`unittest_noop_test_methods()` flags async methods on plain `TestCase` classes
+only. This is a **separate door** in `unittest_plan_errors()` — it reports its
+own named failure and leaves the existing `0 TestCase methods` door's meaning
+intact — and both wired entry points go through it.
+
+Decisive two-tree A/B on `e2bfd2b1`, one drifted byte shape (sha256
+`d79ff742ef51d4ec…` on the suite file), only the guard differs:
+
+- plain run (local layer): old `rc=0 OK` → this **`rc=1`**, naming
+  `ApiErrorVocabularyTests::test_clean_tree_has_no_golden_drift`;
+- `--self-test` (CI side): old `rc=0`, `49 cases, 0` → this **`rc=1`**,
+  naming the no-op plan;
+- `smoke.sh --profile contracts` on the drifted tree: **SMOKE FAIL**;
+- real `unittest discover` on the same bytes: `Ran 10 / OK / rc=0` on both —
+  that is the false green being pinned, not a verdict the guard changes.
+
+Restoring the byte returns both entry points to `rc=0`. **Control:** on those
+same drifted bytes, with the no-op door switched off, the pre-fix reader's
+**verdict** is green (`unittest_plan_errors() == []`) — the drift really was
+silent before the door existed, so the plant is load-bearing. Both the guard's
+`--self-test` plant and the companion case assert that verdict (the latter
+from a second file). An assertion that the old reader merely lists the method
+as collectible would hold on clean bytes too and is not the control. Zero
+generated-artifact bytes, zero wiring edits.
+
+`--self-test` 49 → **50 cases** and companion 39 → **42 passed**; the two
+hand-written floors (`_REVIEWED_CASE_FLOOR` and the companion's
+`_EXPECTED_SELF_TEST_CASES`) are raised together in the same reviewed commit.

@@ -53,6 +53,27 @@ INTRINSIC_DECL_RE = re.compile(
     r"""["']([a-z][a-z0-9]*(?:-[a-z0-9]+)+)["']\s*:""",
 )
 
+# ``interface IntrinsicElements ... {`` -- the start of a type augmentation.
+# Only the declared body is scanned: a route that merely casts to
+# ``keyof React.JSX.IntrinsicElements`` (apps/web/src/routes/guide.tsx does)
+# declares nothing, and unrelated object literals or ternaries later in the
+# same file must not be read as tag declarations.
+_INTRINSIC_BLOCK_RE = re.compile(r"IntrinsicElements\b[^{]*\{")
+
+
+def _intrinsic_element_blocks(text: str):
+    """Yield the body of every ``IntrinsicElements`` declaration in ``text``."""
+    for match in _INTRINSIC_BLOCK_RE.finditer(text):
+        depth = 1
+        index = match.end()
+        while index < len(text) and depth:
+            if text[index] == "{":
+                depth += 1
+            elif text[index] == "}":
+                depth -= 1
+            index += 1
+        yield text[match.end() : index - 1]
+
 # ``customElements.define("soymutdb-widget"`` / ``.define('name',``
 DEFINE_RE = re.compile(
     r"""customElements\s*\.\s*define\s*\(\s*["']([a-z][a-z0-9]*(?:-[a-z0-9]+)+)["']""",
@@ -133,11 +154,10 @@ class CustomElementRegistrationContractTests(unittest.TestCase):
         offenders: list[str] = []
         for path in _iter_source_files():
             text = _strip_comments(_read(path))
-            if "IntrinsicElements" not in text:
-                continue
-            for tag in INTRINSIC_DECL_RE.findall(text):
-                if tag not in registered:
-                    offenders.append(f"{_unqualified(path)}: \"{tag}\":")
+            for block in _intrinsic_element_blocks(text):
+                for tag in INTRINSIC_DECL_RE.findall(block):
+                    if tag not in registered:
+                        offenders.append(f"{_unqualified(path)}: \"{tag}\":")
         self.assertEqual(
             offenders,
             [],

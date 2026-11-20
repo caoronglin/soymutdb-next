@@ -25,6 +25,8 @@ interface DataTableProps<T extends object> {
   emptyTitle?: string;
   emptyDescription?: string;
   onRowClick?: (row: T) => void;
+  /** Accessible name for an interactive row; falls back to a generic label. */
+  rowAriaLabel?: (row: T) => string;
   /**
    * Horizontal scroll configuration of the table body.
    *
@@ -56,6 +58,7 @@ export function DataTable<T extends object>({
   emptyTitle,
   emptyDescription,
   onRowClick,
+  rowAriaLabel,
   scroll,
   className,
 }: DataTableProps<T>) {
@@ -110,6 +113,10 @@ export function DataTable<T extends object>({
         }}
         onRow={(row) => ({
           onClick: onRowClick ? () => onRowClick(row) : undefined,
+          role: onRowClick ? "button" : undefined,
+          "aria-label": onRowClick
+            ? rowAriaLabel?.(row) ?? t("admin.ops.openRow", { defaultValue: "Open row" })
+            : undefined,
           tabIndex: onRowClick ? 0 : undefined,
           onKeyDown: onRowClick
             ? (event) => {

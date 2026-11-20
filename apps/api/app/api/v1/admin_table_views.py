@@ -15,6 +15,8 @@ Every mutation writes an audit log; nothing here can alter biological records.
 
 from __future__ import annotations
 
+from typing import cast
+
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,11 +26,13 @@ from ...core.security import RoleName, has_role
 from ...models.auth import User
 from ...models.table_views import SpeciesInstance, TableViewTemplate
 from ...schemas.table_views import (
+    ConnectionState,
     SpeciesInstanceCreate,
     SpeciesInstanceHealthResponse,
     SpeciesInstanceListResponse,
     SpeciesInstanceResponse,
     SpeciesInstanceUpdate,
+    TableActions,
     TableViewTemplateCreate,
     TableViewTemplateListResponse,
     TableViewTemplateResponse,
@@ -42,6 +46,22 @@ from ...services.species_instance_health_service import (
 from .deps import get_current_user, get_user_roles
 
 router = APIRouter(prefix="/admin/table-views", tags=["admin-table-views"])
+
+#: The literal members `ConnectionState` admits. Enumerated here so the row's
+#: free-form text column can be validated before it reaches the response model:
+#: `ConnectionState` is a `Literal` alias and therefore not callable.
+_CONNECTION_STATES: frozenset[str] = frozenset(
+    {"unknown", "healthy", "unhealthy", "disabled", "unconfigured"}
+)
+
+
+def _connection_state(value: str) -> ConnectionState:
+    """Narrow a stored connection-state string to the published vocabulary."""
+    if value not in _CONNECTION_STATES:
+        raise ValueError(f"unknown species-instance connection state: {value!r}")
+    return cast(ConnectionState, value)
+
+
 
 
 def _require_admin(user: User) -> None:
@@ -60,7 +80,9 @@ def _to_response(template: TableViewTemplate) -> TableViewTemplateResponse:
         release_id=template.release_id,
         is_default=template.is_default,
         columns=template.columns or [],
-        actions=template.actions or {},
+        # `actions` is stored as free-form JSON, so validate it into the
+        # response model rather than passing a bare mapping through.
+        actions=TableActions.model_validate(template.actions or {}),
         notes=template.notes,
         created_at=template.created_at,
         updated_at=template.updated_at,
@@ -135,7 +157,7 @@ def _to_instance_response(instance: SpeciesInstance) -> SpeciesInstanceResponse:
         is_enabled=instance.is_enabled,
         is_local=instance.is_local,
         notes=instance.notes,
-        connection_state=(
+        connection_state=_connection_state(
             "disabled" if not instance.is_enabled else instance.connection_state
         ),
         last_checked_at=instance.last_checked_at,

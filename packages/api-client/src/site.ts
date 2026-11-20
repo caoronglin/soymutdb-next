@@ -83,6 +83,53 @@ export function getSiteHome(variant: SiteVariant = "external"): Promise<SiteHome
   return siteRequest<SiteHome>("/site/home", variant);
 }
 
+/** One visible bilingual link in the primary site navigation. */
+export interface SiteNavigationLink {
+  id: string;
+  label_en: string;
+  label_zh: string;
+  target: "internal" | "external";
+  href: string;
+  enabled: boolean;
+  order: number;
+  feature: string | null;
+}
+
+/** One visible bilingual group in the primary site navigation. */
+export interface SiteNavigationGroup {
+  id: string;
+  title_en: string;
+  title_zh: string;
+  enabled: boolean;
+  order: number;
+  links: SiteNavigationLink[];
+}
+
+export interface SiteNavigation {
+  variant: SiteVariant;
+  groups: SiteNavigationGroup[];
+}
+
+/** Fetch the feature-gated primary navigation for one explicit site variant. */
+export function getSiteNavigation(
+  variant: SiteVariant = "external",
+): Promise<SiteNavigation> {
+  return siteRequest<SiteNavigation>("/site/navigation", variant);
+}
+
+export type DatabaseKind = "genome" | "gene_ontology" | "transcription_factor";
+
+/** Database identity plus public feature availability for the web client. */
+export interface SiteProfile {
+  variant: SiteVariant;
+  database_kind: DatabaseKind;
+  features: Record<string, boolean>;
+}
+
+export function getSiteProfile(variant: SiteVariant = "external"): Promise<SiteProfile> {
+  return siteRequest<SiteProfile>("/site/profile", variant);
+}
+
 /** One visible bilingual link in the public footer navigation. */
 export interface SiteFooterNavigationLink {
   id: string;

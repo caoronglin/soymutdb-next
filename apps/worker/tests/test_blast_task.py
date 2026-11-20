@@ -22,12 +22,18 @@ from soymutdb_worker.tasks import blast as blast_module
 
 
 class _FakeResult:
+    """Rows a fake session returns; ``first()`` is the single-column read."""
+
     def __init__(self, rows: list, rowcount: int | None = None):
         self._rows = rows
         self.rowcount = rowcount
 
     def first(self):
         return self._rows[0] if self._rows else None
+
+    def all(self):
+        """Rows for multi-row reads (e.g. the resolver's batched lookups)."""
+        return list(self._rows)
 
 
 def _extract(value):

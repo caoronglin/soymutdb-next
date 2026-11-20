@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { http, type SiteVariant } from "@soymutdb/api-client";
 import { Alert, Badge, Button, ColorPicker, Flex, Form, Input, PageContainer, ProCard, Select, Typography } from "@/lib/antd";
 import { ConfirmDialog } from "../components/confirm-dialog";
+import { MediaPicker } from "../components/media-picker";
 import { RichEditor } from "../components/rich-editor/rich-editor";
 import {
   ANTD_PRIMARY_HEX,
@@ -137,7 +138,7 @@ function isConfigurationRecord(value: unknown): value is Record<string, unknown>
 
 function SettingsLoadError({ section }: { section: SettingsSection }) {
   const { t } = useTranslation();
-  const sectionLabel = t(`admin.settings.section_${section}`, { defaultValue: settingsSectionLabels[section] });
+  const sectionLabel = t(`admin.settings.section.${section}`, { defaultValue: settingsSectionLabels[section] });
   return (
     <Alert
       className="mt-2"
@@ -211,11 +212,13 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
   });
 
   const [footer, setFooter] = useState({
-    contact_person: "联系人: 周玲",
-    contact_phone: "电话: 025-84391957",
-    contact_email: "电子邮件: zlingxiaoyao@163.com",
+    // Empty by design: these are one deployment's operational details. The
+    // inputs carry placeholders that show the expected shape.
+    contact_person: "",
+    contact_phone: "",
+    contact_email: "",
     copyright: "© {{year}} SoyMutDB. All rights reserved.",
-    address: "地址: 南京市玄武区钟灵街50号 邮编210014",
+    address: "",
   });
 
   const [siteContent, setSiteContent] = useState<Record<string, string>>({});
@@ -391,11 +394,11 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
         return;
       }
       setFooter({
-        contact_person: String(res.contact_person ?? "联系人: 周玲"),
-        contact_phone: String(res.contact_phone ?? "电话: 025-84391957"),
-        contact_email: String(res.contact_email ?? "电子邮件: zlingxiaoyao@163.com"),
+        contact_person: String(res.contact_person ?? ""),
+        contact_phone: String(res.contact_phone ?? ""),
+        contact_email: String(res.contact_email ?? ""),
         copyright: String(res.copyright ?? "© {{year}} SoyMutDB. All rights reserved."),
-        address: String(res.address ?? "地址: 南京市玄武区钟灵街50号 邮编210014"),
+        address: String(res.address ?? ""),
       });
       setSectionLoadError((errors) => ({ ...errors, footer: false }));
       setSectionLoaded((loaded) => ({ ...loaded, footer: true }));
@@ -496,7 +499,7 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
           >
             <p>
               {t("admin.settings.saveFailed", {
-                section: t(`admin.settings.section_${saveFailure.section}`, {
+                section: t(`admin.settings.section.${saveFailure.section}`, {
                   defaultValue: settingsSectionLabel(saveFailure.section),
                 }),
                 defaultValue: "The {{section}} settings could not be saved. The values on screen are unchanged.",
@@ -1016,12 +1019,17 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
             <div className="space-y-4">
               {CONTENT_AREA_ORDER.map((area) => (
                 <div key={area} className="space-y-2">
-                  <Typography.Title level={5} className="mb-1">{t(`admin.settings.contentArea_${area}`, { defaultValue: CONTENT_AREA_LABELS[area] })}</Typography.Title>
+                  <Typography.Title level={5} className="mb-1">{t(`admin.settings.contentArea.${area}`, { defaultValue: CONTENT_AREA_LABELS[area] })}</Typography.Title>
                   <div className="grid gap-x-4 sm:grid-cols-2">
                     {contentFields.filter((field) => field.area === area).map((field) => (
                       <Form.Item
                         key={field.key}
-                        label={t(`admin.settings.contentField_${field.key.replace(/\./g, "_")}`, { defaultValue: field.label })}
+                        // The label is the registered CMS key itself. It used to be
+                        // wrapped in `t(\`admin.settings.contentField_...\`)`, a lookup
+                        // that could never resolve: nothing registers that namespace,
+                        // and `field.key` is the content schema key (e.g.
+                        // `hero.title_zh`), which already localises per site variant.
+                        label={field.label}
                         htmlFor={`content-${field.key}`}
                       >
                         {field.textarea ? (
@@ -1031,6 +1039,24 @@ export default function SettingsPage({ domain }: { domain?: SettingsDomain }) {
                             value={siteContent[field.key] ?? ""}
                             onChange={(e) => setSiteContent({ ...siteContent, [field.key]: e.target.value })}
                           />
+                        ) : field.key.endsWith(".image") ? (
+                          <div className="space-y-2">
+                            <MediaPicker
+                              value={siteContent[field.key] || null}
+                              previewUrl={siteContent[field.key] || null}
+                              previewAlt={field.key}
+                              purpose={null}
+                              onChange={(asset) =>
+                                setSiteContent({ ...siteContent, [field.key]: asset?.public_url ?? "" })
+                              }
+                            />
+                            <Input
+                              id={`content-${field.key}`}
+                              value={siteContent[field.key] ?? ""}
+                              placeholder="https://…"
+                              onChange={(e) => setSiteContent({ ...siteContent, [field.key]: e.target.value })}
+                            />
+                          </div>
                         ) : (
                           <Input
                             id={`content-${field.key}`}

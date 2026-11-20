@@ -7,7 +7,7 @@
  * - fullscreen mode (AntD Modal `fullscreen`), print (current document),
  *   theme-following surface (CSS variables driven by [data-theme])
  *
- * Lazy chunks: pdfjs-dist (pdf), mammoth (docx), marked (markdown),
+ * Lazy chunks: pdfjs-dist (pdf), mammoth (docx), x-markdown (markdown),
  * highlight.js (code). None of them land in the entry bundle.
  *
  * Text-ish kinds are truncated at 1 MB for files > 10 MB (same policy as the
@@ -41,9 +41,16 @@ import { PdfViewer } from "./pdf-viewer";
 import { DocxViewer } from "./docx-viewer";
 import { MarkdownViewer } from "./markdown-viewer";
 import { CodeViewer } from "./code-viewer";
+import {
+  resolvePreviewRoute,
+  type PreviewVisibility,
+  type RemotePreviewConfig,
+} from "./preview-policy";
+import { SITE_VARIANT } from "../../lib/site-variant";
 
 const MAX_FULL_SIZE = 10 * 1024 * 1024; // 10 MB — full content
 const TRUNCATED_SIZE = 1024 * 1024; // 1 MB — first chunk for large files
+const REMOTE_TIMEOUT_MS = 8000;
 
 export interface PreviewFile {
   name: string;
@@ -51,6 +58,11 @@ export interface PreviewFile {
   size: number;
   /** Optional display badge (e.g. "VCF.GZ"); falls back to the extension. */
   format?: string;
+  /**
+   * Release visibility of the artifact. Omitted means "not proven public",
+   * which keeps the preview local — see preview-policy.ts.
+   */
+  visibility?: PreviewVisibility;
 }
 
 export interface FilePreviewDialogProps {
@@ -60,6 +72,8 @@ export interface FilePreviewDialogProps {
   initialIndex?: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Remote provider explicitly configured for one site variant. */
+  remotePreview?: RemotePreviewConfig;
 }
 
 type TextState =
@@ -103,11 +117,16 @@ export function FilePreviewDialog({
   initialIndex = 0,
   open,
   onOpenChange,
+  remotePreview,
 }: FilePreviewDialogProps) {
   const { t } = useTranslation();
   const [currentIndex, setCurrentIndex] = useState(() => clampIndex(initialIndex, files.length));
   const [fullscreen, setFullscreen] = useState(false);
   const [textState, setTextState] = useState<TextState>({ status: "loading" });
+  const [remoteLoad, setRemoteLoad] = useState<{
+    url: string;
+    phase: "ready" | "failed";
+  } | null>(null);
 
   // Reset to the requested index every time the dialog opens.
   useEffect(() => {
@@ -117,9 +136,35 @@ export function FilePreviewDialog({
   const current = files[currentIndex] ?? files[0];
   const kind: FileKind = current ? getFileKind(current.name) : "text";
 
+  const route = current
+    ? resolvePreviewRoute({
+        siteVariant: SITE_VARIANT,
+        visibility: current.visibility ?? "internal",
+        config: remotePreview,
+        url: current.url,
+      })
+    : ({ mode: "local" } as const);
+  const remoteUrl = route.mode === "remote" ? route.url : null;
+  // A previous file's load result must not mark this file's iframe ready.
+  const remotePhase =
+    remoteUrl === null ? null : remoteLoad?.url === remoteUrl ? remoteLoad.phase : "connecting";
+  const remoteActive = remoteUrl !== null && remotePhase !== "failed";
+
+  // A cross-origin iframe that never answers fires no usable error event, so
+  // provider unavailability is detected by a deadline and falls back to the
+  // local renderer.
+  useEffect(() => {
+    if (!open || remoteUrl === null || remotePhase !== "connecting") return;
+    const timer = window.setTimeout(
+      () => setRemoteLoad({ url: remoteUrl, phase: "failed" }),
+      REMOTE_TIMEOUT_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [open, remoteUrl, remotePhase]);
+
   // Fetch text-ish content (csv/fasta/md/code/text) with truncation.
   useEffect(() => {
-    if (!open || !current || !isTextKind(kind)) return;
+    if (!open || !current || !isTextKind(kind) || remoteActive) return;
 
     let disposed = false;
     const controller = new AbortController();
@@ -184,9 +229,10 @@ export function FilePreviewDialog({
     };
     // `current` is read only through its url/size fields below, so those
     // (not the object identity) are the real dependencies; depending on the
-    // object would re-fetch on every parent re-render.
+    // object would re-fetch on every parent re-render. `remoteActive` flips
+    // to false when the provider fails, which is when the local fetch starts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, current?.url, current?.size, kind]);
+  }, [open, current?.url, current?.size, kind, remoteActive]);
 
   const goTo = useCallback(
     (index: number) => {
@@ -379,7 +425,34 @@ export function FilePreviewDialog({
         </div>
 
         {/* Body */}
-        <div className="rl-preview-body flex-1 overflow-auto p-4">{renderBody()}</div>
+        <div className="rl-preview-body flex-1 overflow-auto p-4">
+          {remotePhase === "failed" && (
+            <div
+              role="status"
+              data-testid="file-preview-remote-fallback"
+              className="mb-3 rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground"
+            >
+              {t("fileViewer.remoteFallback")}
+            </div>
+          )}
+          {remoteActive ? (
+            <iframe
+              data-testid="file-preview-remote"
+              title={current.name}
+              src={remoteUrl ?? undefined}
+              className="min-h-[70vh] w-full rounded-md border bg-white"
+              // The viewer is a cross-origin document; it gets script execution
+              // in its own origin but no top-navigation or popup-to-opener.
+              sandbox="allow-scripts allow-same-origin allow-popups"
+              referrerPolicy="no-referrer"
+              onLoad={() => {
+                if (remoteUrl) setRemoteLoad({ url: remoteUrl, phase: "ready" });
+              }}
+            />
+          ) : (
+            renderBody()
+          )}
+        </div>
       </div>
     </Modal>
   );

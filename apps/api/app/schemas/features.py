@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .sequence_tools import SequenceCapabilitiesResponse
+
 
 class PluginCapabilityResponse(BaseModel):
     version: str | None = None
@@ -24,12 +26,17 @@ class DatabaseCapabilitiesResponse(BaseModel):
 
 
 class PublicCapabilitiesResponse(BaseModel):
-    version: int = 2
+    version: int = 3
     features: dict[str, bool] = Field(default_factory=dict)
     plugins: dict[str, PluginCapabilityResponse] = Field(default_factory=dict)
     databases: DatabaseCapabilitiesResponse = Field(
         default_factory=DatabaseCapabilitiesResponse
     )
+    # Required, not defaulted: v3 promises the public face always reports the
+    # real sequence engine state. A default would fabricate an "unavailable"
+    # reading that looks like a measurement. Same owner as
+    # /tools/sequence/capabilities, never a second copy of the kernel state.
+    sequence: SequenceCapabilitiesResponse
 
 
 class FeatureDefinitionResponse(BaseModel):

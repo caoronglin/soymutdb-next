@@ -321,6 +321,48 @@ def _tool_bin(tmp_path: Path, *, with_mc: bool = True, with_psql: bool = True) -
     return fake_bin
 
 
+# Commands backup.sh reaches before (and while reporting) the PostgreSQL client
+# check. Only these are linked into the sandbox; the PostgreSQL clients are the
+# one thing it must not find.
+_SANDBOX_TOOLS = (
+    "bash",
+    "dirname",
+    "date",
+    "hostname",
+    "mkdir",
+    "mktemp",
+    "chmod",
+    "mv",
+    "rm",
+    "awk",
+    "sha256sum",
+    "tar",
+    "stat",
+    "find",
+    "sort",
+    "grep",
+    "python3",
+)
+
+
+def _path_without_postgres_clients(tmp_path: Path) -> str:
+    """A PATH that has the script's own tools but no ``psql``/``pg_dump``.
+
+    The case asserts a host without the clients, but a developer machine (or a
+    fat CI image) may ship them in /usr/bin, where they share a directory with
+    bash and coreutils and cannot be excluded by dropping a PATH entry. An
+    empty directory of symlinks gives a deterministic absence on every host.
+    """
+    sandbox = tmp_path / "no-pg-clients"
+    sandbox.mkdir()
+    for name in _SANDBOX_TOOLS:
+        resolved = shutil.which(name)
+        if resolved is None:  # pragma: no cover - premise on exotic hosts
+            raise AssertionError(f"test premise broken: {name} is missing")
+        (sandbox / name).symlink_to(resolved)
+    return str(sandbox)
+
+
 def _seed_source_bucket(store: Path, alias: str = "s3src") -> int:
     objects = 0
     for index, bucket in enumerate(REQUIRED_BUCKETS):
@@ -673,6 +715,7 @@ def test_native_runtime_fails_without_mc_and_never_falls_back_to_docker(
 def test_native_runtime_fails_without_the_host_postgres_clients(tmp_path: Path) -> None:
     fake_bin = _tool_bin(tmp_path, with_psql=False)
     env = _env(tmp_path, fake_bin)
+    env["PATH"] = os.pathsep.join([str(fake_bin), _path_without_postgres_clients(tmp_path)])
     _seed_source_bucket(tmp_path / "mc-store")
 
     result = _run(["bash", str(BACKUP)], env=env)
@@ -1132,6 +1175,45 @@ def test_no_repo_env_option_keeps_the_repository_env_out_of_the_run(
     )
     assert isolated.returncode == 0, isolated.stdout + isolated.stderr
     assert "repo-env-host" not in "\n".join(_psql_calls(tmp_path))
+
+
+def test_back_to_back_runs_do_not_collide_on_a_second_stamped_backup_id(
+    tmp_path: Path,
+) -> None:
+    """Two backups in the same wall second must not refuse to run.
+
+    The backup id is `<timestamp>-<component hash>`, the timestamp has second
+    resolution, and identical source data yields an identical component hash.
+    A second run started inside the same second therefore built the very id the
+    first run had just published and aborted with
+
+        refusing to overwrite existing backup artifact: <id>.tar.gz
+
+    against a file it had not created. This was flaky rather than deterministic
+    because it depended on how long the harness took, which is why it surfaced
+    as an intermittent contracts-suite failure. Runs are now serialised onto
+    distinct seconds.
+    """
+    fake_bin = _tool_bin(tmp_path)
+    env = _env(tmp_path, fake_bin)
+    env.pop("SOYMUTDB_BACKUP_REPO_ENV")
+    _seed_source_bucket(tmp_path / "mc-store")
+    project = _fake_project(tmp_path)
+
+    # Three runs in a row is the smallest count that exposes the collision: the
+    # second run usually still lands in the next second, the third does not.
+    for attempt in range(3):
+        result = _run(
+            ["bash", str(project / "deploy/scripts/backup.sh"), "--no-repo-env"],
+            env=env,
+            cwd=tmp_path,
+        )
+        assert result.returncode == 0, f"run {attempt}: {result.stdout}{result.stderr}"
+
+    archives = sorted((tmp_path / "backups").glob("*.tar.gz"))
+    assert len(archives) == 3, [archive.name for archive in archives]
+    ids = {archive.name.removesuffix(".tar.gz").rsplit("-", 1)[0] for archive in archives}
+    assert len(ids) == 3, f"backup ids collided: {sorted(ids)}"
 
 
 def test_repo_env_policy_rejects_an_ambiguous_value(tmp_path: Path) -> None:

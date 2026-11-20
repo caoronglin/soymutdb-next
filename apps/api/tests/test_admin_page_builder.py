@@ -350,6 +350,129 @@ async def test_publish_request_rejects_invalid_definition(db_session):
 
 
 # ---------------------------------------------------------------------------
+# Concurrent-write races
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_page_maps_unique_race_to_conflict(db_session, monkeypatch):
+    """A create that loses the unique-route race returns 409, not 500."""
+    await page_service.create_page(
+        db_session,
+        route="/raced-create",
+        title_key="nav.raced",
+        definition=_valid_definition(),
+        edited_by=_editor(),
+    )
+
+    session_cls = type(db_session)
+    original_scalar = session_cls.scalar
+    calls = {"count": 0}
+
+    async def first_miss(self, statement, *args, **kwargs):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            # Pretend the pre-check ran before the competing page committed.
+            return None
+        return await original_scalar(self, statement, *args, **kwargs)
+
+    monkeypatch.setattr(session_cls, "scalar", first_miss)
+
+    with pytest.raises(ConflictError) as excinfo:
+        await page_service.create_page(
+            db_session,
+            route="/raced-create",
+            title_key="nav.raced.dup",
+            definition=_valid_definition(),
+            edited_by=_editor(),
+        )
+
+    assert "already exists" in excinfo.value.message
+
+
+@pytest.mark.asyncio
+async def test_update_draft_maps_version_race_to_conflict(db_session, monkeypatch):
+    """A lost (page_id, version) insert race re-reads the winner and returns 409."""
+    from types import SimpleNamespace
+
+    page, v1 = await page_service.create_page(
+        db_session,
+        route="/raced-draft",
+        title_key="nav.raceddraft",
+        definition=_valid_definition("v1"),
+        edited_by=_editor(),
+    )
+    _page, v2 = await page_service.update_draft(
+        db_session,
+        page_id=page.id,
+        base_version=1,
+        definition=_valid_definition("v2"),
+        edit_comment=None,
+        edited_by=_editor(),
+    )
+    assert v2.version == 2
+
+    async def stale_latest(db, target_page):
+        # Simulate reading the latest version *before* the competing insert.
+        return SimpleNamespace(version=1, status=PageDefinitionStatus.DRAFT)
+
+    monkeypatch.setattr(page_service, "_latest_version", stale_latest)
+
+    with pytest.raises(ConflictError) as excinfo:
+        await page_service.update_draft(
+            db_session,
+            page_id=page.id,
+            base_version=1,
+            definition=_valid_definition("raced"),
+            edit_comment=None,
+            edited_by=_editor(),
+        )
+
+    assert excinfo.value.details == {"expected": 2, "received": 1}
+    # The winning draft is untouched.
+    versions = await page_service.get_versions(db_session, page.id)
+    assert [version.version for version in versions] == [2, 1]
+
+
+@pytest.mark.asyncio
+async def test_publish_request_cannot_revert_a_published_version(db_session):
+    """Re-requesting a version published in the meantime is a 409, not a rollback."""
+    from sqlalchemy import func, select
+
+    from app.models.outbox import OutboxEvent
+
+    page, v1 = await page_service.create_page(
+        db_session,
+        route="/raced-publish",
+        title_key="nav.racedpublish",
+        definition=_valid_definition(),
+        edited_by=_editor(),
+    )
+    # The publication worker (or a concurrent publish_now) wins the transition.
+    await page_service.publish_version(db_session, v1)
+
+    with pytest.raises(ConflictError):
+        await page_service.publish_request(
+            db_session,
+            page_id=page.id,
+            version_id=v1.id,
+            reason="late request",
+            edited_by=_editor(),
+        )
+
+    fresh = await page_service.get_version(db_session, page.id, v1.id)
+    assert fresh.status == PageDefinitionStatus.PUBLISHED
+    assert fresh.published_at is not None
+
+    events = await db_session.scalar(
+        select(func.count())
+        .select_from(OutboxEvent)
+        .where(OutboxEvent.aggregate_id == str(page.id))
+    )
+    assert events == 0
+
+
+# ---------------------------------------------------------------------------
 # API level (mocked auth)
 # ---------------------------------------------------------------------------
 

@@ -45,7 +45,10 @@
     "internalBadge": "内网",
     "primaryLabel": "主导航",
     "quickSearchLabel": "快速搜索（Cmd+K）",
-    "searchPlaceholder": "搜索…"
+    "searchPlaceholder": "搜索…",
+    "comparative": "比较基因组",
+    "expression": "表达",
+    "phenotypes": "表型"
   },
   "home": {
     "subtitle": "大豆突变体数据库",
@@ -62,7 +65,9 @@
       "variants": "变异",
       "variantsDescription": "按组装版本、染色体、类型和影响筛选已发布变异。",
       "mutants": "突变系",
-      "mutantsDescription": "通过稳定的公开编号浏览已发布突变系。"
+      "mutantsDescription": "通过稳定的公开编号浏览已发布突变系。",
+      "notPublished": "未发布",
+      "notPublishedHelp": "当前尚未发布数据版本，该计数在发布后才会统计。"
     },
     "tasks": "科研工具",
     "tasksSubtitle": "针对基因、序列或基因组区域选择相应工具。",
@@ -178,7 +183,11 @@
     "tabs": {
       "overview": "概览",
       "expression": "表达数据",
-      "homologs": "同源基因"
+      "homologs": "同源基因",
+      "annotation": "GO / KEGG",
+      "variants": "变异",
+      "phenotype": "表型",
+      "literature": "文献"
     },
     "expression": {
       "no_data": "暂无表达数据",
@@ -193,7 +202,18 @@
       "species": "物种",
       "gene_id": "同源基因ID",
       "type": "类型",
-      "source": "来源"
+      "source": "来源",
+      "align": {
+        "title": "同源序列比对与邻接树",
+        "run": "比对 {{count}} 个同源基因（{{molecule}}）",
+        "hint": "CDS 之间同源比对；无法在本库解析的条目会单独列出。",
+        "unresolvedTitle": "{{count}} 个条目无法在本库解析",
+        "noSequence": "该条目没有已导入的 {{molecule}} 序列",
+        "notInDatabase": "本部署不包含该版本条目",
+        "tooFew": "可解析的序列只有 {{count}} 条，建树至少需要 {{needed}} 条",
+        "leaves": "{{count}} 个叶节点",
+        "resolved": "已解析 {{count}} 条序列"
+      }
     },
     "loadError": "无法加载该基因。",
     "assemblyLabel": "基因组版本",
@@ -263,7 +283,115 @@
       "siteKey": "突变体系（株系母+位置）"
     },
     "mutationSitesTitle": "突变位点",
-    "unpublishedPreview": "未发布预览"
+    "unpublishedPreview": "未发布预览",
+    "sequences": {
+      "title": "序列",
+      "molecule": {
+        "genomic": "基因组 DNA",
+        "cds": "编码序列 (CDS)",
+        "transcript": "转录本",
+        "protein": "蛋白"
+      },
+      "available": "已收录",
+      "unavailable": "未导入",
+      "unavailableHint": "本发布版本收录了该基因的坐标与注释，不包含残基序列。不显示序列是因为确实没有存储，而不是取值为空。",
+      "length": "长度",
+      "analysis": {
+        "proteinProperties": "理化参数（分子量 / 等电点）",
+        "composition": "碱基组成",
+        "meltingTemp": "引物 Tm",
+        "reverseComplement": "反向互补",
+        "reverseComplementLabel": "反向互补序列",
+        "residues": "残基数",
+        "molecularWeight": "分子量 (Da)",
+        "isoelectricPoint": "等电点 pI",
+        "gravy": "疏水性 GRAVY",
+        "instabilityIndex": "不稳定指数",
+        "aromaticity": "芳香性",
+        "bases": "碱基数",
+        "gcFraction": "GC 含量",
+        "ambiguous": "简并碱基",
+        "meltingMethod": "算法 {{method}}",
+        "failed": "分析失败，请稍后重试"
+      }
+    },
+    "evidence": {
+      "label": "证据等级",
+      "source": "来源",
+      "kind": {
+        "experimental": "实验验证",
+        "curated": "人工审编",
+        "predicted": "计算预测",
+        "transferred": "同源转移",
+        "imported": "外部导入",
+        "unknown": "未知"
+      },
+      "kindHint": {
+        "experimental": "由来源研究实测或实验验证。",
+        "curated": "来源记录中经人工审阅的注释。",
+        "predicted": "计算预测结果，未经实验确认。",
+        "transferred": "由其他物种或同源基因推断而来。",
+        "imported": "导入来源未说明生成方式。",
+        "unknown": "来源记录未描述其证据来源。"
+      },
+      "unknownSource": "来源记录未说明其证据来源。"
+    },
+    "sections": {
+      "state": {
+        "empty": "该基因没有{{section}}。",
+        "emptyHint": "本 release 已导入该数据源的快照，只是这条基因在其中没有记录。",
+        "notImported": "本 release 尚未导入{{section}}快照。",
+        "notImportedHint": "本 release 根本没有这类数据的快照，这与「该基因没有」是两件事。",
+        "unreported": "{{section}}：当前 API 版本未返回这一块。",
+        "reason": "原因：{{reason}}"
+      },
+      "annotation": {
+        "title": "GO / KEGG 注释",
+        "empty": "该基因在本 release 中没有 GO 或 KEGG 条目。",
+        "ontology": "本体",
+        "term": "条目 ID",
+        "termName": "名称",
+        "evidenceCode": "证据代码",
+        "qualifier": "限定词",
+        "reference": "参考",
+        "snapshot": "快照来源",
+        "snapshotVersion": "快照版本"
+      },
+      "variants": {
+        "title": "变异",
+        "empty": "该基因在本 release 中没有变异记录。",
+        "total": "总数",
+        "impact": "效应",
+        "count": "数目",
+        "unannotated": "无效应预测"
+      },
+      "phenotype": {
+        "title": "表型",
+        "empty": "该基因的突变体尚未记录表型。",
+        "mutant": "突变体",
+        "category": "类别",
+        "trait": "性状",
+        "value": "取值",
+        "method": "测定方法"
+      },
+      "literature": {
+        "title": "文献",
+        "empty": "该基因尚未关联文献。",
+        "titleColumn": "标题",
+        "authors": "作者",
+        "journal": "期刊",
+        "year": "年份",
+        "identifier": "标识"
+      }
+    },
+    "confidence": {
+      "high": "高",
+      "medium": "中",
+      "low": "低"
+    },
+    "entryPoints": "基因数据入口",
+    "openLocusView": "位点视图（±{{flank}} kb）",
+    "releaseLabel": "数据版本"
   },
   "variants": {
     "title": "变异搜索",
@@ -360,7 +488,8 @@
     "exportDownload": "下载导出文件",
     "exportDownloadFailed": "导出文件下载失败",
     "exportTakingLong": "该导出任务耗时超出预期，仍可能继续完成。",
-    "exportCheckAgain": "重新检查"
+    "exportCheckAgain": "重新检查",
+    "exportUnavailable": "无法读取该导出记录，可能已过期或属于其他账户。"
   },
   "mutantLines": {
     "title": "突变系",
@@ -469,7 +598,9 @@
     "openInNewTab": "在新标签页打开",
     "retry": "重试",
     "stillLoading": "仍在加载",
-    "stillLoadingDesc": "数据量较大时首屏需要一些时间。"
+    "stillLoadingDesc": "数据量较大时首屏需要一些时间。",
+    "pickAssembly": "选择一个已发布的基因组组装以打开浏览器",
+    "noAssemblies": "当前数据版本中没有任何已发布的基因组组装，因此无法打开基因组浏览器。"
   },
   "blast": {
     "title": "BLAST 搜索",
@@ -513,6 +644,7 @@
     "noHits": "该任务未找到比对命中",
     "hitsLoadError": "无法加载 BLAST 比对命中，请重试。",
     "resultsTitle": "BLAST 结果",
+    "download": "下载原始结果",
     "alignments": "比对",
     "hitTable": "命中表",
     "hitName": "名称",
@@ -546,7 +678,25 @@
       "resolveFailed": "无法加载基因组位置，请重试。"
     },
     "submitRequiresLogin": "请登录具有研究者权限的账户后提交 BLAST 任务。",
-    "submitRequiresResearcher": "当前账户没有提交 BLAST 任务的权限。"
+    "submitRequiresResearcher": "当前账户没有提交 BLAST 任务的权限。",
+    "publicWorkflow": "匿名运行 BLAST",
+    "engine": "搜索引擎",
+    "jobStatus": "状态",
+    "parametersHint": "默认值适合先看一眼；除非需要不同灵敏度，否则不必改动。",
+    "validation": {
+      "programRequired": "请选择比对程序。",
+      "databaseRequired": "请选择数据库。",
+      "sequenceTooShort": "序列长度至少为 10 个字符。",
+      "eValueRange": "E 值需大于 0 且不超过 1000。",
+      "maxHitsRange": "最大命中数需为 1–500 的整数。"
+    }
+  },
+  "releaseStatus": {
+    "draft": "草稿",
+    "validated": "已校验",
+    "ready": "待发布",
+    "published": "已发布",
+    "rolled_back": "已回滚"
   },
   "releases": {
     "title": "数据版本",
@@ -595,7 +745,32 @@
     "downloadFile": "下载 {{name}}",
     "downloadCount": "{{count}} 次下载",
     "customExportTitle": "需要自定义导出？",
-    "customExportDescription": "可提交异步导出任务，导出符合筛选条件的变异集合（最多 1 亿条记录）。"
+    "customExportDescription": "可提交异步导出任务，导出符合筛选条件的变异集合（最多 1 亿条记录）。",
+    "checksumNotRecorded": "未记录",
+    "queryBuilderTitle": "构建自定义导出",
+    "queryBuilderDescription": "把筛选条件组合成一次异步导出；没有查询能力的条件不会被静默忽略。",
+    "queryBuilderEmpty": "本 release 无可导出的数据集。",
+    "queryBuilderFormat": "格式",
+    "queryBuilderSubmit": "生成导出",
+    "queryBuilderUnsupported": "无查询能力：",
+    "queryBuilderSubmitted": "导出已提交",
+    "queryBuilderFailed": "导出提交失败",
+    "license": "许可",
+    "generatedAt": "生成时间",
+    "queryBuilderAssembly": "装配",
+    "queryBuilderChromosome": "染色体",
+    "queryBuilderImpact": "影响",
+    "queryBuilderVariantType": "变异类型",
+    "queryBuilderFiltersCount": "个受支持的条件",
+    "convert": {
+      "action": "转换格式",
+      "label": "把 {{source}} 转换为",
+      "run": "转换",
+      "save": "下载 {{format}}",
+      "chars": "字符",
+      "empty": "文件内容为空，无法转换。",
+      "failed": "转换失败，请确认文件格式。"
+    }
   },
   "fileViewer": {
     "singleFile": "单个文件",
@@ -616,7 +791,8 @@
     "title": "文件预览",
     "downloadOnly": "仅支持下载的预览",
     "undecodable": "浏览器无法解析该压缩、未知或二进制格式。",
-    "downloadOnlyHint": "该文件不支持在线预览，请下载后查看。"
+    "downloadOnlyHint": "该文件不支持在线预览，请下载后查看。",
+    "remoteFallback": "外部预览服务不可用 — 已切换到内置预览。"
   },
   "docs": {
     "title": "文档",
@@ -737,6 +913,7 @@
     "backToList": "返回列表"
   },
   "common": {
+    "refresh": "刷新",
     "loading": "…加载中",
     "error": "错误",
     "errorDescription": "加载此页面时发生意外错误。",
@@ -857,7 +1034,9 @@
     "demoNotice": "演示模式已开启。下方图表使用合成示例数据，并非数据库测量结果。",
     "variantTypesDescription": "SNP / Indel / SV 分布",
     "impactDescription": "按预测影响程度统计的变异数量",
-    "liveDataUnavailable": "实时数据暂不可用，请重试。"
+    "liveDataUnavailable": "实时数据暂不可用，请重试。",
+    "noPublishedVariants": "尚无已发布的变异数据",
+    "noPublishedVariantsHelp": "当前数据版本还没有已发布的变异记录，发布后会在此显示分布。"
   },
   "search": {
     "title": "全局搜索",
@@ -1053,10 +1232,214 @@
     "internalNotPaginated": "内部目录结果不支持分页。"
   },
   "admin": {
+    "siteControl": {
+      "title": "站点控制",
+      "navHint": "公共站点与内网站点各自维护独立的导航文档；API 不会把一个变体的导航复制到另一个变体。",
+      "subtitle": "公共门户的数据库类型、主导航与功能开放设置",
+      "external": "公共站点",
+      "internal": "内网站点",
+      "saveFailed": "保存失败",
+      "conflict": "设置已在其他会话中被修改，已加载最新版本，请重新保存。",
+      "dbKind": {
+        "genome": "基因组 / 突变体数据库",
+        "genomeDescription": "基因、变异、突变体、基因组浏览器与比较基因组学。",
+        "geneOntology": "基因本体数据库",
+        "geneOntologyDescription": "GO 条目、本体关系与功能富集分析流程。",
+        "transcriptionFactor": "转录因子数据库",
+        "transcriptionFactorDescription": "转录因子家族、结合位点、调控子与表达程序。"
+      },
+      "dbType": {
+        "cardTitle": "数据库类型",
+        "description": "选择本部署对外呈现的生物学档案。该值以服务端枚举存储，并通过 GET /site/profile 提供给前端。",
+        "save": "保存数据库类型",
+        "saved": "数据库类型已保存。"
+      },
+      "features": {
+        "cardTitle": "功能开放",
+        "description": "关闭某项功能后，公共站点上受该功能开关控制的导航链接也会一并隐藏。",
+        "save": "保存功能设置",
+        "saved": "功能开放设置已保存。",
+        "enableAria": "启用 {{feature}}",
+        "page_builder": "渲染已发布的页面组件。",
+        "imports_module_tsv": "启用基于模式定义的模块导入。",
+        "imports_module_xlsx": "启用 XLSX 模块导入。",
+        "imports_local_upload": "启用浏览器直传的分片上传。",
+        "imports_fasta": "启用 FASTA 参考序列导入（按 .fai 索引写入染色体及其长度）。",
+        "imports_gff3": "启用 GFF3 注释导入（写入基因、转录本、CDS/UTR 片段并推导外显子）。",
+        "imports_vcf": "启用 VCF 变异导入（写入器已就绪，由 SOYMUTDB_ENABLE_VCF_IMPORT 显式开启）。",
+        "imports_blast_db": "启用 BLAST 数据库导入（写入器尚未完成）。",
+        "imports_seed_data": "启用种子数据导入（写入器尚未完成）。",
+        "imports_expression_csv": "启用表达量 CSV 导入（按组装版本持久化）。",
+        "imports_homolog_csv": "启用同源基因 CSV 导入（按组装版本持久化）。",
+        "publication_github_pages": "启用 GitHub Pages 发布目标。",
+        "publication_cloudflare_pages": "启用 Cloudflare Pages 发布目标。"
+      },
+      "nav": {
+        "cardTitle": "主导航",
+        "dragHint": "拖拽分组和链接即可排序。受功能开关控制的链接会在对应功能关闭时从公共站点隐藏。",
+        "addGroup": "添加分组",
+        "addLink": "添加链接",
+        "save": "保存{{variant}}导航",
+        "saved": "{{variant}}导航已保存",
+        "loadError": "无法加载导航设置",
+        "conflict": "导航已在其他会话中被修改，已加载最新版本，请检查编辑内容后重新保存。",
+        "linksUsed": "{{count}} / {{max}} 个链接",
+        "linkCount": "{{count}} 个链接",
+        "on": "开",
+        "off": "关",
+        "noGate": "无功能门控",
+        "destinationPlaceholder": "/路径、/路径/:id 或 https://…",
+        "reorderGroup": "拖拽排序 {{name}}",
+        "reorderLink": "拖拽排序 {{name}}",
+        "groupEnTitleAria": "分组 {{index}} 英文标题",
+        "groupZhTitleAria": "分组 {{index}} 中文标题",
+        "linkEnLabelAria": "链接 {{index}} 英文标签（{{group}}）",
+        "linkZhLabelAria": "链接 {{index}} 中文标签（{{group}}）",
+        "linkDestinationAria": "链接 {{index}} 目标地址（{{group}}）",
+        "linkGateAria": "链接 {{index}} 功能门控（{{group}}）",
+        "linkEnabledAria": "链接 {{index}} 启用状态（{{group}}）",
+        "error": {
+          "noDestination": "链接“{{label}}”需要填写目标地址",
+          "whitespace": "链接“{{label}}”的目标地址不能包含空白或反斜杠",
+          "protocolRelative": "链接“{{label}}”的目标地址不能是协议相对地址",
+          "prefix": "链接“{{label}}”的目标地址必须以 / 或 https:// 开头",
+          "notLoaded": "设置未加载",
+          "tooManyGroups": "分组数量超出上限",
+          "tooManyLinks": "链接数量超出上限",
+          "invalidGroupId": "分组 ID“{{id}}”无效",
+          "invalidLinkId": "链接 ID“{{id}}”无效"
+        }
+      }
+    },
+    "siteAppearance": {
+      "title": "站点外观",
+      "internal": {
+        "title": "内网站点（仅内部部署）",
+        "help": "内网站点是独立的部署变体，不属于公共站点；这里的设置只影响内网构建产物。",
+        "toggleAria": "编辑内网站点内容"
+      },
+      "brand": {
+        "title": "品牌与图标",
+        "description": "公共站点页眉显示的名称与图标。图标来自媒体库，可以在这里直接选择。"
+      },
+      "header": {
+        "title": "页眉导航",
+        "description": "公共站点页眉的分组与链接。链接可以绑定功能开关，开关关闭时该链接自动隐藏。"
+      },
+      "footer": {
+        "title": "页脚",
+        "description": "公共站点页脚显示的链接分组与版权信息。",
+        "empty": "当前页脚还没有分组，公共站点只会显示版权信息。",
+        "loadError": "无法加载页脚设置。",
+        "on": "显示",
+        "off": "隐藏",
+        "addGroup": "添加分组",
+        "addLink": "添加链接",
+        "save": "保存页脚",
+        "saved": "页脚已保存。",
+        "conflict": "页脚已在其他会话中被修改，已加载最新版本，请检查编辑内容后重新保存。",
+        "linkCount": "{{count}} 个链接",
+        "linksUsed": "已使用 {{count}} / {{max}} 个链接",
+        "groupEnTitleAria": "分组 {{index}} 英文标题",
+        "groupZhTitleAria": "分组 {{index}} 中文标题",
+        "groupEnabledAria": "显示分组 {{name}}",
+        "moveGroupUpAria": "上移分组 {{name}}",
+        "moveGroupDownAria": "下移分组 {{name}}",
+        "removeGroupAria": "删除分组 {{name}}",
+        "linkEnLabelAria": "分组 {{group}} 第 {{index}} 个链接的英文文字",
+        "linkZhLabelAria": "分组 {{group}} 第 {{index}} 个链接的中文文字",
+        "linkDestinationAria": "分组 {{group}} 第 {{index}} 个链接的目标地址",
+        "linkEnabledAria": "显示链接 {{label}}",
+        "moveLinkUpAria": "上移链接 {{label}}",
+        "moveLinkDownAria": "下移链接 {{label}}",
+        "removeLinkAria": "删除链接 {{label}}",
+        "destinationPlaceholder": "站内路径（如 /genes）或 https:// 外部地址",
+        "copyrightZh": "中文版权信息",
+        "copyrightEn": "英文版权信息",
+        "copyrightHelp": "版权信息支持年份占位符，公共站点会替换为当前年份；中文或英文留空时沿用旧版版权字段的内容。",
+        "error": {
+          "noDestination": "链接「{{label}}」没有填写目标地址。",
+          "whitespace": "链接「{{label}}」的目标地址不能包含空格或反斜杠。",
+          "protocolRelative": "链接「{{label}}」不能使用 // 开头的协议相对地址。",
+          "prefix": "链接「{{label}}」的站内地址必须以 / 开头。",
+          "httpsOnly": "链接「{{label}}」的外部地址必须以 https:// 开头。",
+          "notLoaded": "页脚设置尚未加载完成。",
+          "tooManyGroups": "页脚最多支持 {{max}} 个分组。",
+          "tooManyLinks": "页脚最多支持 {{max}} 个链接。",
+          "invalidGroupId": "分组标识「{{id}}」只能使用小写字母、数字和连字符。",
+          "duplicateGroupId": "分组标识「{{id}}」重复。",
+          "invalidLinkId": "链接标识「{{id}}」只能使用小写字母、数字和连字符。",
+          "blankLabel": "分组「{{group}}」中存在空白的中文或英文链接文字。"
+        }
+      },
+      "media": {
+        "title": "图片与媒体",
+        "description": "Logo、横幅和截图都存放在媒体库，不在本页上传。请先在媒体库上传或复用素材，再在页面或上方图标字段中选择。",
+        "open": "打开媒体库"
+      }
+    },
+    "pageBuilder": {
+      "layouts": "布局",
+      "components": "组件",
+      "paletteHint": "先在画布中选择一个容器，再点击组件将其放入该容器；未选择容器时，组件会添加到页面根节点。",
+      "dragHandle": "拖动以排序",
+      "selectContainer": "选择此容器后再添加组件",
+      "remove": "移除组件",
+      "emptyContainer": "空容器 — 请在组件面板中选择后添加。",
+      "pageSettings": "页面设置",
+      "titleKey": "标题键",
+      "theme": "主题",
+      "properties": "属性",
+      "noSelection": "请选择组件",
+      "noProps": "此组件没有可配置的属性。",
+      "documentJson": "定义 JSON",
+      "documentJsonHint": "高级：直接编辑数据源与响应式布局；保存时服务器会重新校验。",
+      "draftSaved": "草稿 v{{version}} 已保存。",
+      "previewReady": "预览校验通过，未保存任何内容。",
+      "published": "已发布 v{{version}}。",
+      "loadFailed": "无法加载页面定义。",
+      "unsaved": "未保存",
+      "lastEdited": "最后编辑于 {{when}}",
+      "preview": "预览",
+      "saveDraft": "保存草稿",
+      "publish": "发布",
+      "palette": "组件",
+      "canvas": "画布",
+      "inspector": "检查器",
+      "previewTitle": "预览（已校验的定义）",
+      "publishTitle": "发布页面定义",
+      "publishSavesFirst": "未保存的更改将先保存为新的草稿，然后发布。",
+      "publishHint": "公开站点会立即提供最新发布的版本。",
+      "publishReason": "原因（可选）",
+      "getStarted": "先从组件面板中选择一个组件开始。根节点是一个分栏容器，因此任何组件都可以直接放置。",
+      "created": "页面定义已创建。",
+      "route": "路由",
+      "version": "版本",
+      "status": "状态",
+      "updatedAt": "更新时间",
+      "title": "页面构建器",
+      "subtitle": "通过拖拽已注册组件设计公开页面；必须显式发布，草稿永远不会被提供。",
+      "newPage": "新建页面",
+      "empty": "还没有页面定义。创建一个开始使用。",
+      "routeHelp": "小写路径，例如 /downloads，首页为 /。保留前缀（/admin、/api、/blast、/browser）会被服务器拒绝。",
+      "template": "从模板开始",
+      "blankCanvas": "空白画布",
+      "draftNote": "已创建草稿 v1。使用编辑器添加组件、预览并发布。",
+      "missingPageId": "缺少页面 ID",
+      "routeRequired": "请填写路由",
+      "routeInvalid": "首页请使用 /，其他页面请使用 /downloads 这样的小写路径",
+      "titleKeyRequired": "请填写标题键"
+    },
     "title": "管理后台",
     "brand": {
       "title": "站点品牌",
       "description": "管理各 SoyMutDB 站点显示的名称和图标。",
+      "uploadPurpose": "上传用途",
+      "purposes": {
+        "news": "新闻",
+        "editor": "编辑器",
+        "about": "关于我们"
+      },
       "nameZh": "中文显示名称",
       "nameEn": "英文显示名称",
       "iconUrl": "站点图标",
@@ -1121,6 +1504,35 @@
     },
     "importStudio": {
       "newImport": "新建导入",
+      "subtitle": "上传模块数据，检查内容后提交为导入任务。",
+      "stepSource": "来源",
+      "stepFile": "文件",
+      "stepInspect": "检查",
+      "stepReview": "确认",
+      "moduleData": "模块数据",
+      "moduleHint": "此文件提供数据行所属的模块结构。",
+      "datasetHint": "拥有上传对象的数据集。",
+      "releaseHint": "导入的数据行所属的数据版本。",
+      "fileHint": "上传本地文件，或引用已有的 S3 对象。",
+      "s3Hint": "对象键会按照数据集前缀进行校验。",
+      "back": "上一步",
+      "continue": "下一步",
+      "startOver": "重新开始",
+      "openTask": "打开任务",
+      "backToList": "返回导入列表",
+      "loadingCapabilities": "正在加载导入能力…",
+      "fileRequired": "请选择要上传的文件。",
+      "s3Required": "S3 模式下需要文件名和 S3 路径。",
+      "inspectHint": "提交前检查本地文件，尽早发现列错误。",
+      "inspectLocalOnly": "仅本地文件支持检查。",
+      "previewRows": "{{rows}} 行预览",
+      "previewTruncated": "（已截断）",
+      "previewReadOnly": "只读预览",
+      "previewNoRows": "文件没有数据行。",
+      "reviewChecksumPending": "上传时计算",
+      "submitted": "导入已提交",
+      "submittedHint": "导入任务 {{id}} 已进入队列。",
+      "browse": "浏览",
       "module": "数据模块",
       "datasetId": "数据集 ID",
       "releaseId": "数据版本 ID",
@@ -1151,6 +1563,9 @@
     },
     "dashboard": {
       "title": "仪表盘",
+      "welcome": "欢迎",
+      "analysis": "分析",
+      "monitor": "监控",
       "systemOverview": "系统总览",
       "totalTeam": "团队成员",
       "activeReleases": "活跃发布版本",
@@ -1167,7 +1582,29 @@
       "pipelineHeadline": "让数据流水线保持运转",
       "pipelineDesc": "从真实的运维流程开始，而不是装饰性的管理页面。",
       "openImports": "打开导入",
-      "trendUnavailable": "仪表盘趋势数据暂不可用。"
+      "openAnalytics": "访问统计配置",
+      "trendUnavailable": "仪表盘趋势数据暂不可用。",
+      "quickLinks": "数据管理快捷入口",
+      "quickLinksHint": "直接进入各项数据工作流，无需在侧栏中逐级查找。",
+      "contentOverview": "数据库内容",
+      "shortcuts": {
+        "releases": {
+          "title": "发布数据库",
+          "description": "管理数据版本、发布状态与记录统计。"
+        },
+        "imports": {
+          "title": "数据导入",
+          "description": "上传模块数据并跟踪运行中的任务。"
+        },
+        "dataViews": {
+          "title": "多维数据视图",
+          "description": "已保存的网格、看板与画廊视图。"
+        },
+        "media": {
+          "title": "媒体库",
+          "description": "公共门户使用的图片与文件资源。"
+        }
+      }
     },
     "dashboardStats": {
       "analyticsHeading": "访问统计",
@@ -1193,8 +1630,8 @@
           "variantNoticeAfter": " 中编辑，本页编辑器尚未拆分。"
         },
         "appearance": {
-          "title": "外观",
-          "description": "主题色和门户展示默认值。"
+          "title": "站点外观",
+          "description": "公共站点的品牌、页眉导航、页脚与媒体素材。"
         },
         "integrations": {
           "title": "集成",
@@ -1215,7 +1652,75 @@
           "description": "数据、通知和文件预览配置。"
         }
       },
+      "appearanceForm": {
+        "title": "管理控制台主题",
+        "description": "管理界面的主题色，不影响公共站点。",
+        "loading": "正在加载外观设置…",
+        "loadError": "无法加载外观设置。",
+        "primaryColor": "主色",
+        "primaryColorHelp": "控制 Ant Design 的按钮、链接、标签与选中态。",
+        "save": "保存外观",
+        "saveError": "无法保存外观设置。",
+        "saved": "外观已保存。"
+      },
+      "localizationForm": {
+        "title": "本地化",
+        "description": "配置公开站点使用的默认语言。",
+        "loading": "正在加载本地化设置…",
+        "loadError": "无法加载本地化设置。",
+        "defaultLanguage": "默认语言",
+        "save": "保存本地化",
+        "saveError": "无法保存本地化设置。",
+        "saved": "本地化设置已保存。"
+      },
+      "securityForm": {
+        "title": "安全",
+        "description": "认证与访问控制设置。",
+        "loading": "正在加载安全设置…",
+        "loadError": "无法加载安全设置。",
+        "sessionTimeout": "会话超时（分钟）",
+        "maxLoginAttempts": "最大登录尝试次数",
+        "passwordMinLength": "密码最小长度",
+        "twoFactor": "两步验证",
+        "required": "必须",
+        "optional": "可选",
+        "toggle": "切换",
+        "save": "保存安全设置",
+        "saveError": "无法保存安全设置。",
+        "saved": "安全设置已保存。"
+      },
+      "siteForm": {
+        "title": "站点信息",
+        "description": "配置公开站点的标识与默认语言。",
+        "loading": "正在加载站点设置…",
+        "loadError": "无法加载站点设置。",
+        "siteName": "站点名称",
+        "defaultLanguage": "默认语言",
+        "siteDescription": "站点描述",
+        "save": "保存站点信息",
+        "saveError": "无法保存站点设置。",
+        "saved": "站点信息已保存。"
+      },
       "sectionsLabel": "设置分区",
+      "contentArea": {
+        "hero": "首屏",
+        "tools": "工具卡片",
+        "search": "检索页",
+        "blast": "BLAST",
+        "help": "帮助",
+        "generic": "通用界面"
+      },
+      "section": {
+        "general": "常规设置",
+        "about": "关于设置",
+        "home": "首页欢迎设置",
+        "data": "数据与存储",
+        "email": "邮件与通知",
+        "security": "安全设置",
+        "filePreview": "文件预览设置",
+        "footer": "页脚设置",
+        "content": "站点内容设置"
+      },
       "overview": "设置概览",
       "sections": {
         "general": "常规",
@@ -1224,7 +1729,9 @@
         "home_external": "首页（外网）",
         "home_internal": "首页（内网）",
         "content_external": "站点内容（外网）",
-        "footer_external": "页脚（外网）",
+        "brand_external": "品牌（公共站点）",
+        "header_external": "页眉导航（公共站点）",
+        "footer_external": "页脚（公共站点）",
         "security": "安全",
         "data": "数据与存储",
         "email": "邮件与通知",
@@ -1245,7 +1752,8 @@
         "restoreConfirm": "恢复版本",
         "reasonLabel": "恢复原因",
         "reasonPlaceholder": "必填：请填写审计原因",
-        "restoreError": "无法恢复此版本；如果版本已变化，请刷新历史后重试。"
+        "restoreError": "无法恢复此版本；如果版本已变化，请刷新历史后重试。",
+        "loadMore": "加载更早的修订"
       },
       "overviewTitle": "设置",
       "overviewDescription": "选择一个设置领域并单独保存。",
@@ -1320,17 +1828,22 @@
       "settingsSavedDesc": "{{section}} 设置已成功更新。",
       "ok": "确定",
       "placeholderAboutContentChinese": "页面内容（中文，富文本 / Markdown 均可）",
-      "saveFailed": "无法保存 {{section}} 设置，页面上的值未被修改。"
+      "saveFailed": "无法保存 {{section}} 设置，页面上的值未被修改。",
+      "appearance": "外观",
+      "integrations": "集成",
+      "security": "安全",
+      "localization": "本地化",
+      "advanced": "高级"
     },
     "analyticsSettings": {
       "title": "分析设置",
-      "description": "门户站点的访问统计（Cloudflare Web Analytics）。",
+      "description": "公共门户的访问统计。默认使用平台自带的采集；Cloudflare Web Analytics 是可选附加项。",
       "overviewTitle": "概览",
-      "overviewDesc": "Cloudflare Web Analytics 是免费、隐私优先、无 Cookie 的流量统计服务。门户（apps/web）通过构建期嵌入的单行静态 JS beacon 接入——不涉及 Workers、KV 或 D1，部署保持纯静态托管。",
+      "overviewDesc": "门户默认把页面浏览上报到平台自己的采集端点 GET /api/v1/analytics/track.gif。该采集是第一方实现：不写 Cookie、在服务端遵守 DNT，且不需要任何第三方脚本。Cloudflare Web Analytics 是需要显式开启的附加项：它会额外加载一个远端信标脚本并向 Cloudflare 上报。通过 SOYMUTDB_ANALYTICS_PROVIDER（native | cloudflare | both）选择提供方。",
       "beaconNote": "只有门户（apps/web）加载 beacon；本管理端与 JBrowse 应用不加载。",
       "dashboardLink": "打开 Cloudflare 控制台",
       "configTitle": "配置方式",
-      "configDesc": "beacon token 是 VITE_* 变量，在构建期注入门户 HTML。本页面仅为文档化配置界面：不保存 token、不调用后端、也无法直接修改线上站点。",
+      "configDesc": "beacon token 是构建期环境变量（SOYMUTDB_CLOUDFLARE_ANALYTICS_TOKEN），在构建时注入门户 HTML。本页面仅为文档化配置界面：不保存 token、不调用后端、也无法直接修改线上站点。",
       "envVar": "环境变量",
       "envVarHelp": "在 Cloudflare Pages 项目 \"soymutdb-web\" → Settings → Environment variables 中设置（Production 与 Preview 都要设）。保存后控制台无法回读变量值。",
       "copy": "复制",
@@ -1340,7 +1853,7 @@
       "step2Title": "复制 beacon token",
       "step2Desc": "打开新站点的安装代码片段，从 data-cf-beacon 中复制 token（一段十六进制短字符串）。",
       "step3Title": "设置 Pages 环境变量",
-      "step3Desc": "在 soymutdb-web 的 Pages 项目：Settings → Environment variables → 添加变量 VITE_CLOUDFLARE_ANALYTICS_TOKEN 并填入 token（Production 与 Preview），然后重新部署。",
+      "step3Desc": "在 soymutdb-web 的 Pages 项目：Settings → Environment variables → 添加变量 SOYMUTDB_CLOUDFLARE_ANALYTICS_TOKEN 并填入 token（Production 与 Preview），然后重新部署。",
       "step4Title": "重新部署",
       "step4Desc": "触发一次新的生产部署，使 token 写入构建出的 index.html。之前已存在的旧部署不包含 beacon。",
       "step5Title": "验证",
@@ -1360,12 +1873,15 @@
       "topSearches": "热门搜索",
       "topReferrers": "来源站点",
       "cloudflareBadge": "Cloudflare",
-      "badgeCloudflare": "Cloudflare Web Analytics",
+      "badgeCloudflare": "Cloudflare Web Analytics（可选）",
       "badgeBeacon": "Beacon（静态 JS）",
       "badgeBuildTimeInjection": "构建期注入",
       "badgeCookieFree": "无 Cookie",
       "badgeBuildTime": "构建期",
-      "badgeRuntimeDetection": "运行时检测：不适用"
+      "badgeRuntimeDetection": "运行时检测：不适用",
+      "badgeNative": "平台原生（默认）",
+      "providerVar": "提供方开关",
+      "providerVarHelp": "不设置即只用平台原生。设为 cloudflare 或 both 才会额外加载 Cloudflare 信标（同时需要上面那个 token）。非法取值会直接让构建失败，而不是悄悄改变页面加载内容。"
     },
     "file_preview": "文件预览配置",
     "file_preview_enabled": "启用文件预览",
@@ -1374,8 +1890,12 @@
     "imports": "数据导入",
     "importDetail": {
       "title": "导入任务",
-      "loadError": "无法加载该导入任务。",
+      "loading": "正在加载导入任务…",
+      "unavailableTitle": "导入任务不可用",
+      "unavailableBody": "该任务可能已被删除，或你无权访问。",
       "back": "返回导入列表",
+      "titleWithId": "导入任务 #{{id}}",
+      "loadError": "无法加载该导入任务。",
       "filename": "文件",
       "type": "类型",
       "status": "状态",
@@ -1386,11 +1906,15 @@
       "completedAt": "完成时间",
       "celeryStatus": "工作进程状态",
       "errorMessage": "错误",
+      "notCompleted": "尚未完成",
+      "noError": "未报告错误。",
       "filePath": "对象",
       "retry": "重试",
       "cancel": "取消",
       "cancelConfirm": "确定取消该导入？",
-      "unknown": "未知"
+      "unknown": "未知",
+      "invalidTitle": "导入任务编号无效",
+      "invalidBody": "该地址没有指向一个导入任务，请返回导入列表重新选择。"
     },
     "importCreate": {
       "title": "发起导入",
@@ -1453,6 +1977,16 @@
       "deleteContentTitle": "删除内容",
       "deleteContentConfirm": "确定要删除吗？",
       "unknownError": "发生未知错误",
+      "type": {
+        "news": "新闻",
+        "publication": "论文",
+        "page": "静态页面"
+      },
+      "status": {
+        "draft": "草稿",
+        "published": "已发布",
+        "archived": "已归档"
+      },
       "editPageTitle": "编辑页面",
       "newPage": "新建页面",
       "editPageDesc": "正在编辑",
@@ -1460,6 +1994,7 @@
       "labelTitleEnglish": "标题（英文）*",
       "placeholderTitleEnglish": "英文页面标题",
       "labelTitleChinese": "标题（中文）",
+      "placeholderTitleChinese": "中文页面标题",
       "labelSlug": "标识（Slug）*",
       "slugReadonlyHint": "标识在创建后不可更改。",
       "labelCategory": "分类",
@@ -1472,6 +2007,7 @@
       "placeholderSummary": "用于列表展示的简短摘要",
       "labelContentEnglish": "内容（英文）*",
       "placeholderContentEnglish": "英文页面内容（支持 Markdown）",
+      "placeholderContentChinese": "中文页面内容（支持 Markdown）",
       "labelContentChinese": "内容（中文）",
       "labelEditComment": "编辑说明",
       "placeholderDescribeRevision": "描述本次修订",
@@ -1496,6 +2032,15 @@
       "editLoadError": "无法加载所请求的页面。",
       "statusAll": "全部状态",
       "statusArchived": "已归档",
+      "searchPlaceholder": "按标题搜索…",
+      "searchContent": "搜索内容",
+      "filterStatus": "按状态筛选",
+      "filterFeatured": "按推荐状态筛选",
+      "featuredAll": "全部出版物",
+      "featuredOnly": "仅推荐",
+      "unfeaturedOnly": "未推荐",
+      "noMatchingContent": "没有匹配的{{type}}内容",
+      "noMatchingContentDesc": "清除搜索或筛选条件以查看全部内容。",
       "filterCategoryPlaceholder": "按分类筛选…",
       "noPagesFound": "未找到页面",
       "noPagesFoundDesc": "新建一个静态页面以开始。",
@@ -1531,6 +2076,18 @@
       "migrationTitle": "页面构建器迁移预览",
       "migrationBody": "该预览仅校验旧版页面并报告草稿候选，不会创建、发布或修改任何源页面。",
       "previewMigration": "预览迁移",
+      "migrationColumnSlug": "旧版 slug",
+      "migrationColumnRoute": "草稿路由",
+      "migrationColumnOutcome": "结果",
+      "migrationColumnMessage": "信息",
+      "migrationReady": "可进行草稿迁移。",
+      "migrationPreviewError": "无法加载迁移预览，请稍后重试。",
+      "migrationSummary": "试运行：{{created}} 个可迁移，{{skipped}} 个已映射，{{invalid}} 个需人工确认。",
+      "migrationOutcome": {
+        "created": "可迁移",
+        "skipped": "已映射",
+        "invalid": "需确认"
+      },
       "publishTitle": "发布页面",
       "publishConfirm": "确定发布“{{title}}”吗？发布后将立即在公开站点可见。",
       "unpublishTitle": "取消发布页面",
@@ -1593,6 +2150,27 @@
       "purgeConfirmBody": "此操作无法撤销。",
       "restoreSuccess": "文章已恢复",
       "purgeSuccess": "文章已永久删除",
+      "externalImport": {
+        "title": "导入外部文章",
+        "cancel": "取消",
+        "apply": "应用已审阅预览",
+        "reviewTitle": "保存前审阅",
+        "reviewDescription": "预览或应用此来源不会创建、保存或发布新闻文章。请在导入后于新闻表单中审阅内容，必要时编辑后再保存。",
+        "platform": "平台",
+        "platformRequired": "请选择一个外部平台。",
+        "url": "文章链接",
+        "urlRequired": "请输入 HTTPS 文章链接。",
+        "httpsOnly": "仅允许 HTTPS 链接。",
+        "invalidUrl": "请输入有效的 HTTPS 链接。",
+        "preview": "预览文章",
+        "previewFailed": "预览失败",
+        "previewFailedFallback": "无法预览该外部文章。",
+        "previewReady": "预览已就绪",
+        "fieldTitle": "标题",
+        "fieldSource": "来源",
+        "fieldPublishedAt": "来源发布时间",
+        "fieldBody": "导入正文（文本预览）"
+      },
       "saveError": "无法保存文章",
       "createNew": "新建文章",
       "edit": "编辑文章",
@@ -1769,6 +2347,8 @@
       "bannerDescription": "保存为模板后立即生效：门户按物种、站点变体与 release 解析这一列集合。",
       "instancesTitle": "多物种实例",
       "instancesBanner": "一个管理面板可管理多个物种库：在此登记每个实例的 API / JBrowse / 门户地址，数据仍留在各自实例内。",
+      "toggleInstance": "启用 {{name}}",
+      "siteVariant": "站点变体",
       "name": "名称",
       "namePlaceholder": "例如：突变位点（含同源列）",
       "columnsLabel": "列（按显示顺序；勾选控制显隐）",
@@ -1834,7 +2414,104 @@
       "instanceUpdateFailed": "无法更新实例“{{name}}”。",
       "instanceDeleteFailed": "无法注销实例“{{name}}”。",
       "loadError": "无法加载表格视图模板。",
-      "instancesLoadError": "无法加载物种实例。"
+      "instancesLoadError": "无法加载物种实例。",
+      "apiOrigin": "API 源地址",
+      "jbrowseOrigin": "JBrowse 源地址",
+      "portalOrigin": "门户源地址",
+      "localTag": "本地",
+      "siteVariantExternal": "外网",
+      "siteVariantInternal": "内网"
+    },
+    "dataViews": {
+      "title": "多维数据视图",
+      "subtitle": "针对已发布基因、变异与突变体品系保存的多视图工作区。",
+      "bannerTitle": "视图只负责呈现，不是第二个数据库",
+      "bannerDescription": "每一行数据仍来自按 release 作用域的公共读取 API，因此保存的视图无法暴露未发布记录或内部标识。",
+      "sourceLabel": "数据源",
+      "source": {
+        "genes": "基因",
+        "variants": "变异",
+        "mutant_lines": "突变体品系"
+      },
+      "viewTypeLabel": "视图类型",
+      "viewType": {
+        "grid": "表格",
+        "kanban": "看板",
+        "gallery": "画廊"
+      },
+      "newView": "新建视图",
+      "editView": "编辑视图",
+      "savedViews": "已保存视图",
+      "loadError": "无法加载已保存视图。",
+      "rowsError": "无法加载该视图的数据行。",
+      "empty": "该数据源还没有保存的视图。新建一个即可选择其字段、筛选与布局。",
+      "activeView": "预览：{{name}}",
+      "preview": "预览",
+      "noActiveView": "请选择或新建一个视图以进行预览。",
+      "name": "视图名称",
+      "namePlaceholder": "例如：按染色体分组的高影响变异",
+      "fieldsLabel": "可见字段",
+      "fieldsHint": "编号顺序即列顺序，可用箭头调整。",
+      "searchableFieldsLabel": "可搜索字段",
+      "searchableFieldsHint": "勾选参与关键字搜索的字段；一个都不选则不显示搜索框。",
+      "searchPlaceholder": "搜索 {{fields}}",
+      "searchNoMatch": "没有匹配当前搜索的行。",
+      "visibilityLabel": "可见性",
+      "visibilityHint": "隐藏的视图仍会保存，也能通过链接打开，只是不再出现在已保存视图列表中。",
+      "visibility": {
+        "visible": "可见",
+        "hidden": "隐藏"
+      },
+      "showHidden": "显示已隐藏视图",
+      "filtersLabel": "筛选条件",
+      "filterKey": "筛选字段",
+      "filterValue": "值",
+      "addFilter": "添加筛选",
+      "removeFilter": "移除筛选",
+      "sortField": "排序字段",
+      "sortDirection": "排序方向",
+      "asc": "升序",
+      "desc": "降序",
+      "groupField": "分组字段",
+      "titleField": "卡片标题字段",
+      "pageSize": "每页行数",
+      "defaultTag": "默认视图",
+      "notes": "备注",
+      "setDefault": "设为默认",
+      "viewSelect": "已保存视图",
+      "viewSettings": "视图设置",
+      "summary": "{{rows}} 行 · {{columns}} 列 · {{searchable}} 个可搜索字段",
+      "activeFilters": "{{count}} 个筛选",
+      "addField": "添加字段（剩余 {{count}} 个）",
+      "viewTypeHint": "随视图一起保存；本控制台统一以一张表格呈现所有视图。",
+      "layoutNote": {
+        "kanban": "该视图保存为看板布局，控制台现在以表格呈现；保存的配置没有被改动。",
+        "gallery": "该视图保存为画廊布局，控制台现在以表格呈现；保存的配置没有被改动。"
+      },
+      "field": {
+        "searchable": "可搜索",
+        "visible": "展示",
+        "searchableAria": "{{field}}：作为搜索来源",
+        "visibleAria": "{{field}}：展示该列",
+        "dragAria": "拖动以调整 {{field}} 的顺序",
+        "moveLeftAria": "{{field}} 左移",
+        "moveRightAria": "{{field}} 右移",
+        "lastVisibleHint": "视图至少要保留一列：先添加另一列，再隐藏这一列。"
+      },
+      "patchFailed": "保存失败：{{reason}}",
+      "saveFailed": "无法保存视图：{{reason}}",
+      "deleteTitle": "删除视图",
+      "deleteConfirm": "确定删除视图“{{name}}”吗？仅删除保存的配置，不会删除任何生物学数据。",
+      "loadMore": "加载更多",
+      "groupRequiredTitle": "看板需要分组字段",
+      "groupRequired": "请先编辑该视图并选择分组字段，再切换回看板布局。",
+      "none": "无",
+      "issue": {
+        "name": "保存前请填写视图名称。",
+        "fields": "请至少选择一个可见字段。",
+        "group": "看板视图需要分组字段。",
+        "sort": "请先选择排序字段，再选择排序方向。"
+      }
     },
     "tableViewsHint": "配置门户各表格显示哪些列。模板按物种、站点变体与 release 作用域；跨组装同源列默认不启用。",
     "table": "表格",
@@ -1880,6 +2557,8 @@
       "resource": "资源",
       "readOnly": "只读",
       "actionPlaceholder": "操作",
+      "actionFilter": "操作筛选",
+      "statsPeriod": "统计周期",
       "title": "审计日志",
       "subtitle": "管理员操作的追加式记录，不可修改或删除。",
       "details": "详情",
@@ -1933,7 +2612,47 @@
       "abstract": "摘要",
       "deleteTitle": "删除文献"
     },
+    "previewTestData": {
+      "title": "测试数据预览",
+      "subtitle": "本机上未发布的测试数据；「可获得」可在此修改，重新导入时会保留。",
+      "columnSiteKey": "突变体系（株系母+位置）",
+      "columnChromosome": "染色体号",
+      "columnPosition": "位点",
+      "columnConfidence": "可信度",
+      "confidenceHigh": "高",
+      "confidenceLow": "低",
+      "columnGene": "基因号",
+      "columnFeature": "特征",
+      "columnAvailable": "可获得",
+      "start": "起始位点",
+      "end": "终止位点",
+      "query": "查询",
+      "yes": "是",
+      "no": "否",
+      "loadFailedTitle": "加载失败",
+      "loadError": "无法加载预览数据；该接口仅在本机 dev 环境可用。",
+      "saveError": "保存「可获得」状态失败。",
+      "toggleAria": "切换 {{key}} 的可获得状态",
+      "resultCount": "共 {{count}} 条"
+    },
     "importsHint": "该部署已接收的全部导入任务，按状态在服务端过滤。",
+    "contentTab": {
+      "news": "新闻",
+      "publication": "论文",
+      "page": "静态页面"
+    },
+    "status": {
+      "releaseDraft": "草稿",
+      "releaseImporting": "导入中",
+      "releaseValidating": "校验中",
+      "releaseActive": "生效中",
+      "releaseArchived": "已归档",
+      "taskPending": "等待中",
+      "taskRunning": "运行中",
+      "taskCompleted": "已完成",
+      "taskFailed": "失败",
+      "taskCancelled": "已取消"
+    },
     "releasesHint": "管理数据版本、发布状态及数据库记录统计。",
     "media": {
       "description": "新闻与页面引用的已上传素材；归档只从选择器中移除，不破坏已发布的引用。",
@@ -1946,6 +2665,12 @@
       "uploadFirst": "请先上传媒体文件。",
       "clearFilters": "清除筛选",
       "searchPlaceholder": "搜索文件名或说明…",
+      "purposes": {
+        "news": "新闻",
+        "editor": "编辑器",
+        "about": "关于"
+      },
+      "uploadPurpose": "上传用途",
       "filterPurpose": "按用途筛选",
       "altPlaceholder": "替代文本",
       "missingAlt": "缺少替代文本",
@@ -1990,16 +2715,12 @@
         "selectedImage": "已选图片",
         "noAltText": "请填写替代文本",
         "missingAlt": "缺少替代文本"
-      },
-      "purposes": {
-        "news": "新闻",
-        "editor": "编辑器",
-        "about": "关于"
       }
     },
     "shell": {
       "overview": "总览",
       "dataManagement": "数据管理",
+      "dataViews": "多维视图",
       "content": "内容",
       "presentation": "呈现",
       "administration": "系统管理",
@@ -2043,7 +2764,15 @@
       "publications": "论文",
       "settings": "设置",
       "featureFlags": "功能开关",
-      "analytics": "访问分析"
+      "analytics": "访问分析",
+      "dashboards": "仪表盘",
+      "allImports": "全部导入",
+      "newImport": "新建导入",
+      "pagesGroup": "页面",
+      "newsGroup": "新闻",
+      "newArticle": "新建文章",
+      "newsTrash": "回收站",
+      "settingsOverview": "设置总览"
     },
     "commandPalette": {
       "dialogLabel": "命令面板",
@@ -2141,6 +2870,9 @@
       "savedDraftsUnavailable": "草稿暂不可用，已有导入不受影响。",
       "resume": "继续",
       "noDrafts": "没有可继续的服务端导入草稿。",
+      "draftCounts": "{{rows}} 行 · {{columns}} 列",
+      "emptyTitle": "暂无导入任务",
+      "emptyDescription": "提交一个新的导入以开始。",
       "searchPlaceholder": "搜索导入任务…",
       "importType": "导入类型",
       "datasetId": "数据集 ID",
@@ -2167,12 +2899,33 @@
       "cancelSucceeded": "导入任务已取消。",
       "retrySucceeded": "导入任务已重新排队。",
       "loadError": "无法加载导入任务。",
-      "cancelTaskConfirmLabel": "取消任务"
+      "cancelTaskConfirmLabel": "取消任务",
+      "columns": {
+        "file": "文件",
+        "status": "状态",
+        "progress": "进度",
+        "submittedBy": "提交人",
+        "submitted": "提交时间",
+        "actions": "操作"
+      },
+      "viewError": "查看错误",
+      "details": "详情",
+      "capabilitiesLoading": "正在加载导入能力…",
+      "capabilitiesError": "无法加载导入能力，导入操作暂不可用。",
+      "moduleImportsDisabled": "模块导入已被停用。",
+      "downloadTemplate": "下载模板",
+      "templateHint": "模块结构（基因）的起始模板，格式：TSV / CSV / XLSX。",
+      "xlsxDisabled": "XLSX 当前已被管理员停用。",
+      "templateDownloadFailed": "模板下载失败。",
+      "moduleKeyRequired": "请填写模块键。",
+      "emptySearchTitle": "没有匹配的导入任务",
+      "emptySearchDescription": "清空搜索即可查看全部导入任务。"
     },
     "charts": {
       "imported": "已导入",
       "failed": "失败",
       "records": "记录数",
+      "running": "进行中",
       "importThroughput": "导入吞吐量",
       "importThroughputAria": "导入吞吐量图表",
       "noData": "暂无图表数据",
@@ -2185,6 +2938,39 @@
       "storage": "存储",
       "storageGrowth": "存储增长",
       "storageGrowthAria": "存储增长图表"
+    },
+    "analysis": {
+      "title": "分析",
+      "subtitle": "导入吞吐量与查询性能的时间趋势。",
+      "date": "日期",
+      "imported": "已导入",
+      "failed": "失败",
+      "totalImported": "累计导入记录",
+      "totalFailed": "失败记录",
+      "importThroughput": "导入吞吐量",
+      "queryLatency": "查询延迟",
+      "storageGrowth": "存储增长",
+      "throughputDetail": "导入吞吐明细"
+    },
+    "monitor": {
+      "title": "监控",
+      "subtitle": "每 30 秒刷新一次的流水线与查询健康状态。",
+      "file": "文件",
+      "type": "类型",
+      "status": "状态",
+      "records": "记录数",
+      "submitted": "提交时间",
+      "activeReleases": "活跃发布版本",
+      "activeImports": "进行中的导入",
+      "services": "服务状态",
+      "healthy": "正常",
+      "degraded": "降级",
+      "checking": "检查中",
+      "apiHealthy": "指标 API 响应正常",
+      "apiDown": "指标 API 无响应",
+      "apiChecking": "正在检查指标 API…",
+      "apiHint": "控制台会自动刷新；点击“刷新”可立即获取快照。",
+      "recentImports": "最近的导入任务"
     },
     "confirm": {
       "confirm": "确认",
@@ -2201,6 +2987,7 @@
       "fileMimeRequired": "必须提供文件的 MIME 类型",
       "presignMustUsePost": "上传预签名响应必须使用 POST",
       "importPreviewAria": "导入预览",
+      "openRow": "打开该行",
       "editCellForRow": "编辑该行",
       "maxPendingEdits": "待保存的编辑过多",
       "uploadFailedStatus": "上传失败",
@@ -2215,6 +3002,9 @@
       "badgePublic": "公开",
       "badgeInternal": "内网",
       "disableBehavior": "停用方式：{{behavior}}",
+      "disableBehaviorValue": {
+        "reject_new_requests": "拒绝新请求，不中断运行中的任务"
+      },
       "toggleFeatureAria": "{{action}} {{key}}",
       "disable": "停用",
       "enable": "启用",
@@ -2261,6 +3051,65 @@
       "strong": "很强",
       "failed": "登录失败，请重试。",
       "invalidCredentials": "邮箱或密码不正确。"
+    },
+    "importDraft": {
+      "operationFailed": "草稿操作失败。",
+      "intro": "字段映射、数据补丁、校验与发布均针对此已持久化的草稿执行；不可变的源元数据与行数不在此处编辑。",
+      "committedLocked": "该草稿已提交，所有编辑控件均已锁定。",
+      "publishableLocked": "该草稿状态为 {{status}}；映射、补丁与校验已锁定，可在下方执行发布。",
+      "readOnlyLocked": "该草稿状态为 {{status}}；映射、补丁、校验与发布均不可用。",
+      "fieldMapping": "字段映射（JSON 数组）",
+      "dataPatches": "数据补丁（JSON 数组）",
+      "saveMapping": "保存映射",
+      "mappingSaved": "映射已保存到草稿。",
+      "savePatches": "保存补丁",
+      "patchesSaved": "补丁已保存到草稿。",
+      "validate": "校验已持久化草稿",
+      "validationCompleted": "草稿校验完成。",
+      "validationState": "校验状态：{{state}}",
+      "publicationTitle": "显式发布确认",
+      "publicationSourceId": "发布源 ID",
+      "publicationSourceIdPlaceholder": "源 ID",
+      "publicationKind": "发布类型",
+      "publicationKindPlaceholder": "发布类型",
+      "publicationConfig": "发布配置 JSON",
+      "publishConfirm": "发布此已校验草稿？该操作是显式的，且无法从草稿编辑器撤销。",
+      "committed": "草稿提交成功。",
+      "confirmCommit": "确认并提交草稿",
+      "status": {
+        "draft": "草稿",
+        "validated": "已校验",
+        "ready": "待发布",
+        "committed": "已提交"
+      },
+      "summary": "{{rows}} 行 · {{columns}} 列 · {{fields}} 个已映射字段",
+      "fieldMappingLabel": "字段映射",
+      "dataPatchesLabel": "数据补丁",
+      "publicationConfigLabel": "发布配置"
+    },
+    "newsForm": {
+      "externalSourceUrlAria": "外部文章来源地址",
+      "externalSourcePlaceholder": "未关联外部来源"
+    },
+    "releasesEmpty": {
+      "title": "暂无数据版本",
+      "description": "一个数据版本归集同一组装版本导入的数据。请先在导入流程中创建版本，再将其发布以对外提供查询。",
+      "openImports": "前往数据导入",
+      "openSiteControl": "站点控制"
+    },
+    "releasesSummary": {
+      "total": "版本总数",
+      "published": "已发布",
+      "draft": "草稿",
+      "active": "活跃版本",
+      "activeVariants": "对外提供 {{count}} 条变异",
+      "noActive": "尚未设置活跃版本指针"
+    },
+    "releasesFilter": {
+      "search": "按名称、版本或 ID 搜索",
+      "status": "按状态筛选",
+      "matching": "{{shown}} / {{total}} 条匹配",
+      "empty": "没有符合当前筛选条件的数据版本。"
     }
   },
   "news": {
@@ -2312,7 +3161,12 @@
     "title": "关于我们",
     "empty": "关于我们内容尚未发布。",
     "loadErrorTitle": "关于我们页面加载失败",
-    "loadErrorSubtitle": "服务暂时不可用，请稍后重试。"
+    "loadErrorSubtitle": "服务暂时不可用，请稍后重试。",
+    "emptyExplain": "「关于我们」正文由管理员在后台撰写并发布，尚未发布时此处不会显示空白页，而是保留可用的入口。",
+    "emptySearchTitle": "按基因 ID 检索",
+    "emptySearchBody": "在指定的基因组组装与数据版本中查找已发布的基因记录。",
+    "emptyAssembliesTitle": "查看基因组组装",
+    "emptyAssembliesBody": "了解当前发布版本包含哪些组装、每个组装有多少基因。"
   },
   "publications": {
     "title": "文献",
@@ -2400,6 +3254,12 @@
       "a": "新版本与发布日期会在新闻和下载页面公布。本帮助页面不承诺固定更新周期。"
     },
     "supportEmail": "support@soymutdb.org"
+  },
+  "guide": {
+    "notPublishedTitle": "指南尚未发布",
+    "notPublishedDesc": "编辑在后台发布后，NCBI 数据库使用指南会显示在这里。",
+    "loadErrorTitle": "指南加载失败",
+    "loadErrorDesc": "请检查网络连接后重试。"
   },
   "tools": {
     "title": "工具",
@@ -2609,7 +3469,127 @@
     "cardSubtitle": "按组装从基因列表或基因组区域提取参考序列。",
     "seqfetchCard": "从选定组装下载最多 200 个基因或 1 个 1-based 闭区间的 FASTA。",
     "exppatternCard": "在一个选定组装内比较最多 50 个基因的文库表达。",
-    "enrichmentCard": "使用组装范围注释运行过表征或排序富集分析。"
+    "enrichmentCard": "使用组装范围注释运行过表征或排序富集分析。",
+    "popgen": {
+      "title": "群体遗传学",
+      "regionLabel": "区间",
+      "regionHelp": "两种模式只能选一种：按基因编号，或按明确的基因组区间。",
+      "modeGene": "按基因",
+      "modeInterval": "按区间",
+      "geneLabel": "基因编号",
+      "genePlaceholder": "例如 Glyma.01G000100",
+      "assemblyLabel": "组装",
+      "assemblyPlaceholder": "请选择组装",
+      "assembliesError": "无法加载组装列表。",
+      "chromosomeLabel": "染色体",
+      "chromosomePlaceholder": "例如 chr01",
+      "startLabel": "起始（1-based）",
+      "endLabel": "终止",
+      "formTitle": "查询",
+      "submit": "运行分析",
+      "summaryTitle": "查询摘要",
+      "emptyTitle": "暂无结果",
+      "errorTitle": "分析失败",
+      "notRecorded": "未记录",
+      "variantCount": "{{count}} 个变异",
+      "sourceGene": "基因区间",
+      "sourceInterval": "自定义区间",
+      "columns": {
+        "variant": "变异",
+        "position": "位置",
+        "alleles": "等位基因",
+        "type": "类型",
+        "alleleFrequency": "等位基因频率",
+        "variantScope": "发布版本内标识",
+        "variantScopeHelp": "该编号只在同一发布版本内唯一，不是永久公开标识；后续版本可能把它分配给另一条记录。"
+      },
+      "errors": {
+        "geneRequired": "请输入基因编号。",
+        "geneTooLong": "基因编号最长 64 个字符。",
+        "assemblyRequired": "请选择组装。",
+        "chromosomeRequired": "请输入染色体名称。",
+        "startInvalid": "起始位置必须是 ≥ 1 的整数。",
+        "endInvalid": "终止位置必须是 ≥ 1 的整数。",
+        "order": "终止位置必须不小于起始位置。",
+        "span": "单次区间不得大于 {{max}} bp。"
+      },
+      "allelefreq": {
+        "title": "等位基因频率",
+        "subtitle": "按基因或区间查询每个变异的等位基因频率",
+        "formDesc": "频率取自已发布的变异数据存储。",
+        "emptyDesc": "请选择基因或区间以列出等位基因频率。",
+        "resultsTitle": "变异频率",
+        "resultsDesc": "保留三位小数。没有记录频率的变异会标注为未记录，而不是 0。",
+        "noRowsTitle": "该区间内没有变异",
+        "noRowsDesc": "已发布的变异存储中该区间没有记录。"
+      },
+      "diversity": {
+        "title": "核苷酸多样性",
+        "subtitle": "按基因或区间计算 π 与 Watterson θ",
+        "formDesc": "π 按每碱基给出；θ 需要样本量。",
+        "emptyDesc": "请选择基因或区间以估计多样性。",
+        "sampleSizeLabel": "样本量（可选）",
+        "sampleSizePlaceholder": "例如 30",
+        "sampleSizeHelp": "仅用于 Watterson θ；不提供则 θ 无定义。",
+        "windowLabel": "窗口大小，bp（可选）",
+        "windowPlaceholder": "例如 5000",
+        "windowHelp": "把 π 切分为滑动窗口，用于下方图表。",
+        "errorSampleSize": "样本量必须是 2 到 1000000 之间的整数。",
+        "errorWindow": "窗口大小必须是 ≥ 0 的整数。",
+        "span": "{{bp}} bp",
+        "segregating": "{{count}} 个分离位点",
+        "segregatingShort": "分离位点",
+        "resultsTitle": "多样性估计",
+        "piLabel": "π",
+        "piPerSiteLabel": "π（每个多态位点）",
+        "thetaLabel": "Watterson θ",
+        "piHelp": "对多态位点求 2p(1−p) 之和，再除以区间长度；单态位点贡献为零。",
+        "piPerSiteHelp": "仅对多态位点求 2p(1−p) 的平均值。",
+        "piNoPolymorphism": "未定义：该区间没有多态位点。",
+        "thetaHelp": "每碱基的 S / a_n，使用你提供的样本量计算。",
+        "thetaNullNoSampleSize": "未计算：没有提供样本量，θ 无定义。",
+        "thetaNullNoSites": "未定义：该区间没有分离位点。",
+        "noVariantsTitle": "该区间内没有变异",
+        "noVariantsDesc": "已发布的变异存储中该区间没有记录，因此不存在多样性估计。",
+        "windowsTitle": "分窗 π",
+        "windowsDesc": "按所请求的窗口大小统计各窗口内的多样性。",
+        "windowsAxis": "π",
+        "windowsEmpty": "没有窗口包含多态位点。",
+        "windowStart": "窗口起点",
+        "windowEnd": "窗口终点"
+      },
+      "ld": {
+        "title": "连锁不平衡",
+        "subtitle": "按基因或区间给出变异坐标与 r² 矩阵",
+        "formDesc": "坐标取自已发布的变异存储；r² 需要基因型数据。",
+        "emptyDesc": "请选择基因或区间以查看连锁不平衡。",
+        "boundaryTitle": "r² 只有拿到基因型才能计算",
+        "boundaryBody": "已发布的存储只有逐个变异的等位基因频率，没有逐样本的基因型。未提供基因型矩阵时，本工具只返回变异坐标，并如实说明 r² 无法计算——不会报告为零连锁。",
+        "genotypesLabel": "基因型矩阵（可选）",
+        "genotypesPlaceholder": "sample\tv1\tv2…\ns1\t0\t2\ns2\t1\t1",
+        "genotypesHelp": "表头行：先写 sample，然后每个变异一列。其后每个样本一行，剂量取 0、1 或 2，不允许缺失。",
+        "genotypeError": {
+          "empty": "至少需要一行表头和一行样本。",
+          "shape": "每行的列数必须与表头一致。",
+          "value": "剂量只能是 0、1 或 2，不允许缺失。",
+          "labels": "至少需要两个样本。"
+        },
+        "stateComputed": "r² 已计算",
+        "stateNotComputable": "r² 无法计算",
+        "r2NullExplanation": "此处 r² 为 null：存储中只有等位基因频率，无法从数据库推导成对 LD。提供基因型矩阵即可计算。",
+        "noGenotypesTitle": "没有可绘制的 r² 矩阵",
+        "noGenotypesDesc": "该区间的 {{count}} 个变异有坐标但没有基因型数据，因此成对 r² 未知。这与 r² = 0 不是一回事。",
+        "noVariantsTitle": "该区间内没有变异",
+        "noVariantsDesc": "已发布的变异存储中该区间没有记录，因此没有可绘制的内容。",
+        "heatmapTitle": "r² 矩阵",
+        "heatmapDesc": "区间内变异两两之间的 r²，由你提供的基因型矩阵计算得出。",
+        "heatmapLegend": "变异",
+        "resultsTitle": "连锁分析结果",
+        "heatmapEmpty": "r² 矩阵为空。",
+        "variantsTitle": "区间内的变异",
+        "variantsDesc": "本次查询解析出的所有变异坐标。"
+      }
+    }
   },
   "commandPalette": {
     "label": "快速搜索",
@@ -2950,12 +3930,18 @@
     "truncationNotice": "图已限制为 {{nodes}} 个节点与 {{edges}} 条关系。"
   },
   "site": {
+    "databaseKind": {
+      "gene_ontology": "基因本体数据库",
+      "transcription_factor": "转录因子数据库"
+    },
     "internalBadgeTitle": "私有内部站点制品",
     "internalBadge": "内部"
   },
   "errorBoundary": {
     "title": "出现了一些问题",
-    "description": "渲染此部分时发生了意外错误。"
+    "description": "渲染此部分时发生了意外错误。",
+    "retry": "重试",
+    "backToDashboard": "返回仪表盘"
   },
   "a11y": {
     "skipToContent": "跳到主要内容"
@@ -2984,8 +3970,21 @@
     "tracks": {
       "all": "全部",
       "genes": "基因",
-      "markers": "标记"
-    }
+      "markers": "标记",
+      "selected": "本基因",
+      "context": "邻近基因（{{total}}）",
+      "sites": "位点（{{total}}）",
+      "transcripts": "转录本（{{total}}）"
+    },
+    "pointer": "指针",
+    "contextWindow": "{{window}} · 上下各 {{flank}} bp 上下文 · 邻近基因 {{total}} 个",
+    "contextUnavailable": "邻近基因未能加载，当前仅绘制本基因。",
+    "geneAriaLabel": "{{geneId}} 基因组视图，窗口 {{chromosome}}:{{start}}–{{end}}",
+    "contextTableCaption": "{{geneId}} 周围 {{window}} 窗口内的基因",
+    "contextTableCoordinates": "坐标",
+    "contextTableRole": "类型",
+    "contextTableSelected": "本基因",
+    "contextTableContext": "邻近基因"
   },
   "dataTable": {
     "title": "数据表",
@@ -3072,6 +4071,333 @@
     "resultsAria": "株系检索结果",
     "subtitle": "按品种、诱变方式与表型检索已公开的突变株系。",
     "title": "突变株系",
-    "resultCount": "共 {{count}} 个突变株系"
+    "resultCount": "共 {{count}} 个突变株系",
+    "pageWindow": "显示第 {{start}}–{{end}} 条 · 第 {{page}} 页"
+  },
+  "blastPublic": {
+    "eyebrow": "公开序列搜索",
+    "title": "匿名 BLAST",
+    "subtitle": "无需创建账户即可运行一次蛋白质搜索。任务处理期间请保持此页面打开。",
+    "formTitle": "搜索蛋白质数据库",
+    "sequencePlaceholder": "粘贴蛋白质 FASTA 序列",
+    "submit": "运行 BLAST",
+    "newSearch": "新建搜索",
+    "databaseRequired": "请选择蛋白质数据库。",
+    "sequenceRequired": "请输入至少 10 个字符的蛋白质序列。",
+    "submitFailed": "公开 BLAST 任务提交失败。",
+    "databasesFailed": "无法加载公开 BLAST 数据库。",
+    "statusTitle": "任务状态",
+    "accessFailed": "公开结果不可用或访问令牌无效。",
+    "expired": "公开 BLAST 访问已过期",
+    "expiredHint": "请新建搜索以获取新的临时结果令牌。",
+    "running": "worker 正在处理序列…",
+    "resultsTitle": "公开 BLAST 结果",
+    "download": "下载原始结果",
+    "release": "数据版本",
+    "loginWorkflow": "登录后可使用个人任务历史。",
+    "resultsNotReady": "公开结果尚未准备好。",
+    "engine": "搜索引擎",
+    "program": "搜索程序",
+    "fastaDetected": "{{count}} 条 FASTA 记录",
+    "noArtifact": "该任务没有可下载的产物。",
+    "resultsFor": "任务 {{job}} 的结果",
+    "artifactHint": "该任务的原始比对输出（制表符分隔）。",
+    "sequenceTooShort": "请输入至少 10 个字符的序列。"
+  },
+  "blastSearch": {
+    "proteinInput": "蛋白质 FASTA 查询",
+    "nucleotideInput": "核酸 FASTA 查询",
+    "nucleotidePlaceholder": "粘贴核酸 FASTA 序列",
+    "queryId": "查询 ID",
+    "subjectCoordinates": "目标序列比对位置",
+    "incompatible": "不支持此引擎和程序组合。",
+    "invalidParameters": "E 值需大于 0 且不超过 1000，最大命中数需为 1–500。",
+    "engineUnknown": "引擎未知",
+    "engineNcbi": "NCBI BLAST+",
+    "engineDiamond": "DIAMOND",
+    "provenance": "数据库上下文",
+    "invalidAlphabet": "查询序列字母与所选程序不匹配。",
+    "fasta": {
+      "emptyRecord": "有一条 FASTA 记录只有头、没有序列。"
+    },
+    "downloadFilenameHint": "比对原始输出（制表符分隔）",
+    "engineDiamondBlastp": "DIAMOND（blastp）"
+  },
+  "comparative": {
+    "title": "比较基因组",
+    "subtitle": "来自具名来源的基因家族与同源分组，每条记录都标明方法与版本。",
+    "filters": {
+      "assembly": "装配版本",
+      "allAssemblies": "全部装配",
+      "level": "层级",
+      "allLevels": "全部层级",
+      "clear": "清除筛选",
+      "searchParamsNote": "筛选条件保存在 URL 中，因此本视图可深链、可分享。"
+    },
+    "level": {
+      "gene_family": "基因家族",
+      "gene_subfamily": "亚家族"
+    },
+    "list": {
+      "family": "家族",
+      "name": "名称",
+      "members": "成员数",
+      "method": "方法",
+      "source": "来源",
+      "release": "版本",
+      "empty": "当前版本与该筛选条件下没有导入任何基因家族。",
+      "emptyHint": "家族表缺失不等于家族数为零：所选范围内没有导入数据。",
+      "total": "共 {{total}} 个家族",
+      "pageInfo": "第 {{page}} / {{pages}} 页",
+      "loadError": "家族列表加载失败。"
+    },
+    "detail": {
+      "backToList": "全部家族",
+      "externalId": "来源编号",
+      "method": "方法",
+      "methodVersion": "方法版本",
+      "sourceName": "来源",
+      "sourceVersion": "来源版本",
+      "sourceUrl": "来源链接",
+      "release": "版本",
+      "assembly": "装配版本",
+      "memberCount": "成员数",
+      "relationshipTypes": "关系类型",
+      "membersTitle": "成员",
+      "memberGene": "基因",
+      "memberSpecies": "物种",
+      "memberRelationship": "关系",
+      "memberMethod": "方法",
+      "memberConfidence": "置信度",
+      "membersEmpty": "该家族没有导入任何成员记录。",
+      "provenanceTitle": "数据溯源",
+      "provenanceNote": "家族是计算得到的分组，产出它的方法是记录的一部分，不是可选注释。",
+      "loadError": "家族信息加载失败。",
+      "notFound": "当前版本中没有该家族。",
+      "artifactsTitle": "比对与系统树",
+      "artifactsNote": "比对与系统树异步计算，只对下方哈希所对应的成员集合有效。",
+      "requestMsa": "计算多序列比对",
+      "requestTree": "构建系统树",
+      "polling": "正在等待 worker 执行…",
+      "inputSha": "输入 sha256",
+      "inputMembers": "冻结成员数",
+      "download": "下载结果",
+      "downloadUnavailable": "worker 已结束，但没有发布可下载的对象。",
+      "requestFailed": "请求被拒绝。",
+      "pollTimedOut": "已停止轮询（{{seconds}} 秒）。任务可能仍在运行，刷新页面可再次检查。"
+    },
+    "coverage": {
+      "title": "物种覆盖",
+      "species": "物种",
+      "state": "状态",
+      "members": "成员数",
+      "available": "已导入",
+      "no_data": "该物种在来源中无记录",
+      "no_dataHint": "来源中没有该物种的行，这不是量到的零。",
+      "not_imported": "本 release 未导入该家族的快照",
+      "not_importedHint": "本版本从未导入该家族的快照，因此这里的缺失不说明该物种的情况。"
+    },
+    "relationship": {
+      "one_to_one": "one_to_one",
+      "one_to_many": "one_to_many",
+      "many_to_many": "many_to_many"
+    },
+    "orthologs": {
+      "title": "直系同源与旁系同源",
+      "hint": "关系类型来自导入的记录行，不来自序列相似度。",
+      "gene": "基因",
+      "species": "物种",
+      "type": "关系",
+      "method": "方法",
+      "source": "来源",
+      "no_data": "来源中该基因在本版本没有同源记录。",
+      "not_imported": "本版本从未为该装配导入同源快照。",
+      "empty": "该基因没有记录。",
+      "loadError": "同源记录加载失败。"
+    },
+    "geneLink": {
+      "title": "比较基因组",
+      "body": "该基因所属的基因家族与同源分组，关系分类沿用来源自己的判定。",
+      "open": "查看直系同源与旁系同源"
+    }
+  },
+  "expression": {
+    "eyebrow": "表达",
+    "title": "表达文库",
+    "subtitle": "浏览已发布的表达文库及每个文库中测得的基因。每个文库都绑定到已发布版本及其所在的基因组组装。",
+    "loading": "正在加载表达文库…",
+    "error": "无法加载表达文库列表",
+    "empty": "本发布版本中没有可用的表达文库",
+    "emptyFiltered": "没有符合当前筛选条件的表达文库",
+    "resultCount": "共 {{count}} 个文库",
+    "pageOf": "第 {{page}} 页，共 {{total}} 页",
+    "resultsAria": "表达文库结果",
+    "filters": {
+      "aria": "表达文库筛选",
+      "tissue": "组织",
+      "tissuePlaceholder": "例如 root",
+      "treatment": "处理",
+      "treatmentPlaceholder": "例如 drought",
+      "assembly": "组装",
+      "assemblyPlaceholder": "不限组装",
+      "apply": "应用筛选",
+      "clear": "清除筛选"
+    },
+    "list": {
+      "sample": "样本",
+      "library": "文库",
+      "tissue": "组织",
+      "treatment": "处理",
+      "assembly": "组装",
+      "assemblyUnknown": "未记录组装",
+      "study": "研究",
+      "noStudyRef": "无研究编号",
+      "measurements": "测定基因数"
+    },
+    "detail": {
+      "back": "返回表达文库列表",
+      "loading": "正在加载表达文库…",
+      "notFound": "未找到该表达文库，或它不属于已发布的版本。",
+      "provenance": "来源信息",
+      "studyRef": "研究编号",
+      "source": "数据来源",
+      "assembly": "组装",
+      "assemblyUnknown": "未记录组装",
+      "developmentalStage": "发育时期",
+      "tissue": "组织",
+      "treatment": "处理",
+      "missing": "未记录",
+      "extraMetadata": "附加元数据",
+      "extraMetadataEmpty": "该文库没有附加元数据。",
+      "measurementsTitle": "测定的基因",
+      "measurementsDesc": "该文库中每个被测定的基因占一行。",
+      "rowCount": "{{count}} 个基因",
+      "rowsLoading": "正在加载表达量…",
+      "rowsError": "无法加载表达量",
+      "rowsEmptyTitle": "没有测定的基因",
+      "rowsEmptyDesc": "该文库在已发布版本中没有表达记录。",
+      "rowsTruncated": "仅显示前 {{shown}} 个基因，共 {{total}} 个。",
+      "distributionTitle": "表达量分布",
+      "distributionDesc": "该文库中测得的基因，按表达量从高到低排列。未测定的值直接省略，不会画成 0。",
+      "distributionEmpty": "该单位下没有可用的测定值。",
+      "unitSwitchAria": "标准化单位",
+      "unitFpkm": "FPKM",
+      "unitTpm": "TPM",
+      "geneColumn": "基因",
+      "fpkmColumn": "FPKM（每千碱基每百万片段数）",
+      "tpmColumn": "TPM（每百万转录本数）",
+      "rawCountColumn": "原始 reads 计数"
+    }
+  },
+  "phenotypes": {
+    "eyebrow": "表型",
+    "title": "表型浏览器",
+    "subtitle": "跨已发布突变系记录的表型观察，每条都能点回携带它的株系。",
+    "loading": "正在读取表型观察记录…",
+    "error": "无法加载表型观察记录",
+    "empty": "本发布版本中没有可用的表型观察记录",
+    "emptyFiltered": "没有符合当前筛选条件的表型观察记录",
+    "resultCount": "{{count}} 条观察记录",
+    "notRecorded": "未记录",
+    "resultsAria": "表型观察结果",
+    "noLinesTitle": "本发布版本中没有公开突变系",
+    "noLinesDesc": "没有已发布的突变系可供读取表型观察记录。",
+    "boundary": {
+      "title": "本页数据是如何取得的",
+      "body": "接口按突变系逐条提供表型观察记录。因此本页只读取前 {{budget}} 个公开株系（接口单次最多返回 {{limit}} 个）并对读到的内容做筛选。它不是跨株系的穷举检索：超出该预算的株系中的观察记录不会出现在这里。"
+    },
+    "filters": {
+      "aria": "表型筛选",
+      "category": "性状类别",
+      "categoryPlaceholder": "不限类别",
+      "trait": "性状",
+      "traitPlaceholder": "搜索性状名称或描述…",
+      "apply": "应用筛选",
+      "clear": "清除筛选"
+    },
+    "scan": {
+      "linesRead": "已读株系数",
+      "observations": "找到的观察记录",
+      "coverage": "覆盖范围",
+      "partial": "部分",
+      "complete": "完整",
+      "truncatedTitle": "当前视图不完整",
+      "truncatedDesc": "公开株系数超过本页读取的 {{budget}} 个（接口单次最多返回 {{limit}} 个）。未读取株系中的观察记录不会显示。",
+      "failedTitle": "有 {{count}} 个株系读取失败",
+      "failedDesc": "这些株系的观察记录未包含在当前视图中；其余株系读取正常。"
+    },
+    "columns": {
+      "line": "突变系",
+      "category": "性状类别",
+      "trait": "性状",
+      "value": "数值",
+      "unit": "单位",
+      "description": "描述"
+    },
+    "detail": {
+      "back": "返回表型浏览器",
+      "loading": "正在加载突变系…",
+      "notFound": "未找到该突变系，或它在已发布版本中尚未公开。",
+      "context": "株系背景",
+      "observations": "表型观察记录",
+      "boundary": "这些是已记录的观察结果，尚不是经本体、环境或实验方案限定的证据。",
+      "noObservationsTitle": "没有表型观察记录",
+      "noObservationsDesc": "该突变系在已发布版本中没有表型观察记录。",
+      "openLine": "打开该突变系"
+    }
+  },
+  "assemblies": {
+    "title": "基因组装配",
+    "subtitle": "当前发布版本中的装配。每个数字都由该装配自己的行聚合得出，两套装配不会共用同一个数。",
+    "default": "默认",
+    "release": "发布版本",
+    "releaseUnavailable": "未标注",
+    "empty": "该发布版本下没有装配。",
+    "loadFailed": "装配数据加载失败。",
+    "notFound": "该发布版本下没有这套装配。",
+    "noChromosomes": "该装配没有染色体记录。",
+    "backToList": "全部装配",
+    "columns": {
+      "assembly": "装配",
+      "version": "版本",
+      "genes": "基因",
+      "transcripts": "转录本",
+      "chromosomes": "染色体",
+      "length": "总长度 (bp)",
+      "chromosome": "染色体",
+      "downloads": "下载"
+    },
+    "metric": {
+      "unknown": "未统计",
+      "reason": {
+        "no_chromosomes": "该装配下没有染色体记录。",
+        "no_genes": "该装配尚未导入注释。",
+        "no_linked_downloads": "该装配没有关联的下载文件。"
+      }
+    }
+  },
+  "errors": {
+    "pageUnavailable": "页面暂时不可用",
+    "notFound": "页面不存在",
+    "pageUnavailableHint": "页面加载失败，请稍后重试。",
+    "notFoundHint": "请检查地址，或使用搜索查找记录。"
+  },
+  "pageBuilder": {
+    "pageNavigation": "页面导航",
+    "geneIdPlaceholder": "输入基因 ID",
+    "buttonFallback": "按钮",
+    "newsUnavailable": "新闻暂时不可用",
+    "noNews": "暂无新闻",
+    "assembliesUnavailable": "基因组版本暂时不可用",
+    "selectAssembly": "选择基因组版本",
+    "openJbrowse": "打开 JBrowse 2",
+    "openBlast": "运行 BLAST",
+    "graphUnavailable": "本体关系图暂时不可用",
+    "ontologyGraph": "本体关系图",
+    "graphTruncated": "关系图已按配置的节点/边上限截断。"
+  },
+  "ui": {
+    "searchButton": "搜索",
+    "noResults": "未找到结果"
   }
 }

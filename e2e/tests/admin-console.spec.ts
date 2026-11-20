@@ -163,12 +163,11 @@ const CONSOLE_ROUTES: readonly ConsoleRoute[] = [
   },
   {
     // /settings is the settings navigation hub: it issues no data query, so the
-    // domain grid is the mount marker and the link to the full settings form is
-    // the (already-rendered) settled marker.
+    // domain grid is both its mount marker and its settled marker.
     path: "/settings",
     label: "settings overview",
     anchor: '[data-testid="settings-domains"]',
-    settled: '[data-testid="settings-legacy-link"]',
+    settled: '[data-testid="settings-domains"]',
   },
   {
     // /settings/brand is the one settings surface with an explicit

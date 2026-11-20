@@ -18,11 +18,29 @@ export interface DatabaseCapabilities {
   analytics: "postgresql" | null;
 }
 
+/** Summary embedded in the public capabilities payload, not the endpoint response. */
+export interface SequenceCapabilitiesSummary {
+  available: boolean;
+  engine: string | null;
+  engine_version: string | null;
+  reason: string | null;
+  max_inline_sequence: number;
+  max_pattern: number;
+  max_hits: number;
+  k_range: number[];
+  genetic_codes: number[];
+  coordinate_system_internal: string;
+  coordinate_system_public: string;
+  programs: string[];
+  formats: string[];
+}
+
 export interface PublicCapabilitiesResponse {
   version: number;
   features: Record<string, boolean>;
   plugins: Record<string, PluginCapability>;
   databases: DatabaseCapabilities;
+  sequence: SequenceCapabilitiesSummary;
 }
 
 export interface PluginAvailability {

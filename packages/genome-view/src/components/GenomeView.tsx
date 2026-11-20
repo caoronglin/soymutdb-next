@@ -78,6 +78,13 @@ export interface GenomeViewProps {
   renderControls?: (api: GenomeViewControlsApi) => ReactNode;
   /** Reports the base pair under the pointer, or `null` when it leaves. */
   onHover?: (bp: number | null) => void;
+  /**
+   * Draw gene-model introns as strand chevrons between the exon boxes.
+   *
+   * Passed straight to the SVG renderer, where it is opt-in for parity with the
+   * Python pre-renderer; see `GenomeViewSvgOptions.intronChevrons`.
+   */
+  intronChevrons?: boolean;
   /** Enables drag-to-pan and wheel-to-zoom. Defaults to true. */
   interactive?: boolean;
   className?: string;
@@ -99,6 +106,7 @@ export function GenomeView({
   onAction,
   renderControls,
   onHover,
+  intronChevrons = false,
   interactive = true,
   className,
 }: GenomeViewProps) {
@@ -154,8 +162,11 @@ export function GenomeView({
   }, [viewport, onViewportChange]);
 
   const markup = useMemo(
-    () => (usePrerendered ? null : renderGenomeViewSvg({ viewport, widthPx, tracks, theme })),
-    [usePrerendered, viewport, widthPx, tracks, theme],
+    () =>
+      usePrerendered
+        ? null
+        : renderGenomeViewSvg({ viewport, widthPx, tracks, theme, ariaLabel, intronChevrons }),
+    [usePrerendered, viewport, widthPx, tracks, theme, ariaLabel, intronChevrons],
   );
 
   const run = useCallback(

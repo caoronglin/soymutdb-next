@@ -12,6 +12,7 @@ import pytest
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from sqlalchemy import text
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -41,13 +42,17 @@ def test_query_values_are_bound_and_scope_is_mandatory():
         VariantFilterParams(assembly=attack, gene_id="private' OR true --"),
         ReleaseContext(release_id=17, assembly_id=5),
     )
-    assert "release_id = :release_id" in where
-    assert attack not in where
+    # Rendered to inspect the SQL text; the values stay bound at execution
+    # (see ``values`` below), so the attack string must not appear here.
+    rendered = str(where.compile(dialect=postgresql.dialect()))
+    assert "variant_facts.release_id" in rendered
+    # The injected value is a bound parameter, never SQL text.
+    assert attack not in rendered
     assert values["release_id"] == 17
     assert values["assembly"] == attack
     # A release's primary assembly is context, not a restriction on explicitly
     # requested alternative assemblies. The filter owns the assembly scope.
-    assert "context_assembly_id" not in where
+    assert "context_assembly_id" not in rendered
 
 
 def test_native_migration_and_unsigned_variant_lookup(monkeypatch):
@@ -63,8 +68,14 @@ def test_native_migration_and_unsigned_variant_lookup(monkeypatch):
         try:
             async with engine.begin() as connection:
                 await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+                # Production types ``releases.status`` as a native enum; the
+                # visibility predicate binds the status with that type.
                 await connection.execute(text(
-                    "CREATE TABLE releases (id INTEGER PRIMARY KEY, status text NOT NULL)"
+                    "CREATE TYPE release_status_enum AS ENUM ('draft','published')"
+                ))
+                await connection.execute(text(
+                    "CREATE TABLE releases (id INTEGER PRIMARY KEY, "
+                    "status release_status_enum NOT NULL)"
                 ))
                 await connection.execute(text("CREATE TABLE assemblies (id INTEGER PRIMARY KEY)"))
                 await connection.execute(text(

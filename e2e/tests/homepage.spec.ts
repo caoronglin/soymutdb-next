@@ -11,7 +11,9 @@
 import { test, expect } from "@playwright/test";
 import { gotoReady } from "./helpers";
 
-const BASE = "";
+// Empty for the standard-base sweep; set E2E_BASE_PATH for a
+// sub-path deployment artifact.
+const BASE = (process.env.E2E_BASE_PATH ?? "").replace(/\/+$/, "");
 
 test.describe("homepage — primary navigation", () => {
   test("renders the primary nav with the database entry points", async ({ page }) => {

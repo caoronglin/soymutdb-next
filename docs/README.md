@@ -55,7 +55,8 @@
 ## 4. 决策记录（ADR，不随时间失效）
 
 [`adr/`](adr/)：平台交付契约、antd 包体预算、Kind/K8s 验证、模块化数据行角色、导入幂等与可见性、
-`total_count` 语义、支持的部署架构、弃用 antd pilot 路由、退役 Page Builder/Widgets。
+`total_count` 语义、支持的部署架构、弃用 antd pilot 路由、退役 Page Builder/Widgets、
+前端构建期变量前缀（`SOYMUTDB_*` 新名，`VITE_*` 兼容）。
 
 ## 5. 其余目录怎么读
 

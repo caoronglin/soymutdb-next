@@ -14,16 +14,26 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field, field_validator
-from soymutdb_jobs.protein_fasta import PROTEIN_ALPHABET as PROTEIN_ALPHABET
-from soymutdb_jobs.protein_fasta import (
-    ProteinFastaError,
-    parse_protein_fasta,
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from soymutdb_jobs.blast_catalog import public_source_url, validate_build_state
+from soymutdb_jobs.blast_search import (
+    normalize_query,
+    validate_search_parameters,
 )
+from soymutdb_jobs.protein_fasta import PROTEIN_ALPHABET as PROTEIN_ALPHABET
 
 from ..core.compat import StrEnum
+
+#: Catalog build states are owned by ``soymutdb_jobs.blast_catalog_state``; this
+#: alias is the wire spelling of its ``COLUMN_STATES``. A published NCBI index --
+#: and every in-flight ``publishing`` row a client polls -- must survive response
+#: validation instead of being rejected as an unknown value.
+BuildState = Literal[
+    "pending", "building", "validating", "publishing", "published", "failed",
+    "ready",
+]
 
 #: Allowed characters for a BLAST database *name* — matches the worker-side
 #: whitelist (alphanumeric / ``-`` / ``_``) so identifiers can never carry
@@ -32,13 +42,7 @@ _DATABASE_NAME_RE = re.compile(r"[A-Za-z0-9_-]+")
 
 
 class BlastProgram(StrEnum):
-    """Every program value that can appear in a *stored* job row.
-
-    This is a storage/response vocabulary, not a submission contract. The
-    search engine is DIAMOND ``blastp`` only; the other values remain here so
-    that jobs persisted before the engine was reduced can still be read and
-    rendered. :class:`BlastSubmitProgram` is what new requests must use.
-    """
+    """Program vocabulary shared by stored jobs and current responses."""
 
     BLASTN = "blastn"
     BLASTP = "blastp"
@@ -48,9 +52,13 @@ class BlastProgram(StrEnum):
 
 
 class BlastSubmitProgram(StrEnum):
-    """The only program this deployment can execute: DIAMOND ``blastp``."""
+    """Programs supported by the explicit NCBI BLAST+ engine."""
 
+    BLASTN = "blastn"
     BLASTP = "blastp"
+    BLASTX = "blastx"
+    TBLASTN = "tblastn"
+    TBLASTX = "tblastx"
 
 
 class BlastJobStatus(StrEnum):
@@ -66,89 +74,46 @@ class BlastJobStatus(StrEnum):
 # Sequence alphabet validation
 # ---------------------------------------------------------------------------
 
-#: IUPAC nucleotide codes (uppercase; ``-`` for gaps). Historic vocabulary:
-#: only ``blastp`` is submittable, but stored job rows may still name the
-#: nucleotide programs, so this alphabet stays readable.
-NUCLEOTIDE_ALPHABET = frozenset("ACGTUNRYSWKMBDHVX-")
-#: ``PROTEIN_ALPHABET`` is imported above from the shared contract, so the API
-#: and the worker cannot drift apart on what counts as a protein residue.
-#: Programs whose *query* is a protein sequence. The only executable program
-#: is ``blastp``, so every submitted query is protein.
-_PROTEIN_QUERY_PROGRAMS = frozenset({"blastp"})
-
-#: BLAST matrix whitelist (case-insensitive on input).
-ALLOWED_MATRICES = frozenset(
-    {"BLOSUM62", "BLOSUM45", "BLOSUM80", "PAM30", "PAM70", "PAM250"}
-)
-
 
 def validate_sequence_charset(sequence: str, program: str) -> str:
-    """Reject characters outside the alphabet for *program*.
-
-    FASTA header lines (``>``) and whitespace are ignored; raises
-    :class:`ValueError` listing the first offending characters.
-    """
-    if program in _PROTEIN_QUERY_PROGRAMS:
-        parse_protein_fasta(sequence)
-        return sequence
-    body = "".join(
-        part for part in sequence.splitlines() if not part.startswith(">")
-    )
-    alphabet = NUCLEOTIDE_ALPHABET
-    invalid = sorted(
-        {ch.upper() for ch in body.replace(" ", "") if ch.upper() not in alphabet}
-    )
-    if invalid:
-        raise ValueError(
-            f"Invalid characters in query sequence: {invalid[:10]}"
-            f"{'…' if len(invalid) > 10 else ''}"
-        )
+    """Use the same query owner as the executing worker."""
+    normalize_query(sequence, program)
     return sequence
 
 
 class BlastParameters(BaseModel):
-    evalue: float = Field(default=1e-5, gt=0)
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
+
+    evalue: float = Field(default=1e-5, gt=0, le=1000)
     max_target_seqs: int = Field(default=50, ge=1, le=500)
-    gap_open: int | None = Field(default=None, ge=0)
-    gap_extend: int | None = Field(default=None, ge=0)
+    gap_open: int | None = Field(default=None, ge=0, le=100)
+    gap_extend: int | None = Field(default=None, ge=0, le=100)
     matrix: str | None = None
-    #: Client-side filter only; not forwarded to the search binary.
-    percent_identity: float | None = Field(default=None, ge=0.0, le=100.0)
-    #: Retired NCBI-BLAST inputs. ``BlastParameters`` is a submission-only
-    #: schema (stored job payloads are read as raw dicts), so these are
-    #: rejected outright rather than silently ignored — DIAMOND has no
-    #: equivalent and quietly ignoring them would misreport the search.
-    word_size: int | None = Field(default=None, ge=4, le=64)
+    word_size: int | None = Field(default=None, ge=2, le=64)
     dust: bool | None = None
     soft_masking: bool | None = None
-
-    @field_validator("word_size", "dust", "soft_masking")
-    @classmethod
-    def _reject_retired_blast_params(cls, v, info):
-        if v is None:
-            return v
-        raise ValueError(
-            f"parameters.{info.field_name} is a retired NCBI BLAST option; "
-            "this deployment searches with DIAMOND blastp, which has no equivalent"
-        )
+    percent_identity: float | None = Field(default=None, ge=0, le=100)
 
     @field_validator("matrix")
     @classmethod
-    def _validate_matrix(cls, v: str | None) -> str | None:
-        if v is None:
-            return None
-        normalized = v.upper()
-        if normalized not in ALLOWED_MATRICES:
-            raise ValueError(
-                f"Unsupported substitution matrix {v!r}; "
-                f"allowed: {sorted(ALLOWED_MATRICES)}"
-            )
-        return normalized
+    def _validate_matrix(cls, value: str | None) -> str | None:
+        return value.upper() if value is not None else None
+
+    def canonical_parameters(self, program: str, engine: str) -> dict:
+        params = self.model_dump(exclude_none=True)
+        if "percent_identity" in params:
+            if engine != "ncbi_blast" or program != "blastn":
+                raise ValueError("percent_identity is supported only by NCBI blastn")
+            params["perc_identity"] = params.pop("percent_identity")
+        for old, new in (("gap_open", "gapopen"), ("gap_extend", "gapextend")):
+            if old in params:
+                params[new] = params.pop(old)
+        return validate_search_parameters(program, engine, params)
 
 
 class BlastSubmitRequest(BaseModel):
-    #: Only DIAMOND ``blastp`` is executable; the wider :class:`BlastProgram`
-    #: vocabulary exists solely to read historical rows.
+    #: New submissions choose NCBI BLAST+ unless DIAMOND is explicit.
+    engine: Literal["ncbi_blast", "diamond"] = "ncbi_blast"
     program: BlastSubmitProgram = BlastSubmitProgram.BLASTP
     #: Numeric id of an active database from ``GET /blast/databases``.
     database_id: int | None = Field(default=None, gt=0)
@@ -179,32 +144,21 @@ class BlastSubmitRequest(BaseModel):
 
     @field_validator("query_sequence", mode="before")
     @classmethod
-    def _validate_fasta(cls, v: object) -> str:
-        """Refuse a query the worker could not search.
+    def _validate_query_shape(cls, value, info):
+        if isinstance(value, str) and len(value) <= 100000:
+            normalize_query(value, info.data.get("program", BlastSubmitProgram.BLASTP).value)
+        return value
 
-        ``mode="before"`` so an empty or header-only submission reports the
-        real reason instead of the length cap, which would otherwise fire first
-        and tell the submitter their empty query "should have at least 10
-        characters".
-
-        The previous check only inspected the first header, so a later empty
-        record was accepted here and then failed inside DIAMOND with an opaque
-        ``Missing fields in input line``. Empty records and duplicate record
-        ids are now rejected at submission time with a 422.
-        """
-        if not isinstance(v, str):
-            return v  # type: ignore[return-value]
-        if len(v) > 100_000:
-            # Let the field's size constraint reject before allocating a parse.
-            return v
-        try:
-            parse_protein_fasta(v)
-        except ProteinFastaError as exc:
-            raise ValueError(f"query_sequence: {exc}") from exc
-        return v.strip(" \t\r\n")
+    @model_validator(mode="after")
+    def _validate_search(self) -> BlastSubmitRequest:
+        self.parameters.canonical_parameters(self.program.value, self.engine)
+        normalize_query(self.query_sequence, self.program.value)
+        self.query_sequence = self.query_sequence.strip(" \t\r\n")
+        return self
 
 
 class BlastJobResponse(BaseModel):
+    engine: Literal["ncbi_blast", "diamond"] = "diamond"
     job_id: str
     status: BlastJobStatus
     program: BlastProgram
@@ -216,6 +170,7 @@ class BlastJobResponse(BaseModel):
     submitted_at: datetime
     started_at: datetime | None = None
     completed_at: datetime | None = None
+
     error_message: str | None = None
     result_url: str | None = None
     #: Release/assembly provenance of the searched database, resolved through
@@ -228,6 +183,14 @@ class BlastJobResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PublicBlastSubmission(BaseModel):
+    """The capability is returned once; send it only in X-Blast-Token."""
+
+    job: BlastJobResponse
+    access_token: str
+    expires_at: datetime
+
+
 class BlastJobListResponse(BaseModel):
     items: list[BlastJobResponse] = Field(default_factory=list)
     total: int
@@ -237,6 +200,7 @@ class BlastJobListResponse(BaseModel):
 
 #: Flat, per-HSP hit row persisted to ``blast_hits`` and returned to clients.
 class BlastHit(BaseModel):
+    query_id: str | None = None
     hsp_num: int = Field(..., ge=1)
     subject_id: str
     subject_title: str = ""
@@ -252,6 +216,10 @@ class BlastHit(BaseModel):
     bit_score: float
     query_strand: str = "plus"
     subject_strand: str = "plus"
+    #: Assembly-scoped genomic location, present only when the hit's subject
+    #: was resolved through an explicit protein/transcript/gene relation.
+    #: ``status`` is "resolved" or "unresolved" with a machine-readable reason.
+    genome_resolution: dict[str, Any] | None = None
 
 
 class BlastHsp(BaseModel):
@@ -289,6 +257,7 @@ class BlastResultResponse(BaseModel):
     search_stats: dict[str, Any] | None = None
     error_message: str | None = None
     completed_at: datetime | None = None
+
     download_url: str | None = None
 
     model_config = {"from_attributes": True}
@@ -311,3 +280,230 @@ class BlastDatabaseResponse(BaseModel):
     release_id: int | None = None
 
     model_config = {"from_attributes": True}
+
+    engine: Literal["diamond", "ncbi_blast"] = "diamond"
+    sequence_type: Literal[
+        "genome", "cds", "transcript", "protein", "repeat_masked",
+        "pan_genome", "family_consensus", "custom",
+    ] | None = None
+    annotation_version: str | None = None
+    source_url: str | None = None
+    sequence_count: int | None = Field(default=None, ge=0)
+    total_length: int | None = Field(default=None, ge=0)
+    fasta_sha256: str | None = None
+    index_version: str | None = None
+    #: Must match ``soymutdb_jobs.blast_catalog_state.COLUMN_STATES``: the catalog's
+    #: check constraint, the worker's state machine and this response share one
+    #: vocabulary, including the in-flight ``publishing`` state and the legacy
+    #: ``ready`` spelling pre-existing catalogs still carry.
+    build_status: BuildState = "pending"
+    is_default: bool = False
+    license: str | None = None
+
+    @field_validator("source_url", mode="before")
+    @classmethod
+    def public_source_url(cls, value: object) -> str | None:
+        """Stored provenance is untrusted; omit paths and private URL authorities."""
+        return public_source_url(value)
+
+
+# ---------------------------------------------------------------------------
+# Admin enable/disable control for a published index (control plane)
+# ---------------------------------------------------------------------------
+
+
+class BlastDatabaseStateUpdate(BaseModel):
+    """Admin toggle for one published catalog row.
+
+    The only mutable field is ``is_active``. A published index is immutable:
+    disabling it stops *new* searches from selecting it, but never deletes the
+    row, rewrites a submitted job, or changes the frozen index identity. The
+    request is deliberately narrow (``extra="forbid"``) so a caller cannot
+    smuggle in a path, a build state or a name through the same route.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    is_active: bool
+
+
+class BlastDatabaseStateResponse(BaseModel):
+    """Narrow acknowledgement of a state toggle.
+
+    ``BlastDatabaseResponse`` is the public discovery shape: it is scoped to a
+    published release and carries catalog metadata. This control-plane reply
+    must work for *any* catalog row (including one already disabled, or one in
+    another release) and must never expose the worker-local ``file_path``.
+    """
+
+    model_config = {"from_attributes": True}
+
+    id: int
+    name: str
+    is_active: bool
+
+
+# ---------------------------------------------------------------------------
+# Asynchronous immutable index builds (admin control plane)
+# ---------------------------------------------------------------------------
+
+
+class BlastIndexBuildRequest(BaseModel):
+    """Admin request to build one immutable NCBI index in a worker.
+
+    The source FASTA is an object-store key under ``blast-sources/`` that was
+    uploaded and reviewed beforehand. No local path, binary name or output
+    directory is accepted from a client. Rebuilds create a new catalog row and
+    a new content-addressed identity; they never overwrite a published index.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_object_key: str = Field(..., min_length=1, max_length=2048)
+    db_type: Literal["nucl", "prot"]
+    assembly_name: str = Field(..., min_length=1, max_length=1024)
+    annotation_version: str = Field(..., min_length=1, max_length=1024)
+    source_version: str = Field(..., min_length=1, max_length=1024)
+    source_url: str = Field(..., min_length=1, max_length=1024)
+    license: str = Field(..., min_length=1, max_length=1024)
+    name: str = Field(..., min_length=1, max_length=256)
+    sequence_type: Literal[
+        "genome", "cds", "transcript", "protein", "repeat_masked",
+        "pan_genome", "family_consensus", "custom",
+    ] = "genome"
+
+    @field_validator("source_object_key")
+    @classmethod
+    def _validate_source_key(cls, value: str) -> str:
+        if (
+            not value.startswith("blast-sources/")
+            or ".." in value.split("/")
+            or "\\" in value
+            or any(ord(ch) < 32 for ch in value)
+        ):
+            raise ValueError("source_object_key must be a reviewed blast-sources/ object key")
+        return value
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        if not _DATABASE_NAME_RE.fullmatch(value):
+            raise ValueError("name must be a plain identifier")
+        return value
+
+    @field_validator("source_url")
+    @classmethod
+    def _validate_public_url(cls, value: str) -> str:
+        if public_source_url(value) is None:
+            raise ValueError("source_url must be public attribution without credentials")
+        return value
+
+    @field_validator("assembly_name", "annotation_version", "source_version", "license")
+    @classmethod
+    def _validate_metadata(cls, value: str) -> str:
+        if "/" in value or "\\" in value or value in {".", ".."}:
+            raise ValueError("metadata must not contain paths")
+        return value
+
+    def build_metadata(
+        self, *, assembly_id: str, assembly_version: str, release_id: str
+    ) -> dict[str, str]:
+        """Freeze identity from the authoritative assembly/release context.
+
+        The three identity fields are never accepted from the request body:
+        ``get_ncbi_db_path`` binds them to the searched job's numeric
+        assemblies.id and release key.
+        """
+        return {
+            "assembly_id": assembly_id,
+            "assembly_version": assembly_version,
+            "release_id": release_id,
+            "annotation_version": self.annotation_version,
+            "source_version": self.source_version,
+            "source_url": self.source_url,
+            "license": self.license,
+        }
+
+
+class BlastIndexBuildResponse(BaseModel):
+    """Status of one build; no filesystem path or binary name is exposed."""
+
+    model_config = {"from_attributes": True}
+
+    build_id: str
+    database_id: int
+    name: str
+    state: BuildState
+    db_type: Literal["nucl", "prot"]
+    index_identity: str | None = None
+    sequence_count: int | None = None
+    total_length: int | None = None
+    error_message: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+
+    @field_validator("state")
+    @classmethod
+    def _validate_state(cls, value: str) -> str:
+        return validate_build_state(value)
+
+
+# ---------------------------------------------------------------------------
+# Protein/transcript hit → genome target (biological correctness boundary)
+# ---------------------------------------------------------------------------
+
+
+class BlastGenomeTargetResponse(BaseModel):
+    """JBrowse target for one BLAST subject, resolved through an explicit relation.
+
+    ``status == "unresolved"`` carries ``reason`` and no locus: the caller must
+    say the mapping is unavailable instead of guessing a genomic coordinate.
+    Amino-acid alignment coordinates from blastp/blastx are never used here.
+    """
+
+    status: Literal["resolved", "unresolved"]
+    reason: Literal[
+        "job_not_completed", "authorization_failed", "unsupported_program",
+        "subject_not_found", "ambiguous_subject", "assembly_mismatch",
+        "no_genomic_coordinates", "invalid_subject_id",
+    ] | None = None
+    gene_id: str | None = None
+    chromosome: str | None = None
+    start: int | None = Field(default=None, ge=1)
+    end: int | None = Field(default=None, ge=1)
+    strand: str | None = None
+    release_id: int | None = None
+    assembly_id: int | None = None
+    assembly_name: str | None = None
+    locus: str | None = None
+    #: Explicit provenance for how the subject was resolved to a gene.
+    resolution: Literal["gene_accession", "gene_alias", "transcript_id"] | None = None
+
+    @model_validator(mode="after")
+    def _validate_shape(self) -> BlastGenomeTargetResponse:
+        if self.status == "resolved":
+            if (
+                self.reason is not None or not self.gene_id or not self.chromosome
+                or self.start is None or self.end is None or self.locus is None
+                or self.resolution is None or self.end < self.start
+                or self.release_id is None or self.assembly_id is None
+                or not self.assembly_name
+            ):
+                raise ValueError("resolved target requires a complete, proven gene locus")
+        elif self.locus is not None or self.resolution is not None or self.start is not None:
+            raise ValueError("unresolved target must not carry coordinates")
+        return self
+
+
+class BlastIndexBuildQueued(BaseModel):
+    """Acknowledgement for an accepted index build request.
+
+    Deliberately narrow: the response says *what was queued*, never where the
+    worker will write it. Progress is read back from the catalog's
+    ``build_status``, not from a filesystem path.
+    """
+
+    database_id: int
+    queued: bool
+    task_name: str

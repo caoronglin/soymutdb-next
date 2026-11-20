@@ -22,7 +22,9 @@ import {
 } from "./lib/motion-policy";
 
 // Lazy-loaded route components (code-splitting per route).
-const DashboardPage = lazy(() => import("./routes/index"));
+const SystemOverviewPage = lazy(() => import("./routes/index"));
+const DashboardAnalysisPage = lazy(() => import("./routes/dashboard/analysis"));
+const DashboardMonitorPage = lazy(() => import("./routes/dashboard/monitor"));
 const UsageGuidePage = lazy(() => import("./routes/usage-guide"));
 const LegacyUnavailablePage = lazy(() => import("./routes/legacy-unavailable"));
 const ReleasesPage = lazy(() => import("./routes/releases"));
@@ -39,7 +41,6 @@ const NewsNewPage = lazy(() => import("./routes/news/new"));
 const NewsTrashPage = lazy(() => import("./routes/news/trash"));
 const NewsEditPage = lazy(() => import("./routes/news/$id"));
 const AuditPage = lazy(() => import("./routes/audit"));
-const SettingsLegacyPage = lazy(() => import("./routes/settings"));
 const SettingsOverviewPage = lazy(() => import("./routes/settings/index"));
 const SettingsAppearancePage = lazy(() => import("./routes/settings/appearance"));
 const SettingsIntegrationsPage = lazy(() => import("./routes/settings/integrations"));
@@ -47,9 +48,13 @@ const SettingsSecurityPage = lazy(() => import("./routes/settings/security"));
 const SettingsLocalizationPage = lazy(() => import("./routes/settings/localization"));
 const SettingsAdvancedPage = lazy(() => import("./routes/settings/advanced"));
 const FeaturesPage = lazy(() => import("./routes/features"));
+const SiteControlPage = lazy(() => import("./routes/site-control"));
+const PageBuilderListPage = lazy(() => import("./routes/page-builder/index"));
+const PageBuilderEditorPage = lazy(() => import("./routes/page-builder/$pageId"));
 const AnalyticsSettingsPage = lazy(() => import("./routes/analytics-settings"));
 const PublicationsAdminPage = lazy(() => import("./routes/publications"));
-const TableViewsPage = lazy(() => import("./routes/table-views"));
+const TableTemplatesPage = lazy(() => import("./routes/table-templates"));
+const DataViewsPage = lazy(() => import("./routes/data-views"));
 
 /** Loading fallback for lazy-loaded routes. */
 function RouteLoading() {
@@ -128,10 +133,22 @@ function RequireAuth() {
   );
 }
 
-const dashboardRoute = createRoute({
+const systemOverviewRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/",
-  component: () => withSuspense(DashboardPage),
+  component: () => withSuspense(SystemOverviewPage),
+});
+
+const dashboardAnalysisRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/dashboard/analysis",
+  component: () => withSuspense(DashboardAnalysisPage),
+});
+
+const dashboardMonitorRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/dashboard/monitor",
+  component: () => withSuspense(DashboardMonitorPage),
 });
 
 const usageGuideRoute = createRoute({
@@ -189,11 +206,17 @@ const contentRoute = createRoute({
   component: () => withSuspense(ContentPage),
 });
 
+/**
+ * `/content/pages` is a deep-link alias, not a second page: it mounted
+ * `ContentPage`, the same component `/content` mounts, so the console had two
+ * URLs for one screen. The alias survives so existing links keep working.
+ */
 const contentPagesRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/content/pages",
-  validateSearch: parseContentPageSearch,
-  component: () => withSuspense(ContentPage),
+  beforeLoad: () => {
+    throw redirect({ to: "/content", search: { page: 1, status: "all", category: "" } });
+  },
 });
 
 const contentPageDetailRoute = createRoute({
@@ -205,13 +228,6 @@ const contentPageDetailRoute = createRoute({
       search: { page: 1, status: "all", category: "", edit: params.pageId },
     });
   },
-});
-
-const contentLegacyRoute = createRoute({
-  getParentRoute: () => authLayoutRoute,
-  path: "/content/legacy",
-  validateSearch: parseContentPageSearch,
-  component: () => withSuspense(ContentPage),
 });
 
 const mediaRoute = createRoute({
@@ -259,14 +275,16 @@ const settingsRoute = createRoute({
 const settingsLegacyRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/settings/legacy",
-  component: () => withSuspense(SettingsLegacyPage),
+  beforeLoad: () => {
+    throw redirect({ to: "/settings" });
+  },
 });
 
 const settingsBrandRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "/settings/brand", component: () => withSuspense(SiteBrandPage) });
 const settingsSiteRedirectRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/settings/site",
-  beforeLoad: () => { throw redirect({ to: "/settings/brand" }); },
+  beforeLoad: () => { throw redirect({ to: "/settings/appearance" }); },
 });
 const settingsAppearanceRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "/settings/appearance", component: () => withSuspense(SettingsAppearancePage) });
 const settingsIntegrationsRoute = createRoute({ getParentRoute: () => authLayoutRoute, path: "/settings/integrations", component: () => withSuspense(SettingsIntegrationsPage) });
@@ -278,6 +296,12 @@ const featuresRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/features",
   component: () => withSuspense(FeaturesPage),
+});
+
+const siteControlRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/site-control",
+  component: () => withSuspense(SiteControlPage),
 });
 
 const analyticsSettingsRoute = createRoute({
@@ -319,13 +343,13 @@ const widgetHealthRoute = createRoute({
 const pageBuilderIndexRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/page-builder",
-  component: () => withSuspense(LegacyUnavailablePage),
+  component: () => withSuspense(PageBuilderListPage),
 });
 
 const pageBuilderEditRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/page-builder/$pageId",
-  component: () => withSuspense(LegacyUnavailablePage),
+  component: () => withSuspense(PageBuilderEditorPage),
 });
 
 const publicationsAdminRoute = createRoute({
@@ -337,7 +361,13 @@ const publicationsAdminRoute = createRoute({
 const tableTemplatesRoute = createRoute({
   getParentRoute: () => authLayoutRoute,
   path: "/table-templates",
-  component: () => withSuspense(TableViewsPage),
+  component: () => withSuspense(TableTemplatesPage),
+});
+
+const dataViewsRoute = createRoute({
+  getParentRoute: () => authLayoutRoute,
+  path: "/data-views",
+  component: () => withSuspense(DataViewsPage),
 });
 
 const tableViewsRedirectRoute = createRoute({
@@ -349,7 +379,9 @@ const tableViewsRedirectRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   loginRoute,
   authLayoutRoute.addChildren([
-    dashboardRoute,
+    systemOverviewRoute,
+    dashboardAnalysisRoute,
+    dashboardMonitorRoute,
     usageGuideRoute,
     releasesRoute,
     instancesRoute,
@@ -361,7 +393,6 @@ const routeTree = rootRoute.addChildren([
     contentRoute,
     contentPagesRoute,
     contentPageDetailRoute,
-    contentLegacyRoute,
     mediaRoute,
     newsRoute,
     newsNewRoute,
@@ -378,6 +409,7 @@ const routeTree = rootRoute.addChildren([
     settingsLocalizationRoute,
     settingsAdvancedRoute,
     featuresRoute,
+    siteControlRoute,
     analyticsSettingsRoute,
     widgetsRoute,
     widgetEditorRoute,
@@ -388,6 +420,7 @@ const routeTree = rootRoute.addChildren([
     pageBuilderEditRoute,
     publicationsAdminRoute,
     tableTemplatesRoute,
+    dataViewsRoute,
     tableViewsRedirectRoute,
   ]),
 ]);

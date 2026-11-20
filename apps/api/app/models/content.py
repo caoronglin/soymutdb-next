@@ -353,6 +353,14 @@ class DownloadFile(Base, TimestampMixin):
     download_count: Mapped[int] = mapped_column(
         Integer, default=0, server_default="0", nullable=False
     )
+    #: Provenance manifest. NULL means "not recorded for this artifact" — a
+    #: pre-checksum file is never presented as having a valid digest.
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    license: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    generated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    source_ref: Mapped[str | None] = mapped_column(String(1024), nullable=True)
 
     release: Mapped[Release | None] = relationship(
         back_populates="download_files", lazy="joined"

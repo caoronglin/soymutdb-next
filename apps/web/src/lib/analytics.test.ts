@@ -40,9 +40,6 @@ function matchFor(pathname: string): {
   if (pathname.startsWith("/news/")) {
     return { routeId: "/news/$slug", fullPath: "/news/$slug", pathname };
   }
-  if (pathname.startsWith("/analyses/")) {
-    return { routeId: "/analyses/$jobId", fullPath: "/analyses/$jobId", pathname };
-  }
   if (pathname.startsWith("/tools/")) {
     return { routeId: "/tools/", fullPath: "/tools", pathname };
   }
@@ -110,8 +107,10 @@ describe("B4 pageview producer", () => {
       expect(toPageTemplate("/mutants/abc123", stub.router)).toBe("/mutants/:publicId");
       expect(toPageTemplate("/genes/GRCh38", stub.router)).toBe("/genes/:geneId");
       expect(toPageTemplate("/news/some-slug", stub.router)).toBe("/news/:slug");
-      expect(toPageTemplate("/analyses/job-1", stub.router)).toBe("/analyses/:jobId");
       expect(toPageTemplate("/", stub.router)).toBe("/");
+      // Bare-pathname form checks the allowlist key itself; the stub router
+      // collapses every /tools/* child to the /tools parent.
+      expect(toPageTemplate("/tools/sequence")).toBe("/tools/sequence");
     });
 
     it("collapses a router route the server allowlist does not name", () => {
@@ -154,16 +153,11 @@ describe("B4 pageview producer", () => {
       });
       // Registered with a slash-LESS `path`, so `fullPath` is slash-less even
       // though the id keeps its trailing slash. This pair caught a real key
-      // drift: an allowlist keyed `/tools/` and `/analyses/` collapsed both
-      // pages to `/other` once the keys moved from routeId to fullPath.
+      // drift: an allowlist keyed `/tools/` collapsed the page to `/other`
+      // once the keys moved from routeId to fullPath.
       const toolsRoute = make().update({
         id: "/tools/",
         path: "/tools",
-        getParentRoute: () => rootRoute,
-      });
-      const analysesRoute = make().update({
-        id: "/analyses/",
-        path: "/analyses",
         getParentRoute: () => rootRoute,
       });
       // Present but absent from the server allowlist: it must stay `/other`.
@@ -184,7 +178,7 @@ describe("B4 pageview producer", () => {
       searchRoute._addFileChildren(children as never);
 
       const routeTree = rootRoute.addChildren(
-        [rootIndex, searchRoute, toolsRoute, analysesRoute, genomeView] as never,
+        [rootIndex, searchRoute, toolsRoute, genomeView] as never,
       );
       const router = createRouter({
         routeTree: routeTree as never,
@@ -226,7 +220,6 @@ describe("B4 pageview producer", () => {
     it("keys slash-less routes by their slash-less fullPath", () => {
       const router = createSearchRouter();
       expect(toPageTemplate("/tools", router)).toBe("/tools");
-      expect(toPageTemplate("/analyses", router)).toBe("/analyses");
     });
 
     it("collapses an unknown /search child rather than inheriting /search", () => {

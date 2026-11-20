@@ -203,20 +203,24 @@ def test_instance_urls_reject_credentials_query_and_paths() -> None:
 
 
 def test_site_url_alias_maps_to_portal_base_url_and_cannot_disagree() -> None:
-    created = SpeciesInstanceCreate(
-        code="peer",
-        name="Peer",
-        species="Glycine max",
-        api_base_url="https://peer.example.org",
-        site_url="https://portal.example.org",
-    )
+    # `site_url` is accepted as an alias by the model's before-validator, not
+    # as a declared field, so it is passed through `model_validate`: the
+    # keyword form would be a type error even though the runtime contract is
+    # exactly what this test pins.
+    created = SpeciesInstanceCreate.model_validate({
+        "code": "peer",
+        "name": "Peer",
+        "species": "Glycine max",
+        "api_base_url": "https://peer.example.org",
+        "site_url": "https://portal.example.org",
+    })
     assert created.portal_base_url == "https://portal.example.org"
 
     with pytest.raises(ValidationError):
-        SpeciesInstanceUpdate(
-            site_url="https://portal.example.org",
-            portal_base_url="https://other.example.org",
-        )
+        SpeciesInstanceUpdate.model_validate({
+            "site_url": "https://portal.example.org",
+            "portal_base_url": "https://other.example.org",
+        })
 
 
 # ---------------------------------------------------------------------------
@@ -588,7 +592,7 @@ async def test_internal_branding_never_reaches_an_anonymous_cache(
         is_superuser=False,
         is_active=True,
         is_deleted=False,
-        role_rel=SimpleNamespace(name="viewer"),
+        role_rel=SimpleNamespace(name="researcher"),
     )
     app.dependency_overrides[get_optional_user] = lambda: viewer
 

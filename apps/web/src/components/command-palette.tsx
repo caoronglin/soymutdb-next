@@ -445,7 +445,7 @@ export function CommandPalette() {
         <div className="flex items-center justify-between border-t px-4 py-2 text-xs text-muted-foreground">
           <div className="flex items-center gap-3">
             <span className="flex items-center gap-1"><kbd>↑</kbd><kbd>↓</kbd> {t("commandPalette.hintNavigate")}</span>
-            <span className="flex items-center gap-1"><kbd>↵</kbd> {t("commandPalette.hintSelect")}</span>
+            <span className="flex items-center gap-1"><kbd>Enter</kbd> {t("commandPalette.hintSelect")}</span>
           </div>
           <span className="flex items-center gap-1">
             <CmdIcon className="size-3" aria-hidden />{t("commandPalette.hintOpen")}

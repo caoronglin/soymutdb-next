@@ -27,7 +27,9 @@ import {
 import { Button, Card, Input, Typography } from "@/lib/antd";
 import { ApiError, request, setAccessToken } from "@soymutdb/api-client";
 import { TextReveal, Reveal, Stagger } from "../components/route-motion";
+import { brandWordmarkParts, useSiteIdentity } from "../lib/site-identity";
 import { safeRedirect } from "../lib/redirect";
+import { safeExternalUrl } from "../lib/url-safety";
 
 export const Route = createFileRoute("/login")({
   component: LoginComponent,
@@ -38,7 +40,14 @@ interface LoginResponse {
 }
 
 function LoginComponent() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const { branding } = useSiteIdentity();
+  const isZh = i18n.language.toLowerCase().startsWith("zh");
+  const brandName = (
+    isZh ? branding?.name_zh || branding?.name_en : branding?.name_en || branding?.name_zh
+  )?.trim();
+  const brandIcon = safeExternalUrl(branding?.icon_url);
+  const wordmark = brandName ? brandWordmarkParts(brandName) : null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const search = useRouterState({ select: (s) => s.location.search });
@@ -108,11 +117,34 @@ function LoginComponent() {
 
         {/* Logo */}
         <Link to="/" className="relative flex items-center gap-2 self-start outline-none focus-visible:ring-2 focus-visible:ring-primary-foreground">
-          <span className="flex size-9 items-center justify-center rounded-lg bg-primary-foreground/15">
-            <Dna className="size-5" aria-hidden />
-          </span>
+          {brandIcon ? (
+            <img
+              src={brandIcon}
+              alt=""
+              aria-hidden
+              className="size-9 rounded-lg bg-primary-foreground/15 object-contain p-1"
+            />
+          ) : (
+            <span className="flex size-9 items-center justify-center rounded-lg bg-primary-foreground/15">
+              <Dna className="size-5" aria-hidden />
+            </span>
+          )}
           <span className="font-display text-lg font-semibold tracking-tight">
-            {t("brand.soy")}<span className="text-primary-foreground/70">{t("brand.mut")}</span>{t("brand.db")}
+            {wordmark ? (
+              <>
+                {wordmark.before}
+                {wordmark.accent ? (
+                  <span className="text-primary-foreground/70">{wordmark.accent}</span>
+                ) : null}
+                {wordmark.after}
+              </>
+            ) : (
+              <>
+                {t("brand.soy")}
+                <span className="text-primary-foreground/70">{t("brand.mut")}</span>
+                {t("brand.db")}
+              </>
+            )}
           </span>
         </Link>
 
@@ -161,11 +193,32 @@ function LoginComponent() {
         {/* Mobile logo */}
         <div className="flex items-center justify-between p-6 lg:hidden">
           <Link to="/" className="flex items-center gap-2" aria-label={t("common.home")}>
-            <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Dna className="size-5" aria-hidden />
-            </span>
+            {brandIcon ? (
+              <img
+                src={brandIcon}
+                alt=""
+                aria-hidden
+                className="size-8 rounded-lg bg-primary object-contain p-1"
+              />
+            ) : (
+              <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <Dna className="size-5" aria-hidden />
+              </span>
+            )}
             <span className="font-display text-lg font-semibold tracking-tight">
-              {t("brand.soy")}<span className="text-primary">{t("brand.mut")}</span>{t("brand.db")}
+              {wordmark ? (
+                <>
+                  {wordmark.before}
+                  {wordmark.accent ? <span className="text-primary">{wordmark.accent}</span> : null}
+                  {wordmark.after}
+                </>
+              ) : (
+                <>
+                  {t("brand.soy")}
+                  <span className="text-primary">{t("brand.mut")}</span>
+                  {t("brand.db")}
+                </>
+              )}
             </span>
           </Link>
           <Link

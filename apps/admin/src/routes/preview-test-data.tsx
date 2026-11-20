@@ -30,10 +30,25 @@ import {
   updateTestDataPreviewMutationSite,
   type TestDataPreviewMutationSite,
 } from "@soymutdb/api-client";
+import { useTranslation } from "react-i18next";
 
 const DEFAULT_LIMIT = 200;
 
+/**
+ * Confidence badge: `H` is high-confidence, anything else is low.
+ *
+ * Resolved through the locale keys (`admin.previewTestData.confidenceHigh` /
+ * `.confidenceLow`) rather than an inline zh/en pair, so the two words live in
+ * the same catalog as the rest of the console.
+ */
+function confidenceKey(confidence: string): { key: string; fallback: string } {
+  return confidence === "H"
+    ? { key: "admin.previewTestData.confidenceHigh", fallback: "High" }
+    : { key: "admin.previewTestData.confidenceLow", fallback: "Low" };
+}
+
 export default function PreviewTestDataPage() {
+  const { t } = useTranslation();
   const [chromosome, setChromosome] = React.useState("Gm01");
   const [start, setStart] = React.useState<number | null>(1);
   const [end, setEnd] = React.useState<number | null>(2000000000);
@@ -64,13 +79,17 @@ export default function PreviewTestDataPage() {
       setApplied(null);
       setError(
         cause instanceof Error
-          ? `${cause.message}（该接口仅在本机 dev 环境可用）`
-          : "无法加载预览数据",
+          ? cause.message
+          : t("admin.previewTestData.loadError", {
+              defaultValue: "Unable to load preview data. This endpoint is only served on a local dev machine.",
+            }),
       );
     } finally {
       setLoading(false);
     }
-  }, []);
+    // `t` is a real dependency: the fallback message is localized, and i18next
+    // hands out a new `t` when the language changes.
+  }, [t]);
 
   const submit = () => {
     if (!chromosome || start == null || end == null || start < 1 || end < start) return;
@@ -88,7 +107,11 @@ export default function PreviewTestDataPage() {
         prev.map((item) => (item.source_site_key === row.source_site_key ? updated : item)),
       );
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "保存失败");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : t("admin.previewTestData.saveError", { defaultValue: "Unable to save the availability flag." }),
+      );
     } finally {
       setSavingKey(null);
     }
@@ -105,15 +128,15 @@ export default function PreviewTestDataPage() {
    */
   const columns: ProColumns<TestDataPreviewMutationSite>[] = [
     {
-      title: "突变体系（株系母+位置）",
+      title: t("admin.previewTestData.columnSiteKey", { defaultValue: "Mutation site (line parent + position)" }),
       dataIndex: "source_site_key",
       key: "source_site_key",
       editable: false,
       render: (_, row) => <span className="font-mono text-xs">{row.source_site_key}</span>,
     },
-    { title: "染色体号", dataIndex: "chromosome", key: "chromosome", width: 100, editable: false },
+    { title: t("admin.previewTestData.columnChromosome", { defaultValue: "Chromosome" }), dataIndex: "chromosome", key: "chromosome", width: 100, editable: false },
     {
-      title: "位点",
+      title: t("admin.previewTestData.columnPosition", { defaultValue: "Position" }),
       dataIndex: "position",
       key: "position",
       width: 120,
@@ -122,33 +145,33 @@ export default function PreviewTestDataPage() {
       render: (_, row) => <span className="font-mono text-xs">{row.position.toLocaleString()}</span>,
     },
     {
-      title: "可信度",
+      title: t("admin.previewTestData.columnConfidence", { defaultValue: "Confidence" }),
       dataIndex: "confidence",
       key: "confidence",
       width: 90,
       editable: false,
       render: (_, row) => (
         <Tag color={row.confidence === "H" ? "green" : "default"}>
-          {row.confidence === "H" ? "高" : "低"}
+          {t(confidenceKey(row.confidence).key, { defaultValue: confidenceKey(row.confidence).fallback })}
         </Tag>
       ),
     },
     {
-      title: "基因号",
+      title: t("admin.previewTestData.columnGene", { defaultValue: "Gene" }),
       dataIndex: "gene_id",
       key: "gene_id",
       editable: false,
       render: (_, row) => <span className="font-mono text-xs">{row.gene_id}</span>,
     },
     {
-      title: "特征",
+      title: t("admin.previewTestData.columnFeature", { defaultValue: "Feature" }),
       dataIndex: "feature",
       key: "feature",
       editable: false,
       render: (_, row) => <span className="font-mono text-xs">{row.feature}</span>,
     },
     {
-      title: "可获得",
+      title: t("admin.previewTestData.columnAvailable", { defaultValue: "Available" }),
       dataIndex: "available",
       key: "available",
       width: 130,
@@ -160,9 +183,16 @@ export default function PreviewTestDataPage() {
             checked={row.available}
             loading={savingKey === row.source_site_key}
             onChange={(checked) => void toggleAvailable(row, checked)}
-            aria-label={`切换 ${row.source_site_key} 的可获得状态`}
+            aria-label={t("admin.previewTestData.toggleAria", {
+              key: row.source_site_key,
+              defaultValue: "Toggle availability for {{key}}",
+            })}
           />
-          <span className="text-xs text-muted-foreground">{row.available ? "是" : "否"}</span>
+          <span className="text-xs text-muted-foreground">
+            {row.available
+              ? t("admin.previewTestData.yes", { defaultValue: "Yes" })
+              : t("admin.previewTestData.no", { defaultValue: "No" })}
+          </span>
         </Space>
       ),
     },
@@ -186,19 +216,21 @@ export default function PreviewTestDataPage() {
 
   return (
     <PageContainer
-      title="测试数据预览"
-      subTitle="本机上未发布的测试数据；「可获得」可在此修改，重新导入时会保留。"
+      title={t("admin.previewTestData.title", { defaultValue: "Test data preview" })}
+      subTitle={t("admin.previewTestData.subtitle", {
+        defaultValue: "Unpublished test data on this machine. Only availability can be edited here; it survives a re-import.",
+      })}
     >
       <ProCard>
         <Space wrap align="center" size={12}>
-          <span className="text-sm text-muted-foreground">染色体号</span>
+          <span className="text-sm text-muted-foreground">{t("admin.previewTestData.columnChromosome", { defaultValue: "Chromosome" })}</span>
           <Input
             value={chromosome}
             onChange={(event) => setChromosome(event.target.value)}
             style={{ width: 120 }}
             placeholder="Gm01"
           />
-          <span className="text-sm text-muted-foreground">起始位点</span>
+          <span className="text-sm text-muted-foreground">{t("admin.previewTestData.start", { defaultValue: "Start" })}</span>
           <InputNumber
             value={start}
             onChange={setStart}
@@ -206,7 +238,7 @@ export default function PreviewTestDataPage() {
             style={{ width: 150 }}
             placeholder="1"
           />
-          <span className="text-sm text-muted-foreground">终止位点</span>
+          <span className="text-sm text-muted-foreground">{t("admin.previewTestData.end", { defaultValue: "End" })}</span>
           <InputNumber
             value={end}
             onChange={setEnd}
@@ -215,20 +247,27 @@ export default function PreviewTestDataPage() {
             placeholder="2000000000"
           />
           <Button type="primary" onClick={submit} loading={loading}>
-            查询
+            {t("admin.previewTestData.query", { defaultValue: "Query" })}
           </Button>
         </Space>
       </ProCard>
 
       {error ? (
-        <Alert className="mt-4" type="error" showIcon title="加载失败" description={error} />
+        <Alert
+          className="mt-4"
+          type="error"
+          showIcon
+          title={t("admin.previewTestData.loadFailedTitle", { defaultValue: "Load failed" })}
+          description={error}
+        />
       ) : null}
 
       {applied ? (
         <ProCard className="mt-4">
           <Typography.Text type="secondary" className="text-sm">
             {applied.chromosome}:{applied.start.toLocaleString()}-
-            {applied.end.toLocaleString()} · 共 {rows.length} 条
+            {applied.end.toLocaleString()} ·{" "}
+            {t("admin.previewTestData.resultCount", { count: rows.length, defaultValue: "{{count}} rows" })}
           </Typography.Text>
           <ProTable<TestDataPreviewMutationSite>
             {...PRO_LIST_SHELL}

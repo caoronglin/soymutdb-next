@@ -37,6 +37,7 @@ def _context(release_id: int = 7) -> ReleaseContext:
 
 def _make_request(**overrides: Any) -> BlastSubmitRequest:
     defaults: dict[str, Any] = dict(
+        engine="diamond",
         program=BlastSubmitProgram.BLASTP,
         database_id=1,
         query_sequence="MKTIIALSYIFCLVFADYKDDDDKTRWQYNE",
@@ -54,6 +55,9 @@ def _make_db(db_type: str = "prot") -> BlastDatabase:
         assembly_id=1,
         file_path="/data/dbs/williams82_cds",
         is_active=True,
+        engine="diamond",
+        build_status="ready",
+        is_default=False,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -151,7 +155,8 @@ class TestOnlyProteinProteinIsSubmittable:
         for program in ("blastn", "blastx", "tblastn", "tblastx"):
             with pytest.raises(ValidationError):
                 BlastSubmitRequest(
-                    program=program, query_sequence=PROTEIN_QUERY, parameters=BlastParameters()
+                    engine="diamond", program=program, query_sequence=PROTEIN_QUERY,
+                    parameters=BlastParameters()
                 )
 
     @pytest.mark.parametrize("field,value", [
@@ -159,9 +164,9 @@ class TestOnlyProteinProteinIsSubmittable:
     ])
     def test_retired_blast_parameters_are_rejected(self, field, value) -> None:
         # Silently dropping them would misreport which search actually ran.
-        with pytest.raises(ValidationError, match="retired NCBI BLAST option"):
+        with pytest.raises(ValidationError, match="DIAMOND|dust"):
             BlastSubmitRequest(
-                program="blastp",
+                engine="diamond", program="blastp",
                 query_sequence=PROTEIN_QUERY,
                 parameters=BlastParameters(**{field: value}),
             )
@@ -216,7 +221,7 @@ class TestProgramDatabaseCompatibility:
         import asyncio
 
         session = FakeDbSession(blast_db=_make_db(db_type="nucl"))
-        with pytest.raises(AppValidationError, match="cannot search"):
+        with pytest.raises(NotFoundError):
             asyncio.run(self._submit(session, _make_request()))
 
     def test_missing_or_inactive_database_not_found(self) -> None:
@@ -243,7 +248,7 @@ class TestProgramDatabaseCompatibility:
 
 class TestParameters:
     def test_matrix_whitelist(self) -> None:
-        with pytest.raises(ValidationError, match="Unsupported substitution matrix"):
+        with pytest.raises(ValidationError, match="matrix must"):
             _make_request(parameters=BlastParameters(matrix="BLOSUM999"))
 
     def test_matrix_normalized_to_upper(self) -> None:
@@ -266,15 +271,15 @@ class TestParameters:
 
     def test_worker_parameter_drops_percent_identity(self) -> None:
         # percent_identity is a client-side filter, not a BLAST CLI param.
-        mapped = _worker_parameters(BlastParameters(percent_identity=90.0))
-        assert "percent_identity" not in mapped
+        with pytest.raises(ValueError, match="only by NCBI blastn"):
+            _worker_parameters(BlastParameters(percent_identity=90.0))
 
     def test_submitted_job_parameters_are_worker_safe(self) -> None:
         import asyncio
 
         session = FakeDbSession(blast_db=_make_db(db_type="prot"))
         request = _make_request(
-            parameters=BlastParameters(gap_open=5, percent_identity=90.0)
+            parameters=BlastParameters(gap_open=5, gap_extend=2)
         )
         asyncio.run(
             BlastService().submit_job(session, uuid.uuid4(), request, release_context=_context())
@@ -286,3 +291,12 @@ class TestParameters:
         assert params["gapopen"] == 5
         # No NCBI-only key may reach the worker: it would abort the search.
         assert not {"dust", "soft_masking", "word_size"} & set(params)
+
+
+@pytest.fixture(autouse=True)
+def isolated_database_quota_boundary(monkeypatch):
+    """These fake-session tests cover mapping; PostgreSQL quota tests cover locks."""
+    async def enforce(_self, _db, _user_id):
+        return None
+
+    monkeypatch.setattr(BlastService, "_enforce_user_limit", enforce)

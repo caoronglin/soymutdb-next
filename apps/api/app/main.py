@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from fastapi import FastAPI, HTTPException
@@ -20,6 +20,7 @@ from fastapi.openapi.utils import get_openapi
 from fastapi.responses import ORJSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
+from starlette.types import ASGIApp, ExceptionHandler
 
 from .api.v1.router import api_router
 from .core.config import get_settings
@@ -27,6 +28,7 @@ from .core.database import close_db
 from .core.exceptions import (
     SoyMutDBError,
     error_code_catalog,
+    error_status_contract,
     http_exception_handler,
     soy_mut_db_exception_handler,
     unhandled_exception_handler,
@@ -62,6 +64,10 @@ Every error response uses the unified envelope (see `ErrorResponse`):
 ```
 
 - `request_id` is always present and echoed in the `X-Request-ID` header.
+- `x-error-codes` lists every stable `error.code`, and `x-error-status` binds
+  each code to the HTTP status that emits it. A generic `HTTPException` without
+  a dedicated domain code uses the `http_error` fallback (400/413/500/503 and
+  other unmapped statuses).
 - Validation failures (422) additionally return a field-level `errors` array
   (`ValidationErrorResponse`); internal framework structures are never
   exposed.
@@ -86,6 +92,72 @@ OPENAPI_TAGS = [
     },
     {"name": "analytics", "description": "Behavioural analytics tracking and summaries."},
     {"name": "widgets", "description": "Dashboard widgets and layouts."},
+    {
+        "name": "admin-content",
+        "description": "Administrator content pages and page-builder migration.",
+    },
+    {
+        "name": "admin-data-views",
+        "description": "Administrator saved multi-view presentations over public data.",
+    },
+    {"name": "admin-features", "description": "Administrator feature-flag configuration."},
+    {
+        "name": "admin-import-studio",
+        "description": "Administrator import-studio dataset versions and drafts.",
+    },
+    {"name": "admin-imports", "description": "Administrator import job management."},
+    {"name": "admin-media", "description": "Administrator media library."},
+    {"name": "admin-modules", "description": "Administrator module inspection and templates."},
+    {"name": "admin-news", "description": "Administrator news administration."},
+    {
+        "name": "admin-page-builder",
+        "description": "Administrator page-builder registry and templates.",
+    },
+    {"name": "admin-plugins", "description": "Administrator plugin state."},
+    {
+        "name": "admin-publication",
+        "description": "Administrator publication targets and requests.",
+    },
+    {"name": "admin-publications", "description": "Administrator publication records."},
+    {"name": "admin-settings", "description": "Administrator site settings and schema."},
+    {
+        "name": "admin-species-instances",
+        "description": "Administrator species-instance configuration.",
+    },
+    {"name": "admin-static", "description": "Administrator static-site build triggers."},
+    {"name": "admin-table-views", "description": "Administrator table-view templates."},
+    {"name": "admin-uploads", "description": "Administrator presigned upload workflow."},
+    {"name": "analyses", "description": "Analysis jobs and uploads."},
+    {"name": "assemblies", "description": "Genome assemblies and chromosomes."},
+    {"name": "blast", "description": "BLAST databases and jobs."},
+    {"name": "capabilities", "description": "Public capability discovery."},
+    {"name": "comparative", "description": "Comparative genomics families and comparisons."},
+    {"name": "content", "description": "Public content snapshots, news and downloads."},
+    {"name": "expression", "description": "Gene expression libraries and measurements."},
+    {
+        "name": "exports",
+        "description": "Unified whitelist query builder over the export pipeline.",
+    },
+    {"name": "genes", "description": "Gene search and gene structure."},
+    {"name": "gwas", "description": "GWAS uploads and jobs."},
+    {"name": "homologs", "description": "Gene homolog lookup and search."},
+    {"name": "jobs", "description": "Job event stream."},
+    {"name": "local-test-preview", "description": "Local test-preview sample data."},
+    {"name": "mutants", "description": "Mutant lines and phenotypes."},
+    {"name": "news", "description": "Public news listing."},
+    {"name": "notifications", "description": "User notifications."},
+    {"name": "ontology", "description": "Ontology terms and relationship graph."},
+    {"name": "page-definitions", "description": "Published routes and page definitions."},
+    {"name": "releases", "description": "Data releases."},
+    {"name": "search", "description": "Global and authorized internal search."},
+    {"name": "seed-requests", "description": "Seed requests and demand counts."},
+    {"name": "seeds", "description": "Seed inventory and requests."},
+    {"name": "site", "description": "Public site branding and content."},
+    {"name": "sra", "description": "SRA run metadata and demo samples."},
+    {"name": "table-views", "description": "Table view retrieval."},
+    {"name": "tools", "description": "Genomic analysis tools."},
+    {"name": "tracks", "description": "Genome browser tracks and configuration."},
+    {"name": "variants", "description": "Variant search and export."},
 ]
 
 # Explicit per-operation pagination behavior.  The homolog endpoint retains its
@@ -170,7 +242,11 @@ def _build_openapi_schema(app: FastAPI) -> dict[str, Any]:
     )
 
     # Publish behavior contracts alongside the existing unified error schema.
+    # x-error-codes lists the stable codes; x-error-status binds each code to
+    # the HTTP status that emits it, including the generic HTTPException
+    # fallback that has no dedicated domain exception class.
     schema["x-error-codes"] = error_code_catalog()
+    schema["x-error-status"] = error_status_contract()
 
     # Document the unified error responses on every path operation.
     for path, path_item in schema.get("paths", {}).items():
@@ -204,19 +280,33 @@ def _build_openapi_schema(app: FastAPI) -> dict[str, Any]:
                         },
                     },
                 )
-            responses.setdefault(
-                "422",
-                {
-                    "description": "Validation Error",
-                    "content": {
-                        "application/json": {
-                            "schema": {
-                                "$ref": "#/components/schemas/ValidationErrorResponse"
-                            }
+            # The app registers ``validation_exception_handler`` for every
+            # RequestValidationError, so a 422 always carries the unified
+            # envelope plus the field-level ``errors`` array -- never FastAPI's
+            # default ``HTTPValidationError`` (a flat ``detail`` list).  The
+            # auto-generated 422 would otherwise win because ``get_openapi``
+            # populates it first, and the generated TypeScript client would
+            # type a response shape the server does not send.  A route may
+            # still supply its own richer 422 description; only the schema is
+            # corrected, so that prose is preserved.
+            validation_response = {
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/ValidationErrorResponse"
                         }
-                    },
+                    }
                 },
-            )
+            }
+            current_422 = responses.get("422")
+            if current_422 is None:
+                responses["422"] = {
+                    "description": "Validation Error",
+                    **validation_response,
+                }
+            else:
+                current_422.setdefault("description", "Validation Error")
+                current_422.update(validation_response)
             responses.setdefault(
                 "500",
                 {
@@ -328,6 +418,8 @@ def create_app() -> FastAPI:
             "Range",
             "X-Requested-With",
             "X-Request-ID",
+            "X-Blast-Token",
+            "X-SoyMutDB-Release",
         ],
     )
     app.add_middleware(GZipMiddleware, minimum_size=1024)
@@ -349,16 +441,24 @@ def create_app() -> FastAPI:
     )
 
     # --- Exception handlers ---
-    app.add_exception_handler(SoyMutDBError, soy_mut_db_exception_handler)
-    app.add_exception_handler(HTTPException, http_exception_handler)
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    #
+    # Starlette types the handler as accepting *any* Exception (so one handler
+    # can cover both HTTP and WebSocket), while each of ours narrows the second
+    # parameter to the class it is registered for. The casts state that
+    # narrowing; the runtime dispatch still only calls a handler for the class
+    # it is registered against.
+    app.add_exception_handler(SoyMutDBError, cast(ExceptionHandler, soy_mut_db_exception_handler))
+    app.add_exception_handler(HTTPException, cast(ExceptionHandler, http_exception_handler))
+    app.add_exception_handler(
+        RequestValidationError, cast(ExceptionHandler, validation_exception_handler)
+    )
     app.add_exception_handler(Exception, unhandled_exception_handler)
 
     # --- Routes ---
     app.include_router(api_router, prefix=settings.api_v1_prefix)
 
     # Prometheus metrics endpoint
-    app.mount("/metrics", get_metrics_app())
+    app.mount("/metrics", cast(ASGIApp, get_metrics_app()))
 
     # Root health check
     @app.get("/health", tags=["health"])

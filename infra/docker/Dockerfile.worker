@@ -27,6 +27,10 @@ ENV PYTHONUNBUFFERED=1 \
 #   libbz2-dev       cyvcf2 0.34 builds a bundled htslib,
 #   liblzma-dev      and htslib's configure picks up the system zlib/bzip2/xz
 #                    when their headers are present.
+#   autoconf
+#   automake         htslib's bundled configure runs autoreconf / libtoolize;
+#   libtool          without autotools the cyvcf2 CMake build fails at
+#                    "cyvcf2: building bundled htslib".
 #   libpq-dev        pg_config for psycopg2-binary.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -37,6 +41,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libbz2-dev \
     liblzma-dev \
     libhdf5-dev \
+    autoconf \
+    automake \
+    libtool \
     && rm -rf /var/lib/apt/lists/*
 
 # h5py links with `-lhdf5 -lhdf5_hl` and takes only the include/-L paths from
@@ -45,12 +52,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # with `hdf5-serial.pc`. Link the exact line h5py will use, so a Debian point
 # that renames the flavour paths fails here with a link error naming them
 # instead of inside the h5py build.
+# `hdf5-serial.pc` hardcodes that -L path in its `Libs:` field and defines no
+# `libdir` variable, so `--variable=libdir` expands to empty: the probe used to
+# compile `-L -lhdf5 -lhdf5_hl`, where the bare -L swallowed `-lhdf5` as its
+# directory argument and the linker could not find `-lhdf5_hl`. `--libs-only-L`
+# reads the path from `Libs:`, which is what h5py itself consumes.
 RUN set -eux; \
     pkg-config --exists hdf5-serial; \
     printf 'int main(void) { return 0; }\n' > /tmp/hdf5-link-probe.c; \
     cc /tmp/hdf5-link-probe.c -o /tmp/hdf5-link-probe \
         $(pkg-config --cflags hdf5-serial) \
-        -L"$(pkg-config --variable=libdir hdf5-serial)" -lhdf5 -lhdf5_hl; \
+        $(pkg-config --libs-only-L hdf5-serial) -lhdf5 -lhdf5_hl; \
     /tmp/hdf5-link-probe; \
     rm -f /tmp/hdf5-link-probe /tmp/hdf5-link-probe.c
 
@@ -61,11 +73,14 @@ RUN set -eux; \
 # Cython-generated code with an error naming neither Python nor pkg-config.
 # PKG_CONFIG_PATH above puts /usr/local/lib/pkgconfig ahead of any Debian
 # python3.x.pc, and this check turns whatever is left into an error that says
-# what it is.
+# what it is. The official CPython image ships python3.pc with
+# includedir=${prefix}/include, so pkg-config answers the bare /usr/local/include
+# and carries the 3.15 in Cflags; both that and a versioned include dir are this
+# image's own interpreter.
 RUN set -eux; \
     foreign="$(pkg-config --variable=includedir python3 2>/dev/null || true)"; \
     case "${foreign}" in \
-        "" | /usr/local/include/python3*) ;; \
+        "" | /usr/local/include | /usr/local/include/python3*) ;; \
         *) echo "pkg-config resolves python3 to ${foreign}, which is not this image's CPython; a Debian python3-dev breaks the meson-python builds (pandas, matplotlib)" >&2; \
            exit 1 ;; \
     esac
@@ -133,7 +148,9 @@ ENV PYTHONUNBUFFERED=1 \
 # queue needs it to survive a restart.
 ENV NUMBA_CACHE_DIR=/tmp/soymutdb-numba-cache
 
-# Bioinformatics tools: htslib, bcftools, diamond
+# Bioinformatics tools: htslib, bcftools, NCBI BLAST+, diamond
+# The version/help probes below intentionally fail the image build when a
+# required NCBI program or index utility is absent.
 #
 # Libraries the source-built science stack links but does not vendor. The
 # builder's -dev packages have been purged by this point, so each of these is
@@ -145,6 +162,9 @@ ENV NUMBA_CACHE_DIR=/tmp/soymutdb-numba-cache
 #                  which does not cover third-party C++ extensions.
 #   libhdf5-310    h5py links libhdf5_serial.so.310; the SONAME package name
 #                  follows the HDF5 series Debian ships (trixie: 1.14.5).
+#   libhdf5-hl-310 h5py also links the high-level interface (libhdf5_serial_hl.so.310);
+#                  Debian ships it as a separate package that libhdf5-310 does
+#                  not depend on, so both have to be named.
 # Arrow C++, pandas, matplotlib's FreeType/Qhull and cyvcf2's htslib carry
 # their own dependencies inside site-packages or statically, so nothing else
 # from the builder stage is needed here.
@@ -155,14 +175,28 @@ RUN apt-get update \
     libgomp1 \
     libstdc++6 \
     libhdf5-310 \
+    libhdf5-hl-310 \
     bcftools \
     tabix \
+    ncbi-blast+ \
     diamond-aligner \
     samtools \
     bedtools \
     pigz \
     zstd \
     && rm -rf /var/lib/apt/lists/* \
+    && blastn -version \
+    && blastp -version \
+    && blastx -version \
+    && tblastn -version \
+    && tblastx -version \
+    && makeblastdb -version \
+    && blastdbcmd -version \
+    && blastn -help >/dev/null \
+    && blastp -help >/dev/null \
+    && blastx -help >/dev/null \
+    && tblastn -help >/dev/null \
+    && tblastx -help >/dev/null \
     && groupadd --gid 1000 soymutdb \
     && useradd --uid 1000 --gid soymutdb --shell /bin/bash --create-home soymutdb
 

@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { NAV_SECTIONS } from "../components/admin-sidebar";
+import { NAV_SECTIONS, type NavItem } from "../components/admin-sidebar";
 import { COMMANDS } from "../components/admin-command-palette";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -33,24 +33,35 @@ function routerPaths(): string[] {
   return [...paths].sort();
 }
 
+/** Depth-first walk over the sidebar tree; submenus carry no path of their own. */
+function navEntries(items: NavItem[]): NavItem[] {
+  return items.flatMap((item) => [item, ...(item.children ? navEntries(item.children) : [])]);
+}
+
+const NAV_ITEMS = NAV_SECTIONS.flatMap((section) => navEntries(section.items));
+
 /** Paths an operator reaches from the sidebar today. */
-const NAV_PATHS = new Set(NAV_SECTIONS.flatMap((section) => section.items.map((item) => item.path)));
+const NAV_PATHS = new Set(NAV_ITEMS.map((item) => item.path).filter((path): path is string => Boolean(path)));
 
 /**
  * Routes that are intentionally not sidebar entries: the login screen (no console
- * behind it), the redirect/alias routes that keep a retired deep link alive, and the
- * ADR-0009 retirements that deliberately resolve to an "unavailable" page.
+ * behind it), the redirect/alias routes that keep a retired deep link alive, the
+ * destinations the owner retired (`/imports`, `/imports/new`, `/site-control`:
+ * the pages stay routable for deep links and tests, but the menu no longer
+ * advertises them), and the ADR-0009 retirements that deliberately resolve to an
+ * "unavailable" page.
  */
 const NOT_IN_NAV = new Set([
   "/login",
-  "/content",
+  "/content/pages",
+  "/imports",
   "/imports/new",
+  "/site-control",
   "/news/new",
   "/news/trash",
   "/settings/site",
   "/settings/legacy",
   "/table-views",
-  "/page-builder",
   "/page-builder/$pageId",
   "/widgets",
   "/widgets/$name",
@@ -109,13 +120,17 @@ describe("admin navigation reachability", () => {
   it("parses the router path literals it depends on", () => {
     // If this fails the guard below is vacuous, which is worse than no guard.
     expect(routerPaths().length).toBeGreaterThan(20);
-    expect(routerPaths()).toContain("/content/pages");
+    expect(routerPaths()).toContain("/content");
   });
 
   it("resolves each sidebar entry to the component the router renders", () => {
     const components = routerComponents();
     expect(components.size).toBeGreaterThan(20);
-    expect(components.get("/")).toBe("DashboardPage");
+    // The page was renamed from `DashboardPage`: the old name made three
+    // different pages answer to "dashboard". The guard checks that `/`
+    // resolves to the component the router actually renders, which is now
+    // `SystemOverviewPage` in App.tsx.
+    expect(components.get("/")).toBe("SystemOverviewPage");
     // The retired routes are the ones this guard exists for, so the parser has
     // to see them before it can keep them out of the menu.
     expect(components.get("/resource-catalog")).toBe(UNAVAILABLE_COMPONENT);
@@ -153,13 +168,27 @@ describe("admin navigation reachability", () => {
 
   it("has no duplicate sidebar entries", () => {
     const seen: string[] = [];
-    for (const section of NAV_SECTIONS) {
-      for (const item of section.items) {
-        if (item.path === "/") continue; // the dashboard is allowed once per section list
-        seen.push(item.path);
-      }
+    for (const item of NAV_ITEMS) {
+      if (item.path === "/") continue; // the dashboard is allowed once per section list
+      if (item.path) seen.push(item.path);
     }
     expect(seen.filter((path, index) => seen.indexOf(path) !== index)).toEqual([]);
+  });
+
+  it("renders multi-level navigation without placeholder parents", () => {
+    // A submenu exists to group destinations, so it must have children and no
+    // path of its own; a leaf must have a path and no children.
+    const broken: string[] = [];
+    for (const item of NAV_ITEMS) {
+      if (item.children?.length && item.path) broken.push(`${item.label}: submenu with a path`);
+      if (!item.children?.length && !item.path) broken.push(`${item.label}: leaf without a path`);
+    }
+    expect(broken).toEqual([]);
+    expect(
+      NAV_SECTIONS.some((section) =>
+        section.items.some((item) => (item.children?.length ?? 0) > 0),
+      ),
+    ).toBe(true);
   });
 
   it("fails when a shipped destination is dropped from the sidebar (ablation)", () => {

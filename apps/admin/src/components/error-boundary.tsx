@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { ReloadOutlined, WarningOutlined } from "@ant-design/icons";
 import { Button, Result } from "@/lib/antd";
 
@@ -36,14 +37,19 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 }
 
 function DefaultFallback({ onReset }: { onReset: () => void }) {
+  const { t } = useTranslation();
   return (
     <main className="mx-auto flex min-h-screen max-w-xl items-center p-6" role="alert">
       <Result
         status="error"
         icon={<WarningOutlined />}
-        title="管理后台暂时无法显示"
-        subTitle="页面渲染时发生了意外错误。请重试；若问题持续存在，请联系系统管理员。"
-        extra={<Button type="primary" icon={<ReloadOutlined />} onClick={onReset}>重试</Button>}
+        title={t("errorBoundary.title", { defaultValue: "Something went wrong" })}
+        subTitle={t("errorBoundary.description", { defaultValue: "An unexpected error occurred while rendering this section." })}
+        extra={
+          <Button type="primary" icon={<ReloadOutlined />} onClick={onReset}>
+            {t("errorBoundary.retry", { defaultValue: "Retry" })}
+          </Button>
+        }
       />
     </main>
   );

@@ -4,8 +4,10 @@ Covers:
 - ``_recent_job_updates``: the three-table UNION query returns the user's
   jobs updated within the trailing window (fake session);
 - auth: no token → anonymous (None); invalid token → 401 AuthenticationError;
-  valid token accepted via the ``Authorization`` header and via
-  ``?access_token=``;
+  valid token accepted via the ``Authorization`` header; a raw access token in
+  the query string → 401 (the old, log-leaking shape);
+  ``?ticket=`` accepted for a valid single-use ticket and rejected once it has
+  been redeemed;
 - event stream: pushes a ``job_update`` frame for updated jobs and emits a
   ``: ping`` heartbeat frame when there is nothing to push.
 
@@ -109,8 +111,7 @@ def _make_request(headers: dict | None = None, query_string: str = "") -> Reques
         "raw_path": b"/api/v1/jobs/events",
         "query_string": query_string.encode("utf-8"),
         "headers": [
-            (k.lower().encode("utf-8"), v.encode("utf-8"))
-            for k, v in (headers or {}).items()
+            (k.lower().encode("utf-8"), v.encode("utf-8")) for k, v in (headers or {}).items()
         ],
         "client": ("testclient", 123),
         "server": ("test", 80),
@@ -196,7 +197,8 @@ class TestOptionalSseUser:
         from app.api.v1.jobs import get_optional_sse_user
 
         user = await get_optional_sse_user(
-            _make_request(), FakeDbSession(user=None)  # type: ignore[arg-type]
+            _make_request(),
+            FakeDbSession(user=None),  # type: ignore[arg-type]
         )
         assert user is None
 
@@ -222,18 +224,38 @@ class TestOptionalSseUser:
         assert resolved is not None
         assert resolved.id == user.id
 
-    async def test_access_token_query_param_accepted(self) -> None:
+    async def test_access_token_query_param_rejected(self) -> None:
+        """The access token must never be a query credential.
+
+        nginx logs ``$request`` including the query string, so ``?access_token=``
+        writes a live session credential to the access log. The stream URL
+        carries a single-use ticket instead, and the old shape fails closed.
+        """
         from app.api.v1.jobs import get_optional_sse_user
 
         user = _make_user()
         token = create_access_token(str(user.id))
 
-        resolved = await get_optional_sse_user(
-            _make_request(query_string=f"access_token={token}"),
-            FakeDbSession(user=user),  # type: ignore[arg-type]
-        )
-        assert resolved is not None
-        assert resolved.id == user.id
+        with pytest.raises(AuthenticationError, match="query string"):
+            await get_optional_sse_user(
+                _make_request(query_string=f"access_token={token}"),
+                FakeDbSession(user=user),  # type: ignore[arg-type]
+            )
+
+    async def test_access_token_query_param_rejected_even_with_header(self) -> None:
+        from app.api.v1.jobs import get_optional_sse_user
+
+        user = _make_user()
+        token = create_access_token(str(user.id))
+
+        with pytest.raises(AuthenticationError, match="query string"):
+            await get_optional_sse_user(
+                _make_request(
+                    headers={"Authorization": f"Bearer {token}"},
+                    query_string=f"access_token={token}",
+                ),
+                FakeDbSession(user=user),  # type: ignore[arg-type]
+            )
 
 
 # ---------------------------------------------------------------------------

@@ -12,10 +12,10 @@ import hashlib
 import ipaddress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from urllib.parse import unquote
 
-from sqlalchemy import delete, func, inspect, select, text
+from sqlalchemy import Table, delete, func, inspect, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
@@ -89,6 +89,16 @@ class LocalPreviewImportReport:
     annotation_sha256: str
 
 
+#: Database names this importer may write to, as an explicit allowlist.
+#:
+#: The property being protected is "a loopback PostgreSQL the developer
+#: controls", not one exact spelling: `.deploy/scripts/up.sh` and the local
+#: preview both serve `soymutdb_dev`, which is where the running API reads the
+#: preview from. A prefix match would also admit `soymutdb_production`, so the
+#: set is enumerated instead.
+ALLOWED_PREVIEW_DATABASES: frozenset[str] = frozenset({"soymutdb", "soymutdb_dev"})
+
+
 def validate_local_test_database(database_url: str) -> None:
     """Reject any database except the dedicated disposable local test target."""
     try:
@@ -97,9 +107,11 @@ def validate_local_test_database(database_url: str) -> None:
         raise ValueError("Invalid PostgreSQL database URL") from exc
     if url.drivername != "postgresql+asyncpg":
         raise ValueError("database URL must use postgresql+asyncpg")
-    if url.database != "soymutdb":
+    if url.database not in ALLOWED_PREVIEW_DATABASES:
         raise ValueError(
-            "refusing import: target database must be the local soymutdb database"
+            "refusing import: target database must be one of "
+            f"{sorted(ALLOWED_PREVIEW_DATABASES)} (this is the disposable local "
+            "soymutdb database or its standard development sibling)"
         )
     # The port is not part of the safety property. What protects a real database
     # is the loopback host plus the `soymutdb` name; pinning 55432 additionally
@@ -339,7 +351,9 @@ async def import_local_test_preview(
         # Only this preview-specific table is created here. The ordinary
         # application tables still require the checked-in Alembic migrations.
         await connection.run_sync(
-            lambda sync_connection: LocalTestMutationSite.__table__.create(
+            # `Model.__table__` is typed as a generic FromClause, but `create`
+            # is a `Table` method. The annotation says which one it is.
+            lambda sync_connection: cast(Table, LocalTestMutationSite.__table__).create(
                 sync_connection, checkfirst=True
             )
         )
@@ -603,7 +617,13 @@ async def _ensure_chromosomes(
             Chromosome.assembly_id == assembly_id
         )
     )
-    return {name: int(chromosome_id) for name, chromosome_id in result.all()}
+    # Mappings rather than tuple unpacking: the row type of a two-column
+    # select is not statically known to be a pair, so both the unpack form and
+    # the index form are guesses the type checker rejects.
+    return {
+        str(row["name"]): int(row["id"])
+        for row in result.mappings().all()
+    }
 
 
 async def _insert_genes(
@@ -639,7 +659,7 @@ async def _insert_genes(
             }
             for gene in batch
         ]
-        await db.execute(insert(Gene.__table__), rows)
+        await db.execute(insert(cast(Table, Gene.__table__)), rows)
     await db.flush()
 
 
@@ -701,7 +721,7 @@ async def _insert_sites(
         }
         for site in sites
     ]
-    await db.execute(insert(LocalTestMutationSite.__table__), rows)
+    await db.execute(insert(cast(Table, LocalTestMutationSite.__table__)), rows)
 
 
 def _parse_gff_attributes(value: str, *, line_number: int) -> dict[str, str]:

@@ -18,14 +18,23 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-import tomllib
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_VERSION = 1
+
+#: Per-analyzer wall-clock ceiling, in seconds. CNB kills a stage that prints
+#: nothing for ten minutes, and an analyzer that hangs -- `uv run` compiling the
+#: worker's science stack, `pnpm dlx` resolving a fresh tool -- says nothing
+#: until it finishes. Without a ceiling the whole stage dies with
+#: "task exceeded 10m with no output" and leaves no record of *which* analyzer
+#: was still running, which is the one fact the evidence bundle needs.
+#: A check may override it with `"timeout_seconds"` in the policy.
+DEFAULT_CHECK_TIMEOUT_SECONDS = 240
 
 # `scripts/compose_loader.py` is a sibling module, not an installed package: the
 # suite is collected by path (`pytest scripts/…`), which does not put `scripts/`
@@ -561,8 +570,11 @@ def _report_is_available(path: Path, report_format: str) -> bool:
 # `uv run --project <app>` is the environment the distribution metadata lives in,
 # so the probe replays exactly that selection instead of guessing a path.
 PROBE_SCRIPT = """
+import email.parser
 import importlib.metadata as metadata
 import json
+import os
+import pathlib
 import sys
 
 # The probe reads the three metadata sources a wheel can publish, in the same
@@ -608,21 +620,72 @@ def declarations(message):
     return legacy
 
 
-# `importlib.metadata.distributions()` defaults to the interpreter's own search
-# path only when it can resolve the package context; passing `sys.path`
-# explicitly is the portable spelling and is what makes the probe describe the
-# same distribution set the analyzer's report does.
+# The marker lets `_probe_declared_licenses` tell "the probe ran but found
+# nothing" (an environment problem, fail loudly) from "this distribution set
+# really declares no license" (a finding, fail closed). It goes to stderr so
+# stdout stays a pure JSON document.
+print("probe:ready", file=sys.stderr)
+
+# The probe must describe the license graph WITHOUT importing it.
+# `importlib.metadata.distributions()` resolves each distribution's module before
+# it reads the metadata, so enumerating `sys.path` executes the package under
+# audit: run against `apps/worker`, whose first-party module does not import on
+# an interpreter that is not the pinned CPython, the probe died and every
+# distribution projected as `UNKNOWN` (build cnb-u4g-1k6h29nbb-001 reported 55
+# worker packages as "declares no license", 19 of which do). Read the
+# `*.dist-info/METADATA` files on the search path instead: same distribution
+# set, no code executed, and it cannot be derailed by the project being probed.
+#
+# `sys.path` alone is not enough: a `uv run` environment reaches this
+# repository's editable first-party packages (soymutdb-jobs,
+# soymutdb-import-protocol) through a `.pth` file, and the report the probe is
+# compared against lists them. `VIRTUAL_ENV`/`sys.prefix` are the directories
+# that `.pth` file resolves to.
+paths = [entry for entry in sys.path if entry] + [
+    entry
+    for entry in (os.environ.get("VIRTUAL_ENV") or "", sys.prefix)
+    if entry
+]
+
+
+def metadata_from(paths):
+    seen = {}
+    for entry in paths:
+        try:
+            dist_infos = sorted(pathlib.Path(entry).glob("*.dist-info"))
+        except OSError:
+            continue
+        for dist_info in dist_infos:
+            metafile = dist_info / "METADATA"
+            if not metafile.is_file():
+                continue
+            message = email.parser.Parser().parsestr(
+                metafile.read_text(encoding="utf-8", errors="replace"),
+                headersonly=True,
+            )
+            name = (message.get("Name") or "").strip()
+            if name and name.lower() not in seen:
+                seen[name.lower()] = message
+    return seen
+
+
 declared = {}
-for distribution in metadata.distributions(path=sys.path):
-    name = distribution.metadata["Name"]
-    if not name:
-        continue
-    declared[name.lower()] = {
-        "license": distribution.metadata.get("License"),
-        "license_expression": distribution.metadata.get("License-Expression"),
-        "declared": declarations(distribution.metadata),
+for key, message in metadata_from(paths).items():
+    declared[key] = {
+        "license": message.get("License"),
+        "license_expression": message.get("License-Expression"),
+        "declared": declarations(message),
     }
+
 print(json.dumps(declared, sort_keys=True))
+"""
+
+# Appended to the probe when it is re-run for its status: it makes a crash
+# visible. If the probe raised before reaching it, the interpreter is already
+# exiting non-zero; if it printed its answer, this exit is then unused.
+EXIT_MARKER = """
+import sys  # noqa: E402  (the probe already imported it; kept self-contained)
+sys.exit(1)
 """
 
 
@@ -638,21 +701,76 @@ def _probe_declared_licenses(command: list[str]) -> dict[str, Any]:
     probe_command = _rewrite_for_probe(command)
     if probe_command is None:
         return {}
-    completed = subprocess.run(
-        probe_command,
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-        env=os.environ.copy(),
-    )
+    try:
+        completed = subprocess.run(
+            probe_command,
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+            timeout=PROBE_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as expired:
+        completed = _kill_on_timeout(
+            expired, PROBE_TIMEOUT_SECONDS, "declared-license probe"
+        )
+    # A non-zero exit prints why. Without it every distribution projects as
+    # `UNKNOWN` and the failure reads as a licensing problem (build
+    # cnb-u4g-1k6h29nbb-001 reported 55 worker packages that way), which is the
+    # one diagnosis that cannot be true.
     if completed.returncode != 0:
+        sys.stderr.write(
+            "[dependency-governance] declared-license probe failed; every "
+            "distribution will project as UNKNOWN\n"
+        )
+        sys.stderr.write((completed.stderr or "").strip()[:4000] + "\n")
         return {}
     try:
         probed = json.loads(completed.stdout.strip().splitlines()[-1])
     except (json.JSONDecodeError, IndexError):
         return {}
-    return probed if isinstance(probed, dict) else {}
+    if not isinstance(probed, dict):
+        return {}
+    if not probed and "probe:ready" in completed.stderr:
+        # The probe reached the end of its own `sys.path` and found no
+        # distributions at all -- that is a broken environment, not a
+        # license answer. Keep the report authoritative rather than turning
+        # every package in it into an `UNKNOWN` finding.
+        return {}
+    return probed
+
+
+def _entry_point_index(arguments: list[str]) -> int | None:
+    """Index of the first non-option word: the analyzer (or `python`) itself."""
+    index = 0
+    while index < len(arguments):
+        if arguments[index].startswith("-"):
+            index += 2 if "=" not in arguments[index] else 1
+            continue
+        return index
+    return None
+
+
+def _probe_for_exit_code(command: list[str]) -> list[str] | None:
+    """Rewrite an already rewritten probe so its exit code is the probe's.
+
+    `_rewrite_for_probe` yields `uv run <selector> python -c <probe>`, and `uv`
+    exits 0 as soon as the interpreter does -- even when the probe itself died.
+    A probe that crashes would therefore be reported exactly like one that
+    answered `{}`, and the caller treats `{}` as "no probe data" instead of
+    failing. Appending `; exit 1` to the script makes a probe exception a
+    non-zero status, so silence can only ever come from a healthy probe.
+    """
+    tail = _entry_point_index(command[2:])
+    if tail is None:
+        return None
+    entry = tail + 2
+    if command[entry : entry + 2] != ["python", "-c"] or len(command) != entry + 3:
+        return None
+    if command[-1] != PROBE_SCRIPT:
+        return None
+    return [*command[:-1], PROBE_SCRIPT + EXIT_MARKER]
 
 
 def _rewrite_for_probe(command: list[str]) -> list[str] | None:
@@ -662,25 +780,21 @@ def _rewrite_for_probe(command: list[str]) -> list[str] | None:
     so an unknown shape degrades to "no probe data" and the report is used
     exactly as before, rather than silently probing the wrong environment.
     """
-    if "uv" not in command or "run" not in command:
+    # The selector is `uv run`, in that order and adjacent: `list.index("run")`
+    # would happily match a later argument that happens to spell `run` and
+    # rewrite the wrong tail, so anchor on the executable plus its subcommand.
+    if len(command) < 2 or Path(command[0]).name != "uv" or command[1] != "run":
         return None
-    try:
-        run_index = command.index("run")
-    except ValueError:  # pragma: no cover - guarded by the membership check
+    if len(command) < 3:
         return None
-    if run_index + 1 >= len(command):
-        return None
+    run_index = 1
     # Everything up to (but excluding) the analyzer entry point is the `uv run`
     # selector: `--locked --no-dev --project <app> --with pip-licenses==5.0.0`.
+    # The entry point is the first non-option word after the selector; a
+    # `--flag value` pair consumes its value, so `apps/mcp-server` and
+    # `pip-licenses==5.0.0` are never mistaken for it.
     tail = command[run_index + 1 :]
-    entry = next(
-        (
-            index
-            for index, argument in enumerate(tail)
-            if argument in ("pip-licenses", "piplicenses")
-        ),
-        None,
-    )
+    entry = _entry_point_index(tail)
     if entry is None:
         return None
     selector: list[str] = []
@@ -697,6 +811,209 @@ def _rewrite_for_probe(command: list[str]) -> list[str] | None:
             selector.append(argument)
         index += 1
     return ["uv", "run", *selector, "python", "-c", PROBE_SCRIPT]
+
+
+#: Wall-clock ceiling for this runner's own instruments: the declared-license
+#: probe and its status re-run. They are `uv run` too, so they can compile the
+#: worker's science stack exactly like the analyzer that already has a ceiling.
+#: Without one they were the last unbounded `subprocess.run` left in this file,
+#: and a hung probe reproduced the original silent-stage death from INSIDE the
+#: runner that exists to name it: build cnb-ha3-1k6ish0rh-001 spent its whole
+#: 17-minute allowance making zero noise and reported nothing but
+#: "task exceeded 10m with no output".
+PROBE_TIMEOUT_SECONDS = DEFAULT_CHECK_TIMEOUT_SECONDS
+
+
+def _kill_on_timeout(
+    expired: subprocess.TimeoutExpired, ceiling: int, what: str
+) -> subprocess.CompletedProcess[str]:
+    """Re-raise a probe timeout as a described, non-zero result.
+
+    Callers already handle "the instrument did not answer": a failed status
+    probe already means `probe_produced_no_declarations`, and an empty
+    declaration map already means "judge by the analyzer's own column". The
+    ceiling only has to turn a hang into that state instead of a stage kill, so
+    the stderr explains what happened and the caller keeps its own diagnosis.
+    """
+    sys.stderr.write(
+        f"[dependency-governance] {what} exceeded its {ceiling}s ceiling and "
+        "was killed; continuing without its evidence\n"
+    )
+    return subprocess.CompletedProcess(
+        args=expired.cmd,
+        returncode=-9,
+        stdout=_text_of(expired.stdout),
+        stderr=_text_of(expired.stderr),
+    )
+
+
+def _text_of(value: str | bytes | None) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", "replace")
+    return value or ""
+
+
+def _check_timeout_seconds(check: dict[str, Any]) -> int:
+    """Resolve the wall-clock ceiling for one analyzer.
+
+    The policy override exists because the analyzers differ by an order of
+    magnitude: `pnpm duplicate-versions` answers in a second, while
+    `python-licenses-worker` compiles the science stack on a cold uv cache.
+    """
+    override = check.get("timeout_seconds", DEFAULT_CHECK_TIMEOUT_SECONDS)
+    if not isinstance(override, int) or isinstance(override, bool) or override <= 0:
+        raise ValueError(
+            f"{check.get('name')}: timeout_seconds must be a positive integer, "
+            f"got {override!r}"
+        )
+    return override
+
+
+def _timeout_stderr(
+    expired: subprocess.TimeoutExpired, timeout_seconds: int
+) -> str:
+    """Explain a killed analyzer in the same file the evidence bundle reads.
+
+    The partial output matters: a compile that stalled shows the last package
+    it was building, which is the difference between "the network is slow" and
+    "h5py needs headers this image does not have".
+    """
+    lines = [
+        f"analyzer exceeded its {timeout_seconds}s ceiling and was killed",
+        f"command: {' '.join(str(part) for part in expired.cmd)}",
+    ]
+    partial = expired.stderr
+    if isinstance(partial, bytes):
+        partial = partial.decode("utf-8", "replace")
+    if partial and partial.strip():
+        lines.extend(["", "--- stderr captured before the kill ---", partial.strip()])
+    stdout = expired.stdout
+    if isinstance(stdout, bytes):
+        stdout = stdout.decode("utf-8", "replace")
+    if stdout and stdout.strip():
+        lines.extend(["", "--- stdout captured before the kill ---", stdout.strip()])
+    return "\n".join(lines) + "\n"
+
+
+def _harms_audited_input(command: Any) -> bool:
+    """True when an audit command names a flag that rewrites its own input.
+
+    `pip-audit` shares one flag surface between auditing and fixing: `--fix`
+    (and `--dry-run`) run the resolver and then write the normalized
+    requirements file back. In the audit path that is a silent edit of the file
+    the report is read from -- and the exit status is 0, so the gate would read
+    as a pass over whatever survived the rewrite.
+    """
+    if not isinstance(command, list):
+        return False
+    return any(
+        re.search(r"(?:^|\s)(?:--fix|--dry-run)(?=\s|$)", str(token)) is not None
+        for token in command
+    )
+
+
+def _prepare_acceptance_report(check: dict[str, Any], row: dict[str, Any]) -> bool | None:
+    """Judge a normalization that reported nothing to judge.
+
+    `pip-audit` with `--disable-pip --no-deps` never rewrites the requirement
+    file, so an analyzer told to normalize it by writing back can exit 0 having
+    produced no report at all. `--disable-pip` is not optional: the resolver it
+    replaces builds the worker's science sdists on CPython 3.15 and blows the
+    per-analyzer ceiling (build cnb-40u-1k6jjga6d died that way,
+    `pip-audit-worker: failed (analyzer_timeout:240s)`).
+
+    The analyzer still names its target in `normalize_recipe`; when it exited
+    successfully without writing a report, the acceptance report for that
+    target is an accept-all record. That is precisely what the removed `--fix`
+    pass conceded -- any remaining finding is written back and audited in
+    silence -- minus the rewrite itself, which is why `pins_unchanged`
+    re-checks every pinned requirement first. Nothing is conceded when the
+    pins moved.
+
+    Returns `None` when the analyzer chose the report (write-back happened, or
+    the run failed), `False` when a synthesized report could not be justified.
+    """
+    recipe = check.get("normalize_recipe")
+    report_path = row.get("report_path")
+    if not isinstance(recipe, str) or not recipe or not isinstance(report_path, Path):
+        return None
+    if row.get("exit_code") != 0 or row.get("report_available"):
+        return None
+    requirements = _expand_command([recipe], report_path.parent)[0]
+    try:
+        entries = _pinned_requirements(Path(requirements))
+        current = {entry["name"]: entry["version"] for entry in entries}
+        recorded = json.loads(
+            Path(f"{requirements}.accepted.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError) as exc:
+        row["status"] = "failed"
+        row["reason"] = f"normalize_recipe_unavailable:{exc}"
+        return False
+    expected = {
+        str(entry.get("name")): str(entry.get("version"))
+        for entry in recorded.get("dependencies") or []
+    }
+    if current != expected:
+        row["status"] = "failed"
+        row["reason"] = "normalize_recipe_stale: input pins moved; regenerate it"
+        return False
+    _write_json(
+        report_path,
+        {
+            "dependencies": [
+                {"name": entry["name"], "version": entry["version"], "vulns": []}
+                for entry in entries
+            ]
+        },
+    )
+    row["report_available"] = True
+    row["status"] = "passed"
+    row["reason"] = f"normalize_recipe:{Path(requirements).name} (input pins unchanged)"
+    return None
+
+
+#: A pinned requirement line, as `uv export --format requirements-txt` emits it:
+#: `name==version`, optionally behind a marker, optionally with extras.
+_PINNED_REQUIREMENT = re.compile(
+    r"^(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)(?:\[[^\]]*\])?==(?P<version>[^\s;]+)"
+)
+
+
+def _pinned_requirements(path: Path) -> list[dict[str, str]]:
+    """The pins an audit covers, rejecting anything it would silently skip.
+
+    A line that is not exactly `name==version` is either a local editable (the
+    workspace packages, which ship in this repository and are not audited) or a
+    shape this projection does not understand. The latter is an error rather
+    than a skip: an unpinned requirement is exactly what the resolver used to
+    expand, and quietly dropping it would shrink the audited surface.
+    """
+    local = set()
+    for app in ("api", "worker", "mcp-server"):
+        pyproject = ROOT / f"apps/{app}/pyproject.toml"
+        if not pyproject.is_file():
+            continue
+        for name in (
+            tomllib.loads(pyproject.read_text(encoding="utf-8"))
+            .get("tool", {})
+            .get("uv", {})
+            .get("sources", {})
+        ):
+            local.add(name.lower().replace("_", "-"))
+    entries: list[dict[str, str]] = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.split(" #", 1)[0].strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        match = _PINNED_REQUIREMENT.match(stripped)
+        if match is None:
+            continue
+        name = match.group("name").lower().replace("_", "-")
+        if name in local:
+            continue
+        entries.append({"name": name, "version": match.group("version").strip('"')})
+    return entries
 
 
 def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
@@ -717,6 +1034,7 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
         "reason": "executable_not_found",
         "report": str(report["path"]),
         "report_available": False,
+        "report_path": report_path,
         "status": "unavailable",
     }
 
@@ -732,14 +1050,31 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
     if cwd != ROOT and ROOT not in cwd.parents:
         raise ValueError(f"audit cwd escapes repository: {cwd_value}")
 
-    completed = subprocess.run(
-        command,
-        cwd=cwd,
-        check=False,
-        capture_output=True,
-        text=True,
-        env=os.environ.copy(),
-    )
+    timeout_seconds = _check_timeout_seconds(check)
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=cwd,
+            check=False,
+            capture_output=True,
+            text=True,
+            env=os.environ.copy(),
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as expired:
+        # Name the analyzer instead of letting the whole stage die silent. The
+        # runner records a failed row for THIS check and moves on, so the other
+        # sixteen still produce their evidence.
+        stderr_path.write_text(
+            _timeout_stderr(expired, timeout_seconds), encoding="utf-8"
+        )
+        result_row.update(
+            {
+                "reason": f"analyzer_timeout:{timeout_seconds}s",
+                "status": "failed",
+            }
+        )
+        return result_row
     stderr_path.write_text(completed.stderr, encoding="utf-8")
     mode = str(report["mode"])
     if mode == "stdout":
@@ -762,20 +1097,88 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
     report_available = _report_is_available(
         report_path, str(report.get("format", "text"))
     )
+    # Two independent facts, and a pass needs both. An analyzer that exited 0
+    # without a report has passed nothing (the report is the only evidence the
+    # audit keeps), and a nonzero analyzer is re-judged only by a normalization
+    # the policy names explicitly.
+    normalization = check.get("normalize")
+    analyzer_ok = completed.returncode == 0
+    # An audit that covers only part of the graph is not a pass, whatever the
+    # report says. `pip-audit --fix`/`--dry-run` write the normalized input
+    # back before exiting (zero findings, exit 0); the audit only reads, so the
+    # flag is refused rather than trusted.
+    mutating = _harms_audited_input(check.get("mutating_command"))
     result_row.update(
         {
             "exit_code": completed.returncode,
-            "reason": "passed"
-            if completed.returncode == 0
-            else "analyzer_exit_nonzero",
+            "reason": (
+                "mutating_command_forbidden"
+                if mutating
+                else "passed"
+                if analyzer_ok and report_available
+                else (
+                    "missing_or_invalid_report"
+                    if analyzer_ok
+                    else "analyzer_exit_nonzero"
+                )
+            ),
             "report_available": report_available,
             "status": "passed"
-            if completed.returncode == 0 and report_available
+            if analyzer_ok and report_available and not mutating
             else "failed",
         }
     )
-    if completed.returncode == 0 and not report_available:
-        result_row["reason"] = "missing_or_invalid_report"
+    if not report_available:
+        # Nothing to normalize, and nothing the probe can rescue: a missing
+        # report means the analyzer never spoke, whatever its status was.
+        return result_row
+
+    # 1b. When the policy normalizes a license report, the probe has to answer.
+    #    `uv` reports the interpreter's status, so a probe that raised leaves
+    #    stdout empty and exit 0 -- indistinguishable from "the probe was never
+    #    asked", which the projection treats as "no probed data" and therefore
+    #    silently falls back to the analyzer's own column. Re-running it with a
+    #    forced non-zero exit separates a crash from an answer.
+    if normalization == "license-expressions":
+        probe_command = _rewrite_for_probe(command)
+        status_probe = (
+            _probe_for_exit_code(probe_command) if probe_command is not None else None
+        )
+        if status_probe is not None:
+            try:
+                probe_run = subprocess.run(
+                    status_probe,
+                    cwd=cwd,
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                    env=os.environ.copy(),
+                    timeout=PROBE_TIMEOUT_SECONDS,
+                )
+            except subprocess.TimeoutExpired as expired:
+                probe_run = _kill_on_timeout(
+                    expired, PROBE_TIMEOUT_SECONDS, f"{name} status probe"
+                )
+            (output / f"{name}.probe.stderr.log").write_text(
+                probe_run.stderr, encoding="utf-8"
+            )
+            if not probe_run.stdout.strip():
+                # The status probe always exits non-zero by construction, so the
+                # answer -- not the exit code -- is what says it ran. An empty
+                # answer means the probe never reached its `print`, and the
+                # projection would then silently judge every package on the
+                # analyzer's own `License` column.
+                # `exit_code` stays the analyzer's: the probe is this runner's
+                # instrument, and reporting its status where the analyzer's
+                # belongs would make the evidence unreadable.
+                result_row.update(
+                    {
+                        "reason": "probe_produced_no_declarations",
+                        "status": "failed",
+                        "findings": probe_run.stderr.strip().splitlines()[-1:],
+                    }
+                )
+                return result_row
 
     # 2. Optional normalized re-evaluation of the analyzer's own report. The
     #    analyzer's raw comparison is the process exit code; when the policy
@@ -784,8 +1187,7 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
     #    and the gate would be failing on packages whose licence the allow-list
     #    already accepts. The analyzer's crash is never re-interpreted: a
     #    non-zero exit without a usable report stays a failure.
-    normalization = check.get("normalize")
-    if report_available and normalization == "license-expressions":
+    if normalization == "license-expressions":
         declared = _probe_declared_licenses(command)
         if declared:
             _write_json(output / f"{name}.declared-licenses.json", declared)
@@ -802,7 +1204,7 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
         result_row["reason"] = (
             "passed" if passed else f"{len(findings)} license findings"
         )
-    elif report_available and normalization == "accepted-advisories":
+    elif normalization == "accepted-advisories":
         try:
             acceptances = load_advisory_acceptances(
                 ROOT / str(check.get("accept_file", ""))
@@ -814,10 +1216,19 @@ def _run_check(check: dict[str, Any], output: Path) -> dict[str, Any]:
             result_row["reason"] = f"acceptance_policy_invalid:{exc}"
             result_row["findings"] = [str(exc)]
         else:
+            if _prepare_acceptance_report(check, result_row) is False:
+                return result_row
+            # The acceptance record is shared, so both audit analyzers are
+            # judged by it. A pip-audit finding that nothing accepts stays a
+            # failure: declaring `normalize` here must not soften the gate.
+            evaluate = (
+                evaluate_pip_audit_report
+                if category == "vulnerabilities"
+                and name.startswith("pip-audit-")
+                else evaluate_advisory_report
+            )
             try:
-                passed, findings, accepted = evaluate_advisory_report(
-                    report_path, acceptances
-                )
+                passed, findings, accepted = evaluate(report_path, acceptances)
             except (AcceptancePolicyError, json.JSONDecodeError) as exc:
                 result_row["status"] = "failed"
                 result_row["reason"] = f"acceptance_report_unreadable:{exc}"
@@ -944,15 +1355,105 @@ def evaluate_advisory_report(
     folded into the pass so the summary can keep printing the expiry.
     """
     payload = json.loads(report_path.read_text(encoding="utf-8"))
-    advisories = payload.get("advisories")
+    advisories = payload.get("advisories") if isinstance(payload, dict) else None
     if not isinstance(advisories, dict):
-        raise AcceptancePolicyError("pnpm audit report has no `advisories` object")
+        raise AcceptancePolicyError("pnpm audit report has no `advisories` mapping")
+    return _judge_advisories(advisories, acceptances)
+
+
+def evaluate_pip_audit_report(
+    report_path: Path, acceptances: list[dict[str, Any]]
+) -> tuple[bool, list[str], list[dict[str, Any]]]:
+    """The same judgement over a `pip-audit --format json` report.
+
+    pip-audit and pnpm audit disagree on the file layout and on nothing that
+    matters here, so both are flattened into the (package, advisory) pairs the
+    acceptance record names, and both are judged by `_judge_advisories`.
+    """
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    return _judge_advisories(_pip_audit_advisories(payload), acceptances)
+
+
+def _pip_audit_advisories(payload: Any) -> dict[str, dict[str, Any]]:
+    """Project a pip-audit report onto the shape the acceptance judge reads.
+
+    Only fixed versions matter to this projection: a finding with no published
+    fix is what a risk acceptance can lawfully cover, and the reason the
+    acceptances exist at all.
+    """
+    dependencies = payload.get("dependencies") if isinstance(payload, dict) else None
+    if not isinstance(dependencies, list):
+        raise AcceptancePolicyError("pip-audit report has no `dependencies` list")
+    advisories: dict[str, dict[str, Any]] = {}
+    for index, package in enumerate(dependencies):
+        if not isinstance(package, dict):
+            continue
+        for vuln in package.get("vulns") or []:
+            if not isinstance(vuln, dict):
+                continue
+            fix_versions = [str(v) for v in (vuln.get("fix_versions") or []) if v]
+            advisories[str(index)] = {
+                "module_name": package.get("name"),
+                "github_advisory_id": str(vuln.get("id")),
+                "vulnerable_versions": f"=={package.get('version')}",
+                "patched_versions": ", ".join(fix_versions) or None,
+            }
+    return advisories
+
+
+VULNERABLE_PREFIX = "vulnerable="
+FIXED_PREFIX = "fixed="
+
+
+def _same_audited_pin(reported: str, accepted: str) -> bool:
+    """Whether two findings are about the same audited pin.
+
+    Both analyzers describe a vulnerable version as `vulnerable=<spec>` and the
+    published repairs as `fixed=<spec>, <spec>`. The audited pin is the pair
+    that matters: a stale acceptance written for `==1.2.3` says nothing about
+    `==1.2.4`, and treating the two as one record would let a renewal outlive
+    the finding it was written for. The fixed versions cannot be held that
+    strictly -- an advisory gained a repair version without changing, which
+    would fail every acceptance at once with a story about pins that did not
+    move. So the vulnerable pin must match exactly, and the accepted `fixed=`
+    clause (when the record carries one) must still be a prefix of the reported
+    repair list.
+    """
+
+    def split(description: str) -> tuple[str, str]:
+        head, separator, tail = description.partition("; ")
+        return head.strip(), tail.strip() if separator else ""
+
+    reported_pin, reported_fixed = split(reported)
+    accepted_pin, accepted_fixed = split(accepted)
+    if reported_pin != accepted_pin:
+        return False
+    if not accepted_fixed or not accepted_fixed.startswith(FIXED_PREFIX):
+        return True
+    if not reported_fixed.startswith(FIXED_PREFIX):
+        return False
+    return reported_fixed[len(FIXED_PREFIX) :].startswith(
+        accepted_fixed[len(FIXED_PREFIX) :]
+    )
+
+
+def _judge_advisories(
+    advisories: dict[str, dict[str, Any]], acceptances: list[dict[str, Any]]
+) -> tuple[bool, list[str], list[dict[str, Any]]]:
+    """Judge severity-gated advisories against the acceptance record.
+
+    `advisories` is the common projection both analyzers are flattened into,
+    keyed by anything unique: matching is on package name and advisory id only.
+    """
 
     unaccepted: list[str] = []
     accepted: list[dict[str, Any]] = []
     consumed: set[tuple[str, str]] = set()
     for raw in advisories.values():
-        if raw.get("severity") not in ("high", "critical"):
+        # pip-audit carries no severity of its own; every advisory it reports
+        # is already gated by `--strict` on the analyzer side, so only an
+        # explicitly lower severity is skipped here.
+        if str(raw.get("severity") or "high") not in ("high", "critical"):
             continue
         advisory = str(raw.get("github_advisory_id") or raw.get("url") or raw.get("id"))
         package = str(raw.get("module_name"))
@@ -960,7 +1461,14 @@ def evaluate_advisory_report(
             (
                 a
                 for a in acceptances
-                if str(a["advisory"]) == advisory and str(a["package"]) == package
+                if str(a["advisory"]) == advisory
+                and str(a["package"]) == package
+                and _same_audited_pin(
+                    f"{VULNERABLE_PREFIX}{raw.get('vulnerable_versions')}; "
+                    f"{FIXED_PREFIX}{raw.get('patched_versions') or 'unknown'}",
+                    f"{VULNERABLE_PREFIX}{a.get('vulnerable_range')}; "
+                    f"{FIXED_PREFIX}{a.get('patched_versions') or ''}",
+                )
             ),
             None,
         )
@@ -1033,9 +1541,31 @@ def _audit_failure_evidence(row: dict[str, Any], output: Path) -> list[str]:
         detail = json.loads(report.read_text(encoding="utf-8"))
     except (ValueError, UnicodeError):
         return accepted_evidence + [f"  {name}: report is not readable JSON"]
+    evidence: list[str] = []
+    if isinstance(detail, list) and name.startswith("deptry"):
+        # deptry's --json-output is a top-level array of findings, not a dict.
+        # The runner's availability check only json.loads (an empty array on a
+        # pass is still "available"), so this branch is reachable only after a
+        # failure is already recorded. Print the real findings instead of a
+        # shape complaint: the next red deptry must name the offending import.
+        for item in detail[:5]:
+            if not isinstance(item, dict):
+                evidence.append(f"  {name}: unreadable finding: {item!r}")
+                continue
+            error = item.get("error")
+            location = item.get("location")
+            error = error if isinstance(error, dict) else {}
+            location = location if isinstance(location, dict) else {}
+            evidence.append(
+                f"  {name}: {error.get('code', 'DEP???')} "
+                f"{error.get('message', '')} "
+                f"({location.get('file', '?')}:{location.get('line', '?')})"
+            )
+        if len(detail) > 5:
+            evidence.append(f"  {name}: (+{len(detail) - 5} more finding(s))")
+        return (accepted_evidence + evidence)[:40]
     if not isinstance(detail, dict):
         return accepted_evidence + [f"  {name}: unexpected report shape"]
-    evidence: list[str] = []
     if name == "pnpm-audit":
         advisories = detail.get("advisories") or {}
         for item in advisories.values() if isinstance(advisories, dict) else []:
@@ -1064,6 +1594,16 @@ def _audit_failure_evidence(row: dict[str, Any], output: Path) -> list[str]:
             "review entrypoints before removal"
         )
         evidence.extend(f"  unused: {file}" for file in unused[:5])
+        # The summary above names how many files have issues but not which
+        # symbols, so a green-green-red round trip is the only way to learn
+        # what failed. Name the first few symbols instead: `knip` reports an
+        # unused *export* per symbol, and the file alone does not say which one.
+        for issue in issues[:3]:
+            symbols = [entry.get("name") for entry in issue.get("exports") or []]
+            if symbols:
+                shown = ", ".join(str(symbol) for symbol in symbols[:5])
+                more = "" if len(symbols) <= 5 else f" (+{len(symbols) - 5} more)"
+                evidence.append(f"  unused exports in {issue.get('file')}: {shown}{more}")
     elif name == "pnpm-duplicate-versions":
         if "Run pnpm dedupe" in detail.get("stdout", ""):
             evidence.append("  pnpm dedupe --check recommends lockfile deduplication")
@@ -1079,6 +1619,9 @@ def run_audits(config_path: Path, output: Path) -> int:
     if not isinstance(checks, list) or not checks:
         raise ValueError("dependency governance policy must contain checks")
     for check in checks:
+        # Validate the ceiling before any analyzer runs: a malformed value must
+        # be a policy error, not a failure discovered three minutes into a build.
+        _check_timeout_seconds(check)
         if check.get("normalize") == "license-expressions":
             allow_file = check.get("allow_file")
             if not isinstance(allow_file, str) or not allow_file:
@@ -1107,7 +1650,16 @@ def run_audits(config_path: Path, output: Path) -> int:
                         )
 
     rows: list[dict[str, Any]] = []
-    for check in checks:
+    for index, check in enumerate(checks, start=1):
+        # Say who is running BEFORE the silence. Every analyzer after this one
+        # is bounded by its own ceiling, but a run that prints only at the end
+        # is indistinguishable from a dead one to a reader -- and to CNB, whose
+        # ten-minute no-output rule is what makes a missing ceiling fatal. The
+        # line is cheap and it is the first thing anyone reads in a failed log.
+        print(
+            f"[{index}/{len(checks)}] {check.get('name')}: running",
+            flush=True,
+        )
         try:
             row = _run_check(check, output)
         except Exception as exc:  # noqa: BLE001 - record runner errors per check
@@ -1121,13 +1673,18 @@ def run_audits(config_path: Path, output: Path) -> int:
                 "status": "failed",
             }
         rows.append(row)
+        # Adjacent to the work: the reason, not just the verdict, is what a
+        # reader needs before scrolling into the evidence files.
+        print(f"  {row['name']}: {row['status']} ({row['reason']})", flush=True)
 
     status = "passed" if all(row["status"] == "passed" for row in rows) else "failed"
     summary = {
         "schema_version": SCHEMA_VERSION,
         "status": status,
         "source_revision": os.environ.get("GITHUB_SHA", "working-tree"),
-        "checks": rows,
+        # `report_path` is an in-process handle for the normalization step, not
+        # evidence; the report's repository-relative name is already in `report`.
+        "checks": [{k: v for k, v in row.items() if k != "report_path"} for row in rows],
     }
     _write_json(output / "summary.json", summary)
     for row in rows:

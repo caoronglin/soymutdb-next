@@ -145,6 +145,29 @@ async def test_inventory_list_filters_by_public_line_id():
     assert "mutant_lines.release_id" in sql, sql
 
 
+@pytest.mark.asyncio
+async def test_inventory_list_excludes_unpublished_and_deleted_lines():
+    """Ablation: the release pin alone still exposes hidden lines' lots."""
+    db = _RecordingDb([_inventory()])
+
+    await SeedService().list_inventory(db, release_context=_context())
+
+    sql = db.sql(0)
+    assert "mutant_lines.is_public" in sql, sql
+    assert "mutant_lines.is_deleted" in sql, sql
+
+
+@pytest.mark.asyncio
+async def test_inventory_detail_excludes_unpublished_and_deleted_lines():
+    db = _RecordingDb([_inventory()])
+
+    await SeedService().get_inventory(db, "LOT-1", release_context=_context())
+
+    sql = db.sql(0)
+    assert "mutant_lines.is_public" in sql, sql
+    assert "mutant_lines.is_deleted" in sql, sql
+
+
 # ---------------------------------------------------------------------------
 # 2. Detail is addressed by the public lot label inside the release.
 # ---------------------------------------------------------------------------

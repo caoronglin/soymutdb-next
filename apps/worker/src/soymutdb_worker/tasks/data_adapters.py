@@ -7,15 +7,19 @@ inserted.
 
 from __future__ import annotations
 
+import csv
+import gzip
 import hashlib
 import hmac
+import io
+import math
 import re
 import uuid
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, BinaryIO, Protocol, cast
 
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.shared import _ensure_jobs_package
@@ -65,36 +69,74 @@ class UnsupportedImportError(RuntimeError):
     """Raised when an import cannot satisfy the pipeline's safety contract."""
 
 
-class _HashingReader:
-    """Record a SHA-256 while the existing bounded parser consumes a source."""
+class _HashingReader(io.RawIOBase):
+    """Record a SHA-256 while the existing bounded parser consumes a source.
 
-    def __init__(self, source: Any) -> None:
+    Subclasses :class:`io.RawIOBase` rather than re-implementing a subset of the
+    IO protocol by hand: ``gzip.GzipFile`` needs a real ``fileobj`` (it probes
+    for ``seek``/``tell``/``readable``), and typed helpers such as
+    ``validate_module_file_streaming_from_stream`` declare ``BinaryIO``. A
+    read()-only duck type satisfied neither, which surfaced as a type error at
+    every call site even though the happy path happened to work.
+    """
+
+    def __init__(self, source: Any, name: str = "<import-stream>") -> None:
+        super().__init__()
+        # A real binary stream exposes `name` and `mode`; typed helpers that
+        # accept `BinaryIO` require them even when they never read the value.
+        self.name = name
+        self.mode = "rb"
         self._source = source
         self._digest = hashlib.sha256()
+        self._closed = False
 
     def read(self, size: int = -1) -> bytes:
         if size < 0:
-            raise ValueError("module checksum calculation requires bounded reads")
+            raise ValueError("checksum calculation requires bounded reads")
         chunk = self._source.read(size)
         if not isinstance(chunk, bytes):
-            raise ValueError("module stream must yield bytes")
+            raise ValueError("import stream must yield bytes")
         self._digest.update(chunk)
         return chunk
+
+    def read1(self, size: int = -1) -> bytes:
+        return self.read(size)
+
+    def readinto(self, buffer: Any) -> int:
+        chunk = self.read(len(buffer))
+        buffer[: len(chunk)] = chunk
+        return len(chunk)
+
+    def readable(self) -> bool:
+        return True
+
+    def writable(self) -> bool:
+        return False
+
+    # A stream that is hashed as it is read cannot seek: the digest covers only
+    # the bytes that passed through, so rewinding would silently invalidate it.
+    # ``gzip.GzipFile`` only probes this; it is not required to succeed.
+    def seekable(self) -> bool:
+        return False
+
+    def close(self) -> None:
+        self._closed = True
+        super().close()
 
     @property
     def checksum_sha256(self) -> str:
         return self._digest.hexdigest()
 
 
-def _verify_module_checksum(context: ImportContext, actual: str) -> bool:
+def _verify_source_checksum(context: ImportContext, actual: str) -> bool:
     """Verify an optional caller declaration against the streamed object bytes."""
     if context.checksum is None:
         return False
     expected = context.checksum.strip().lower()
     if not re.fullmatch(r"[0-9a-f]{64}", expected):
-        raise ValueError("module checksum must be a SHA-256 hex digest")
+        raise ValueError("source checksum must be a SHA-256 hex digest")
     if not hmac.compare_digest(expected, actual):
-        raise ValueError("module source checksum mismatch")
+        raise ValueError("source checksum mismatch")
     return True
 
 
@@ -122,9 +164,61 @@ class FastaAdapter(_TextAdapter):
     kind = "fasta"
 
     def run(self, context: ImportContext, *, progress=None) -> AdapterResult:
-        raise UnsupportedImportError(
-            "fasta import is disabled: durable persistence writer, artifact upload, "
-            "and release registration are not implemented"
+        """Persist the reference sequence lengths for one assembly.
+
+        Reads the ``.fai`` sidecar next to the uploaded FASTA. The index is the
+        authoritative statement of what the reference is (names, lengths,
+        order), so a 1 GB genome costs a millisecond scan instead of a full
+        read — and a missing index is a hard failure rather than a silent
+        "0 chromosomes".
+        """
+        from ..utils.db import get_db
+        from .annotation_writers import (
+            AnnotationWriteError,
+            write_reference_fai,
+        )
+        from .ingest import _resolve_release_assembly
+
+        fasta_path = _path(context)
+        fai_path = Path(f"{fasta_path}.fai")
+        if not fai_path.exists():
+            raise UnsupportedImportError(
+                "fasta import needs the faidx index next to the reference: "
+                f"{fai_path.name} not found"
+            )
+
+        with get_db() as session:
+            _, assembly_id = _resolve_release_assembly(
+                session, context.release_id, context.assembly or ""
+            )
+            if assembly_id is None:
+                raise UnsupportedImportError(
+                    "fasta import cannot resolve the assembly "
+                    f"{context.assembly!r}; register it before importing the reference"
+                )
+            _progress(progress, progress=10)
+            try:
+                report = write_reference_fai(
+                    session,
+                    assembly_id=int(assembly_id),
+                    fai_path=fai_path,
+                    fasta_path=fasta_path,
+                )
+            except AnnotationWriteError as exc:
+                raise UnsupportedImportError(f"fasta import rejected the index: {exc}") from exc
+
+        _progress(progress, processed=report.chromosomes, total=report.chromosomes, progress=100)
+        return AdapterResult(
+            records=report.chromosomes,
+            inserted=report.chromosomes,
+            skipped=0,
+            evidence={
+                "assembly_id": int(assembly_id),
+                "chromosomes": report.chromosomes,
+                "replaced_chromosomes": report.replaced,
+                "fasta_sha256": report.fasta_sha256,
+                "fai": fai_path.name,
+            },
         )
 
 
@@ -132,9 +226,54 @@ class Gff3Adapter(_TextAdapter):
     kind = "gff3"
 
     def run(self, context: ImportContext, *, progress=None) -> AdapterResult:
-        raise UnsupportedImportError(
-            "gff3 import is disabled: durable persistence writer and release "
-            "registration are not implemented"
+        """Store genes, transcripts, CDS/UTR parts and derived exons.
+
+        Before this writer existed the worker streamed the file, counted
+        features and returned the counts while writing nothing: a green import
+        reported tens of thousands of genes against an empty catalogue. The
+        reported counts below are rows the database can be asked for again.
+        """
+        from ..utils.db import get_db
+        from .annotation_writers import (
+            AnnotationWriteError,
+            assembly_gene_count,
+            write_gff3_annotation,
+        )
+        from .ingest import _resolve_release_assembly
+
+        path = _path(context)
+        with get_db() as session:
+            _, assembly_id = _resolve_release_assembly(
+                session, context.release_id, context.assembly or ""
+            )
+            if assembly_id is None:
+                raise UnsupportedImportError(
+                    "gff3 import cannot resolve the assembly "
+                    f"{context.assembly!r}; register it before importing the annotation"
+                )
+            _progress(progress, progress=10)
+            try:
+                report = write_gff3_annotation(
+                    session, assembly_id=int(assembly_id), path=path
+                )
+            except AnnotationWriteError as exc:
+                raise UnsupportedImportError(f"gff3 import rejected the file: {exc}") from exc
+            stored = assembly_gene_count(session, int(assembly_id))
+
+        _progress(progress, processed=report.genes, total=report.genes, progress=100)
+        return AdapterResult(
+            records=report.genes,
+            inserted=report.genes,
+            skipped=0,
+            evidence={
+                "assembly_id": int(assembly_id),
+                "genes": report.genes,
+                "transcripts": report.transcripts,
+                "cds_utr_parts": report.parts,
+                "exons_derived": report.exons,
+                "replaced_genes": report.replaced_genes,
+                "assembly_gene_total": stored,
+            },
         )
 
 
@@ -204,7 +343,7 @@ class UnsupportedCsvAdapter(_TextAdapter):
 
 @contextmanager
 def _open_module_source(context: ImportContext) -> Iterator[Any]:
-    """Open a module source without downloading or reading it all at once."""
+    """Open a source without downloading or reading it all at once."""
     path = Path(context.file_key)
     if path.exists():
         with path.open("rb") as source:
@@ -224,6 +363,455 @@ def _open_module_source(context: ImportContext) -> Iterator[Any]:
 
     with stream_s3_file(source_key) as source:
         yield source
+
+
+@contextmanager
+def _open_csv_text(
+    context: ImportContext,
+) -> Iterator[tuple[_HashingReader, io.TextIOWrapper]]:
+    """Yield hashing bytes plus a streaming UTF-8 text view of the source."""
+    filename = context.filename or context.file_key
+    with _open_module_source(context) as source:
+        hashing = _HashingReader(source)
+        raw: Any = hashing
+        if filename.endswith(".gz"):
+            raw = gzip.GzipFile(fileobj=hashing, mode="rb")
+        text = io.TextIOWrapper(raw, encoding="utf-8-sig", newline="")
+        try:
+            yield hashing, text
+        finally:
+            text.close()
+
+
+class _RowError(ValueError):
+    """A row-level validation failure collected into bounded diagnostics."""
+
+
+def _is_comment_row(row: dict[Any, Any]) -> bool:
+    return any(
+        isinstance(value, str) and value.lstrip().startswith("#")
+        for value in row.values()
+    )
+
+
+def _cell(row: dict[Any, Any], name: str) -> str:
+    value = row.get(name)
+    if value is None:
+        return ""
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _required_text(
+    row: dict[Any, Any], name: str, row_number: int, *, max_length: int
+) -> str:
+    value = _cell(row, name)
+    if not value:
+        raise _RowError(f"row {row_number}: {name} is required")
+    if len(value) > max_length:
+        raise _RowError(f"row {row_number}: {name} exceeds {max_length} characters")
+    return value
+
+
+def _optional_text(
+    row: dict[Any, Any], name: str, row_number: int, *, max_length: int
+) -> str | None:
+    value = _cell(row, name)
+    if not value:
+        return None
+    if len(value) > max_length:
+        raise _RowError(f"row {row_number}: {name} exceeds {max_length} characters")
+    return value
+
+
+def _optional_float(row: dict[Any, Any], name: str, row_number: int) -> float | None:
+    value = _cell(row, name)
+    if not value:
+        return None
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise _RowError(f"row {row_number}: {name} must be a number") from exc
+    if not math.isfinite(parsed):
+        raise _RowError(f"row {row_number}: {name} must be finite")
+    if parsed < 0:
+        raise _RowError(f"row {row_number}: {name} must be non-negative")
+    return parsed
+
+
+def _optional_int(
+    row: dict[Any, Any], name: str, row_number: int, *, minimum: int | None = None
+) -> int | None:
+    value = _cell(row, name)
+    if not value:
+        return None
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise _RowError(f"row {row_number}: {name} must be an integer") from exc
+    if minimum is not None and parsed < minimum:
+        raise _RowError(f"row {row_number}: {name} must be at least {minimum}")
+    return parsed
+
+
+def _required_int(
+    row: dict[Any, Any], name: str, row_number: int, *, minimum: int = 1
+) -> int:
+    parsed = _optional_int(row, name, row_number, minimum=minimum)
+    if parsed is None:
+        raise _RowError(f"row {row_number}: {name} is required")
+    return parsed
+
+
+class _CsvUpsertAdapter(_TextAdapter):
+    """Streaming CSV writer with a transactional, idempotent upsert.
+
+    Subclasses supply the assembly-scoped reference lookups, row validation,
+    natural key and PostgreSQL upsert.  The base owns the shared contract:
+    explicit assembly, data-set binding, single transaction, streamed checksum
+    evidence, bounded diagnostics and fail-closed row handling.
+    """
+
+    required_headers: tuple[str, ...] = ()
+    batch_size = 10_000
+    diagnostic_limit = 200
+
+    def _require_assembly(self, context: ImportContext) -> str:
+        assembly = (context.assembly or "").strip()
+        if not assembly:
+            raise ValueError(f"{self.kind} imports require an explicit assembly")
+        return assembly
+
+    def _references(self, session: Any, assembly: str) -> Any:
+        raise NotImplementedError
+
+    def _parse_row(
+        self, raw: dict[Any, Any], references: Any, row_number: int
+    ) -> dict[str, Any]:
+        raise NotImplementedError
+
+    def _row_key(self, payload: dict[str, Any]) -> tuple[Any, ...]:
+        raise NotImplementedError
+
+    def _upsert(self, session: Any, payloads: list[dict[str, Any]]) -> int:
+        raise NotImplementedError
+
+    def _reference_evidence(self, references: Any) -> dict[str, Any]:
+        return {}
+
+    def _reader(self, text: io.TextIOWrapper) -> csv.DictReader:
+        reader = csv.DictReader(text)
+        fieldnames = reader.fieldnames
+        if not fieldnames:
+            raise ValueError(f"{self.kind} import source has no header row")
+        normalized = [(name or "").strip() for name in fieldnames]
+        missing = [name for name in self.required_headers if name not in normalized]
+        if missing:
+            raise ValueError(
+                f"{self.kind} import is missing required columns: {', '.join(missing)}"
+            )
+        reader.fieldnames = normalized
+        return reader
+
+    def validate(self, context: ImportContext) -> dict[str, Any]:
+        assembly = self._require_assembly(context)
+        with _open_csv_text(context) as (hashing, text):
+            for _raw in self._reader(text):
+                pass
+            checksum = hashing.checksum_sha256
+        return {
+            "kind": self.kind,
+            "assembly": assembly,
+            "checksum": checksum,
+            "checksum_verified": _verify_source_checksum(context, checksum),
+        }
+
+    def run(self, context: ImportContext, *, progress=None) -> AdapterResult:
+        assembly = self._require_assembly(context)
+        filename = context.filename or Path(context.file_key).name
+        rows_seen = 0
+        inserted = 0
+        skipped = 0
+        duplicates = 0
+        diagnostics: list[str] = []
+        batch: dict[tuple[Any, ...], dict[str, Any]] = {}
+        checksum = ""
+        checksum_verified = False
+
+        from sqlalchemy import select
+
+        from soymutdb_worker.tables import data_sets
+        from soymutdb_worker.utils.db import get_db
+
+        with get_db() as session:
+            # One transaction protects the public view: validation failures
+            # and checksum mismatches roll back every batch upsert together.
+            data_set_type = session.execute(
+                select(data_sets.c.type)
+                .where(data_sets.c.id == context.data_set_id)
+                .with_for_update()
+            ).scalar_one_or_none()
+            if data_set_type is None:
+                raise ValueError(f"{self.kind} import data set does not exist")
+            if data_set_type != self.kind:
+                raise ValueError(
+                    f"{self.kind} import requires a {self.kind} data set"
+                )
+
+            references = self._references(session, assembly)
+
+            with _open_csv_text(context) as (hashing, text):
+                reader = self._reader(text)
+                for raw in reader:
+                    row_number = reader.line_num
+                    if _is_comment_row(raw):
+                        continue
+                    try:
+                        payload = self._parse_row(raw, references, row_number)
+                    except _RowError as exc:
+                        skipped += 1
+                        if len(diagnostics) < self.diagnostic_limit:
+                            diagnostics.append(str(exc))
+                        continue
+                    rows_seen += 1
+                    key = self._row_key(payload)
+                    if key in batch:
+                        # PostgreSQL refuses to upsert the same key twice in
+                        # one statement; keep the last occurrence explicitly.
+                        duplicates += 1
+                        batch.pop(key)
+                    batch[key] = payload
+                    if len(batch) >= self.batch_size:
+                        inserted += self._upsert(session, list(batch.values()))
+                        batch.clear()
+                        _progress(
+                            progress, processed=rows_seen, total=rows_seen, progress=0
+                        )
+                if batch:
+                    inserted += self._upsert(session, list(batch.values()))
+                checksum = hashing.checksum_sha256
+
+            checksum_verified = _verify_source_checksum(context, checksum)
+
+            if diagnostics:
+                raise ValueError(
+                    f"{self.kind} validation failed: "
+                    + "; ".join(diagnostics[:5])
+                    + (f" (+{len(diagnostics) - 5} more)" if len(diagnostics) > 5 else "")
+                )
+
+            evidence = {
+                "kind": self.kind,
+                "assembly": assembly,
+                "filename": filename,
+                "checksum": checksum,
+                "checksum_verified": checksum_verified,
+                "rows_seen": rows_seen,
+                "rows_inserted": inserted,
+                "rows_skipped": skipped,
+                "rows_duplicate": duplicates,
+                "batch_size": self.batch_size,
+                "on_conflict": "upsert",
+                **self._reference_evidence(references),
+            }
+            session.execute(
+                data_sets.update()
+                .where(data_sets.c.id == context.data_set_id)
+                .values(
+                    status="ready",
+                    validation_evidence=evidence,
+                    manifest={
+                        "kind": self.kind,
+                        "assembly": assembly,
+                        "filename": filename,
+                        "checksum": checksum,
+                        "checksum_verified": checksum_verified,
+                        "rows_seen": rows_seen,
+                        "rows_inserted": inserted,
+                        "rows_skipped": skipped,
+                        "rows_duplicate": duplicates,
+                    },
+                )
+            )
+
+        _progress(progress, processed=rows_seen, total=rows_seen, progress=100)
+        return AdapterResult(rows_seen, inserted, skipped, evidence)
+
+
+@dataclass(frozen=True)
+class _ExpressionReferences:
+    assembly: str
+    assembly_id: int
+    genes: dict[str, int]
+    libraries: dict[int, int]
+
+
+class ExpressionCsvAdapter(_CsvUpsertAdapter):
+    """Durable writer for ``gene_id,library_id,fpkm,tpm,raw_count`` CSV."""
+
+    kind = "expression_csv"
+    required_headers = ("gene_id", "library_id")
+
+    def _references(self, session: Any, assembly: str) -> _ExpressionReferences:
+        from sqlalchemy import select
+
+        from soymutdb_worker.tables import expression_libraries
+
+        from .gene_resolution import resolve_assembly_id, resolve_gene_accessions
+
+        assembly_id = resolve_assembly_id(session, assembly)
+        genes, _ambiguous = resolve_gene_accessions(
+            session, assembly=assembly, assembly_id=assembly_id
+        )
+        libraries = {
+            int(library_id): int(library_assembly_id)
+            for library_id, library_assembly_id in session.execute(
+                select(expression_libraries.c.id, expression_libraries.c.assembly_id)
+            ).all()
+        }
+        return _ExpressionReferences(assembly, assembly_id, genes, libraries)
+
+    def _parse_row(
+        self, raw: dict[Any, Any], references: _ExpressionReferences, row_number: int
+    ) -> dict[str, Any]:
+        accession = _required_text(raw, "gene_id", row_number, max_length=64)
+        gene_pk = references.genes.get(accession)
+        if gene_pk is None:
+            raise _RowError(
+                f"row {row_number}: unknown gene accession {accession!r} "
+                f"in assembly {references.assembly!r}"
+            )
+        library_id = _required_int(raw, "library_id", row_number)
+        library_assembly = references.libraries.get(library_id)
+        if library_assembly is None:
+            raise _RowError(
+                f"row {row_number}: unknown expression library {library_id}"
+            )
+        if library_assembly != references.assembly_id:
+            raise _RowError(
+                f"row {row_number}: expression library {library_id} "
+                "belongs to another assembly"
+            )
+        return {
+            "gene_id": gene_pk,
+            "library_id": library_id,
+            "fpkm": _optional_float(raw, "fpkm", row_number),
+            "tpm": _optional_float(raw, "tpm", row_number),
+            "raw_count": _optional_int(raw, "raw_count", row_number, minimum=0),
+        }
+
+    def _row_key(self, payload: dict[str, Any]) -> tuple[Any, ...]:
+        return (payload["gene_id"], payload["library_id"])
+
+    def _upsert(self, session: Any, payloads: list[dict[str, Any]]) -> int:
+        if not payloads:
+            return 0
+        from sqlalchemy import func
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        from soymutdb_worker.tables import expression_data
+
+        statement = pg_insert(expression_data)
+        statement = statement.on_conflict_do_update(
+            constraint="uq_expression_gene_library",
+            set_={
+                "fpkm": statement.excluded.fpkm,
+                "tpm": statement.excluded.tpm,
+                "raw_count": statement.excluded.raw_count,
+                "updated_at": func.now(),
+            },
+        )
+        session.execute(statement, payloads)
+        return len(payloads)
+
+    def _reference_evidence(self, references: _ExpressionReferences) -> dict[str, Any]:
+        return {"assembly_id": references.assembly_id}
+
+
+@dataclass(frozen=True)
+class _HomologReferences:
+    assembly: str
+    assembly_id: int
+    genes: dict[str, int]
+
+
+class HomologCsvAdapter(_CsvUpsertAdapter):
+    """Durable writer for homolog relationships (ortholog/paralog) CSV."""
+
+    kind = "homolog_csv"
+    required_headers = (
+        "gene_id",
+        "homolog_species",
+        "homolog_gene_id",
+        "homolog_type",
+    )
+
+    def _references(self, session: Any, assembly: str) -> _HomologReferences:
+        from .gene_resolution import resolve_assembly_id, resolve_gene_accessions
+
+        assembly_id = resolve_assembly_id(session, assembly)
+        genes, _ambiguous = resolve_gene_accessions(
+            session, assembly=assembly, assembly_id=assembly_id
+        )
+        return _HomologReferences(assembly, assembly_id, genes)
+
+    def _parse_row(
+        self, raw: dict[Any, Any], references: _HomologReferences, row_number: int
+    ) -> dict[str, Any]:
+        accession = _required_text(raw, "gene_id", row_number, max_length=64)
+        gene_pk = references.genes.get(accession)
+        if gene_pk is None:
+            raise _RowError(
+                f"row {row_number}: unknown gene accession {accession!r} "
+                f"in assembly {references.assembly!r}"
+            )
+        homolog_type = _required_text(
+            raw, "homolog_type", row_number, max_length=16
+        ).lower()
+        if homolog_type not in {"ortholog", "paralog"}:
+            raise _RowError(
+                f"row {row_number}: homolog_type must be ortholog or paralog"
+            )
+        return {
+            "gene_id": gene_pk,
+            "homolog_species": _required_text(
+                raw, "homolog_species", row_number, max_length=128
+            ),
+            "homolog_gene_id": _required_text(
+                raw, "homolog_gene_id", row_number, max_length=64
+            ),
+            "homolog_type": homolog_type,
+            "source": _optional_text(raw, "source", row_number, max_length=128),
+        }
+
+    def _row_key(self, payload: dict[str, Any]) -> tuple[Any, ...]:
+        return (
+            payload["gene_id"],
+            payload["homolog_species"],
+            payload["homolog_gene_id"],
+            payload["homolog_type"],
+        )
+
+    def _upsert(self, session: Any, payloads: list[dict[str, Any]]) -> int:
+        if not payloads:
+            return 0
+        from sqlalchemy import func
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        from soymutdb_worker.tables import gene_homologs
+
+        statement = pg_insert(gene_homologs)
+        statement = statement.on_conflict_do_update(
+            constraint="uq_gene_homolog",
+            set_={
+                "source": statement.excluded.source,
+                "updated_at": func.now(),
+            },
+        )
+        session.execute(statement, payloads)
+        return len(payloads)
+
+    def _reference_evidence(self, references: _HomologReferences) -> dict[str, Any]:
+        return {"assembly_id": references.assembly_id}
 
 
 def _module_release_id(value: str) -> int:
@@ -263,15 +851,19 @@ class ModuleTsvAdapter(_TextAdapter):
         filename = context.filename or str(Path(context.file_key).name)
         with _open_module_source(context) as source:
             hashing_source = _HashingReader(source)
+            # SAFETY: the validator only ever calls `read`, which is the
+            # whole contract `_HashingReader` implements; `BinaryIO` also
+            # promises `write`/`seek`, which a checksum hasher must not
+            # offer (a rewind would silently invalidate the digest).
             result = validate_module_file_streaming_from_stream(
                 context.module_key or "",
                 filename,
-                hashing_source,
+                cast(BinaryIO, hashing_source),
             )
         if not result.ok:
             raise ValueError(f"TSV validation failed: {result.first_error()}")
         checksum = hashing_source.checksum_sha256
-        checksum_verified = _verify_module_checksum(context, checksum)
+        checksum_verified = _verify_source_checksum(context, checksum)
         return {
             "module_key": context.module_key,
             "rows": result.row_count,
@@ -299,13 +891,23 @@ class ModuleTsvAdapter(_TextAdapter):
         from soymutdb_worker.tables import data_sets, module_data_rows, releases
         from soymutdb_worker.utils.db import get_db
 
+        # `module_tsv` is defined by its schema: without a module key there is no
+        # column contract and no unique key to deduplicate on, so this fails
+        # closed instead of falling back to "no key".
+        module_key = context.module_key
+        if not module_key:
+            # A missing module key is an invalid *request*, not a missing
+            # capability: raising UnsupportedImportError here would report
+            # module_tsv as unimplemented to the capability contract.
+            raise ValueError("module_tsv import requires a module key; the request carries none")
+
         def flush_batch(session, values: list[dict[str, Any]]) -> int:
             if not values:
                 return 0
             payload = []
             for row in values:
                 key_parts = [
-                    str(row.get(col, "")) for col in _module_unique_key(context.module_key)
+                    str(row.get(col, "")) for col in _module_unique_key(module_key)
                 ]
                 payload.append(
                     {
@@ -349,10 +951,11 @@ class ModuleTsvAdapter(_TextAdapter):
             )
             with _open_module_source(context) as source:
                 hashing_source = _HashingReader(source)
+                # SAFETY: same read-only contract as the validate path above.
                 for typed, error in iter_module_rows_from_stream(
                     context.module_key,
                     filename,
-                    hashing_source,
+                    cast(BinaryIO, hashing_source),
                 ):
                     if error is not None:
                         skipped += 1
@@ -371,7 +974,7 @@ class ModuleTsvAdapter(_TextAdapter):
                         _progress(progress, processed=rows_seen, total=rows_seen, progress=0)
             inserted += flush_batch(session, batch)
             checksum = hashing_source.checksum_sha256
-            checksum_verified = _verify_module_checksum(context, checksum)
+            checksum_verified = _verify_source_checksum(context, checksum)
 
             if diagnostics:
                 raise ValueError(
@@ -443,7 +1046,10 @@ def _module_unique_key(module_key: str) -> tuple[str, ...]:
     schema = get_schema(module_key)
     if schema is None:
         raise ValueError(f"unknown module schema: {module_key}")
-    return schema.unique_key
+    # Rebuild the tuple instead of returning the attribute directly: the schema
+    # registry crosses a package boundary, so an untyped re-export there would
+    # otherwise leak `Any` into this function's declared return type.
+    return tuple(str(column) for column in schema.unique_key)
 
 
 _ADAPTERS: dict[str, DataAdapter] = {
@@ -452,8 +1058,8 @@ _ADAPTERS: dict[str, DataAdapter] = {
     "vcf": VcfAdapter(),
     "blast_db": BlastDbAdapter(),
     "seed_data": UnsupportedCsvAdapter("seed_data"),
-    "expression_csv": UnsupportedCsvAdapter("expression_csv"),
-    "homolog_csv": UnsupportedCsvAdapter("homolog_csv"),
+    "expression_csv": ExpressionCsvAdapter(),
+    "homolog_csv": HomologCsvAdapter(),
     "module_tsv": ModuleTsvAdapter(),
 }
 

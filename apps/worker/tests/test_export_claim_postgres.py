@@ -33,18 +33,43 @@ from sqlalchemy.orm import sessionmaker
 from soymutdb_worker.repositories import EXPORT_CLAIM_LEASE_SECONDS, VariantExportStore
 from soymutdb_worker.tables import variant_exports
 
-MIGRATION = (
+MIGRATION_0049 = (
     Path(__file__).resolve().parents[3]
     / "apps/api/migrations/versions/0049_variant_exports.py"
 )
+MIGRATION_0056 = (
+    Path(__file__).resolve().parents[3]
+    / "apps/api/migrations/versions/0056_download_provenance.py"
+)
+
+
+def _native_url_or_fail() -> str:
+    """The native PostgreSQL URL, or a hard failure.
+
+    Fail-closed on purpose. The backend gate exports
+    ``SOYMUTDB_RUN_POSTGRES_INTEGRATION=1`` to say "a real database is
+    available"; a suite that then *skips* because its own URL is missing
+    reports the same pytest verdict as a suite that ran and passed. These tests
+    cover variant identity, atomic publication and assembly scoping -- skipping
+    them is a merge-gate hole, not an opt-out.
+
+    ``scripts/with-postgres-service.sh`` exports this variable, so an absent
+    value means the resolver or the caller dropped it, never "no database".
+    """
+    url = os.environ.get("SOYMUTDB_NATIVE_TEST_DATABASE_URL")
+    if not url:
+        pytest.fail(
+            "SOYMUTDB_NATIVE_TEST_DATABASE_URL is required: scripts/with-postgres-service.sh "
+            "derives it from SOYMUTDB_TEST_DATABASE_URL. This suite is a merge gate; it "
+            "must fail rather than skip."
+        )
+    return url
 
 
 @pytest.fixture
 def export_database():
     """A throwaway schema with a real ``variant_exports`` table."""
-    url = os.environ.get("SOYMUTDB_NATIVE_TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("SOYMUTDB_NATIVE_TEST_DATABASE_URL is required")
+    url = _native_url_or_fail()
     schema = "export_claim_" + uuid.uuid4().hex[:12]
     admin = create_engine(url)
     options = {"options": f"-csearch_path={schema},public"}
@@ -56,14 +81,20 @@ def export_database():
         with admin.begin() as connection:
             connection.execute(text(f'CREATE SCHEMA "{schema}"'))
         with engine.begin() as connection:
-            # 0049 adds only this FK dependency; no API ORM/create_all shortcut.
+            # 0049 adds only this FK dependency; 0056 also alters download_files.
+            # No API ORM/create_all shortcut.
             connection.execute(text("CREATE TABLE users (id UUID PRIMARY KEY)"))
-            spec = spec_from_file_location("export_claim_migration_0049", MIGRATION)
-            assert spec is not None and spec.loader is not None
-            migration = module_from_spec(spec)
-            spec.loader.exec_module(migration)
-            migration.op = Operations(MigrationContext.configure(connection))
-            migration.upgrade()
+            connection.execute(text("CREATE TABLE download_files (id UUID PRIMARY KEY)"))
+            for module_name, migration_path in (
+                ("export_claim_migration_0049", MIGRATION_0049),
+                ("export_claim_provenance_0056", MIGRATION_0056),
+            ):
+                spec = spec_from_file_location(module_name, migration_path)
+                assert spec is not None and spec.loader is not None
+                migration = module_from_spec(spec)
+                spec.loader.exec_module(migration)
+                migration.op = Operations(MigrationContext.configure(connection))
+                migration.upgrade()
         factory = sessionmaker(engine)
 
         @contextmanager

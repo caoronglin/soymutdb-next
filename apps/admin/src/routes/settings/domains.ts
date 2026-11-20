@@ -7,12 +7,31 @@ export const SETTINGS_DOMAINS = [
   "advanced",
 ] as const;
 
+/**
+ * The domains the settings hub offers as its own cards.
+ *
+ * `site` is not one of them: `/settings/site` redirects to
+ * `/settings/appearance`, so a card for it opened the page the neighbouring
+ * "Site appearance" card already opened. Two cards, one destination -- the
+ * hub looked like it offered a choice it did not offer. The route stays
+ * routable as an alias for existing deep links.
+ */
+export const SETTINGS_HUB_DOMAINS = SETTINGS_DOMAINS.filter(
+  (domain) => domain !== "site",
+);
+
 export type SettingsDomain = (typeof SETTINGS_DOMAINS)[number];
+
+export interface SettingsRevisionSection {
+  id: string;
+  /** Registered in both catalogs as `admin.settings.sections.<id>`. */
+  label: string;
+}
 
 export interface SettingsDomainMeta {
   title: string;
   description: string;
-  revisionSections: Array<{ id: string; label: string }>;
+  revisionSections: SettingsRevisionSection[];
 }
 
 export const SETTINGS_DOMAIN_META: Record<SettingsDomain, SettingsDomainMeta> = {
@@ -27,7 +46,16 @@ export const SETTINGS_DOMAIN_META: Record<SettingsDomain, SettingsDomainMeta> = 
       { id: "footer_external", label: "Footer (external)" },
     ],
   },
-  appearance: { title: "Appearance", description: "Theme colour and public presentation defaults.", revisionSections: [{ id: "general", label: "General" }] },
+  appearance: {
+    title: "Site appearance",
+    description: "Brand, header navigation, footer and media for the public site.",
+    revisionSections: [
+      { id: "general", label: "Admin console theme" },
+      { id: "brand_external", label: "Brand (public site)" },
+      { id: "header_external", label: "Header navigation (public site)" },
+      { id: "footer_external", label: "Footer (public site)" },
+    ],
+  },
   integrations: { title: "Integrations", description: "External delivery and service configuration.", revisionSections: [] },
   security: { title: "Security", description: "Session and account protection settings.", revisionSections: [{ id: "security", label: "Security" }] },
   localization: {

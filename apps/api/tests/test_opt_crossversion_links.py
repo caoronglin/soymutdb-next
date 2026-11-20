@@ -196,6 +196,28 @@ async def test_opt01_null_release_is_generic_and_foreign_release_is_skipped(db_s
             release_id=foreign.id,  # non-null, not the active release
         )
     )
+
+    # A generic row is not enough: a linked gene whose assembly exists only in
+    # an *unpublished* release is not part of any catalogue yet, so the row must
+    # not publish its accession and assembly.
+    draft = Release(
+        version="opt-cw-draft-release",
+        name="draft release",
+        status=ReleaseStatus.DRAFT,
+    )
+    db_session.add(draft)
+    await db_session.flush()
+    foreign_only = await _assembly(db_session, draft, "opt-cw-fscope-a5", version="v5")
+    foreign_target = await _gene(db_session, foreign_only, "Glyma.09G000900")
+    db_session.add(
+        GeneCrosswalk(
+            source_gene_id=generic_v4.gene_pk,
+            target_gene_id=foreign_target.gene_pk,
+            relation_type="one_to_many",
+            provenance_source="generic-foreign-assembly",
+            release_id=None,
+        )
+    )
     await db_session.flush()
 
     service = SearchService()
@@ -209,6 +231,9 @@ async def test_opt01_null_release_is_generic_and_foreign_release_is_skipped(db_s
           f"foreign={[link.gene_accession for link in _links(scoped_away)]}")
 
     assert {link.gene_accession for link in _links(generic)} == {"Glyma.05G000100"}
+    assert "Glyma.09G000900" not in {
+        link.gene_accession for link in _links(generic)
+    }, "a generic row must not disclose a link into another release's assembly"
     assert _links(scoped_away) == [], (
         "a crosswalk scoped to another release must not appear here"
     )

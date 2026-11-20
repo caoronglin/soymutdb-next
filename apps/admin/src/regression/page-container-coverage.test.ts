@@ -50,8 +50,7 @@ function readSource(path: string): string {
  * form: `"./routes/audit"` → `routes/audit`.
  *
  * Read from the router rather than from a list, so renaming or adding a route
- * changes what this guard checks. `imports/index.tsx` re-exports `../imports`,
- * so the module id is the routing truth even when the component is not local.
+ * changes what this guard checks.
  */
 function routedModules(): string[] {
   return [...appSource.matchAll(/lazy\(\(\) => import\("\.\/(routes\/[^"]+)"\)\)/g)]
@@ -76,19 +75,21 @@ const NOT_A_FEATURE_PAGE: Record<string, string> = {
 /**
  * Route module → the file that renders its `PageContainer`.
  *
- * Not always 1:1. Several routes share one owning component (`/imports` and
- * `/imports/new` both land in `ImportsPage`; the five `/settings/*` domains all
- * render `SettingsDomainPage`), which is exactly why the map is written out —
- * a shared owner has to be re-confirmed once, not silently assumed.
+ * Not always 1:1. Several routes share one owning component (the five
+ * `/settings/*` domains all render `SettingsDomainPage`), which is exactly why
+ * the map is written out — a shared owner has to be re-confirmed once, not
+ * silently assumed.
  */
 const PAGE_CONTAINER_OWNER: Record<string, string> = {
   "routes/index.tsx": "routes/index.tsx",
+  "routes/dashboard/analysis.tsx": "routes/dashboard/analysis.tsx",
+  "routes/dashboard/monitor.tsx": "routes/dashboard/monitor.tsx",
   "routes/usage-guide.tsx": "routes/usage-guide.tsx",
   "routes/releases.tsx": "routes/releases.tsx",
   "routes/instances.tsx": "routes/instances.tsx",
   "routes/preview-test-data.tsx": "routes/preview-test-data.tsx",
   "routes/imports.tsx": "routes/imports.tsx",
-  "routes/imports/new.tsx": "routes/imports.tsx",
+  "routes/imports/new.tsx": "routes/imports/new.tsx",
   "routes/imports/task-detail.tsx": "routes/imports/task-detail.tsx",
   "routes/content.tsx": "routes/content.tsx",
   "routes/media.tsx": "routes/media.tsx",
@@ -106,9 +107,13 @@ const PAGE_CONTAINER_OWNER: Record<string, string> = {
   "routes/settings/advanced.tsx": "routes/settings/section-page.tsx",
   "routes/settings/integrations.tsx": "routes/settings/section-page.tsx",
   "routes/features.tsx": "routes/features.tsx",
+  "routes/site-control.tsx": "routes/site-control.tsx",
+  "routes/page-builder/index.tsx": "routes/page-builder/index.tsx",
+  "routes/page-builder/$pageId.tsx": "routes/page-builder/$pageId.tsx",
   "routes/analytics-settings.tsx": "routes/analytics-settings.tsx",
   "routes/publications.tsx": "routes/publications.tsx",
-  "routes/table-views.tsx": "routes/table-views.tsx",
+  "routes/table-templates.tsx": "routes/table-templates.tsx",
+  "routes/data-views.tsx": "routes/data-views.tsx",
 };
 
 /** Owners that must exist on disk; a stale map entry must not pass vacuously. */

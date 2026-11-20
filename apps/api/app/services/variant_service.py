@@ -233,6 +233,18 @@ class VariantService:
         except (SQLAlchemyError, OSError, TimeoutError) as exc:
             raise ServiceUnavailableError("Variant data is unavailable") from exc
 
+    # Keys each mapper reads from a projected row. Declared next to the mappers
+    # because the response layer is where a missed projection turns into a
+    # silent default; ``variant_repository`` asserts these stay projected.
+    RESPONSE_ROW_KEYS = frozenset({
+        "variant_id", "assembly_key", "chromosome", "position", "ref_allele",
+        "alt_allele", "variant_type", "quality_score", "filter_status",
+        "allele_frequency", "gene_id", "gene_symbol", "consequence", "impact",
+    })
+    DETAIL_ROW_KEYS = RESPONSE_ROW_KEYS | {
+        "hgvs_c", "hgvs_p", "read_depth", "zygosity",
+    }
+
     @staticmethod
     def _row_to_response(row: dict[str, Any]) -> VariantResponse:
         return VariantResponse(

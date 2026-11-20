@@ -188,7 +188,8 @@ describe("queryKeys", () => {
     expect(queryKeys.variants.list({ ...base, cursor: "c1" })).not.toEqual(key);
   });
 
-  it("scopes news caches by category, page and page size", () => {    const base = { category: "update", page: 1, pageSize: 10 };
+  it("scopes news caches by category, page and page size", () => {
+    const base = { category: "update", page: 1, pageSize: 10 };
     const listKey = queryKeys.news.list(base);
     expect(queryKeys.news.list({ ...base, category: "news" })).not.toEqual(listKey);
     expect(queryKeys.news.list({ ...base, page: 2 })).not.toEqual(listKey);
@@ -209,6 +210,72 @@ describe("queryKeys", () => {
     const detail = queryKeys.news.detail("release-2026-09");
     expect(detail).toContain("release-2026-09");
     expect(detail[2]).toBe("detail");
+  });
+
+  it("scopes expression library reads by filter, release and site variant", () => {
+    const base = {
+      page: 1,
+      pageSize: 20,
+      tissue: "root",
+      treatment: null,
+      assemblyId: 4,
+      releaseId: "2026.09",
+      siteVariant: "external" as const,
+    };
+    const listKey = queryKeys.expression.libraries(base);
+    // Every variable sent to the API is part of the identity: a changed filter
+    // or page must not reuse the previous page's rows.
+    expect(queryKeys.expression.libraries({ ...base, page: 2 })).not.toEqual(listKey);
+    expect(queryKeys.expression.libraries({ ...base, tissue: "leaf" })).not.toEqual(listKey);
+    expect(queryKeys.expression.libraries({ ...base, treatment: "drought" })).not.toEqual(listKey);
+    expect(queryKeys.expression.libraries({ ...base, assemblyId: 5 })).not.toEqual(listKey);
+    expect(queryKeys.expression.libraries({ ...base, releaseId: "2026.10" })).not.toEqual(listKey);
+    expect(queryKeys.expression.libraries({ ...base, siteVariant: "internal" })).not.toEqual(listKey);
+
+    // One library's rows are keyed by the public sample id, never by a
+    // persistence key, so an internal identifier cannot reach a cache entry.
+    const rowsKey = queryKeys.expression.rows({
+      library: "SAMPLE-A",
+      page: 1,
+      pageSize: 100,
+      releaseId: "2026.09",
+      siteVariant: "external",
+    });
+    expect(rowsKey).toContain("SAMPLE-A");
+    expect(queryKeys.expression.rows({
+      library: "SAMPLE-A",
+      page: 2,
+      pageSize: 100,
+      releaseId: "2026.09",
+      siteVariant: "external",
+    })).not.toEqual(rowsKey);
+    expect(queryKeys.expression.library("SAMPLE-A", "2026.09", "external")).not.toEqual(rowsKey);
+  });
+
+  it("scopes comparative reads by family context and keeps artifacts off the family key", () => {
+    const base = { assemblyId: "2", level: "gene_family", page: 1, pageSize: 20, releaseId: "2026.09", siteVariant: "external" as const };
+    const key = queryKeys.comparative.families(base);
+    // A different assembly answers with a different member set.
+    expect(queryKeys.comparative.families({ ...base, assemblyId: "3" })).not.toEqual(key);
+    expect(queryKeys.comparative.families({ ...base, level: "gene_subfamily" })).not.toEqual(key);
+    expect(queryKeys.comparative.families({ ...base, page: 2 })).not.toEqual(key);
+    expect(queryKeys.comparative.families({ ...base, releaseId: "2026.10" })).not.toEqual(key);
+    expect(queryKeys.comparative.families({ ...base, siteVariant: "internal" })).not.toEqual(key);
+
+    const detail = queryKeys.comparative.family({
+      familyId: 12,
+      assemblyId: "2",
+      releaseId: "2026.09",
+      siteVariant: "external",
+    });
+    expect(detail.slice(0, 2)).toEqual(["soymutdb", "comparative"]);
+    expect(detail).toContain(12);
+
+    // A finished alignment belongs to a frozen input set, not to the family's
+    // current membership: the artifact key must not collide with the family key.
+    const artifact = queryKeys.comparative.artifact("job-1", "2026.09", "external");
+    expect(artifact).not.toEqual(detail);
+    expect(queryKeys.comparative.artifact("job-2", "2026.09", "external")).not.toEqual(artifact);
   });
 
   it("scopes the export cache by export id and session", () => {

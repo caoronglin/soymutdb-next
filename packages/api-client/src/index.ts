@@ -36,6 +36,8 @@ export {
   onAuthLogout,
   clearLegacyTokens,
   setAccessToken,
+  clearSessionHint,
+  markSessionPossible,
   AUTH_REFRESH_PATH,
   getCurrentUser,
   type CurrentUser,
@@ -43,7 +45,9 @@ export {
 
 export { attachCsrf } from "./csrf";
 
+export * from "./comparative";
 export * from "./genes";
+export * from "./assemblies";
 export * from "./variants";
 export * from "./blast";
 export * from "./mutant-lines";
@@ -57,6 +61,8 @@ export * from "./homolog";
 export * from "./sra";
 export * from "./analyses";
 export * from "./tools";
+export * from "./sequence";
+export * from "./popgen";
 export * from "./news";
 export * from "./site";
 export * from "./publications";
@@ -68,6 +74,7 @@ export * from "./admin-plugins";
 export * from "./admin-imports";
 export * from "./admin-import-studio";
 export * from "./admin-settings";
+export * from "./admin-page-builder";
 export * from "./admin-content";
 export * from "./admin-analytics";
 export * from "./page-definitions";
@@ -76,5 +83,6 @@ export * from "./notifications";
 
 export * from "./capabilities";
 export * from "./table-views";
+export * from "./admin-data-views";
 export * from "./ontology";
 export * from "./test-data-preview";

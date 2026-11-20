@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import csv
 import gzip
+import hashlib
 import json
 import logging
 import tempfile
@@ -243,12 +244,22 @@ def _write_vcf(output_file, rows, provenance: dict | None = None) -> int:
     return count
 
 
-def _write_bed(output_file, rows) -> int:
+def _write_bed(output_file, rows, provenance: dict | None = None) -> int:
     """Write rows in BED format.
 
     BED has no free metadata field, so the release/assembly provenance is
-    carried in the track line and in the name column.
+    carried in the leading ``track`` line instead. Without it a downloaded
+    file gives no hint which coordinate namespace it belongs to.
     """
+    description = "; ".join(
+        f"{key}={_bed_safe((provenance or {}).get(key))}"
+        for key in ("release_key", "assembly_key")
+        if (provenance or {}).get(key)
+    )
+    if description:
+        output_file.write(
+            f'track name="soymutdb_export" description="{description}"\n'
+        )
     count = 0
     for row in rows:
         rec = _record(row)
@@ -261,6 +272,22 @@ def _write_bed(output_file, rows) -> int:
         )
         count += 1
     return count
+
+
+def _bed_safe(value) -> str:
+    """Flatten a provenance value into a single track-line token."""
+    return str(value).replace('"', "'").replace("\n", " ").replace("\r", " ")
+
+
+def _file_digest(path: Path) -> tuple[int, str]:
+    """Return ``(size, sha256)`` without loading the artifact into memory."""
+    size = 0
+    digest = hashlib.sha256()
+    with open(path, "rb") as artifact:
+        for chunk in iter(lambda: artifact.read(1024 * 1024), b""):
+            size += len(chunk)
+            digest.update(chunk)
+    return size, digest.hexdigest()
 
 
 def _write_json(output_file, rows) -> int:
@@ -399,7 +426,7 @@ def _run_export(
                 elif format == "vcf":
                     record_count = _write_vcf(output_file, rows, provenance)
                 elif format == "bed":
-                    record_count = _write_bed(output_file, rows)
+                    record_count = _write_bed(output_file, rows, provenance)
                 elif format == "json":
                     record_count = _write_json(output_file, rows)
                 task.update_state(state="PROGRESS", meta={"records": record_count})
@@ -407,7 +434,8 @@ def _run_export(
                 output_file.close()
                 result.close()
 
-        file_size = output_path.stat().st_size
+        file_size, artifact_sha256 = _file_digest(output_path)
+        generated_at = datetime.now(UTC)
 
         # Upload to S3 (use multipart for large files)
         s3_bucket = get_setting("S3_EXPORT_BUCKET", "exports")
@@ -425,6 +453,8 @@ def _run_export(
                 artifact_path=s3_path,
                 record_count=record_count,
                 file_size=file_size,
+                sha256=artifact_sha256,
+                generated_at=generated_at,
                 expires_at=expires_at,
             )
             session.commit()

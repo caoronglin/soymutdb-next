@@ -6,7 +6,7 @@
  *   never writes back — the editor syncs external value changes itself and
  *   guards the loop with a lastEmitted ref.
  * - Markdown is an explicit import/export/apply surface (Tabs), guarded by
- *   a confirmation on switch; no lossless HTML↔MD round-trip is promised.
+ *   a confirmation on switch; no lossless HTML/MD round-trip is promised.
  * - `immediatelyRender: false` + idempotent onCreate/onUpdate (React 19
  *   StrictMode). No FloatingMenu, no NodeView extensions.
  */

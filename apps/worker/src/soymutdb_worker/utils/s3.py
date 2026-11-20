@@ -265,12 +265,37 @@ def delete_object(s3_path: str) -> None:
 
 def list_objects(
     s3_prefix: str,
-    max_keys: int = 1000,
+    max_keys: int | None = None,
 ) -> list[dict[str, Any]]:
-    """List objects under an S3 prefix."""
+    """List every object under an S3 prefix.
+
+    S3 returns at most 1000 keys per call, so a single call silently hides
+    everything past the first page. Callers like the export cleanup would
+    then never see (or delete) the rest, so the listing follows
+    ``NextContinuationToken`` until the prefix is exhausted. ``max_keys``
+    caps the total when a caller wants a bounded sample.
+    """
     s3 = get_s3_client()
     bucket, prefix = parse_s3_path(s3_prefix)
-    response = s3.list_objects_v2(
-        Bucket=bucket, Prefix=prefix, MaxKeys=max_keys
-    )
-    return response.get("Contents", [])
+    objects: list[dict[str, Any]] = []
+    token: str | None = None
+    while True:
+        remaining = 1000 if max_keys is None else max_keys - len(objects)
+        if remaining <= 0:
+            break
+        request: dict[str, Any] = {
+            "Bucket": bucket,
+            "Prefix": prefix,
+            "MaxKeys": min(1000, remaining),
+        }
+        if token:
+            request["ContinuationToken"] = token
+        response = s3.list_objects_v2(**request)
+        page_objects = response.get("Contents", [])
+        if max_keys is not None:
+            page_objects = page_objects[: remaining]
+        objects.extend(page_objects)
+        token = response.get("NextContinuationToken")
+        if not response.get("IsTruncated") or not token:
+            break
+    return objects

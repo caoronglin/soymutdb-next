@@ -19,7 +19,7 @@ function renderTab(type: "news" | "publication") {
 }
 
 beforeEach(() => {
-  api.get.mockReset().mockResolvedValue({ items: [{ id: "item-1", title_en: "News title", title: "Publication title", slug: "news", status: "draft", authors: "Author", created_at: "2026-01-01", updated_at: "2026-01-01" }], total: 1 });
+  api.get.mockReset().mockResolvedValue({ items: [{ id: "item-1", title_en: "News title", title: "Publication title", slug: "news", status: "draft", category: "pipeline", authors: "Ada Lovelace", updated_at: "2026-01-02T03:04:05Z", created_at: "2026-01-01" }], total: 1 });
   api.delete.mockReset().mockRejectedValue(new Error("delete refused"));
 });
 
@@ -42,5 +42,48 @@ describe.each(["news", "publication"] as const)("%s list failure feedback", (typ
     await waitFor(() => expect(api.delete).toHaveBeenCalledWith(type === "news" ? "/admin/news/item-1" : "/admin/publications/item-1"));
     expect(await screen.findByRole("alert")).toHaveTextContent("delete refused");
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+});
+
+describe("content list filters", () => {
+  it("sends the debounced search term and status filter to the news API", async () => {
+    renderTab("news");
+    fireEvent.change(await screen.findByTestId("content-search"), {
+      target: { value: "  cancer  " },
+    });
+    fireEvent.change(screen.getByTestId("content-status-filter"), {
+      target: { value: "published" },
+    });
+    await waitFor(() =>
+      expect(api.get).toHaveBeenLastCalledWith("/admin/news", {
+        params: expect.objectContaining({ search: "cancer", status_filter: "published" }),
+      }),
+    );
+  });
+
+  it("sends the debounced search term and featured filter to the publications API", async () => {
+    renderTab("publication");
+    fireEvent.change(await screen.findByTestId("content-search"), {
+      target: { value: "genome" },
+    });
+    fireEvent.change(screen.getByTestId("content-featured-filter"), {
+      target: { value: "unfeatured" },
+    });
+    await waitFor(() =>
+      expect(api.get).toHaveBeenLastCalledWith("/admin/publications", {
+        params: expect.objectContaining({ search: "genome", is_featured: false }),
+      }),
+    );
+  });
+
+  it("renders the real news category instead of a fabricated author and trims ISO timestamps", async () => {
+    renderTab("news");
+    expect(await screen.findByText("pipeline")).toBeInTheDocument();
+    expect(screen.getByText("2026-01-02")).toBeInTheDocument();
+  });
+
+  it("keeps the publication author in its own column", async () => {
+    renderTab("publication");
+    expect(await screen.findByText("Ada Lovelace")).toBeInTheDocument();
   });
 });

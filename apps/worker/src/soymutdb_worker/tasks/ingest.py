@@ -146,7 +146,10 @@ def update_import_progress(import_task_id: int, **values: Any) -> None:
     intentionally best-effort: a metrics/state write failure must not abort
     the underlying ingestion work.
     """
-    logger.info("import progress", import_task_id=import_task_id, **values)
+    # Structured fields go through `extra=`: stdlib logging's signature is
+    # (msg, *args, *, exc_info, stack_info, stacklevel, extra), so arbitrary
+    # kwargs are ignored by the type contract and by the formatter alike.
+    logger.info("import progress", extra={"import_task_id": import_task_id, **values})
     try:
         from sqlalchemy import update
 
@@ -182,8 +185,7 @@ def update_import_progress(import_task_id: int, **values: Any) -> None:
     except Exception as exc:  # pragma: no cover - defensive
         logger.warning(
             "import_progress_persist_failed",
-            import_task_id=import_task_id,
-            error=str(exc),
+            extra={"import_task_id": import_task_id, "error": str(exc)},
         )
 
 
@@ -302,7 +304,20 @@ def get_clickhouse_client() -> Any:
         port = 8123
         database = "soymutdb"
 
-    import clickhouse_connect
+    # Imported here, not at module scope: `clickhouse_connect` is installed only
+    # in the retired ClickHouse migration image, so a top-level import would make
+    # every worker import fail on the default native runtime. A missing driver is
+    # reported as what it is instead of an import traceback at load time.
+    try:
+        # Resolved at runtime, not by the type checker: the driver is absent from
+        # the default runtime image by design (see the note above), so it is a
+        # genuine optional dependency rather than a missing declaration.
+        import clickhouse_connect  # type: ignore[import-not-found]  # noqa: PLC0415
+    except ImportError as exc:  # pragma: no cover - legacy lane only
+        raise RuntimeError(
+            "the legacy ClickHouse lane needs the clickhouse-connect driver, which "
+            "the default runtime does not install; use the clickhouse-migration image"
+        ) from exc
 
     return clickhouse_connect.get_client(
         host=host,
@@ -533,9 +548,24 @@ def import_vcf(
                 raise ValueError(f"unknown release version: {release_id!r}")
             if assembly_id_int is None:
                 raise ValueError(f"unknown assembly: {assembly_key!r}")
-        protocol = _import_vcf_via_protocol if engine is not None else _import_vcf_native
-        return protocol(
-            engine,
+        # Dispatch without a callable variable: the protocol path requires a
+        # live engine and the native path forbids one, so naming the function in
+        # a variable loses the `engine is not None` narrowing that each branch
+        # actually relies on.
+        if engine is not None:
+            return _import_vcf_via_protocol(
+                engine,
+                release_id=release_id,
+                assembly_key=assembly_key,
+                local_vcf_path=local_vcf_path,
+                file_key=file_key,
+                batch_size=batch_size,
+                source_sha256=source_sha256,
+                release_id_int=release_id_int,
+                assembly_id_int=assembly_id_int,
+            )
+        return _import_vcf_native(
+            None,
             release_id=release_id,
             assembly_key=assembly_key,
             local_vcf_path=local_vcf_path,
@@ -615,10 +645,21 @@ def _import_vcf_native(
 
 
 def _sha256_file(path: str, _chunk: int = 1 << 20) -> str:
+    """SHA-256 of a local source file.
+
+    A missing or unreadable file is reported as an import-source problem. Left
+    to raise, the caller sees a bare ``FileNotFoundError`` several frames deep in
+    a Celery traceback with no indication that the *source* is what is wrong.
+    """
     digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for block in iter(lambda: handle.read(_chunk), b""):
-            digest.update(block)
+    try:
+        with open(path, "rb") as handle:
+            for block in iter(lambda: handle.read(_chunk), b""):
+                digest.update(block)
+    except OSError as exc:
+        raise UnsupportedImportError(
+            f"cannot read the import source {path!r}: {exc.strerror or exc}"
+        ) from exc
     return digest.hexdigest()
 
 
@@ -862,11 +903,18 @@ def _import_vcf_via_protocol(
 
 def _published_result(session, import_id: str) -> dict:
     """The idempotent response for an already-published logical import."""
-    written = get_manifest(session, import_id)
+    manifest = get_manifest(session, import_id)
+    # `get_manifest` returns the row or None. Resolve the counter through an
+    # explicit branch: `(manifest or {}).get(...)` loses the row type and makes
+    # the lookup untyped, and indexing a missing key would raise instead of
+    # reporting zero rows.
+    written_rows = 0
+    if manifest is not None:
+        written_rows = int(manifest.get("written_rows") or 0)
     return {
         "status": "published",
         "import_id": import_id,
-        "written_rows": (written or {})["written_rows"] or 0,
+        "written_rows": written_rows,
         "idempotent": True,
     }
 

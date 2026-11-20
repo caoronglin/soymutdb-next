@@ -38,7 +38,7 @@ import json
 import math
 import re
 import uuid
-from typing import Any
+from typing import Any, TypedDict
 
 from fastapi import (
     APIRouter,
@@ -187,6 +187,30 @@ def _parse_float(value: str) -> float | None:
     return parsed
 
 
+class _EventArgs(TypedDict):
+    """Shape of one queued page-view event (see ``record_event``)."""
+
+    event_type: str
+    page: str | None
+    path: str
+    widget_name: str
+    search_query: str
+    source: str
+    referrer: str
+    user_agent: str
+    ip_hash: str
+    duration_ms: int
+
+
+class _VitalArgs(TypedDict):
+    """Shape of one queued Web Vital (see ``record_web_vital``)."""
+
+    name: str
+    value: float
+    rating: str
+    path: str
+
+
 def _bounded_param(
     request: Request,
     name: str,
@@ -316,6 +340,11 @@ async def track_pixel(
         ref_raw = _bounded_param(request, "ref")
         source_raw = _bounded_param(request, "source")
 
+        # One of the two payloads is built per branch and queued after the
+        # cookie is minted. Declared up front so every surviving path binds
+        # exactly one of them.
+        event_args: _EventArgs | None = None
+        vital: _VitalArgs | None = None
         if event_type == "performance":
             name = _bounded_param(request, "name", VALID_WEB_VITAL_NAMES)
             rating = _bounded_param(request, "rating", VALID_WEB_VITAL_RATINGS)
@@ -332,7 +361,6 @@ async def track_pixel(
                 "path": normalize_analytics_page(path_raw or request.url.path),
             }
         else:
-            vital = None
             referrer_hint = ref_raw or request.headers.get("referer", "")
             if len(referrer_hint) > MAX_RAW_PARAM_LENGTH:
                 raise ValueError("referrer")
@@ -366,10 +394,12 @@ async def track_pixel(
             ip_hash="",
             **vital,
         )
-    else:
+    elif event_args is not None:
         background_tasks.add_task(
             analytics.record_event, session_id=session_id, **event_args
         )
+    # Both payloads cannot be unset: the branch above built exactly one, and a
+    # malformed input returned before reaching here.
     return response
 
 

@@ -62,12 +62,12 @@ EMAIL_SENTINEL = "sentinel.user@example.invalid"
         ("/search/tools", "/search/tools"),
         ("/tools", "/tools"),
         ("/tools/seqfetch", "/tools/seqfetch"),
+        ("/tools/sequence", "/tools/sequence"),
         ("/tools/exppattern", "/tools/exppattern"),
         ("/tools/enrichment", "/tools/enrichment"),
         ("/news", "/news"),
         ("/browser", "/browser"),
         ("/blast", "/blast"),
-        ("/analyses", "/analyses"),
         ("/sra", "/sra"),
         ("/seed-request", "/seed-request"),
         ("/guide", "/guide"),
@@ -89,7 +89,6 @@ EMAIL_SENTINEL = "sentinel.user@example.invalid"
         # Release/article slug.
         ("/news/2026-01-release-notes", "/news/:slug"),
         # Analysis job id.
-        ("/analyses/8f2c0f3a-1f0a-4c2e-9a2e-6a4f1f0d77b1", "/analyses/:jobId"),
         # Trailing slash tolerance.
         ("/mutants/", "/mutants"),
         ("/news/2026-01-release-notes/", "/news/:slug"),
@@ -142,7 +141,6 @@ def test_stored_page_read_back_is_not_re_normalised_away() -> None:
         # Nothing here may widen the identifier position into an echo.
         "/genes/Glyma.16G000100",
         f"/mutants/{INTERNAL_ID_SENTINEL}",
-        "/analyses/8f2c0f3a-1f0a-4c2e-9a2e-6a4f1f0d77b1",
     ],
 )
 def test_normalization_is_idempotent(raw: str) -> None:
@@ -188,12 +186,11 @@ def test_relative_query_and_fragment_equate_the_absolute_form() -> None:
         ("/search?q=secret", "/search"),
         ("/search#secret", "/search"),
         ("/search/genes?assembly=v5", "/search/genes"),
-        ("/analyses/fastp#frag", "/analyses/fastp"),
+        ("/search/primer#frag", "/search/primer"),
         # A dynamic page behind a query string or fragment.
         ("/mutants/42#secret", "/mutants/:publicId"),
         ("/genes/Glyma.16G000100?assembly=v5", "/genes/:geneId"),
         ("/news/2026-01-release-notes?ref=x", "/news/:slug"),
-        ("/analyses/8f2c0f3a-1f0a-4c2e-9a2e-6a4f1f0d77b1#out", "/analyses/:jobId"),
         # The root page keeps its identity behind a query string.
         ("/?utm_source=secret", "/"),
         # An unknown route still collapses: stripping is not widening.
@@ -219,7 +216,6 @@ def test_query_and_fragment_stripping_applies_to_relative_paths(raw: str, expect
         "/genes/:secretParam",
         "/mutants/:internalId",
         "/news/:unknownSlug",
-        "/analyses/:callerParam",
         # Non-ASCII identifiers are not in the published identifier shape.
         "/mutants/café",
         "/genes/基因",
@@ -232,10 +228,12 @@ def test_caller_chosen_parameter_names_collapse_to_other(raw: str) -> None:
 
 def test_canonical_parameter_names_are_the_only_ones_returned() -> None:
     """A colon-shaped output is one of four constants, never a caller's name."""
-    expected = {"/analyses/:jobId", "/genes/:geneId", "/mutants/:publicId", "/news/:slug"}
+    expected = {"/genes/:geneId", "/mutants/:publicId", "/news/:slug"}
+    # `/analyses/:jobId` left this set with the /analyses routes; the
+    # assertion is about *which constants may escape*, not how many.
     produced = {
         normalize_analytics_page(f"{prefix}/{name}")
-        for prefix in ("/genes", "/mutants", "/news", "/analyses", "/fake")
+        for prefix in ("/genes", "/mutants", "/news", "/fake")
         for name in (":geneId", ":publicId", ":slug", ":jobId", ":callerParam", ":x")
     }
     assert {value for value in produced if ":" in value} == expected
@@ -323,8 +321,8 @@ def test_traversal_encoding_and_length_anomalies_collapse_to_other(raw: str) -> 
     ("raw", "expected"),
     [
         # Static templates win over the dynamic one that could also match.
-        ("/analyses/fastp", "/analyses/fastp"),
-        ("/analyses/scanpy", "/analyses/scanpy"),
+        # (`/analyses/fastp` vs `/analyses/:jobId` used to cover this too;
+        # both routes are gone, so `/news/news` and `/genes/genes` carry it.)
         ("/news/news", "/news/:slug"),
         ("/genes/genes", "/genes/:geneId"),
         ("/search/genes", "/search/genes"),
@@ -370,7 +368,6 @@ def test_no_counterexample_leaks_its_raw_sentinel(sentinel: str) -> None:
         f"/mutants/{sentinel}",
         f"/genes/{sentinel}",
         f"/news/{sentinel}",
-        f"/analyses/{sentinel}",
         f"https://{sentinel}:{sentinel}@soymutdb.example/mutants/{sentinel}",
         f"https://soymutdb.example/search?q={sentinel}",
         f"https://soymutdb.example/search#{sentinel}",

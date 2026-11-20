@@ -13,12 +13,14 @@ from datetime import UTC, datetime
 from sqlalchemy import (
     JSON,
     BigInteger,
+    Boolean,
     Column,
     DateTime,
     Float,
     ForeignKey,
     Integer,
     MetaData,
+    SmallInteger,
     String,
     Table,
     Text,
@@ -103,7 +105,59 @@ chromosomes = Table(
     "chromosomes",
     metadata,
     Column("id", Integer, primary_key=True),
+    Column("assembly_id", Integer, nullable=False),
     Column("name", String(64)),
+    # The FASTA writer registers the reference length of every sequence; the
+    # column is NOT NULL in the schema, so the worker definition has to carry
+    # it or a bulk insert would omit a required field silently.
+    Column("length", BigInteger, nullable=False),
+    Column("order", Integer),
+)
+
+transcripts = Table(
+    "transcripts",
+    metadata,
+    Column("id", String(64), primary_key=True),
+    Column("gene_id", BigInteger),
+    Column("is_canonical", Boolean),
+    Column("name", String(256)),
+    Column("biotype", String(64)),
+    Column("start", BigInteger),
+    Column("end", BigInteger),
+    Column("strand", String(1)),
+)
+
+#: CDS / UTR segments inside a transcript (migration 0045). An exon is derived
+#: from these, never copied from the file: GFF3 carries no ``exon`` feature for
+#: this annotation, so an exon is by definition the union of the parts it holds.
+transcript_parts = Table(
+    "transcript_parts",
+    metadata,
+    Column("id", BigInteger, primary_key=True),
+    Column("transcript_id", String(64), nullable=False),
+    Column("part_type", String(24), nullable=False),
+    Column("start", BigInteger, nullable=False),
+    Column("end", BigInteger, nullable=False),
+    Column("order", SmallInteger, nullable=False),
+)
+
+exons = Table(
+    "exons",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("transcript_id", String(64), nullable=False),
+    Column("start", BigInteger, nullable=False),
+    Column("end", BigInteger, nullable=False),
+    Column("order", SmallInteger, nullable=False),
+)
+
+gene_aliases = Table(
+    "gene_aliases",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("gene_id", BigInteger),
+    Column("alias", String(256)),
+    Column("source", String(128)),
 )
 
 expression_data = Table(
@@ -115,6 +169,8 @@ expression_data = Table(
     Column("fpkm", Float),
     Column("tpm", Float),
     Column("raw_count", BigInteger),
+    # Upserts refresh this so "last touched" is not frozen at creation time.
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
 )
 
 expression_libraries = Table(
@@ -124,6 +180,8 @@ expression_libraries = Table(
     Column("library_name", String(256)),
     Column("tissue", String(32)),
     Column("treatment", String(32)),
+    # Expression is assembly-scoped: a library belongs to exactly one assembly.
+    Column("assembly_id", Integer, nullable=False),
 )
 
 gene_homologs = Table(
@@ -135,6 +193,61 @@ gene_homologs = Table(
     Column("homolog_gene_id", String(64), nullable=False),
     Column("homolog_type", String(16), nullable=False),
     Column("source", String(128)),
+    Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
+)
+
+#: Comparative-genomics membership. API owns the migration; the worker reads
+#: it to resolve the members an artifact is computed from.
+gene_families = Table(
+    "gene_families",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("assembly_id", Integer),
+    Column("release_id", Integer),
+    Column("level", String(16)),
+    Column("external_id", String(128)),
+    Column("name", String(256)),
+    Column("method", String(64)),
+    Column("source_name", String(256)),
+    Column("source_version", String(128)),
+    Column("source_sha256", String(64)),
+)
+
+gene_family_members = Table(
+    "gene_family_members",
+    metadata,
+    Column("id", BigInteger, primary_key=True),
+    Column("family_id", Integer),
+    Column("assembly_id", Integer),
+    Column("release_id", Integer),
+    Column("gene_accession", String(64)),
+    Column("species", String(128)),
+    Column("relationship_type", String(16)),
+    Column("method", String(64)),
+    Column("confidence", Float),
+    Column("evidence", JSONB),
+)
+
+#: Asynchronous alignments and trees. ``input_sha256`` freezes the ordered
+#: member set; ``object_key`` is written only once the artifact succeeded.
+comparative_artifacts = Table(
+    "comparative_artifacts",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("job_id", UUID(as_uuid=True)),
+    Column("artifact_type", String(16)),
+    Column("family_id", Integer),
+    Column("assembly_id", Integer),
+    Column("release_id", Integer),
+    Column("method", String(64)),
+    Column("input_sha256", String(64)),
+    Column("input_member_ids", JSONB),
+    Column("state", String(20)),
+    Column("object_key", String(2048)),
+    Column("object_sha256", String(64)),
+    Column("error_message", Text),
+    Column("created_at", DateTime(timezone=True)),
+    Column("completed_at", DateTime(timezone=True)),
 )
 
 gene_data_cache = Table(
@@ -197,6 +310,36 @@ module_data_rows = Table(
     ),
 )
 
+blast_databases = Table(
+    "blast_databases",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("name", String(256)),
+    Column("engine", String(16)),
+    Column("db_type", String(4)),
+    Column("build_status", String(20)),
+    Column("build_error", Text),
+    Column("build_attempt", Integer),
+    Column("build_started_at", DateTime(timezone=True)),
+    Column("build_finished_at", DateTime(timezone=True)),
+    Column("index_health_checked_at", DateTime(timezone=True)),
+    Column("file_path", String(2048)),
+    Column("index_version", String(256)),
+    Column("fasta_sha256", String(64)),
+    Column("sequence_count", BigInteger),
+    Column("total_length", BigInteger),
+    Column("is_active", Boolean),
+    Column("is_default", Boolean),
+    Column("annotation_version", String(256)),
+    Column("source_url", String(2048)),
+    Column("source_version", String(256)),
+    Column("license", Text),
+    Column("assembly_id", Integer),
+    Column("release_id", Integer),
+    Column("assembly_version", String(64)),
+    Column("provenance", JSONB),
+)
+
 blast_jobs = Table(
     "blast_jobs",
     metadata,
@@ -207,6 +350,7 @@ blast_jobs = Table(
     Column("completed_at", DateTime(timezone=True)),
     Column("error_message", Text),
     Column("result_path", String(2048)),
+    Column("parameters", JSONB),
     Column("query_len", Integer),
     Column("hit_count", Integer),
 )
@@ -233,11 +377,23 @@ analysis_jobs = Table(
 #: and records the produced artifact's object key.  ``status`` uses the shared
 #: job vocabulary (``pending``/``running``/``succeeded``/``failed``), matching
 #: the PostgreSQL enum ``variant_export_status_enum``.
+variant_export_status_enum = ENUM(
+    "pending",
+    "running",
+    "succeeded",
+    "failed",
+    name="variant_export_status_enum",
+    create_type=False,
+)
 variant_exports = Table(
     "variant_exports",
     metadata,
     Column("id", UUID(as_uuid=True), primary_key=True),
-    Column("status", String(32)),
+    # Bound to the migration's enum type, not a bare VARCHAR: the worker's
+    # guarded UPDATE is a real ``WHERE status = ...`` against
+    # ``variant_export_status_enum``, and PostgreSQL rejects comparing the enum
+    # column with a varchar literal.
+    Column("status", variant_export_status_enum),
     Column("artifact_path", String(2048)),
     Column("record_count", Integer),
     Column("file_size", Integer),
@@ -245,6 +401,12 @@ variant_exports = Table(
     Column("started_at", DateTime(timezone=True)),
     Column("completed_at", DateTime(timezone=True)),
     Column("expires_at", DateTime(timezone=True)),
+    # Provenance of the produced bytes. The worker fills sha256/generated_at
+    # on success; license/source_ref are catalog metadata.
+    Column("sha256", String(64)),
+    Column("license", String(256)),
+    Column("generated_at", DateTime(timezone=True)),
+    Column("source_ref", String(1024)),
     # The row's own bookkeeping column: the worker's updates refresh it,
     # so "last touched" does not stay at creation time.
     Column("updated_at", DateTime(timezone=True), nullable=False, server_default=func.now()),
@@ -256,6 +418,7 @@ blast_hits = Table(
     Column("id", Integer, primary_key=True),
     Column("job_id", UUID(as_uuid=True)),
     Column("hsp_num", Integer),
+    Column("query_id", String(256)),
     Column("subject_id", String(256)),
     Column("subject_title", String(1024)),
     Column("percent_identity", Float),
@@ -270,6 +433,9 @@ blast_hits = Table(
     Column("bit_score", Float),
     Column("query_strand", String(8)),
     Column("subject_strand", String(8)),
+    # Protein/transcript -> gene genomic coordinates, resolved through
+    # explicit assembly-scoped relations. NULL means "no proven link".
+    Column("genome_resolution", JSONB),
 )
 
 #: GWAS association jobs (EMMAX / GEMMA).  The API side (B5) owns the
@@ -403,7 +569,12 @@ def utcnow() -> datetime:
 __all__ = [
     "analysis_jobs",
     "assemblies",
+    "comparative_artifacts",
+    "gene_families",
+    "gene_family_members",
+    "blast_databases",
     "blast_hits",
+    "blast_index_builds",
     "blast_jobs",
     "chromosomes",
     "expression_data",
@@ -424,3 +595,27 @@ __all__ = [
     "utcnow",
     "variant_exports",
 ]
+
+
+#: Asynchronous immutable BLAST index builds. API owns the migration; the
+#: worker advances the state machine and records the published identity.
+blast_index_builds = Table(
+    "blast_index_builds",
+    metadata,
+    Column("id", UUID(as_uuid=True), primary_key=True),
+    Column("database_id", Integer),
+    Column("state", String(20)),
+    Column("source_object_key", String(2048)),
+    Column("source_sha256", String(64)),
+    Column("db_type", String(4)),
+    Column("build_metadata", JSONB),
+    Column("index_identity", String(64)),
+    Column("sequence_count", BigInteger),
+    Column("total_length", BigInteger),
+    Column("error_message", Text),
+    Column("requested_by", UUID(as_uuid=True)),
+    Column("started_at", DateTime(timezone=True)),
+    Column("completed_at", DateTime(timezone=True)),
+    Column("updated_at", DateTime(timezone=True)),
+)
+

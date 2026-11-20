@@ -121,6 +121,10 @@ class Settings(BaseSettings):
     db_pool_timeout: int = 30
     db_pool_recycle: int = 1800
     db_pool_pre_ping: bool = True
+    #: LIFO checkout keeps a small hot set of server connections in use and
+    #: lets the rest age out, instead of round-robining every pooled
+    #: connection through PostgreSQL on each burst.
+    db_pool_use_lifo: bool = True
     # Process topology is consumed by the container entrypoint. Keep these
     # values in Settings so validation/docs share one canonical contract.
     api_workers: int = Field(default=2, ge=1, le=16)
@@ -132,6 +136,14 @@ class Settings(BaseSettings):
     #: reference (geekblogs) was unavailable, so this follows the general
     #: PostgreSQL/asyncpg best practice of a bounded statement_timeout.
     db_statement_timeout: int = 30
+    #: PostgreSQL JIT compilation.  Measured on the isolated 200k-variant
+    #: baseline, the stats aggregate triggered JIT and spent ~500 ms of a
+    #: ~640 ms statement inside the JIT (generation/inlining/optimization/
+    #: emission), while execution without JIT took ~130 ms.  Aggregates and
+    #: index lookups are not the long-running analytical queries JIT targets,
+    #: so it is off by default; enable per deployment if a real workload
+    #: profile shows a win.
+    db_jit_enabled: bool = False
 
     # ------------------------------------------------------------ ClickHouse
     clickhouse_host: str = "localhost"
@@ -150,7 +162,6 @@ class Settings(BaseSettings):
 
     # ----------------------------------------------------------------- Redis
     redis_url: str = "redis://localhost:6379/0"
-    cache_ttl_seconds: int = 3600
 
     # ----------------------------------------------------------- Rate limits
     # The global inbound request limiter lives in ``app/core/middleware.py``
@@ -197,6 +208,10 @@ class Settings(BaseSettings):
     #: instead of hanging the request path.
     redis_socket_timeout: float = 2.0
     redis_socket_connect_timeout: float = 2.0
+    #: Upper bound on pooled Redis connections per API process.  redis-py's
+    #: default pool is unbounded, so a slow Redis plus concurrent requests
+    #: could open sockets without limit; checkout then blocks instead.
+    redis_max_connections: int = Field(default=64, ge=1)
 
     # ----------------------------------------------------------- S3 / MinIO
     s3_endpoint: str = "http://localhost:9000"
@@ -257,12 +272,16 @@ class Settings(BaseSettings):
     # --------------------------------------------------------------- BLAST
     blast_max_length: int = 100000
     blast_default_db: str = "williams82_cds"
+    blast_max_active_jobs_per_user: int = Field(default=3, ge=1, le=20)
+    # Public capability jobs share the existing worker, with a separate peer budget.
+    blast_public_enabled: bool = True
+    blast_public_max_length: int = Field(default=10000, ge=10, le=100000)
+    blast_public_token_ttl_seconds: int = Field(default=86400, ge=1, le=86400)
+    blast_public_rate_limit_max: int = Field(default=5, ge=1)
+    blast_public_rate_limit_window: int = Field(default=3600, ge=1)
     #: Maximum delivery attempts per BLAST job (broker-level retries only;
     #: the worker itself is idempotent on top of this).
     blast_max_attempts: int = 3
-
-    # ---------------------------------------------------------------- GWAS
-    #: Maximum delivery attempts per GWAS job (broker-level retries only).
 
     # --------------------------------------------------------------- Outbox
     # Transactional outbox: API writes events inside business transactions;
@@ -280,7 +299,6 @@ class Settings(BaseSettings):
     outbox_retention_days: int = 30
     outbox_cleanup_interval_seconds: float = 3600.0
 
-    # ----------------------------------------------------- OpenTelemetry
     # --------------------------------------------------------------- Admin
     admin_email: str = "admin@soymutdb.local"
     admin_password: str = "admin123"
@@ -295,7 +313,6 @@ class Settings(BaseSettings):
     # They are redacted from API responses and audit logs by
     # ``services.publication_targets``.
     publication_local_root: str | None = None
-    publication_artifact_bucket: str = "static-publications"
     github_pages_token: str | None = None
     github_pages_repo: str | None = None
     github_repository: str | None = None
@@ -317,6 +334,20 @@ class Settings(BaseSettings):
 
     # --------------------------------------------------------- Feature flags
     feature_registration_enabled: bool = True
+
+    # Sequence engine selector.
+    #
+    # ``python`` is the Biopython-backed engine (app/services/bio_python_engine.py)
+    # and the default: it is the implementation of record, it ships a maintained
+    # REBASE enzyme table, codon tables and the tree builders, and it needs no
+    # build toolchain. ``rust`` selects the compiled soymutdb_bio_core kernel
+    # when that wheel is installed; the two answer the same contract, so a
+    # deployment can switch without the API or the UI noticing.
+    #
+    # Both engines fail closed on invalid input — neither falls back to empty
+    # results — so a misconfigured deployment reports "unavailable" rather than
+    # silently answering wrong.
+    bio_engine: Literal["rust", "python"] = "python"
 
     @property
     def refresh_cookie_secure_effective(self) -> bool:
@@ -416,6 +447,15 @@ class Settings(BaseSettings):
             if not self.rate_limit_enabled:
                 validation_errors.append(
                     "rate_limit_enabled must not be disabled in production"
+                )
+
+            # Self-registration grants VIEWER automatically, so leaving it on
+            # in production silently opens the viewer namespace to strangers.
+            # This is a fail-fast rather than a default flip: an operator who
+            # really wants open registration says so explicitly.
+            if self.feature_registration_enabled:
+                validation_errors.append(
+                    "feature_registration_enabled must be false in production"
                 )
 
             required_fields = [

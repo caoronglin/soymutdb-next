@@ -13,7 +13,16 @@ from .auth import (
     User,
 )
 from .base import AuditMixin, Base, SoftDeleteMixin, TimestampMixin
-from .blast import BlastDatabase, BlastHit, BlastJob
+from .blast import BlastDatabase, BlastHit, BlastIndexBuild, BlastJob
+from .comparative import (
+    ArtifactType,
+    ComparativeArtifact,
+    ComparativeArtifactState,
+    FamilyLevel,
+    GeneFamily,
+    GeneFamilyMember,
+    RelationshipType,
+)
 from .content import (
     DownloadFile,
     NewsArticle,
@@ -27,6 +36,7 @@ from .content import (
     StaticPage,
 )
 from .data_publishing import ActiveRelease, DataSet, ImportStatus, Provenance, ReleaseDataSet
+from .data_views import AdminDataView
 from .expression import ExpressionData, ExpressionLibrary
 from .gene_annotation import GeneAnnotation, GeneAnnotationSet
 from .gene_data_cache import GeneDataCache
@@ -39,6 +49,7 @@ from .genomic import (
     GeneCrosswalk,
     Transcript,
     TranscriptPart,
+    TranscriptSequence,
 )
 from .gwas import GwasFileType, GwasJob, GwasJobStatus, GwasMethod
 from .homolog import GeneHomolog
@@ -75,11 +86,19 @@ from .variant_export import VariantExport, VariantExportStatus
 from .variant_facts import analytics_events, variant_facts, variant_facts_staging, web_vitals
 
 __all__ = [
+    "ArtifactType",
+    "ComparativeArtifact",
+    "ComparativeArtifactState",
+    "FamilyLevel",
+    "GeneFamily",
+    "GeneFamilyMember",
+    "RelationshipType",
     "analytics_events",
     "variant_facts",
     "variant_facts_staging",
     "web_vitals",
     "ActiveRelease",
+    "AdminDataView",
     "AnalysisJob",
     "AnalysisJobStatus",
     "AnalysisType",
@@ -89,6 +108,7 @@ __all__ = [
     "Base",
     "BlastDatabase",
     "BlastHit",
+    "BlastIndexBuild",
     "BlastJob",
     "Chromosome",
     "DataPatch",
@@ -167,6 +187,7 @@ __all__ = [
     "Track",
     "TrackCategory",
     "Transcript",
+    "TranscriptSequence",
     "User",
     "VariantExport",
     "VariantExportStatus",

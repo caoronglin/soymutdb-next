@@ -54,6 +54,8 @@ TOOLS: list[dict[str, object]] = [
         "inputs": {
             "gene_id": "str, required — gene id, e.g. 'Glyma.01G000100'",
             "assembly_id": "int, optional — restrict to a genome assembly",
+            "release_id": "int, optional — released data release to read "
+            "(sent as X-SoyMutDB-Release); omitted = the API's active release",
         },
         "outputs": {
             "gene_id": "str | None",
@@ -84,6 +86,8 @@ TOOLS: list[dict[str, object]] = [
             "start": "int, required (>= 0)",
             "end": "int, required (>= 0)",
             "max_results": "int, default 1000, clamped to [1, 10000]",
+            "release_id": "int, optional — released data release to read "
+            "(sent as X-SoyMutDB-Release); omitted = the API's active release",
         },
         "outputs": {
             "count": "int — number of variants returned",
@@ -121,7 +125,11 @@ TOOLS: list[dict[str, object]] = [
         "status": "implemented",
         "auth": "public (API bearer forwarded when configured)",
         "rate_limit": "global 60/min per client",
-        "inputs": {},
+        "inputs": {
+            "release_id": "int, optional — released data release the counters "
+            "are aggregated for (sent as X-SoyMutDB-Release); omitted = the "
+            "API's active release",
+        },
         "outputs": {
             "total_variants": "int",
             "total_genes": "int",
@@ -138,7 +146,8 @@ TOOLS: list[dict[str, object]] = [
         "description": "Extract sequences from one explicit assembly by gene ids or chromosome interval.",
         "endpoint": "POST /api/v1/tools/seqfetch",
         "status": "implemented",
-        "auth": "public (API bearer forwarded when configured)",
+        "auth": "public (API bearer forwarded when configured); scoped by the "
+        "explicit 'assembly' input, not by a release pin",
         "rate_limit": "global 60/min per client",
         "inputs": {
             "genes": "list[str], optional — batch mode (<= 200 ids; requires assembly)",
@@ -170,16 +179,21 @@ TOOLS: list[dict[str, object]] = [
         "inputs": {
             "query_sequence": "str, required (>= 10 chars; FASTA header "
             "optional; amino-acid alphabet checked by the API)",
-            "program": "str, default 'blastp' — the only supported value; "
-            "searches run with DIAMOND blastp",
+            "engine": "str, default 'ncbi_blast' — explicit engine selector; "
+            "use 'diamond' only when selecting the DIAMOND backend",
+            "program": "str, default 'blastp' — one of blastn, blastp, "
+            "blastx, tblastn, tblastx; forwarded unchanged to the selected engine",
             "database": "str, optional — database name alias",
             "database_id": "int, optional — numeric database id",
-            "params": "dict, optional — search parameters (evalue, "
-            "max_target_seqs, matrix, ...) sent as 'parameters'",
+            "parameters": "dict, optional — search parameters (evalue, "
+            "max_target_seqs, matrix, ...); sent as the request body's "
+            "'parameters' property, so the MCP argument and the REST field "
+            "share one name",
         },
         "outputs": {
             "job_id": "str",
             "status": "str ('pending' | ...)",
+            "engine": "str ('ncbi_blast' | 'diamond')",
             "program": "str",
             "database_id": "int",
             "submitted_at": "datetime (ISO string)",

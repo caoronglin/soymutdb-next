@@ -22,6 +22,7 @@ from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
+from soymutdb_jobs.blast_search import normalize_query
 from soymutdb_jobs.protein_fasta import (
     ProteinFastaError,
     parse_protein_fasta,
@@ -42,6 +43,7 @@ PROTEIN = "MKTIIALSYIFCLVFADYKDDDDKTRWQYNE"
 
 def _request(**overrides: object) -> BlastSubmitRequest:
     defaults: dict[str, object] = dict(
+        engine="diamond",
         program=BlastSubmitProgram.BLASTP,
         database_id=1,
         query_sequence=PROTEIN,
@@ -153,7 +155,9 @@ class TestUnsearchableQueriesAreRefusedAtSubmission:
             _request(query_sequence=query)
         # The message must name the reason, because this text is what the user
         # sees and what the worker copies into the job error.
-        assert code in str(excinfo.value)
+        with pytest.raises(ValueError) as shared_error:
+            normalize_query(query, "blastp")
+        assert str(shared_error.value) in str(excinfo.value)
 
     def test_empty_record_error_reaches_the_caller(self) -> None:
         # The specific defect this slice closes: the old validator only
@@ -197,9 +201,11 @@ class TestApiAgreesWithTheSharedContract:
         with pytest.raises(ProteinFastaError) as contract_error:
             parse_protein_fasta(query)
         assert contract_error.value.code == code
-        with pytest.raises(ProteinFastaError) as service_error:
+        with pytest.raises(ValueError) as service_error:
             validate_sequence_charset(query, "blastp")
-        assert service_error.value.code == code
+        with pytest.raises(ValueError) as shared_error:
+            normalize_query(query, "blastp")
+        assert str(service_error.value) == str(shared_error.value)
         with pytest.raises(ValidationError) as api_error:
             _request(query_sequence=query)
         assert str(contract_error.value) in str(api_error.value)

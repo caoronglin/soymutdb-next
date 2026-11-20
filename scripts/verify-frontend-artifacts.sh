@@ -4,8 +4,8 @@
 # =============================================================================
 # Owns the ordered, blocking frontend gates:
 #   i18n key parity → offline demo build → placeholder scan → bundle budget →
-#   unit tests → lint → typecheck → page/query/admin architecture checks →
-#   OpenAPI client contract.
+#   unit tests → lint → ANT Design source scan → typecheck →
+#   page/query/admin architecture checks → OpenAPI client contract.
 #
 # The bundle stage runs twice over: scripts/check-bundle-size.sh keeps the
 # per-cache-group caps for the external portal, and the chart dependency closure
@@ -35,6 +35,16 @@ SOYMUTDB_CI_DEMO_JBROWSE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL:-https://jbrowse.so
 # origins above so the gate stays runnable without network access.
 SOYMUTDB_CI_DEMO_PORTAL_URL="${SOYMUTDB_CI_DEMO_PORTAL_URL:-https://portal.soymutdb.test}"
 SOYMUTDB_CI_DEMO_ADMIN_URL="${SOYMUTDB_CI_DEMO_ADMIN_URL:-https://admin.soymutdb.test}"
+# The *site* origin is NOT the API origin. `SOYMUTDB_SITE_URL` feeds the
+# canonical `<link>`, `sitemap.xml` and the `Sitemap:` line in `robots.txt`
+# (`apps/web/scripts/generate-static-routes.ts`), so pointing it at the API host
+# publishes a canonical URL and a sitemap that name the API server instead of
+# the page's own origin. The value here is the one
+# `apps/web/scripts/build-sites.ts` already falls back to for the external
+# variant, which is also what the committed `apps/web/dist/external/routes.json`
+# records: a rebuild must reproduce those pinned bytes, and
+# `scripts/test_published_route_manifest.py` asserts the two agree.
+SOYMUTDB_CI_DEMO_SITE_URL="${SOYMUTDB_CI_DEMO_SITE_URL:-https://external.soymutdb.invalid}"
 
 step() { printf '\n==> %s\n' "$*"; }
 
@@ -66,7 +76,7 @@ VITE_API_BASE_URL="${SOYMUTDB_CI_DEMO_API_URL}" \
 VITE_JBROWSE_BASE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL}" \
 SOYMUTDB_PORTAL_ORIGIN="${SOYMUTDB_CI_DEMO_PORTAL_URL}" \
 SOYMUTDB_ADMIN_ORIGIN="${SOYMUTDB_CI_DEMO_ADMIN_URL}" \
-SOYMUTDB_SITE_URL="${SOYMUTDB_CI_DEMO_API_URL}" \
+SOYMUTDB_SITE_URL="${SOYMUTDB_CI_DEMO_SITE_URL}" \
   pnpm --filter @soymutdb/web build:sites
 
 step "Scan demo artifact for placeholder origins"
@@ -91,6 +101,13 @@ step "Visible i18n contract (hardcoded text budget)"
 python3 scripts/check_visible_i18n.py
 node scripts/check_visible_i18n_react.mjs --self-test
 node scripts/check_visible_i18n_react.mjs
+
+# The visible-text guard catches hardcoded copy; it cannot catch the opposite
+# failure — a `t()` key that was never registered. i18next then falls back to
+# `defaultValue`, so a zh console prints English and every gate stays green.
+step "Admin i18n key guard (every referenced key exists in zh and en)"
+node scripts/test_admin_i18n_keys_guard.mjs
+node scripts/check-admin-i18n-keys.mjs
 
 # A call site may pass a different option name than the catalog placeholder
 # (`conds` vs `{{conditions}}`); i18next then renders the raw braces and no other
@@ -127,6 +144,12 @@ pnpm turbo run test
 step "Lint"
 pnpm turbo run lint
 
+step "ANT Design component usage scan"
+# `antd lint` exits 0 even when it finds deprecated/a11y/usage problems, so the
+# wrapper parses the JSON report and fails on any finding. Self-test runs first
+# so a scanner that stops reading the target fails instead of passing silently.
+node scripts/check-antd-design.mjs --self-test
+
 step "Typecheck"
 pnpm turbo run typecheck
 
@@ -144,8 +167,19 @@ python3 scripts/check_page_registry.py
 step "Web query-key architecture"
 python3 scripts/check_web_query_keys.py
 
+step "Variants row-key source and regression-suite contract"
+python3 scripts/check_variant_row_key_contract.py
+
 step "Backend-editable content key contract"
 python3 scripts/check_content_key_contract.py
+
+# PR #117 shipped BASE = "/api/v1/tools/sequence" while buildUrl already
+# prepends apiBaseUrl: every operation resolved to a doubled prefix. The
+# OpenAPI/schema gates read snapshots, not .ts path construction, so this
+# source-level guard is the only thing that names the regression before vitest.
+step "api-client base-path guard (no duplicated /api/v1 in request paths)"
+python3 scripts/check_api_client_base_path.py --self-test
+python3 scripts/check_api_client_base_path.py
 
 step "Admin transport and session boundary"
 python3 scripts/check_admin_content_architecture.py

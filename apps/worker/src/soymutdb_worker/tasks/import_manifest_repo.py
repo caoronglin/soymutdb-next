@@ -17,6 +17,7 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from datetime import UTC, datetime
+from typing import Any
 
 from soymutdb_import_protocol import (
     ImportManifestStatus,
@@ -24,7 +25,7 @@ from soymutdb_import_protocol import (
     compute_import_fingerprint,
     is_portal_visible_status,
 )
-from sqlalchemy import select, text, update
+from sqlalchemy import Engine, func, literal, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -35,8 +36,13 @@ class InvalidManifestTransition(Exception):
     """Raised when a manifest state transition is not permitted (mirrors the API)."""
 
 
-class ManifestRow(dict):
-    """A manifest row as a plain mapping keyed by column name."""
+class ManifestRow(dict[str, Any]):
+    """A manifest row as a plain mapping keyed by column name.
+
+    Parameterised rather than a bare ``dict``: an unparameterised subclass makes
+    every ``.get("written_rows")`` a type error ("dict[Never, Never]"), which
+    reads as a bug in the caller instead of a missing annotation here.
+    """
 
     @property
     def import_id(self) -> str:
@@ -135,19 +141,23 @@ def manifest_lock(session: Session, fingerprint: str) -> Iterator[None]:
     locked connection to the pool.
     """
     key = _manifest_lock_key(fingerprint)
-    parameters = {"namespace": MANIFEST_LOCK_NAMESPACE, "key": key}
-    connection = session.get_bind().connect()
-    connection.execute(text("SELECT pg_advisory_lock(:namespace, :key)"), parameters)
+    # A Session may be bound to either an Engine or a Connection; only the
+    # Engine can hand out the dedicated connection this lock needs.
+    bind = session.get_bind()
+    engine = bind if isinstance(bind, Engine) else bind.engine
+    connection = engine.connect()
+    # Composed with the SQL expression language rather than a raw SQL string:
+    # the advisory-lock calls take no user input, and an expression keeps it
+    # that way by construction.
+    lock_expr = func.pg_advisory_lock(literal(MANIFEST_LOCK_NAMESPACE), literal(key))
+    unlock_expr = func.pg_advisory_unlock(literal(MANIFEST_LOCK_NAMESPACE), literal(key))
+    connection.execute(select(lock_expr))
     try:
         yield
     finally:
         unlocked = False
         try:
-            unlocked = bool(
-                connection.execute(
-                    text("SELECT pg_advisory_unlock(:namespace, :key)"), parameters
-                ).scalar_one()
-            )
+            unlocked = bool(connection.execute(select(unlock_expr)).scalar_one())
         finally:
             if unlocked:
                 connection.close()
@@ -191,9 +201,7 @@ def record_counts(session: Session, manifest: ManifestRow, *, written_rows: int)
 
 
 def mark_failed(session: Session, manifest: ManifestRow, failure_code: str) -> ManifestRow:
-    return transition_or_fail(
-        session, manifest, ImportManifestStatus.FAILED, failure_code
-    )
+    return transition_or_fail(session, manifest, ImportManifestStatus.FAILED, failure_code)
 
 
 def transition_or_fail(
@@ -219,14 +227,22 @@ def is_published(manifest: ManifestRow) -> bool:
 
 
 def _find_by_fingerprint(session: Session, fingerprint: str) -> ManifestRow | None:
-    result = session.execute(
-        select(*import_manifests.c).where(import_manifests.c.fingerprint == fingerprint)
-    ).mappings().first()
+    result = (
+        session.execute(
+            select(*import_manifests.c).where(import_manifests.c.fingerprint == fingerprint)
+        )
+        .mappings()
+        .first()
+    )
     return ManifestRow(dict(result)) if result is not None else None
 
 
 def get(session: Session, import_id: str) -> ManifestRow | None:
-    result = session.execute(
-        select(*import_manifests.c).where(import_manifests.c.import_id == import_id)
-    ).mappings().first()
+    result = (
+        session.execute(
+            select(*import_manifests.c).where(import_manifests.c.import_id == import_id)
+        )
+        .mappings()
+        .first()
+    )
     return ManifestRow(dict(result)) if result is not None else None

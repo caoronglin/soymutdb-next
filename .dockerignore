@@ -40,6 +40,10 @@ apps/web/dist
 apps/admin/dist
 apps/jbrowse/dist
 apps/mcp-server/dist
+# Build-time reports (chart closure manifests, bundle analyses) are regenerated
+# inside the builder; leaving them in the context re-invalidates `COPY . .` on
+# every second build.
+.build
 **/coverage/**
 **/playwright-report
 **/test-results

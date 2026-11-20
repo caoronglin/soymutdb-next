@@ -31,11 +31,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...core.database import get_db
 from ...core.exceptions import AuthenticationError, AuthorizationError
+from ...core.features import FeatureFlagService
 from ...core.footer_content import (
     DEFAULT_FOOTER_NAVIGATION_JSON,
     FooterContentValidationError,
     parse_footer_navigation,
     visible_footer_navigation,
+)
+from ...core.header_navigation import (
+    DEFAULT_HEADER_NAVIGATION_JSON,
+    HeaderContentValidationError,
+    parse_header_navigation,
+    visible_header_navigation,
 )
 from ...core.sanitize import sanitize_rich_html
 from ...core.security import RoleName, has_role
@@ -52,6 +59,8 @@ from ...schemas.site import (
     FooterContentResponse,
     HomeContentResponse,
     SiteBrandResponse,
+    SiteNavigationResponse,
+    SiteProfileResponse,
 )
 from ...services.site_brand_service import get_site_brand_document
 from .deps import get_optional_user, get_user_roles
@@ -98,13 +107,19 @@ _CONTENT_DEFINITIONS = tuple(
 
 
 def _ensure_variant_access(variant: SiteVariant, current_user: User | None) -> None:
-    """Enforce the private read boundary for the internal artifact."""
+    """Enforce the private read boundary for the internal artifact.
+
+    The bar is RESEARCHER, not VIEWER: registration grants VIEWER automatically
+    (``auth.py``), so requiring VIEWER would let any stranger who signs up read
+    the internal namespace. RESEARCHER is only ever assigned by an operator, so
+    this remains a real boundary rather than a formality.
+    """
     if variant is SiteVariant.EXTERNAL:
         return
     if current_user is None:
         raise AuthenticationError("Internal site content requires authentication")
-    if not has_role(get_user_roles(current_user), RoleName.VIEWER):
-        raise AuthorizationError("Viewer role required for internal site content")
+    if not has_role(get_user_roles(current_user), RoleName.RESEARCHER):
+        raise AuthorizationError("Researcher role required for internal site content")
 
 
 def _set_cache_policy(response: Response, variant: SiteVariant) -> None:
@@ -175,6 +190,69 @@ async def get_site_branding(
     _set_cache_policy(response, variant)
     document = await get_site_brand_document(db, variant=variant)
     return SiteBrandResponse(variant=variant.value, **document.values.model_dump())
+
+
+@router.get("/navigation", response_model=SiteNavigationResponse)
+async def get_site_navigation(
+    response: Response,
+    variant: SiteVariant = Query(default=SiteVariant.EXTERNAL),
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
+) -> SiteNavigationResponse:
+    """Return the editable primary navigation, filtered by feature flags."""
+    _ensure_variant_access(variant, current_user)
+    _set_cache_policy(response, variant)
+    values = await _variant_values(
+        db, base_section="header", variant=variant, keys=("navigation_json",)
+    )
+    selected_section = variant_section("header", variant)
+    navigation_json = values.get(
+        "navigation_json",
+        str(get_setting_definition(selected_section, "navigation_json").default),
+    )
+    enabled_features = {
+        key
+        for key, enabled in (await FeatureFlagService.snapshot(db)).items()
+        if enabled
+    }
+    try:
+        groups = visible_header_navigation(
+            parse_header_navigation(navigation_json), enabled_features
+        )
+    except HeaderContentValidationError:
+        logger.warning(
+            "Invalid header navigation configuration for variant=%s; using defaults",
+            variant.value,
+        )
+        groups = visible_header_navigation(
+            parse_header_navigation(DEFAULT_HEADER_NAVIGATION_JSON), enabled_features
+        )
+    return SiteNavigationResponse(variant=variant.value, groups=groups)
+
+
+@router.get("/profile", response_model=SiteProfileResponse)
+async def get_site_profile(
+    response: Response,
+    variant: SiteVariant = Query(default=SiteVariant.EXTERNAL),
+    db: AsyncSession = Depends(get_db),
+    current_user: User | None = Depends(get_optional_user),
+) -> SiteProfileResponse:
+    """Return the configured database kind and public feature availability."""
+    _ensure_variant_access(variant, current_user)
+    _set_cache_policy(response, variant)
+    stored = await db.scalar(
+        select(SystemSetting).where(SystemSetting.key == "general.databaseKind")
+    )
+    default_kind = str(get_setting_definition("general", "databaseKind").default)
+    kind = stored.value if stored is not None else default_kind
+    if kind not in {"genome", "gene_ontology", "transcription_factor"}:
+        kind = default_kind
+    features = await FeatureFlagService.snapshot(db, public_only=True)
+    return SiteProfileResponse(
+        variant=variant.value,
+        database_kind=kind,  # type: ignore[arg-type]
+        features=features,
+    )
 
 
 @router.get("/about", response_model=AboutContentResponse)

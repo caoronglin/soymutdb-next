@@ -58,7 +58,7 @@ export function PortalSearchBox({
         aria-label={placeholder}
       />
       <Button type="primary" size={size} onClick={submit} data-testid={`${testId}-submit`}>
-        {t("home.searchButton", { defaultValue: "搜索" })}
+        {t("home.searchButton")}
       </Button>
     </div>
   );

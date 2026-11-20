@@ -20,9 +20,10 @@ import tempfile
 import zipfile
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Any, BinaryIO, Literal, Protocol
+from typing import Any, BinaryIO, Literal, Protocol, cast
 
 ScalarType = Literal["string", "integer"]
+
 
 #: File extensions accepted for a module import, in canonical order.
 SUPPORTED_MODULE_FORMATS: tuple[str, ...] = (".txt", ".tsv", ".csv", ".xlsx")
@@ -108,6 +109,15 @@ class TsvColumn:
     type: ScalarType = "string"
     required: bool = True
     minimum: int | None = None
+    #: Alternative header spellings that map to this canonical column.
+    #:
+    #: Operators export from upstream tools whose headers are not ours: the
+    #: mutant-information export uses Chinese column names, and an older export
+    #: may spell the same concept differently. An alias is *input* spelling
+    #: only — every validated row, every template and every stored record uses
+    #: ``name``, so one file authored either way produces identical records and
+    #: the database never grows a second column for the same fact.
+    aliases: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -116,6 +126,38 @@ class ModuleTsvSchema:
     columns: tuple[TsvColumn, ...]
     unique_key: tuple[str, ...]
     max_rows: int = 2_000_000
+
+
+def _resolve_headers(
+    schema: ModuleTsvSchema, fieldnames: list[str]
+) -> tuple[dict[str, str], list[str], list[str]]:
+    """Map incoming header spellings to canonical column names.
+
+    Returns ``(incoming -> canonical, unknown incoming names, missing required
+    canonical names)``. Two incoming headers that resolve to the same canonical
+    column are reported by the caller as a duplicate, because the second one
+    would silently overwrite the first while building a row.
+    """
+    lookup: dict[str, str] = {}
+    for column in schema.columns:
+        lookup.setdefault(column.name, column.name)
+        for alias in column.aliases:
+            lookup.setdefault(alias, column.name)
+
+    mapping: dict[str, str] = {}
+    unknown: list[str] = []
+    for name in fieldnames:
+        canonical = lookup.get(name)
+        if canonical is None:
+            unknown.append(name)
+        else:
+            mapping[name] = canonical
+
+    present = set(mapping.values())
+    missing = [
+        column.name for column in schema.columns if column.required and column.name not in present
+    ]
+    return mapping, unknown, missing
 
 
 @dataclass
@@ -727,19 +769,19 @@ def _read_xlsx_rows(data: bytes) -> tuple[list[str], list[dict[str, str]], Valid
     # than silently truncating a non-empty column beyond the header.
     rl_sheet.reset_dimensions()
 
-    rl_grid: list[tuple[Any, ...]] = []
-    for rl_row in rl_sheet.iter_rows(values_only=True):
-        rl_values = tuple(rl_row)
+    xlsx_grid: list[tuple[Any, ...]] = []
+    for xlsx_row in rl_sheet.iter_rows(values_only=True):
+        rl_values: tuple[Any, ...] = tuple(xlsx_row)
         if rl_values and any(rl_v is not None and str(rl_v).strip() != "" for rl_v in rl_values):
-            rl_grid.append(rl_values)
-    if not rl_grid:
+            xlsx_grid.append(rl_values)
+    if not xlsx_grid:
         return (
             [],
             [],
             ValidationResult(False, [ValidationError("empty_file", None, "module data is empty")]),
         )
 
-    rl_header_values = _trim_xlsx_trailing_none(rl_grid[0])
+    rl_header_values = _trim_xlsx_trailing_none(xlsx_grid[0])
     rl_fieldnames = [str(rl_v).strip() if rl_v is not None else "" for rl_v in rl_header_values]
     for rl_field in rl_fieldnames:
         if len(rl_field) > MAX_HEADER_LENGTH:
@@ -758,7 +800,7 @@ def _read_xlsx_rows(data: bytes) -> tuple[list[str], list[dict[str, str]], Valid
                 ),
             )
     rl_rows: list[dict[str, str]] = []
-    for row_number, rl_values in enumerate(rl_grid[1:], start=2):
+    for row_number, rl_values in enumerate(xlsx_grid[1:], start=2):
         rl_values = _trim_xlsx_trailing_none(rl_values)
         # ``iter_rows`` pads cells to the widest worksheet dimension and
         # Excel does not retain a distinction between an omitted optional
@@ -793,15 +835,12 @@ def _validate_rows(
             False, [ValidationError("duplicate_header", None, "data contains duplicate headers")]
         )
 
-    schema_columns = {col.name: col for col in schema.columns}
-    unknown = [name for name in fieldnames if name not in schema_columns]
+    mapping, unknown, missing = _resolve_headers(schema, fieldnames)
     if unknown:
         return ValidationResult(
             False,
             [ValidationError("header_mismatch", None, f"Unknown columns: {', '.join(unknown)}")],
         )
-
-    missing = [col.name for col in schema.columns if col.required and col.name not in fieldnames]
     if missing:
         return ValidationResult(
             False,
@@ -811,6 +850,16 @@ def _validate_rows(
                 )
             ],
         )
+    # Two different input spellings resolving to one canonical column would make
+    # one of them silently win while building the row.
+    canonical_fieldnames = [mapping[name] for name in fieldnames]
+    if len(canonical_fieldnames) != len(set(canonical_fieldnames)):
+        return ValidationResult(
+            False, [ValidationError("duplicate_header", None, "data contains duplicate headers")]
+        )
+    # Normalise once so every downstream lookup uses the canonical name.
+    fieldnames = canonical_fieldnames
+    rows = [{mapping.get(key, key): value for key, value in row.items()} for row in rows]
 
     errors: list[ValidationError] = []
     out_rows: list[dict[str, Any]] = []
@@ -989,6 +1038,7 @@ def render_module_template(module_key: str, file_format: str) -> tuple[str | byt
             raise ValueError("openpyxl is required for xlsx templates") from rl_exc
         rl_book = Workbook()
         rl_sheet = rl_book.active
+        assert rl_sheet is not None, "a new Workbook always has an active sheet"
         rl_sheet.title = module_key
         rl_sheet.append(rl_headers)
         rl_sheet.append(rl_example)
@@ -1123,7 +1173,7 @@ class XlsxReader:
     """Streaming reader for ``.xlsx`` (openpyxl ``read_only=True``).
 
     Reads the first worksheet; the header is the first non-empty row.  No
-    ``rl_grid`` full-list materialisation.
+    ``xlsx_grid`` full-list materialisation.
     """
 
     def __init__(self, source: bytes | BinaryIO, sheet_name: str | None = None) -> None:
@@ -1307,7 +1357,12 @@ def _reader_for_stream(
                 while chunk := bounded_source.read(STREAM_READ_CHUNK_BYTES):
                     spool.write(chunk)
                 spool.seek(0)
-                return XlsxReader(spool)
+                # SAFETY: `tempfile.SpooledTemporaryFile` is a seekable binary
+                # file object at runtime (it forwards to an in-memory BytesIO
+                # until the threshold, then to a real file). typeshed models it
+                # as its own class rather than as `BinaryIO`, so the cast states
+                # the invariant the xlsx reader relies on: read + seek.
+                return XlsxReader(cast(BinaryIO, spool))
             except Exception:
                 spool.close()
                 raise
@@ -1342,16 +1397,13 @@ def iter_typed_rows(
         yield None, ValidationError("duplicate_header", None, "data contains duplicate headers")
         return
 
-    schema_columns = {col.name: col for col in schema.columns}
-    unknown = [name for name in fieldnames if name not in schema_columns]
+    mapping, unknown, missing = _resolve_headers(schema, fieldnames)
     if unknown:
         yield (
             None,
             ValidationError("header_mismatch", None, f"Unknown columns: {', '.join(unknown)}"),
         )
         return
-
-    missing = [col.name for col in schema.columns if col.required and col.name not in fieldnames]
     if missing:
         yield (
             None,
@@ -1360,6 +1412,11 @@ def iter_typed_rows(
             ),
         )
         return
+    canonical_fieldnames = [mapping[name] for name in fieldnames]
+    if len(canonical_fieldnames) != len(set(canonical_fieldnames)):
+        yield None, ValidationError("duplicate_header", None, "data contains duplicate headers")
+        return
+    fieldnames = canonical_fieldnames
 
     seen_keys: set[str] = set()
     physical_rows = 0
@@ -1393,7 +1450,7 @@ def iter_typed_rows(
                 _row_width_error(row_number, len(fieldnames), parsed.field_count),
             )
             continue
-        row = parsed.values
+        row = {mapping.get(key, key): value for key, value in parsed.values.items()}
         errors: list[ValidationError] = []
         typed: dict[str, Any] = {}
         row_valid = True

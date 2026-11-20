@@ -37,6 +37,28 @@ export const queryKeys = {
         context?.releaseId ?? null,
         context?.siteVariant ?? null,
       ] as const,
+    // The catalogue above comes from `/genes/assemblies`; this key belongs to
+    // `/assemblies`, whose payload carries per-assembly counts. They are kept
+    // in separate keys on purpose: merging them would serve one endpoint's
+    // shape to the other's caller.
+    statistics: (context?: { releaseId?: string | null; siteVariant?: "external" | "internal" }) =>
+      [
+        ...queryKeys.assemblies.all(),
+        "statistics-list",
+        context?.releaseId ?? null,
+        context?.siteVariant ?? null,
+      ] as const,
+    detail: (
+      assemblyId: string | number | undefined,
+      context?: { releaseId?: string | null; siteVariant?: "external" | "internal" },
+    ) =>
+      [
+        ...queryKeys.assemblies.all(),
+        "detail",
+        assemblyId ?? null,
+        context?.releaseId ?? null,
+        context?.siteVariant ?? null,
+      ] as const,
   },
   news: {
     all: () => [...queryKeys.all, "news"] as const,
@@ -152,6 +174,52 @@ export const queryKeys = {
       context.siteVariant,
     ] as const,
   },
+  // Expression libraries are release- and assembly-bound reads: the API joins
+  // every library to the published release's assemblies, so the key carries
+  // both boundaries plus each filter that changes the result set.
+  expression: {
+    all: () => [...queryKeys.all, "expression"] as const,
+    libraries: (context: {
+      page: number;
+      pageSize: number;
+      tissue: string | null;
+      treatment: string | null;
+      assemblyId: number | null;
+      releaseId: string | null;
+      siteVariant: "external" | "internal";
+    }) =>
+      [
+        ...queryKeys.expression.all(),
+        "libraries",
+        context.page,
+        context.pageSize,
+        context.tissue ?? null,
+        context.treatment ?? null,
+        context.assemblyId ?? null,
+        context.releaseId,
+        context.siteVariant,
+      ] as const,
+    library: (publicId: string, releaseId: string | null, siteVariant: "external" | "internal") =>
+      [...queryKeys.expression.all(), "library", publicId, releaseId, siteVariant] as const,
+    // One library's expression rows. Keyed by the public sample id, never the
+    // persistence key, so an internal identifier cannot leak through a cache.
+    rows: (context: {
+      library: string;
+      page: number;
+      pageSize: number;
+      releaseId: string | null;
+      siteVariant: "external" | "internal";
+    }) =>
+      [
+        ...queryKeys.expression.all(),
+        "rows",
+        context.library,
+        context.page,
+        context.pageSize,
+        context.releaseId,
+        context.siteVariant,
+      ] as const,
+  },
   mutants: {
     all: () => [...queryKeys.all, "mutants"] as const,
     // Public mutant lines keyed by filter + site/release so caches never cross
@@ -226,6 +294,53 @@ export const queryKeys = {
     // the previous account's export state from the cache.
     export: (exportId: string | null, sessionId?: number | null) =>
       [...queryKeys.variants.all(), "export", exportId ?? null, sessionId ?? null] as const,
+  },
+  comparative: {
+    all: () => [...queryKeys.all, "comparative"] as const,
+    // Family listing and detail are release-, assembly- and site-scoped reads:
+    // the same family id answers with different member sets per assembly, so
+    // none of that context may be dropped from the key (DB-CORE-6).
+    families: (context: {
+      assemblyId: string | number | null;
+      level: string | null;
+      page: number;
+      pageSize: number;
+      releaseId: string | null;
+      siteVariant: "external" | "internal";
+    }) =>
+      [
+        ...queryKeys.comparative.all(),
+        "families",
+        context.assemblyId ?? null,
+        context.level ?? null,
+        context.page,
+        context.pageSize,
+        context.releaseId,
+        context.siteVariant,
+      ] as const,
+    family: (context: {
+      familyId: number;
+      assemblyId: string | number | null;
+      releaseId: string | null;
+      siteVariant: "external" | "internal";
+    }) =>
+      [
+        ...queryKeys.comparative.all(),
+        "family",
+        context.familyId,
+        context.assemblyId ?? null,
+        context.releaseId,
+        context.siteVariant,
+      ] as const,
+    // An artifact is a job: its key is the job id, and it must never be shared
+    // with a family read (a finished alignment belongs to a frozen input set,
+    // not to the family's current membership).
+    artifact: (
+      jobId: string | null,
+      releaseId: string | null,
+      siteVariant: "external" | "internal",
+    ) =>
+      [...queryKeys.comparative.all(), "artifact", jobId ?? null, releaseId, siteVariant] as const,
   },
 } as const;
 

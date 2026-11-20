@@ -99,6 +99,9 @@ def _make_db(name: str = "williams82_cds", *, assembly_id: int = 1) -> BlastData
         assembly_id=assembly_id,
         file_path="/data/dbs/williams82_cds",
         is_active=True,
+        engine="diamond",
+        build_status="ready",
+        is_default=False,
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )
@@ -117,6 +120,7 @@ def _make_assembly(release_id: int = _RELEASE_ID) -> Assembly:
 
 def _make_request(**overrides: Any) -> BlastSubmitRequest:
     defaults: dict[str, Any] = dict(
+        engine="diamond",
         program=BlastSubmitProgram.BLASTP,
         query_sequence="ATGCAAGCTTAGCTAGGCTAGGCTAGGC",
         parameters=BlastParameters(),
@@ -258,10 +262,24 @@ def test_job_response_exposes_the_searched_release_and_assembly():
         submitted_at=datetime.now(UTC),
     )
     database = _make_db()
-    database.assembly = _make_assembly()
+    assembly = _make_assembly()
+    database.assembly = assembly
     job.database = database
 
-    response = BlastService._job_to_response(job)  # noqa: SLF001
+    # The catalog/assembly rows are rendered from explicit arguments: the
+    # relationship is lazy, so a control-plane read can never trigger it.
+    response = BlastService._job_to_response(job, database, assembly)  # noqa: SLF001
 
     assert response.release_id == _RELEASE_ID
     assert response.assembly_name == "Wm82.a4.v1"
+    # Nothing is read through the relationship.
+    assert BlastService._job_to_response(job).release_id is None  # noqa: SLF001
+
+
+@pytest.fixture(autouse=True)
+def isolated_database_quota_boundary(monkeypatch):
+    """These fake-session tests cover mapping; PostgreSQL quota tests cover locks."""
+    async def enforce(_self, _db, _user_id):
+        return None
+
+    monkeypatch.setattr(BlastService, "_enforce_user_limit", enforce)

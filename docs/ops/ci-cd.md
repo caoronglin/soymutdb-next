@@ -578,6 +578,16 @@ bash scripts/smoke.sh --list
 | `e2e` | 线上/本地站点浏览器冒烟 | `e2e/node_modules` + Playwright |
 | `images` | 镜像构建/冒烟/扫描/SBOM | Docker daemon |
 
+`contracts` 的「无前置条件」必须是**这一层自己保证的**，不能是同流水线其它 stage
+的副作用。`check_visible_i18n_react.mjs` 在模块加载时 `import ts from "typescript"`，
+只有 `pnpm install` 之后才能解析；CNB 的 `Frontend verification` 会把 `node_modules`
+留在共享的 `/workspace` 里，所以曾经挂在 contracts 层的那条 Node 自测一直绿，
+但干净 checkout、单独重跑 `Contract suites`、或调整 stage 顺序都会报
+`ERR_MODULE_NOT_FOUND: Cannot find package 'typescript'`（issue #125）。现在 React
+守卫的自测与实扫都归 `verify-frontend-artifacts.sh`（两侧 provider 都先 bootstrap
+workspace），contracts 层只留纯 Python / stdlib 守卫；
+`scripts/test_contracts_layer_self_containment.py` 把这层边界钉成可执行判据。
+
 **关键约定**：前置条件缺失时输出 `SKIPPED: <原因>` 并计入 summary，**绝不冒充通过**。
 只有真正执行过的 layer 才会决定退出码。
 
@@ -594,6 +604,15 @@ bash scripts/smoke.sh --list
 验收还会写 `artifacts/acceptance/acceptance-manifest.txt`（commit / profile / 逐层
 判定 / 工具链 / 制品 digest），并在 `endStages` 上传，所以失败的验收同样留下记录。
 细节见 [`cnb-startup-acceptance.md`](cnb-startup-acceptance.md)。
+
+`web_trigger_acceptance` 的 `Delivery contracts` stage 不声明 `image:`：
+`acceptance.sh --profile contracts` 直接委派给 `smoke.sh --profile contracts`，
+那一层会 shell 出 `node`（前端 i18n 守卫自测）且用例 import PyYAML，所以它必须和
+`main` 的 `Contract suites` 一样继承流水线级 `docker.build`（`.cnb/env/Dockerfile.frontend`，
+`python:3.15` + Node 26.13.0）。裸 `python:3.15` 没有 Node，验收会挂在
+`FileNotFoundError: node` 上。`.cnb/pipelines/acceptance.yml` 是同一条流水线的只读记录，
+两处必须一致；契约测试 `test_acceptance_contracts_stage_inherits_the_dual_toolchain_image`
+同时断言两处，并逐项反向验证（重新加回 stage `image`、或删掉流水线 `docker.build` 都要红）。
 
 ## 6. 工具链固定
 

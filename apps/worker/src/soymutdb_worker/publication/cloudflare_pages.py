@@ -51,14 +51,30 @@ class CloudflarePagesAdapter:
             metadata={"publication_id": publication_id},
         )
 
+    @staticmethod
+    def _staged_artifact(deployment: DeploymentRef) -> Path:
+        """The staged directory, or a clear failure instead of a TypeError.
+
+        `artifact_path` is optional on `DeploymentRef` because not every target
+        stages locally. This adapter only ever uploads a locally staged tree, so
+        a missing path is a caller error and must say so — `Path(None)` would
+        raise a bare TypeError that reads like a library bug.
+        """
+        if deployment.artifact_path is None:
+            raise RuntimeError(
+                "cloudflare_pages upload requires a locally staged artifact "
+                "(DeploymentRef.artifact_path is unset)"
+            )
+        return Path(deployment.artifact_path)
+
     def verify(self, deployment: DeploymentRef) -> ValidationEvidence:
-        artifact = Path(deployment.artifact_path)
+        artifact = self._staged_artifact(deployment)
         return verify_manifest(artifact, deployment.manifest_digest)
 
     def promote(self, deployment: DeploymentRef) -> str:
         """Upload files, wait for deployment, verify, promote."""
         self._check_configured()
-        artifact = Path(deployment.artifact_path)
+        artifact = self._staged_artifact(deployment)
         files = _collect_files(artifact)
         db = _form_direct_upload(artifact, files)
         if not files:

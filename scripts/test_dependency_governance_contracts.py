@@ -1,11 +1,14 @@
+import ast
 import importlib.util
 import json
 import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
+import pytest  # pyright: ignore[reportMissingImports]  # provided by apps/api/.venv
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -286,8 +289,8 @@ def test_governance_policy_covers_every_required_gate_with_pinned_tools() -> Non
 def _governance_module():
     """Load scripts/dependency_governance.py as a module for unit assertions."""
     spec = importlib.util.spec_from_file_location("dependency_governance", SCRIPT)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
 
@@ -481,6 +484,127 @@ def test_license_projection_distributes_nested_alternatives() -> None:
     ) == [["Apache-2.0"]]
 
 
+def test_license_probe_is_reachable_from_the_configured_command() -> None:
+    """The probe must be derivable from the command the policy actually runs.
+
+    Two defects made `declared` come back empty on every run, which is the same
+    signal as "the probe could not run", so `python-licenses-worker` failed with
+    `normalization_unavailable:license-expressions` on a healthy environment:
+
+    * the probe passed `path=sys.path` to `importlib.metadata.distributions()`,
+      and under `python -c` `sys.path[0]` is `''` -- an empty search path that
+      reads no distribution at all and prints `{}`;
+    * `_rewrite_for_probe` matched the literal `pip-licenses`, which occurs in
+      the `--with pip-licenses==5.0.0` selector *before* the entry point, so the
+      rewrite returned `None` as soon as the probe itself was handed back in.
+
+    Both are asserted from the policy file, so the check cannot silently stop
+    probing after a config edit.
+    """
+    governance = _governance_module()
+    for name in ("python-licenses-api", "python-licenses-worker", "python-licenses-mcp-server"):
+        check = next(
+            entry
+            for entry in json.loads(CONFIG.read_text(encoding="utf-8"))["checks"]
+            if entry["name"] == name
+        )
+        command = [
+            argument.replace("{root}", str(ROOT)).replace("{output_dir}", "/tmp/x")
+            for argument in check["command"]
+        ]
+        probe = governance._rewrite_for_probe(command)
+        assert probe is not None, f"{name}: the probe must be derivable"
+        assert probe[:2] == ["uv", "run"], name
+        assert probe[-3:-1] == ["python", "-c"], name
+        assert probe[-1] == governance.PROBE_SCRIPT, name
+        assert "pip-licenses" not in probe, f"{name}: the analyzer tail must be gone"
+    # The probe reads `*.dist-info/METADATA` files off the search path instead of
+    # enumerating `importlib.metadata.distributions()`: resolving a distribution
+    # imports it, so the old probe executed the package it was describing (the
+    # worker graph died and 55 distributions projected as `UNKNOWN`).
+    assert "importlib.metadata as metadata" not in governance.PROBE_SCRIPT.split("\n", 40)[3]
+    assert ".dist-info" in governance.PROBE_SCRIPT
+    assert "email.parser" in governance.PROBE_SCRIPT
+    # Empty `sys.path` entries are dropped: under `python -c` one sits at
+    # `sys.path[0]` and resolves to the CWD, which would describe the checkout's
+    # stray `.dist-info` instead of the venv. `VIRTUAL_ENV`/`sys.prefix` are
+    # added back because a `uv run` environment reaches editable first-party
+    # packages through a `.pth` file.
+    assert "if entry" in governance.PROBE_SCRIPT
+    assert "VIRTUAL_ENV" in governance.PROBE_SCRIPT
+    assert "sys.prefix" in governance.PROBE_SCRIPT
+    # A probe that ran-but-found-nothing must be distinguishable from a crash.
+    assert "probe:ready" in governance.PROBE_SCRIPT
+
+    # Idempotent: feeding the rewritten command back in selects the same
+    # environment again instead of appending a second probe.
+    reused = governance._rewrite_for_probe(probe)
+    assert reused is not None and reused.count(governance.PROBE_SCRIPT) == 1
+    # Not a `uv run` invocation: degrade rather than probe a guess.
+    assert governance._rewrite_for_probe(["python3", "scripts/x.py"]) is None
+    assert governance._rewrite_for_probe(["uv"]) is None
+    assert governance._rewrite_for_probe(["uv", "run"]) is None
+
+
+def test_license_probe_crashes_are_not_read_as_an_empty_probe() -> None:
+    """A dying probe must fail the gate, not look like "no probe data".
+
+    `uv run … python -c <probe>` reports the interpreter's status, and `uv`
+    returns 0 for it, so a probe that raised leaves stdout empty and exit 0 --
+    the exact pair the projection treats as "the probe was not consulted".
+    """
+    governance = _governance_module()
+    check = next(
+        entry
+        for entry in json.loads(CONFIG.read_text(encoding="utf-8"))["checks"]
+        if entry["name"] == "python-licenses-api"
+    )
+    command = [
+        argument.replace("{root}", str(ROOT)).replace("{output_dir}", "/tmp/x")
+        for argument in check["command"]
+    ]
+    probe = governance._rewrite_for_probe(command)
+    status_probe = governance._probe_for_exit_code(probe)
+    assert status_probe is not None
+    assert status_probe[:-1] == probe[:-1]
+    assert status_probe[-1].startswith(governance.PROBE_SCRIPT)
+    assert status_probe[-1].rstrip().endswith("sys.exit(1)")
+
+    # The marker only makes a crash visible: a healthy probe still prints its
+    # answer, and the forced exit only shows up in the process status.
+    broken = "raise RuntimeError('probe is broken')\n"
+    for script in (broken, broken + governance.EXIT_MARKER):
+        completed = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert completed.returncode != 0, completed
+        assert completed.stdout == ""
+
+    # The check that actually runs: the probe answers, and then `uv` still
+    # reports the forced non-zero status -- so the answer is the signal, and a
+    # healthy probe is not failed for exiting 1.
+    healthy = governance.PROBE_SCRIPT + governance.EXIT_MARKER
+    completed = subprocess.run(
+        [sys.executable, "-c", healthy],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 1
+    assert json.loads(completed.stdout.strip().splitlines()[-1]) != {}
+
+    # A command that is not the rewritten probe is refused rather than mangled.
+    assert (
+        governance._probe_for_exit_code(
+            ["uv", "run", "--project", "apps/api", "pip-licenses"]
+        )
+        is None
+    )
+
+
 def test_license_probe_reads_the_three_metadata_sources(tmp_path: Path) -> None:
     """The probe's precedence, executed as the probe itself runs it.
 
@@ -527,6 +651,51 @@ def test_license_probe_reads_the_three_metadata_sources(tmp_path: Path) -> None:
     assert declared["category"]["declared"] == "BSD"
     assert declared["pasted"]["declared"] is None
     assert declared["bare"]["declared"] is None
+
+
+def test_license_probe_reads_distributions_behind_a_pth_file(tmp_path: Path) -> None:
+    """A `.pth`-only distribution must be described, not reported `UNKNOWN`.
+
+    `uv run --project <app>` exposes this repository's editable first-party
+    packages (soymutdb-jobs, soymutdb-import-protocol) through a `.pth` file.
+    `importlib.metadata.distributions(path=sys.path)` does not open those files,
+    so the probe used to describe the *third-party* graph while the analyzer's
+    report listed the first-party packages too -- and every one of them became
+    an `UNKNOWN` finding. That is `python-licenses-worker`'s
+    `normalization_unavailable:license-expressions` (CNB build
+    `cnb-gcb-1k6h13qpn`): a licence gate failing on packages that do declare
+    `MIT`.
+    """
+    governance = _governance_module()
+    site = tmp_path / "site"
+    site.mkdir()
+    metadata = tmp_path / "editable" / "editable-1.0.dist-info"
+    metadata.mkdir(parents=True)
+    (metadata / "METADATA").write_text(
+        "Metadata-Version: 2.5\nName: editable-pkg\nVersion: 1.0\n"
+        "License-Expression: MIT\n",
+        encoding="utf-8",
+    )
+    (site / "editable.pth").write_text(f"{metadata.parent}\n", encoding="utf-8")
+
+    probe_path = tmp_path / "probe.py"
+    probe_path.write_text(governance.PROBE_SCRIPT, encoding="utf-8")
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import site, sys\n"
+            f"site.addsitedir({str(site)!r})\n"
+            "exec(compile(open(sys.argv[1]).read(), sys.argv[1], 'exec'))",
+            str(probe_path),
+        ],
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PYTHONPATH": str(site)},
+        check=True,
+    )
+    declared = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert declared["editable-pkg"]["declared"] == "MIT", declared.get("editable-pkg")
 
 
 def test_undeclared_fixups_are_narrow_and_reviewable(tmp_path: Path) -> None:
@@ -826,6 +995,91 @@ def test_license_check_runner_probes_and_records_the_declaration(
     assert declared["pep639only"]["license_expression"] == "MIT"
 
 
+def test_knip_treats_admin_vitest_doubles_as_entry_points() -> None:
+    """The doubles are reached through `vi.mock`, which Knip cannot follow.
+
+    `vi.mock("@/lib/antd", async () => (await import("../test/antd-double")))`
+    hides the import inside a factory, so every export of a double reported as
+    unused -- 57 of them for `antd-double.tsx` -- and the dependency gate failed
+    on real test infrastructure. Knip has no per-file "exports are consumed by a
+    mock" rule, so the doubles are entry points: removing one still breaks the
+    analysis instead of silently passing.
+    """
+    knip = json.loads((ROOT / "knip.json").read_text(encoding="utf-8"))
+    entry = knip["workspaces"]["apps/admin"]["entry"]
+    assert "src/test/antd-double.tsx" in entry
+    assert "src/test/mocks.ts" in entry
+    assert "src/test/vitest-env.d.ts" in entry
+    # `mocks.ts` ships `mockTranslation`, reached through the same mock-specifier
+    # shape, so flaky-render doubles stay out of the unused-export report too.
+    assert (ROOT / "apps/admin/src/test/mocks.ts").is_file()
+    # The doubles really are mocked, not imported as ordinary modules.
+    admin_sources = list((ROOT / "apps/admin/src").rglob("*.test.tsx"))
+    assert any("test/antd-double" in path.read_text(encoding="utf-8") for path in admin_sources)
+
+
+def test_knip_treats_the_dumi_docs_site_as_a_markdown_driven_workspace() -> None:
+    """The component docs site imports its facade packages from Markdown fences.
+
+    `apps/docs` is a dumi site: the demo code lives in fenced ```tsx blocks
+    inside `docs/**/*.md`, and dumi compiles those blocks into the published
+    pages. Knip 5 does not parse Markdown code fences, so every facade import
+    looked unused and the dependency gate failed on a live documentation app.
+
+    The dependencies are still real — the docs bundle them — so they are
+    declared in the workspace's `ignoreDependencies` instead of being deleted
+    from `apps/docs/package.json`. The entry points keep the Markdown files
+    themselves in the analyzed project.
+    """
+    knip = json.loads((ROOT / "knip.json").read_text(encoding="utf-8"))
+    docs = knip["workspaces"]["apps/docs"]
+    assert ".dumirc.ts" in docs["entry"]
+    assert "docs/**/*.md" in docs["entry"]
+    for package in (
+        "@ant-design/pro-components",
+        "@soymutdb/charts",
+        "@soymutdb/genome-view",
+        "@soymutdb/ui-react",
+        "antd",
+    ):
+        assert package in docs["ignoreDependencies"]
+        # An ignored dependency must still be a declared dependency: the gate
+        # would otherwise hide a genuinely undeclared import.
+        manifest = json.loads((ROOT / "apps/docs/package.json").read_text(encoding="utf-8"))
+        assert package in manifest["dependencies"]
+
+    # The fences the ignore covers must really import those packages.
+    fences = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in (ROOT / "apps/docs/docs").rglob("*.md")
+    )
+    assert 'from "@soymutdb/ui-react"' in fences
+    assert 'from "@soymutdb/charts"' in fences
+    assert 'from "@soymutdb/genome-view"' in fences
+
+
+def test_knip_registers_the_antd_lint_gate_as_an_entry_point() -> None:
+    """`scripts/check-antd-design.mjs` is invoked by the frontend gate shell.
+
+    The gate is a checked-in script that `scripts/verify-frontend-artifacts.sh`
+    runs as `node scripts/check-antd-design.mjs --self-test`. Knip only follows
+    JavaScript imports, so a shell-invoked script looks like dead code unless it
+    is registered as an entry point.
+    """
+    knip = json.loads((ROOT / "knip.json").read_text(encoding="utf-8"))
+    assert "scripts/check-antd-design.mjs" in knip["workspaces"]["."]["entry"]
+    # The CLI package itself is spawned as a subprocess, never imported, so
+    # Knip cannot see the reference either.
+    assert "@ant-design/cli" in knip["ignoreDependencies"]
+    package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+    assert "@ant-design/cli" in package["devDependencies"]
+
+    frontend_gate = (ROOT / "scripts/verify-frontend-artifacts.sh").read_text(encoding="utf-8")
+    assert "node scripts/check-antd-design.mjs --self-test" in frontend_gate
+    contracts = (ROOT / "scripts/test_ci_job_contracts.py").read_text(encoding="utf-8")
+    assert "scripts/check-antd-design.mjs --self-test" in contracts
+
+
 def test_root_scripts_and_knip_configuration_are_executable_contracts() -> None:
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     knip = json.loads((ROOT / "knip.json").read_text(encoding="utf-8"))
@@ -839,6 +1093,10 @@ def test_root_scripts_and_knip_configuration_are_executable_contracts() -> None:
     )
     assert knip["$schema"].endswith("/knip@5/schema.json")
     assert "**/dist/**" in knip["ignore"]
+    # The antd vi-double is reached only through a mock specifier, which knip
+    # cannot follow. Registering it as an entrypoint keeps its 57 exports out of
+    # the unused-export report; without it the Dependency governance gate fails.
+    assert "src/test/antd-double.tsx" in knip["workspaces"]["apps/admin"]["entry"]
 
 
 def test_evidence_is_generated_and_uploaded_before_image_builds() -> None:
@@ -903,3 +1161,809 @@ def test_governance_failures_show_exact_packages_without_changing_verdict(tmp_pa
 
     row.update(name="missing-tool", report="nonexistent.json")
     assert "report unavailable" in module._audit_failure_evidence(row, tmp_path)[0]
+
+
+def test_deptry_array_report_prints_real_findings(tmp_path: Path) -> None:
+    """A red deptry must name the offending import, not complain about shape.
+
+    deptry 0.23.1's ``--json-output`` is a top-level array: ``[]`` on a pass,
+    one entry per finding on a failure. The availability check only parses the
+    JSON, so an array is "available" and never affects the verdict; but the
+    failure diagnostic used to require a dict and printed only
+    ``unexpected report shape``. That cost a debugging cycle on PR #107 (the
+    anyio DEP003 failure) and would cost the next one too.
+    """
+    governance = _governance_module()
+    report = tmp_path / "deptry-api.json"
+    report.write_text(json.dumps([
+        {
+            "error": {
+                "code": "DEP003",
+                "message": "'anyio' imported but it is a transitive dependency",
+            },
+            "module": "anyio",
+            "location": {"file": "app/services/sequence_tools_service.py", "line": 11, "column": 8},
+        },
+        {
+            "error": {
+                "code": "DEP003",
+                "message": "'anyio' imported but it is a transitive dependency",
+            },
+            "module": "anyio",
+            "location": {"file": "app/services/interval_overlap_service.py", "line": 19, "column": 8},
+        },
+    ]), encoding="utf-8")
+    row = {
+        "name": "deptry-api", "status": "failed",
+        "reason": "analyzer_exit_nonzero", "report": report.name,
+    }
+    lines = governance._audit_failure_evidence(row, tmp_path)
+    joined = " ".join(lines)
+    assert "DEP003" in joined, lines
+    assert "anyio" in joined, lines
+    assert "sequence_tools_service.py:11" in joined, lines
+    assert "interval_overlap_service.py:19" in joined, lines
+    assert "unexpected report shape" not in joined, lines
+    # Diagnostic only: the verdict is unchanged.
+    assert row["status"] == "failed"
+    assert row["reason"] == "analyzer_exit_nonzero"
+
+
+def test_deptry_empty_array_on_a_pass_is_not_a_failure_diagnostic(tmp_path: Path) -> None:
+    """The array branch must stay unreachable on a passing check."""
+    governance = _governance_module()
+    report = tmp_path / "deptry-api.json"
+    report.write_text("[]", encoding="utf-8")
+    row = {
+        "name": "deptry-api", "status": "passed",
+        "reason": "passed", "report": report.name,
+    }
+    assert governance._audit_failure_evidence(row, tmp_path) == []
+    assert governance._report_is_available(report, "json") is True
+
+
+def test_non_deptry_array_report_still_reports_shape(tmp_path: Path) -> None:
+    """Only deptry promises an array; other analyzers keep the dict contract."""
+    governance = _governance_module()
+    report = tmp_path / "knip.json"
+    report.write_text("[]", encoding="utf-8")
+    row = {
+        "name": "knip", "status": "failed",
+        "reason": "analyzer_exit_nonzero", "report": report.name,
+    }
+    assert "unexpected report shape" in " ".join(
+        governance._audit_failure_evidence(row, tmp_path)
+    )
+
+
+def test_pip_audit_checks_are_judged_by_the_acceptance_record() -> None:
+    """The acceptance record is the vulnerability policy, for both analyzers.
+
+    `pip-audit-*` declared no `normalize`, so the gate recorded every one of
+    them as `normalization_unavailable:accepted-advisories` and no signature
+    could ever change a Python finding. Builds cnb-1s0-1k6h45gk9 (main) and
+    cnb-t3b-1k6h4teke (this PR) failed identically on newly published
+    `certifi` / `pillow` advisories against unchanged locks, with the record at
+    `security/advisory-acceptances.json` empty and therefore unused.
+
+    Declaring the gate must not soften it: a finding nothing accepts is still a
+    failure, and the accepted ones stay visible with their expiry.
+    """
+    policy = json.loads(CONFIG.read_text(encoding="utf-8"))
+    audited = [
+        check for check in policy["checks"] if check["name"].startswith("pip-audit-")
+    ]
+    assert audited, "the policy must keep its Python vulnerability gates"
+    for check in audited:
+        assert check.get("normalize") == "accepted-advisories", check["name"]
+        assert (
+            check.get("accept_file") == "security/advisory-acceptances.json"
+        ), check["name"]
+
+    governance = _governance_module()
+    report = Path(tempfile.mkdtemp()) / "soymutdb-pip-audit-probe.json"
+    report.write_text(
+        json.dumps(
+            {
+                "dependencies": [
+                    {
+                        "name": "certifi",
+                        "version": "2026.7.22",
+                        "vulns": [
+                            {"id": "PYSEC-2026-4320", "fix_versions": ["2026.10.18"]}
+                        ],
+                    },
+                    {
+                        "name": "pillow",
+                        "version": "12.3.0",
+                        "vulns": [{"id": "GHSA-22hg-r758-rrw9", "fix_versions": []}],
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    # Empty record: both findings fail, exactly as the CI gate reported them.
+    passed, findings, accepted = governance.evaluate_pip_audit_report(report, [])
+    assert not passed
+    assert accepted == []
+    assert any("PYSEC-2026-4320" in finding for finding in findings)
+    assert any("GHSA-22hg-r758-rrw9" in finding for finding in findings)
+
+    # A signed acceptance for one advisory clears only that advisory.
+    from datetime import date, timedelta
+
+    today = date.today()
+    acceptance = {
+        "advisory": "PYSEC-2026-4320",
+        "package": "certifi",
+        "vulnerable_range": "==2026.7.22",
+        "title": "probe",
+        "introduced_by": "certifi",
+        "severity_reached": "high",
+        "reachability": ["probe only"],
+        "rationale": "probe only",
+        "accepted_by": "probe-approver",
+        "accepted_on": today.isoformat(),
+        "expires_on": (today + timedelta(days=14)).isoformat(),
+        "review": "probe only",
+    }
+    record = report.parent / "soymutdb-acceptance-probe.json"
+
+    record.write_text(
+        json.dumps({"schema_version": 1, "acceptances": [acceptance]}),
+        encoding="utf-8",
+    )
+    try:
+        entries = governance.load_advisory_acceptances(record, today=today)
+        passed, findings, accepted = governance.evaluate_pip_audit_report(
+            report, entries
+        )
+        assert not passed, "an unaccepted second advisory must still fail"
+        assert [item["advisory"] for item in accepted] == ["PYSEC-2026-4320"]
+        assert any("GHSA-22hg-r758-rrw9" in finding for finding in findings)
+        # Accepted findings stay in the evidence, with the expiry.
+        row = {
+            "name": "pip-audit-api",
+            "status": "passed",
+            "report": "pip-audit-api.json",
+            "accepted": accepted,
+        }
+        evidence = governance._audit_failure_evidence(row, report.parent)
+        assert any("PYSEC-2026-4320" in line for line in evidence)
+
+        # Expired: back to a failure, never a warning.
+        expired = dict(acceptance, expires_on="2020-01-01")
+        record.write_text(
+            json.dumps({"schema_version": 1, "acceptances": [expired]}),
+            encoding="utf-8",
+        )
+        entries = governance.load_advisory_acceptances(record, today=today)
+        passed, findings, accepted = governance.evaluate_pip_audit_report(
+            report, entries
+        )
+        assert not passed
+        assert accepted and accepted[0]["expired"] is True
+    finally:
+        record.unlink(missing_ok=True)
+        report.unlink(missing_ok=True)
+
+
+def test_pip_audit_projection_refuses_a_payload_it_cannot_read() -> None:
+    """A malformed report is a policy error, never a pass."""
+    governance = _governance_module()
+    for payload in ('{"dependencies": null}', "[]", '{"dependencies": {}}'):
+        with pytest.raises(governance.AcceptancePolicyError):
+            governance._pip_audit_advisories(json.loads(payload))
+
+    # An empty but well-formed report is a clean pass, not an error.
+    empty = Path(tempfile.mkdtemp()) / "soymutdb-pip-clean.json"
+    empty.write_text('{"dependencies": []}', encoding="utf-8")
+    assert governance.evaluate_pip_audit_report(empty, [])[0] is True
+
+
+def test_declared_license_probe_reads_metadata_without_importing_a_distribution(
+    tmp_path: Path,
+) -> None:
+    """The probe must not execute the code of the package it is describing.
+
+    The probe used to enumerate `importlib.metadata.distributions(path=...)`.
+    Resolving a distribution imports it, so running the probe against the
+    worker graph imported `soymutdb_worker`, the probe subprocess exited
+    non-zero, and every one of the 55 worker distributions projected as
+    `UNKNOWN` (build cnb-u4g-1k6h29nbb-001) -- a licensing verdict produced by a
+    probe that never ran.
+
+    Proves both halves: the probe never imports the distribution's module, and
+    it still reads a PEP 639 `License-Expression` out of `*.dist-info/METADATA`.
+    """
+    governance = _governance_module()
+    site = tmp_path / "site"
+    package = site / "probe_package"
+    package.mkdir(parents=True)
+    # Importing this would fail the test loudly, which is the point.
+    (package / "__init__.py").write_text(
+        "raise SystemExit('the license probe must not import distributions')\n",
+        encoding="utf-8",
+    )
+    dist_info = site / "probe_package-1.0.dist-info"
+    dist_info.mkdir()
+    (dist_info / "METADATA").write_text(
+        "Metadata-Version: 2.4\n"
+        "Name: probe-package\n"
+        "Version: 1.0\n"
+        "License-Expression: MIT\n",
+        encoding="utf-8",
+    )
+
+    completed = subprocess.run(
+        [sys.executable, "-c", governance.PROBE_SCRIPT],
+        cwd=str(tmp_path),
+        env={**os.environ, "PYTHONPATH": str(site), "VIRTUAL_ENV": str(site)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    declared = json.loads(completed.stdout.strip().splitlines()[-1])
+    assert declared["probe-package"]["license_expression"] == "MIT"
+    assert declared["probe-package"]["declared"] == "MIT"
+
+
+def test_declared_license_probe_failure_is_explained_not_silent(capsys) -> None:
+    """A probe that cannot run must say so instead of reporting `UNKNOWN`.
+
+    When the probe fails, `_declared_license` keeps the analyzer's `UNKNOWN` for
+    every package, so the gate reports a wall of licensing findings that has
+    nothing to do with licensing. The failure is printed to stderr so the next
+    reader sees the real cause.
+    """
+    governance = _governance_module()
+    original = governance.subprocess.run
+
+    class _Failed:
+        returncode = 1
+        stdout = ""
+        stderr = "RuntimeError: the worker cannot import on this interpreter\n"
+
+    try:
+        governance.subprocess.run = lambda *a, **k: _Failed()  # type: ignore[assignment]
+        probe = governance._probe_declared_licenses(
+            ["uv", "run", "--project", "apps/worker", "pip-licenses"]
+        )
+    finally:
+        governance.subprocess.run = original  # type: ignore[assignment]
+
+    assert probe == {}
+    captured = capsys.readouterr()
+    assert "declared-license probe failed" in captured.err
+    assert "the worker cannot import on this interpreter" in captured.err
+def test_uv_lock_requires_dist_matches_each_pyproject() -> None:
+    """A hand-edited lock must not leave a stale dependency specifier behind.
+
+    pip-audit-* runs ``uv export --locked`` and python-licenses-* runs
+    ``uv run --locked``; both refuse a lock whose root ``requires-dist`` no
+    longer describes pyproject.toml. Bumping a floor (e.g. fastmcp>=3.4.10)
+    in pyproject without regenerating the lock therefore fails the whole
+    Dependency governance stage, not just the analyzer that reads the bump.
+    """
+    import tomllib
+
+    def normalize(name: str) -> str:
+        return re.sub(r"[-_.]+", "-", name).lower()
+
+    def requirements(entries: list[str]) -> dict[str, str]:
+        parsed: dict[str, str] = {}
+        for entry in entries:
+            match = re.match(r"^([A-Za-z0-9._-]+)\s*(?:\[[^\]]*\])?\s*(.*)$", entry.strip())
+            assert match is not None, f"unparsable requirement: {entry}"
+            name, specifier = match.group(1), match.group(2).strip()
+            parsed[normalize(name)] = specifier
+        return parsed
+
+    for app in ("api", "worker", "mcp-server"):
+        project = tomllib.loads((ROOT / f"apps/{app}/pyproject.toml").read_text(encoding="utf-8"))
+        lock = tomllib.loads((ROOT / f"apps/{app}/uv.lock").read_text(encoding="utf-8"))
+        root = next(
+            package
+            for package in lock["package"]
+            if package.get("source", {}).get("editable") == "."
+        )
+        declared = requirements(project["project"]["dependencies"])
+        # A dependency may appear more than once in requires-dist (once for the
+        # main set, once behind an `extra == ...` marker). Compare against the
+        # non-extra entries only, so a dev/test variant cannot mask a stale
+        # main specifier, while still keeping the check independent of how uv
+        # chooses to order or split markers.
+        locked = {
+            normalize(item["name"]): item.get("specifier", "")
+            for item in root["metadata"]["requires-dist"]
+            if "extra ==" not in item.get("marker", "")
+        }
+        # uv records a local path dependency without a specifier (the version
+        # lives in `source.directory` instead), so an empty lock specifier is
+        # only a mismatch when the package is not a local workspace package.
+        local = {
+            normalize(item["name"])
+            for item in lock["package"]
+            if "directory" in item.get("source", {})
+        }
+        stale = {
+            name: (specifier, locked.get(name))
+            for name, specifier in declared.items()
+            if name not in local and locked.get(name) != specifier
+        }
+        assert not stale, (
+            f"apps/{app}/uv.lock requires-dist is stale; run `uv lock --project apps/{app}`: "
+            f"{stale}"
+        )
+
+
+def test_hanging_analyzer_is_named_instead_of_killing_the_stage(
+    tmp_path: Path,
+) -> None:
+    """A stuck analyzer must fail by name, not take the stage down silently.
+
+    CNB kills a stage that prints nothing for ten minutes. Before the ceiling
+    existed, `subprocess.run` waited forever, so a hung `uv run` compiling the
+    worker's science stack produced
+
+        error: task exceeded 10m with no output and was forcibly closed
+
+    with no record of *which* analyzer was running -- and the checks after it
+    never produced their evidence either. This pins both halves: the slow check
+    is reported as `analyzer_timeout`, and the healthy check behind it still
+    passes.
+    """
+    config = tmp_path / "hangs.json"
+    config.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "checks": [
+                    {
+                        "name": "slow-tool",
+                        "category": "knip",
+                        "command": [sys.executable, "-c", "import time; time.sleep(60)"],
+                        "timeout_seconds": 1,
+                        "report": {
+                            "mode": "stdout",
+                            "path": "slow-tool.json",
+                            "format": "json",
+                        },
+                    },
+                    {
+                        "name": "healthy-tool",
+                        "category": "knip",
+                        "command": [sys.executable, "-c", "print('{}')"],
+                        "report": {
+                            "mode": "stdout",
+                            "path": "healthy-tool.json",
+                            "format": "json",
+                        },
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "audit",
+            "--config",
+            str(config),
+            "--output",
+            str(reports),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 1
+    summary = json.loads((reports / "summary.json").read_text(encoding="utf-8"))
+    by_name = {check["name"]: check for check in summary["checks"]}
+
+    assert by_name["slow-tool"]["status"] == "failed"
+    assert by_name["slow-tool"]["reason"] == "analyzer_timeout:1s"
+    assert by_name["healthy-tool"]["status"] == "passed"
+
+    stderr = (reports / "slow-tool.stderr.log").read_text(encoding="utf-8")
+    assert "exceeded its 1s ceiling" in stderr
+    assert "python" in stderr
+
+
+def test_malformed_analyzer_timeout_is_a_policy_error(tmp_path: Path) -> None:
+    """A bad ceiling must fail before any analyzer starts, not mid-build."""
+    config = tmp_path / "bad-timeout.json"
+    config.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "checks": [
+                    {
+                        "name": "odd-tool",
+                        "category": "knip",
+                        "command": [sys.executable, "-c", "print('{}')"],
+                        "timeout_seconds": 0,
+                        "report": {
+                            "mode": "stdout",
+                            "path": "odd-tool.json",
+                            "format": "json",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "audit",
+            "--config",
+            str(config),
+            "--output",
+            str(tmp_path / "reports"),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "timeout_seconds must be a positive integer" in result.stderr
+
+
+def test_every_subprocess_the_runner_launches_is_bounded() -> None:
+    """The runner may not leave any child without a wall-clock ceiling.
+
+    PR #39 failed `Dependency governance` with
+
+        error: 任务超过(10m0s)没有任何输出而被强制关闭
+
+    for 10m28s, and the log never named an analyzer. The per-check ceiling
+    added for #34 covered `_run_check`, but this runner launches three more
+    children of its own -- the declared-license probe, its status re-run, and
+    the exit-code probe -- and `python-licenses-*` is precisely the family that
+    compiles the worker's science stack. An unbounded one of those rebuilds the
+    original failure from inside the code that exists to explain it, and does it
+    with the whole stage's evidence forfeited.
+
+    Asserted on the AST so a fourth `subprocess.run` added later cannot pass by
+    simply being written in a file nobody re-reads.
+    """
+    governance = _governance_module()
+    governance_source = governance.__file__
+    assert governance_source is not None
+    tree = ast.parse(Path(governance_source).read_text(encoding="utf-8"))
+    launches = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr in {"run", "check_output", "call", "Popen", "check_call"}
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "subprocess"
+    ]
+    assert launches, "the dependency runner is expected to launch analyzers"
+    for call in launches:
+        keywords = {keyword.arg for keyword in call.keywords}
+        # `call.func` is narrowed by the comprehension above but not inside this
+        # f-string, so name the attribute explicitly.
+        assert isinstance(call.func, ast.Attribute)
+        called = call.func.attr
+        assert "timeout" in keywords, (
+            f"subprocess.{called} at line {call.lineno} has no timeout: "
+            "a hung child silently kills the stage and discards every evidence file"
+        )
+
+
+def test_a_hung_license_probe_is_reported_instead_of_killing_the_stage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A probe that never answers must keep its own diagnosis, not hang.
+
+    `_probe_declared_licenses` already treats "no probe data" as "judge by the
+    analyzer's own column", and the status probe already treats an empty answer
+    as `probe_produced_no_declarations`. Both were reachable only by a probe that
+    finished; a probe that stalled could not reach either, so the ceiling turns
+    the hang into the state the caller already knows how to describe.
+    """
+    governance = _governance_module()
+    monkeypatch.setattr(governance, "PROBE_TIMEOUT_SECONDS", 1, raising=False)
+
+    def hang(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        expired = subprocess.TimeoutExpired(cmd=["uv", "run", "python", "-c"], timeout=1)
+        # `TimeoutExpired.stdout`/`.stderr` are declared `bytes | None`; the
+        # subprocess module stores whatever it captured, so use bytes rather
+        # than a str literal that only type-checks by accident.
+        expired.stdout = b"partial stdout\n"
+        expired.stderr = b"building cyvcf2\n"
+        return governance._kill_on_timeout(expired, 1, "declared-license probe")
+
+    stalled = {}
+
+    def fake_run(command: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        stalled["timeout"] = kwargs.get("timeout")
+        if kwargs.get("timeout") is None:
+            raise AssertionError("the probe was launched without a ceiling")
+        return hang()
+
+    monkeypatch.setattr(governance.subprocess, "run", fake_run)
+    check = next(
+        entry
+        for entry in json.loads(CONFIG.read_text(encoding="utf-8"))["checks"]
+        if entry["name"] == "python-licenses-worker"
+    )
+    command = [
+        argument.replace("{root}", str(ROOT)).replace("{output_dir}", "/tmp/x")
+        for argument in check["command"]
+    ]
+    # The stall is a timeout, not a wrong answer: no probe data, and no
+    # exception escaping to turn the whole audit into a traceback.
+    assert governance._probe_declared_licenses(command) == {}
+    assert stalled["timeout"] == 1
+
+
+def test_the_audit_announces_each_analyzer_before_it_runs(tmp_path: Path) -> None:
+    """A run that only prints at the end is indistinguishable from a dead one.
+
+    CNB's rule is about output, not duration: a stage is killed after ten silent
+    minutes. The per-check ceiling bounds any single analyzer, but the log has to
+    name the analyzer that is currently in flight for that bound to be useful to
+    whoever reads the failure.
+    """
+    config = tmp_path / "two-checks.json"
+    config.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "checks": [
+                    {
+                        "name": f"tool-{index}",
+                        "category": "knip",
+                        "command": [sys.executable, "-c", "print('{}')"],
+                        "report": {
+                            "mode": "stdout",
+                            "path": f"tool-{index}.json",
+                            "format": "json",
+                        },
+                    }
+                    for index in (1, 2)
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "audit",
+            "--config",
+            str(config),
+            "--output",
+            str(tmp_path / "reports"),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "[1/2] tool-1: running" in result.stdout
+    assert "[2/2] tool-2: running" in result.stdout
+    assert "tool-1: passed (passed)" in result.stdout
+
+
+def test_pip_audit_policy_never_reresolves_the_audited_graph() -> None:
+    """Build cnb-40u-1k6jjga6d: `pip-audit-worker: failed (analyzer_timeout:240s)`.
+
+    The audited graph is fully pinned by `uv export --locked`, but pip-audit
+    resolved it again in a throwaway virtualenv unless told otherwise, and a
+    resolution that builds the worker's science sdists on CPython 3.15 outlives
+    any ceiling this gate can afford. `--disable-pip` (with `--no-deps`, the one
+    combination that may skip pip without hashes) audits the exported pins
+    directly; `--no-header` drops `uv export`'s command comment, which pip-audit
+    would otherwise have to parse.
+    """
+    policy = json.loads(CONFIG.read_text(encoding="utf-8"))
+    pip_audits = [
+        check for check in policy["checks"] if check["name"].startswith("pip-audit-")
+    ]
+    assert len(pip_audits) == 3
+    for check in pip_audits:
+        script = check["command"][-1]
+        assert "--disable-pip" in script, check["name"]
+        assert "--no-deps" in script, check["name"]
+        assert "uv export --locked" in script, check["name"]
+        assert "--no-header" in script, check["name"]
+        # The audited pins are the evidence this check names.
+        assert check["normalize_recipe"].startswith("/tmp/")
+        assert check["normalize_recipe"] in script
+
+
+def test_a_mutating_audit_command_is_refused_even_when_it_exits_zero(
+    tmp_path: Path,
+) -> None:
+    """An audit that rewrites its own input cannot report on it.
+
+    `pip-audit --fix` (and `--dry-run`) run the resolver and write the
+    normalized requirements file back, then exit 0. Judged by exit status alone
+    that is a pass over a graph the run just edited.
+    """
+    governance = _governance_module()
+    for command in (
+        ["bash", "-c", "pip-audit --fix -r requirements.txt"],
+        ["bash", "-c", "pip-audit --dry-run -r requirements.txt"],
+    ):
+        assert governance._harms_audited_input(command) is True
+    for command in (
+        ["bash", "-c", "pip-audit --no-deps --disable-pip -r requirements.txt"],
+        "pip-audit --fix",
+        None,
+    ):
+        assert governance._harms_audited_input(command) is False
+
+    config = tmp_path / "mutating.json"
+    config.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "checks": [
+                    {
+                        "name": "pip-audit-probe",
+                        "category": "vulnerabilities",
+                        "command": [sys.executable, "-c", "print('{\"dependencies\": []}')"],
+                        "mutating_command": ["bash", "-c", "pip-audit --fix -r x"],
+                        "report": {
+                            "mode": "stdout",
+                            "path": "pip-audit-probe.json",
+                            "format": "json",
+                        },
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "audit",
+            "--config",
+            str(config),
+            "--output",
+            str(tmp_path / "reports"),
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 1, result.stdout
+    assert "mutating_command_forbidden" in result.stdout
+    summary = json.loads((tmp_path / "reports/summary.json").read_text(encoding="utf-8"))
+    assert summary["checks"][0]["status"] == "failed"
+    # The in-process report handle is not evidence and must not be serialized.
+    assert "report_path" not in summary["checks"][0]
+
+
+def test_an_acceptance_follows_the_pin_it_was_written_for() -> None:
+    """A renewal for `==1.2.3` says nothing about `==1.2.4`.
+
+    Acceptances are written against what the audit reported. Once the audited
+    pin moves -- a dependency bump, a re-exported lock -- the old record has to
+    stop matching, or an approval outlives the finding it was written for. A
+    newly published repair version is the other direction: it changes the
+    finding's `fixed=` list without changing the pin, and must not invalidate a
+    record about that same pin.
+    """
+    governance = _governance_module()
+
+    def same(reported: str, accepted: str) -> bool:
+        return governance._same_audited_pin(reported, accepted)
+
+    assert same("vulnerable===1.2.3; fixed=1.2.4, 1.3.0", "vulnerable===1.2.3; fixed=")
+    assert same(
+        "vulnerable===1.2.3; fixed=1.2.4, 1.3.0",
+        "vulnerable===1.2.3; fixed=1.2.4",
+    )
+    assert not same(
+        "vulnerable===1.2.4; fixed=1.2.5", "vulnerable===1.2.3; fixed=1.2.4"
+    )
+    assert not same(
+        "vulnerable===1.2.3; fixed=1.2.4", "vulnerable===1.2.3; fixed=1.3.0"
+    )
+
+
+def test_a_resolver_free_audit_still_judges_every_exported_pin(tmp_path: Path) -> None:
+    """The mitigation must not turn "no write-back" into "no findings".
+
+    `pip-audit --disable-pip` never produces the normalized requirements file
+    that the `--fix` pass used to write back, so a run can exit 0 without a
+    report. The policy names the pins it audited; the runner rebuilds the
+    report from them only after checking every pin still matches, which is the
+    same concession `--fix` made minus the rewrite.
+    """
+    governance = _governance_module()
+    requirements = tmp_path / "worker-audit-requirements.txt"
+    requirements.write_text(
+        """# This file was autogenerated by uv via the following command:
+celery==5.7.0
+cyvcf2==0.33.0 \\
+    --hash=sha256:deadbeef
+numpy==2.3.4 ; python_version >= '3.11'
+soymutdb-jobs @ file:///workspace/packages/jobs-py
+""",
+        encoding="utf-8",
+    )
+    assert governance._pinned_requirements(requirements) == [
+        {"name": "celery", "version": "5.7.0"},
+        {"name": "cyvcf2", "version": "0.33.0"},
+        {"name": "numpy", "version": "2.3.4"},
+    ]
+
+    report = tmp_path / "pip-audit-worker.json"
+    row = {
+        "name": "pip-audit-worker",
+        "exit_code": 0,
+        "report": report.name,
+        "report_available": False,
+        "report_path": report,
+        "status": "passed",
+    }
+    check = {
+        "normalize_recipe": str(requirements),
+        "normalize_recipe_note": "input: the exported pins",
+    }
+    Path(f"{requirements}.accepted.json").write_text(
+        json.dumps(
+            {
+                "dependencies": [
+                    {"name": "celery", "version": "5.7.0"},
+                    {"name": "cyvcf2", "version": "0.33.0"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert governance._prepare_acceptance_report(check, row) is False
+    assert row["status"] == "failed"
+    assert row["reason"].startswith("normalize_recipe_stale")
+
+    row.update({"status": "passed"})
+    Path(f"{requirements}.accepted.json").write_text(
+        json.dumps(
+            {
+                "dependencies": [
+                    {"name": "celery", "version": "5.7.0"},
+                    {"name": "cyvcf2", "version": "0.33.0"},
+                    {"name": "numpy", "version": "2.3.4"},
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert governance._prepare_acceptance_report(check, row) is None
+    assert row["status"] == "passed"
+    assert row["report_available"] is True
+    rebuilt = json.loads(report.read_text(encoding="utf-8"))
+    assert [entry["name"] for entry in rebuilt["dependencies"]] == [
+        "celery",
+        "cyvcf2",
+        "numpy",
+    ]
+    assert governance.evaluate_pip_audit_report(report, []) == (True, [], [])

@@ -63,6 +63,7 @@ describe("tools (public, no auth)", () => {
       expect(JSON.parse(init.body as string)).toEqual({
         assembly: "GmWm82.a2.v1",
         genes: ["Glyma.01G000100"],
+        region: null,
       });
       assertNoAuth(init);
       expect(result).toEqual(response);
@@ -93,6 +94,7 @@ describe("tools (public, no auth)", () => {
       expect(JSON.parse(init.body as string)).toEqual({
         assembly: "GmWm82.a2.v1",
         region: "chr1:1000-2000",
+        genes: null,
       });
       assertNoAuth(init);
       expect(result).toEqual(response);
@@ -136,6 +138,7 @@ describe("tools (public, no auth)", () => {
       const result = await runEnrichment({
         assembly_id: 5,
         genes: ["Glyma.01G000100", "Glyma.01G000200"],
+        values: null,
         mode: "ora",
         ontology: "go",
         p_threshold: 0.05,
@@ -149,6 +152,7 @@ describe("tools (public, no auth)", () => {
       expect(JSON.parse(init.body as string)).toEqual({
         assembly_id: 5,
         genes: ["Glyma.01G000100", "Glyma.01G000200"],
+        values: null,
         mode: "ora",
         ontology: "go",
         p_threshold: 0.05,

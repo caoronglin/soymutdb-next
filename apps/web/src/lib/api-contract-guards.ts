@@ -11,7 +11,12 @@
  * The guard checks only the fields that make a record usable for rendering
  * coordinates; everything else stays optional and degrades to the empty state.
  */
-import type { GeneDetail, MutantLineDetail, NewsDetail } from "@soymutdb/api-client";
+import type {
+  GeneDetail,
+  MutantLineDetail,
+  NewsDetail,
+  RegionStructure,
+} from "@soymutdb/api-client";
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -50,9 +55,29 @@ export function isMutantLineDetailRecord(value: unknown): value is MutantLineDet
 }
 
 /**
- * News-detail guard. Requires the bilingual title/body fields the page renders;
- * a list envelope (`{items: []}`) or an error body must fall through to the
- * not-found/error Result instead of rendering `undefined` fields.
+ * Region-structure guard (`GET /genes/region-structure`).
+ *
+ * The gene page's genome view maps `genes` into tracks and clamps its window to
+ * `chromosome_length`, so a list-shaped body or a `{items: []}` envelope must
+ * read as "no context": reading `start`/`end` off it would otherwise produce a
+ * window of `undefined` and a picture with no genes claiming to be complete.
+ */
+export function isRegionStructureRecord(value: unknown): value is RegionStructure {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.chromosome === "string" &&
+    record.chromosome.length > 0 &&
+    isFiniteNumber(record.start) &&
+    isFiniteNumber(record.end) &&
+    Array.isArray(record.genes)
+  );
+}
+
+/**
+ * News-detail guard. Same failure mode as the gene page, on the fields the page
+ * renders: a list envelope (`{items: []}`) or an error body must fall through to
+ * the not-found/error Result instead of rendering `undefined` fields.
  */
 export function isNewsDetailRecord(value: unknown): value is NewsDetail {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;

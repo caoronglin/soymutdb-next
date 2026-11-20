@@ -553,6 +553,81 @@ services:
     restart: unless-stopped
 
   # ------------------------------------------------------------------
+  # Go gateway — serving layer for the admin console (opt-in, phase A).
+  #
+  # An ADDITIONAL front door, not a replacement: the nginx service above stays
+  # the default `core` entry point and nothing here changes it. This profile
+  # serves the built admin artifact, answers /healthz + /readyz, serves
+  # /api/v1/stats/homepage itself and reverse-proxies the rest of /api/* to the
+  # Python API. It adds no write path and no new data store.
+  #
+  #   docker compose --profile core --profile gateway up -d
+  #
+  # `api` and `postgres` live in the `core` profile, so both profiles must be
+  # selected: `--profile gateway` alone stops with "depends on undefined
+  # service". The gateway stays out of `core`, so a normal `--profile core`
+  # deployment does not start it and nginx remains the only front door.
+  #
+  # The image is referenced by digest like every other release service, but NO
+  # pipeline builds/scans/signs it yet: scripts/list-images.sh has no gateway
+  # entry, so GATEWAY_IMAGE_REF must currently be produced out-of-band from
+  # apps/gateway-go/Dockerfile. See docs/dev/go-gateway.md.
+  #
+  # The admin console is a static artifact, not an image, so it is mounted
+  # read-only from the built directory (the same one Cloudflare Pages serves).
+  # ------------------------------------------------------------------
+  gateway:
+    <<: *app-runtime
+    profiles: [ "gateway" ]
+    image: ${GATEWAY_IMAGE_REF:?GATEWAY_IMAGE_REF is required as image@sha256 - build it from apps/gateway-go/Dockerfile, see docs/dev/go-gateway.md}
+    depends_on:
+      api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      SOYMUTDB_GATEWAY_ADDR: ":18020"
+      SOYMUTDB_GATEWAY_STATIC_DIR: /srv/admin
+      # api-local is the api service's api-proxy alias: the API trusts
+      # forwarding headers only from that subnet (SOYMUTDB_FORWARDED_ALLOW_IPS).
+      SOYMUTDB_GATEWAY_UPSTREAM_URL: http://api-local:8010
+      SOYMUTDB_GATEWAY_PROXY_TIMEOUT: ${SOYMUTDB_GATEWAY_PROXY_TIMEOUT:-30s}
+      SOYMUTDB_GATEWAY_READ_TIMEOUT: ${SOYMUTDB_GATEWAY_READ_TIMEOUT:-5m}
+      SOYMUTDB_GATEWAY_RATE_LIMIT_RATE: ${SOYMUTDB_GATEWAY_RATE_LIMIT_RATE:-30}
+      SOYMUTDB_GATEWAY_RATE_LIMIT_BURST: ${SOYMUTDB_GATEWAY_RATE_LIMIT_BURST:-60}
+      SOYMUTDB_GATEWAY_RATE_LIMIT_CLIENTS: ${SOYMUTDB_GATEWAY_RATE_LIMIT_CLIENTS:-4096}
+      # Read-only: the gateway forces default_transaction_read_only=on on the
+      # session and only reads the published-release aggregate.
+      SOYMUTDB_DATABASE_URL: postgresql+asyncpg://soymutdb:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/soymutdb
+    ports:
+      - "127.0.0.1:${GATEWAY_PORT:-8083}:18020"
+    volumes:
+      - ${GATEWAY_ADMIN_DIST:-./apps/admin/dist}:/srv/admin:ro
+    networks:
+      # postgres is reachable on the default network only; api-local is the
+      # api-proxy alias that makes the API trust the gateway's forwarding
+      # headers.
+      default:
+      api-proxy:
+    tmpfs:
+      - /tmp
+    read_only: true
+    healthcheck:
+      # /readyz, not /healthz: this front door is healthy only when the artifact
+      # is mounted and the upstream answers. busybox wget comes from the alpine
+      # base of apps/gateway-go/Dockerfile.
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:18020/readyz" ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: ${GATEWAY_MEMORY_LIMIT:-256m}
+    cpus: ${GATEWAY_CPU_LIMIT:-1.0}
+    pids_limit: ${GATEWAY_PIDS_LIMIT:-256}
+    stop_grace_period: ${GATEWAY_STOP_GRACE_PERIOD:-15s}
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
   # Cloudflare Tunnel origin and connector (optional)
   #
   # The connector is isolated on cloudflare-edge and can reach application

@@ -8,6 +8,16 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ..core.compat import StrEnum
+from .gene_evidence import (
+    AnnotationSection,
+    EvidenceTag,
+    ExpressionSection,
+    HomologSection,
+    LiteratureSection,
+    PhenotypeSection,
+    SequenceAvailability,
+    VariantSection,
+)
 
 
 class Strand(StrEnum):
@@ -52,6 +62,11 @@ class GeneResponse(BaseModel):
     gene_id: str | None = None
     assembly_id: str | None = None
     assembly_name: str | None = None
+    #: The release this record was resolved in. The portal is required to show
+    #: assembly *and* release context on an entity page, so both travel with
+    #: the record rather than being inferred by the client.
+    release_id: str | None = None
+    release_name: str | None = None
     chromosome: str
     name: str | None = None
     symbol: str | None = None
@@ -94,6 +109,22 @@ class GeneDetail(GeneResponse):
     aliases: list[str] = Field(default_factory=list)
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    #: Per-molecule availability (genomic/CDS/transcript/protein). Always
+    #: present; a disabled entry carries a machine-readable ``reason`` instead
+    #: of a fabricated sequence.
+    sequences: list[SequenceAvailability] = Field(default_factory=list)
+    #: How the gene model itself came to exist (predicted/curated/imported).
+    #: ``None`` when the source record does not say — never guessed.
+    model_evidence: EvidenceTag | None = None
+    #: Optional blocks. Each carries its own status, so "this gene has none"
+    #: and "this release never imported them" stay distinguishable. Optional on
+    #: the wire: an older API build omits them rather than sending empty lists.
+    annotation_section: AnnotationSection | None = None
+    homolog_section: HomologSection | None = None
+    expression_section: ExpressionSection | None = None
+    variants_section: VariantSection | None = None
+    phenotype_section: PhenotypeSection | None = None
+    literature_section: LiteratureSection | None = None
 
 
 class ExonResponse(BaseModel):
@@ -203,9 +234,7 @@ class GeneListParams(BaseModel):
     @classmethod
     def _validate_sort_by(cls, value: str) -> str:
         if value not in GENE_SORT_COLUMNS:
-            raise ValueError(
-                f"sort_by must be one of {', '.join(GENE_SORT_COLUMNS)}"
-            )
+            raise ValueError(f"sort_by must be one of {', '.join(GENE_SORT_COLUMNS)}")
         return value
 
     @field_validator("sort_dir")
@@ -228,3 +257,101 @@ class GeneListResponse(BaseModel):
 
 
 GeneDetail.model_rebuild()
+
+
+class AssemblyMetricReason(StrEnum):
+    """Why an assembly statistic has no value.
+
+    A closed set. The reason reaches the reader as translated text, so it has to
+    be a code the client can look up; a sentence written by the service would be
+    shown untranslated and cannot be covered by a locale check. Keeping the set
+    closed on the server is also what stops a new free-text reason from being
+    introduced without a client-side translation.
+    """
+
+    #: No gene rows exist for this assembly: no annotation was ever imported.
+    NO_GENES = "no_genes"
+    #: No chromosome rows exist, so there is neither a count nor a size.
+    NO_CHROMOSOMES = "no_chromosomes"
+    #: ``download_files`` has no assembly dimension to aggregate over.
+    NO_LINKED_DOWNLOADS = "no_linked_downloads"
+
+
+class AssemblyMetric(BaseModel):
+    """One assembly-level statistic, with the reason it is unknown.
+
+    ``value`` is ``None`` whenever the number could not be derived from the
+    authoritative tables, and a machine-readable ``reason`` then says why. It is
+    never defaulted to ``0``: an assembly whose annotation was never imported and
+    an assembly that genuinely has no genes are different facts, and once both
+    are printed as zero nobody can tell them apart. The two fields are mutually
+    exclusive on purpose -- a number with a reason ("we did not count it, but
+    here it is") would be a contradiction.
+    """
+
+    value: int | None = Field(default=None, ge=0)
+    reason: AssemblyMetricReason | None = None
+
+    @model_validator(mode="after")
+    def _reason_matches_value(self):  # noqa: ANN201
+        if self.value is None and not self.reason:
+            raise ValueError("an unknown statistic must carry a reason")
+        if self.value is not None and self.reason is not None:
+            raise ValueError("a known statistic must not carry a reason")
+        return self
+
+
+class AssemblyStatistics(BaseModel):
+    """Counts derived from real rows, scoped to one assembly.
+
+    Every number here is a ``COUNT``/``SUM`` over rows that carry an
+    ``assembly_id`` of their own. Nothing is read from ``Release.gene_count`` or
+    any other denormalised counter: a release owns several assemblies, so a
+    release-level total copied onto each assembly would report the whole
+    release's genes once per assembly.
+
+    Each count is an :class:`AssemblyMetric` rather than a bare ``int`` so that
+    "we could not count this" survives the trip to the client. A histogram over
+    an empty assembly and an assembly whose statistics were never computed both
+    used to arrive as ``0``; with the metric shape the second arrives as
+    ``{"value": null, "reason": "..."}`` and the page can say so.
+
+    ``download_count`` is always unknown. ``download_files`` has no assembly
+    column -- it is linked to a release and its ``category`` is free text -- so
+    there is no relation to aggregate over. Guessing an assembly from a category
+    string would invent a number, and borrowing the release's download total
+    would be the same mistake as borrowing its gene count.
+
+    All five fields are required on purpose. A default of ``AssemblyMetric()``
+    is ``value=None, reason=None``, which the metric's own validator rejects, so
+    a defaulted field could not even be constructed -- and any value that *did*
+    construct would be an unstated measurement. Requiring them moves "somebody
+    forgot to say" from the reader's guess to a schema error at write time.
+    """
+
+    gene_count: AssemblyMetric
+    transcript_count: AssemblyMetric
+    chromosome_count: AssemblyMetric
+    total_length: AssemblyMetric
+    download_count: AssemblyMetric
+
+
+class AssemblySummaryResponse(AssemblyResponse):
+    """An assembly in the resolved release, with its own real counts."""
+
+    release_id: int | None = None
+    release_version: str | None = None
+    #: Required for the same reason the five metrics are: a defaulted statistics
+    #: block would be five unstated numbers, not an empty one.
+    statistics: AssemblyStatistics
+
+
+class AssemblyDetailResponse(AssemblySummaryResponse):
+    """One assembly, its counts, and its chromosomes.
+
+    The chromosome list is what makes "the assembly does not exist" and "the
+    assembly exists but has no chromosomes" distinguishable answers rather
+    than two identical empty payloads.
+    """
+
+    chromosomes: list[ChromosomeResponse] = Field(default_factory=list)

@@ -224,9 +224,18 @@ function MutantsIndex() {
                   ),
                 }}
               />
-              <Typography.Text type="secondary" className="mt-3 block">
-                {t("mutants.resultCount", { count: lines.length })}
-              </Typography.Text>
+              {/* The page fetches one window at a time, so `lines.length` is
+                  not a total. State the window and page instead of labelling
+                  a page of rows as the whole result set. */}
+              {lines.length > 0 ? (
+                <Typography.Text type="secondary" className="mt-3 block">
+                  {t("mutants.pageWindow", {
+                    start: offset + 1,
+                    end: offset + lines.length,
+                    page: targetPage,
+                  })}
+                </Typography.Text>
+              ) : null}
               <nav className="mt-4 flex justify-center gap-3" aria-label={t("common.pagination")}>
                 <Button onClick={() => changePage(targetPage - 1)} disabled={targetPage <= 1 || query.isFetching}>
                   {t("common.previous")}

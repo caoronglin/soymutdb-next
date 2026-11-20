@@ -62,4 +62,25 @@ describe("published guide Markdown links", () => {
         expect(screen.getByText(/JavaScript/)).toBeTruthy();
         expect(screen.getByText(/Protocol relative/)).toBeTruthy();
     });
+
+    it("escapes raw HTML and stamps heading anchors for the table of contents", () => {
+        const { container } = render(
+            <Markdown
+                content={[
+                    "## Retrieval",
+                    "",
+                    "<script>alert(1)</script>",
+                    "",
+                    "### Sub Section",
+                ].join("\n")}
+            />,
+        );
+
+        expect(screen.getByRole("heading", { name: "Retrieval" }).id).toBe("retrieval");
+        expect(screen.getByRole("heading", { name: "Sub Section" }).id).toBe("sub-section");
+
+        // Raw HTML is shown as text, never executed as markup.
+        expect(screen.getByText(/alert\(1\)/)).toBeTruthy();
+        expect(container.querySelector("script")).toBeNull();
+    });
 });

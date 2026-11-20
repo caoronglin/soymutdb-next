@@ -40,19 +40,28 @@ FEATURES: Final[dict[str, FeatureDefinition]] = {
     "imports.local_upload": FeatureDefinition(
         "imports.local_upload", True, True, "Enable browser-direct multipart uploads."
     ),
-    # The seven classic scientific import types default to OFF: their durable
-    # persistence writers are not yet implemented (data_adapters raise
+    # The remaining classic scientific import types default to OFF: their
+    # durable persistence writers are not implemented (data_adapters raise
     # UnsupportedImportError; import_vcf/import_gff3/import_mutant_lines are
     # fail-closed or count-only).  They must be hidden in Admin and rejected at
     # the API until a writer closes the loop.  See docs/ops/first-release-data-plan.md §5.
     "imports.fasta": FeatureDefinition(
-        "imports.fasta", False, True, "Enable FASTA reference imports (writer not yet closed)."
+        "imports.fasta",
+        False,
+        True,
+        "Enable FASTA reference imports (writes chromosomes + lengths from the .fai index).",
     ),
     "imports.gff3": FeatureDefinition(
-        "imports.gff3", False, True, "Enable GFF3 gene-model imports (writer not yet closed)."
+        "imports.gff3",
+        False,
+        True,
+        "Enable GFF3 annotation imports (writes genes, transcripts, CDS/UTR parts, derived exons).",
     ),
     "imports.vcf": FeatureDefinition(
-        "imports.vcf", False, True, "Enable VCF variant imports (writer not yet closed)."
+        "imports.vcf",
+        False,
+        True,
+        "Enable VCF variant imports (durable writer exists; gated by SOYMUTDB_ENABLE_VCF_IMPORT).",
     ),
     "imports.blast_db": FeatureDefinition(
         "imports.blast_db", False, True, "Enable BLAST database imports (writer not yet closed)."
@@ -62,12 +71,15 @@ FEATURES: Final[dict[str, FeatureDefinition]] = {
     ),
     "imports.expression_csv": FeatureDefinition(
         "imports.expression_csv",
-        False,
         True,
-        "Enable Expression CSV imports (writer not yet closed).",
+        True,
+        "Enable Expression CSV imports (assembly-scoped durable writer).",
     ),
     "imports.homolog_csv": FeatureDefinition(
-        "imports.homolog_csv", False, True, "Enable Homolog CSV imports (writer not yet closed)."
+        "imports.homolog_csv",
+        True,
+        True,
+        "Enable Homolog CSV imports (assembly-scoped durable writer).",
     ),
     "publication.github_pages": FeatureDefinition(
         "publication.github_pages", True, False, "Enable GitHub Pages publication target."

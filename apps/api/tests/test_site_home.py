@@ -8,6 +8,7 @@ rich-HTML welcome block).  Uses a mocked DB session — no PostgreSQL required
 from __future__ import annotations
 
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -34,7 +35,12 @@ def _make_client(mock_session, current_user=None):
     app = FastAPI()
     from app.core.exceptions import SoyMutDBError, soy_mut_db_exception_handler
 
-    app.add_exception_handler(SoyMutDBError, soy_mut_db_exception_handler)
+    # Starlette's handler signature is narrower than ours (it accepts any
+    # Exception, ours takes the SoyMutDBError base). The cast says which one
+    # this is without weakening the runtime check.
+    app.add_exception_handler(
+        SoyMutDBError, cast(Any, soy_mut_db_exception_handler)
+    )
     app.include_router(router, prefix="/api/v1")
 
     async def override_get_db():
@@ -117,7 +123,7 @@ class TestSiteHome:
     async def test_internal_variant_is_private_and_not_shared_cacheable(self):
         mock_session = _make_mock_session()
         viewer = SimpleNamespace(
-            role_rel=SimpleNamespace(name="viewer"),
+            role_rel=SimpleNamespace(name="researcher"),
             is_superuser=False,
         )
 
@@ -128,13 +134,39 @@ class TestSiteHome:
         assert response.headers["cache-control"] == "private, no-store"
         assert response.headers["vary"] == "Authorization"
 
-def test_internal_variant_accepts_viewer_role():
+def test_internal_variant_accepts_researcher_role():
+    """The internal site is reachable for a RESEARCHER."""
     from app.api.v1.site import _ensure_variant_access
     from app.core.site_variant import SiteVariant
+    from app.models.auth import User
+
+    researcher = SimpleNamespace(
+        role_rel=SimpleNamespace(name="researcher"),
+        is_superuser=False,
+    )
+
+    _ensure_variant_access(SiteVariant.INTERNAL, cast(User, researcher))
+
+
+def test_internal_variant_refuses_viewer_role():
+    """A VIEWER must not reach the internal site.
+
+    Self-registration grants VIEWER automatically, so the internal site --
+    which serves unpublished content -- is closed to it. This is the whole
+    point of the role split, so the refusal is pinned here rather than left
+    to the endpoint tests.
+    """
+    import pytest
+
+    from app.api.v1.site import _ensure_variant_access
+    from app.core.exceptions import AuthorizationError
+    from app.core.site_variant import SiteVariant
+    from app.models.auth import User
 
     viewer = SimpleNamespace(
         role_rel=SimpleNamespace(name="viewer"),
         is_superuser=False,
     )
 
-    _ensure_variant_access(SiteVariant.INTERNAL, viewer)
+    with pytest.raises(AuthorizationError):
+        _ensure_variant_access(SiteVariant.INTERNAL, cast(User, viewer))

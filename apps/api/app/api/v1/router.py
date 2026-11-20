@@ -11,6 +11,7 @@ from fastapi import APIRouter
 from . import (
     admin,
     admin_content,
+    admin_data_views,
     admin_features,
     admin_imports,
     admin_media,
@@ -26,10 +27,13 @@ from . import (
     admin_uploads,
     analyses,
     analytics,
+    assemblies,
     auth,
     blast,
     capabilities,
+    comparative,
     content,
+    export_query,
     expression,
     genes,
     gwas,
@@ -54,7 +58,9 @@ from . import (
     table_views,
     tools_enrichment,
     tools_exppattern,
+    tools_intervals,
     tools_seqfetch,
+    tools_sequence,
     tracks,
     variants,
 )
@@ -71,12 +77,15 @@ api_router = APIRouter()
 api_router.include_router(health.router)
 api_router.include_router(auth.router)
 api_router.include_router(genes.router)
+api_router.include_router(assemblies.router)
 api_router.include_router(gwas.router)
 api_router.include_router(jobs.router)
 api_router.include_router(popgen.router)
 api_router.include_router(preview_test_data.router)
 api_router.include_router(variants.router)
 api_router.include_router(tools_seqfetch.router)
+api_router.include_router(tools_sequence.router)
+api_router.include_router(tools_intervals.router)
 api_router.include_router(search.router)
 api_router.include_router(stats.router)
 api_router.include_router(blast.router)
@@ -88,6 +97,7 @@ api_router.include_router(table_views.router)
 api_router.include_router(seeds.router)
 api_router.include_router(seed_requests.router)
 api_router.include_router(content.router)
+api_router.include_router(export_query.router)
 api_router.include_router(news.router)
 api_router.include_router(notifications.router)
 api_router.include_router(ontology.router)
@@ -108,9 +118,11 @@ api_router.include_router(admin_settings.router)
 api_router.include_router(admin_static.router)
 api_router.include_router(admin_table_views.router)
 api_router.include_router(admin_table_views.species_router)
+api_router.include_router(admin_data_views.router)
 api_router.include_router(admin_uploads.router)
 api_router.include_router(expression.router)
 api_router.include_router(homolog.router)
+api_router.include_router(comparative.router)
 api_router.include_router(analytics.router)
 api_router.include_router(site.router)
 api_router.include_router(capabilities.router)

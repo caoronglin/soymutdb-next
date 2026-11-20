@@ -33,14 +33,21 @@ import {
   Col,
   Empty,
   Row,
+  Skeleton,
   Typography,
 } from "@/lib/antd";
 import { FluidGradient } from "../fluids/fluid-gradient";
 import { useAnimation } from "@/lib/animation-context";
 import DOMPurify from "dompurify";
-import { getFeaturedNews, getSiteHome, type NewsSummary } from "@soymutdb/api-client";
+import {
+  fetchHomepageStats,
+  getFeaturedNews,
+  getSiteHome,
+  type NewsSummary,
+} from "@soymutdb/api-client";
 import { formatDate } from "../../lib/format";
 import { SITE_VARIANT } from "../../lib/site-variant";
+import { useReleaseId } from "../../lib/release-scope";
 import { NEWS_FEATURED_KEY } from "../news-carousel";
 import { pickNewsTitle } from "../news-card";
 
@@ -95,10 +102,10 @@ interface ToolEntry {
 // Design was retired from this surface at the operator's request; its route
 // `/search/primer` stays reachable directly.
 const TOOL_ENTRIES: ToolEntry[] = [
-  { key: "gene", labelKey: "home.toolGeneLabel", label: "基因 ID 检索", descKey: "home.toolGeneDesc", desc: "按基因号查询突变", route: "/search/genes", icon: <IdcardOutlined /> },
-  { key: "location", labelKey: "home.toolLocationLabel", label: "物理位置检索", descKey: "home.toolLocationDesc", desc: "按染色体与位点查询", route: "/search/location", icon: <EnvironmentOutlined /> },
-  { key: "gbrowse", labelKey: "home.toolGbrowseLabel", label: "JBrowse 2", descKey: "home.toolGbrowseDesc", desc: "在 JBrowse 2 中浏览基因组", route: "/search/gbrowse", icon: <GlobalOutlined /> },
-  { key: "blast", labelKey: "home.toolBlastLabel", label: "BLAST 比对", descKey: "home.toolBlastDesc", desc: "序列比对检索同源", route: "/blast", icon: <ThunderboltOutlined /> },
+  { key: "gene", labelKey: "home.toolGeneLabel", label: "基因 ID 检索", descKey: "home.toolGeneDescription", desc: "按基因号查询突变", route: "/search/genes", icon: <IdcardOutlined /> },
+  { key: "location", labelKey: "home.toolLocationLabel", label: "物理位置检索", descKey: "home.toolLocationDescription", desc: "按染色体与位点查询", route: "/search/location", icon: <EnvironmentOutlined /> },
+  { key: "gbrowse", labelKey: "home.toolGbrowseLabel", label: "JBrowse 2", descKey: "home.toolGbrowseDescription", desc: "在 JBrowse 2 中浏览基因组", route: "/search/gbrowse", icon: <GlobalOutlined /> },
+  { key: "blast", labelKey: "home.toolBlastLabel", label: "BLAST 比对", descKey: "home.toolBlastDescription", desc: "序列比对检索同源", route: "/blast", icon: <ThunderboltOutlined /> },
 ];
 
 /**
@@ -126,14 +133,17 @@ function LatestNewsPanel() {
   }
 
   if (query.isError) {
-    return <Alert type="error" showIcon title={t("home.newsUnavailable", { defaultValue: "最新动态暂不可用" })} description={t("home.newsRetry", { defaultValue: "请稍后重试，当前没有使用演示数据替代。" })} />;
+    return <Alert type="error" showIcon title={t("home.newsUnavailable")} description={t("home.newsRetry")} />;
   }
 
   const items: NewsSummary[] = query.data?.featured.slice(0, 5) ?? [];
   if (items.length === 0) {
     return (
-      <div data-testid="home-news-empty">
-        <Empty description={t("home.noNews", { defaultValue: "暂无已发布新闻" })} />
+      <div
+        data-testid="home-news-empty"
+        className="flex min-h-56 items-center justify-center"
+      >
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={t("home.noNews")} />
       </div>
     );
   }
@@ -155,7 +165,7 @@ function LatestNewsPanel() {
               {pickNewsTitle(item, i18n.language)}
             </Link>
             <span className="block text-xs text-muted-foreground">
-              {item.category ? `${item.category} · ` : ""}{item.published_at ? formatDate(item.published_at) : t("home.newsMeta", { defaultValue: "最新发布" })}
+              {item.category ? `${item.category} · ` : ""}{item.published_at ? formatDate(item.published_at) : t("home.newsMeta")}
             </span>
           </div>
         </li>
@@ -196,6 +206,137 @@ function HomeWelcomeBlock() {
   );
 }
 
+/**
+ * DatabaseOverview — the release-scoped headline counts.
+ *
+ * The key carries the pinned release and the site variant, so switching a
+ * release cannot leave counts from the previous one on screen: the release
+ * scope invalidates `homepage-stats` in place. A failed read is not fatal —
+ * the counts are supporting context, so the strip shows a retry instead of
+ * taking the page down.
+ */
+function DatabaseOverview() {
+  const { t, i18n } = useTranslation();
+  const releaseId = useReleaseId();
+  const query = useQuery({
+    queryKey: ["homepage-stats", releaseId, SITE_VARIANT],
+    queryFn: fetchHomepageStats,
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const format = (value: number) =>
+    new Intl.NumberFormat(i18n.language || undefined).format(value);
+
+  // A zero is only informative next to a published release. Without one, the
+  // variant and mutant-line aggregates are empty *because nothing has been
+  // published*, not because the database holds none -- and a bare "0" next to
+  // a real gene count reads as an empty database. The release state decides
+  // which of the two it is.
+  const hasPublishedRelease = (query.data?.release_count ?? 0) > 0;
+  const tiles = query.data
+    ? [
+        { key: "genes", label: t("home.database.genes"), value: query.data.gene_count },
+        {
+          key: "variants",
+          label: t("home.database.variants"),
+          value: query.data.total_variants,
+          unpublished: !hasPublishedRelease && query.data.total_variants === 0,
+        },
+        {
+          key: "mutants",
+          label: t("home.database.mutants"),
+          value: query.data.mutant_line_count,
+          unpublished: !hasPublishedRelease && query.data.mutant_line_count === 0,
+        },
+        { key: "assemblies", label: t("home.assemblies"), value: query.data.assembly_count },
+      ]
+    : [];
+
+  return (
+    <section className="border-b border-border/60 bg-muted/30" data-testid="home-database-overview">
+      <div className="container-prose py-10 md:py-12">
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <Title level={2} style={{ margin: 0, fontWeight: 700 }}>
+              {t("home.databaseTitle")}
+            </Title>
+            <Paragraph className="mb-0 mt-1 max-w-2xl text-muted-foreground">
+              {t("home.databaseSubtitle")}
+            </Paragraph>
+          </div>
+          <Link
+            to="/search"
+            className="home-section-link shrink-0 text-primary"
+            style={{ fontWeight: 500 }}
+          >
+            {t("home.databaseSearch")} →
+          </Link>
+        </div>
+
+        {query.isError ? (
+          <Alert
+            type="warning"
+            showIcon
+            title={t("home.statsUnavailable")}
+            action={
+              <Button size="small" onClick={() => void query.refetch()}>
+                {t("common.retry")}
+              </Button>
+            }
+          />
+        ) : (
+          <Row gutter={[16, 16]} align="stretch">
+            {tiles.length === 0
+              ? [0, 1, 2, 3].map((slot) => (
+                  <Col key={slot} xs={12} md={6}>
+                    <Card
+                      className="h-full rounded-xl border border-border bg-card shadow-sm"
+                      styles={{ body: { padding: 20 } }}
+                    >
+                      <Skeleton
+                        active
+                        paragraph={{ rows: 1, width: "60%" }}
+                        title={{ width: "40%" }}
+                      />
+                    </Card>
+                  </Col>
+                ))
+              : tiles.map((tile) => (
+                  <Col key={tile.key} xs={12} md={6}>
+                    <Card
+                      className="h-full rounded-xl border border-border bg-card shadow-sm"
+                      styles={{ body: { padding: 20 } }}
+                    >
+                      <Text className="block text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        {tile.label}
+                      </Text>
+                      <div
+                        data-testid={`home-stat-${tile.key}`}
+                        className="mt-2 font-display text-2xl font-semibold tabular-nums text-foreground"
+                      >
+                        {tile.unpublished ? (
+                          <span className="text-base font-normal text-muted-foreground">
+                            {t("home.database.notPublished")}
+                          </span>
+                        ) : (
+                          format(tile.value)
+                        )}
+                      </div>
+                      {tile.unpublished ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {t("home.database.notPublishedHelp")}
+                        </p>
+                      ) : null}
+                    </Card>
+                  </Col>
+                ))}
+          </Row>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export function AntdHome() {
   const { t } = useTranslation();
   const { get } = useSiteContent();
@@ -216,10 +357,10 @@ export function AntdHome() {
             {get("hero.eyebrow", t("home.heroEyebrow"))}
           </Text>
           <Title level={1} style={{ margin: "18px 0 14px", color: "var(--foreground)", fontSize: "clamp(2rem, 4.5vw, 3rem)", lineHeight: 1.15, fontWeight: 700 }}>
-            {get("hero.title", t("home.heroTitle", { defaultValue: "探索多物种突变的未知疆域" }))}
+            {get("hero.title", t("home.heroTitle"))}
           </Title>
           <Paragraph style={{ maxWidth: "58ch", margin: "0 auto", color: "var(--muted-foreground)", fontSize: "clamp(1rem, 1.5vw, 1.1rem)", lineHeight: 1.7 }}>
-            {get("hero.subtitle", t("home.heroSubtitle", { defaultValue: "新一代多物种突变数据库，从基因组到表型一站探索。" }))}
+            {get("hero.subtitle", t("home.heroSubtitle"))}
           </Paragraph>
           <div className="mt-8">
             <PortalSearchBox testId="home-search" />
@@ -228,7 +369,7 @@ export function AntdHome() {
             <div className="mx-auto mt-10 aspect-[16/9] w-full max-w-3xl overflow-hidden rounded-2xl border border-border/60 shadow-sm">
               <img
                 src={heroImage}
-                alt={t("home.heroTitle", { defaultValue: "探索多物种突变的未知疆域" })}
+                alt={t("home.heroTitle")}
                 loading="lazy"
                 className="h-full w-full object-cover"
               />
@@ -236,6 +377,9 @@ export function AntdHome() {
           ) : null}
         </div>
       </section>
+
+      {/* Release-scoped database overview counts. */}
+      <DatabaseOverview />
 
       {/* ---------------------------------------------------------------- */}
       {/* TOP: 最新动态 (left) + 滚动照片 carousel (right).                   */}
@@ -245,11 +389,11 @@ export function AntdHome() {
           {/* Latest news — 5 titles linking to /news. */}
           <Col xs={24} lg={9} className="flex flex-col">
             <div className="mb-3 flex items-baseline justify-between gap-3">
-              <Title level={3} className="font-bold" style={{ margin: 0 }}>
-                {t("home.latestNews", { defaultValue: "最新动态" })}
+              <Title level={2} className="font-bold" style={{ margin: 0 }}>
+                {t("home.latestNews")}
               </Title>
               <Link to="/news" search={{ category: undefined, page: undefined }} className="home-section-link shrink-0 text-primary" style={{ fontWeight: 500 }}>
-                {t("home.openTool", { defaultValue: "进入" })} →
+                {t("home.openTool")} →
               </Link>
             </div>
             <Card className="flex-1 rounded-xl border border-border bg-card shadow-sm" styles={{ body: { padding: "4px 20px" } }}>
@@ -257,16 +401,27 @@ export function AntdHome() {
             </Card>
           </Col>
 
-          {/* Photo carousel (滚动照片) — 3-6 brand slides. */}
+          {/* Photo carousel (滚动照片) — 3-6 brand slides. The heading row
+              mirrors the news column so both panels start on the same
+              baseline; the height chain is completed by `.home-photo-carousel`
+              in index.css, which keeps the carousel as tall as the news card. */}
           <Col xs={24} lg={15} className="flex flex-col">
-            <div className="flex-1">
-              <Carousel autoplay autoplaySpeed={5200} effect="fade" className="h-full">
+            <div className="mb-3 flex items-baseline justify-between gap-3">
+              <Title level={2} className="font-bold" style={{ margin: 0 }}>
+                {t("home.researchHighlights")}
+              </Title>
+              <Link to="/search" className="home-section-link shrink-0 text-primary" style={{ fontWeight: 500 }}>
+                {t("home.openTool")} →
+              </Link>
+            </div>
+            <div className="home-photo-carousel flex-1" style={{ minHeight: 320 }}>
+              <Carousel autoplay={!reduced} autoplaySpeed={5200} effect="fade" className="h-full">
                 {HERO_SLIDES.map((slide, i) => (
                   <div key={slide.titleKey} className="h-full">
                     <FluidGradient
                       reduced={reduced}
                       colors={HERO_PALETTES[i % HERO_PALETTES.length]}
-                      style={{ minHeight: 340, height: "100%", borderRadius: "var(--radius-xl)" }}
+                      style={{ minHeight: 320, height: "100%", borderRadius: "var(--radius-xl)" }}
                     >
                       <div
                         style={{
@@ -285,7 +440,7 @@ export function AntdHome() {
                           {t(slide.subKey, { defaultValue: slide.sub })}
                         </Paragraph>
                         <Button type="primary" onClick={goSearch} style={{ marginTop: 8 }}>
-                          {t("home.heroPrimary", { defaultValue: "开始探索" })} <ArrowRightOutlined />
+                          {t("home.heroPrimary")} <ArrowRightOutlined />
                         </Button>
                       </div>
                     </FluidGradient>
@@ -298,15 +453,15 @@ export function AntdHome() {
       </div>
 
       {/* ---------------------------------------------------------------- */}
-      {/* BOTTOM: 收索工具 — five first-level directory buttons in a row.    */}
+      {/* BOTTOM: 收索工具 — four first-level directory buttons in a row.    */}
       {/* ---------------------------------------------------------------- */}
       <div className="container-prose pb-20 pt-4 md:pt-6">
         <div className="mb-5 flex items-baseline justify-between gap-3">
-          <Title level={3} style={{ margin: 0, fontWeight: 700 }}>
-            {t("home.featuredTools", { defaultValue: "搜索工具" })}
+          <Title level={2} style={{ margin: 0, fontWeight: 700 }}>
+            {t("home.featuredTools")}
           </Title>
           <Link to="/search" className="home-section-link shrink-0 text-primary" style={{ fontWeight: 500 }}>
-            {t("home.openTool", { defaultValue: "进入" })} →
+            {t("home.openTool")} →
           </Link>
         </div>
 
@@ -328,9 +483,9 @@ export function AntdHome() {
                   >
                     <Card
                       className="h-full rounded-xl border border-border bg-card shadow-sm transition-colors hover:border-primary/40"
-                      styles={{ body: { padding: 18, height: "100%" } }}
+                      styles={{ body: { padding: 18 } }}
                     >
-                      <div className="flex h-full flex-col items-center justify-start gap-3 text-center">
+                      <div className="flex flex-col items-center justify-start gap-3 text-center">
                         <div className="flex h-11 w-11 flex-none items-center justify-center overflow-hidden rounded-lg bg-accent text-accent-foreground">
                           {image ? <img src={image} alt={label} loading="lazy" className="h-full w-full object-cover" /> : tool.icon}
                         </div>

@@ -81,6 +81,18 @@ class AlleleFreqRequest(RegionQuery):
 
 class AlleleFreqVariant(BaseModel):
     variant_id: str
+    assembly: str = Field(
+        title="Assembly",
+        description=(
+            # The line breaks are part of the published description: the
+            # committed OpenAPI snapshot spells this field that way, with
+            # `description` before `title` -- the order the exporter prints, so
+            # a hand-fixed snapshot key order survives the next check:contract.
+            "Assembly namespace the variant was read from.\n\n"
+            "`variant_id` is only unique per (release, assembly); a row that travels\n"
+            "without its namespace cannot be identified once two scopes meet."
+        )
+    )
     chromosome: str
     position: int
     ref_allele: str
@@ -190,6 +202,10 @@ class LdRequest(RegionQuery):
 
 class LdVariant(BaseModel):
     variant_id: str
+    assembly: str = Field(
+        title="Assembly",
+        description="Assembly namespace the variant was read from (see AlleleFreqVariant).",
+    )
     chromosome: str
     position: int
     ref_allele: str

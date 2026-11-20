@@ -17,19 +17,26 @@
  * browser must read that release's assembly list and tracks. A job that
  * states no such context gets no link and a visible reason instead.
  */
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import * as React from "react";
-import { CaretRightOutlined as Play, ExperimentOutlined as FlaskConical } from "@ant-design/icons";
+import {
+  CaretRightOutlined as Play,
+  DownloadOutlined,
+} from "@ant-design/icons";
 import {
   Alert,
   Button,
   Card,
+  Col,
+  Descriptions,
   Empty,
+  Flex,
   Form,
   Input,
   Result,
+  Row,
   Select,
   Skeleton,
   Table,
@@ -43,16 +50,23 @@ import {
   getBlastJobs,
   getBlastHits,
   resolveBlastHitGenomeTarget,
+  blastDownloadLink,
+  blastEngineLabel,
+  validateBlastFastaStructure,
   type BlastHit,
   BLAST_PROGRAMS,
-  apiBaseUrl,
-  getAccessToken,
+  compatibleBlastDatabases,
+  hasCompatibleBlastQueryAlphabet,
+  BLAST_PROGRAM_COMPATIBILITY,
+  type BlastEngine,
+  type BlastProgram,
   type BlastJob,
 } from "@soymutdb/api-client";
 import { FadeUp } from "../components/route-motion";
 import { useSiteContent } from "../lib/site-content-react";
 import { grantsResearcher, useCurrentUser } from "../lib/use-current-user";
 import { resolveAppUrl } from "../lib/deployment";
+import { openJobEventStream } from "../lib/job-event-stream";
 import { useReleaseId } from "../lib/release-scope";
 import { ensurePermission, showNotification } from "../lib/use-browser-notifications";
 import { z } from "zod";
@@ -75,56 +89,35 @@ type JobContext = {
   assembly: string;
 };
 
-// The only executable program is DIAMOND blastp (protein vs protein). The
-// API still reports the wider BlastProgram vocabulary for jobs stored before
-// the engine was reduced, so history rendering must keep using those labels.
-const BLAST_PROGRAM = BLAST_PROGRAMS[0];
-
-const blastSchema = z.object({
-  program: z.string().min(1),
-  database: z.string().min(1),
-  sequence: z.string().min(10, "Sequence must be at least 10 characters"),
-  e_value: z.number().min(0).default(1e-5),
-  max_hits: z.number().int().min(1).max(1000).default(50),
-});
 
 /**
- * Client-side FASTA structure check (defence in depth on top of backend
- * validation). Accepts a plain sequence or one-or-more FASTA records; rejects
- * a `>` header with no following sequence and non-sequence characters.
+ * Build the BLAST form schema with localized messages.
  *
- * @returns an error message, or null when the input is acceptable.
+ * A module-level schema cannot be localized: `z.string().min(1)` and
+ * `.min(10, "...")` bake their text in at import time, so a Chinese UI showed
+ * zod's default English ("Too small: expected string to have >=1 characters")
+ * next to the localized help copy. Taking `t` here is what makes the validation
+ * text follow the active language.
  */
-function validateFastaStructure(input: string): string | null {
-  const hasHeader = />/.test(input.trim());
-  if (!hasHeader) return null; // plain sequence — backend validates.
-  const lines = input.split(/\r?\n/).map((l) => l.trim());
-  let currentHasHeader = false;
-  let currentHasSeq = false;
-  let sawAny = false;
-  for (const line of lines) {
-    if (!line) continue;
-    if (line.startsWith(">")) {
-      if (currentHasHeader && !currentHasSeq) {
-        return "FASTA header without a sequence";
-      }
-      currentHasHeader = true;
-      currentHasSeq = false;
-      sawAny = true;
-    } else {
-      // Sequence line — allow letters and common gap/stop symbols.
-      if (currentHasHeader && !/[^A-Za-z*.-]/.test(line.replace(/\s+/g, ""))) {
-        currentHasSeq = true;
-      } else if (!currentHasHeader) {
-        return "Sequence data before a FASTA header";
-      }
-    }
-  }
-  if (sawAny && !currentHasSeq) {
-    return "FASTA header without a sequence";
-  }
-  return null;
+function makeBlastSchema(t: (key: string, options?: Record<string, unknown>) => string) {
+  return z.object({
+    program: z.string().min(1, t("blast.validation.programRequired")),
+    database: z.string().min(1, t("blast.validation.databaseRequired")),
+    sequence: z.string().trim().min(10, t("blast.validation.sequenceTooShort")),
+    e_value: z
+      .number()
+      .gt(0, t("blast.validation.eValueRange"))
+      .max(1000, t("blast.validation.eValueRange"))
+      .default(1e-5),
+    max_hits: z
+      .number()
+      .int(t("blast.validation.maxHitsRange"))
+      .min(1, t("blast.validation.maxHitsRange"))
+      .max(500, t("blast.validation.maxHitsRange"))
+      .default(50),
+  });
 }
+
 
 /** Extract the ID from the first FASTA header of a submitted query, if any. */
 function fastaHeaderId(sequence: string | null | undefined): string | undefined {
@@ -150,10 +143,10 @@ function BlastComponent() {
   // current session can never authorize. Anonymous visitors retain the
   // public database/form experience; researcher-capable users retain submit.
   const canSubmit = user != null && grantsResearcher(user);
-  // Defaults to blastp: protein/protein is the only program this deployment
-  // executes, and DIAMOND is the only aligner behind it.
-  const [form, setForm] = React.useState({
+  // NCBI BLAST+ is explicit by default; DIAMOND is a separate blastp choice.
+  const [form, setForm] = React.useState<{ program: BlastProgram; engine: BlastEngine; database: string; sequence: string; e_value: string; max_hits: string }>({
     program: "blastp",
+    engine: "ncbi_blast",
     database: "",
     sequence: "",
     e_value: "1e-5",
@@ -168,7 +161,8 @@ function BlastComponent() {
   });
 
   const databases = (databasesQuery.data ?? []);
-  const activeDatabases = databases.filter((d) => d.is_active);
+  const activeDatabases = compatibleBlastDatabases(databases, form.engine, form.program);
+  const selectedDatabase = activeDatabases.find((item) => String(item.id) === form.database);
 
   const databaseOptions: { value: string; label: React.ReactNode; disabled?: boolean }[] =
     databasesQuery.isLoading
@@ -190,15 +184,22 @@ function BlastComponent() {
             ),
           }));
 
+  // The engine picker's copy lives in one place per page: the pair used to be
+  // duplicated as two inline option arrays, and the two copies drifted.
+  const engineOptions: { value: BlastEngine; label: string; disabled?: boolean }[] = [
+    { value: "ncbi_blast", label: t("blastSearch.engineNcbi") },
+    { value: "diamond", label: t("blastSearch.engineDiamondBlastp"), disabled: form.program !== "blastp" },
+  ];
+
   // Default to the database flagged as the assembly default (fallback: first active).
   React.useEffect(() => {
     if (form.database) return;
-    const active = (databasesQuery.data ?? []).filter((d) => d.is_active);
+    const active = compatibleBlastDatabases(databasesQuery.data ?? [], form.engine, form.program);
     if (active.length === 0) return;
-    const def = active.find((d) => d.assembly_is_default) ?? active[0];
+    const def = active.find((d) => d.is_default) ?? active.find((d) => d.assembly_is_default) ?? active[0];
     if (def) setForm((f) => ({ ...f, database: String(def.id) }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [databasesQuery.data]);
+  }, [databasesQuery.data, form.engine, form.program]);
 
   const [sseAvailable, setSseAvailable] = React.useState(false);
 
@@ -220,10 +221,11 @@ function BlastComponent() {
   });
 
   // D5 pilot: server-push job updates via SSE (GET /api/v1/jobs/events).
-  // EventSource cannot set an Authorization header, so the in-memory access
-  // token travels as a short-lived query parameter (never persisted). Any
-  // stream failure closes the connection and falls back to polling; the
-  // connection is closed again when the component unmounts.
+  // EventSource cannot set an Authorization header, so the stream URL carries
+  // a single-use ticket from POST /api/v1/jobs/sse-ticket — never the access
+  // token, which the edge proxy would log with the request line. Any stream
+  // failure closes the connection and falls back to polling; the connection is
+  // closed again when the component unmounts.
   React.useEffect(() => {
     // EventSource cannot carry an Authorization header, so an anonymous stream
     // would 401 and reconnect forever. Subscribe only for a known session.
@@ -231,37 +233,50 @@ function BlastComponent() {
       setSseAvailable(false);
       return;
     }
-    const token = getAccessToken();
-    const url = new URL(`${apiBaseUrl}/jobs/events`, window.location.origin);
-    if (token) url.searchParams.set("access_token", token);
-    const es = new EventSource(url.toString());
+    let disposed = false;
+    let es: EventSource | null = null;
 
-    es.addEventListener("open", () => setSseAvailable(true));
-    es.addEventListener("job_update", (event) => {
-      try {
-        const update = JSON.parse((event as MessageEvent).data) as {
-          job_type?: string;
-        };
-        // Only blast updates concern this page; analysis/gwas updates are
-        // ignored (their own pages will subscribe).
-        if (update.job_type === "blast") {
-          // Refresh immediately — covers the completed/failed transitions
-          // this pilot targets.
-          void queryClient.invalidateQueries({ queryKey: ["blast-jobs"] });
+    openJobEventStream()
+      .then((stream) => {
+        if (disposed) {
+          // The page went away while the ticket was being exchanged.
+          stream.close();
+          return;
         }
-      } catch {
-        // Malformed frame — ignore; the polling fallback still refreshes.
-      }
-    });
-    es.onerror = () => {
-      // SSE unavailable (proxy, auth expiry, server restart): fall back to
-      // polling and stop EventSource from reconnecting.
-      es.close();
-      setSseAvailable(false);
-    };
+        es = stream;
+        es.addEventListener("open", () => setSseAvailable(true));
+        es.addEventListener("job_update", (event) => {
+          try {
+            const update = JSON.parse((event as MessageEvent).data) as {
+              job_type?: string;
+            };
+            // Only blast updates concern this page; analysis/gwas updates are
+            // ignored (their own pages will subscribe).
+            if (update.job_type === "blast") {
+              // Refresh immediately — covers the completed/failed transitions
+              // this pilot targets.
+              void queryClient.invalidateQueries({ queryKey: ["blast-jobs"] });
+            }
+          } catch {
+            // Malformed frame — ignore; the polling fallback still refreshes.
+          }
+        });
+        es.onerror = () => {
+          // SSE unavailable (proxy, auth expiry, server restart): fall back to
+          // polling and stop EventSource from reconnecting.
+          es?.close();
+          setSseAvailable(false);
+        };
+      })
+      .catch(() => {
+        // No ticket (session expired, ticket store unavailable): polling is
+        // already the fallback whenever the stream is not available.
+        setSseAvailable(false);
+      });
 
     return () => {
-      es.close();
+      disposed = true;
+      es?.close();
       setSseAvailable(false);
     };
   }, [queryClient, isSignedIn]);
@@ -293,10 +308,11 @@ function BlastComponent() {
   });
 
   const onSubmit = () => {
+    if (form.engine === "diamond" && form.program !== "blastp") { setErrors({ program: t("blastSearch.incompatible") }); return; }
     // Request Notification permission inside this user gesture (browser
     // requirement) — fire-and-forget; denied is handled by the hook.
     void ensurePermission();
-    const parsed = blastSchema.safeParse({
+    const parsed = makeBlastSchema(t).safeParse({
       program: form.program,
       database: form.database,
       sequence: form.sequence,
@@ -304,16 +320,31 @@ function BlastComponent() {
       max_hits: Number(form.max_hits),
     });
     if (!parsed.success) {
+      // Numeric bounds are checked in the same place as the anonymous route so
+      // both entry points accept exactly the same queries. The zod schema still
+      // runs first: it catches a non-numeric value before the range test.
       const fieldErrors: Record<string, string> = {};
       for (const issue of parsed.error.issues) {
         fieldErrors[issue.path[0] as string] = issue.message;
       }
+      const inRange =
+        Number.isFinite(Number(form.e_value)) && Number(form.e_value) > 0 && Number(form.e_value) <= 1000 &&
+        Number.isInteger(Number(form.max_hits)) && Number(form.max_hits) >= 1 && Number(form.max_hits) <= 500;
+      if (!inRange) {
+        delete fieldErrors.e_value;
+        delete fieldErrors.max_hits;
+        fieldErrors.parameters = t("blastSearch.invalidParameters");
+      }
       setErrors(fieldErrors);
       return;
     }
-    const fastaError = validateFastaStructure(parsed.data.sequence);
+    if (!hasCompatibleBlastQueryAlphabet(parsed.data.sequence, form.program)) { setErrors({ sequence: t("blastSearch.invalidAlphabet") }); return; }
+    // Multi-record FASTA is allowed; each record still needs a header and a
+    // sequence. Shared with the anonymous route so both entry points accept
+    // exactly the same queries.
+    const fastaError = validateBlastFastaStructure(parsed.data.sequence);
     if (fastaError) {
-      setErrors({ sequence: fastaError });
+      setErrors({ sequence: t(`blastSearch.fasta.${fastaError}`) });
       return;
     }
     setErrors({});
@@ -321,14 +352,17 @@ function BlastComponent() {
     // *name* (or numeric database_id) — map back so the job carries a
     // plain identifier that resolves to an active whitelist entry.
     const selected = activeDatabases.find((d) => String(d.id) === parsed.data.database);
+    if (!selected) { setErrors({ database: t("blast.noDatabases") }); return; }
     submitMutation.mutate({
       ...parsed.data,
+      program: parsed.data.program as BlastProgram,
+      engine: form.engine,
       database: selected?.name ?? parsed.data.database,
     });
   };
 
   const clearForm = () =>
-    setForm({ program: "blastp", database: "", sequence: "", e_value: "1e-5", max_hits: "50" });
+    setForm({ program: "blastp", engine: "ncbi_blast", database: "", sequence: "", e_value: "1e-5", max_hits: "50" });
 
   const jobs = jobsQuery.data?.items ?? [];
 
@@ -338,13 +372,16 @@ function BlastComponent() {
   const navigate = useNavigate();
   const [selectedJob, setSelectedJob] = React.useState<BlastJob | null>(null);
 
+  // The newest completed job is open by default (`activeJob`), so this query
+  // follows the active job rather than only the one the reader clicked.
+  const activeJob = selectedJob ?? jobs[0] ?? null;
   const hitsQuery = useQuery({
-    queryKey: ["blast-hits", selectedJob?.id],
+    queryKey: ["blast-hits", activeJob?.id],
     queryFn: async () => {
-      const res = await getBlastHits(selectedJob!.id, { limit: 100, offset: 0 });
-      return res.items ?? [];
+      const res = await getBlastHits(activeJob!.id, { limit: 100, offset: 0 });
+      return res;
     },
-    enabled: selectedJob != null,
+    enabled: activeJob != null && activeJob.status === "completed",
     staleTime: 60_000,
   });
 
@@ -382,7 +419,7 @@ function BlastComponent() {
     setResolvingHit(null);
     setNavigationError(null);
     return () => { navigationAttempt.current += 1; };
-  }, [selectedJob?.id]);
+  }, [activeJob?.id]);
   const openGenomeBrowser = async (job: BlastJob, hit: BlastHit) => {
     const attempt = ++navigationAttempt.current;
     setResolvingHit(hit.subject_id);
@@ -403,8 +440,13 @@ function BlastComponent() {
     }
   };
 
-  const hits = hitsQuery.data ?? [];
-  const inputSequenceId = selectedJob ? fastaHeaderId(selectedJob.query_sequence) : undefined;
+  const hits = hitsQuery.data?.items ?? [];
+  // Raw aligner output for the selected job. `download_url` is the presigned
+  // artifact link; without it there is nothing to download (never a dead link).
+  const hitsDownload = activeJob
+    ? blastDownloadLink(hitsQuery.data?.download_url, activeJob)
+    : null;
+  const inputSequenceId = activeJob ? fastaHeaderId(activeJob.query_sequence) : undefined;
   const hitsColumns: TableColumnsType<BlastHit> = [
     {
       // Wireframe: 基因组版本 (assembly) — shown with the release the job was
@@ -414,7 +456,7 @@ function BlastComponent() {
       key: "assembly",
       width: 160,
       render: () => {
-        const context = selectedJob ? contextForJob(selectedJob) : null;
+        const context = activeJob ? contextForJob(activeJob) : null;
         if (!context) {
           return <span className="font-mono text-xs text-muted-foreground">—</span>;
         }
@@ -433,8 +475,8 @@ function BlastComponent() {
       title: get("blast.hitSequenceId", t("blast.hitSequenceId")),
       key: "subject",
       width: 160,
-      render: () => (
-        <span className="font-mono text-xs font-medium">{inputSequenceId ?? "—"}</span>
+      render: (_, hit) => (
+        <span className="font-mono text-xs font-medium">{hit.query_id ?? inputSequenceId ?? "—"}</span>
       ),
     },
     {
@@ -453,11 +495,8 @@ function BlastComponent() {
       },
     },
     {
-      // The alignment coordinates are amino-acid positions of the subject
-      // protein. They are deliberately labelled as protein coordinates: they
-      // are not genome positions, and the genome browser link below resolves
-      // the gene itself rather than these offsets.
-      title: get("blast.hitProteinCoords", t("blast.hitProteinCoords")),
+      // Alignment offsets are never used directly as genomic browser targets.
+      title: get("blast.hitProteinCoords", t("blastSearch.subjectCoordinates")),
       key: "proteinCoords",
       width: 150,
       render: (_, hit) => (
@@ -486,7 +525,7 @@ function BlastComponent() {
       width: 180,
       render: (_, hit) => {
         const geneId = hit.subject_id;
-        const context = selectedJob ? contextForJob(selectedJob) : null;
+        const context = activeJob ? contextForJob(activeJob) : null;
         const canSearch = context != null && context.release === currentRelease;
         // The identifier is shown whole. It used to go through
         // `compactGeneId(geneId, 18)`, which cut `Glyma.066015200`-length and
@@ -518,14 +557,14 @@ function BlastComponent() {
       key: "gbrowse",
       width: 140,
       render: (_, hit) => {
-        const context = selectedJob ? contextForJob(selectedJob) : null;
+        const context = activeJob ? contextForJob(activeJob) : null;
         return (
           <Button
             size="small"
             data-testid="blast-gbrowse-link"
             disabled={!context || !hit.subject_id?.trim() || resolvingHit != null}
             loading={resolvingHit === hit.subject_id}
-            onClick={() => { if (selectedJob) void openGenomeBrowser(selectedJob, hit); }}
+            onClick={() => { if (activeJob) void openGenomeBrowser(activeJob, hit); }}
             title={context ? undefined : t("browser.contextMissingDescription")}
           >
             {t(resolvingHit === hit.subject_id ? "blast.jbrowse.resolving" : "blast.actions.gbrowse")}
@@ -534,6 +573,21 @@ function BlastComponent() {
       },
     },
   ];
+  // Provenance of the selected reference, as one compact block. Empty values are
+  // dropped so the block states what is known instead of padding five columns.
+  const provenanceItems: React.ComponentProps<typeof Descriptions>["items"] = selectedDatabase
+    ? ([
+        ["blast.assembly", selectedDatabase.assembly_name],
+        ["search.releaseLabel", selectedDatabase.release_id == null ? null : String(selectedDatabase.release_id)],
+        ["blast.annotation", selectedDatabase.annotation_version],
+        ["blast.dbType", selectedDatabase.db_type],
+        ["blast.license", selectedDatabase.license],
+      ] as const)
+        .filter(([, value]) => value != null && value !== "")
+        .map(([label, value]) => ({ key: label, label: t(label), children: String(value) }))
+    : [];
+
+  const activeContext = activeJob ? contextForJob(activeJob) : null;
 
   return (
     <FadeUp>
@@ -542,20 +596,10 @@ function BlastComponent() {
         <h1 className="mt-2 font-display text-4xl font-semibold tracking-tight">
           {t("blast.subtitle")}
         </h1>
+        <div className="mt-3"><Link to="/search/blast">{t("blast.publicWorkflow")}</Link></div>
 
-        <Card className="mt-8">
-          <Card.Meta
-            title={
-              <span className="flex items-center gap-2">
-                <FlaskConical className="size-5 text-primary" aria-hidden />
-                {t("blast.title")}
-              </span>
-            }
-            description={
-              <Typography.Text type="secondary">{t("blast.desc")}</Typography.Text>
-            }
-          />
-          {/* Label-above, two columns. The previous horizontal layout pinned a
+        <Card className="mt-8" title={<span className="text-base">{t("blast.title")}</span>}>
+          {/* Label-above, three columns. The previous horizontal layout pinned a
               6/24 label column inside a 768px card, which left every control
               roughly 570px wide no matter how wide the viewport got — the page
               looked small on a wide screen because it was.
@@ -564,51 +608,72 @@ function BlastComponent() {
               injects `:where(.css-x).ant-form{margin:0}` at runtime, into the
               head *after* Tailwind's stylesheet. Same specificity, later wins,
               so a spacing utility on an antd element root is a silent no-op. */}
-          <div className="mt-6">
           <Form layout="vertical" onFinish={onSubmit}>
-            <div className="grid gap-x-6 md:grid-cols-2">
-            <Form.Item
-              label={get("blast.searchType", t("blast.searchType"))}
-              htmlFor="program"
-              help={errors.program ?? undefined}
-              validateStatus={errors.program ? "error" : undefined}
-            >
-              {/* One executable program, so a dropdown would be a control that
-                  cannot change anything. A read-only value states the contract
-                  without inviting a click. */}
-              <div
-                id="program"
-                data-testid="blast-program"
-                className="flex h-8 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-sm"
-              >
-                <span className="font-medium">{BLAST_PROGRAM.label}</span>
-                <span className="text-xs text-muted-foreground">
-                  {t("blast.proteinOnlyHint")}
-                </span>
-              </div>
-            </Form.Item>
+            <Row gutter={[24, 0]}>
+              <Col xs={24} md={8}>
+                <Form.Item
+                  label={get("blast.searchType", t("blast.searchType"))}
+                  help={errors.program ?? undefined}
+                  validateStatus={errors.program ? "error" : undefined}
+                >
+                  <Flex gap={8}>
+                    <Select
+                      className="min-w-0 flex-1"
+                      aria-label={t("blastPublic.engine")}
+                      value={form.engine}
+                      onChange={(value: BlastEngine) => setForm((f) => ({ ...f, engine: value, database: "" }))}
+                      options={engineOptions}
+                    />
+                    <Select
+                      className="min-w-0 flex-1"
+                      aria-label={t("blastPublic.program")}
+                      value={form.program}
+                      onChange={(value: BlastProgram) => setForm((f) => ({ ...f, program: value, database: "" }))}
+                      options={BLAST_PROGRAMS
+                        .filter((item) => form.engine === "ncbi_blast" || item.id === "blastp")
+                        .map((item) => ({ value: item.id, label: item.label }))}
+                    />
+                  </Flex>
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item
+                  label={get("blast.database", t("blast.database"))}
+                  htmlFor="database"
+                  help={errors.database ?? undefined}
+                  validateStatus={errors.database ? "error" : undefined}
+                >
+                  <Select
+                    id="database"
+                    data-testid="blast-database"
+                    value={form.database}
+                    onChange={(v) => setForm((f) => ({ ...f, database: v }))}
+                    placeholder={t("blast.referencePlaceholder")}
+                    status={errors.database ? "error" : undefined}
+                    options={databaseOptions}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item label=" " colon={false}>
+                  <Typography.Text type="secondary" className="text-xs">{t("blast.parametersHint")}</Typography.Text>
+                </Form.Item>
+              </Col>
+            </Row>
 
-            <Form.Item
-              label={get("blast.database", t("blast.database"))}
-              htmlFor="database"
-              help={errors.database ?? undefined}
-              validateStatus={errors.database ? "error" : undefined}
-            >
-              <Select
-                id="database"
-                data-testid="blast-database"
-                size="large"
-                value={form.database}
-                onChange={(v) => setForm((f) => ({ ...f, database: v }))}
-                placeholder={t("blast.referencePlaceholder")}
-                options={databaseOptions}
+            {provenanceItems.length > 0 ? (
+              <Descriptions
+                className="mb-6"
+                size="small"
+                bordered
+                column={{ xs: 1, sm: 2, md: 3, lg: 5 }}
+                title={<span className="text-sm font-medium">{t("blastSearch.provenance")}</span>}
+                items={provenanceItems}
               />
-            </Form.Item>
-
-            </div>
+            ) : null}
 
             <Form.Item
-              label={get("blast.input", t("blast.inputSequence"))}
+              label={t(BLAST_PROGRAM_COMPATIBILITY[form.program].query === "prot" ? "blastSearch.proteinInput" : "blastSearch.nucleotideInput")}
               htmlFor="sequence"
               help={errors.sequence ?? undefined}
               validateStatus={errors.sequence ? "error" : undefined}
@@ -616,79 +681,87 @@ function BlastComponent() {
               <Input.TextArea
                 id="sequence"
                 data-testid="blast-sequence"
-                size="large"
                 value={form.sequence}
                 onChange={(e) => setForm((f) => ({ ...f, sequence: e.target.value }))}
+                autoSize={{ minRows: 6, maxRows: 14 }}
+                status={errors.sequence ? "error" : undefined}
                 placeholder={get("blast.sequencePlaceholder", t("blast.sequencePlaceholder"))}
-                className="min-h-[160px] font-mono text-sm"
+                className="font-mono text-sm"
               />
             </Form.Item>
 
-            <div className="grid gap-x-6 md:grid-cols-2">
-            <Form.Item label={t("blast.eValue")} htmlFor="e_value" style={{ marginBottom: 0 }}>
-              <Input
-                id="e_value"
-                size="large"
-                value={form.e_value}
-                onChange={(e) => setForm((f) => ({ ...f, e_value: e.target.value }))}
-                className="font-mono"
-                style={{ maxWidth: 320 }}
-              />
-            </Form.Item>
-
-            <Form.Item label={t("blast.maxHits")} htmlFor="max_hits" style={{ marginBottom: 0 }}>
-              <Input
-                id="max_hits"
-                type="number"
-                size="large"
-                value={form.max_hits}
-                onChange={(e) => setForm((f) => ({ ...f, max_hits: e.target.value }))}
-                className="font-mono"
-                style={{ maxWidth: 320 }}
-              />
-            </Form.Item>
-
-            </div>
-
-            <Form.Item style={{ marginTop: 24, marginBottom: 0 }}>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="primary"
-                  htmlType="submit"
-                  size="large"
-                  data-testid="blast-submit"
-                  loading={submitMutation.isPending}
-                  disabled={!canSubmit}
-                  title={!isSignedIn ? t("blast.submitRequiresLogin") : !canSubmit ? t("blast.submitRequiresResearcher") : undefined}
-                  icon={<Play className="size-4" aria-hidden />}
+            <Row gutter={[24, 0]}>
+              <Col xs={12} md={6}>
+                <Form.Item
+                  label={get("blast.eValue", t("blast.eValue"))}
+                  htmlFor="e_value"
+                  help={errors.parameters}
+                  validateStatus={errors.parameters ? "error" : undefined}
                 >
-                  {get("blast.submit", t("blast.submit"))}
-                </Button>
-                <Button size="large" onClick={clearForm}>{t("blast.clear")}</Button>
-              </div>
-            </Form.Item>
+                  <Input
+                    id="e_value"
+                    className="font-mono"
+                    value={form.e_value}
+                    status={errors.parameters ? "error" : undefined}
+                    onChange={(e) => setForm((f) => ({ ...f, e_value: e.target.value }))}
+                  />
+                </Form.Item>
+              </Col>
+              <Col xs={12} md={6}>
+                <Form.Item
+                  label={get("blast.maxHits", t("blast.maxHits"))}
+                  htmlFor="max_hits"
+                  help={errors.parameters ? " " : undefined}
+                  validateStatus={errors.parameters ? "error" : undefined}
+                >
+                  <Input
+                    id="max_hits"
+                    className="font-mono"
+                    type="number"
+                    min={1}
+                    max={500}
+                    value={form.max_hits}
+                    status={errors.parameters ? "error" : undefined}
+                    onChange={(e) => setForm((f) => ({ ...f, max_hits: e.target.value }))}
+                  />
+                </Form.Item>
+              </Col>
+            </Row>
+
+            <Flex wrap gap={12} align="center">
+              <Button
+                type="primary"
+                htmlType="submit"
+                size="large"
+                data-testid="blast-submit"
+                loading={submitMutation.isPending}
+                disabled={!canSubmit}
+                title={!isSignedIn ? t("blast.submitRequiresLogin") : !canSubmit ? t("blast.submitRequiresResearcher") : undefined}
+                icon={<Play className="size-4" aria-hidden />}
+              >
+                {get("blast.submit", t("blast.submit"))}
+              </Button>
+              <Button size="large" onClick={clearForm}>{t("blast.clear")}</Button>
+            </Flex>
 
             {!currentUserLoading && !canSubmit ? (
-              <Form.Item className="mb-0 mt-4">
-                <Alert
-                  type="info"
-                  showIcon
-                  message={isSignedIn ? t("blast.submitRequiresResearcher") : t("blast.submitRequiresLogin")}
-                />
-              </Form.Item>
+              <Alert
+                className="mt-4"
+                type="info"
+                showIcon
+                title={isSignedIn ? t("blast.submitRequiresResearcher") : t("blast.submitRequiresLogin")}
+              />
             ) : null}
 
             {submitMutation.isError ? (
-              <Form.Item className="mb-0 mt-4">
-                <Alert
-                  type="error"
-                  showIcon
-                  title={get("ui.errorRetry", t("blast.submitFailed", { message: (submitMutation.error as Error).message }))}
-                />
-              </Form.Item>
+              <Alert
+                className="mt-4"
+                type="error"
+                showIcon
+                title={get("ui.errorRetry", t("blast.submitFailed", { message: (submitMutation.error as Error).message }))}
+              />
             ) : null}
           </Form>
-          </div>
         </Card>
 
         <Card
@@ -726,99 +799,110 @@ function BlastComponent() {
             // Native <ul>/<li> rather than AntD 6's deprecated List. The
             // empty state is the sibling branch above, so this list is only
             // reached with at least one job.
+            //
+            // A job's hits, its download control and its warnings live inside
+            // the job's own row, and the newest completed job is open by
+            // default: the row that states a job's release/assembly context is
+            // the row that shows its hits.
             <ul className="m-0 list-none p-0">
-              {jobs.map((job) => (
-                <li key={job.id} className="py-3">
-                  <div className="flex w-full items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-mono text-xs">{job.id.slice(0, 12)}…</p>
-                      <p className="text-xs text-muted-foreground">{job.program} · {job.database}</p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-3">
-                      <Tag
-                        color={job.status === "completed" ? "success" : "default"}
-                        className="m-0 text-[10px] uppercase"
-                      >
-                        {job.status}
-                      </Tag>
-                      {job.status === "completed" ? (
-                        <Button
-                          size="small"
-                          type={selectedJob?.id === job.id ? "primary" : "default"}
-                          onClick={() => setSelectedJob(job)}
+              {jobs.map((job) => {
+                const isActive = activeJob?.id === job.id;
+                return (
+                  <li key={job.id} className="border-b border-border/60 py-3 last:border-b-0">
+                    <Flex wrap gap={12} align="center" justify="space-between">
+                      <div className="min-w-0">
+                        <p className="truncate font-mono text-xs">{job.id.slice(0, 12)}…</p>
+                        <p className="text-xs text-muted-foreground">{blastEngineLabel(job.engine, t("blastSearch.engineUnknown"))} · {job.program} · {job.database}</p>
+                      </div>
+                      <Flex gap={12} align="center" style={{ flexShrink: 0 }}>
+                        <Tag
+                          color={job.status === "completed" ? "success" : job.status === "failed" ? "error" : "processing"}
+                          className="m-0 text-[10px] uppercase"
                         >
-                          {t("blast.viewResults")}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                </li>
-              ))}
+                          {job.status}
+                        </Tag>
+                        {job.status === "completed" ? (
+                          <Button
+                            size="small"
+                            type={isActive ? "primary" : "default"}
+                            onClick={() => setSelectedJob(isActive ? null : job)}
+                          >
+                            {t("blast.viewResults")}
+                          </Button>
+                        ) : null}
+                      </Flex>
+                    </Flex>
+
+                    {isActive && activeJob ? (
+                      <div className="mt-4">
+                        {/*
+                          A job that states no release/assembly context cannot
+                          offer a trustworthy genome-browser link. The state is
+                          announced instead of silently dropping the column, so
+                          the reader knows the link is unavailable rather than
+                          missing.
+                        */}
+                        {!activeContext ? (
+                          <Alert
+                            className="mb-3"
+                            type="warning"
+                            showIcon
+                            title={t("browser.contextMissingTitle")}
+                            description={t("browser.contextMissingDescription")}
+                          />
+                        ) : null}
+                        {navigationError ? <Alert className="mb-3" type="error" showIcon title={navigationError} /> : null}
+                        {hitsDownload ? (
+                          <Flex justify="flex-end" className="mb-3">
+                            <Button
+                              size="small"
+                              data-testid="blast-download"
+                              icon={<DownloadOutlined aria-hidden />}
+                              href={hitsDownload.href}
+                              download={hitsDownload.filename}
+                              target="_blank"
+                              rel="noreferrer"
+                              title={t("blastSearch.downloadFilenameHint")}
+                            >
+                              {t("blast.download")}
+                            </Button>
+                          </Flex>
+                        ) : null}
+                        {hitsQuery.isLoading ? (
+                          <Skeleton active paragraph={{ rows: 4 }} title={false} />
+                        ) : hitsQuery.isError ? (
+                          <div role="alert">
+                            <Result
+                              status="error"
+                              title={t("blast.hitsLoadError")}
+                              extra={
+                                <Button loading={hitsQuery.isFetching} onClick={() => void hitsQuery.refetch()}>
+                                  {t("common.retry")}
+                                </Button>
+                              }
+                            />
+                          </div>
+                        ) : hits.length === 0 ? (
+                          <Empty description={get("ui.noResults", t("blast.noHits"))} />
+                        ) : (
+                          <Table<BlastHit>
+                            rowKey={(hit) => String(hit.hsp_num)}
+                            columns={hitsColumns}
+                            dataSource={hits}
+                            loading={hitsQuery.isFetching}
+                            size="small"
+                            pagination={hits.length > 25 ? { pageSize: 25, showSizeChanger: false } : false}
+                            scroll={{ x: "max-content" }}
+                          />
+                        )}
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </Card>
-
-        {/* Hits table for the selected completed job — with JBrowse 2 /
-            gene-search cross links (PPTX V2). */}
-        {selectedJob ? (
-          <Card
-            className="mt-6"
-            title={<span className="text-base">{t("blast.resultsTitle")}</span>}
-            extra={
-              <Typography.Text type="secondary" className="font-mono">
-                {selectedJob.id.slice(0, 12)}…
-              </Typography.Text>
-            }
-          >
-            {/*
-              A job that states no release/assembly context cannot offer a
-              trustworthy genome-browser link. The state is announced instead
-              of silently dropping the column, so the reader knows the link is
-              unavailable rather than missing.
-            */}
-            {selectedJob && !contextForJob(selectedJob) ? (
-              <Alert
-                className="mb-4"
-                type="warning"
-                showIcon
-                title={t("browser.contextMissingTitle")}
-                description={t("browser.contextMissingDescription")}
-              />
-            ) : null}
-            {navigationError ? <Alert className="mb-4" type="error" showIcon title={navigationError} /> : null}
-            {hitsQuery.isLoading ? (
-              <Skeleton active paragraph={{ rows: 4 }} title={false} />
-            ) : hitsQuery.isError ? (
-              <div role="alert">
-                <Result
-                  status="error"
-                  title={t("blast.hitsLoadError")}
-                  extra={
-                    <Button loading={hitsQuery.isFetching} onClick={() => void hitsQuery.refetch()}>
-                      {t("common.retry")}
-                    </Button>
-                  }
-                />
-              </div>
-            ) : hits.length === 0 ? (
-              <Empty description={get("ui.noResults", t("blast.noHits"))} />
-            ) : (
-              <Table<BlastHit>
-                rowKey={(hit) => String(hit.hsp_num)}
-                columns={hitsColumns}
-                dataSource={hits}
-                loading={hitsQuery.isFetching}
-                size="small"
-                pagination={
-                  hits.length > 25
-                    ? { pageSize: 25, showSizeChanger: false }
-                    : false
-                }
-                scroll={{ x: "max-content" }}
-              />
-            )}
-          </Card>
-        ) : null}
       </div>
     </FadeUp>
   );

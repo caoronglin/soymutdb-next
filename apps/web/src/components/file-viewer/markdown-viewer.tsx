@@ -1,13 +1,15 @@
 /**
- * Markdown viewer — marked (lazy chunk) + DOMPurify sanitization.
+ * Markdown viewer — @ant-design/x-markdown (lazy chunk).
  *
- * DOMPurify is already part of the app's static sanitization graph; marked is
- * loaded on demand so markdown parsing stays out of the initial viewer path.
+ * X-Markdown parses with marked and sanitizes the result with DOMPurify.
+ * File contents are untrusted, so `escapeRawHtml` renders embedded HTML as
+ * visible text instead of markup, and `openLinksInNewTab` emits
+ * rel="noopener noreferrer" on every link.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentType } from "react";
 import { useTranslation } from "react-i18next";
 import { Skeleton } from "@/lib/antd";
-import DOMPurify from "dompurify";
+import type { XMarkdownProps } from "@ant-design/x-markdown";
 
 interface MarkdownViewerProps {
   content: string;
@@ -16,17 +18,7 @@ interface MarkdownViewerProps {
 type MdState =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; html: string };
-
-function sanitizeMarkdownHtml(rawHtml: string): string {
-  const sanitized = DOMPurify.sanitize(rawHtml, { ADD_ATTR: ["target"] });
-  const template = document.createElement("template");
-  template.innerHTML = sanitized;
-  template.content.querySelectorAll('a[target="_blank"]').forEach((link) => {
-    link.setAttribute("rel", "noopener noreferrer");
-  });
-  return template.innerHTML;
-}
+  | { status: "ready"; Renderer: ComponentType<XMarkdownProps> };
 
 export function MarkdownViewer({ content }: MarkdownViewerProps) {
   const { t } = useTranslation();
@@ -36,28 +28,23 @@ export function MarkdownViewer({ content }: MarkdownViewerProps) {
     let disposed = false;
     setState({ status: "loading" });
 
-    (async () => {
-      try {
-        const { marked } = await import("marked");
-        if (disposed) return;
-        const rawHtml = await marked.parse(content);
-        if (disposed) return;
-        // Sanitize before injecting — markdown may embed raw HTML.
-        const html = sanitizeMarkdownHtml(rawHtml as string);
-        setState({ status: "ready", html });
-      } catch (err) {
-        if (disposed) return;
-        setState({
-          status: "error",
-          message: err instanceof Error ? err.message : String(err),
-        });
-      }
-    })();
+    import("@ant-design/x-markdown")
+      .then((mod) => {
+        if (!disposed) setState({ status: "ready", Renderer: mod.default });
+      })
+      .catch((err) => {
+        if (!disposed) {
+          setState({
+            status: "error",
+            message: err instanceof Error ? err.message : String(err),
+          });
+        }
+      });
 
     return () => {
       disposed = true;
     };
-  }, [content]);
+  }, []);
 
   if (state.status === "loading") {
     return (
@@ -76,5 +63,10 @@ export function MarkdownViewer({ content }: MarkdownViewerProps) {
     );
   }
 
-  return <div className="rl-md-viewer" dangerouslySetInnerHTML={{ __html: state.html }} />;
+  const { Renderer } = state;
+  return (
+    <div className="rl-md-viewer">
+      <Renderer content={content} escapeRawHtml openLinksInNewTab />
+    </div>
+  );
 }

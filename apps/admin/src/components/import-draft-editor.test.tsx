@@ -15,6 +15,10 @@ const api = vi.hoisted(() => ({
 
 vi.mock("@soymutdb/api-client", () => ({ adminImportStudioApi: api }));
 
+// The editor is a localized surface; initialize the real catalogs so the
+// assertions below read the shipped English copy (and interpolate {{status}}).
+await import("@soymutdb/i18n").then(({ initI18n }) => initI18n("en"));
+
 // The admin app compiles TSX with the classic React.createElement factory
 // (tsconfig sets jsx: "preserve") and its component modules deliberately do
 // not import React, so the identifier must exist globally before first render.
@@ -68,11 +72,11 @@ function renderEditor(
 }
 
 function mappingInput(): HTMLTextAreaElement {
-  return screen.getByLabelText("Field mapping JSON") as HTMLTextAreaElement;
+  return screen.getByLabelText("Field mapping (JSON array)") as HTMLTextAreaElement;
 }
 
 function patchesInput(): HTMLTextAreaElement {
-  return screen.getByLabelText("Data patches JSON") as HTMLTextAreaElement;
+  return screen.getByLabelText("Data patches (JSON array)") as HTMLTextAreaElement;
 }
 
 function commitButton(): HTMLElement {

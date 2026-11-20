@@ -361,4 +361,31 @@ async def publish_request(
     )
 
 
+@router.post("/pages/{page_id}/publish", response_model=PublishRequestResponse)
+async def publish_now(
+    page_id: uuid.UUID,
+    payload: PublishRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PublishRequestResponse:
+    """Publish a version immediately without the asynchronous task round-trip."""
+    _require_admin(current_user)
+    plugin_states = await PluginService.snapshot(db, get_plugin_registry())
+    _page, version = await page_service.publish_now(
+        db,
+        page_id=page_id,
+        version_id=payload.version_id,
+        reason=payload.reason,
+        edited_by=current_user.id,
+        plugin_states=plugin_states,
+    )
+    return PublishRequestResponse(
+        page_id=page_id,
+        version_id=version.id,
+        version=version.version,
+        status=PageDefinitionStatusEnum(version.status),
+        event_id=None,
+    )
+
+
 __all__ = ["router"]

@@ -9,16 +9,19 @@ columns the worker needs, always validating transitions with the shared
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from soymutdb_jobs.export_errors import EXPORT_FAILED_MESSAGE
-from sqlalchemy import delete, insert, select, text, update
+from sqlalchemy import delete, func, insert, literal, select, text, update
+from sqlalchemy.dialects.postgresql import JSONB
 
 from soymutdb_worker.shared import JobStatus, JobStatusUpdate, transition_allowed
 from soymutdb_worker.tables import (
     analysis_jobs,
+    blast_databases,
     blast_hits,
+    blast_index_builds,
     blast_jobs,
     gwas_jobs,
     import_tasks,
@@ -122,6 +125,100 @@ class BlastJobStore:
             return None
         return _BLAST_DB_TO_SHARED.get(row[0])
 
+    def _deadline(self, job_id: str | uuid.UUID) -> tuple[datetime | None, bool]:
+        """Return ``(deadline, known)`` for the job's expiry.
+
+        ``known`` is False when the row is missing or the deadline is absent or
+        not a datetime: an unreadable deadline must never be read as "expired",
+        and must never be read as "just expired now" either.
+        """
+        row = self._session.execute(
+            text("SELECT expires_at FROM blast_jobs WHERE id = :jid"),
+            {"jid": str(job_id)},
+        ).first()
+        if row is None or row[0] is None:
+            return None, False
+        deadline = row[0]
+        if not isinstance(deadline, datetime):
+            return None, False
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=UTC)
+        return deadline, True
+
+    def is_expired(self, job_id: str | uuid.UUID) -> bool:
+        """True when the job's download/capability deadline has passed.
+
+        An expired job must not be executed: its public capability and result
+        download are no longer valid. NULL expiry (legacy rows) is not expired.
+        """
+        deadline, known = self._deadline(job_id)
+        return known and deadline is not None and deadline <= datetime.now(UTC)
+
+    def is_terminal_skip(self, job_id: str | uuid.UUID) -> bool:
+        """True when the job must not be started at all.
+
+        A cancelled/expired *row* is terminal, and so is a row whose deadline
+        has passed — the worker is the last line of defence, so a late Celery
+        delivery cannot start a search whose capability already lapsed.
+        """
+        row = self._session.execute(
+            text("SELECT status FROM blast_jobs WHERE id = :jid"),
+            {"jid": str(job_id)},
+        ).first()
+        if row is not None and row[0] in {"cancelled", "expired"}:
+            return True
+        return self.is_expired(job_id)
+
+    def is_cancelled(self, job_id: str | uuid.UUID) -> bool:
+        """True when the job row is already in a cancelled/expired terminal state."""
+        row = self._session.execute(
+            text("SELECT status FROM blast_jobs WHERE id = :jid"),
+            {"jid": str(job_id)},
+        ).first()
+        return row is not None and row[0] in {"cancelled", "expired"}
+
+    def download_ttl_seconds(
+        self, job_id: str | uuid.UUID, *, cap: int = 86400
+    ) -> int:
+        """Remaining seconds until the job's download/capability deadline.
+
+        ``cap`` is the hard maximum even for rows without an expiry (legacy).
+        Zero or negative means no download link may be issued.
+        """
+        deadline, known = self._deadline(job_id)
+        if deadline is None or not known:
+            return max(0, cap)  # unknown deadline shape: use the hard cap
+        remaining = int((deadline - datetime.now(UTC)).total_seconds())
+        return max(0, min(remaining, cap))
+
+    def mark_expired(self, job_id: str | uuid.UUID) -> bool:
+        """Guardedly close a pending/running job whose deadline has passed."""
+        result = self._session.execute(
+            update(blast_jobs)
+            .where(
+                blast_jobs.c.id == str(job_id),
+                blast_jobs.c.status.in_(["pending", "running"]),
+            )
+            .values(status="expired", completed_at=utcnow(),
+                    error_message="BLAST job expired before completion")
+        )
+        return bool(getattr(result, "rowcount", 0))
+
+    def request_retry(self, job_id: str | uuid.UUID) -> bool:
+        """Reset a FAILED job to PENDING for one explicit retry.
+
+        Only ``failed`` is retryable: completed/cancelled/expired jobs are
+        terminal (a new job must be submitted instead). The caller owns the
+        outbox re-dispatch; this method never fabricates a new execution.
+        """
+        result = self._session.execute(
+            update(blast_jobs)
+            .where(blast_jobs.c.id == str(job_id), blast_jobs.c.status == "failed")
+            .values(status="pending", error_message=None, started_at=None,
+                    completed_at=None, result_path=None, hit_count=0, query_len=None)
+        )
+        return bool(getattr(result, "rowcount", 0))
+
     def update_status(
         self,
         job_id: str | uuid.UUID,
@@ -186,6 +283,7 @@ class BlastJobStore:
         result_path: str,
         query_len: int | None = None,
         hit_count: int | None = None,
+        execution_metadata: dict | None = None,
     ) -> bool:
         """Mark the job completed and record the S3 result path.
 
@@ -206,6 +304,10 @@ class BlastJobStore:
             values["query_len"] = int(query_len)
         if hit_count is not None:
             values["hit_count"] = int(hit_count)
+        if execution_metadata is not None:
+            values["parameters"] = func.coalesce(
+                blast_jobs.c.parameters, literal({}, type_=JSONB)
+            ).op("||")(literal({"_execution": execution_metadata}, type_=JSONB))
         result = self._session.execute(
             update(blast_jobs)
             .where(
@@ -258,7 +360,10 @@ class BlastHitStore:
             delete(blast_hits).where(blast_hits.c.job_id == jid)
         )
         if hits:
-            rows = [{**hit, "job_id": jid} for hit in hits]
+            rows = [
+                {**hit, "hsp_num": number, "job_id": jid}
+                for number, hit in enumerate(hits, 1)
+            ]
             self._session.execute(insert(blast_hits), rows)
         return len(hits)
 
@@ -414,6 +519,8 @@ class VariantExportStore:
         export_id: str | uuid.UUID,
         *,
         artifact_path: str,
+        sha256: str | None = None,
+        generated_at=None,
         record_count: int,
         file_size: int,
         expires_at: datetime,
@@ -435,6 +542,8 @@ class VariantExportStore:
                 artifact_path=artifact_path,
                 record_count=int(record_count),
                 file_size=int(file_size),
+                sha256=sha256,
+                generated_at=generated_at,
                 completed_at=utcnow(),
                 expires_at=expires_at,
                 updated_at=utcnow(),
@@ -858,8 +967,191 @@ class NotifyStore:
 __all__ = [
     "AnalysisJobStore",
     "BlastHitStore",
+    "BlastIndexBuildStore",
     "BlastJobStore",
     "GwasJobStore",
     "ImportTaskStore",
     "NotifyStore",
 ]
+
+
+class BlastIndexBuildStore:
+    """Narrow repository over ``blast_index_builds``.
+
+    Every state write is a guarded conditional UPDATE validated by the shared
+    BLAST catalog state machine, so duplicate outbox deliveries cannot advance
+    a build twice or publish a stale identity. Failure reasons are sanitized
+    (no paths, no child stderr, no sequences).
+    """
+
+    def __init__(self, session) -> None:
+        self._session = session
+
+    def get_state(self, build_id: str | uuid.UUID) -> tuple[str, dict] | None:
+        row = self._session.execute(
+            select(
+                blast_index_builds.c.state,
+                blast_index_builds.c.build_metadata,
+                blast_index_builds.c.source_object_key,
+                blast_index_builds.c.db_type,
+                blast_index_builds.c.index_identity,
+                blast_index_builds.c.database_id,
+            ).where(blast_index_builds.c.id == str(build_id))
+        ).first()
+        if row is None:
+            return None
+        state, metadata, key, db_type, identity, database_id = row
+        return state, {
+            "build_metadata": metadata or {}, "source_object_key": key, "db_type": db_type,
+            "index_identity": identity, "database_id": database_id,
+        }
+
+    def expire_stale_claim(self, build_id: str | uuid.UUID, lease_seconds: int) -> bool:
+        """Close a claim whose worker died, without starting another build."""
+        row = self._session.execute(
+            select(blast_index_builds.c.state, blast_index_builds.c.started_at).where(
+                blast_index_builds.c.id == str(build_id)
+            )
+        ).first()
+        if row is None or row[0] not in {"building", "validating"}:
+            return False
+        started_at = row[1]
+        if started_at is None:
+            return False
+        if started_at.tzinfo is None:
+            from datetime import UTC
+
+            started_at = started_at.replace(tzinfo=UTC)
+        if (utcnow() - started_at).total_seconds() < lease_seconds:
+            return False
+        result = self._session.execute(
+            update(blast_index_builds)
+            .where(
+                blast_index_builds.c.id == str(build_id),
+                blast_index_builds.c.state == row[0],
+                blast_index_builds.c.started_at == started_at,
+            )
+            .values(
+                state="failed",
+                error_message="build attempt lost (claim lease expired)",
+                completed_at=utcnow(),
+                updated_at=utcnow(),
+            )
+        )
+        return bool(getattr(result, "rowcount", 0))
+
+    def transition(
+        self,
+        build_id: str | uuid.UUID,
+        target: str,
+        *,
+        expected: str,
+        fields: dict[str, Any] | None = None,
+    ) -> bool:
+        """Apply one legal state step only if the row is still at *expected*."""
+        from soymutdb_jobs.blast_catalog import build_transition_allowed, validate_build_state
+
+        validate_build_state(target)
+        if not build_transition_allowed(expected, target):
+            return False
+        now = utcnow()
+        values: dict[str, Any] = {"state": target, "updated_at": now}
+        if target == "building":
+            values["started_at"] = now
+        if target in {"published", "failed"}:
+            values["completed_at"] = now
+        if fields:
+            values.update(fields)
+        result = self._session.execute(
+            update(blast_index_builds)
+            .where(
+                blast_index_builds.c.id == str(build_id),
+                blast_index_builds.c.state == expected,
+            )
+            .values(**values)
+        )
+        return bool(getattr(result, "rowcount", 0))
+
+    def fail(self, build_id: str | uuid.UUID, *, reason: str) -> bool:
+        """Terminal failure from any non-terminal state, with a scrubbed reason."""
+        current, _ = self.get_state(build_id) or (None, {})
+        if current is None or current in {"published", "failed", "ready"}:
+            return False
+        return self.transition(
+            build_id, "failed", expected=current,
+            fields={"error_message": _scrub_build_error(reason)},
+        )
+
+    def publish(
+        self,
+        build_id: str | uuid.UUID,
+        *,
+        identity: str,
+        source_sha256: str,
+        sequence_count: int,
+        total_length: int,
+        database_id: int | None,
+    ) -> bool:
+        """Atomically publish the verified identity and bind the catalog row.
+
+        The catalog row is updated in the same transaction: an index becomes
+        searchable only when both the build record and the catalog agree.
+        A published directory is never overwritten.
+        """
+        # ``blast_catalog.index_identity`` validates and returns the normalized
+        # identity; the previous local alias named it ``validate_identity`` and
+        # raised ImportError, which every caller read as "publication rejected".
+        from soymutdb_jobs.blast_catalog import index_identity as validate_identity
+
+        validate_identity(identity)
+        current, _ = self.get_state(build_id) or (None, {})
+        # Both builders take the ``validating -> publishing`` claim before they
+        # publish, so ``publishing`` is the expected state here -- a build that
+        # is still ``validating`` has not finished re-verifying its artifacts
+        # and must not win the swap.
+        if current != "publishing":
+            return False
+
+        # Bind the catalog row first. If the guarded UPDATE is rejected the
+        # whole transaction rolls back and the build row stays ``publishing``,
+        # so the caller's failure handler can close it as ``failed`` rather
+        # than leaving a build marked published with no searchable index.
+        if database_id is not None:
+            updated = self._session.execute(
+                update(blast_databases)
+                .where(
+                    blast_databases.c.id == database_id,
+                    blast_databases.c.build_status.in_(
+                        ["pending", "building", "validating"]
+                    ),
+                    blast_databases.c.index_version.is_(None),
+                )
+                .values(
+                    build_status="published",
+                    index_version=identity,
+                    fasta_sha256=source_sha256,
+                    sequence_count=sequence_count,
+                    total_length=total_length,
+                    engine="ncbi_blast",
+                    is_active=True,
+                )
+            )
+            if not getattr(updated, "rowcount", 0):
+                raise ValueError("catalog row missing or already published")
+
+        return self.transition(
+            build_id, "published", expected="publishing",
+            fields={
+                "index_identity": identity,
+                "source_sha256": source_sha256,
+                "sequence_count": sequence_count,
+                "total_length": total_length,
+            },
+        )
+
+
+def _scrub_build_error(reason: str, *, max_len: int = 2000) -> str:
+    """Operator diagnostics never echo paths, sequences or raw child stderr."""
+    clean = "".join(ch for ch in reason if ch.isprintable() or ch in "\n\t")
+    clean = " ".join(clean.split())
+    return (clean[:max_len] or "index build failed")

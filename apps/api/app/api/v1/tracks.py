@@ -41,14 +41,16 @@ async def list_tracks(
     db: AsyncSession = Depends(get_db),
     assembly_id: int | None = Query(default=None),
     category_id: int | None = Query(default=None),
+    release_context: ReleaseContext = Depends(get_release_context),
     current_user: User | None = Depends(get_optional_user),
 ) -> list[dict[str, Any]]:
-    """List tracks (optionally filtered by assembly / category)."""
+    """List the selected release's tracks (optionally filtered by assembly/category)."""
     _cache_policy(response, authenticated=current_user is not None)
     return await service.list_tracks(
         db,
         assembly_id=assembly_id,
         category_id=category_id,
+        release_id=release_context.release_id,
         user_id=current_user.id if current_user else None,
         user_roles=get_user_roles(current_user) if current_user else [],
     )
@@ -100,13 +102,15 @@ async def get_track(
     track_id: int,
     response: Response,
     db: AsyncSession = Depends(get_db),
+    release_context: ReleaseContext = Depends(get_release_context),
     current_user: User | None = Depends(get_optional_user),
 ) -> dict[str, Any]:
-    """Get track detail."""
+    """Get track detail scoped to the selected release."""
     _cache_policy(response, authenticated=current_user is not None)
     return await service.get_track(
         db,
         track_id,
+        release_id=release_context.release_id,
         user_id=current_user.id if current_user else None,
         user_roles=get_user_roles(current_user) if current_user else [],
     )

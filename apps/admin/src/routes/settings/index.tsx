@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import { useTranslation } from "react-i18next";
 import { PageContainer } from "@/lib/antd";
-import { SETTINGS_DOMAIN_META, SETTINGS_DOMAINS } from "./domains";
+import { SETTINGS_DOMAIN_META, SETTINGS_HUB_DOMAINS } from "./domains";
 
 export default function SettingsOverviewPage() {
   const { t } = useTranslation();
@@ -16,7 +16,7 @@ export default function SettingsOverviewPage() {
         {/* This route issues no data query: it is the settings navigation hub, so
             the domain grid is both its mount marker and its settled marker. */}
         <div data-testid="settings-domains" className="grid gap-4 sm:grid-cols-2">
-          {SETTINGS_DOMAINS.map((domain) => {
+          {SETTINGS_HUB_DOMAINS.map((domain) => {
             const meta = SETTINGS_DOMAIN_META[domain];
             return (
               <Link
@@ -34,9 +34,6 @@ export default function SettingsOverviewPage() {
             );
           })}
         </div>
-        <Link data-testid="settings-legacy-link" to="/settings/legacy" className="text-sm text-primary hover:underline">
-          {t("admin.settings.completeForm", { defaultValue: "Open the complete settings form" })}
-        </Link>
       </div>
     </PageContainer>
   );

@@ -49,6 +49,30 @@ vi.mock("@/lib/antd", () => {
       <span data-color={props.color as string | undefined}>{props.children}</span>
     ),
     Space: (props: Props) => <div>{props.children}</div>,
+    Input: (props: Props) => (
+      <input
+        aria-label={props["aria-label"] as string | undefined}
+        placeholder={props.placeholder as string | undefined}
+        value={props.value as string | undefined}
+        onChange={props.onChange as React.ChangeEventHandler<HTMLInputElement>}
+      />
+    ),
+    Select: (props: Props) => {
+      const options = props.options as Array<{ value: string; label: React.ReactNode }> | undefined;
+      return (
+        <select
+          aria-label={props["aria-label"] as string | undefined}
+          value={props.value as string | undefined}
+          onChange={(event) => (props.onChange as (value: string) => void)?.(event.target.value)}
+        >
+          {options?.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      );
+    },
     Typography: {
       Text: (props: Props) => (
         <span data-code={String(Boolean(props.code))} data-text-type={props.type as string | undefined}>

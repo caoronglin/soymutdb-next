@@ -544,3 +544,14 @@ API **2447 / 4 skipped**；Worker **659 / 8 skipped**；`pytest scripts` **517 /
 - analyses.spec.ts（public 套件）3 用例：匿名门禁零个人请求、researcher 服务端列表+行→job 页、列表 404 时 localStorage 回退经 GET /analyses/{id} 解析。
 - 真实 BUG：jobsQuery 在 ResearcherGate 外层 → 匿名访客先发 GET /api/v1/analyses?limit=50（401+refresh）再显示门禁；修复为 AnalysesJobList 子组件置于 gate 内。
 - 验证：3 passed（匿名 0 请求）、sweep 9/9（251s）、workspace 908、web eslint 通过。
+
+### 2026-11-08（任务 #11：内容键双向门禁）
+- 守卫升级为双向硬门禁：注册键无消费者也失败；动态族 `tool.${tool.key}.*` / `help.faq${i+1}.*` 从 `TOOL_ENTRIES`/`FAQS` 展开，未知模板 fail-closed；`labelKey` 仅在 `get(...labelKey...)` 文件计为消费者。
+- 修复 4 处真实接线（`search.location.colGbrowse`、`blast.hitProteinCoords/eValue/maxHits`）+ 3 处导航面包屑/标题；删除 11 个陈旧键；补齐 9 个头部标签注册。
+- 当前证据：guard OK 123/123；守卫 unittest 10 passed；API registry/site-content 25 passed；web 受影响 4 文件 33 passed；web typecheck/eslint 通过。
+
+### 2026-11-08（任务 #12：真实产物前端性能测量）
+- 在 `apps/web/dist/external` 真实构建上测得：移动端 FCP 36ms / LCP 1388ms / CLS 0.0059；桌面 LCP 952ms / CLS 0；reduced-motion LCP 1388ms / CLS 0.0063 / RAF 0；390px 无横向溢出。首屏 HTML 引用 JS 163KB gzip（<700KB），图表闭包 331914B（<378880B），字体约 100KB（<500KB）。
+- 真实 CLS BUG：静态壳 `soymutdb-shell-fallback` 以普通块紧随 `#root`，挂载后被推走；UA body margin 在应用 CSS 前生效。三连冷启动稳定 0.2084。修复为 head 内联 `html,body{margin:0;padding:0}` + 占位块 `position:absolute` + `body:has(#root > *)` 隐藏，CLS 降至 0.0059/0/0.0063。
+- reduced-motion 缺口：ticker 已停（RAF=0）但 `Carousel autoplay` 仍每 5.2s 切换。改为 `autoplay={!reduced}`，e2e 等待 5.6s 断言 active slide 文本不变。
+- 验证：web 78 files / 661 passed；lint/typecheck 通过；playwright 2 passed；bundle/chart closure OK。

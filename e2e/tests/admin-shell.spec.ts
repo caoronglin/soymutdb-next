@@ -61,6 +61,8 @@ const ADMIN_ROUTES = [
   // Registered paths from apps/admin/src/App.tsx (route tree is manual, so a
   // renamed file without a route update shows up as "Not Found").
   "/",
+  "/dashboard/analysis",
+  "/dashboard/monitor",
   "/releases",
   "/publications",
   "/imports",
@@ -80,6 +82,7 @@ const ADMIN_ROUTES = [
   "/guide",
   "/preview-test-data",
   "/resource-catalog",
+  "/site-control",
   "/page-builder",
   "/widgets",
   "/widget-health",

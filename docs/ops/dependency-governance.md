@@ -90,6 +90,28 @@ the reference:
   root/app `entry` points: the first is a documented CLI scan tool, the webpack
   files are referenced by `apps/web/config/config.ts` (one by path string).
 
+Three more entries exist for the same reason, added when the component docs
+site and the Ant Design lint gate landed:
+
+- `scripts/check-antd-design.mjs` is a root `entry` point. The gate is invoked
+  by `scripts/verify-frontend-artifacts.sh` as
+  `node scripts/check-antd-design.mjs --self-test`; Knip only follows
+  JavaScript imports, so a shell-invoked script otherwise reads as dead code.
+- `@ant-design/cli` is in the root `ignoreDependencies`. The lint gate spawns
+  the CLI as a subprocess through its resolved `dist/index.js` path and never
+  imports it, so there is no import edge for Knip to follow. The package is
+  still a declared root `devDependency`.
+- `apps/docs` is a workspace whose `entry` points are `.dumirc.ts` and
+  `docs/**/*.md`. The docs site is a dumi app: the demo code lives in fenced
+  ```` ```tsx ```` blocks inside the Markdown, and dumi compiles those blocks
+  into the published pages. Knip 5 does not parse Markdown code fences, so
+  every facade import (`@soymutdb/ui-react`, `@soymutdb/charts`,
+  `@soymutdb/genome-view`, `antd`, `@ant-design/pro-components`) looked unused
+  and the dependency gate failed on a live documentation app. Those five
+  packages are therefore listed in the workspace's `ignoreDependencies` — they
+  are still declared in `apps/docs/package.json` and still bundled by the docs
+  build; the entry keeps the Markdown files themselves in the analyzed project.
+
 With these entries the analyzer exits 0 on the current tree; a new unused file
 or export fails the governance gate.
 

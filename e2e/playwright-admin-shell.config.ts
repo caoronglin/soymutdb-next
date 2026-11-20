@@ -17,7 +17,9 @@ const baseURL = "http://localhost:4189/";
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: /admin-shell\.spec\.ts/,
+  // Two specs share this gate: the mount sweep, and the write path that
+  // actually changes the live site (navigation save, conflict handling).
+  testMatch: /admin-(shell|write-paths)\.spec\.ts/,
   workers: 1,
   fullyParallel: false,
   timeout: 45_000,
@@ -31,7 +33,9 @@ export default defineConfig({
     baseURL,
     // The console is Chinese-first in this build; assertions are testid-based.
     locale: "en-US",
-    reducedMotion: "reduce",
+    // `reducedMotion` is a browser-context option; the type surface accepts it
+    // only under `contextOptions`, not as a top-level `use` key.
+    contextOptions: { reducedMotion: "reduce" },
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     viewport: { width: 1440, height: 900 },

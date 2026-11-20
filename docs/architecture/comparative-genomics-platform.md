@@ -13,7 +13,7 @@ SoyMutDB remains a release-aware FastAPI, PostgreSQL, Redis/Celery and object-st
 
 ## Access modes
 
-`/blast` remains the authenticated researcher workflow for owned jobs and history. The public form and database discovery remain readable without a session, but the API still rejects unauthorized job creation and job reads. `/search/blast` remains a compatibility entry point and must not bypass the same API authorization boundary. Any future anonymous execution must use an opaque, expiring capability rather than an ownerless job with guessable IDs.
+`/blast` remains the authenticated researcher workflow for owned jobs and history. Public form/database discovery remain readable without a session. `/search/blast` provides anonymous execution through separate capability-authorized HTTP endpoints over the same job/outbox/worker pipeline. A signed, purpose-specific credential is bound to one explicitly anonymous job and expires within 24 hours. Private account ownership and researcher submission authorization remain unchanged. See [public BLAST operations](../ops/public-blast.md).
 
 ## Delivery order
 

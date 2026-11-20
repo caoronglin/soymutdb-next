@@ -14,6 +14,7 @@ export default tseslint.config(
             "**/dist/**",
             "**/.turbo/**",
             "**/.umi*/**",
+            "**/.dumi*/**",
             "**/coverage/**",
             "**/public/**",
             "**/*.gen.ts",

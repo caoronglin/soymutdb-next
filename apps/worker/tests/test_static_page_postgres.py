@@ -13,13 +13,34 @@ from sqlalchemy.orm import sessionmaker
 from soymutdb_worker.tasks import static_pages as sp
 
 
-@pytest.fixture
-def static_page_database(monkeypatch):
+def _static_url_or_fail() -> str:
+    """The static-page PostgreSQL URL, or a hard failure (never a skip).
+
+    Mirrors ``_native_url_or_fail`` in the sibling suites. Skipping here made
+    three release-scope and keyset-batching assertions invisible to the gate
+    while ``SOYMUTDB_RUN_POSTGRES_INTEGRATION=1`` claimed a real database was
+    present. ``scripts/with-postgres-service.sh`` derives this variable, so an
+    absent value is a wiring bug, not an absent database.
+
+    No scheme check here: the value either comes from ``derive_sync_url``,
+    which only emits ``postgresql+psycopg2://``, or from a caller who set the
+    variable themselves. A ``startswith("postgresql")`` guard on that value
+    would be unreachable, and an unreachable guard reads as protection that is
+    not there.
+    """
     url = os.environ.get("SOYMUTDB_STATIC_TEST_DATABASE_URL")
     if not url:
-        pytest.skip("SOYMUTDB_STATIC_TEST_DATABASE_URL is required for PostgreSQL execution")
-    if not url.startswith("postgresql"):
-        pytest.fail("static-page integration requires PostgreSQL")
+        pytest.fail(
+            "SOYMUTDB_STATIC_TEST_DATABASE_URL is required: scripts/with-postgres-service.sh "
+            "derives it from SOYMUTDB_TEST_DATABASE_URL. This suite is a merge gate; it "
+            "must fail rather than skip."
+        )
+    return url
+
+
+@pytest.fixture
+def static_page_database(monkeypatch):
+    url = _static_url_or_fail()
     schema = "static_page_test_" + uuid.uuid4().hex
     admin = create_engine(url)
     engine = create_engine(url, connect_args={"options": f"-csearch_path={schema},public"})

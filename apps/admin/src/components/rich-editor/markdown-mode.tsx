@@ -7,17 +7,20 @@
  * No lossless round-trip is promised — the Tabs switch is guarded by a
  * confirmation (see tiptap-editor.tsx).
  */
-import { useMemo, useState } from "react";
-import { marked } from "marked";
-import DOMPurify from "dompurify";
+import { lazy, Suspense, useState } from "react";
 import type { Editor } from "@tiptap/react";
 // Side-effect import: pulls in @tiptap/markdown's module augmentation so
 // `editor.getMarkdown()` / `setContent(..., { contentType: 'markdown' })`
 // are typed in this file.
 import "@tiptap/markdown";
-import { Alert, Button, Space } from "../../lib/antd";
+import { Alert, Button, Skeleton, Space } from "../../lib/antd";
 import { CheckOutlined, EyeOutlined, EditOutlined } from "@ant-design/icons";
 import { useTranslation } from "react-i18next";
+
+// X-Markdown sanitizes with DOMPurify by default. The extra FORBID_* entries
+// keep the preview at the same trust level the previous marked+DOMPurify
+// pipeline enforced for author-supplied HTML.
+const XMarkdown = lazy(() => import("@ant-design/x-markdown"));
 
 interface MarkdownModeProps {
   /** The live TipTap editor (non-null — rendered only when mounted). */
@@ -31,16 +34,6 @@ export function MarkdownMode({ editor, onApplied }: MarkdownModeProps) {
   const [source, setSource] = useState(() => editor.getMarkdown() ?? "");
   const [preview, setPreview] = useState(false);
   const [applied, setApplied] = useState(false);
-
-  const previewHtml = useMemo(() => {
-    if (!preview) return "";
-    const raw = marked.parse(source, { async: false }) as string;
-    return DOMPurify.sanitize(raw, {
-      USE_PROFILES: { html: true },
-      FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form", "input"],
-      FORBID_ATTR: ["onerror", "onclick", "onload", "style"],
-    });
-  }, [source, preview]);
 
   const handleApply = () => {
     editor.commands.setContent(source, { contentType: "markdown" });
@@ -58,10 +51,19 @@ export function MarkdownMode({ editor, onApplied }: MarkdownModeProps) {
       />
       <div className="rl-editor-markdown-wrap" style={{ position: "relative" }}>
         {preview ? (
-          <div
-            className="rl-editor-content rl-editor-preview"
-            dangerouslySetInnerHTML={{ __html: previewHtml }}
-          />
+          <div className="rl-editor-content rl-editor-preview">
+            <Suspense fallback={<Skeleton active paragraph={{ rows: 4 }} />}>
+              <XMarkdown
+                content={source}
+                openLinksInNewTab
+                dompurifyConfig={{
+                  USE_PROFILES: { html: true },
+                  FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form", "input"],
+                  FORBID_ATTR: ["onerror", "onclick", "onload", "style"],
+                }}
+              />
+            </Suspense>
+          </div>
         ) : (
           <textarea
             className="rl-editor-markdown"

@@ -7,7 +7,8 @@ import math
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, literal, select, text
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,8 +16,8 @@ from ..core.database import get_session_factory
 from ..core.exceptions import ServiceUnavailableError, ValidationError
 from ..schemas.variant import VariantFilterParams
 from .release_context import ReleaseContext
-from .variant_repository import _FIELDS, VariantRepository
-from .variant_visibility import PUBLIC_FACT_VISIBILITY
+from .variant_repository import FACTS, PROJECTED_COLUMNS, VariantRepository
+from .variant_visibility import variant_fact_visibility
 
 
 def _guard(operation):
@@ -29,10 +30,42 @@ def _guard(operation):
     return wrapped
 
 
+def _public_fact_visibility_sql() -> str:
+    """Render the shared visibility expression as the aggregates' WHERE text.
+
+    The aggregates below stay SQL text (``count(*) FILTER`` clauses, grouped
+    expressions, CASTs), so they need a text predicate rather than a SQLAlchemy
+    expression. Rendering it from the expression *inside a statement* is what
+    makes the EXISTS subqueries correlate to the outer ``variant_facts`` row:
+    compiled bare, SQLAlchemy puts ``variant_facts`` into the subquery's own
+    FROM list and the predicate silently stops filtering (measured: 8 rows
+    instead of 3 on the test fixture). Deriving it also means the text form and
+    the expression form cannot drift, and no caller input reaches the string.
+    """
+    statement = select(literal(1)).select_from(FACTS).where(variant_fact_visibility(FACTS))
+    rendered = str(statement.compile(
+        dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True},
+    ))
+    # The statement is exactly "SELECT ... FROM variant_facts WHERE <predicate>",
+    # so the predicate is everything after the first WHERE token.
+    marker = "\nWHERE "
+    start = rendered.find(marker)
+    assert start != -1, "the compiled statement carries no WHERE clause"
+    predicate = rendered[start + len(marker):]
+    # Correlated, not self-contained: the render must not re-declare the surface
+    # inside the subquery, which is the failure this whole function guards.
+    assert "FROM releases, variant_facts" not in predicate
+    assert "FROM mutant_lines, variant_facts" not in predicate
+    return predicate
+
+
+PUBLIC_FACT_VISIBILITY_SQL = _public_fact_visibility_sql()
+
+
 def _release_scope(
     release_key: str | None, *, public_only: bool = True,
 ) -> tuple[str, dict[str, Any]]:
-    conditions = [PUBLIC_FACT_VISIBILITY] if public_only else []
+    conditions = [PUBLIC_FACT_VISIBILITY_SQL] if public_only else []
     values: dict[str, Any] = {}
     if release_key is not None:
         conditions.append("release_id = :release_id")
@@ -114,12 +147,18 @@ class PostgresVariantService:
             return None
         if not 0 <= identity <= 18446744073709551615:
             return None
+        statement = (
+            select(*(FACTS.c[name] for name in PROJECTED_COLUMNS))
+            .where(
+                FACTS.c.release_id == bindparam("release_id"),
+                FACTS.c.variant_id == bindparam("variant_id"),
+                variant_fact_visibility(FACTS),
+            )
+        )
         async with get_session_factory()() as db:
-            result = await db.execute(text(
-                f"SELECT {_FIELDS} FROM variant_facts "
-                "WHERE release_id = :release_id AND variant_id = :variant_id AND "
-                + PUBLIC_FACT_VISIBILITY
-            ), {"release_id": release_context.release_id, "variant_id": identity})
+            result = await db.execute(statement, {
+                "release_id": release_context.release_id, "variant_id": identity,
+            })
             record = result.mappings().one_or_none()
             if record is None:
                 return None

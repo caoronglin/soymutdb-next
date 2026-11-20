@@ -9,6 +9,7 @@ export {
   Alert,
   App,
   App as AntdApp,
+  AutoComplete,
   Avatar,
   Badge,
   Breadcrumb,
@@ -49,6 +50,7 @@ export {
   Space,
   Spin,
   Statistic,
+  Steps,
   Switch,
   Table,
   Tabs,
@@ -56,6 +58,7 @@ export {
   Tooltip,
   Typography,
   Upload,
+  Watermark,
   theme,
 } from "antd";
 export {

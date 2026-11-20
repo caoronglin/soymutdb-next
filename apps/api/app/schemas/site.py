@@ -15,8 +15,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..core.footer_content import FooterNavigationGroup
+from ..core.header_navigation import HeaderNavigationGroup
 
 SiteVariant = Literal["external", "internal"]
+DatabaseKind = Literal["genome", "gene_ontology", "transcription_factor"]
 
 
 class SiteBrandValues(BaseModel):
@@ -121,3 +123,18 @@ class FooterContentResponse(BaseModel):
     copyright_en: str | None = None
     copyright_zh: str | None = None
     navigation: list[FooterNavigationGroup] = Field(default_factory=list)
+
+
+class SiteNavigationResponse(BaseModel):
+    """Feature-gated primary navigation for one explicit site variant."""
+
+    variant: SiteVariant
+    groups: list[HeaderNavigationGroup] = Field(default_factory=list)
+
+
+class SiteProfileResponse(BaseModel):
+    """Database identity and public feature availability for the web client."""
+
+    variant: SiteVariant
+    database_kind: DatabaseKind
+    features: dict[str, bool] = Field(default_factory=dict)

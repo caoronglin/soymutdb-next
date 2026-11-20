@@ -14,7 +14,7 @@ const baseURL = "http://127.0.0.1:4178/";
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: /web-artifact-performance\.spec\.ts/,
+  testMatch: /web-artifact-(performance|vitals)\.spec\.ts/,
   workers: 1,
   fullyParallel: false,
   timeout: 45_000,

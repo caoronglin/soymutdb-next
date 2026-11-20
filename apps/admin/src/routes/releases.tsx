@@ -1,15 +1,43 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
+import { ReloadOutlined } from "@ant-design/icons";
 import { getActiveRelease, getAdminRelease, getAdminReleases } from "@soymutdb/api-client";
 import { formatDate, formatNumber } from "@soymutdb/shared/format";
-import { Alert, Button, Descriptions, PageContainer, ProCard, ProTable, Space, Tag, Typography, type ProColumns } from "@/lib/antd";
+import {
+  Alert,
+  Button,
+  Descriptions,
+  Input,
+  PageContainer,
+  ProCard,
+  ProTable,
+  Select,
+  Space,
+  Tag,
+  Typography,
+  type ProColumns,
+} from "@/lib/antd";
 import { useTranslation } from "react-i18next";
 import { PRO_LIST_SHELL } from "../components/pro-table-shell";
 import { readActiveReleaseId, statusTone, toReleaseRow, toReleaseRows, type ReleaseRow } from "./releases/release-rows";
 
+const STATUS_ORDER = ["published", "ready", "validated", "draft", "rolled_back"] as const;
+
+function SummaryCard({ label, value, hint }: { label: React.ReactNode; value: React.ReactNode; hint?: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-border bg-card px-4 py-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
+      {hint ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{hint}</p> : null}
+    </div>
+  );
+}
+
 export default function ReleasesPage() {
   const { t } = useTranslation();
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [search, setSearch] = React.useState("");
+  const [statusFilter, setStatusFilter] = React.useState<string>("all");
   // `GET /releases` accepts only `status`; it ignores `page`/`page_size` and
   // returns the whole list ordered by `published_at` desc
   // (apps/api/app/api/v1/releases.py::list_releases), so the table paginates
@@ -34,8 +62,30 @@ export default function ReleasesPage() {
     enabled: Boolean(selectedId),
   });
   const activeReleaseId = readActiveReleaseId(activeQuery.data);
-  const releases = toReleaseRows(query.data, activeReleaseId);
+  const releases = React.useMemo(() => toReleaseRows(query.data, activeReleaseId), [query.data, activeReleaseId]);
   const detail = toReleaseRow(detailQuery.data, activeReleaseId);
+
+  const statuses = React.useMemo(() => {
+    const present = new Set(releases.map((release) => release.status));
+    return STATUS_ORDER.filter((status) => present.has(status));
+  }, [releases]);
+
+  const filtered = React.useMemo(() => {
+    const needle = search.trim().toLocaleLowerCase();
+    return releases.filter((release) => {
+      if (statusFilter !== "all" && release.status !== statusFilter) return false;
+      if (!needle) return true;
+      return [release.id, release.name, release.version]
+        .filter(Boolean)
+        .join(" ")
+        .toLocaleLowerCase()
+        .includes(needle);
+    });
+  }, [releases, search, statusFilter]);
+
+  const activeRelease = releases.find((release) => release.isActive) ?? null;
+  const publishedCount = releases.filter((release) => release.status === "published").length;
+  const draftCount = releases.filter((release) => release.status === "draft").length;
 
   // Read-only list: the only action reads one release through a route the API
   // serves. No column opts into ProTable's editor, and no lifecycle write
@@ -59,7 +109,7 @@ export default function ReleasesPage() {
       title: t("releases.status"),
       key: "status",
       editable: false,
-      render: (_value, release) => <Tag color={statusTone(release.status)}>{t(`releases.statuses.${release.status}`, { defaultValue: release.status })}</Tag>,
+      render: (_value, release) => <Tag color={statusTone(release.status)}>{t(`releaseStatus.${release.status}`, { defaultValue: release.status })}</Tag>,
     },
     {
       title: t("releases.variantCount"),
@@ -94,6 +144,16 @@ export default function ReleasesPage() {
     <PageContainer
       title={t("admin.releases", { defaultValue: "Releases" })}
       subTitle={t("admin.releasesHint", { defaultValue: "Release versions, publication status and database counts." })}
+      extra={
+        <Button
+          icon={<ReloadOutlined aria-hidden />}
+          loading={query.isFetching}
+          onClick={() => void query.refetch()}
+          data-testid="releases-refresh"
+        >
+          {t("common.refresh", { defaultValue: "Refresh" })}
+        </Button>
+      }
     >
       {query.isPending ? (
         <ProCard loading data-testid="releases-loading" />
@@ -106,21 +166,108 @@ export default function ReleasesPage() {
           action={<Button size="small" loading={query.isFetching} onClick={() => void query.refetch()} data-testid="releases-retry">{t("common.retry")}</Button>}
         />
       ) : releases.length === 0 ? (
-        <ProCard><Typography.Text type="secondary" data-testid="releases-empty">{t("common.noData")}</Typography.Text></ProCard>
-      ) : (
-        <ProCard>
-          <div data-testid="releases-table">
-            <ProTable<ReleaseRow>
-              {...PRO_LIST_SHELL}
-              rowKey="id"
-              dataSource={releases}
-              columns={columns}
-              pagination={{ pageSize: 10, showSizeChanger: true }}
-              scroll={{ x: 760 }}
-              onRow={() => ({ "data-testid": "release-row" } as React.HTMLAttributes<HTMLTableRowElement>)}
-            />
+        <ProCard data-testid="releases-empty">
+          <div className="flex flex-col items-center gap-3 py-10 text-center">
+            <Typography.Title level={5} style={{ margin: 0 }}>
+              {t("admin.releasesEmpty.title", { defaultValue: "No releases yet" })}
+            </Typography.Title>
+            <Typography.Text type="secondary" style={{ maxWidth: 520 }}>
+              {t("admin.releasesEmpty.description", {
+                defaultValue:
+                  "A release groups the data imported for one assembly version. Create one from the import workflow, then publish it to serve it on the public site.",
+              })}
+            </Typography.Text>
+            <Space>
+              <Button type="primary" href="#/imports">
+                {t("admin.releasesEmpty.openImports", { defaultValue: "Open imports" })}
+              </Button>
+              <Button href="#/site-control">
+                {t("admin.releasesEmpty.openSiteControl", { defaultValue: "Site control" })}
+              </Button>
+            </Space>
           </div>
         </ProCard>
+      ) : (
+        <>
+          <div data-testid="releases-summary" className="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <SummaryCard
+              label={t("admin.releasesSummary.total", { defaultValue: "Total releases" })}
+              value={formatNumber(releases.length)}
+            />
+            <SummaryCard
+              label={t("admin.releasesSummary.published", { defaultValue: "Published" })}
+              value={formatNumber(publishedCount)}
+            />
+            <SummaryCard
+              label={t("admin.releasesSummary.draft", { defaultValue: "Drafts" })}
+              value={formatNumber(draftCount)}
+            />
+            <SummaryCard
+              label={t("admin.releasesSummary.active", { defaultValue: "Active release" })}
+              value={activeRelease ? activeRelease.version || activeRelease.id : "—"}
+              hint={
+                activeRelease
+                  ? t("admin.releasesSummary.activeVariants", {
+                      defaultValue: "{{count}} variants served",
+                      count: formatNumber(activeRelease.variantCount),
+                    })
+                  : t("admin.releasesSummary.noActive", { defaultValue: "No active release pointer" })
+              }
+            />
+          </div>
+
+          <ProCard>
+            <div data-testid="releases-table">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <Input
+                  allowClear
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={t("admin.releasesFilter.search", { defaultValue: "Search by name, version, or ID" })}
+                  aria-label={t("admin.releasesFilter.search", { defaultValue: "Search by name, version, or ID" })}
+                  style={{ maxWidth: 320 }}
+                />
+                <Select
+                  value={statusFilter}
+                  onChange={setStatusFilter}
+                  aria-label={t("admin.releasesFilter.status", { defaultValue: "Filter by status" })}
+                  style={{ width: 180 }}
+                  options={[
+                    { value: "all", label: t("common.all", { defaultValue: "All" }) },
+                    ...statuses.map((status) => ({
+                      value: status,
+                      label: t(`releaseStatus.${status}`, { defaultValue: status }),
+                    })),
+                  ]}
+                />
+                <Typography.Text type="secondary" className="text-xs">
+                  {t("admin.releasesFilter.matching", {
+                    defaultValue: "{{shown}} / {{total}} matching",
+                    shown: formatNumber(filtered.length),
+                    total: formatNumber(releases.length),
+                  })}
+                </Typography.Text>
+              </div>
+              {filtered.length === 0 ? (
+                <div className="py-10 text-center" data-testid="releases-filtered-empty">
+                  <Typography.Text type="secondary">
+                    {t("admin.releasesFilter.empty", { defaultValue: "No releases match the current filters." })}
+                  </Typography.Text>
+                </div>
+              ) : (
+                <ProTable<ReleaseRow>
+                  {...PRO_LIST_SHELL}
+                  rowKey="id"
+                  dataSource={filtered}
+                  columns={columns}
+                  pagination={{ pageSize: 10, showSizeChanger: true }}
+                  scroll={{ x: 760 }}
+                  onRow={() => ({ "data-testid": "release-row" } as React.HTMLAttributes<HTMLTableRowElement>)}
+                />
+              )}
+            </div>
+          </ProCard>
+        </>
       )}
 
       {selectedId ? (
@@ -149,7 +296,7 @@ export default function ReleasesPage() {
               items={[
                 { key: "name", label: t("releases.releaseName"), children: detail.name || "—" },
                 { key: "version", label: t("releases.version", { defaultValue: "Version" }), children: detail.version || "—" },
-                { key: "status", label: t("releases.status"), children: <Tag color={statusTone(detail.status)}>{t(`releases.statuses.${detail.status}`, { defaultValue: detail.status })}</Tag> },
+                { key: "status", label: t("releases.status"), children: <Tag color={statusTone(detail.status)}>{t(`releaseStatus.${detail.status}`, { defaultValue: detail.status })}</Tag> },
                 { key: "published", label: t("releases.releaseDate"), children: formatDate(detail.publishedAt) },
                 { key: "variants", label: t("releases.variantCount"), children: formatNumber(detail.variantCount) },
                 { key: "genes", label: t("releases.geneCount"), children: formatNumber(detail.geneCount) },

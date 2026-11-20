@@ -5,12 +5,12 @@ import { useTranslation } from "react-i18next";
 import { Input, type InputRef } from "@/lib/antd";
 import { cn } from "../lib/cn";
 
-export type AdminCommandPath = "/" | "/imports" | "/content" | "/news/new" | "/settings" | "/audit";
+export type AdminCommandDestination = "/" | "/imports" | "/content" | "/news/new" | "/settings" | "/audit";
 
-interface RouteCommand {
+interface DestinationCommand {
   id: string;
   kind: "route";
-  path: AdminCommandPath;
+  path: AdminCommandDestination;
   /** Locale key for the row title; `defaultValue` is the English fallback. */
   labelKey: string;
   label: string;
@@ -29,14 +29,14 @@ interface GeneResult {
   hint: string;
 }
 
-type PaletteResult = RouteCommand | GeneResult;
+type PaletteResult = DestinationCommand | GeneResult;
 
 // Only live destinations belong here. ADR-0009 retirements and the unavailable
 // resource-catalog page are intentionally absent: a command that lands on an
 // "unavailable" page is a dead end an operator cannot act on. Every copy is a
-// locale key — this surface is reachable from ⌘K in a Chinese console, so
+// locale key — this surface is reachable from the keyboard shortcut in a Chinese console, so
 // hardcoded English here would bypass the locale entirely.
-export const COMMANDS: readonly RouteCommand[] = [
+export const COMMANDS: readonly DestinationCommand[] = [
   {
     id: "dashboard",
     labelKey: "admin.commandPalette.commands.dashboard.label",
@@ -113,7 +113,7 @@ function geneResult(
   };
 }
 
-export function AdminCommandPalette({ open, onClose, onNavigate, onOpenGene }: { open: boolean; onClose: () => void; onNavigate: (path: AdminCommandPath) => void; onOpenGene: (geneId: string) => void }) {
+export function AdminCommandPalette({ open, onClose, onNavigate, onOpenGene }: { open: boolean; onClose: () => void; onNavigate: (path: AdminCommandDestination) => void; onOpenGene: (geneId: string) => void }) {
   const { t } = useTranslation();
   const inputRef = useRef<HTMLInputElement>(null);
   const listboxId = useId();
@@ -218,7 +218,7 @@ export function AdminCommandPalette({ open, onClose, onNavigate, onOpenGene }: {
           so substituting them would drop the semantics screen readers rely on.
           This is the only remaining native interactive element in apps/admin. */}
       <ul aria-label={t("admin.commandPalette.listLabel", { defaultValue: "Available commands" })} className="max-h-80 overflow-y-auto p-2" id={listboxId} role="listbox">
-        {results.map((result, index) => <li key={result.id}><button aria-selected={index === activeIndex} className={cn("flex w-full items-start rounded-lg px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", index === activeIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/70")} id={"admin-command-" + result.id} onClick={() => choose(result)} onMouseMove={() => setActiveIndex(index)} role="option" type="button"><span className="min-w-0 flex-1"><span className="block text-sm font-medium">{result.label}</span><span className="mt-0.5 block text-xs text-muted-foreground">{result.hint}</span></span><span aria-hidden className="ml-3 pt-1 text-xs text-muted-foreground">↵</span></button></li>)}
+        {results.map((result, index) => <li key={result.id}><button aria-selected={index === activeIndex} className={cn("flex w-full items-start rounded-lg px-3 py-2.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", index === activeIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/70")} id={"admin-command-" + result.id} onClick={() => choose(result)} onMouseMove={() => setActiveIndex(index)} role="option" type="button"><span className="min-w-0 flex-1"><span className="block text-sm font-medium">{result.label}</span><span className="mt-0.5 block text-xs text-muted-foreground">{result.hint}</span></span><span aria-hidden className="ml-3 pt-1 text-xs text-muted-foreground">Enter</span></button></li>)}
         {!results.length && !geneSearchFailed ? <li className="px-3 py-8 text-center text-sm text-muted-foreground">{t("admin.shell.commandEmpty", { defaultValue: "No matching command or gene." })}</li> : null}
         {geneSearchFailed ? <li className="px-3 py-3 text-sm text-muted-foreground">{t("admin.shell.commandGeneUnavailable", { defaultValue: "Gene suggestions are unavailable; command search still works." })}</li> : null}
       </ul>

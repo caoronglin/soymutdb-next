@@ -18,18 +18,21 @@ describe("deriveStaticRouteEntries", () => {
     expect(paths).toEqual([
       "/",
       "/about",
-      "/analyses",
       "/analytics",
+      "/assemblies",
       "/blast",
       "/browser",
+      "/comparative",
       "/compare",
       "/downloads",
+      "/expression",
       "/genes",
       "/guide",
       "/help",
       "/login",
       "/mutants",
       "/news",
+      "/phenotypes",
       "/publications",
       "/search",
       "/search/gbrowse",
@@ -43,12 +46,26 @@ describe("deriveStaticRouteEntries", () => {
       "/tools/enrichment",
       "/tools/exppattern",
       "/tools/seqfetch",
+      "/tools/sequence",
       "/variants",
     ]);
-    // Dynamic detail routes render from parameters; they never get a document.
+    // A POST-form tool renders nothing without JS, so it gets no document of
+    // its own: a titled shell with an empty body reads as "this page has no
+    // content". The data-rendering tools keep theirs.
+    expect(paths).not.toContain("/tools/ld");
+    expect(paths).not.toContain("/tools/diversity");
+    expect(paths).not.toContain("/tools/allelefreq");
+    expect(paths).toContain("/tools/enrichment");
+    expect(paths).toContain("/tools/seqfetch");
+    expect(paths).toContain("/tools/exppattern");
+    expect(paths).toContain("/tools/sequence");
+    // Dynamic detail routes render from parameters; metadata alone never gives
+    // them a document (only an entity-snapshot entry does — see below).
     expect(paths).not.toContain("/genes/:geneId");
     expect(paths).not.toContain("/mutants/:publicId");
     expect(paths).not.toContain("/news/:slug");
+    expect(paths).not.toContain("/comparative/:familyId");
+    expect(paths).not.toContain("/assemblies/:assemblyId");
   });
 
   it("never lists the internal variant in the sitemap", () => {
@@ -69,12 +86,66 @@ describe("deriveStaticRouteEntries", () => {
     expect(externalIndexed.map((entry) => entry.path)).not.toContain("/seed-request");
   });
 
-  it("skips a dynamic path even if metadata says prerender", () => {
-    const entries = deriveStaticRouteEntries(
-      [{ path: "/genes/:id", meta: { prerender: true, title: "Gene" } }],
-      "external",
-    );
-    expect(entries).toEqual([]);
+  it("skips a dynamic path unless the snapshot supplies it", () => {
+    const dynamicRoute = {
+      path: "/genes/:geneId",
+      meta: { prerender: true, title: "Gene" },
+    };
+    const document = {
+      path: "/genes/Glyma.01G000100",
+      templatePath: "/genes/:geneId",
+      title: "Glyma.01G000100 — SoyMutDB",
+      description: "Gene record.",
+    };
+
+    // Without a snapshot entry the template stays a template: metadata saying
+    // "prerender" is not a record.
+    expect(deriveStaticRouteEntries([dynamicRoute], "external")).toEqual([]);
+    // An entry that names no route of this app is still not a document.
+    expect(
+      deriveStaticRouteEntries([], "external", { entityDocuments: [document] }),
+    ).toEqual([]);
+    // An entry whose path does not fit its template is refused, not coerced.
+    expect(
+      deriveStaticRouteEntries([dynamicRoute], "external", {
+        entityDocuments: [{ ...document, path: "/genes/a/b" }],
+      }),
+    ).toEqual([]);
+
+    // With the snapshot the same path becomes exactly one indexable document
+    // on the external variant. This is the whole rule: data decides.
+    expect(
+      deriveStaticRouteEntries([dynamicRoute], "external", {
+        entityDocuments: [document],
+      }),
+    ).toEqual([
+      {
+        path: "/genes/Glyma.01G000100",
+        title: "Glyma.01G000100 — SoyMutDB",
+        description: "Gene record.",
+        includeInSitemap: true,
+      },
+    ]);
+
+    // The internal variant prerenders the same document but never lists it.
+    const internal = deriveStaticRouteEntries([dynamicRoute], "internal", {
+      entityDocuments: [document],
+    });
+    expect(internal.map((entry) => entry.includeInSitemap)).toEqual([false]);
+  });
+
+  it("keeps a repeated snapshot entry out of the enumeration", () => {
+    const routes = [{ path: "/genes/:geneId", meta: { title: "Gene" } }];
+    const document = {
+      path: "/genes/Glyma.01G000100",
+      templatePath: "/genes/:geneId",
+      title: "Glyma.01G000100 — SoyMutDB",
+    };
+    expect(
+      deriveStaticRouteEntries(routes, "external", {
+        entityDocuments: [document, document],
+      }),
+    ).toHaveLength(1);
   });
 });
 
@@ -117,6 +188,84 @@ describe("injectPageHead", () => {
     });
     expect(output).toContain("<title>Home</title>");
     expect(output).not.toContain("canonical");
+  });
+});
+
+describe("injectPageHead shell fallback", () => {
+  const shelf = '<html><head><title>Old</title></head>' +
+    '<body><div id="root"></div><script src="/app.js"></script></body></html>';
+
+  it("gives a prerendered shell a readable body beside its title", () => {
+    const html = injectPageHead(shelf, {
+      path: "/expression",
+      title: "Expression — SoyMutDB",
+      description: "Browse released expression libraries.",
+      includeInSitemap: false,
+    });
+
+    // A crawler must not see a correct title over an empty document.
+    expect(html).toContain("<title>Expression — SoyMutDB</title>");
+    expect(html).toContain('class="soymutdb-shell-fallback"');
+    expect(html).toContain("<h1>Expression — SoyMutDB</h1>");
+    expect(html).toContain("<p>Browse released expression libraries.</p>");
+    expect(html).toContain("<noscript>");
+    // The fallback must not participate in document flow: it is removed once
+    // the app mounts, and a static block at the top caused a measured 0.09 CLS.
+    expect(html).toContain(".soymutdb-shell-fallback{position:absolute;");
+    expect(html).toContain("body:has(#root > *) .soymutdb-shell-fallback{display:none}");
+    // Default UA body margin is replaced by the app stylesheet only after boot,
+    // which shifted the whole document; reset it in the document itself.
+    expect(html).toContain("html,body{margin:0;padding:0}");
+  });
+
+  it("keeps the mount container empty so react can own it", () => {
+    const html = injectPageHead(shelf, {
+      path: "/expression",
+      title: "Expression — SoyMutDB",
+      includeInSitemap: false,
+    });
+
+    // The content-snapshot build only recognises an empty #root, and
+    // createRoot clears it — anything written inside is markup nobody sees.
+    expect(html).toContain('<div id="root"></div>');
+    // The fallback is a sibling, and the boot script still comes last.
+    expect(html).toContain('</div><div class="soymutdb-shell-fallback">');
+    expect(html.indexOf("soymutdb-shell-fallback")).toBeLessThan(html.indexOf("<script"));
+  });
+
+  it("skips the fallback when the caller supplies a real body", () => {
+    // The content-snapshot build calls this with a document that gets a real
+    // <main>, so "enable JavaScript" must not appear in it.
+    const html = injectPageHead(
+      shelf,
+      { path: "/about", title: "About", description: "About body.", includeInSitemap: true },
+      undefined,
+      "external",
+      { shellFallback: false },
+    );
+    expect(html).toContain("<title>About</title>");
+    expect(html).not.toContain("soymutdb-shell-fallback");
+  });
+
+  it("leaves a document with no mount container untouched", () => {
+    const html = injectPageHead("<html><head><title>Old</title></head><body></body></html>", {
+      path: "/about",
+      title: "About",
+      includeInSitemap: true,
+    });
+    expect(html).toContain("<title>About</title>");
+    expect(html).not.toContain("soymutdb-shell-fallback");
+  });
+
+  it("escapes the title and description it writes into the body", () => {
+    const html = injectPageHead(shelf, {
+      path: "/about",
+      title: 'A & "B"',
+      description: "<script>x</script>",
+      includeInSitemap: false,
+    });
+    expect(html).toContain("<h1>A &amp; &quot;B&quot;</h1>");
+    expect(html).not.toContain("<p><script>");
   });
 });
 

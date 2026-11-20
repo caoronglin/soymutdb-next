@@ -95,9 +95,14 @@ test("fetches FASTA by gene IDs and reports count and missing genes", async ({ p
 
   expect(stub.captured).toHaveLength(1);
   expect(stub.captured[0]!.pathname.endsWith("/api/v1/tools/seqfetch")).toBe(true);
+  // Full-payload equality on purpose: `SeqFetchRequest` carries both modes and
+  // the unused one is explicitly `null`, so a client that started omitting
+  // `region` would be changing the contract, not just the body. Assert the
+  // three-field shape rather than loosening the matcher.
   expect(stub.captured[0]!.body).toEqual({
     assembly: "Wm82.a4.v1",
     genes: ["Glyma.01G000100", "Glyma.02G000200"],
+    region: null,
   });
 });
 
@@ -113,7 +118,13 @@ test("fetches FASTA for a genomic region with the documented interval payload", 
 
   await expect(page.getByTestId("seqfetch-fasta-preview")).toBeVisible();
   expect(stub.captured).toHaveLength(1);
-  expect(stub.captured[0]!.body).toEqual({ assembly: "Wm82.a4.v1", region: "chr01:100-400" });
+  // Same three-field contract as the gene-ID case, mirrored: region mode sends
+  // `genes: null` because `tools.ts` states it explicitly.
+  expect(stub.captured[0]!.body).toEqual({
+    assembly: "Wm82.a4.v1",
+    genes: null,
+    region: "chr01:100-400",
+  });
 });
 
 test("renders a download link instead of inline text for a large result", async ({ page }) => {

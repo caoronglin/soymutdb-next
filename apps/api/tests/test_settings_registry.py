@@ -63,6 +63,10 @@ def test_registry_contains_only_bounded_safe_product_defaults() -> None:
     )
 
     expected_enum_defaults = {
+        "general.databaseKind": (
+            "genome",
+            frozenset({"genome", "gene_ontology", "transcription_factor"}),
+        ),
         "navigation.defaultSource": (
             "published",
             frozenset({"published", "immutable_fallback"}),
@@ -113,6 +117,10 @@ def test_registry_contains_only_bounded_safe_product_defaults() -> None:
         # type"), not connection settings. Variant-prefixed copies are safe
         # for the same reason.
         if normalized_key.endswith(("blast.database", "blast.databaseplaceholder")):
+            continue
+        # A bounded product enum describing which database the portal
+        # presents; it carries no DSN, credentials, or topology.
+        if normalized_key == "general.databasekind":
             continue
         assert not any(
             forbidden in normalized_key

@@ -6,7 +6,9 @@ Repository-wide document entry point: [docs/README.md](../README.md); superseded
 
 ## Start here
 
-**2026-10-20 增量稳定性修复**：[实施计划](plans/2026-10-20-fullstack-stabilization.md) · [批准设计](../superpowers/specs/2026-10-20-fullstack-stabilization-design.md) · [当前检查点](work/2026-10-20-fullstack-stabilization/20-checkpoint.md)。基线为 Draft PR #26 / `57e2bcd`；修复进行中，不代表全线验收通过。
+**2026-11-08 当前状态**：[项目状态](../dev/project-status.md)。工作树冻结在 `a2da8a23`；基线 `57e2bcd` 与稳定性修复 `01fc163` 均已并入 `main`，无需重复合并。本轮复跑门禁并修复 `@soymutdb/api-client` 的重复导出回归。以下 2026-10-20 / 10-17 条目保留为历史证据。
+
+**2026-10-20 增量稳定性修复（历史）**：[实施计划](plans/2026-10-20-fullstack-stabilization.md) · [批准设计](../superpowers/specs/2026-10-20-fullstack-stabilization-design.md) · [当前检查点](work/2026-10-20-fullstack-stabilization/20-checkpoint.md)。基线为 Draft PR #26 / `57e2bcd`；当时记录不代表本条目的当前结论。
 
 **2026-10-17 追加验收记录**：[非 Docker 验收与脱敏证据](../dev/native-validation-20261017.md)。涵盖客户端零路由债务、前端 1083 tests、真实导出链、原生 PG/S3 灾备和历史回填演练。以下旧计划的状态描述保留其原日期语境，当前实测结论优先查阅该报告与项目状态；不据此将未复核的计划全部结项。生产回填与切换、异地灾备尚未验收，Docker 运行按用户要求排除。
 

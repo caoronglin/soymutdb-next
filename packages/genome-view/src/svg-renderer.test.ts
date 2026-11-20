@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { genomeViewCacheKey, renderGenomeViewSvg, type GenomeViewSvgTheme } from "./svg-renderer";
+import {
+  DIM_OPACITY,
+  genomeViewCacheKey,
+  renderGenomeViewSvg,
+  type GenomeViewSvgTheme,
+} from "./svg-renderer";
 import { createViewport } from "./viewport";
 
 const theme: GenomeViewSvgTheme = {
@@ -91,6 +96,127 @@ describe("renderGenomeViewSvg", () => {
   it("states the window in the accessible label", () => {
     const svg = renderGenomeViewSvg({ viewport, widthPx: 600, tracks: [], theme });
     expect(svg).toContain('aria-label="Gm01:0-10,000"');
+  });
+
+  it("lets the caller name what the picture is of", () => {
+    const svg = renderGenomeViewSvg({
+      viewport,
+      widthPx: 600,
+      tracks: [],
+      theme,
+      ariaLabel: "Genes around AT1G01010, window Gm01:0-10,000",
+    });
+    expect(svg).toContain('aria-label="Genes around AT1G01010, window Gm01:0-10,000"');
+  });
+
+  it("draws a dimmed feature as one translucent group, leaving the focus at full strength", () => {
+    const svg = renderGenomeViewSvg({
+      viewport,
+      widthPx: 600,
+      theme,
+      tracks: [
+        {
+          id: "genes",
+          label: "Genes",
+          kind: "feature",
+          features: [
+            { id: "focus", start: 4000, end: 6000, label: "focus", strand: "+" },
+            { id: "context", start: 1000, end: 2000, label: "context", dim: true },
+          ],
+        },
+      ],
+    });
+    // The flanking gene is one group, so its body, label and strand dim together.
+    const open = `<g opacity="${DIM_OPACITY}" data-dim="true">`;
+    const groupStart = svg.indexOf(open);
+    expect(groupStart).toBeGreaterThan(-1);
+    expect(svg.slice(groupStart, svg.indexOf("</g>", groupStart))).toContain(
+      'data-feature-id="context"',
+    );
+    // The focus feature carries no opacity of its own.
+    expect(svg).toContain('data-feature-id="focus"');
+    expect(svg.match(/data-dim="true"/g)?.length).toBe(1);
+  });
+
+  it("draws introns as chevrons between the exon boxes when asked", () => {
+    const options = {
+      viewport,
+      widthPx: 900,
+      theme,
+      tracks: [
+        {
+          id: "gene",
+          label: "gene",
+          kind: "feature" as const,
+          features: [
+            {
+              id: "G",
+              start: 1000,
+              end: 8000,
+              kind: "gene" as const,
+              label: "G",
+              strand: "+" as const,
+              parts: [
+                { start: 1000, end: 2000, kind: "exon" as const },
+                { start: 5000, end: 6000, kind: "exon" as const },
+                { start: 7000, end: 8000, kind: "exon" as const },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+
+    const plain = renderGenomeViewSvg(options);
+    // Default output is the byte-parity contract with the Python pre-renderer:
+    // no intron marker may appear unless the caller asks for one.
+    expect(plain).not.toContain("data-intron");
+
+    const svg = renderGenomeViewSvg({ ...options, intronChevrons: true });
+    // Three exon boxes stay rectangles; each of the two gaps between them gets a
+    // chevron, so an intron is a mark of its own and not just a gap.
+    expect(svg.match(/data-exon-kind="exon"/g)?.length).toBe(3);
+    expect(svg.match(/data-intron="true"/g)?.length).toBe(2);
+    expect(svg).toContain('data-intron-line="true"');
+    // Shape, not colour: the intron marker is a polyline, never a box.
+    expect(svg).toMatch(
+      /<polyline points="[^"]+" fill="none" stroke="#0f6b3c" stroke-width="1\.5" stroke-linecap="round" stroke-linejoin="round" data-intron="true"\/>/,
+    );
+    expect(svg).not.toMatch(/<rect[^>]*data-intron="true"/);
+  });
+
+  it("keeps a narrow intron a line, because two chevrons there read as noise", () => {
+    // 200 bp of exon, 1 bp of intron, 200 bp of exon across a 1000 bp window at
+    // 900 px: the gap is under a pixel wide.
+    const svg = renderGenomeViewSvg({
+      viewport,
+      widthPx: 900,
+      theme,
+      intronChevrons: true,
+      tracks: [
+        {
+          id: "gene",
+          label: "gene",
+          kind: "feature",
+          features: [
+            {
+              id: "G",
+              start: 0,
+              end: 401,
+              kind: "gene",
+              label: "G",
+              strand: "+",
+              parts: [
+                { start: 0, end: 200, kind: "exon" },
+                { start: 201, end: 401, kind: "exon" },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    expect(svg).not.toContain('data-intron="true"');
+    expect(svg).toContain('data-intron-line="true"');
   });
 
   it("returns a placeholder for a degenerate width instead of throwing", () => {

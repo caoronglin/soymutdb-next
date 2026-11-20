@@ -3,27 +3,27 @@
   "app": "admin",
   "font_dir": "apps/admin/public/fonts/harmonyos",
   "charset": {
-    "codepoint_count": 6892,
-    "charset_sha256": "1862260cce48671367d3960b56b88113ba2a2858c2e353fbf99fa2a77c986e30",
+    "codepoint_count": 6891,
+    "charset_sha256": "4e2daf1a4f0dee12bcb42d3bc0ad31a4ce1d8a640fc9952db0120e237fe4ae06",
     "ranges": [
       "20-7e",
       "a7",
       "a9",
       "b0",
+      "b2",
       "b7",
       "d7",
+      "3b8",
+      "3c0",
       "2013-2014",
       "201c-201d",
       "2022",
       "2026",
       "2028-2029",
       "2032",
-      "2082",
-      "2191-2194",
-      "21b5",
+      "2191-2193",
       "2212",
       "2264-2265",
-      "2318",
       "3001-3002",
       "300c-300d",
       "4e00-4e01",
@@ -3574,17 +3574,17 @@
       "ff1f"
     ],
     "parts": {
-      "latin": 119,
+      "latin": 118,
       "cjk": 6773
     },
     "sources": {
       "locale_json": {
-        "packages/i18n-core/src/locales/en/common.json": 97,
-        "packages/i18n-core/src/locales/zh/common.json": 920
+        "packages/i18n-core/src/locales/en/common.json": 104,
+        "packages/i18n-core/src/locales/zh/common.json": 980
       },
       "app_typescript": {
-        "apps/admin/src": 286,
-        "apps/web/src": 511
+        "apps/admin/src": 192,
+        "apps/web/src": 577
       },
       "gb2312_level_1_2": 6763,
       "ascii_printable": 95,
@@ -3596,83 +3596,83 @@
       "weight": 400,
       "role": "latin",
       "file": "HarmonyOS-Sans-SC-Regular-latin.woff2",
-      "bytes": 14580,
-      "sha256": "46d6cfaf6943e2e4db6646a8f688d397c3a7597446cf765b2c48a3669a508495",
-      "codepoint_count": 116,
+      "bytes": 14828,
+      "sha256": "9ca2e0500bbd8d7a686941c8c3a9b61ed578d36ce31a39c80518440fe590e363",
+      "codepoint_count": 119,
       "missing_codepoints": [
         8596,
         8629,
         8984
       ],
-      "source_bytes": 4279032,
-      "source_sha256": "8fc45ce960b84c2dc6884e428e51452b63f702ccc10ef1f3eefdab50250f6db6"
+      "source_bytes": 8261128,
+      "source_sha256": "297b088424be212207df2ce8b98e335468b782aa6b96832af0b8b773d711e2b1"
     },
     {
       "weight": 400,
       "role": "cjk",
       "file": "HarmonyOS-Sans-SC-Regular-cjk.woff2",
-      "bytes": 915720,
-      "sha256": "8bfb5a7066695290b916d905e1e446d63d2056a564e67f3cc2eb68d29035e5a8",
+      "bytes": 915480,
+      "sha256": "bbf1e5d810fa98186d608f436d8ac1262738072557c136148ad33c8d318e321c",
       "codepoint_count": 6773,
       "missing_codepoints": [],
-      "source_bytes": 4279032,
-      "source_sha256": "8fc45ce960b84c2dc6884e428e51452b63f702ccc10ef1f3eefdab50250f6db6"
+      "source_bytes": 8261128,
+      "source_sha256": "297b088424be212207df2ce8b98e335468b782aa6b96832af0b8b773d711e2b1"
     },
     {
       "weight": 500,
       "role": "latin",
       "file": "HarmonyOS-Sans-SC-Medium-latin.woff2",
-      "bytes": 15748,
-      "sha256": "f3a96b92ed8007a5638753a300fd0d12deaeabddf86ee7fcf5df58b9078ed20a",
-      "codepoint_count": 116,
+      "bytes": 15968,
+      "sha256": "541d0816cd74e2cdc26b2669da2604a61ba590fb64c4633d836bf4beb2c7d9b6",
+      "codepoint_count": 119,
       "missing_codepoints": [
         8596,
         8629,
         8984
       ],
-      "source_bytes": 4341792,
-      "source_sha256": "292ed8adea73a71ec25870d32a3f668f6e313e40bb33fde968e602362e9c0e62"
+      "source_bytes": 8227312,
+      "source_sha256": "6ed1553edccddc48eb27ff25d134a4a715cf54211238d4840b3038576cba1944"
     },
     {
       "weight": 500,
       "role": "cjk",
       "file": "HarmonyOS-Sans-SC-Medium-cjk.woff2",
-      "bytes": 924696,
-      "sha256": "7e54d0c7f87173acaf7a082cfe263a0beb6a4793ef667c9b265e9212b14ce396",
+      "bytes": 924904,
+      "sha256": "251e6cc14a2dddd6ddaf476535209ae5032a4de2776a856ebbc31bedcf9ae7e0",
       "codepoint_count": 6773,
       "missing_codepoints": [],
-      "source_bytes": 4341792,
-      "source_sha256": "292ed8adea73a71ec25870d32a3f668f6e313e40bb33fde968e602362e9c0e62"
+      "source_bytes": 8227312,
+      "source_sha256": "6ed1553edccddc48eb27ff25d134a4a715cf54211238d4840b3038576cba1944"
     },
     {
       "weight": 700,
       "role": "latin",
       "file": "HarmonyOS-Sans-SC-Bold-latin.woff2",
-      "bytes": 15776,
-      "sha256": "73bdb4130f387c53f1b090cd532c57b25f9728cc0cfbe4279ff323d28f8b9320",
-      "codepoint_count": 116,
+      "bytes": 16072,
+      "sha256": "1eca0035934d4c221b41d20f57cf29f22dfffec32281c696e42c26049c8aa952",
+      "codepoint_count": 119,
       "missing_codepoints": [
         8596,
         8629,
         8984
       ],
-      "source_bytes": 4403468,
-      "source_sha256": "7aad825a235487a8fe3959d4175512d32433eb62398a1d7751bf7d1ecbfb473d"
+      "source_bytes": 8158996,
+      "source_sha256": "43a424b85e47fb53a17b3b32026a71801f86f8e022ca6798d186b47d39fa5f01"
     },
     {
       "weight": 700,
       "role": "cjk",
       "file": "HarmonyOS-Sans-SC-Bold-cjk.woff2",
-      "bytes": 930088,
-      "sha256": "4b6be8c5f1618a5c510f0f77837afccb52e710bb66b1d5ece782a298bf658301",
+      "bytes": 930380,
+      "sha256": "eaa13cb882bc116e79aac28ea25add2acc44c1ae8666dc8e28dad97009f307aa",
       "codepoint_count": 6773,
       "missing_codepoints": [],
-      "source_bytes": 4403468,
-      "source_sha256": "7aad825a235487a8fe3959d4175512d32433eb62398a1d7751bf7d1ecbfb473d"
+      "source_bytes": 8158996,
+      "source_sha256": "43a424b85e47fb53a17b3b32026a71801f86f8e022ca6798d186b47d39fa5f01"
     }
   ],
   "totals": {
-    "bytes": 2816608
+    "bytes": 2817632
   },
   "budgets": {
     "max_latin_file_bytes": 262144,

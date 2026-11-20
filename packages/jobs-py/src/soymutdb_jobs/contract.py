@@ -14,6 +14,18 @@ from typing import Final
 # ---------------------------------------------------------------------------
 
 BLAST_RUN_TASK: Final[str] = "soymutdb_worker.tasks.blast.run_blast"
+#: Asynchronous, worker-only construction of an immutable NCBI BLAST index
+#: (staging -> makeblastdb -> validation -> atomic publication). HTTP handlers
+#: enqueue this through the transactional outbox and never invoke makeblastdb
+#: themselves; it runs on the `blast` queue, never inside a request.
+BLAST_BUILD_INDEX_TASK: Final[str] = "soymutdb_worker.tasks.blast_index.build_index"
+#: The lifecycle-owning build task (staging -> makeblastdb -> validation ->
+#: catalog publication). `BLAST_BUILD_INDEX_TASK` above is the legacy single-shot
+#: builder that predates the catalog state machine; new work is queued through
+#: this one, and both are registered so redelivered legacy messages still run.
+BLAST_INDEX_BUILD_TASK: Final[str] = (
+    "soymutdb_worker.tasks.blast_index_tasks.build_blast_index"
+)
 BUILD_STATIC_PAGES_TASK: Final[str] = "soymutdb_worker.tasks.static_pages.build_static_pages"
 EXPORT_VARIANTS_TASK: Final[str] = "soymutdb_worker.tasks.export.export_variants"
 IMPORT_ADAPTER_TASK: Final[str] = "soymutdb_worker.tasks.ingest.run_import_adapter"
@@ -27,6 +39,12 @@ IMPORT_SEED_TASK: Final[str] = "soymutdb_worker.tasks.ingest.import_seed"
 ANALYSIS_FASTP_TASK: Final[str] = "soymutdb_worker.tasks.analyses.run_fastp"
 ANALYSIS_SCANPY_TASK: Final[str] = "soymutdb_worker.tasks.analyses.run_scanpy"
 GWAS_RUN_TASK: Final[str] = "soymutdb_worker.tasks.gwas.run_gwas"
+#: Comparative-genomics artifacts (multiple-sequence alignment, phylogenetic
+#: tree). The API only records the request and enqueues this; the worker runs
+#: an allowlisted aligner/tree builder over the frozen member set.
+COMPARATIVE_ARTIFACT_TASK: Final[str] = (
+    "soymutdb_worker.tasks.comparative.build_artifact"
+)
 #: Email dispatch for contact-style modules (seed requests).  Runs on the
 #: ``default`` queue (no task_routes entry needed).
 SEED_REQUEST_EMAIL_TASK: Final[str] = (
@@ -56,6 +74,8 @@ QUEUE_DEFAULT: Final[str] = "default"
 #: Queue used for a given task name (fallback: ``default``).
 TASK_QUEUE_MAP: Final[dict[str, str]] = {
     BLAST_RUN_TASK: QUEUE_BLAST,
+    BLAST_INDEX_BUILD_TASK: QUEUE_BLAST,
+    BLAST_BUILD_INDEX_TASK: QUEUE_BLAST,
     BUILD_STATIC_PAGES_TASK: QUEUE_STATS,
     STATIC_PUBLISH_TASK: QUEUE_STATS,
     PAGE_BUILDER_PUBLISH_TASK: QUEUE_DEFAULT,
@@ -66,6 +86,7 @@ TASK_QUEUE_MAP: Final[dict[str, str]] = {
     ANALYSIS_FASTP_TASK: QUEUE_ANALYSES,
     ANALYSIS_SCANPY_TASK: QUEUE_ANALYSES,
     GWAS_RUN_TASK: QUEUE_ANALYSES,
+    COMPARATIVE_ARTIFACT_TASK: QUEUE_ANALYSES,
 }
 
 # ---------------------------------------------------------------------------
@@ -80,7 +101,10 @@ PAYLOAD_VERSION: Final[int] = 1
 __all__ = [
     "ANALYSIS_FASTP_TASK",
     "ANALYSIS_SCANPY_TASK",
+    "COMPARATIVE_ARTIFACT_TASK",
     "BLAST_RUN_TASK",
+    "BLAST_INDEX_BUILD_TASK",
+    "BLAST_BUILD_INDEX_TASK",
     "GWAS_RUN_TASK",
     "BUILD_STATIC_PAGES_TASK",
     "EXPORT_VARIANTS_TASK",

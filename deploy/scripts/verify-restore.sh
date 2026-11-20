@@ -441,7 +441,9 @@ ch_query() {
     if [[ "${CH_HOST}" == "localhost" || "${CH_HOST}" == "127.0.0.1" ]]; then
         compose_exec clickhouse clickhouse-client --user "${CH_USER}" -q "${sql}"
     else
-        curl -sf -u "${CH_USER}:${CLICKHOUSE_PASSWORD:-soymutdb_dev_password}" \
+        [[ -n "${CLICKHOUSE_PASSWORD:-}" ]] \
+            || die "a ClickHouse query over HTTP requires CLICKHOUSE_PASSWORD; a default credential is never used"
+        curl -sf -u "${CH_USER}:${CLICKHOUSE_PASSWORD}" \
             "http://${CH_HOST}:${CH_PORT}/" --data-binary "${sql}"
     fi
 }

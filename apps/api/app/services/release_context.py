@@ -35,6 +35,10 @@ class ReleaseContext:
     release_id: int
     assembly_id: int | None = None
     assembly: str | None = None
+    #: The release's display name. Entity pages are required to show which
+    #: release a record belongs to, so the name travels with the context
+    #: instead of being looked up again by every service.
+    release_name: str | None = None
 
     @property
     def release_key(self) -> str:
@@ -94,6 +98,10 @@ async def resolve_release_context(
             "release_id": int(release.id),
             "assembly_id": release.assembly_id,
             "assembly": release.assembly,
+            # A display name, not a contract field: a row that somehow lacks
+            # one must not fail the whole release resolution, which every
+            # public query depends on.
+            "release_name": getattr(release, "name", None),
         }
 
     identity = await load_identity(requested_release_id)
@@ -101,6 +109,7 @@ async def resolve_release_context(
         release_id=int(identity["release_id"]),
         assembly_id=identity.get("assembly_id"),
         assembly=identity.get("assembly"),
+        release_name=identity.get("release_name"),
     )
 
 

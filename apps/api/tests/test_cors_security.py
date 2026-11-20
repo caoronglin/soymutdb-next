@@ -18,6 +18,8 @@ def _prod_settings(**overrides: object) -> Settings:
         "s3_secret_key": "production-secret-key",
         "analytics_ip_salt": "production-analytics-ip-salt-at-least-32-characters",
         "cors_origins": ["https://app.example.com"],
+        # Production must say no to open self-registration explicitly.
+        "feature_registration_enabled": False,
     }
     values.update(overrides)
     return Settings(_env_file=None, app_env="prod", **values)
@@ -68,3 +70,31 @@ async def test_request_id_is_transmitted_and_generated(monkeypatch) -> None:
 
     assert transmitted.headers["x-request-id"] == "edge-request-123"
     assert len(generated.headers["x-request-id"]) == 36
+
+
+async def test_blast_capability_and_release_preflight_preserves_origin_allowlist(
+    monkeypatch,
+) -> None:
+    """Public job credentials travel in headers across the separate portal origin."""
+    monkeypatch.setattr(main, "settings", _prod_settings())
+    application = main.create_app()
+    async with AsyncClient(
+        transport=ASGITransport(app=application), base_url="http://test"
+    ) as client:
+        headers = {
+            "Origin": "https://app.example.com",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "X-Blast-Token,X-SoyMutDB-Release",
+        }
+        allowed = await client.options("/api/v1/blast/public/jobs/test", headers=headers)
+        denied = await client.options(
+            "/api/v1/blast/public/jobs/test",
+            headers={**headers, "Origin": "https://untrusted.example.com"},
+        )
+    assert allowed.status_code == 200
+    allowed_headers = allowed.headers["access-control-allow-headers"].lower()
+    assert "x-blast-token" in allowed_headers
+    assert "x-soymutdb-release" in allowed_headers
+    assert allowed.headers["access-control-allow-origin"] == "https://app.example.com"
+    assert denied.status_code == 400
+    assert "access-control-allow-origin" not in denied.headers

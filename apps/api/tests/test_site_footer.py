@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -63,7 +64,12 @@ def _client(session: MagicMock, user: object | None = None) -> AsyncClient:
     from app.core.exceptions import SoyMutDBError, soy_mut_db_exception_handler
 
     app = FastAPI()
-    app.add_exception_handler(SoyMutDBError, soy_mut_db_exception_handler)
+    # Starlette's handler signature is narrower than ours (it accepts any
+    # Exception, ours takes the SoyMutDBError base). The cast says which one
+    # this is without weakening the runtime check.
+    app.add_exception_handler(
+        SoyMutDBError, cast(Any, soy_mut_db_exception_handler)
+    )
     app.include_router(router, prefix="/api/v1")
 
     async def override_get_db():
@@ -119,7 +125,7 @@ async def test_footer_keeps_external_and_internal_values_isolated() -> None:
         ]
     )
     viewer = SimpleNamespace(
-        role_rel=SimpleNamespace(name="viewer"),
+        role_rel=SimpleNamespace(name="researcher"),
         is_superuser=False,
     )
 

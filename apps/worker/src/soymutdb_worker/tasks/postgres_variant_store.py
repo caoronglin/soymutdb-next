@@ -116,6 +116,22 @@ class PostgresVariantStore:
         if str(status) == "published":
             raise ValueError("Published release facts are immutable")
         scope = STAGING.c.import_id == import_id
+        # A duplicate identity in staging can only come from two assemblies
+        # (the staging PK blocks same-assembly duplicates). Left unchecked it is
+        # either collapsed onto variant_facts' single (release_id, variant_id)
+        # arbiter -- SQLSTATE 21000, no RETURNING row -- or, on the real path,
+        # rejected by the scope guard below as a generic ValueError. Either way
+        # the offending id is lost. Fail closed with the ids instead.
+        duplicates = self.session.execute(
+            select(STAGING.c.variant_id, func.count().label("payloads"))
+            .select_from(STAGING).where(scope)
+            .group_by(STAGING.c.variant_id)
+            .having(func.count() > 1)
+        ).all()
+        if duplicates:
+            raise ConflictingVariantRowsError([
+                (int(row.variant_id), int(row.payloads)) for row in duplicates
+            ])
         invalid = self.session.execute(select(func.count()).select_from(STAGING).where(
             scope, (STAGING.c.release_id != release_id) | (STAGING.c.assembly_id != assembly_id),
         )).scalar_one()

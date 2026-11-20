@@ -38,8 +38,15 @@ import tempfile
 from pathlib import Path
 
 from celery import Task
+from soymutdb_jobs.blast_search import normalize_query
 from soymutdb_jobs.protein_fasta import ProteinFastaError, parse_protein_fasta
 
+from soymutdb_worker.blast_genome_resolution import (
+    PROTEIN_SUBJECT_PROGRAMS,
+    BlastGenomeResolver,
+    annotate_hits,
+)
+from soymutdb_worker.blast_index import verify_index
 from soymutdb_worker.config import get_setting
 from soymutdb_worker.main import celery_app
 from soymutdb_worker.repositories import BlastHitStore, BlastJobStore
@@ -60,9 +67,11 @@ logger = logging.getLogger(__name__)
 
 BLAST_CACHE_DIR = Path(get_setting("BLAST_CACHE_DIR", "/tmp/blast_cache"))
 
-#: The one aligner this deployment runs. DIAMOND replaces NCBI BLAST entirely:
-#: there is no second engine, no auto-routing and no fallback, so a job cannot
-#: end up parsed by a tool it was not built for.
+#: The DIAMOND executable. DIAMOND is the *selected* backend for ``blastp``
+#: here; it is not the only engine this module serves. ``run_blast`` routes
+#: ``engine == "ncbi_blast"`` to :mod:`soymutdb_worker.ncbi_blast` and keeps
+#: DIAMOND only for an explicitly selected ``blastp`` job, so an NCBI payload is
+#: never parsed by the DIAMOND parser (see ``ENGINE_PROGRAMS`` below).
 DIAMOND_BIN = Path(get_setting("DIAMOND_BIN", shutil.which("diamond") or "/usr/bin/diamond"))
 #: Also the documented default columns; explicit names pin our parser contract.
 DIAMOND_OUTFMT6_COLUMNS = (
@@ -136,10 +145,55 @@ def load_database_paths(raw: str) -> dict[str, str]:
 
 BLAST_DATABASE_PATHS = load_database_paths(get_setting("BLAST_DATABASE_PATHS", "{}"))
 
-#: The single executable program. NCBI BLAST and the translated-search
-#: programs (``blastn`` / ``blastx`` / ``tblastn`` / ``tblastx``) have no
-#: engine in this deployment and are rejected before any index is touched.
-ALLOWED_PROGRAMS = frozenset({"blastp"})
+#: Explicit NCBI catalog mapping, separate from DIAMOND's existing mapping.
+#: Values are immutable local prefixes: <root>/<64-character identity>/db.
+NCBI_BLAST_DATABASE_PATHS = load_database_paths(get_setting("NCBI_BLAST_DATABASE_PATHS", "{}"))
+NCBI_BLAST_BIN_DIR = Path(get_setting("NCBI_BLAST_BIN_DIR", "/usr/bin"))
+
+
+def get_ncbi_db_path(
+    database: str, *, index_identity: str, fasta_sha256: str, database_type: str,
+    release_key: str, assembly_id: str,
+) -> Path:
+    """Resolve only a configured immutable index and verify frozen provenance."""
+    configured = NCBI_BLAST_DATABASE_PATHS.get(database)
+    if configured is None:
+        raise ValueError("NCBI database is not configured on this worker")
+    path = Path(configured)
+    if not path.is_absolute() or path.name != "db" or path.parent.name != index_identity:
+        raise ValueError("NCBI database index identity mismatch")
+    verified = verify_index(
+        path.parent.parent, index_identity,
+        blastdbcmd_bin=NCBI_BLAST_BIN_DIR / "blastdbcmd",
+    )
+    request = verified["manifest"]["request"]
+    metadata = request["metadata"]
+    if (
+        request["source_sha256"] != fasta_sha256
+        or request["db_type"] != database_type
+        or str(metadata["release_id"]) != str(release_key)
+        or str(metadata["assembly_id"]) != str(assembly_id)
+    ):
+        raise ValueError("NCBI database provenance mismatch")
+    return path
+
+
+#: Program set per engine. DIAMOND has no nucleotide search, so the four
+#: remaining NCBI programs belong to ``ncbi_blast`` and are rejected before any
+#: index is touched. One shared set is exactly the bug this replaces: the task
+#: routes blastn/blastx/tblastn/tblastx to the NCBI runner, but a blastp-only
+#: whitelist refused them first. ``ENGINE_PROGRAMS["diamond"]`` is what this
+#: module validates against; it is not the platform program set.
+ENGINE_PROGRAMS = {
+    #: DIAMOND is protein-to-protein only.
+    "diamond": frozenset({"blastp"}),
+    #: NCBI BLAST+ runs all five standard searches.
+    "ncbi_blast": frozenset({"blastn", "blastp", "blastx", "tblastn", "tblastx"}),
+}
+#: Union kept under the historical name for callers that probe the vocabulary.
+ALLOWED_PROGRAMS = frozenset().union(*ENGINE_PROGRAMS.values())
+#: The DIAMOND executable program set, named for the backend it describes.
+DIAMOND_PROGRAMS = ENGINE_PROGRAMS["diamond"]
 
 # Resource limits
 MAX_QUERY_LENGTH = int(get_setting("BLAST_MAX_QUERY_LENGTH", "100000"))
@@ -190,12 +244,20 @@ def sanitize_error_message(
 # ---------------------------------------------------------------------------
 
 
-def validate_program(program: str) -> str:
-    """Validate that *program* is the one program this deployment executes."""
-    if program not in ALLOWED_PROGRAMS:
+def validate_program(program: str, engine: str = "diamond") -> str:
+    """Validate *program* against the program set of *engine*.
+
+    The engine decides the vocabulary: DIAMOND is protein-only (``blastp``),
+    NCBI BLAST+ runs all five standard searches. Validating against the union
+    would let a DIAMOND job reach the runner with a program it cannot execute,
+    and validating against DIAMOND alone is what made every nucleotide search
+    fail before the index was even opened.
+    """
+    allowed = ENGINE_PROGRAMS.get(engine, ENGINE_PROGRAMS["diamond"])
+    if program not in allowed:
         raise ValueError(
-            f"Unsupported program: {program!r}. This deployment searches with "
-            f"DIAMOND blastp only; allowed: {sorted(ALLOWED_PROGRAMS)}"
+            f"Unsupported program: {program!r} for engine {engine!r}; "
+            f"allowed: {sorted(allowed)}"
         )
     return program
 
@@ -212,6 +274,23 @@ def _require_diamond() -> Path:
             "Install diamond-aligner or set SOYMUTDB_DIAMOND_BIN."
         )
     return DIAMOND_BIN
+
+
+def _frozen_id(value: object) -> int | None:
+    """Normalise a frozen provenance identifier to a positive int.
+
+    The outbox payload is JSON, so an id may arrive as ``42`` or ``"42"``. Only
+    a positive integer resolves; anything else (absent, empty, non-numeric,
+    bool, zero) is ``None`` and must never be substituted from another source.
+    """
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, str) and value.strip().isdigit():
+        parsed = int(value.strip())
+        return parsed if parsed > 0 else None
+    return None
 
 
 def _positive_threads(value) -> int:
@@ -374,6 +453,14 @@ def get_blast_db_path(db_name: str) -> Path:
 # ---------------------------------------------------------------------------
 
 
+# `preexec_fn` runs inside the forked child, so the limits below can only be set
+# on platforms that implement them; a missing RLIMIT is expected and must not
+# abort the search. Both clauses therefore catch and ignore. This function was
+# unimportable for a while (`except ValueError, OSError:` is Python 2 syntax),
+# which is why the worker's per-child limits are only trusted after a real
+# subprocess search, not after an import check.
+
+
 def _set_subprocess_limits() -> None:
     """Set memory and file-size limits for the child process via ``resource``.
 
@@ -383,12 +470,12 @@ def _set_subprocess_limits() -> None:
     mem_bytes = MAX_MEMORY_MB * 1024 * 1024
     try:
         resource.setrlimit(resource.RLIMIT_AS, (mem_bytes, mem_bytes))
-    except ValueError, OSError:
+    except (ValueError, OSError):
         pass  # May not be supported on all platforms
     # Output file size limit
     try:
         resource.setrlimit(resource.RLIMIT_FSIZE, (MAX_OUTPUT_SIZE, MAX_OUTPUT_SIZE))
-    except ValueError, OSError:
+    except (ValueError, OSError):
         pass
 
 
@@ -466,14 +553,15 @@ def run_blast_command(
     queued payload written before the engine was reduced still loads; any
     non-default value is rejected rather than silently ignored.
     """
-    program = validate_program(program)
+    # DIAMOND has no nucleotide search: resolve its own program set.
+    program = validate_program(program, "diamond")
     if word_size is not None:
         raise ValueError(
             "word_size is a retired NCBI BLAST option; DIAMOND blastp has no equivalent"
         )
     if engine not in (None, "diamond", "auto"):
         raise ValueError(
-            f"Unknown aligner {engine!r}; this deployment runs DIAMOND blastp only"
+            f"Unknown aligner {engine!r}; this path runs the DIAMOND backend"
         )
     if outfmt != 15:
         raise ValueError("outfmt is fixed: DIAMOND always writes the 12-column tabular format")
@@ -630,6 +718,7 @@ def run_blast(
     max_target_seqs: int = 100,
     parameters: dict | None = None,
     num_threads: int = 1,
+    engine: str = "diamond",
 ) -> dict:
     """Execute a BLAST search asynchronously.
 
@@ -665,6 +754,8 @@ def run_blast(
         max_target_seqs = int(p.get("max_target_seqs", 100))
         parameters = p.get("parameters")
         num_threads = int(p.get("num_threads", 1))
+        # Missing engine means a legacy DIAMOND job, never an implicit reroute.
+        engine = str(p.get("engine", "diamond"))
     else:
         if job_id is None:
             raise TypeError("run_blast requires a JobPayload or a legacy job_id kwarg")
@@ -681,12 +772,33 @@ def run_blast(
     )
 
     # Validate inputs before doing any work
-    validate_program(program)
-    validate_sequence(sequence)
+    if engine == "diamond":
+        validate_program(program, "diamond")
+        validate_sequence(sequence)
+    elif engine == "ncbi_blast":
+        # NCBI runs all five programs and validates its own query alphabet.
+        validate_program(program, "ncbi_blast")
+        normalize_query(sequence, program, max_length=MAX_QUERY_LENGTH)
+    else:
+        raise ValueError("Unsupported BLAST engine")
 
     # ── Idempotent job claim (shared transition validation) ──────────────
     with get_db() as session:
-        decision = BlastJobStore(session).begin_run(job_id)
+        store = BlastJobStore(session)
+        # A cancelled/expired row — or a row whose deadline already passed —
+        # must never launch a resource-consuming NCBI/DIAMOND process: expiry
+        # invalidates the capability and the result download too.
+        if store.is_terminal_skip(job_id):
+            # Only a *deadline* expiry may be closed as ``expired``. A row the
+            # user already cancelled keeps its cancelled status and message;
+            # rewriting it would misreport who ended the job.
+            if not store.is_cancelled(job_id) and store.mark_expired(job_id):
+                logger.info("BLAST job %s closed (deadline passed)", job_id)
+            else:
+                logger.info("BLAST job %s skipped (cancelled/expired)", job_id)
+            return {"job_id": job_id, "skipped": True, "idempotency_key": idempotency_key,
+                    "reason": "cancelled_or_expired"}
+        decision = store.begin_run(job_id)
     if decision == "skip":
         logger.info("BLAST job %s skipped (terminal/unknown status)", job_id)
         return {"job_id": job_id, "skipped": True, "idempotency_key": idempotency_key}
@@ -695,8 +807,22 @@ def run_blast(
 
     try:
         # Validate parameters and freeze the index before touching the filesystem.
-        cleaned = validate_diamond_parameters(parameters)
-        db_path = get_blast_db_path(database)
+        if engine == "diamond":
+            cleaned = validate_diamond_parameters(parameters)
+            db_path = get_blast_db_path(database)
+        else:
+            if payload is None:
+                raise ValueError("NCBI execution requires a versioned provenance payload")
+            from soymutdb_worker.ncbi_blast import validate_program_database
+
+            validate_program_database(program, p.get("database_type"))
+            db_path = get_ncbi_db_path(
+                database, index_identity=p.get("index_identity", ""),
+                fasta_sha256=p.get("fasta_sha256", ""),
+                database_type=p.get("database_type", ""),
+                release_key=p.get("release_key", ""), assembly_id=p.get("assembly_id", ""),
+            )
+            cleaned = dict(parameters or {})
         self.update_state(state="STARTED", meta={"progress": 10})
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -711,32 +837,40 @@ def run_blast(
             # "Missing fields in input line" only after the job is running.
             # The shared parser is the same owner the API validated with, so
             # acceptance cannot differ between the two.
-            try:
-                query = parse_protein_fasta(sequence)
-            except ProteinFastaError as exc:
-                raise ValueError(f"query_sequence: {exc}") from exc
-            query_path.write_text(query.to_fasta)
-            self.update_state(state="STARTED", meta={"progress": 15})
+            if engine == "diamond":
+                try:
+                    query = parse_protein_fasta(sequence)
+                except ProteinFastaError as exc:
+                    raise ValueError(f"query_sequence: {exc}") from exc
+                query_path.write_text(query.to_fasta)
+                self.update_state(state="STARTED", meta={"progress": 15})
+                run_blast_command(
+                    program=program, db_path=db_path, query_path=query_path,
+                    output_path=output_path, evalue=evalue, word_size=word_size,
+                    max_target_seqs=max_target_seqs, extra_args=cleaned,
+                    num_threads=num_threads,
+                )
+                parsed = parse_diamond_tabular(output_path)
+                parsed["query_len"] = query.query_length
+            else:
+                from soymutdb_worker.ncbi_blast import run_search
 
-            run_blast_command(
-                program=program,
-                db_path=db_path,
-                query_path=query_path,
-                output_path=output_path,
-                evalue=evalue,
-                word_size=word_size,
-                max_target_seqs=max_target_seqs,
-                extra_args=cleaned,
-                num_threads=num_threads,
-            )
+                query = normalize_query(sequence, program, max_length=MAX_QUERY_LENGTH)
+                query_path.write_text(query.normalized_fasta)
+                self.update_state(state="STARTED", meta={"progress": 15})
+                search_parameters = {
+                    **cleaned, "evalue": evalue, "max_target_seqs": max_target_seqs,
+                    "num_threads": num_threads,
+                }
+                if word_size is not None:
+                    search_parameters["word_size"] = word_size
+                parsed = run_search(
+                    program=program, db_type=p["database_type"], db_path=db_path,
+                    query_path=query_path, output_path=output_path,
+                    parameters=search_parameters, bin_dir=NCBI_BLAST_BIN_DIR,
+                )
+                parsed["query_len"] = query.query_length
             self.update_state(state="STARTED", meta={"progress": 80})
-
-            parsed = parse_diamond_tabular(output_path)
-            # Residues actually searched. Reusing the validated parse instead of
-            # re-reading the file keeps the reported provenance identical to
-            # what the search consumed, and excludes a terminal stop symbol
-            # that ``len(record.seq)`` used to count as a residue.
-            parsed["query_len"] = query.query_length
             self.update_state(state="STARTED", meta={"progress": 90})
 
             # Upload raw results to MinIO (key contains job_id; metadata
@@ -750,23 +884,61 @@ def run_blast(
                 metadata={"checksum": checksum, "size": str(size)},
             )
 
-            # Generate pre-signed URL (24 h)
-            presigned_url = generate_presigned_url(f"{s3_bucket}/{s3_key}", expires_in=86400)
+            # Download link never outlives the job's own deadline. A public
+            # capability may expire much earlier than the historical fixed 24h;
+            # the API re-signs on each poll with the true remaining TTL, and the
+            # worker's returned URL is capped to the same bound.
+            with get_db() as session:
+                download_ttl = BlastJobStore(session).download_ttl_seconds(
+                    job_id, cap=86400
+                )
+            presigned_url = (
+                generate_presigned_url(f"{s3_bucket}/{s3_key}", expires_in=download_ttl)
+                if download_ttl > 0 else None
+            )
 
             self.update_state(state="STARTED", meta={"progress": 100})
 
             logger.info("BLAST job %s completed: %d hits", job_id, parsed["total_hits"])
 
+            # Protein/translated hits carry amino-acid subject coordinates.
+            # Resolve them through explicit gene/transcript/alias relations in
+            # the frozen assembly/release before any browser link can exist;
+            # unresolved is a first-class, persisted outcome.
+            hits_to_store = parsed["hits"]
+            if program in PROTEIN_SUBJECT_PROGRAMS and payload is not None:
+                assembly_id = _frozen_id(p.get("assembly_id"))
+                release_id = _frozen_id(p.get("release_id", p.get("release_key")))
+                # Only a frozen, numeric assembly/release scope can resolve a
+                # genomic locus. Missing provenance is recorded as unresolved
+                # rather than guessed from a string or a default assembly —
+                # the outbox payload is JSON, where these may be strings.
+                if assembly_id is not None and release_id is not None:
+                    with get_db() as session:
+                        resolutions = BlastGenomeResolver(
+                            session, assembly_id=assembly_id, release_id=release_id,
+                        ).resolve(
+                            [str(hit.get("subject_id", "")) for hit in hits_to_store]
+                        )
+                else:
+                    resolutions = {}
+                hits_to_store = annotate_hits(hits_to_store, resolutions)
+
             # Persist parsed hits (delete-then-insert: idempotent on
             # redelivery) and mark the job succeeded — one transaction, and
             # only a running row wins the status update.
             with get_db() as session:
-                BlastHitStore(session).replace_hits(job_id, parsed["hits"])
+                BlastHitStore(session).replace_hits(job_id, hits_to_store)
                 BlastJobStore(session).mark_succeeded(
                     job_id,
                     result_path=s3_key,
                     query_len=parsed["query_len"],
                     hit_count=parsed["total_hits"],
+                    execution_metadata=(
+                        {"engine": engine, "binary": parsed["binary"],
+                         "raw_sha256": checksum, "raw_bytes": size}
+                        if engine == "ncbi_blast" and "binary" in parsed else None
+                    ),
                 )
 
             # In-app + optional desktop notification (D2): resolves the job
@@ -780,6 +952,7 @@ def run_blast(
                 "hits_persisted": parsed["total_hits"],
                 "result_s3_path": s3_key,
                 "download_url": presigned_url,
+                "download_ttl_seconds": download_ttl,
                 "query_len": parsed["query_len"],
                 "checksum": checksum,
             }

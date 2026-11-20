@@ -19,8 +19,8 @@
 | `imports.vcf` | off | 是 | VCF 写入未闭环，新增导入拒绝（API 422 + Admin 隐藏） |
 | `imports.blast_db` | off | 是 | BLAST DB 写入未闭环，新增导入拒绝（API 422 + Admin 隐藏） |
 | `imports.seed_data` | off | 是 | Seed 写入未闭环，新增导入拒绝（API 422 + Admin 隐藏） |
-| `imports.expression_csv` | off | 是 | Expression 写入未闭环，新增导入拒绝（API 422 + Admin 隐藏） |
-| `imports.homolog_csv` | off | 是 | Homolog 写入未闭环，新增导入拒绝（API 422 + Admin 隐藏） |
+| `imports.expression_csv` | on | 是 | Expression 写入（assembly 作用域 upsert）已闭环；关闭后新增导入拒绝（API 422 + Admin 隐藏） |
+| `imports.homolog_csv` | on | 是 | Homolog 写入（assembly 作用域 upsert）已闭环；关闭后新增导入拒绝（API 422 + Admin 隐藏） |
 | `publication.github_pages` | on | 否 | 禁止选择 GitHub Pages target |
 | `publication.cloudflare_pages` | on | 否 | 禁止选择 Cloudflare Pages target |
 

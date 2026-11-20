@@ -14,11 +14,14 @@ Design notes:
   (or outbox dispatcher) with zero wire-format changes — the SSE frame shape
   below is the contract.
 - Auth is optional on purpose: anonymous clients receive updates for
-  ``user_id IS NULL`` jobs only (public/system jobs).  A bearer token may be
-  passed either via the ``Authorization`` header or the ``access_token``
-  query parameter, because the browser ``EventSource`` API cannot set
-  headers.  The token is short-lived and request logs never record query
-  strings, but prefer the header for non-browser clients.
+  ``user_id IS NULL`` jobs only (public/system jobs).  A stream credential is
+  supplied either as an ``Authorization: Bearer`` header (non-browser clients)
+  or as ``?ticket=`` (browsers: ``EventSource`` cannot set headers).  The
+  ticket is a single-use, 30-second, opaque value obtained from
+  ``POST /api/v1/jobs/sse-ticket`` -- see :mod:`app.services.sse_ticket`.  The
+  access token itself is never accepted in the query string: nginx logs
+  ``$request`` including the query string, so a token there is a live session
+  credential written to a log file.
 - The stream terminates when the client disconnects (checked every poll
   cycle; the generator is also cancelled by the ASGI server).
 - **The stream never holds a pooled database connection.**  FastAPI closes
@@ -41,7 +44,7 @@ from collections.abc import AsyncIterator
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, Response
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import String, cast, func, literal, select, text
@@ -49,11 +52,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from structlog import get_logger
 
 from ...core.database import get_db, get_session_factory
+from ...core.exceptions import AuthenticationError
 from ...models.analysis_job import AnalysisJob
 from ...models.auth import User
 from ...models.blast import BlastJob
 from ...models.gwas import GwasJob
-from .deps import get_current_user
+from ...schemas.jobs import SseTicketResponse
+from ...services.sse_ticket import SSE_TICKET_TTL_SECONDS, issue_ticket, redeem_ticket
+from .deps import get_current_user, load_active_user
 
 logger = get_logger(__name__)
 
@@ -76,37 +82,68 @@ _POLL_ERROR_LOG_INTERVAL_SECONDS = 60.0
 def _blast_updated_at():
     """Blast rows carry no ``updated_at`` column (no TimestampMixin) — use
     the most recent lifecycle timestamp as the update marker."""
-    return func.coalesce(
-        BlastJob.completed_at, BlastJob.started_at, BlastJob.submitted_at
-    )
+    return func.coalesce(BlastJob.completed_at, BlastJob.started_at, BlastJob.submitted_at)
 
 
 async def get_optional_sse_user(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> User | None:
-    """Resolve the bearer token from ``Authorization`` or ``?access_token=``.
+    """Resolve the stream's credential from ``Authorization`` or ``?ticket=``.
 
-    Returns ``None`` when no token is supplied (anonymous stream); raises
-    :class:`AuthenticationError` (401) when a supplied token is invalid.
+    Returns ``None`` when no credential is supplied (anonymous stream); raises
+    :class:`AuthenticationError` (401) when a supplied credential is invalid.
+
+    A raw access token in the query string is rejected outright, header or no
+    header: the edge proxy logs the request line, so ``?access_token=`` writes
+    a live session credential to ``access.log``.  The only URL credential is
+    the single-use ticket from ``POST /api/v1/jobs/sse-ticket``.
     """
+    if "access_token" in request.query_params:
+        raise AuthenticationError(
+            "The access token must not be sent in the query string; exchange it "
+            "for a single-use ticket at POST /api/v1/jobs/sse-ticket"
+        )
+
     token: str | None = None
     auth_header = request.headers.get("Authorization")
     if auth_header:
         scheme, _, value = auth_header.partition(" ")
         if scheme.lower() == "bearer" and value.strip():
             token = value.strip()
-    if token is None:
-        token = request.query_params.get("access_token")
-    if not token:
+    if token is not None:
+        credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
+        return await get_current_user(db=db, credentials=credentials)
+
+    ticket = request.query_params.get("ticket")
+    if not ticket:
         return None
-    credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
-    return await get_current_user(db=db, credentials=credentials)
+    user_id = await redeem_ticket(ticket)
+    if user_id is None:
+        # Malformed, unknown, expired and already-redeemed tickets are one
+        # answer on purpose: a replay learns nothing about the others.
+        raise AuthenticationError("Invalid or expired SSE ticket")
+    return await load_active_user(db, user_id)
 
 
-async def _recent_job_updates(
-    db: AsyncSession, user_id: UUID | None
-) -> list[dict]:
+@router.post("/sse-ticket", response_model=SseTicketResponse)
+async def create_sse_ticket(
+    response: Response,
+    current_user: User = Depends(get_current_user),
+) -> SseTicketResponse:
+    """Exchange an authenticated session for one single-use stream ticket.
+
+    ``EventSource`` cannot send an ``Authorization`` header, but the access
+    token must not travel in the stream URL (nginx logs the query string).
+    This endpoint returns an opaque ticket that ``GET /jobs/events?ticket=``
+    accepts exactly once, within :data:`SSE_TICKET_TTL_SECONDS`.
+    """
+    ticket = await issue_ticket(current_user.id)
+    response.headers["Cache-Control"] = "private, no-store"
+    return SseTicketResponse(ticket=ticket, expires_in=SSE_TICKET_TTL_SECONDS)
+
+
+async def _recent_job_updates(db: AsyncSession, user_id: UUID | None) -> list[dict]:
     """Return the user's jobs updated in the trailing 30s window.
 
     Three tables (``blast_jobs`` / ``analysis_jobs`` / ``gwas_jobs``) are
@@ -315,4 +352,4 @@ async def job_events(
     )
 
 
-__all__ = ["get_optional_sse_user", "job_events", "router"]
+__all__ = ["create_sse_ticket", "get_optional_sse_user", "job_events", "router"]

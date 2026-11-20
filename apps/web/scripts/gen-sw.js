@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global process, Buffer, console */
 /**
  * Service Worker 生成脚本 — 构建链最后一步（apps/web/package.json "build"）
  *
@@ -8,7 +9,8 @@
  *   3. 读取 public/sw.js 模板，替换 __PRECACHE_MANIFEST__ / __CACHE_VERSION__
  *   4. 输出 dist/sw.js，并同步刷新 dist/sw.js.gz（gzip-compress 在更早步骤运行，
  *      它压缩的是未替换占位符的模板版本，这里必须覆盖，避免部署 stale 的 .gz）。
- *      .gz 仅在 SOYMUTDB_EMIT_GZ=1（容器路径）时生成；其它路径只删除遗留 .gz。
+ *      .gz 默认生成（与 gzip-compress.ts 同一条开关：SOYMUTDB_EMIT_GZ=0 时
+ *      只删除遗留 .gz）。
  *
  * 路径约定：清单使用相对路径，SW 运行时以 registration.scope 为
  * 基准解析，因此能够跟随 Umi base/publicPath 的部署前缀工作。
@@ -32,7 +34,7 @@ const DIST_DIR = resolve(ROOT, process.env.SOYMUTDB_DIST_DIR ?? "dist");
 const OUT_FILE = join(DIST_DIR, "sw.js");
 const OUT_GZ = `${OUT_FILE}.gz`;
 // 仅容器路径产出 .gz（nginx gzip_static）；Pages/gh-pages 不读取 .gz。
-const EMIT_GZ = process.env.SOYMUTDB_EMIT_GZ === "1";
+const EMIT_GZ = process.env.SOYMUTDB_EMIT_GZ !== "0";
 // The external and internal artifacts are separate deployments with separate
 // caches (AGENTS.md cache boundary). The version string therefore carries the
 // site variant, so a variant's cache name can never collide with the other's.

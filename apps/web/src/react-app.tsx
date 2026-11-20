@@ -91,6 +91,10 @@ declare module "@tanstack/react-router" {
 
 function AppReadySignal() {
   React.useLayoutEffect(() => {
+    // The prerendered document carries a no-JS fallback beside `#root`; once
+    // React has rendered, that text is stale (and its <h1> would duplicate the
+    // page's own heading), so drop it instead of leaving an invisible copy.
+    document.querySelector(".soymutdb-shell-fallback")?.remove();
     document.documentElement.dataset.appReady = "true";
   }, []);
   return null;

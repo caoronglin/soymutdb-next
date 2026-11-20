@@ -12,7 +12,7 @@ from compose_loader import load_compose
 ROOT = Path(__file__).resolve().parents[1]
 NODE_VERSION = "26.13.0"
 PNPM_VERSION = "12.11.2"
-PROFILES = {"core", "jbrowse", "blast", "analyses", "mcp", "cloudflare-tunnel"}
+PROFILES = {"core", "jbrowse", "blast", "analyses", "mcp", "cloudflare-tunnel", "gateway"}
 UPGRADE = ROOT / "deploy/scripts/upgrade.sh"
 BACKUP = ROOT / "deploy/scripts/backup.sh"
 HEALTHCHECK = ROOT / "deploy/scripts/healthcheck.sh"
@@ -50,6 +50,16 @@ PLATFORM_CATALOG = {
     "antd": "6.6.6",
     "@ant-design/pro-components": "3.1.15-2",
     "@ant-design/plots": "2.6.8",
+    # Design-system unification (#16): icons, X-Markdown renderer, the mobile
+    # shell, and Ant Design's own source linter all resolve through the catalog.
+    "@ant-design/icons": "6.3.4",
+    "@ant-design/x-markdown": "2.10.0",
+    "antd-mobile": "5.43.0",
+    "@ant-design/cli": "6.7.0",
+    # Admin page-motion engine (motion.ant.design's TweenOne) and the
+    # component documentation site (apps/docs).
+    "rc-tween-one": "3.0.6",
+    "dumi": "2.4.55",
     "vitest": "5.0.5",
     "tailwindcss": "4.3.3",
     "@tailwindcss/vite": "4.3.3",
@@ -120,7 +130,9 @@ def test_node_and_pnpm_toolchain_is_exact_in_jobs_that_build_assets() -> None:
     assert (ROOT / ".nvmrc").read_text(encoding="utf-8").strip() == NODE_VERSION
     assert (ROOT / ".node-version").read_text(encoding="utf-8").strip() == NODE_VERSION
     assert package["packageManager"] == f"pnpm@{PNPM_VERSION}"
-    assert package["engines"] == {"node": ">=26.0.0 <27", "pnpm": PNPM_VERSION}
+    # Exact-pin upper bound mirrors the lower bound: a floating floor here is the
+    # same defect as a floating floor in the pipelines, one install away.
+    assert package["engines"] == {"node": f">={NODE_VERSION} <27", "pnpm": PNPM_VERSION}
 
     # CNB is the primary delivery pipeline. Every pipeline that builds or tests
     # the workspace must pin the exact Node release; the smoke pipeline runs the
@@ -163,6 +175,79 @@ def test_node_and_pnpm_toolchain_is_exact_in_jobs_that_build_assets() -> None:
     assert "scripts/verify-pages-artifact.sh" in ci_text
     assert "Upload GitHub Pages demo artifact" in ci_text
 
+
+
+def _acceptance_contracts_stage_image_error(document: dict) -> str | None:
+    """Why the acceptance contracts stage cannot run its own layer.
+
+    Returns None when the stage inherits the pipeline's dual-toolchain
+    `docker.build`. Otherwise returns the reason it is wrong. Kept as a pure
+    function over parsed YAML so the in-file mutations exercise the real
+    decision instead of a second copy of it in the test.
+    """
+    for pipeline in document["$"].get("web_trigger_acceptance", []):
+        stages = pipeline.get("stages") or []
+        contracts = [st for st in stages if st.get("name") == "Delivery contracts"]
+        if not contracts:
+            continue
+        stage = contracts[0]
+        if stage.get("image"):
+            return (
+                f"Delivery contracts declares image={stage['image']!r}; the "
+                "contracts layer shells out to node, so it must inherit the "
+                "pipeline-level docker.build instead"
+            )
+        build = (pipeline.get("docker") or {}).get("build")
+        if not isinstance(build, dict) or not build.get("dockerfile"):
+            return "acceptance pipeline has no pipeline-level docker.build to inherit"
+        return None
+    return "acceptance pipeline has no Delivery contracts stage"
+
+
+def test_acceptance_contracts_stage_inherits_the_dual_toolchain_image() -> None:
+    """The acceptance contracts layer must run in the same image as verify's.
+
+    `scripts/acceptance.sh --profile contracts` calls `scripts/smoke.sh
+    --profile contracts` directly, bypassing `ci-job-steps.sh`. That layer
+    shells out to `node` (the frontend i18n guard self-test and the locale
+    checker) and its suites import PyYAML. `main` -> `Contract suites` already
+    inherits the pipeline-level `.cnb/env/Dockerfile.frontend` for exactly this
+    reason, but `$` -> `web_trigger_acceptance` -> `Delivery contracts` was
+    declared with `image: python:3.15`, which has no Node: every acceptance
+    run either fails on `FileNotFoundError: node` or silently loses coverage.
+    Both copies of the pipeline must agree.
+    """
+    document = yaml.safe_load(_pipeline_source())
+    assert _acceptance_contracts_stage_image_error(document) is None
+
+    record = yaml.safe_load(
+        (ROOT / ".cnb/pipelines/acceptance.yml").read_text(encoding="utf-8")
+    )
+    # The standalone record is a flat pipeline, not wrapped in `$`/event.
+    wrapped = {"$": {"web_trigger_acceptance": [record]}}
+    assert _acceptance_contracts_stage_image_error(wrapped) is None
+
+    # Mutations: each must be rejected, or the guard is a tautology.
+    mutated_stage = yaml.safe_load(_pipeline_source())
+    pipeline = mutated_stage["$"]["web_trigger_acceptance"][0]
+    next(st for st in pipeline["stages"] if st["name"] == "Delivery contracts")[
+        "image"
+    ] = "python:3.15"
+    assert _acceptance_contracts_stage_image_error(mutated_stage) is not None
+
+    mutated_build = yaml.safe_load(_pipeline_source())
+    del mutated_build["$"]["web_trigger_acceptance"][0]["docker"]["build"]
+    assert _acceptance_contracts_stage_image_error(mutated_build) is not None
+
+    mutated_record = yaml.safe_load(
+        (ROOT / ".cnb/pipelines/acceptance.yml").read_text(encoding="utf-8")
+    )
+    next(st for st in mutated_record["stages"] if st["name"] == "Delivery contracts")[
+        "image"
+    ] = "node:26.13.0"
+    assert _acceptance_contracts_stage_image_error(
+        {"$": {"web_trigger_acceptance": [mutated_record]}}
+    ) is not None
 
 def workspace_catalog() -> dict:
     return yaml.safe_load((ROOT / "pnpm-workspace.yaml").read_text(encoding="utf-8"))["catalog"]
@@ -248,8 +333,15 @@ def test_workspace_catalog_pins_platform_dependencies() -> None:
 def test_dependency_build_scripts_are_fail_closed_except_for_reviewed_tools() -> None:
     workspace = yaml.safe_load((ROOT / "pnpm-workspace.yaml").read_text(encoding="utf-8"))
 
+    # Every allowed postinstall is reviewed and justified in the workspace file
+    # itself. `@swc/core` and `@parcel/watcher` are dumi's (apps/docs) compile
+    # and watch helpers: swc's postinstall links the downloaded platform binary
+    # and watcher's install prefers the prebuilt optional package, so neither
+    # builds arbitrary code. Anything else stays refused.
     assert workspace["allowBuilds"] == {
         "esbuild": True,
+        "@swc/core": True,
+        "@parcel/watcher": True,
         "core-js": False,
         "core-js-pure": False,
         "es5-ext": False,
@@ -1184,3 +1276,101 @@ def test_upgrade_rollback_survives_a_stale_or_incomplete_environment() -> None:
             f"rollback() must run compose with {applied} set to the recorded "
             f"{recorded}; a restart on the new images is not a rollback"
         )
+
+
+# ---------------------------------------------------------------------------
+# NPC pipelines — platform stages the repository does not declare
+# ---------------------------------------------------------------------------
+
+# Stage names CNB injects into every `@npc` pipeline regardless of the config in
+# `.cnb.yml`. They appear in the build log the platform renders, so they are an
+# observation, not a guess -- see the docstring below for the build that proved
+# it. Anything NOT in this set must come from bytes this repository owns.
+_PLATFORM_INJECTED_STAGES = frozenset({"set model", "run with npc"})
+
+
+def _declared_stage_names(document: dict) -> set[str]:
+    """Every stage name the template itself declares, at any nesting depth."""
+    names: set[str] = set()
+
+    def walk(stages) -> None:
+        for stage in stages or []:
+            if not isinstance(stage, dict):
+                continue
+            if isinstance(stage.get("name"), str):
+                names.add(stage["name"])
+            walk(stage.get("stages"))
+
+    for branches in document.values():
+        if not isinstance(branches, dict):
+            continue
+        for pipelines in branches.values():
+            if not isinstance(pipelines, list):
+                continue
+            for pipeline in pipelines:
+                if isinstance(pipeline, dict):
+                    walk(pipeline.get("stages"))
+    return names
+
+
+def test_npc_pipelines_run_no_stage_the_repository_never_declared() -> None:
+    """A `@npc` build must not grow stages from anywhere but `.cnb.yml`.
+
+    The `verify` pipeline worked and the `@npc` pipelines did not, on the same
+    commit, with the same template:
+
+        verify        cnb-edd-1k6m89jkq-001  Prepare → error [5.4s]
+        @npc          cnb-i9t-1k6m89p3l-001  Prepare → success → set model
+                                             → run with npc → never finished
+                       6 stages, 18 minutes, zero forward progress
+
+    `Prepare` ending in ``Root Group's events CPU core-hours are insufficient
+    for pre-freezing`` is a real, observable state of this organisation, and it
+    is what ``verify`` reports. The `@npc` reading was not that: its `Prepare`
+    passed, so the runner started, and then the build sat in a stage
+    (``run with npc``) that no text in this repository contains. Every `@npc`
+    pipeline restarts a model session from scratch and holds the runner while it
+    does, which is the one cost an exhausted organisation cannot pay for.
+
+    The distinction matters because it decides who does what:
+      * ``verify`` red and `@npc` pending → an organisation quota. Only an
+        administrator can fix that, and rerunning changes nothing;
+      * an `@npc` pipeline red *with* a completed `Prepare` → an NPC invocation.
+        Nothing in the diff caused it, nothing in the diff can fix it, and the
+        cheapest correct answer is to stop asking.
+
+    So this gate pins the stage vocabulary. If a future revision of the platform
+    injects a different pair, this fails and somebody re-reads the log instead
+    of the summary line.
+    """
+    document = yaml.safe_load(_pipeline_source())
+    npc_events = {
+        event: pipelines
+        for branches in document.values()
+        if isinstance(branches, dict)
+        for event, pipelines in branches.items()
+        if isinstance(event, str) and event.endswith("@npc")
+    }
+    assert npc_events, "no `@npc` event left in .cnb.yml; the scan is broken"
+
+    declared = _declared_stage_names(document)
+    for event, pipelines in npc_events.items():
+        for pipeline in pipelines:
+            for stage in pipeline.get("stages") or []:
+                name = stage.get("name")
+                assert name in declared, (
+                    f"{event}/{pipeline.get('name')} runs a stage named {name!r} "
+                    "that .cnb.yml never declares"
+                )
+                # `npc:go` is the entry point the platform expands. It is the
+                # only stage type that can add work nobody wrote down.
+                if stage.get("type") == "npc:go":
+                    assert name in _PLATFORM_INJECTED_STAGES | {"npc go"}, name
+                    assert not stage.get("options"), (
+                        f"{event}/{name} carries options={stage['options']}; any "
+                        "option here is resolved before the container starts, so "
+                        "a wrong one turns every @npc build red at t=0"
+                    )
+                    assert not stage.get("stages"), (
+                        f"{event}/{name} nests stages under an NPC session"
+                    )

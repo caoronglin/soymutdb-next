@@ -18,14 +18,24 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 from urllib.parse import quote, urlencode
 
-from sqlalchemy import and_, case, desc, func, literal, or_, select, union_all
+from sqlalchemy import (
+    ColumnElement,
+    and_,
+    case,
+    desc,
+    func,
+    literal,
+    or_,
+    select,
+    union_all,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from ..core.exceptions import ValidationError
 from ..core.public_ids import normalize_public_id
 from ..core.site_variant import SiteVariant
-from ..models.content import Publication
+from ..models.content import Publication, Release, ReleaseStatus
 from ..models.genomic import Assembly, Gene, GeneAlias, GeneCrosswalk
 from ..models.variant import MutantLine
 from ..schemas.search import (
@@ -123,7 +133,9 @@ def _encode_global_cursor(payload: Mapping[str, Any]) -> str:
     return signed
 
 
-def _normalize_active_types(types: list[SearchResultType] | None) -> list[SearchResultType]:
+def _normalize_active_types(
+    types: Iterable[str | SearchResultType] | None,
+) -> list[SearchResultType]:
     """Deduplicate types in enum order so cursor bindings are deterministic."""
     supplied = types or list(SearchResultType)
     try:
@@ -614,8 +626,10 @@ class SearchService:
                         assembly_id=hit.metadata.get("assembly_id"),
                         assembly=hit.metadata.get("assembly"),
                         cross_version=cross_version_by_gene.get(
-                            hit.metadata.get("gene_pk"), []
-                        ),
+                            int(hit.metadata["gene_pk"]), []
+                        )
+                        if isinstance(hit.metadata.get("gene_pk"), int)
+                        else [],
                     )
                     for hit in hits
                 ],
@@ -732,7 +746,7 @@ class SearchService:
         # The match set arrives as one indexable subquery instead of an OR of
         # text tests and a correlated alias EXISTS; see _gene_match_query for
         # the measured reason.
-        conditions: list = [
+        conditions: list[ColumnElement[bool]] = [
             Gene.gene_pk.in_(
                 _gene_match_query(
                     query, pattern, release_id=release_id, assembly_id=assembly_id
@@ -869,9 +883,16 @@ class SearchService:
         One batched query (no N+1) over ``gene_crosswalks`` in BOTH
         directions: a row is relevant whether the matched gene is its source
         or its target. Rows scoped to a different release are skipped;
-        ``release_id IS NULL`` means "generic, every release". The linked
-        gene's assembly is joined purely for display metadata, never to
-        infer equivalence.
+        ``release_id IS NULL`` means "generic, every release".
+
+        Each endpoint assembly must belong either to the resolved release or
+        to another *published* release (v4 and v5 can live in separate published
+        releases, which is what makes cross-version links useful). A generic row
+        can point at a gene whose assembly exists only in an unpublished
+        release; disclosing that accession and assembly would publish a record
+        this catalogue does not contain. The assembly/release joins are
+        therefore part of the scope, not just display metadata, and equivalence
+        is still never inferred from them.
         """
         if not gene_pks:
             return {}
@@ -880,6 +901,8 @@ class SearchService:
         target_gene = aliased(Gene)
         source_assembly = aliased(Assembly)
         target_assembly = aliased(Assembly)
+        source_release = aliased(Release)
+        target_release = aliased(Release)
         stmt = (
             select(
                 GeneCrosswalk.source_gene_id,
@@ -899,6 +922,8 @@ class SearchService:
             .join(target_gene, target_gene.gene_pk == GeneCrosswalk.target_gene_id)
             .join(source_assembly, source_assembly.id == source_gene.assembly_id)
             .join(target_assembly, target_assembly.id == target_gene.assembly_id)
+            .join(source_release, source_release.id == source_assembly.release_id)
+            .join(target_release, target_release.id == target_assembly.release_id)
             .where(
                 or_(
                     GeneCrosswalk.source_gene_id.in_(matched),
@@ -907,6 +932,14 @@ class SearchService:
                 or_(
                     GeneCrosswalk.release_id.is_(None),
                     GeneCrosswalk.release_id == release_id,
+                ),
+                or_(
+                    source_assembly.release_id == release_id,
+                    source_release.status == ReleaseStatus.PUBLISHED,
+                ),
+                or_(
+                    target_assembly.release_id == release_id,
+                    target_release.status == ReleaseStatus.PUBLISHED,
                 ),
             )
         )
@@ -1057,7 +1090,7 @@ class SearchService:
 
         # Internal federated search: kept for internal callers of
         # global_search; matching spans both identities.
-        stmt = (
+        internal_stmt = (
             select(
                 MutantLine.public_id,
                 MutantLine.id,
@@ -1079,13 +1112,13 @@ class SearchService:
                 )
             )
         )
-        rank_expr = literal(1)
+        internal_rank = literal(1)
         if cursor_key is not None:
-            stmt = stmt.where(
+            internal_stmt = internal_stmt.where(
                 or_(
-                    rank_expr < cursor_key["rank"],
+                    internal_rank < cursor_key["rank"],
                     and_(
-                        rank_expr == cursor_key["rank"],
+                        internal_rank == cursor_key["rank"],
                         or_(
                             MutantLine.name > cursor_key["name"],
                             and_(
@@ -1096,12 +1129,12 @@ class SearchService:
                     ),
                 )
             )
-        stmt = (
-            stmt.order_by(desc(rank_expr), MutantLine.name, MutantLine.id)
+        internal_stmt = (
+            internal_stmt.order_by(desc(internal_rank), MutantLine.name, MutantLine.id)
             .limit(limit)
             .offset(offset)
         )
-        result = await db.execute(stmt)
+        result = await db.execute(internal_stmt)
         hits = []
         for ml in result.all():
             hits.append(
@@ -1134,7 +1167,7 @@ class SearchService:
         query: str,
         pattern: str,
         *,
-        release_id: int,
+        release_id: int | None,
         limit: int,
     ) -> list[InternalMutantSearchItem]:
         """Internal mutant search across public_id, internal id and name."""
@@ -1149,7 +1182,7 @@ class SearchService:
             candidate = int(stripped)
             if candidate <= 2_147_483_647:
                 internal_id_value = candidate
-        conditions = [
+        conditions: list[ColumnElement[bool]] = [
             MutantLine.is_deleted.is_(False),
         ]
         if is_exact:
@@ -1202,7 +1235,7 @@ class SearchService:
         query: str,
         pattern: str,
         *,
-        release_id: int,
+        release_id: int | None,
         limit: int,
     ) -> list[InternalGeneSearchItem]:
         """Internal gene search across accession, name and curated aliases."""
@@ -1317,6 +1350,7 @@ class SearchService:
     async def suggest(
         self, db: AsyncSession, query: str, limit: int = 5,
         *, release_id: int | None = None,
+        site_variant: SiteVariant = SiteVariant.EXTERNAL,
     ) -> list[SearchSuggestion]:
         """Return autocomplete suggestions, cached for a short interval.
 
@@ -1356,6 +1390,16 @@ class SearchService:
             "search:suggest",
             ttl=30,
             loader=load,
-            params={"query": query, "limit": limit, "release_id": release_id},
+            # Every biological-search cache key carries the full context that
+            # changes its result set (AGENTS.md, database-core-contract.md):
+            # site variant, release, query and limit. `suggest` was the one
+            # search path missing the variant, so an internal caller reusing it
+            # would have collided with the external suggestion set.
+            params={
+                "query": query,
+                "limit": limit,
+                "release_id": release_id,
+                "site_variant": site_variant.value,
+            },
         )
         return [SearchSuggestion.model_validate(item) for item in payload]

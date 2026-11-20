@@ -1,0 +1,15 @@
+{
+  "authentication_failed": "",
+  "conflict": "",
+  "forbidden": "",
+  "http_error": "Generic HTTPException fallback; see x-error-status for the statuses that use it.",
+  "internal_error": "Base class for all SoyMutDB domain errors.",
+  "not_found": "",
+  "plugin_disabled": "A deployed plugin exists but is intentionally hidden/disabled.",
+  "plugin_unavailable": "A plugin is enabled but not configured or currently unhealthy.",
+  "rate_limit_exceeded": "",
+  "service_unavailable": "",
+  "settings_version_conflict": "An optimistic settings mutation used a stale section version.",
+  "task_dispatch_failed": "A background task could not be handed to the Celery broker.",
+  "validation_error": ""
+}

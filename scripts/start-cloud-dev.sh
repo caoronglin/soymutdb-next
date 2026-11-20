@@ -5,7 +5,7 @@
 # Owns everything that turns a bare CNB branch page into a working SoyMutDB
 # development environment, so the `.cnb.yml` stage body stays a single
 # `bash scripts/start-cloud-dev.sh <mode>` call that the platform's default
-# shell cannot misinterpret (see docs/ops/ci-cd.md, "Stage shell").
+# shell cannot misinterpret (see docs/ops/ci-cd.md, "Stage shell：CNB 用 `sh` 执行 stage 脚本").
 #
 # Modes
 #   full         prepare dependencies only; the developer drives the servers

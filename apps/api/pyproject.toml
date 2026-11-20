@@ -32,6 +32,11 @@ dependencies = [
     "boto3>=1.35.0",
     "botocore>=1.35.0",
     "scipy>=1.14.0",
+    # The sequence engine (app/services/bio_python_engine.py). The wheel is
+    # pure-Python for CPython 3.15 and carries the REBASE enzyme table, the
+    # codon tables, the nearest-neighbour Tm calculator and the tree builders.
+    # Its licence is already in dependency-licenses.json.
+    "biopython==1.88",
     "httpx>=0.28.0",
     "email-validator>=2.2.0",
     "opentelemetry-api>=1.28.0",
@@ -41,6 +46,7 @@ dependencies = [
     "bleach>=6.0.0",
     "Jinja2>=3.1.0",
     "aiohttp>=3.10.0",
+    "anyio>=4.0.0",
 ]
 
 [tool.uv.sources]
@@ -64,16 +70,9 @@ dev = [
 [tool.hatch.build.targets.wheel]
 packages = ["app"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-asyncio_mode = "auto"
-python_files = "test_*.py"
-python_classes = "Test*"
-python_functions = "test_*"
-filterwarnings = [
-    "ignore::DeprecationWarning",
-    "ignore::PendingDeprecationWarning",
-]
+# Pytest configuration lives in `pytest.ini`; pytest ignores
+# `[tool.pytest.ini_options]` whenever that file exists, so duplicating it
+# here would be dead configuration.
 
 [tool.ruff]
 target-version = "py315"
@@ -86,3 +85,10 @@ select = ["E", "F", "I", "W", "UP"]
 python_version = "3.15"
 warn_return_any = true
 warn_unused_configs = true
+
+# openpyxl publishes no type information and no stub package exists, so the
+# audit-log XLSX export cannot be checked through it. The module is imported at
+# function scope, so this only relaxes the one import.
+[[tool.mypy.overrides]]
+module = ["openpyxl", "openpyxl.*", "openpyxl.styles"]
+ignore_missing_imports = true

@@ -9,10 +9,13 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SplatRouteImport } from './routes/$'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as BlastRouteImport } from './routes/blast'
+import { Route as AssembliesIndexRouteImport } from './routes/assemblies/index'
+import { Route as AssembliesAssemblyIdRouteImport } from './routes/assemblies/$assemblyId'
 import { Route as BrowserRouteImport } from './routes/browser'
 import { Route as CompareRouteImport } from './routes/compare'
 import { Route as DownloadsRouteImport } from './routes/downloads'
@@ -26,19 +29,25 @@ import { Route as SeedRequestRouteImport } from './routes/seed-request'
 import { Route as SraRouteImport } from './routes/sra'
 import { Route as ToolsIndexRouteImport } from './routes/tools/index'
 import { Route as ToolsSeqfetchRouteImport } from './routes/tools/seqfetch'
+import { Route as ToolsSequenceRouteImport } from './routes/tools/sequence'
 import { Route as ToolsEnrichmentRouteImport } from './routes/tools/enrichment'
 import { Route as ToolsExppatternRouteImport } from './routes/tools/exppattern'
+import { Route as ToolsAllelefreqRouteImport } from './routes/tools/allelefreq'
+import { Route as ToolsDiversityRouteImport } from './routes/tools/diversity'
+import { Route as ToolsLdRouteImport } from './routes/tools/ld'
+import { Route as ComparativeIndexRouteImport } from './routes/comparative/index'
+import { Route as ComparativeFamilyIdRouteImport } from './routes/comparative/$familyId'
+import { Route as ExpressionIndexRouteImport } from './routes/expression/index'
+import { Route as ExpressionSampleIdRouteImport } from './routes/expression/$sampleId'
 import { Route as GenesIndexRouteImport } from './routes/genes/index'
 import { Route as GenesGeneIdRouteImport } from './routes/genes/$geneId'
 import { Route as MutantsIndexRouteImport } from './routes/mutants/index'
 import { Route as MutantsIdRouteImport } from './routes/mutants/$id'
 import { Route as NewsIndexRouteImport } from './routes/news/index'
 import { Route as NewsSlugRouteImport } from './routes/news/$slug'
+import { Route as PhenotypesIndexRouteImport } from './routes/phenotypes/index'
+import { Route as PhenotypesLineIdRouteImport } from './routes/phenotypes/$lineId'
 import { Route as VariantsIndexRouteImport } from './routes/variants/index'
-import { Route as AnalysesIndexRouteImport } from './routes/analyses/index'
-import { Route as AnalysesFastpRouteImport } from './routes/analyses/fastp'
-import { Route as AnalysesScanpyRouteImport } from './routes/analyses/scanpy'
-import { Route as AnalysesJobIdRouteImport } from './routes/analyses/$jobId'
 import { Route as SearchGenesRouteImport } from './routes/search/genes'
 import { Route as SearchLocationRouteImport } from './routes/search/location'
 import { Route as SearchGbrowseRouteImport } from './routes/search/gbrowse'
@@ -51,6 +60,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SplatRoute = SplatRouteImport.update({
+  id: '/$',
+  path: '/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
@@ -59,6 +73,16 @@ const AboutRoute = AboutRouteImport.update({
 const AnalyticsRoute = AnalyticsRouteImport.update({
   id: '/analytics',
   path: '/analytics',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssembliesIndexRoute = AssembliesIndexRouteImport.update({
+  id: '/assemblies/',
+  path: '/assemblies/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AssembliesAssemblyIdRoute = AssembliesAssemblyIdRouteImport.update({
+  id: '/assemblies/$assemblyId',
+  path: '/assemblies/$assemblyId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BlastRoute = BlastRouteImport.update({
@@ -131,6 +155,11 @@ const ToolsSeqfetchRoute = ToolsSeqfetchRouteImport.update({
   path: '/tools/seqfetch',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ToolsSequenceRoute = ToolsSequenceRouteImport.update({
+  id: '/tools/sequence',
+  path: '/tools/sequence',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ToolsEnrichmentRoute = ToolsEnrichmentRouteImport.update({
   id: '/tools/enrichment',
   path: '/tools/enrichment',
@@ -139,6 +168,41 @@ const ToolsEnrichmentRoute = ToolsEnrichmentRouteImport.update({
 const ToolsExppatternRoute = ToolsExppatternRouteImport.update({
   id: '/tools/exppattern',
   path: '/tools/exppattern',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ToolsAllelefreqRoute = ToolsAllelefreqRouteImport.update({
+  id: '/tools/allelefreq',
+  path: '/tools/allelefreq',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ToolsDiversityRoute = ToolsDiversityRouteImport.update({
+  id: '/tools/diversity',
+  path: '/tools/diversity',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ToolsLdRoute = ToolsLdRouteImport.update({
+  id: '/tools/ld',
+  path: '/tools/ld',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComparativeIndexRoute = ComparativeIndexRouteImport.update({
+  id: '/comparative/',
+  path: '/comparative/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ComparativeFamilyIdRoute = ComparativeFamilyIdRouteImport.update({
+  id: '/comparative/$familyId',
+  path: '/comparative/$familyId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExpressionIndexRoute = ExpressionIndexRouteImport.update({
+  id: '/expression/',
+  path: '/expression/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ExpressionSampleIdRoute = ExpressionSampleIdRouteImport.update({
+  id: '/expression/$sampleId',
+  path: '/expression/$sampleId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const GenesIndexRoute = GenesIndexRouteImport.update({
@@ -171,29 +235,19 @@ const NewsSlugRoute = NewsSlugRouteImport.update({
   path: '/news/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PhenotypesIndexRoute = PhenotypesIndexRouteImport.update({
+  id: '/phenotypes/',
+  path: '/phenotypes/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PhenotypesLineIdRoute = PhenotypesLineIdRouteImport.update({
+  id: '/phenotypes/$lineId',
+  path: '/phenotypes/$lineId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const VariantsIndexRoute = VariantsIndexRouteImport.update({
   id: '/variants/',
   path: '/variants/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AnalysesIndexRoute = AnalysesIndexRouteImport.update({
-  id: '/analyses/',
-  path: '/analyses',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AnalysesFastpRoute = AnalysesFastpRouteImport.update({
-  id: '/analyses/fastp',
-  path: '/analyses/fastp',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AnalysesScanpyRoute = AnalysesScanpyRouteImport.update({
-  id: '/analyses/scanpy',
-  path: '/analyses/scanpy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AnalysesJobIdRoute = AnalysesJobIdRouteImport.update({
-  id: '/analyses/$jobId',
-  path: '/analyses/$jobId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SearchGenesRoute = SearchGenesRouteImport.update({
@@ -251,14 +305,22 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/analytics': typeof AnalyticsRoute
+  '/assemblies/': typeof AssembliesIndexRoute
+  '/assemblies/$assemblyId': typeof AssembliesAssemblyIdRoute
   '/blast': typeof BlastRoute
   '/browser': typeof BrowserRoute
+  '/comparative/': typeof ComparativeIndexRoute
+  '/comparative/$familyId': typeof ComparativeFamilyIdRoute
   '/compare': typeof CompareRoute
   '/downloads': typeof DownloadsRoute
+  '/expression/': typeof ExpressionIndexRoute
+  '/expression/$sampleId': typeof ExpressionSampleIdRoute
   '/genome-view': typeof GenomeViewRoute
   '/guide': typeof GuideRoute
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
+  '/phenotypes/': typeof PhenotypesIndexRoute
+  '/phenotypes/$lineId': typeof PhenotypesLineIdRoute
   '/publications': typeof PublicationsRoute
   '/search': typeof SearchRoute
   '/search/genes': typeof SearchGenesRoute
@@ -270,8 +332,12 @@ export interface FileRoutesByFullPath {
   '/seed-request': typeof SeedRequestRoute
   '/sra': typeof SraRoute
   '/tools/seqfetch': typeof ToolsSeqfetchRoute
+  '/tools/sequence': typeof ToolsSequenceRoute
   '/tools/enrichment': typeof ToolsEnrichmentRoute
   '/tools/exppattern': typeof ToolsExppatternRoute
+  '/tools/allelefreq': typeof ToolsAllelefreqRoute
+  '/tools/diversity': typeof ToolsDiversityRoute
+  '/tools/ld': typeof ToolsLdRoute
   '/genes/$geneId': typeof GenesGeneIdRoute
   '/mutants/$id': typeof MutantsIdRoute
   '/mutants/': typeof MutantsIndexRoute
@@ -280,23 +346,27 @@ export interface FileRoutesByFullPath {
   '/genes/': typeof GenesIndexRoute
   '/news/': typeof NewsIndexRoute
   '/variants/': typeof VariantsIndexRoute
-  '/analyses/': typeof AnalysesIndexRoute
-  '/analyses/fastp': typeof AnalysesFastpRoute
-  '/analyses/scanpy': typeof AnalysesScanpyRoute
-  '/analyses/$jobId': typeof AnalysesJobIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/analytics': typeof AnalyticsRoute
+  '/assemblies/': typeof AssembliesIndexRoute
+  '/assemblies/$assemblyId': typeof AssembliesAssemblyIdRoute
   '/blast': typeof BlastRoute
   '/browser': typeof BrowserRoute
+  '/comparative/': typeof ComparativeIndexRoute
+  '/comparative/$familyId': typeof ComparativeFamilyIdRoute
   '/compare': typeof CompareRoute
   '/downloads': typeof DownloadsRoute
+  '/expression': typeof ExpressionIndexRoute
+  '/expression/$sampleId': typeof ExpressionSampleIdRoute
   '/genome-view': typeof GenomeViewRoute
   '/guide': typeof GuideRoute
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
+  '/phenotypes': typeof PhenotypesIndexRoute
+  '/phenotypes/$lineId': typeof PhenotypesLineIdRoute
   '/publications': typeof PublicationsRoute
   '/search': typeof SearchRoute
   '/search/genes': typeof SearchGenesRoute
@@ -308,9 +378,16 @@ export interface FileRoutesByTo {
   '/seed-request': typeof SeedRequestRoute
   '/sra': typeof SraRoute
   '/tools': typeof ToolsIndexRoute
+  '/comparative': typeof ComparativeIndexRoute
+  '/assemblies': typeof AssembliesIndexRoute
+  '/assemblies/$assemblyId': typeof AssembliesAssemblyIdRoute
   '/tools/seqfetch': typeof ToolsSeqfetchRoute
+  '/tools/sequence': typeof ToolsSequenceRoute
   '/tools/enrichment': typeof ToolsEnrichmentRoute
   '/tools/exppattern': typeof ToolsExppatternRoute
+  '/tools/allelefreq': typeof ToolsAllelefreqRoute
+  '/tools/diversity': typeof ToolsDiversityRoute
+  '/tools/ld': typeof ToolsLdRoute
   '/genes/$geneId': typeof GenesGeneIdRoute
   '/mutants/$id': typeof MutantsIdRoute
   '/mutants': typeof MutantsIndexRoute
@@ -318,10 +395,6 @@ export interface FileRoutesByTo {
   '/genes': typeof GenesIndexRoute
   '/news': typeof NewsIndexRoute
   '/variants': typeof VariantsIndexRoute
-  '/analyses': typeof AnalysesIndexRoute
-  '/analyses/fastp': typeof AnalysesFastpRoute
-  '/analyses/scanpy': typeof AnalysesScanpyRoute
-  '/analyses/$jobId': typeof AnalysesJobIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -330,12 +403,18 @@ export interface FileRoutesById {
   '/analytics': typeof AnalyticsRoute
   '/blast': typeof BlastRoute
   '/browser': typeof BrowserRoute
+  '/comparative/': typeof ComparativeIndexRoute
+  '/comparative/$familyId': typeof ComparativeFamilyIdRoute
   '/compare': typeof CompareRoute
   '/downloads': typeof DownloadsRoute
+  '/expression/': typeof ExpressionIndexRoute
+  '/expression/$sampleId': typeof ExpressionSampleIdRoute
   '/genome-view': typeof GenomeViewRoute
   '/guide': typeof GuideRoute
   '/help': typeof HelpRoute
   '/login': typeof LoginRoute
+  '/phenotypes/': typeof PhenotypesIndexRoute
+  '/phenotypes/$lineId': typeof PhenotypesLineIdRoute
   '/publications': typeof PublicationsRoute
   '/search': typeof SearchRoute
   '/search/genes': typeof SearchGenesRoute
@@ -347,8 +426,12 @@ export interface FileRoutesById {
   '/seed-request': typeof SeedRequestRoute
   '/sra': typeof SraRoute
   '/tools/seqfetch': typeof ToolsSeqfetchRoute
+  '/tools/sequence': typeof ToolsSequenceRoute
   '/tools/enrichment': typeof ToolsEnrichmentRoute
   '/tools/exppattern': typeof ToolsExppatternRoute
+  '/tools/allelefreq': typeof ToolsAllelefreqRoute
+  '/tools/diversity': typeof ToolsDiversityRoute
+  '/tools/ld': typeof ToolsLdRoute
   '/genes/$geneId': typeof GenesGeneIdRoute
   '/mutants/$id': typeof MutantsIdRoute
   '/mutants/': typeof MutantsIndexRoute
@@ -357,10 +440,6 @@ export interface FileRoutesById {
   '/genes/': typeof GenesIndexRoute
   '/news/': typeof NewsIndexRoute
   '/variants/': typeof VariantsIndexRoute
-  '/analyses/': typeof AnalysesIndexRoute
-  '/analyses/fastp': typeof AnalysesFastpRoute
-  '/analyses/scanpy': typeof AnalysesScanpyRoute
-  '/analyses/$jobId': typeof AnalysesJobIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -370,12 +449,18 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/blast'
     | '/browser'
+    | '/comparative/'
+    | '/comparative/$familyId'
     | '/compare'
     | '/downloads'
+    | '/expression/'
+    | '/expression/$sampleId'
     | '/genome-view'
     | '/guide'
     | '/help'
     | '/login'
+    | '/phenotypes/'
+    | '/phenotypes/$lineId'
     | '/publications'
     | '/search'
     | '/search/genes'
@@ -387,8 +472,12 @@ export interface FileRouteTypes {
     | '/seed-request'
     | '/sra'
     | '/tools/seqfetch'
+    | '/tools/sequence'
     | '/tools/enrichment'
     | '/tools/exppattern'
+    | '/tools/allelefreq'
+    | '/tools/diversity'
+    | '/tools/ld'
     | '/genes/$geneId'
     | '/mutants/$id'
     | '/mutants/'
@@ -397,23 +486,27 @@ export interface FileRouteTypes {
     | '/genes/'
     | '/news/'
     | '/variants/'
-    | '/analyses/'
-    | '/analyses/fastp'
-    | '/analyses/scanpy'
-    | '/analyses/$jobId'
   fileRoutesByTo: FileRoutesByTo
   to:
+    | '/assemblies'
+    | '/assemblies/$assemblyId'
     | '/'
     | '/about'
     | '/analytics'
     | '/blast'
     | '/browser'
+    | '/comparative'
+    | '/comparative/$familyId'
     | '/compare'
     | '/downloads'
+    | '/expression'
+    | '/expression/$sampleId'
     | '/genome-view'
     | '/guide'
     | '/help'
     | '/login'
+    | '/phenotypes'
+    | '/phenotypes/$lineId'
     | '/publications'
     | '/search'
     | '/search/genes'
@@ -426,8 +519,12 @@ export interface FileRouteTypes {
     | '/sra'
     | '/tools'
     | '/tools/seqfetch'
+    | '/tools/sequence'
     | '/tools/enrichment'
     | '/tools/exppattern'
+    | '/tools/allelefreq'
+    | '/tools/diversity'
+    | '/tools/ld'
     | '/genes/$geneId'
     | '/mutants/$id'
     | '/mutants'
@@ -435,10 +532,6 @@ export interface FileRouteTypes {
     | '/genes'
     | '/news'
     | '/variants'
-    | '/analyses'
-    | '/analyses/fastp'
-    | '/analyses/scanpy'
-    | '/analyses/$jobId'
   id:
     | '__root__'
     | '/'
@@ -446,12 +539,18 @@ export interface FileRouteTypes {
     | '/analytics'
     | '/blast'
     | '/browser'
+    | '/comparative/'
+    | '/comparative/$familyId'
     | '/compare'
     | '/downloads'
+    | '/expression/'
+    | '/expression/$sampleId'
     | '/genome-view'
     | '/guide'
     | '/help'
     | '/login'
+    | '/phenotypes/'
+    | '/phenotypes/$lineId'
     | '/publications'
     | '/search'
     | '/search/genes'
@@ -463,8 +562,12 @@ export interface FileRouteTypes {
     | '/seed-request'
     | '/sra'
     | '/tools/seqfetch'
+    | '/tools/sequence'
     | '/tools/enrichment'
     | '/tools/exppattern'
+    | '/tools/allelefreq'
+    | '/tools/diversity'
+    | '/tools/ld'
     | '/genes/$geneId'
     | '/mutants/$id'
     | '/mutants/'
@@ -473,32 +576,39 @@ export interface FileRouteTypes {
     | '/genes/'
     | '/news/'
     | '/variants/'
-    | '/analyses/'
-    | '/analyses/fastp'
-    | '/analyses/scanpy'
-    | '/analyses/$jobId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  SplatRoute: typeof SplatRoute
   AboutRoute: typeof AboutRoute
   AnalyticsRoute: typeof AnalyticsRoute
+  AssembliesIndexRoute: typeof AssembliesIndexRoute
+  AssembliesAssemblyIdRoute: typeof AssembliesAssemblyIdRoute
   BlastRoute: typeof BlastRoute
   BrowserRoute: typeof BrowserRoute
   CompareRoute: typeof CompareRoute
   DownloadsRoute: typeof DownloadsRoute
+  ExpressionIndexRoute: typeof ExpressionIndexRoute
+  ExpressionSampleIdRoute: typeof ExpressionSampleIdRoute
   GenomeViewRoute: typeof GenomeViewRoute
   GuideRoute: typeof GuideRoute
   HelpRoute: typeof HelpRoute
   LoginRoute: typeof LoginRoute
+  PhenotypesIndexRoute: typeof PhenotypesIndexRoute
+  PhenotypesLineIdRoute: typeof PhenotypesLineIdRoute
   PublicationsRoute: typeof PublicationsRoute
   SearchRoute: typeof SearchRoute
   SeedRequestRoute: typeof SeedRequestRoute
   SraRoute: typeof SraRoute
   ToolsIndexRoute: typeof ToolsIndexRoute
   ToolsSeqfetchRoute: typeof ToolsSeqfetchRoute
+  ToolsSequenceRoute: typeof ToolsSequenceRoute
   ToolsEnrichmentRoute: typeof ToolsEnrichmentRoute
   ToolsExppatternRoute: typeof ToolsExppatternRoute
+  ToolsAllelefreqRoute: typeof ToolsAllelefreqRoute
+  ToolsDiversityRoute: typeof ToolsDiversityRoute
+  ToolsLdRoute: typeof ToolsLdRoute
   GenesGeneIdRoute: typeof GenesGeneIdRoute
   MutantsIndexRoute: typeof MutantsIndexRoute
   MutantsIdRoute: typeof MutantsIdRoute
@@ -506,10 +616,6 @@ export interface RootRouteChildren {
   GenesIndexRoute: typeof GenesIndexRoute
   NewsIndexRoute: typeof NewsIndexRoute
   VariantsIndexRoute: typeof VariantsIndexRoute
-  AnalysesIndexRoute: typeof AnalysesIndexRoute
-  AnalysesFastpRoute: typeof AnalysesFastpRoute
-  AnalysesScanpyRoute: typeof AnalysesScanpyRoute
-  AnalysesJobIdRoute: typeof AnalysesJobIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -519,6 +625,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/$': {
+      id: '/$'
+      path: '/$'
+      fullPath: '/$'
+      preLoaderRoute: typeof SplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/about': {
@@ -533,6 +646,20 @@ declare module '@tanstack/react-router' {
       path: '/analytics'
       fullPath: '/analytics'
       preLoaderRoute: typeof AnalyticsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assemblies/': {
+      id: '/assemblies/'
+      path: '/assemblies/'
+      fullPath: '/assemblies/'
+      preLoaderRoute: typeof AssembliesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/assemblies/$assemblyId': {
+      id: '/assemblies/$assemblyId'
+      path: '/assemblies/$assemblyId'
+      fullPath: '/assemblies/$assemblyId'
+      preLoaderRoute: typeof AssembliesAssemblyIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/blast': {
@@ -563,6 +690,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DownloadsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/expression/': {
+      id: '/expression/'
+      path: '/expression/'
+      fullPath: '/expression/'
+      preLoaderRoute: typeof ExpressionIndexImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/expression/$sampleId': {
+      id: '/expression/$sampleId'
+      path: '/expression/$sampleId'
+      fullPath: '/expression/$sampleId'
+      preLoaderRoute: typeof ExpressionSampleIdImport
+      parentRoute: typeof rootRouteImport
+    }
     '/genome-view': {
       id: '/genome-view'
       path: '/genome-view'
@@ -589,6 +730,20 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/phenotypes/': {
+      id: '/phenotypes/'
+      path: '/phenotypes'
+      fullPath: '/phenotypes/'
+      preLoaderRoute: typeof PhenotypesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/phenotypes/$lineId': {
+      id: '/phenotypes/$lineId'
+      path: '/phenotypes/$lineId'
+      fullPath: '/phenotypes/$lineId'
+      preLoaderRoute: typeof PhenotypesLineIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/publications': {
@@ -661,6 +816,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SraRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/comparative/': {
+      id: '/comparative/'
+      path: '/comparative'
+      fullPath: '/comparative/'
+      preLoaderRoute: typeof ComparativeIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/comparative/$familyId': {
+      id: '/comparative/$familyId'
+      path: '/comparative/$familyId'
+      fullPath: '/comparative/$familyId'
+      preLoaderRoute: typeof ComparativeFamilyIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/genes/': {
       id: '/genes/'
       path: '/genes'
@@ -710,34 +879,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof VariantsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/analyses/': {
-      id: '/analyses/'
-      path: '/analyses'
-      fullPath: '/analyses/'
-      preLoaderRoute: typeof AnalysesIndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/analyses/fastp': {
-      id: '/analyses/fastp'
-      path: '/analyses/fastp'
-      fullPath: '/analyses/fastp'
-      preLoaderRoute: typeof AnalysesFastpRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/analyses/scanpy': {
-      id: '/analyses/scanpy'
-      path: '/analyses/scanpy'
-      fullPath: '/analyses/scanpy'
-      preLoaderRoute: typeof AnalysesScanpyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/analyses/$jobId': {
-      id: '/analyses/$jobId'
-      path: '/analyses/$jobId'
-      fullPath: '/analyses/$jobId'
-      preLoaderRoute: typeof AnalysesJobIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/tools/': {
       id: '/tools/'
       path: '/tools'
@@ -750,6 +891,13 @@ declare module '@tanstack/react-router' {
       path: '/tools/seqfetch'
       fullPath: '/tools/seqfetch'
       preLoaderRoute: typeof ToolsSeqfetchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tools/sequence': {
+      id: '/tools/sequence'
+      path: '/tools/sequence'
+      fullPath: '/tools/sequence'
+      preLoaderRoute: typeof ToolsSequenceRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/tools/enrichment': {
@@ -766,29 +914,63 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ToolsExppatternRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/tools/allelefreq': {
+      id: '/tools/allelefreq'
+      path: '/tools/allelefreq'
+      fullPath: '/tools/allelefreq'
+      preLoaderRoute: typeof ToolsAllelefreqRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tools/diversity': {
+      id: '/tools/diversity'
+      path: '/tools/diversity'
+      fullPath: '/tools/diversity'
+      preLoaderRoute: typeof ToolsDiversityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tools/ld': {
+      id: '/tools/ld'
+      path: '/tools/ld'
+      fullPath: '/tools/ld'
+      preLoaderRoute: typeof ToolsLdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  SplatRoute: SplatRoute,
   AboutRoute: AboutRoute,
   AnalyticsRoute: AnalyticsRoute,
+  AssembliesIndexRoute: AssembliesIndexRoute,
+  AssembliesAssemblyIdRoute: AssembliesAssemblyIdRoute,
   BlastRoute: BlastRoute,
   BrowserRoute: BrowserRoute,
   CompareRoute: CompareRoute,
   DownloadsRoute: DownloadsRoute,
+  ExpressionIndexRoute: ExpressionIndexRoute,
+  ExpressionSampleIdRoute: ExpressionSampleIdRoute,
   GenomeViewRoute: GenomeViewRoute,
   GuideRoute: GuideRoute,
   HelpRoute: HelpRoute,
   LoginRoute: LoginRoute,
+  PhenotypesIndexRoute: PhenotypesIndexRoute,
+  PhenotypesLineIdRoute: PhenotypesLineIdRoute,
   PublicationsRoute: PublicationsRoute,
   SearchRoute: SearchRouteWithChildren,
   SeedRequestRoute: SeedRequestRoute,
   SraRoute: SraRoute,
   ToolsIndexRoute: ToolsIndexRoute,
   ToolsSeqfetchRoute: ToolsSeqfetchRoute,
+  ToolsSequenceRoute: ToolsSequenceRoute,
   ToolsEnrichmentRoute: ToolsEnrichmentRoute,
   ToolsExppatternRoute: ToolsExppatternRoute,
+  ToolsAllelefreqRoute: ToolsAllelefreqRoute,
+  ToolsDiversityRoute: ToolsDiversityRoute,
+  ToolsLdRoute: ToolsLdRoute,
+  ComparativeIndexRoute: ComparativeIndexRoute,
+  ComparativeFamilyIdRoute: ComparativeFamilyIdRoute,
   GenesGeneIdRoute: GenesGeneIdRoute,
   MutantsIndexRoute: MutantsIndexRoute,
   MutantsIdRoute: MutantsIdRoute,
@@ -796,10 +978,6 @@ const rootRouteChildren: RootRouteChildren = {
   GenesIndexRoute: GenesIndexRoute,
   NewsIndexRoute: NewsIndexRoute,
   VariantsIndexRoute: VariantsIndexRoute,
-  AnalysesIndexRoute: AnalysesIndexRoute,
-  AnalysesFastpRoute: AnalysesFastpRoute,
-  AnalysesScanpyRoute: AnalysesScanpyRoute,
-  AnalysesJobIdRoute: AnalysesJobIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

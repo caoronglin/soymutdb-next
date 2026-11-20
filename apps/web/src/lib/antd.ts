@@ -60,6 +60,7 @@ export {
   Tooltip,
   Typography,
   Upload,
+  Watermark,
 } from "@soymutdb/ui-react";
 export type {
   FormProps,
