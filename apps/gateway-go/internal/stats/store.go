@@ -12,9 +12,12 @@ import (
 	"time"
 )
 
-// Querier is the read surface shared by *sql.DB and *sql.Tx.
+// Querier is the read surface the store needs. Both *sql.DB and *sql.Tx
+// satisfy it, so the PostgreSQL fixture can run inside a rolled-back
+// transaction.
 type Querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
 }
 
 // Homepage mirrors schemas.analytics.HomepageStats, field order included.
@@ -34,12 +37,38 @@ type Homepage struct {
 
 // Store reads published-release aggregates. It performs no writes; the process
 // additionally opens the database with default_transaction_read_only=on.
+//
+// Both statements are prepared once. lib/pq parses and describes an unprepared
+// statement in a round trip of its own before it can bind parameters, and
+// PostgreSQL re-plans on every unprepared execution, so each request paid both
+// costs twice. Preparing removes them from the request path and keeps one
+// server-side plan; the generic plan PostgreSQL switches to after five
+// executions holds this query's shape (measured in store_bench_test.go).
 type Store struct {
-	db Querier
+	publishedRelease *sql.Stmt
+	aggregate        *sql.Stmt
 }
 
-func NewStore(db Querier) *Store {
-	return &Store{db: db}
+// NewStore prepares the store's statements on the given connection source.
+func NewStore(ctx context.Context, db Querier) (*Store, error) {
+	publishedRelease, err := db.PrepareContext(ctx, publishedReleaseSQL)
+	if err != nil {
+		return nil, fmt.Errorf("prepare published release query: %w", err)
+	}
+	aggregate, err := db.PrepareContext(ctx, homepageSQL)
+	if err != nil {
+		// Closing the prepared statement is best-effort: if it fails the
+		// connection is being torn down anyway, and the aggregate statement's
+		// close below is the one whose error we report.
+		_ = publishedRelease.Close()
+		return nil, fmt.Errorf("prepare homepage aggregate query: %w", err)
+	}
+	return &Store{publishedRelease: publishedRelease, aggregate: aggregate}, nil
+}
+
+// Close releases the prepared statements.
+func (s *Store) Close() error {
+	return errors.Join(s.publishedRelease.Close(), s.aggregate.Close())
 }
 
 // The active pointer is a singleton (id = 1) and must not be trusted blindly:
@@ -112,7 +141,7 @@ func (s *Store) Homepage(ctx context.Context) (Homepage, error) {
 		version     sql.NullString
 		publishedAt sql.NullTime
 	)
-	err := s.db.QueryRowContext(ctx, publishedReleaseSQL).Scan(&releaseID, &version, &publishedAt)
+	err := s.publishedRelease.QueryRowContext(ctx).Scan(&releaseID, &version, &publishedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Homepage{}, nil
 	}
@@ -135,7 +164,7 @@ func (s *Store) loadAggregate(ctx context.Context, releaseID int64) (Homepage, e
 		ins  int64
 		del  int64
 	)
-	err := s.db.QueryRowContext(ctx, homepageSQL, releaseID).Scan(
+	err := s.aggregate.QueryRowContext(ctx, releaseID).Scan(
 		&page.GeneCount,
 		&page.MutantLineCount,
 		&page.ReleaseCount,

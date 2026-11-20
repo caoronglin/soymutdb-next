@@ -5,11 +5,14 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	_ "github.com/lib/pq"
+
+	"soymutdb.local/gateway/internal/config"
 )
 
 // The integration test runs inside one transaction and rolls it back, so it
@@ -84,7 +87,11 @@ func TestHomepageAgainstPostgres(t *testing.T) {
 		insertFact(t, tx, fact.releaseID, assemblyID, fact.variantID, fact.variantType, fact.mutantLineName)
 	}
 
-	store := NewStore(tx)
+	store, err := NewStore(ctx, tx)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	defer func() { _ = store.Close() }()
 	got, err := store.Homepage(ctx)
 	if err != nil {
 		t.Fatalf("homepage: %v", err)
@@ -126,9 +133,56 @@ func TestHomepageAgainstPostgres(t *testing.T) {
 	if empty != (Homepage{}) {
 		t.Fatalf("draft pointer must answer the zero aggregate, got %+v", empty)
 	}
+
+	// A prepared statement is re-planned by PostgreSQL from a custom plan to a
+	// generic one after five executions. The answer must not move with it.
+	setActiveRelease(t, tx, publishedID)
+	for i := 0; i < 6; i++ {
+		repeated, err := store.Homepage(ctx)
+		if err != nil {
+			t.Fatalf("repeat %d: %v", i, err)
+		}
+		if !reflect.DeepEqual(repeated, got) {
+			t.Fatalf("repeat %d = %+v, want %+v", i, repeated, got)
+		}
+	}
 }
 
-func assertCount(t *testing.T, name string, got, want int64) {
+// TestForcedSessionParametersReachServer proves the DSN normalisation is not
+// decoration: lib/pq forwards unknown keys as startup runtime parameters, so
+// the read-only guarantee and the JIT setting arrive before any statement runs.
+func TestForcedSessionParametersReachServer(t *testing.T) {
+	raw := strings.TrimSpace(os.Getenv("SOYMUTDB_GATEWAY_TEST_DATABASE_URL"))
+	if raw == "" {
+		t.Skip("SOYMUTDB_GATEWAY_TEST_DATABASE_URL is not set")
+	}
+	dsn, err := config.NormalizeDatabaseURL(raw)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for setting, want := range map[string]string{
+		"default_transaction_read_only": "on",
+		"jit":                           "off",
+	} {
+		var got string
+		if err := db.QueryRowContext(ctx, "SHOW "+setting).Scan(&got); err != nil {
+			t.Fatalf("show %s: %v", setting, err)
+		}
+		if got != want {
+			t.Fatalf("%s = %q, want %q", setting, got, want)
+		}
+	}
+}
+
+func assertCount(t testing.TB, name string, got, want int64) {
 	t.Helper()
 	if got != want {
 		t.Fatalf("%s = %d, want %d", name, got, want)
@@ -150,7 +204,7 @@ func libpqDSN(raw string) string {
 	return raw
 }
 
-func insertRelease(t *testing.T, tx *sql.Tx, version, status string, publishedAt any) int {
+func insertRelease(t testing.TB, tx *sql.Tx, version, status string, publishedAt any) int {
 	t.Helper()
 	var id int
 	err := tx.QueryRow(
@@ -164,7 +218,7 @@ func insertRelease(t *testing.T, tx *sql.Tx, version, status string, publishedAt
 	return id
 }
 
-func setActiveRelease(t *testing.T, tx *sql.Tx, releaseID int) {
+func setActiveRelease(t testing.TB, tx *sql.Tx, releaseID int) {
 	t.Helper()
 	result, err := tx.Exec(`UPDATE active_release SET release_id = $1 WHERE id = 1`, releaseID)
 	if err != nil {
@@ -181,7 +235,7 @@ func setActiveRelease(t *testing.T, tx *sql.Tx, releaseID int) {
 	}
 }
 
-func insertAssembly(t *testing.T, tx *sql.Tx, name string, releaseID int) int {
+func insertAssembly(t testing.TB, tx *sql.Tx, name string, releaseID int) int {
 	t.Helper()
 	var id int
 	err := tx.QueryRow(
@@ -195,7 +249,7 @@ func insertAssembly(t *testing.T, tx *sql.Tx, name string, releaseID int) int {
 	return id
 }
 
-func insertChromosome(t *testing.T, tx *sql.Tx, assemblyID int, name string) int {
+func insertChromosome(t testing.TB, tx *sql.Tx, assemblyID int, name string) int {
 	t.Helper()
 	var id int
 	err := tx.QueryRow(
@@ -209,7 +263,7 @@ func insertChromosome(t *testing.T, tx *sql.Tx, assemblyID int, name string) int
 	return id
 }
 
-func insertGene(t *testing.T, tx *sql.Tx, accession string, assemblyID, chromosomeID int) {
+func insertGene(t testing.TB, tx *sql.Tx, accession string, assemblyID, chromosomeID int) {
 	t.Helper()
 	if _, err := tx.Exec(
 		`INSERT INTO genes (accession, assembly_id, chromosome_id, start, "end", strand)
@@ -221,7 +275,7 @@ func insertGene(t *testing.T, tx *sql.Tx, accession string, assemblyID, chromoso
 }
 
 func insertLine(
-	t *testing.T, tx *sql.Tx, publicID, name string, isPublic, isDeleted bool, releaseID *int,
+	t testing.TB, tx *sql.Tx, publicID, name string, isPublic, isDeleted bool, releaseID *int,
 ) int {
 	t.Helper()
 	var id int
@@ -240,7 +294,7 @@ func insertLine(
 	return id
 }
 
-func insertSeed(t *testing.T, tx *sql.Tx, lineID int, lot string) {
+func insertSeed(t testing.TB, tx *sql.Tx, lineID int, lot string) {
 	t.Helper()
 	if _, err := tx.Exec(
 		`INSERT INTO seed_inventory (mutant_line_id, lot_number, seed_lot, quantity_grams)
@@ -251,7 +305,7 @@ func insertSeed(t *testing.T, tx *sql.Tx, lineID int, lot string) {
 	}
 }
 
-func insertFact(t *testing.T, tx *sql.Tx, releaseID, assemblyID int, variantID int64, variantType, lineName string) {
+func insertFact(t testing.TB, tx *sql.Tx, releaseID, assemblyID int, variantID int64, variantType, lineName string) {
 	t.Helper()
 	if _, err := tx.Exec(
 		`INSERT INTO variant_facts (
