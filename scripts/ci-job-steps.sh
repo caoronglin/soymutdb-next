@@ -157,8 +157,8 @@ ensure_contracts_python() {
   local spec
   for spec in "${required[@]}"; do
     case "${spec}" in
-      pytest*) "${interpreter}" -m pytest --version >/dev/null 2>&1 || missing+=("${spec}") ;;
-      *) "${interpreter}" -c "import yaml" >/dev/null 2>&1 || missing+=("${spec}") ;;
+    pytest*) "${interpreter}" -m pytest --version >/dev/null 2>&1 || missing+=("${spec}") ;;
+    *) "${interpreter}" -c "import yaml" >/dev/null 2>&1 || missing+=("${spec}") ;;
     esac
   done
   if [[ ${#missing[@]} -gt 0 ]]; then
@@ -349,8 +349,8 @@ ensure_api_venv() {
 
 frontend_build_demo() {
   VITE_DEPLOYMENT_MODE="${SOYMUTDB_CI_DEMO_MODE}" \
-  VITE_API_BASE_URL="${SOYMUTDB_CI_DEMO_API_URL}" \
-  VITE_JBROWSE_BASE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL}" \
+    VITE_API_BASE_URL="${SOYMUTDB_CI_DEMO_API_URL}" \
+    VITE_JBROWSE_BASE_URL="${SOYMUTDB_CI_DEMO_JBROWSE_URL}" \
     pnpm build
 }
 
@@ -568,6 +568,7 @@ compose_acceptance_run() {
     "MIGRATE_CLICKHOUSE_IMAGE_REF=soymutdb-validation/migrate-clickhouse:local"
     "JBROWSE_IMAGE_REF=soymutdb-validation/jbrowse:local"
     "MCP_IMAGE_REF=soymutdb-validation/mcp-server:local"
+    "GATEWAY_IMAGE_REF=soymutdb-validation/gateway:local"
     "POSTGRES_PASSWORD=ci-validation"
     "CLICKHOUSE_PASSWORD=ci-validation"
     "REDIS_PASSWORD=ci-validation"
@@ -590,6 +591,7 @@ compose_acceptance_run() {
     "core,analyses"
     "core,mcp"
     "core,cloudflare-tunnel"
+    "core,gateway"
   )
   local profile_set
   for profile_set in "${profile_sets[@]}"; do
@@ -727,20 +729,27 @@ USAGE
 main() {
   local command="${1:-}"
   case "${command}" in
-    list) list_jobs ;;
-    run)
-      local job="${2:-}"
-      [[ -n "${job}" ]] || { usage >&2; exit 2; }
-      local function_name="${job//-/_}_run"
-      declare -F "${function_name}" >/dev/null || {
-        echo "unknown job: ${job}" >&2
-        exit 2
-      }
-      log "run ${job}"
-      "${function_name}"
-      ;;
-    -h|--help|"") usage ;;
-    *) echo "unknown command: ${command}" >&2; usage >&2; exit 2 ;;
+  list) list_jobs ;;
+  run)
+    local job="${2:-}"
+    [[ -n "${job}" ]] || {
+      usage >&2
+      exit 2
+    }
+    local function_name="${job//-/_}_run"
+    declare -F "${function_name}" >/dev/null || {
+      echo "unknown job: ${job}" >&2
+      exit 2
+    }
+    log "run ${job}"
+    "${function_name}"
+    ;;
+  -h | --help | "") usage ;;
+  *)
+    echo "unknown command: ${command}" >&2
+    usage >&2
+    exit 2
+    ;;
   esac
 }
 

@@ -1,5 +1,6 @@
 export * from "./page-builder";
 export * from "./site-navigation";
+export * from "./site-footer";
 export * from "./cn";
 export * from "./format";
 export * from "./genomics";

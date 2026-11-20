@@ -12,7 +12,7 @@ from compose_loader import load_compose
 ROOT = Path(__file__).resolve().parents[1]
 NODE_VERSION = "26.13.0"
 PNPM_VERSION = "12.11.2"
-PROFILES = {"core", "jbrowse", "blast", "analyses", "mcp", "cloudflare-tunnel"}
+PROFILES = {"core", "jbrowse", "blast", "analyses", "mcp", "cloudflare-tunnel", "gateway"}
 UPGRADE = ROOT / "deploy/scripts/upgrade.sh"
 BACKUP = ROOT / "deploy/scripts/backup.sh"
 HEALTHCHECK = ROOT / "deploy/scripts/healthcheck.sh"

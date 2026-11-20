@@ -1,3 +1,42 @@
+# 序列引擎：Biopython（默认）与 Rust 内核（可选）
+
+## 为什么换默认引擎
+
+`SOYMUTDB_BIO_ENGINE` 现在默认 `python`，由 `apps/api/app/services/bio_python_engine.py`
+提供实现；`rust` 仍可选择，需要 `soymutdb_bio_core` 轮子在场。两者回答同一套函数
+面，因此 `bio_core_bridge`、服务层、HTTP 契约与前端都不需要知道自己连着哪一个。
+
+理由：
+
+- Biopython 是这些操作的参考实现，结果与研究者自己写脚本一致；
+- 它带 REBASE 酶库、完整 NCBI 密码子表、nearest-neighbour Tm 与建树器，这些不该手写；
+- CPython 3.15 有官方轮子，镜像不需要 Rust 工具链。
+
+## 能力差异（由 `/tools/sequence/capabilities` 如实广告）
+
+Rust 内核实现密码表 1 与 9 个程序；Biopython 引擎实现全部 NCBI 密码子表与 15 个程序。
+`capabilities` 报告**当前加载引擎**的能力集，客户端据此发现差异，而不是从 404 反推。
+
+新增的 6 个操作：
+
+| 端点 | 实现 |
+| --- | --- |
+| `POST /tools/sequence/convert` | FASTA / GenBank / EMBL / tabular 互转 |
+| `POST /tools/sequence/restriction-sites` | 限制性内切酶切点（REBASE） |
+| `POST /tools/sequence/protein-properties` | 分子量、等电点、消光系数、疏水性 |
+| `POST /tools/sequence/melting-temp` | 引物 Tm（Wallace / GC / nearest-neighbour） |
+| `POST /tools/sequence/multiple-alignment` | 渐进式多序列比对 + 距离矩阵 |
+| `POST /tools/sequence/tree` | 邻接树（NJ），Newick 输出 |
+
+## 两条守卫的分工
+
+- `scripts/check_sequence_capabilities_parity.py` 钉**声明基线**：schema 字段默认值
+  等于 Rust 常量，`programs` 覆盖每一条在线 POST 路由。默认值刻意保守，运行时由
+  已加载引擎覆盖成更宽的能力集。
+- `scripts/check_bio_core_capability_parity.py` 钉**数值限值**与 Rust 常量对偶。
+
+两者都保留：静态编辑里"发明一个没有实现的密码表"仍会被抓到（自检用例覆盖）。
+
 # Rust 内核能力面 ↔ `/tools/sequence/capabilities` 对账
 
 ## 补的是哪一类漂移
@@ -59,7 +98,7 @@ Playwright 的验证仍归各自 CI，本机不代签。
 
 ## 复现
 
-```
+```bash
 python3 scripts/check_bio_core_capability_surface.py
 python3 scripts/check_bio_core_capability_surface.py --self-test
 python3 -m pytest scripts/test_bio_core_capability_surface.py \
