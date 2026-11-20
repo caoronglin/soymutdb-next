@@ -22,12 +22,15 @@ import * as React from "react";
 import {
   AimOutlined as Microscope,
   ArrowLeftOutlined as ArrowLeft,
+  GlobalOutlined,
 } from "@ant-design/icons";
 import {
   Button,
   Card,
   Descriptions,
+  Divider,
   Empty,
+  Flex,
   Skeleton,
   Table,
   Tabs,
@@ -72,6 +75,14 @@ const ExpressionBarChart = React.lazy(() =>
   })),
 );
 
+/**
+ * Half-window of the in-app locus view link, in kilobases.
+ *
+ * It matches that route's own default, so the link states the window the reader
+ * will actually get instead of implying the gene page's ±2 kb context.
+ */
+const LOCUS_VIEW_FLANK_KB = 10;
+
 export const Route = createFileRoute("/genes/$geneId")({
   component: GeneDetailComponent,
   // The deep-link assembly is a request hint, not an id: a link may carry the
@@ -86,6 +97,9 @@ function GeneDetailComponent() {
   const { t } = useTranslation();
   const { geneId } = Route.useParams();
   const { assembly } = Route.useSearch();
+  // Controlled so the action area can jump into a data block without the reader
+  // hunting a nine-item tab strip.
+  const [activeTab, setActiveTab] = React.useState<string>("overview");
   const releaseId = useReleaseId();
   const assembliesQuery = useQuery(assembliesQueryOptions({
     releaseId,
@@ -267,10 +281,82 @@ function GeneDetailComponent() {
     // used by search, not fields to read off the page.
   ];
 
+  /** Counts of the gene's variant set, as one definition list. */
+  const variantItems = [
+    {
+      key: "variant_count",
+      label: t("genes.variantCount"),
+      children: <CountValue value={gene?.variant_count} />,
+    },
+    {
+      key: "high_impact",
+      label: t("genes.highImpactVariants"),
+      children: <CountValue value={gene?.high_impact_variants} tone="high" />,
+    },
+    {
+      key: "snp_count",
+      label: t("genes.snpCount"),
+      children: <CountValue value={gene?.snp_count} />,
+    },
+    {
+      key: "indel_count",
+      label: t("genes.indelCount"),
+      children: <CountValue value={gene?.indel_count} />,
+    },
+    {
+      key: "mutant_line_count",
+      label: t("genes.mutantLineCount"),
+      children: <CountValue value={gene?.mutant_line_count} />,
+    },
+  ];
+
+  /**
+   * The consequence classes, kept apart from the counts above on purpose: a
+   * class the API did not count is `undefined`, and rendering it as a zero would
+   * claim a measured zero.
+   */
+  const effectItems = [
+    {
+      key: "nonsense",
+      label: t("genes.nonsenseCount"),
+      children: <CountValue value={gene?.nonsense_count} tone="high" />,
+    },
+    {
+      key: "missense",
+      label: t("genes.missenseCount"),
+      children: <CountValue value={gene?.missense_count} tone="moderate" />,
+    },
+    {
+      key: "synonymous",
+      label: t("genes.synonymousCount"),
+      children: <CountValue value={gene?.synonymous_count} tone="low" />,
+    },
+    {
+      key: "frameshift",
+      label: t("genes.frameshiftCount"),
+      children: <CountValue value={gene?.frameshift_count} tone="high" />,
+    },
+  ];
+
+  // The in-app locus view is the secondary entry point. It is assembly-scoped
+  // like every other link on this page: without the numeric assembly id the
+  // same coordinates name a different place, so the link is simply not offered.
+  const locusAssemblyId = Number(gene?.assembly_id);
+  const locusViewSearch =
+    gene && gene.assembly_id != null && Number.isFinite(locusAssemblyId)
+      ? {
+          assembly: locusAssemblyId,
+          chromosome: gene.chromosome,
+          position: Math.round((gene.start_pos + gene.end_pos) / 2),
+          flank: LOCUS_VIEW_FLANK_KB * 1000,
+        }
+      : undefined;
+
   return (
-    <div className="container-prose section-rhythm" data-testid="gene-detail">
+    <div className="container-prose pb-16 pt-6" data-testid="gene-detail">
       <Link
         to="/genes"
+        data-testid="gene-back-link"
         search={{
           assembly: assembly ?? "",
            q: "",
@@ -291,62 +377,121 @@ function GeneDetailComponent() {
           <Empty description={t("search.assemblyUnavailable")} className="py-8" />
         </Card>
       ) : geneQuery.isLoading || assemblyPending ? (
-        <div className="mt-8 grid gap-4">
-          <Skeleton active paragraph={{ rows: 1 }} title={{ width: "66%" }} />
-          <Skeleton active paragraph={{ rows: 8 }} title={false} />
-        </div>
+        <GeneDetailSkeleton />
       ) : geneQuery.isError || !gene ? (
         <Card className="mt-8">
           <Empty description={t("common.noData")} className="py-8" />
         </Card>
       ) : (
         <>
+          {/* Tier 1 — the identity anchor: every fact that says *which* record
+              this page is about, in one definition list. The assembly is an
+              item, not a floating tag: it is the coordinate namespace, so it
+              belongs with the coordinates it qualifies. */}
           <FadeUp>
-            <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Tag className="m-0 font-mono text-[10px] uppercase">{gene.biotype}</Tag>
-                  <Tag className="m-0 font-mono text-[10px]">{gene.chromosome}</Tag>
-                  <Tag data-testid="gene-assembly" className="m-0 font-mono text-[10px]" color="blue">
-                    {assemblyEntry ? assemblyOptionLabel(assemblyEntry) : (gene.assembly_name ?? "—")}
-                  </Tag>
-                </div>
-                <h1 data-testid="gene-id" className="mt-3 font-mono text-3xl font-semibold tracking-tight">
-                  {gene.gene_id}
-                </h1>
-                <p
-                  data-testid="gene-coords"
-                  className="mt-1 font-mono text-sm text-muted-foreground"
-                >
-                  {gene.chromosome}:{gene.start_pos}..{gene.end_pos}
-                </p>
-                {gene.symbol ? (
-                  <p className="mt-1 font-display text-xl text-muted-foreground">
-                    {gene.symbol}
-                  </p>
-                ) : null}
-                {gene.description ? (
-                  <p className="mt-2 max-w-2xl text-muted-foreground">
-                    {gene.description}
-                  </p>
-                ) : null}
-                {/* The gene model's provenance, stated once at the top so a
-                    predicted model is never read as a curated one. */}
-                <div className="mt-2" data-testid="gene-model-evidence">
-                  <EvidenceLine evidence={gene.model_evidence ?? null} />
-                </div>
-              </div>
-              <Button
-                data-testid="gene-jbrowse"
-                href={jbrowseHref}
-                disabled={!jbrowseHref}
-                icon={<Microscope className="size-4" aria-hidden />}
+            <Card className="mt-6" data-testid="gene-identity">
+              <h1
+                data-testid="gene-id"
+                className="break-all font-mono text-2xl font-semibold tracking-tight sm:text-3xl"
               >
-                {t("genes.viewInBrowser")}
-              </Button>
-            </div>
+                {gene.gene_id}
+              </h1>
+              {gene.symbol ? (
+                <p className="mt-1 font-display text-lg text-muted-foreground">{gene.symbol}</p>
+              ) : null}
+
+              <Descriptions
+                className="mt-4"
+                size="small"
+                column={{ xs: 1, sm: 2, lg: 5 }}
+                items={[
+                  {
+                    key: "coordinates",
+                    label: t("genes.coordinatesLabel"),
+                    children: (
+                      <span data-testid="gene-coords" className="font-mono break-all">
+                        {gene.chromosome}:{formatPosition(gene.start_pos)}–{formatPosition(gene.end_pos)}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "strand",
+                    label: t("genes.strand"),
+                    children: <span className="font-mono">{gene.strand || "—"}</span>,
+                  },
+                  {
+                    key: "assembly",
+                    label: t("genes.assemblyLabel"),
+                    children: (
+                      <span data-testid="gene-assembly" className="font-mono break-all">
+                        {assemblyEntry ? assemblyOptionLabel(assemblyEntry) : (gene.assembly_name ?? "—")}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: "release",
+                    label: t("genes.releaseLabel"),
+                    children: <span className="font-mono">{releaseId ?? "—"}</span>,
+                  },
+                  {
+                    key: "biotype",
+                    label: t("genes.biotypeLabel"),
+                    children: <span className="font-mono">{gene.biotype || "—"}</span>,
+                  },
+                ]}
+              />
+
+              {gene.description ? (
+                <p className="mt-3 max-w-3xl text-sm text-muted-foreground">{gene.description}</p>
+              ) : null}
+              {/* The gene model's provenance, stated once at the top so a
+                  predicted model is never read as a curated one. */}
+              <div className="mt-2" data-testid="gene-model-evidence">
+                <EvidenceLine evidence={gene.model_evidence ?? null} />
+              </div>
+            </Card>
           </FadeUp>
 
+          {/* Tier 2 — one action area for everything that leaves this page: the
+              genome browser and the in-app locus view. The data blocks are not
+              listed a second time here -- the section tabs directly below are
+              the page's single section navigation. */}
+          <ScaleIn delay={80}>
+            <Card
+              className="mt-4"
+              data-testid="gene-actions-card"
+              title={<span className="text-base">{t("genes.actionsTitle")}</span>}
+            >
+              <Flex wrap align="center" gap={8} data-testid="gene-actions">
+                <Button
+                  type="primary"
+                  data-testid="gene-jbrowse"
+                  href={jbrowseHref}
+                  disabled={!jbrowseHref}
+                  icon={<Microscope className="size-4" aria-hidden />}
+                >
+                  {t("genes.viewInBrowser")}
+                </Button>
+                {locusViewSearch ? (
+                  <Link
+                    to="/genome-view"
+                    search={locusViewSearch}
+                    data-testid="gene-locus-view"
+                    className="link-underline inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+                  >
+                    <GlobalOutlined className="size-4" aria-hidden />
+                    {t("genes.openLocusView", { flank: LOCUS_VIEW_FLANK_KB })}
+                  </Link>
+                ) : null}
+              </Flex>
+            </Card>
+          </ScaleIn>
+
+          {/* Tier 3 — the data blocks, one tab each, behind the page's single
+              section navigation. The tab strip used to be duplicated: the
+              action card listed the same nine destinations as chips, so every
+              section was announced twice. Controlled state keeps a switch
+              programmatic without a second list of links. */}
           {(() => {
             const tabItems = [
               {
@@ -354,82 +499,36 @@ function GeneDetailComponent() {
                 label: t("genes.tabs.overview"),
                 children: (
                   <>
-                    {/* The genome-annotation cards (assembly location, biotype/
-                        source/annotation, transcript structure) were removed at
-                        the operator's request: this page is driven by the table
-                        they upload, not by the GFF3 annotation file. */}
-                    <div className="grid gap-4 lg:grid-cols-3">
-                    <ScaleIn delay={80}>
-                      <Card title={<span className="text-base">{t("genes.variantSummary")}</span>}>
-                        <Descriptions
-                          size="small"
-                          column={1}
-                          items={[
-                            {
-                              key: "variant_count",
-                              label: t("genes.variantCount"),
-                              children: (
-                                <span className="font-mono tabular-nums">
-                                  {(gene.variant_count ?? 0).toLocaleString()}
-                                </span>
-                              ),
-                            },
-                            {
-                              key: "high_impact",
-                              label: t("genes.highImpactVariants"),
-                              children: (
-                                <span className="font-mono tabular-nums text-impact-high">
-                                  {(gene.high_impact_variants ?? 0).toLocaleString()}
-                                </span>
-                              ),
-                            },
-                            {
-                              key: "snp_count",
-                              label: t("genes.snpCount"),
-                              children: (
-                                <span className="font-mono tabular-nums">
-                                  {(gene.snp_count ?? 0).toLocaleString()}
-                                </span>
-                              ),
-                            },
-                            {
-                              key: "indel_count",
-                              label: t("genes.indelCount"),
-                              children: (
-                                <span className="font-mono tabular-nums">
-                                  {(gene.indel_count ?? 0).toLocaleString()}
-                                </span>
-                              ),
-                            },
-                            {
-                              key: "mutant_line_count",
-                              label: t("genes.mutantLineCount"),
-                              children: (
-                                <span className="font-mono tabular-nums">
-                                  {(gene.mutant_line_count ?? 0).toLocaleString()}
-                                </span>
-                              ),
-                            },
-                          ]}
-                        />
-                      </Card>
-                    </ScaleIn>
-
-                  </div>
-
-                    {/* Simplified genome view: the gene body, its transcripts
-                        and the operator's mutation sites in one SVG. This sits
-                        alongside — never replaces — the full JBrowse 2 browser,
-                        which stays reachable at /search/gbrowse and via the
-                        "open in browser" action in the header. */}
-                    <ScaleIn delay={200}>
+                    {/* The spatial context belongs to the record's overview:
+                        ±2 kb around the gene, with every gene in that window,
+                        which is the question the picture exists to answer. */}
+                    <ScaleIn delay={120}>
                       <GeneGenomeView
-                        className="mt-4"
                         gene={gene}
                         mutationSites={mutationSites}
                         assemblyLabel={jbrowseAssembly ?? assembly ?? undefined}
                       />
                     </ScaleIn>
+
+                    {/* Variant totals and the effect breakdown are one dataset;
+                        one card with two definition lists, not two cards. */}
+                    <Card
+                      className="mt-4"
+                      data-testid="gene-variant-summary"
+                      title={<span className="text-base">{t("genes.variantSummary")}</span>}
+                    >
+                      <Descriptions size="small" column={{ xs: 1, sm: 2, lg: 5 }} items={variantItems} />
+                      <Divider className="my-3" />
+                      <Typography.Text type="secondary" className="text-xs">
+                        {t("genes.effectBreakdown")}
+                      </Typography.Text>
+                      <Descriptions
+                        className="mt-2"
+                        size="small"
+                        column={{ xs: 1, sm: 2, lg: 4 }}
+                        items={effectItems}
+                      />
+                    </Card>
 
                     {/* Local-only unpublished test-data preview. Rendered only
                         when the loopback-gated preview endpoint answers, so a
@@ -475,6 +574,34 @@ function GeneDetailComponent() {
                 ),
               },
               {
+                key: "variants",
+                label: t("genes.tabs.variants"),
+                children: <GeneVariantSectionCard section={variantsSection} />,
+              },
+              {
+                key: "annotation",
+                label: t("genes.tabs.annotation"),
+                children: <GeneAnnotationSectionCard section={annotationSection} />,
+              },
+              {
+                key: "homologs",
+                label: t("genes.tabs.homologs"),
+                children: <GeneHomologSectionCard section={homologSection} />,
+              },
+              {
+                // Comparative genomics lives on its own tab rather than inside
+                // "Homologs": the homolog table is the older per-row view, while
+                // these rows carry the source's own relationship classification
+                // (one_to_one / one_to_many / many_to_many) and its evidence tag.
+                key: "orthologs",
+                label: t("comparative.orthologs.title"),
+                children: (
+                  <ScaleIn>
+                    <GeneOrthologSection geneId={gene.gene_id ?? geneId} assemblyId={assembly} />
+                  </ScaleIn>
+                ),
+              },
+              {
                 key: "expression",
                 label: t("genes.tabs.expression"),
                 children: (
@@ -492,21 +619,6 @@ function GeneDetailComponent() {
                 ),
               },
               {
-                key: "homologs",
-                label: t("genes.tabs.homologs"),
-                children: <GeneHomologSectionCard section={homologSection} />,
-              },
-              {
-                key: "annotation",
-                label: t("genes.tabs.annotation"),
-                children: <GeneAnnotationSectionCard section={annotationSection} />,
-              },
-              {
-                key: "variants",
-                label: t("genes.tabs.variants"),
-                children: <GeneVariantSectionCard section={variantsSection} />,
-              },
-              {
                 key: "phenotype",
                 label: t("genes.tabs.phenotype"),
                 children: <GenePhenotypeSectionCard section={phenotypeSection} />,
@@ -515,19 +627,6 @@ function GeneDetailComponent() {
                 key: "literature",
                 label: t("genes.tabs.literature"),
                 children: <GeneLiteratureSectionCard section={literatureSection} />,
-              },
-              {
-                // Comparative genomics lives on its own tab rather than inside
-                // "Homologs": the homolog table is the older per-row view, while
-                // these rows carry the source's own relationship classification
-                // (one_to_one / one_to_many / many_to_many) and its evidence tag.
-                key: "orthologs",
-                label: t("comparative.orthologs.title"),
-                children: (
-                  <ScaleIn>
-                    <GeneOrthologSection geneId={gene.gene_id ?? geneId} assemblyId={assembly} />
-                  </ScaleIn>
-                ),
               },
               {
                 key: "sequences",
@@ -539,69 +638,122 @@ function GeneDetailComponent() {
                 ),
               },
             ];
-            return <Tabs defaultActiveKey="overview" className="mt-8" items={tabItems} />;
+            return (
+              <div data-testid="gene-section-nav">
+                <Tabs
+                  activeKey={activeTab}
+                  onChange={setActiveTab}
+                  className="mt-4"
+                  items={tabItems}
+                />
+              </div>
+            );
           })()}
-
-          <Card className="mt-4">
-            <Card.Meta
-              title={<span className="text-base">{t("genes.geneVariants")}</span>}
-              description={
-                <Typography.Text type="secondary">{t("genes.effectBreakdown")}</Typography.Text>
-              }
-            />
-            <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-              <EffectPill
-                label={t("genes.nonsenseCount")}
-                value={gene.nonsense_count ?? 0}
-                tone="high"
-              />
-              <EffectPill
-                label={t("genes.missenseCount")}
-                value={gene.missense_count ?? 0}
-                tone="moderate"
-              />
-              <EffectPill
-                label={t("genes.synonymousCount")}
-                value={gene.synonymous_count ?? 0}
-                tone="low"
-              />
-              <EffectPill
-                label={t("genes.frameshiftCount")}
-                value={gene.frameshift_count ?? 0}
-                tone="high"
-              />
-            </div>
-          </Card>
         </>
       )}
     </div>
   );
 }
 
-function EffectPill({
-  label,
+/**
+ * The page's shape while the record loads: the facts anchor, the action area,
+ * the section navigation and the open section — not a blank column.
+ *
+ * Placeholders match the blocks they stand in for (a title line, five fact
+ * pairs, one button row, the tab strip, the genome strip and one content card),
+ * so the page does not reflow into a different silhouette when the response
+ * arrives. The static document the build prerenders carries the same facts for
+ * a reader whose JS never runs; this is what the SPA shows in the meantime.
+ */
+function GeneDetailSkeleton() {
+  const { t } = useTranslation();
+  // Plain blocks, not `<Skeleton>`: antd's component always lays out its
+  // default title + paragraph rows *inside* whatever height the caller sets, so
+  // nine of them measured 1334 px of identity card alone. A block with a fixed
+  // height and the same muted pulse keeps the silhouette exact.
+  const bar = (className: string) => (
+    <span className={`block animate-pulse rounded bg-muted ${className}`} aria-hidden />
+  );
+  return (
+    <div
+      className="mt-6 grid gap-4"
+      data-testid="gene-skeleton"
+      aria-busy="true"
+      aria-live="polite"
+    >
+      <span className="sr-only">{t("genes.loading")}</span>
+
+      <div className="rounded-lg border border-border bg-card p-4" data-testid="gene-skeleton-identity">
+        {bar("h-3 w-24")}
+        {bar("mt-3 h-8 w-2/3 max-w-72")}
+        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {[0, 1, 2, 3, 4].map((slot) => (
+            <div key={slot}>
+              {bar("h-3 w-16")}
+              {bar("mt-2 h-4 w-full")}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-4" data-testid="gene-skeleton-actions">
+        {bar("h-4 w-32")}
+        <div className="mt-3 flex flex-wrap gap-2">
+          {bar("h-8 w-36")}
+          {bar("h-8 w-32")}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card p-4" data-testid="gene-skeleton-sections">
+        {/* The tab strip: the page's only section navigation, so the skeleton
+            shows it once, where the loaded page puts it. */}
+        <div className="flex flex-wrap gap-2 pb-3" data-testid="gene-skeleton-section-nav">
+          {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((slot) => (
+            <span key={slot}>{bar("h-5 w-16")}</span>
+          ))}
+        </div>
+        {bar("h-24 w-full")}
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {[0, 1].map((slot) => (
+            <div key={slot}>
+              {bar("h-4 w-40")}
+              {bar("mt-3 h-4 w-full")}
+              {bar("mt-2 h-4 w-5/6")}
+              {bar("mt-2 h-4 w-2/3")}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CountValue({
   value,
   tone,
 }: {
-  label: string;
-  value: number;
-  tone: "high" | "moderate" | "low";
+  value?: number | null;
+  tone?: "high" | "moderate" | "low";
 }) {
-  const color =
-    tone === "high"
-      ? "var(--impact-high)"
-      : tone === "moderate"
-        ? "var(--impact-moderate)"
-        : "var(--impact-low)";
   return (
-    <div className="rounded-lg border p-3">
-      <div className="flex items-center gap-1.5">
-        <span className="size-2 rounded-full" style={{ backgroundColor: color }} aria-hidden />
-        <span className="text-xs text-muted-foreground">{label}</span>
-      </div>
-      <p className="mt-1 font-mono text-lg font-semibold tabular-nums">
-        {value.toLocaleString()}
-      </p>
-    </div>
+    <span className="inline-flex items-center gap-1.5 font-mono tabular-nums">
+      {tone ? (
+        <span
+          className="size-2 rounded-full"
+          style={{ backgroundColor: impactColor(tone) }}
+          aria-hidden
+        />
+      ) : null}
+      {(value ?? 0).toLocaleString()}
+    </span>
   );
+}
+
+/** Impact colour tokens, shared by every consequence readout on the page. */
+function impactColor(tone: "high" | "moderate" | "low"): string {
+  return tone === "high"
+    ? "var(--impact-high)"
+    : tone === "moderate"
+      ? "var(--impact-moderate)"
+      : "var(--impact-low)";
 }

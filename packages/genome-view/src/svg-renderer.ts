@@ -28,6 +28,16 @@ export interface SvgFeature extends IntervalLike {
    * placeholder rectangle.
    */
   parts?: StructurePart[];
+  /**
+   * Draw the feature at reduced opacity.
+   *
+   * Used for flanking context: a locus picture shows every gene in the window,
+   * but the one the page is about must be the feature the eye lands on first.
+   * Dimming is per feature rather than a rectangle painted over the picture, so
+   * the emphasis survives panning and zooming — the flanking genes stay dim and
+   * the focus gene stays at full strength wherever the window moves to.
+   */
+  dim?: boolean;
 }
 
 /** One horizontal track. */
@@ -58,6 +68,14 @@ export interface GenomeViewSvgTheme {
 
 export interface GenomeViewSvgOptions {
   viewport: GenomeViewport;
+  /**
+   * Accessible name for the figure.
+   *
+   * Defaults to the window (`ref:start-end`, the only thing this function knows).
+   * A caller that renders a locus *of something* passes its own name here so the
+   * picture announces what it is a picture of, coordinates included.
+   */
+  ariaLabel?: string;
   /** Rendered width in CSS pixels; the SVG scales to its container. */
   widthPx: number;
   tracks: SvgTrack[];
@@ -79,6 +97,21 @@ export interface GenomeViewSvgOptions {
    * enough to fit — the rail fits {@link RAIL_CHARS_AT_11PX}.
    */
   labelRailPx?: number;
+  /**
+   * Draw a gene model's introns as strand chevrons between the exon boxes.
+   *
+   * Exons are solid boxes and introns are the line between them, so the two are
+   * already different shapes; the chevrons add the standard gene-model
+   * convention and make an intron readable as a gap with a direction rather
+   * than as empty space — without relying on colour, which a dimmed flanking
+   * gene or a colour-vision deficiency would flatten.
+   *
+   * Opt-in, not default: the Python pre-renderer reproduces this function byte
+   * for byte (`apps/api/tests/fixtures/genome_view_svg_golden.json`), so a new
+   * default would change every pre-rendered picture before that side can emit
+   * the same markup. Callers that render for a person turn it on.
+   */
+  intronChevrons?: boolean;
   /** Font stack for labels. */
   fontFamily?: string;
   /** Stable id prefix so several views can live in one document. */
@@ -100,6 +133,9 @@ const DEFAULTS = {
  */
 const MIN_CONTENT_PX = 80;
 
+/** Opacity for a `dim` feature: readable, but clearly not the focus. */
+export const DIM_OPACITY = 0.35;
+
 /** Escape text destined for an SVG text node. */
 function escapeXml(value: string): string {
   return value
@@ -115,12 +151,68 @@ function n(value: number): string {
   return Number.isFinite(value) ? String(Math.round(value * 100) / 100) : "0";
 }
 
+/** Narrowest a chevron gap may be before the chevrons would crowd the line. */
+const MIN_CHEVRON_GAP_PX = 8;
+
+/**
+ * Chevrons inside a gene model's introns, one per gap between exon boxes.
+ *
+ * The gap between two placed exon boxes *is* the intron on screen, so the
+ * chevrons are derived from the drawn boxes rather than from a separate intron
+ * list — the picture and the marker cannot disagree. A gap narrower than
+ * {@link MIN_CHEVRON_GAP_PX} is a line only: two chevrons in 3 px of space read
+ * as noise, and the box edges already say where the intron starts.
+ */
+function intronChevrons(
+  exons: readonly PlacedPart[],
+  centreY: number,
+  strand: "+" | "-" | undefined,
+  fill: string,
+): string[] {
+  const marks: string[] = [];
+  const direction = strand === "-" ? -1 : 1;
+  const size = 3;
+  for (let index = 1; index < exons.length; index += 1) {
+    const previous = exons[index - 1];
+    const next = exons[index];
+    const gapStart = previous.x + previous.width;
+    const gapEnd = next.x;
+    if (!(gapEnd - gapStart >= MIN_CHEVRON_GAP_PX)) continue;
+    const middle = (gapStart + gapEnd) / 2;
+    const points = [
+      `${n(middle - direction * size)},${n(centreY - size)}`,
+      `${n(middle + direction * size)},${n(centreY)}`,
+      `${n(middle - direction * size)},${n(centreY + size)}`,
+    ].join(" ");
+    marks.push(
+      `<polyline points="${points}" fill="none" stroke="${fill}" stroke-width="1.5" ` +
+        `stroke-linecap="round" stroke-linejoin="round" data-intron="true"/>`,
+    );
+  }
+  return marks;
+}
+
 /**
  * Build the SVG markup for one viewport.
  *
  * Returns a complete `<svg>` element string. Coordinates are 1:1 with base
  * pairs through `bpPerPx`, so an x offset is reproducible from the tick labels.
  */
+/**
+ * Emit one feature's drawn elements into the track output.
+ *
+ * A `dim` feature (flanking context) is wrapped in a single translucent group so
+ * its body, exons, strand arrowhead and label dim together; anything else is
+ * emitted unchanged, which keeps the pre-rendered artifact byte-identical for a
+ * caller that never sets the flag.
+ */
+function flushFeature(out: string[], drawn: string[], dim: boolean | undefined): void {
+  if (drawn.length === 0) return;
+  out.push(
+    dim === true ? `<g opacity="${DIM_OPACITY}" data-dim="true">${drawn.join("")}</g>` : drawn.join(""),
+  );
+}
+
 export function renderGenomeViewSvg(options: GenomeViewSvgOptions): string {
   const rowHeight = options.rowHeightPx ?? DEFAULTS.rowHeightPx;
   const rulerHeight = options.rulerHeightPx ?? DEFAULTS.rulerHeightPx;
@@ -181,10 +273,13 @@ export function renderGenomeViewSvg(options: GenomeViewSvgOptions): string {
   const totalHeight = Math.max(cursorY - gap, rulerHeight);
 
   const parts: string[] = [];
+  const figureLabel =
+    options.ariaLabel ??
+    `${viewport.refName}:${formatBp(viewport.start)}-${formatBp(viewport.end)}`;
   parts.push(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${n(widthPx)}" height="${n(totalHeight)}" ` +
       `viewBox="0 0 ${n(widthPx)} ${n(totalHeight)}" role="img" ` +
-      `aria-label="${escapeXml(`${viewport.refName}:${formatBp(viewport.start)}-${formatBp(viewport.end)}`)}" ` +
+      `aria-label="${escapeXml(figureLabel)}" ` +
       `font-family="${escapeXml(font)}">`,
   );
   parts.push(
@@ -234,6 +329,9 @@ export function renderGenomeViewSvg(options: GenomeViewSvgOptions): string {
     }
 
     for (const placed of item.placed) {
+      // One buffer per feature so a dimmed feature becomes a single <g>, not a
+      // stack of individually translucent elements that leak at the seams.
+      const featureParts: string[] = [];
       const laneTop = item.y + placed.row * rowHeight;
       const fill = placed.feature.kind === "mutation" ? theme.warn : theme.primary;
 
@@ -247,9 +345,10 @@ export function renderGenomeViewSvg(options: GenomeViewSvgOptions): string {
         const boxHeight = Math.max(5, rowHeight - 10);
         const lineStart = placed.x;
         const lineEnd = placed.x + Math.max(placed.w, 1);
-        parts.push(
+        featureParts.push(
           `<line x1="${n(lineStart)}" y1="${n(centreY)}" x2="${n(lineEnd)}" y2="${n(centreY)}" ` +
-            `stroke="${fill}" stroke-width="1.5" stroke-linecap="round" opacity="0.55"/>`,
+            `stroke="${fill}" stroke-width="1.5" stroke-linecap="round" opacity="0.55"` +
+            `${options.intronChevrons ? ' data-intron-line="true"' : ""}/>`,
         );
 
         const placedParts: PlacedPart[] = placeStructureParts(
@@ -260,10 +359,13 @@ export function renderGenomeViewSvg(options: GenomeViewSvgOptions): string {
           placed.feature.end,
         ).map((part) => ({ ...part, x: part.x + rail }));
         for (const exon of placedParts) {
-          parts.push(
+          featureParts.push(
             `<rect x="${n(exon.x)}" y="${n(boxTop)}" width="${n(Math.max(exon.width, 1.5))}" ` +
               `height="${n(boxHeight)}" rx="1" fill="${fill}" data-exon-kind="${escapeXml(exon.kind)}"/>`,
           );
+        }
+        if (options.intronChevrons) {
+          featureParts.push(...intronChevrons(placedParts, centreY, placed.feature.strand, fill));
         }
 
         const strand = placed.feature.strand;
@@ -278,13 +380,13 @@ export function renderGenomeViewSvg(options: GenomeViewSvgOptions): string {
             `${n(tipX + direction * 7)},${n(centreY)}`,
             `${n(tipX)},${n(centreY + 4)}`,
           ].join(" ");
-          parts.push(`<polygon points="${points}" fill="${fill}" data-strand="${strand}"/>`);
+          featureParts.push(`<polygon points="${points}" fill="${fill}" data-strand="${strand}"/>`);
         }
 
         // An exon-accurate tooltip beats a bare coordinate range once the
         // picture actually shows structure.
         const featureLabel = placed.feature.label ?? placed.feature.id;
-        parts.push(
+        featureParts.push(
           `<rect x="${n(lineStart)}" y="${n(laneTop)}" width="${n(Math.max(placed.w, 2))}" ` +
             `height="${n(rowHeight)}" fill="transparent" data-feature-id="${escapeXml(placed.feature.id)}">` +
             `<title>${escapeXml(
@@ -298,18 +400,19 @@ export function renderGenomeViewSvg(options: GenomeViewSvgOptions): string {
           // and runs across the intron gaps between the exon boxes, so a
           // surface-coloured glyph is invisible over the background half the
           // time. The halo gives it an outline on either surface.
-          parts.push(
+          featureParts.push(
             `<text x="${n(placed.x + 4)}" y="${n(boxTop + boxHeight - 1)}" font-size="10" ` +
               `fill="${theme.text}" stroke="${theme.surface}" stroke-width="2.5" ` +
               `paint-order="stroke">${escapeXml(featureLabel)}</text>`,
           );
         }
+        flushFeature(parts, featureParts, placed.feature.dim);
         continue;
       }
 
       const y = laneTop + 4;
       const height = rowHeight - 8;
-      parts.push(
+      featureParts.push(
         `<rect x="${n(placed.x)}" y="${n(y)}" width="${n(Math.max(placed.w, 2))}" height="${n(height)}" ` +
           `rx="2" fill="${fill}" data-feature-id="${escapeXml(placed.feature.id)}">` +
           `<title>${escapeXml(
@@ -331,7 +434,7 @@ export function renderGenomeViewSvg(options: GenomeViewSvgOptions): string {
           `${n(tipX + direction * 4)},${n(arrowY)}`,
           `${n(tipX)},${n(arrowY + 3)}`,
         ].join(" ");
-        parts.push(
+        featureParts.push(
           `<polygon points="${points}" fill="${theme.surface}" opacity="0.9" ` +
             `data-strand="${plainStrand}"/>`,
         );
@@ -340,13 +443,15 @@ export function renderGenomeViewSvg(options: GenomeViewSvgOptions): string {
       if (placed.w >= 28) {
         // Same halo as the gene-model branch: a bar label that runs past its
         // body must stay readable against the lane background.
-        parts.push(
+        featureParts.push(
           `<text x="${n(placed.x + 4)}" y="${n(y + height - 3)}" font-size="10" ` +
             `fill="${theme.text}" stroke="${theme.surface}" stroke-width="2.5" ` +
             `paint-order="stroke">` +
             `${escapeXml(placed.feature.label ?? placed.feature.id)}</text>`,
         );
       }
+
+      flushFeature(parts, featureParts, placed.feature.dim);
     }
   }
 

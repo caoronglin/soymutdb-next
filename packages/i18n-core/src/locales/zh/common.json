@@ -65,7 +65,9 @@
       "variants": "变异",
       "variantsDescription": "按组装版本、染色体、类型和影响筛选已发布变异。",
       "mutants": "突变系",
-      "mutantsDescription": "通过稳定的公开编号浏览已发布突变系。"
+      "mutantsDescription": "通过稳定的公开编号浏览已发布突变系。",
+      "notPublished": "未发布",
+      "notPublishedHelp": "当前尚未发布数据版本，该计数在发布后才会统计。"
     },
     "tasks": "科研工具",
     "tasksSubtitle": "针对基因、序列或基因组区域选择相应工具。",
@@ -200,7 +202,18 @@
       "species": "物种",
       "gene_id": "同源基因ID",
       "type": "类型",
-      "source": "来源"
+      "source": "来源",
+      "align": {
+        "title": "同源序列比对与邻接树",
+        "run": "比对 {{count}} 个同源基因（{{molecule}}）",
+        "hint": "CDS 之间同源比对；无法在本库解析的条目会单独列出。",
+        "unresolvedTitle": "{{count}} 个条目无法在本库解析",
+        "noSequence": "该条目没有已导入的 {{molecule}} 序列",
+        "notInDatabase": "本部署不包含该版本条目",
+        "tooFew": "可解析的序列只有 {{count}} 条，建树至少需要 {{needed}} 条",
+        "leaves": "{{count}} 个叶节点",
+        "resolved": "已解析 {{count}} 条序列"
+      }
     },
     "loadError": "无法加载该基因。",
     "assemblyLabel": "基因组版本",
@@ -282,7 +295,25 @@
       "available": "已收录",
       "unavailable": "未导入",
       "unavailableHint": "本发布版本收录了该基因的坐标与注释，不包含残基序列。不显示序列是因为确实没有存储，而不是取值为空。",
-      "length": "长度"
+      "length": "长度",
+      "analysis": {
+        "proteinProperties": "理化参数（分子量 / 等电点）",
+        "composition": "碱基组成",
+        "meltingTemp": "引物 Tm",
+        "reverseComplement": "反向互补",
+        "reverseComplementLabel": "反向互补序列",
+        "residues": "残基数",
+        "molecularWeight": "分子量 (Da)",
+        "isoelectricPoint": "等电点 pI",
+        "gravy": "疏水性 GRAVY",
+        "instabilityIndex": "不稳定指数",
+        "aromaticity": "芳香性",
+        "bases": "碱基数",
+        "gcFraction": "GC 含量",
+        "ambiguous": "简并碱基",
+        "meltingMethod": "算法 {{method}}",
+        "failed": "分析失败，请稍后重试"
+      }
     },
     "evidence": {
       "label": "证据等级",
@@ -357,7 +388,10 @@
       "high": "高",
       "medium": "中",
       "low": "低"
-    }
+    },
+    "entryPoints": "基因数据入口",
+    "openLocusView": "位点视图（±{{flank}} kb）",
+    "releaseLabel": "数据版本"
   },
   "variants": {
     "title": "变异搜索",
@@ -564,7 +598,9 @@
     "openInNewTab": "在新标签页打开",
     "retry": "重试",
     "stillLoading": "仍在加载",
-    "stillLoadingDesc": "数据量较大时首屏需要一些时间。"
+    "stillLoadingDesc": "数据量较大时首屏需要一些时间。",
+    "pickAssembly": "选择一个已发布的基因组组装以打开浏览器",
+    "noAssemblies": "当前数据版本中没有任何已发布的基因组组装，因此无法打开基因组浏览器。"
   },
   "blast": {
     "title": "BLAST 搜索",
@@ -725,7 +761,16 @@
     "queryBuilderChromosome": "染色体",
     "queryBuilderImpact": "影响",
     "queryBuilderVariantType": "变异类型",
-    "queryBuilderFiltersCount": "个受支持的条件"
+    "queryBuilderFiltersCount": "个受支持的条件",
+    "convert": {
+      "action": "转换格式",
+      "label": "把 {{source}} 转换为",
+      "run": "转换",
+      "save": "下载 {{format}}",
+      "chars": "字符",
+      "empty": "文件内容为空，无法转换。",
+      "failed": "转换失败，请确认文件格式。"
+    }
   },
   "fileViewer": {
     "singleFile": "单个文件",
@@ -989,7 +1034,9 @@
     "demoNotice": "演示模式已开启。下方图表使用合成示例数据，并非数据库测量结果。",
     "variantTypesDescription": "SNP / Indel / SV 分布",
     "impactDescription": "按预测影响程度统计的变异数量",
-    "liveDataUnavailable": "实时数据暂不可用，请重试。"
+    "liveDataUnavailable": "实时数据暂不可用，请重试。",
+    "noPublishedVariants": "尚无已发布的变异数据",
+    "noPublishedVariantsHelp": "当前数据版本还没有已发布的变异记录，发布后会在此显示分布。"
   },
   "search": {
     "title": "全局搜索",
@@ -1187,10 +1234,10 @@
   "admin": {
     "siteControl": {
       "title": "站点控制",
-      "navHint": "内部站点与外部站点各自维护独立的导航文档；API 不会把一个变体的导航复制到另一个变体。",
+      "navHint": "公共站点与内网站点各自维护独立的导航文档；API 不会把一个变体的导航复制到另一个变体。",
       "subtitle": "公共门户的数据库类型、主导航与功能开放设置",
-      "external": "外部站点",
-      "internal": "内部站点",
+      "external": "公共站点",
+      "internal": "内网站点",
       "saveFailed": "保存失败",
       "conflict": "设置已在其他会话中被修改，已加载最新版本，请重新保存。",
       "dbKind": {
@@ -1262,6 +1309,73 @@
           "invalidGroupId": "分组 ID“{{id}}”无效",
           "invalidLinkId": "链接 ID“{{id}}”无效"
         }
+      }
+    },
+    "siteAppearance": {
+      "title": "站点外观",
+      "internal": {
+        "title": "内网站点（仅内部部署）",
+        "help": "内网站点是独立的部署变体，不属于公共站点；这里的设置只影响内网构建产物。",
+        "toggleAria": "编辑内网站点内容"
+      },
+      "brand": {
+        "title": "品牌与图标",
+        "description": "公共站点页眉显示的名称与图标。图标来自媒体库，可以在这里直接选择。"
+      },
+      "header": {
+        "title": "页眉导航",
+        "description": "公共站点页眉的分组与链接。链接可以绑定功能开关，开关关闭时该链接自动隐藏。"
+      },
+      "footer": {
+        "title": "页脚",
+        "description": "公共站点页脚显示的链接分组与版权信息。",
+        "empty": "当前页脚还没有分组，公共站点只会显示版权信息。",
+        "loadError": "无法加载页脚设置。",
+        "on": "显示",
+        "off": "隐藏",
+        "addGroup": "添加分组",
+        "addLink": "添加链接",
+        "save": "保存页脚",
+        "saved": "页脚已保存。",
+        "conflict": "页脚已在其他会话中被修改，已加载最新版本，请检查编辑内容后重新保存。",
+        "linkCount": "{{count}} 个链接",
+        "linksUsed": "已使用 {{count}} / {{max}} 个链接",
+        "groupEnTitleAria": "分组 {{index}} 英文标题",
+        "groupZhTitleAria": "分组 {{index}} 中文标题",
+        "groupEnabledAria": "显示分组 {{name}}",
+        "moveGroupUpAria": "上移分组 {{name}}",
+        "moveGroupDownAria": "下移分组 {{name}}",
+        "removeGroupAria": "删除分组 {{name}}",
+        "linkEnLabelAria": "分组 {{group}} 第 {{index}} 个链接的英文文字",
+        "linkZhLabelAria": "分组 {{group}} 第 {{index}} 个链接的中文文字",
+        "linkDestinationAria": "分组 {{group}} 第 {{index}} 个链接的目标地址",
+        "linkEnabledAria": "显示链接 {{label}}",
+        "moveLinkUpAria": "上移链接 {{label}}",
+        "moveLinkDownAria": "下移链接 {{label}}",
+        "removeLinkAria": "删除链接 {{label}}",
+        "destinationPlaceholder": "站内路径（如 /genes）或 https:// 外部地址",
+        "copyrightZh": "中文版权信息",
+        "copyrightEn": "英文版权信息",
+        "copyrightHelp": "版权信息支持年份占位符，公共站点会替换为当前年份；中文或英文留空时沿用旧版版权字段的内容。",
+        "error": {
+          "noDestination": "链接「{{label}}」没有填写目标地址。",
+          "whitespace": "链接「{{label}}」的目标地址不能包含空格或反斜杠。",
+          "protocolRelative": "链接「{{label}}」不能使用 // 开头的协议相对地址。",
+          "prefix": "链接「{{label}}」的站内地址必须以 / 开头。",
+          "httpsOnly": "链接「{{label}}」的外部地址必须以 https:// 开头。",
+          "notLoaded": "页脚设置尚未加载完成。",
+          "tooManyGroups": "页脚最多支持 {{max}} 个分组。",
+          "tooManyLinks": "页脚最多支持 {{max}} 个链接。",
+          "invalidGroupId": "分组标识「{{id}}」只能使用小写字母、数字和连字符。",
+          "duplicateGroupId": "分组标识「{{id}}」重复。",
+          "invalidLinkId": "链接标识「{{id}}」只能使用小写字母、数字和连字符。",
+          "blankLabel": "分组「{{group}}」中存在空白的中文或英文链接文字。"
+        }
+      },
+      "media": {
+        "title": "图片与媒体",
+        "description": "Logo、横幅和截图都存放在媒体库，不在本页上传。请先在媒体库上传或复用素材，再在页面或上方图标字段中选择。",
+        "open": "打开媒体库"
       }
     },
     "pageBuilder": {
@@ -1516,8 +1630,8 @@
           "variantNoticeAfter": " 中编辑，本页编辑器尚未拆分。"
         },
         "appearance": {
-          "title": "外观",
-          "description": "主题色和门户展示默认值。"
+          "title": "站点外观",
+          "description": "公共站点的品牌、页眉导航、页脚与媒体素材。"
         },
         "integrations": {
           "title": "集成",
@@ -1539,8 +1653,8 @@
         }
       },
       "appearanceForm": {
-        "title": "外观",
-        "description": "配置管理员界面的主色调。",
+        "title": "管理控制台主题",
+        "description": "管理界面的主题色，不影响公共站点。",
         "loading": "正在加载外观设置…",
         "loadError": "无法加载外观设置。",
         "primaryColor": "主色",
@@ -1615,7 +1729,9 @@
         "home_external": "首页（外网）",
         "home_internal": "首页（内网）",
         "content_external": "站点内容（外网）",
-        "footer_external": "页脚（外网）",
+        "brand_external": "品牌（公共站点）",
+        "header_external": "页眉导航（公共站点）",
+        "footer_external": "页脚（公共站点）",
         "security": "安全",
         "data": "数据与存储",
         "email": "邮件与通知",
@@ -1796,7 +1912,9 @@
       "retry": "重试",
       "cancel": "取消",
       "cancelConfirm": "确定取消该导入？",
-      "unknown": "未知"
+      "unknown": "未知",
+      "invalidTitle": "导入任务编号无效",
+      "invalidBody": "该地址没有指向一个导入任务，请返回导入列表重新选择。"
     },
     "importCreate": {
       "title": "发起导入",
@@ -2360,6 +2478,28 @@
       "defaultTag": "默认视图",
       "notes": "备注",
       "setDefault": "设为默认",
+      "viewSelect": "已保存视图",
+      "viewSettings": "视图设置",
+      "summary": "{{rows}} 行 · {{columns}} 列 · {{searchable}} 个可搜索字段",
+      "activeFilters": "{{count}} 个筛选",
+      "addField": "添加字段（剩余 {{count}} 个）",
+      "viewTypeHint": "随视图一起保存；本控制台统一以一张表格呈现所有视图。",
+      "layoutNote": {
+        "kanban": "该视图保存为看板布局，控制台现在以表格呈现；保存的配置没有被改动。",
+        "gallery": "该视图保存为画廊布局，控制台现在以表格呈现；保存的配置没有被改动。"
+      },
+      "field": {
+        "searchable": "可搜索",
+        "visible": "展示",
+        "searchableAria": "{{field}}：作为搜索来源",
+        "visibleAria": "{{field}}：展示该列",
+        "dragAria": "拖动以调整 {{field}} 的顺序",
+        "moveLeftAria": "{{field}} 左移",
+        "moveRightAria": "{{field}} 右移",
+        "lastVisibleHint": "视图至少要保留一列：先添加另一列，再隐藏这一列。"
+      },
+      "patchFailed": "保存失败：{{reason}}",
+      "saveFailed": "无法保存视图：{{reason}}",
       "deleteTitle": "删除视图",
       "deleteConfirm": "确定删除视图“{{name}}”吗？仅删除保存的配置，不会删除任何生物学数据。",
       "loadMore": "加载更多",
@@ -3021,7 +3161,12 @@
     "title": "关于我们",
     "empty": "关于我们内容尚未发布。",
     "loadErrorTitle": "关于我们页面加载失败",
-    "loadErrorSubtitle": "服务暂时不可用，请稍后重试。"
+    "loadErrorSubtitle": "服务暂时不可用，请稍后重试。",
+    "emptyExplain": "「关于我们」正文由管理员在后台撰写并发布，尚未发布时此处不会显示空白页，而是保留可用的入口。",
+    "emptySearchTitle": "按基因 ID 检索",
+    "emptySearchBody": "在指定的基因组组装与数据版本中查找已发布的基因记录。",
+    "emptyAssembliesTitle": "查看基因组组装",
+    "emptyAssembliesBody": "了解当前发布版本包含哪些组装、每个组装有多少基因。"
   },
   "publications": {
     "title": "文献",
@@ -3825,9 +3970,21 @@
     "tracks": {
       "all": "全部",
       "genes": "基因",
-      "markers": "标记"
+      "markers": "标记",
+      "selected": "本基因",
+      "context": "邻近基因（{{total}}）",
+      "sites": "位点（{{total}}）",
+      "transcripts": "转录本（{{total}}）"
     },
-    "pointer": "指针"
+    "pointer": "指针",
+    "contextWindow": "{{window}} · 上下各 {{flank}} bp 上下文 · 邻近基因 {{total}} 个",
+    "contextUnavailable": "邻近基因未能加载，当前仅绘制本基因。",
+    "geneAriaLabel": "{{geneId}} 基因组视图，窗口 {{chromosome}}:{{start}}–{{end}}",
+    "contextTableCaption": "{{geneId}} 周围 {{window}} 窗口内的基因",
+    "contextTableCoordinates": "坐标",
+    "contextTableRole": "类型",
+    "contextTableSelected": "本基因",
+    "contextTableContext": "邻近基因"
   },
   "dataTable": {
     "title": "数据表",

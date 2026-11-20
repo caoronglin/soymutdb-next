@@ -26,14 +26,63 @@ export interface StaticRouteEntry {
 export type SiteVariant = "external" | "internal";
 
 /**
- * Routes that get their own `index.html`. Dynamic segments are skipped even if
- * metadata marks them prerenderable — a template path is not a document.
+ * A document the build materialised from a *dynamic* route template.
+ *
+ * `/genes/:geneId` is not a document; `/genes/Glyma.01G000100.Wm82.a4.v1` is.
+ * The caller has already decided which concrete paths exist (see
+ * `lib/entity-snapshot.ts`, which derives them from the release snapshot), and
+ * names the template each one was materialised from so eligibility stays a
+ * property of the route table.
+ */
+export interface EntityRouteDocument {
+  /** Concrete router path, e.g. "/genes/Glyma.01G000100.Wm82.a4.v1". */
+  path: string;
+  /** Template the path was materialised from, e.g. "/genes/:geneId". */
+  templatePath: string;
+  title: string;
+  description?: string;
+}
+
+export interface DeriveStaticRouteOptions {
+  /** Concrete documents the build's entity snapshot supplies. */
+  entityDocuments?: readonly EntityRouteDocument[];
+}
+
+/**
+ * Does a concrete path match a `:param` template, segment for segment?
+ *
+ * Counted, not prefix-matched: `:geneId` stands for exactly one non-empty
+ * segment, so a snapshot entry can never address a path outside its template.
+ */
+function matchesTemplate(path: string, template: string): boolean {
+  const actual = path.split("/");
+  const expected = template.split("/");
+  if (actual.length !== expected.length) return false;
+  return expected.every((segment, index) => {
+    const value = actual[index] ?? "";
+    if (segment.startsWith(":")) {
+      return value.length > 0 && value !== "." && value !== "..";
+    }
+    return segment === value;
+  });
+}
+
+/**
+ * Routes that get their own `index.html`.
+ *
+ * Stable routes come from the route metadata. A **dynamic** path (one with a
+ * `:param` segment) is skipped unless the build's entity snapshot supplies that
+ * concrete document: a template is not a document, and the data decides which
+ * records the deployment publishes. No snapshot — the default — therefore emits
+ * no entity document at all, and the artifact keeps the SPA shell for every
+ * record page.
  */
 export function deriveStaticRouteEntries(
   routes: readonly RouteLike[],
   siteVariant: SiteVariant,
+  options: DeriveStaticRouteOptions = {},
 ): StaticRouteEntry[] {
-  return routes
+  const entries: StaticRouteEntry[] = routes
     .filter((route) => route.meta?.prerender === true && !route.path.includes(":"))
     .map((route) => ({
       path: route.path,
@@ -41,8 +90,28 @@ export function deriveStaticRouteEntries(
       description: route.meta?.description ? String(route.meta.description) : undefined,
       // The internal site variant is never listed for indexing.
       includeInSitemap: siteVariant === "external" && route.meta?.sitemap === true,
-    }))
-    .sort((left, right) => left.path.localeCompare(right.path));
+    }));
+
+  const seen = new Set(entries.map((entry) => entry.path));
+  for (const document of options.entityDocuments ?? []) {
+    // Eligibility is the route table's, not the snapshot's: a path whose
+    // template is missing (or is not dynamic) is not a route this app serves.
+    const template = routes.find((route) => route.path === document.templatePath);
+    if (!template || !template.path.includes(":")) continue;
+    if (!matchesTemplate(document.path, template.path)) continue;
+    if (seen.has(document.path)) continue;
+    seen.add(document.path);
+    entries.push({
+      path: document.path,
+      title: document.title,
+      description: document.description,
+      // Released records are indexable on the external variant unless the
+      // route metadata says otherwise; the internal variant never is.
+      includeInSitemap: siteVariant === "external" && template.meta?.sitemap !== false,
+    });
+  }
+
+  return entries.sort((left, right) => left.path.localeCompare(right.path));
 }
 
 /** "/search" -> "search/index.html"; "/" -> "index.html". */

@@ -25,6 +25,11 @@ vi.mock("react-i18next", () => {
 vi.mock("../lib/site-content-react", () => ({ useSiteContent: () => ({ get: (_key: string, fallback: string) => fallback }) }));
 vi.mock("../components/route-motion", () => ({ FadeUp: ({ children }: { children: React.ReactNode }) => children }));
 vi.mock("../lib/release-scope", () => ({ useReleaseId: () => runtime.currentRelease }));
+// The stream transport (ticket exchange, EventSource URL) is pinned by
+// lib/job-event-stream.test.ts; this route test only needs the stream to open.
+vi.mock("../lib/job-event-stream", () => ({
+  openJobEventStream: async () => ({ addEventListener() {}, close() {} }),
+}));
 vi.mock("../lib/use-current-user", () => ({
   useCurrentUser: () => ({ user: runtime.currentUser, isLoading: false }),
   grantsResearcher: (user: { is_superuser?: boolean; effective_roles?: string[] }) => user.is_superuser === true || user.effective_roles?.includes("researcher") === true,

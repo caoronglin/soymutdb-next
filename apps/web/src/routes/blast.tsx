@@ -55,8 +55,6 @@ import {
   validateBlastFastaStructure,
   type BlastHit,
   BLAST_PROGRAMS,
-  apiBaseUrl,
-  getAccessToken,
   compatibleBlastDatabases,
   hasCompatibleBlastQueryAlphabet,
   BLAST_PROGRAM_COMPATIBILITY,
@@ -68,6 +66,7 @@ import { FadeUp } from "../components/route-motion";
 import { useSiteContent } from "../lib/site-content-react";
 import { grantsResearcher, useCurrentUser } from "../lib/use-current-user";
 import { resolveAppUrl } from "../lib/deployment";
+import { openJobEventStream } from "../lib/job-event-stream";
 import { useReleaseId } from "../lib/release-scope";
 import { ensurePermission, showNotification } from "../lib/use-browser-notifications";
 import { z } from "zod";
@@ -222,10 +221,11 @@ function BlastComponent() {
   });
 
   // D5 pilot: server-push job updates via SSE (GET /api/v1/jobs/events).
-  // EventSource cannot set an Authorization header, so the in-memory access
-  // token travels as a short-lived query parameter (never persisted). Any
-  // stream failure closes the connection and falls back to polling; the
-  // connection is closed again when the component unmounts.
+  // EventSource cannot set an Authorization header, so the stream URL carries
+  // a single-use ticket from POST /api/v1/jobs/sse-ticket — never the access
+  // token, which the edge proxy would log with the request line. Any stream
+  // failure closes the connection and falls back to polling; the connection is
+  // closed again when the component unmounts.
   React.useEffect(() => {
     // EventSource cannot carry an Authorization header, so an anonymous stream
     // would 401 and reconnect forever. Subscribe only for a known session.
@@ -233,37 +233,50 @@ function BlastComponent() {
       setSseAvailable(false);
       return;
     }
-    const token = getAccessToken();
-    const url = new URL(`${apiBaseUrl}/jobs/events`, window.location.origin);
-    if (token) url.searchParams.set("access_token", token);
-    const es = new EventSource(url.toString());
+    let disposed = false;
+    let es: EventSource | null = null;
 
-    es.addEventListener("open", () => setSseAvailable(true));
-    es.addEventListener("job_update", (event) => {
-      try {
-        const update = JSON.parse((event as MessageEvent).data) as {
-          job_type?: string;
-        };
-        // Only blast updates concern this page; analysis/gwas updates are
-        // ignored (their own pages will subscribe).
-        if (update.job_type === "blast") {
-          // Refresh immediately — covers the completed/failed transitions
-          // this pilot targets.
-          void queryClient.invalidateQueries({ queryKey: ["blast-jobs"] });
+    openJobEventStream()
+      .then((stream) => {
+        if (disposed) {
+          // The page went away while the ticket was being exchanged.
+          stream.close();
+          return;
         }
-      } catch {
-        // Malformed frame — ignore; the polling fallback still refreshes.
-      }
-    });
-    es.onerror = () => {
-      // SSE unavailable (proxy, auth expiry, server restart): fall back to
-      // polling and stop EventSource from reconnecting.
-      es.close();
-      setSseAvailable(false);
-    };
+        es = stream;
+        es.addEventListener("open", () => setSseAvailable(true));
+        es.addEventListener("job_update", (event) => {
+          try {
+            const update = JSON.parse((event as MessageEvent).data) as {
+              job_type?: string;
+            };
+            // Only blast updates concern this page; analysis/gwas updates are
+            // ignored (their own pages will subscribe).
+            if (update.job_type === "blast") {
+              // Refresh immediately — covers the completed/failed transitions
+              // this pilot targets.
+              void queryClient.invalidateQueries({ queryKey: ["blast-jobs"] });
+            }
+          } catch {
+            // Malformed frame — ignore; the polling fallback still refreshes.
+          }
+        });
+        es.onerror = () => {
+          // SSE unavailable (proxy, auth expiry, server restart): fall back to
+          // polling and stop EventSource from reconnecting.
+          es?.close();
+          setSseAvailable(false);
+        };
+      })
+      .catch(() => {
+        // No ticket (session expired, ticket store unavailable): polling is
+        // already the fallback whenever the stream is not available.
+        setSseAvailable(false);
+      });
 
     return () => {
-      es.close();
+      disposed = true;
+      es?.close();
       setSseAvailable(false);
     };
   }, [queryClient, isSignedIn]);

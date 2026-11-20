@@ -20,6 +20,7 @@ const api = vi.hoisted(() => ({
   getGeneHomologs: vi.fn(),
   listTestDataPreviewMutationSitesForGene: vi.fn(),
   gene: null as unknown,
+  detailLoading: false,
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -29,7 +30,14 @@ vi.mock("@tanstack/react-router", () => ({
     useParams: () => ({ geneId: "Glyma.01G000100" }),
     useSearch: () => ({ assembly: undefined }),
   }),
-  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
+  // `to`/`search` are router inputs, not DOM attributes; everything else (a
+  // data-testid the page sets for its own assertions) reaches the anchor.
+  Link: ({
+    children,
+    to: _to,
+    search: _search,
+    ...props
+  }: { children: React.ReactNode; to?: string; search?: unknown }) => <a {...props}>{children}</a>,
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (options: { queryKey: unknown[] }) => {
@@ -37,8 +45,8 @@ vi.mock("@tanstack/react-query", () => ({
     const key = JSON.stringify(options.queryKey);
     const isDetail = key.includes('"detail"') && key.includes("Glyma.01G000100");
     return {
-      data: isDetail ? api.gene : undefined,
-      isLoading: false,
+      data: isDetail && !api.detailLoading ? api.gene : undefined,
+      isLoading: isDetail && api.detailLoading,
       isError: false,
       refetch: vi.fn(),
     };
@@ -55,10 +63,13 @@ vi.mock("@soymutdb/api-client", async (importOriginal) => ({
 vi.mock("../../lib/query-options", () => ({ assembliesQueryOptions: () => ({ queryKey: ["assemblies"], queryFn: vi.fn() }) }));
 vi.mock("../../lib/site-variant", () => ({ SITE_VARIANT: "external" }));
 vi.mock("../../lib/release-scope", () => ({ useReleaseId: () => "5" }));
-vi.mock("../../components/gene-genome-view", () => ({ GeneGenomeView: () => null }));
+vi.mock("../../components/gene-genome-view", () => ({
+  GeneGenomeView: () => <div data-testid="gene-genome-view-stand-in" />,
+}));
 vi.mock("../../components/gene-seed-request-entry", () => ({ GeneSeedRequestEntry: () => null }));
 
 import { Route } from "./$geneId";
+import { stableT } from "../../test/mocks";
 
 const Page = (Route as unknown as { options: { component: React.ComponentType } }).options.component;
 
@@ -144,6 +155,7 @@ function gene(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   api.gene = gene();
+  api.detailLoading = false;
   api.listTestDataPreviewMutationSitesForGene.mockResolvedValue([]);
 });
 afterEach(cleanup);
@@ -182,5 +194,96 @@ describe("gene detail sections", () => {
     render(<Page />);
     fireEvent.click(screen.getByRole("tab", { name: /Phenotypes/ }));
     expect(screen.getByTestId("gene-section-empty")).toBeTruthy();
+  });
+
+  it("reads as identity first, entry points second, data blocks last", () => {
+    render(<Page />);
+    const identity = screen.getByTestId("gene-identity");
+    // The page's own record is the anchor: accession, coordinates, strand and
+    // the assembly that qualifies them all live in the first card.
+    expect(identity.contains(screen.getByTestId("gene-id"))).toBe(true);
+    expect(identity.contains(screen.getByTestId("gene-coords"))).toBe(true);
+    expect(identity.contains(screen.getByTestId("gene-assembly"))).toBe(true);
+    // The facts card carries facts only; mixing actions into it is what made
+    // the record look like a toolbar with a title.
+    expect(identity.contains(screen.getByTestId("gene-actions"))).toBe(false);
+    // One action area holds the outbound entry points (browser, in-app locus).
+    const actions = screen.getByTestId("gene-actions");
+    expect(actions.contains(screen.getByTestId("gene-jbrowse"))).toBe(true);
+    // Document order: facts, then the action area, then the section navigation.
+    const precedes = (first: Element, second: Element) =>
+      Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(precedes(identity, screen.getByTestId("gene-actions-card"))).toBe(true);
+    expect(
+      precedes(screen.getByTestId("gene-actions-card"), screen.getByTestId("gene-section-nav")),
+    ).toBe(true);
+  });
+
+  it("offers the data sections through exactly one navigation surface", () => {
+    render(<Page />);
+    // Regression: the page used to list the same nine destinations twice — a
+    // chip row in the action card plus the tab strip — so every section was
+    // announced twice on one page.
+    expect(screen.getAllByRole("tablist")).toHaveLength(1);
+    expect(screen.getAllByRole("tab")).toHaveLength(9);
+    expect(screen.queryAllByTestId(/^gene-jump-/)).toHaveLength(0);
+    expect(screen.queryByTestId("gene-section-jumps")).toBeNull();
+    // One way back to the search, not two.
+    expect(screen.getAllByTestId("gene-back-link")).toHaveLength(1);
+  });
+
+  it("switches the visible section from the tab strip", () => {
+    render(<Page />);
+    fireEvent.click(screen.getByRole("tab", { name: /Variants/ }));
+    expect(screen.getByTestId("gene-variant-summary")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: /Literature/ }));
+    expect(screen.getByTestId("gene-section-not-imported")).toBeTruthy();
+  });
+
+  it("renders the page's shape while the record loads, not a blank column", () => {
+    api.detailLoading = true;
+    render(<Page />);
+    const skeleton = screen.getByTestId("gene-skeleton");
+    expect(skeleton.getAttribute("aria-busy")).toBe("true");
+    // Facts anchor, action area, section navigation + open section: the shape
+    // the loaded page will have, so nothing reflows into a different
+    // silhouette.
+    for (const part of [
+      "gene-skeleton-identity",
+      "gene-skeleton-actions",
+      "gene-skeleton-section-nav",
+      "gene-skeleton-sections",
+    ]) {
+      expect(skeleton.contains(screen.getByTestId(part))).toBe(true);
+    }
+    // The wait is announced with copy, not left as empty space.
+    expect(skeleton.textContent).toContain(stableT("genes.loading"));
+    // A skeleton is not a record: no identifier is claimed before it arrives.
+    expect(screen.queryByTestId("gene-id")).toBeNull();
+  });
+
+  it("carries the genome view in the overview section, not in the navigation", () => {
+    render(<Page />);
+    // The spatial context is the overview's content, so it sits inside the open
+    // section rather than between the section navigation and its content.
+    const summary = screen.getByTestId("gene-variant-summary");
+    const genome = screen.getByTestId("gene-genome-view-stand-in");
+    const precedes = (first: Element, second: Element) =>
+      Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(precedes(genome, summary)).toBe(true);
+    // Inside the open section's panel, not beside the tab strip.
+    expect(genome.closest('[role="tabpanel"]')).not.toBeNull();
+  });
+
+  it("reports variant totals and the effect breakdown once, in one card", () => {
+    render(<Page />);
+    const summary = screen.getByTestId("gene-variant-summary");
+    expect(summary.textContent).toContain("Variant Summary");
+    expect(summary.textContent).toContain("Variant Count");
+    // Each consequence class appears exactly once: the breakdown used to be a
+    // second card rendered after the tabs.
+    for (const label of ["Nonsense Count", "Missense Count", "Synonymous Count", "Frameshift Count"]) {
+      expect(screen.getAllByText(label)).toHaveLength(1);
+    }
   });
 });

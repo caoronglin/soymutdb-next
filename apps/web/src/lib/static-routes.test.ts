@@ -59,7 +59,8 @@ describe("deriveStaticRouteEntries", () => {
     expect(paths).toContain("/tools/seqfetch");
     expect(paths).toContain("/tools/exppattern");
     expect(paths).toContain("/tools/sequence");
-    // Dynamic detail routes render from parameters; they never get a document.
+    // Dynamic detail routes render from parameters; metadata alone never gives
+    // them a document (only an entity-snapshot entry does — see below).
     expect(paths).not.toContain("/genes/:geneId");
     expect(paths).not.toContain("/mutants/:publicId");
     expect(paths).not.toContain("/news/:slug");
@@ -85,12 +86,66 @@ describe("deriveStaticRouteEntries", () => {
     expect(externalIndexed.map((entry) => entry.path)).not.toContain("/seed-request");
   });
 
-  it("skips a dynamic path even if metadata says prerender", () => {
-    const entries = deriveStaticRouteEntries(
-      [{ path: "/genes/:id", meta: { prerender: true, title: "Gene" } }],
-      "external",
-    );
-    expect(entries).toEqual([]);
+  it("skips a dynamic path unless the snapshot supplies it", () => {
+    const dynamicRoute = {
+      path: "/genes/:geneId",
+      meta: { prerender: true, title: "Gene" },
+    };
+    const document = {
+      path: "/genes/Glyma.01G000100",
+      templatePath: "/genes/:geneId",
+      title: "Glyma.01G000100 — SoyMutDB",
+      description: "Gene record.",
+    };
+
+    // Without a snapshot entry the template stays a template: metadata saying
+    // "prerender" is not a record.
+    expect(deriveStaticRouteEntries([dynamicRoute], "external")).toEqual([]);
+    // An entry that names no route of this app is still not a document.
+    expect(
+      deriveStaticRouteEntries([], "external", { entityDocuments: [document] }),
+    ).toEqual([]);
+    // An entry whose path does not fit its template is refused, not coerced.
+    expect(
+      deriveStaticRouteEntries([dynamicRoute], "external", {
+        entityDocuments: [{ ...document, path: "/genes/a/b" }],
+      }),
+    ).toEqual([]);
+
+    // With the snapshot the same path becomes exactly one indexable document
+    // on the external variant. This is the whole rule: data decides.
+    expect(
+      deriveStaticRouteEntries([dynamicRoute], "external", {
+        entityDocuments: [document],
+      }),
+    ).toEqual([
+      {
+        path: "/genes/Glyma.01G000100",
+        title: "Glyma.01G000100 — SoyMutDB",
+        description: "Gene record.",
+        includeInSitemap: true,
+      },
+    ]);
+
+    // The internal variant prerenders the same document but never lists it.
+    const internal = deriveStaticRouteEntries([dynamicRoute], "internal", {
+      entityDocuments: [document],
+    });
+    expect(internal.map((entry) => entry.includeInSitemap)).toEqual([false]);
+  });
+
+  it("keeps a repeated snapshot entry out of the enumeration", () => {
+    const routes = [{ path: "/genes/:geneId", meta: { title: "Gene" } }];
+    const document = {
+      path: "/genes/Glyma.01G000100",
+      templatePath: "/genes/:geneId",
+      title: "Glyma.01G000100 — SoyMutDB",
+    };
+    expect(
+      deriveStaticRouteEntries(routes, "external", {
+        entityDocuments: [document, document],
+      }),
+    ).toHaveLength(1);
   });
 });
 

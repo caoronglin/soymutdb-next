@@ -31,17 +31,36 @@ function wrapper({ children }: { children: React.ReactNode }) {
 beforeEach(() => {
   mocks.getPageDefinition.mockReset();
   mocks.listPublishedPageDefinitions.mockReset();
+  // The published-route list gates the per-route request, so a route that the
+  // list does not name is never asked for.
+  mocks.listPublishedPageDefinitions.mockResolvedValue([]);
 });
 
 describe("usePublishedPageDefinition", () => {
   it("returns null when the route has no published definition", async () => {
+    mocks.listPublishedPageDefinitions.mockResolvedValue([
+      { route: "/about", version: 1, status: "published", definition: {} as never },
+    ]);
     mocks.getPageDefinition.mockRejectedValue(new ApiError("not found", 404));
     const { result } = renderHook(() => usePublishedPageDefinition("/about"), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toBeNull();
   });
 
+  it("does not request a definition for a route the list does not name", async () => {
+    // Asking for a definition that does not exist is a 404 by design, and the
+    // browser reports each one as a failed resource.
+    mocks.listPublishedPageDefinitions.mockResolvedValue([]);
+    const { result } = renderHook(() => usePublishedPageDefinition("/about"), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toBeNull();
+    expect(mocks.getPageDefinition).not.toHaveBeenCalled();
+  });
+
   it("normalises a stored v1 definition to the current contract", async () => {
+    mocks.listPublishedPageDefinitions.mockResolvedValue([
+      { route: "/about", version: 3, status: "published", definition: {} as never },
+    ]);
     mocks.getPageDefinition.mockResolvedValue({
       route: "/about",
       version: 3,
@@ -59,6 +78,9 @@ describe("usePublishedPageDefinition", () => {
   });
 
   it("surfaces non-404 failures instead of silently falling back", async () => {
+    mocks.listPublishedPageDefinitions.mockResolvedValue([
+      { route: "/about", version: 1, status: "published", definition: {} as never },
+    ]);
     mocks.getPageDefinition.mockRejectedValue(new ApiError("boom", 500));
     const { result } = renderHook(() => usePublishedPageDefinition("/about"), { wrapper });
     await waitFor(() => expect(result.current.isError).toBe(true));

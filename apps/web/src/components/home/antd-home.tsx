@@ -227,11 +227,27 @@ function DatabaseOverview() {
   const format = (value: number) =>
     new Intl.NumberFormat(i18n.language || undefined).format(value);
 
+  // A zero is only informative next to a published release. Without one, the
+  // variant and mutant-line aggregates are empty *because nothing has been
+  // published*, not because the database holds none -- and a bare "0" next to
+  // a real gene count reads as an empty database. The release state decides
+  // which of the two it is.
+  const hasPublishedRelease = (query.data?.release_count ?? 0) > 0;
   const tiles = query.data
     ? [
         { key: "genes", label: t("home.database.genes"), value: query.data.gene_count },
-        { key: "variants", label: t("home.database.variants"), value: query.data.total_variants },
-        { key: "mutants", label: t("home.database.mutants"), value: query.data.mutant_line_count },
+        {
+          key: "variants",
+          label: t("home.database.variants"),
+          value: query.data.total_variants,
+          unpublished: !hasPublishedRelease && query.data.total_variants === 0,
+        },
+        {
+          key: "mutants",
+          label: t("home.database.mutants"),
+          value: query.data.mutant_line_count,
+          unpublished: !hasPublishedRelease && query.data.mutant_line_count === 0,
+        },
         { key: "assemblies", label: t("home.assemblies"), value: query.data.assembly_count },
       ]
     : [];
@@ -241,7 +257,7 @@ function DatabaseOverview() {
       <div className="container-prose py-10 md:py-12">
         <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <Title level={3} style={{ margin: 0, fontWeight: 700 }}>
+            <Title level={2} style={{ margin: 0, fontWeight: 700 }}>
               {t("home.databaseTitle")}
             </Title>
             <Paragraph className="mb-0 mt-1 max-w-2xl text-muted-foreground">
@@ -298,8 +314,19 @@ function DatabaseOverview() {
                         data-testid={`home-stat-${tile.key}`}
                         className="mt-2 font-display text-2xl font-semibold tabular-nums text-foreground"
                       >
-                        {format(tile.value)}
+                        {tile.unpublished ? (
+                          <span className="text-base font-normal text-muted-foreground">
+                            {t("home.database.notPublished")}
+                          </span>
+                        ) : (
+                          format(tile.value)
+                        )}
                       </div>
+                      {tile.unpublished ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {t("home.database.notPublishedHelp")}
+                        </p>
+                      ) : null}
                     </Card>
                   </Col>
                 ))}
@@ -362,7 +389,7 @@ export function AntdHome() {
           {/* Latest news — 5 titles linking to /news. */}
           <Col xs={24} lg={9} className="flex flex-col">
             <div className="mb-3 flex items-baseline justify-between gap-3">
-              <Title level={3} className="font-bold" style={{ margin: 0 }}>
+              <Title level={2} className="font-bold" style={{ margin: 0 }}>
                 {t("home.latestNews")}
               </Title>
               <Link to="/news" search={{ category: undefined, page: undefined }} className="home-section-link shrink-0 text-primary" style={{ fontWeight: 500 }}>
@@ -380,7 +407,7 @@ export function AntdHome() {
               in index.css, which keeps the carousel as tall as the news card. */}
           <Col xs={24} lg={15} className="flex flex-col">
             <div className="mb-3 flex items-baseline justify-between gap-3">
-              <Title level={3} className="font-bold" style={{ margin: 0 }}>
+              <Title level={2} className="font-bold" style={{ margin: 0 }}>
                 {t("home.researchHighlights")}
               </Title>
               <Link to="/search" className="home-section-link shrink-0 text-primary" style={{ fontWeight: 500 }}>
@@ -430,7 +457,7 @@ export function AntdHome() {
       {/* ---------------------------------------------------------------- */}
       <div className="container-prose pb-20 pt-4 md:pt-6">
         <div className="mb-5 flex items-baseline justify-between gap-3">
-          <Title level={3} style={{ margin: 0, fontWeight: 700 }}>
+          <Title level={2} style={{ margin: 0, fontWeight: 700 }}>
             {t("home.featuredTools")}
           </Title>
           <Link to="/search" className="home-section-link shrink-0 text-primary" style={{ fontWeight: 500 }}>

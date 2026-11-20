@@ -10,7 +10,7 @@
  * Content is admin-authored, bleach-sanitised HTML; DOMPurify re-sanitises
  * as defence in depth. A missing/empty about block renders an empty state.
  */
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -125,12 +125,39 @@ function AboutComponent() {
             }
           />
         ) : !hasContent ? (
-          <Empty
-            description={
-              <Typography.Text type="secondary">{t("about.empty")}</Typography.Text>
-            }
-            className="py-16"
-          />
+          /* The about text is operator-authored and is not published yet. An
+             empty box in a large empty page says nothing; this says what is
+             missing, why, and what the visitor can do meanwhile. */
+          <div data-testid="about-empty" className="py-6">
+            <Empty
+              description={
+                <Typography.Text type="secondary">{t("about.empty")}</Typography.Text>
+              }
+            />
+            <Typography.Paragraph className="mx-auto mt-2 max-w-2xl text-center text-sm text-muted-foreground">
+              {t("about.emptyExplain")}
+            </Typography.Paragraph>
+            <div className="mx-auto mt-6 grid max-w-2xl gap-3 sm:grid-cols-2">
+              <Link
+                to="/search"
+                className="rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary hover:bg-accent"
+              >
+                <p className="font-medium">{t("about.emptySearchTitle")}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t("about.emptySearchBody")}
+                </p>
+              </Link>
+              <Link
+                to="/assemblies"
+                className="rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary hover:bg-accent"
+              >
+                <p className="font-medium">{t("about.emptyAssembliesTitle")}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t("about.emptyAssembliesBody")}
+                </p>
+              </Link>
+            </div>
+          </div>
         ) : (
           <>
             {summary ? (

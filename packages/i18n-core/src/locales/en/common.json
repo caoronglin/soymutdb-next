@@ -65,7 +65,9 @@
       "variants": "Variants",
       "variantsDescription": "Filter released variants by assembly, chromosome, type and impact.",
       "mutants": "Mutant lines",
-      "mutantsDescription": "Explore released mutant lines by their stable public identifiers."
+      "mutantsDescription": "Explore released mutant lines by their stable public identifiers.",
+      "notPublished": "Not published",
+      "notPublishedHelp": "No data release is published yet, so this count starts at publication."
     },
     "tasks": "Research tools",
     "tasksSubtitle": "Choose a focused tool for a gene, sequence or genomic region.",
@@ -200,7 +202,18 @@
       "species": "Species",
       "gene_id": "Homolog Gene ID",
       "type": "Type",
-      "source": "Source"
+      "source": "Source",
+      "align": {
+        "title": "Homolog alignment and NJ tree",
+        "run": "Align {{count}} homologs ({{molecule}})",
+        "hint": "CDS is compared locus to locus; entries this database cannot resolve are listed separately.",
+        "unresolvedTitle": "{{count}} entries cannot be resolved in this database",
+        "noSequence": "no imported {{molecule}} sequence for this entry",
+        "notInDatabase": "this deployment does not hold that version",
+        "tooFew": "only {{count}} sequences resolved; a tree needs at least {{needed}}",
+        "leaves": "{{count}} leaves",
+        "resolved": "{{count}} sequences resolved"
+      }
     },
     "loadError": "Could not load this gene.",
     "assemblyLabel": "Genome version",
@@ -282,7 +295,25 @@
       "available": "Available",
       "unavailable": "Not imported",
       "unavailableHint": "This platform release holds coordinates and annotations for this gene, not residues. A sequence is not shown because none is stored.",
-      "length": "Length"
+      "length": "Length",
+      "analysis": {
+        "proteinProperties": "Properties (MW / pI)",
+        "composition": "Base composition",
+        "meltingTemp": "Primer Tm",
+        "reverseComplement": "Reverse complement",
+        "reverseComplementLabel": "Reverse complement",
+        "residues": "Residues",
+        "molecularWeight": "Molecular weight (Da)",
+        "isoelectricPoint": "Isoelectric point",
+        "gravy": "Hydrophobicity (GRAVY)",
+        "instabilityIndex": "Instability index",
+        "aromaticity": "Aromaticity",
+        "bases": "Bases",
+        "gcFraction": "GC content",
+        "ambiguous": "Ambiguous bases",
+        "meltingMethod": "Method {{method}}",
+        "failed": "Analysis failed; try again"
+      }
     },
     "evidence": {
       "label": "Evidence",
@@ -357,7 +388,10 @@
       "high": "High",
       "medium": "Medium",
       "low": "Low"
-    }
+    },
+    "entryPoints": "Gene data entry points",
+    "openLocusView": "Locus view (±{{flank}} kb)",
+    "releaseLabel": "Release"
   },
   "variants": {
     "title": "Variant Search",
@@ -564,7 +598,9 @@
     "openInNewTab": "Open in a new tab",
     "retry": "Retry",
     "stillLoading": "Still loading",
-    "stillLoadingDesc": "Large datasets can take a moment on first paint."
+    "stillLoadingDesc": "Large datasets can take a moment on first paint.",
+    "pickAssembly": "Choose a published genome assembly to open the browser",
+    "noAssemblies": "This data release publishes no genome assemblies, so there is nothing to open in the genome browser."
   },
   "blast": {
     "title": "BLAST Search",
@@ -725,7 +761,16 @@
     "queryBuilderChromosome": "Chromosome",
     "queryBuilderImpact": "Impact",
     "queryBuilderVariantType": "Variant type",
-    "queryBuilderFiltersCount": "supported filters"
+    "queryBuilderFiltersCount": "supported filters",
+    "convert": {
+      "action": "Convert",
+      "label": "Convert {{source}} to",
+      "run": "Convert",
+      "save": "Download {{format}}",
+      "chars": "characters",
+      "empty": "The file is empty; nothing to convert.",
+      "failed": "Conversion failed; check the file format."
+    }
   },
   "fileViewer": {
     "singleFile": "Single file",
@@ -989,7 +1034,9 @@
     "demoNotice": "Demo mode is enabled. The charts below use synthetic example data and are not database measurements.",
     "variantTypesDescription": "SNP / Indel / SV distribution",
     "impactDescription": "Variant count by predicted impact",
-    "liveDataUnavailable": "Live data is unavailable. Please retry."
+    "liveDataUnavailable": "Live data is unavailable. Please retry.",
+    "noPublishedVariants": "No published variant data",
+    "noPublishedVariantsHelp": "This data release has no published variant records yet; the distribution appears once there is one."
   },
   "search": {
     "title": "Global Search",
@@ -1187,10 +1234,10 @@
   "admin": {
     "siteControl": {
       "title": "Site control",
-      "navHint": "Internal and external sites keep separate navigation documents; the API never copies one variant into the other.",
+      "navHint": "The public site and the internal site keep separate navigation documents; the API never copies one variant into the other.",
       "subtitle": "Database type, primary navigation and feature availability for the public portal",
-      "external": "External site",
-      "internal": "Internal site",
+      "external": "public site",
+      "internal": "internal site",
       "saveFailed": "Save failed",
       "conflict": "Settings were changed in another session. The latest version has been loaded; save again.",
       "dbKind": {
@@ -1262,6 +1309,73 @@
           "invalidGroupId": "Invalid group id '{{id}}'",
           "invalidLinkId": "Invalid link id '{{id}}'"
         }
+      }
+    },
+    "siteAppearance": {
+      "title": "Site appearance",
+      "internal": {
+        "title": "Internal site (internal deployments only)",
+        "help": "The internal site is a separate deployment artifact, not part of the public site; these settings only affect the internal build.",
+        "toggleAria": "Edit internal site content"
+      },
+      "brand": {
+        "title": "Brand and icon",
+        "description": "The name and icon the public site shows in its header. The icon is a media-library asset you can pick here."
+      },
+      "header": {
+        "title": "Header navigation",
+        "description": "Groups and links in the public site header. A link can be gated on a feature flag, which hides it while the flag is off."
+      },
+      "footer": {
+        "title": "Footer",
+        "description": "The footer link groups and copyright line the public site renders.",
+        "empty": "This footer has no groups yet, so the public site shows only the copyright line.",
+        "loadError": "Unable to load the footer settings.",
+        "on": "Shown",
+        "off": "Hidden",
+        "addGroup": "Add group",
+        "addLink": "Add link",
+        "save": "Save footer",
+        "saved": "Footer saved.",
+        "conflict": "The footer was changed in another session. The latest version has been loaded; check your edits and save again.",
+        "linkCount": "{{count}} links",
+        "linksUsed": "{{count}} of {{max}} links used",
+        "groupEnTitleAria": "Group {{index}} English title",
+        "groupZhTitleAria": "Group {{index}} Chinese title",
+        "groupEnabledAria": "Show group {{name}}",
+        "moveGroupUpAria": "Move group {{name}} up",
+        "moveGroupDownAria": "Move group {{name}} down",
+        "removeGroupAria": "Remove group {{name}}",
+        "linkEnLabelAria": "Group {{group}} link {{index}} English label",
+        "linkZhLabelAria": "Group {{group}} link {{index}} Chinese label",
+        "linkDestinationAria": "Group {{group}} link {{index}} destination",
+        "linkEnabledAria": "Show link {{label}}",
+        "moveLinkUpAria": "Move link {{label}} up",
+        "moveLinkDownAria": "Move link {{label}} down",
+        "removeLinkAria": "Remove link {{label}}",
+        "destinationPlaceholder": "Site path (e.g. /genes) or an https:// address",
+        "copyrightZh": "Chinese copyright line",
+        "copyrightEn": "English copyright line",
+        "copyrightHelp": "The copyright line supports a year placeholder that the public site replaces; when the Chinese or English line is empty, the legacy copyright value is used.",
+        "error": {
+          "noDestination": "Link \"{{label}}\" has no destination.",
+          "whitespace": "Link \"{{label}}\" must not contain spaces or a backslash.",
+          "protocolRelative": "Link \"{{label}}\" must not use a protocol-relative // address.",
+          "prefix": "Link \"{{label}}\" must be a site path starting with /.",
+          "httpsOnly": "Link \"{{label}}\" must be an https:// address.",
+          "notLoaded": "The footer settings are not loaded yet.",
+          "tooManyGroups": "A footer supports at most {{max}} groups.",
+          "tooManyLinks": "A footer supports at most {{max}} links.",
+          "invalidGroupId": "Group id \"{{id}}\" may only contain lowercase letters, digits and hyphens.",
+          "duplicateGroupId": "Group id \"{{id}}\" is used twice.",
+          "invalidLinkId": "Link id \"{{id}}\" may only contain lowercase letters, digits and hyphens.",
+          "blankLabel": "Group \"{{group}}\" has a blank Chinese or English link label."
+        }
+      },
+      "media": {
+        "title": "Images and media",
+        "description": "Logos, banners and screenshots live in the media library, not on this page. Upload or re-use an asset there, then select it on a page or in the icon field above.",
+        "open": "Open media library"
       }
     },
     "pageBuilder": {
@@ -1516,8 +1630,8 @@
           "variantNoticeAfter": " while its local editor is extracted."
         },
         "appearance": {
-          "title": "Appearance",
-          "description": "Theme colour and public presentation defaults."
+          "title": "Site appearance",
+          "description": "Brand, header navigation, footer and media for the public site."
         },
         "integrations": {
           "title": "Integrations",
@@ -1539,8 +1653,8 @@
         }
       },
       "appearanceForm": {
-        "title": "Appearance",
-        "description": "Configure the administrator interface primary colour.",
+        "title": "Admin console theme",
+        "description": "Primary colour of the administrator interface. It does not change the public site.",
         "loading": "Loading appearance settings…",
         "loadError": "Unable to load appearance settings.",
         "primaryColor": "Primary color",
@@ -1615,7 +1729,9 @@
         "home_external": "Homepage (external)",
         "home_internal": "Homepage (internal)",
         "content_external": "Site content (external)",
-        "footer_external": "Footer (external)",
+        "brand_external": "Brand (public site)",
+        "header_external": "Header navigation (public site)",
+        "footer_external": "Footer (public site)",
         "security": "Security",
         "data": "Data and storage",
         "email": "Email and notifications",
@@ -1796,7 +1912,9 @@
       "retry": "Retry",
       "cancel": "Cancel",
       "cancelConfirm": "Cancel this import?",
-      "unknown": "Unknown"
+      "unknown": "Unknown",
+      "invalidTitle": "Invalid import task id",
+      "invalidBody": "This address does not name an import task. Go back to the import list and pick one."
     },
     "importCreate": {
       "title": "Start an import",
@@ -2360,6 +2478,28 @@
       "defaultTag": "Default view",
       "notes": "Notes",
       "setDefault": "Set as default",
+      "viewSelect": "Saved view",
+      "viewSettings": "View settings",
+      "summary": "{{rows}} rows · {{columns}} columns · {{searchable}} searchable",
+      "activeFilters": "{{count}} filters",
+      "addField": "Add field ({{count}} left)",
+      "viewTypeHint": "Saved with the view. This console presents every view as one table.",
+      "layoutNote": {
+        "kanban": "This view was saved as a kanban board; the console presents every view as one table. The saved layout is unchanged.",
+        "gallery": "This view was saved as a gallery; the console presents every view as one table. The saved layout is unchanged."
+      },
+      "field": {
+        "searchable": "Searchable",
+        "visible": "Shown",
+        "searchableAria": "{{field}}: use as a search source",
+        "visibleAria": "{{field}}: show this column",
+        "dragAria": "Drag to reorder {{field}}",
+        "moveLeftAria": "Move {{field}} left",
+        "moveRightAria": "Move {{field}} right",
+        "lastVisibleHint": "A view has to show at least one column. Add another column, then hide this one."
+      },
+      "patchFailed": "Could not save the change: {{reason}}",
+      "saveFailed": "Could not save the view: {{reason}}",
       "deleteTitle": "Delete view",
       "deleteConfirm": "Delete the view \"{{name}}\"? The saved configuration is removed; no biological data is deleted.",
       "loadMore": "Load more",
@@ -3021,7 +3161,12 @@
     "title": "About SoyMutDB",
     "empty": "About content has not been published yet.",
     "loadErrorTitle": "Failed to load about page",
-    "loadErrorSubtitle": "The about service is temporarily unavailable. Please try again later."
+    "loadErrorSubtitle": "The about service is temporarily unavailable. Please try again later.",
+    "emptyExplain": "The about text is written and published by an administrator. Until it is published this page keeps the useful entry points instead of showing an empty box.",
+    "emptySearchTitle": "Search by gene ID",
+    "emptySearchBody": "Find published gene records within a named genome assembly and data release.",
+    "emptyAssembliesTitle": "Browse genome assemblies",
+    "emptyAssembliesBody": "See which assemblies the current release publishes and how many genes each holds."
   },
   "publications": {
     "title": "Publications",
@@ -3825,9 +3970,21 @@
     "tracks": {
       "all": "All",
       "genes": "Genes",
-      "markers": "Markers"
+      "markers": "Markers",
+      "selected": "Selected gene",
+      "context": "Neighbouring genes ({{total}})",
+      "sites": "Sites ({{total}})",
+      "transcripts": "Transcripts ({{total}})"
     },
-    "pointer": "Cursor"
+    "pointer": "Cursor",
+    "contextWindow": "{{window}} · ±{{flank}} bp context · {{total}} neighbouring genes",
+    "contextUnavailable": "Neighbouring genes could not be loaded, so only this gene is drawn.",
+    "geneAriaLabel": "Genome view of {{geneId}}, window {{chromosome}}:{{start}}–{{end}}",
+    "contextTableCaption": "Genes in the {{window}} window around {{geneId}}",
+    "contextTableCoordinates": "Coordinates",
+    "contextTableRole": "Role",
+    "contextTableSelected": "This gene",
+    "contextTableContext": "Neighbouring gene"
   },
   "dataTable": {
     "title": "Data table",

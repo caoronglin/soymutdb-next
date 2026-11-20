@@ -19,7 +19,9 @@
  *     console warning.
  */
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
+import { listAssemblies } from "@soymutdb/api-client";
 import * as React from "react";
 import {
   AimOutlined as Microscope,
@@ -29,7 +31,7 @@ import {
   LoadingOutlined as Loader2,
   SearchOutlined as Search,
 } from "@ant-design/icons";
-import { Button, Card, Input, Typography } from "@/lib/antd";
+import { Button, Card, Input, Skeleton, Typography } from "@/lib/antd";
 import { FadeUp } from "../components/route-motion";
 import { resolveJbrowseBaseUrl } from "../lib/deployment";
 import { SOYBEAN_CHROMOSOMES } from "../lib/format";
@@ -144,6 +146,73 @@ function buildJbrowseUrl(params: {
     if (params.release) url.searchParams.set("release", params.release);
     if (params.portalOrigin) url.searchParams.set("portalOrigin", params.portalOrigin);
     return url.toString();
+}
+
+/**
+ * The published assemblies, as a way into the browser.
+ *
+ * The context gate refuses to guess an assembly, which is right: a renamed
+ * assembly must not be opened under the wrong namespace. But a gate with no
+ * way through is a dead end, so this lists what the release actually
+ * publishes and lets the visitor choose. Choosing is explicit, so the
+ * contract the gate protects is untouched.
+ */
+function BrowserAssemblyPicker() {
+    const { t } = useTranslation();
+    const navigate = useNavigate();
+    const query = useQuery({
+        queryKey: ["browser-assemblies"],
+        queryFn: () => listAssemblies(),
+        staleTime: 5 * 60 * 1000,
+        retry: false,
+    });
+
+    if (query.isPending) {
+        return (
+            <div data-testid="browser-assembly-picker-loading" className="mt-4">
+                <Skeleton active paragraph={{ rows: 2 }} title={false} />
+            </div>
+        );
+    }
+    if (query.isError || !query.data || query.data.length === 0) {
+        return (
+            <Typography.Paragraph type="secondary" className="mt-4 mb-0" data-testid="browser-assembly-picker-empty">
+                {t("browser.noAssemblies")}
+            </Typography.Paragraph>
+        );
+    }
+
+    return (
+        <div data-testid="browser-assembly-picker" className="mt-4">
+            <Typography.Text strong>{t("browser.pickAssembly")}</Typography.Text>
+            <ul className="mt-2 space-y-2">
+                {query.data.map((assembly) => (
+                    <li key={String(assembly.id)}>
+                        <Button
+                            block
+                            onClick={() =>
+                                void navigate({
+                                    to: "/browser",
+                                    // The full `BrowserSearchParams` shape:
+                                    // `locus` is required, and an empty one
+                                    // means "open on the destination's own
+                                    // default" (see buildJbrowseUrl).
+                                    search: (previous) => ({
+                                        ...previous,
+                                        assembly: assembly.name,
+                                        locus: previous.locus ?? "",
+                                        release: assembly.release_version ?? undefined,
+                                    }) as BrowserSearchParams,
+                                })
+                            }
+                        >
+                            {assembly.name} · {assembly.species}
+                        </Button>
+                    </li>
+                ))}
+            </ul>
+        </div>
+    );
 }
 
 function BrowserComponent() {
@@ -365,6 +434,11 @@ function BrowserComponent() {
                     <Typography.Paragraph type="secondary">
                         {t("browser.contextMissingDescription")}
                     </Typography.Paragraph>
+                    {/* The gate never guesses an assembly, but a visitor who
+                        arrives without one can still be helped: the published
+                        assemblies are listed, and picking one opens the
+                        browser with that assembly named explicitly. */}
+                    <BrowserAssemblyPicker />
                 </Card>
             </main>
         );
