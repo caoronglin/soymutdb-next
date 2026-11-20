@@ -52,6 +52,51 @@ const LEGACY_TOKEN_KEYS = [
     "soymutdb_access_token",
 ] as const;
 
+/**
+ * Non-secret marker that says "this browser may hold a session cookie".
+ *
+ * The refresh cookie is HttpOnly, so JavaScript cannot read it, and the
+ * access token lives only in memory. That left the boot restore with no way to
+ * tell "never signed in" from "signed in, cookie expired": it always called
+ * `POST /auth/refresh`, and an anonymous visitor got a 401 on every single
+ * page load — a network error in the browser console on all pages, forever.
+ *
+ * This marker is the missing signal. It carries no secret and grants nothing:
+ * it only decides whether the boot is worth asking the server at all. Absent
+ * means "this browser has never signed in", so the restore is skipped and the
+ * visitor sees an anonymous portal with a clean console. Present means "ask".
+ */
+const SESSION_HINT_KEY = "soymutdb_session_hint";
+
+function readSessionHint(): boolean {
+    try {
+        return typeof localStorage !== "undefined" && localStorage.getItem(SESSION_HINT_KEY) === "1";
+    } catch {
+        /* storage unavailable — assume no session rather than guessing */
+        return false;
+    }
+}
+
+function writeSessionHint(value: boolean): void {
+    try {
+        if (typeof localStorage === "undefined") return;
+        if (value) localStorage.setItem(SESSION_HINT_KEY, "1");
+        else localStorage.removeItem(SESSION_HINT_KEY);
+    } catch {
+        /* storage unavailable — the hint is an optimization, never a gate */
+    }
+}
+
+/** Note that this browser holds a session, so the boot restore should ask. */
+export function markSessionPossible(): void {
+    writeSessionHint(true);
+}
+
+/** Note that this browser holds no session, so the boot restore should not ask. */
+export function clearSessionHint(): void {
+    writeSessionHint(false);
+}
+
 /** Shape of the refresh response (subset of the OpenAPI TokenResponse). */
 interface RefreshResponse {
     access_token: string;
@@ -125,6 +170,9 @@ async function performRefresh(generation: number): Promise<SessionRefreshResult>
         }
         logoutEmitted = false;
         setAuthTokens(res.access_token);
+        // The server answered with a session: remember that this browser holds
+        // one, so the next boot knows the restore is worth asking for.
+        markSessionPossible();
         return { status: "authenticated", generation: getAuthGeneration() };
     } catch (error) {
         if (generation !== getAuthGeneration()) {
@@ -132,6 +180,9 @@ async function performRefresh(generation: number): Promise<SessionRefreshResult>
         }
         if (error instanceof ApiError && error.status === 401) {
             clearAuth();
+            // A 401 means the server holds no session for this browser; the
+            // next boot must not ask again.
+            clearSessionHint();
             return { status: "anonymous", generation: getAuthGeneration() };
         }
         return { status: "error", generation, error };
@@ -158,10 +209,20 @@ export async function refreshAccessToken(): Promise<boolean> {
 
 /** Boot restore distinguishes an absent cookie from transport/service errors. No logout event. */
 export function restoreSessionResult(): Promise<SessionRefreshResult> {
+    // Never signed in on this browser: the refresh would be answered with a
+    // 401 every time, which the browser reports as a failed resource on every
+    // page. Skipping it is the difference between an anonymous visitor seeing
+    // a clean console and seeing one error per page view.
+    if (!readSessionHint()) {
+        return Promise.resolve({ status: "anonymous", generation: getAuthGeneration() });
+    }
     return refreshAccessTokenResult();
 }
 
 export function restoreSession(): Promise<boolean> {
+    // Same hint rule as the boot restore: a browser that never signed in must
+    // not spend a request (and a console error) to learn that it is anonymous.
+    if (!readSessionHint()) return Promise.resolve(false);
     return refreshAccessToken();
 }
 
@@ -169,6 +230,10 @@ export function restoreSession(): Promise<boolean> {
 export function setAccessToken(token: string): void {
     logoutEmitted = false;
     setAuthTokens(token);
+    // A fresh sign-in means this browser now holds a session, so the next boot
+    // must ask the server for it.
+    if (token) markSessionPossible();
+    else clearSessionHint();
 }
 
 function isRefreshEndpoint(path: string): boolean {
@@ -368,4 +433,5 @@ export function __resetAuthStateForTests(): void {
     logoutEmitted = false;
     logoutHandlers.clear();
     clearAuth();
+    clearSessionHint();
 }

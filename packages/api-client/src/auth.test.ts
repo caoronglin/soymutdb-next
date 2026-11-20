@@ -10,10 +10,12 @@ import {
   authRequest,
   http,
   restoreSession,
+  restoreSessionResult,
   refreshAccessToken,
   onAuthLogout,
   clearLegacyTokens,
   setAccessToken,
+  markSessionPossible,
   __resetAuthStateForTests,
   AUTH_REFRESH_PATH,
   getCurrentUser,
@@ -71,6 +73,30 @@ function installFetchMock(opts: {
 function lastInitFor(calls: Array<{ url: string; init: RequestInit }>, url: string) {
   const match = [...calls].reverse().find((c) => c.url === url);
   return match?.init ?? null;
+}
+
+/** Minimal localStorage stub: the unit environment is node, and the session
+ * hint lives there. */
+function installLocalStorage(): void {
+  const ls: Record<string, string> = {};
+  Object.defineProperty(globalThis, "localStorage", {
+    value: {
+      getItem: (k: string) => ls[k] ?? null,
+      setItem: (k: string, v: string) => {
+        ls[k] = v;
+      },
+      removeItem: (k: string) => {
+        delete ls[k];
+      },
+      clear: () => {
+        for (const k of Object.keys(ls)) delete ls[k];
+      },
+      length: 0,
+      key: () => null,
+    },
+    configurable: true,
+    writable: true,
+  });
 }
 
 describe("auth coordination", () => {
@@ -292,6 +318,10 @@ describe("auth coordination", () => {
   });
 
   it("restoreSession restores the token from the refresh cookie", async () => {
+    // The browser has to *say* it holds a session: the cookie is HttpOnly, so
+    // the only signal available to the boot is the localStorage hint.
+    installLocalStorage();
+    markSessionPossible();
     installFetchMock({
       refreshResponse: () =>
         jsonResponse({ access_token: "cookie-token", token_type: "bearer", expires_in: 900 }),
@@ -306,6 +336,8 @@ describe("auth coordination", () => {
   it("restoreSession failure yields anonymous state without logout event", async () => {
     const onLogout = vi.fn();
     onAuthLogout(onLogout);
+    installLocalStorage();
+    markSessionPossible();
 
     installFetchMock({
       refreshResponse: () => jsonResponse({}, 401),
@@ -316,6 +348,36 @@ describe("auth coordination", () => {
     expect(ok).toBe(false);
     expect(getAccessToken()).toBeNull();
     expect(onLogout).not.toHaveBeenCalled();
+  });
+
+  it("does not ask the server when this browser never signed in", async () => {
+    // An anonymous visitor used to get a 401 on every page view, which the
+    // browser reports as a failed resource on every page. The hint is what
+    // lets the boot skip the request.
+    installLocalStorage();
+    const { calls } = installFetchMock({
+      refreshResponse: () =>
+        jsonResponse({ access_token: "cookie-token", token_type: "bearer", expires_in: 900 }),
+    });
+
+    const result = await restoreSessionResult();
+
+    expect(result.status).toBe("anonymous");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("asks the server again once this browser has signed in", async () => {
+    installLocalStorage();
+    markSessionPossible();
+    const { calls } = installFetchMock({
+      refreshResponse: () =>
+        jsonResponse({ access_token: "cookie-token", token_type: "bearer", expires_in: 900 }),
+    });
+
+    const result = await restoreSessionResult();
+
+    expect(result.status).toBe("authenticated");
+    expect(calls.filter((c) => c.url.includes(AUTH_REFRESH_PATH))).toHaveLength(1);
   });
 
   it("anonymous request carries no Authorization header", async () => {

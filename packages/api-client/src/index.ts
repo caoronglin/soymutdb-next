@@ -36,6 +36,8 @@ export {
   onAuthLogout,
   clearLegacyTokens,
   setAccessToken,
+  clearSessionHint,
+  markSessionPossible,
   AUTH_REFRESH_PATH,
   getCurrentUser,
   type CurrentUser,
