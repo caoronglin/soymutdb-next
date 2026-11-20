@@ -62,6 +62,11 @@ class GeneResponse(BaseModel):
     gene_id: str | None = None
     assembly_id: str | None = None
     assembly_name: str | None = None
+    #: The release this record was resolved in. The portal is required to show
+    #: assembly *and* release context on an entity page, so both travel with
+    #: the record rather than being inferred by the client.
+    release_id: str | None = None
+    release_name: str | None = None
     chromosome: str
     name: str | None = None
     symbol: str | None = None
@@ -229,9 +234,7 @@ class GeneListParams(BaseModel):
     @classmethod
     def _validate_sort_by(cls, value: str) -> str:
         if value not in GENE_SORT_COLUMNS:
-            raise ValueError(
-                f"sort_by must be one of {', '.join(GENE_SORT_COLUMNS)}"
-            )
+            raise ValueError(f"sort_by must be one of {', '.join(GENE_SORT_COLUMNS)}")
         return value
 
     @field_validator("sort_dir")

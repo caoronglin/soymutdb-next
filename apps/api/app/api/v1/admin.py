@@ -22,6 +22,7 @@ from ...core.config import get_settings
 from ...core.database import get_db, get_session_factory
 from ...core.exceptions import ConflictError, NotFoundError, ValidationError
 from ...core.security import require_admin_roles
+from ...core.spreadsheet import neutralize_spreadsheet_cell
 from ...models.auth import AuditLog, User
 from ...models.content import Release, ReleaseStatus
 from ...models.data_publishing import ActiveRelease, DataSet, ReleaseDataSet
@@ -528,12 +529,16 @@ async def export_audit_logs(
                     writer.writerow(
                         [
                             log.timestamp.isoformat() if log.timestamp else "",
-                            actor,
-                            log.action,
-                            log.resource_type,
-                            log.resource_id or "",
-                            log.ip_address or "",
-                            json.dumps(details) if details is not None else "",
+                            neutralize_spreadsheet_cell(actor),
+                            neutralize_spreadsheet_cell(log.action),
+                            neutralize_spreadsheet_cell(log.resource_type),
+                            # `resource_id` carries the caller's raw search
+                            # query, so it is the cell an outsider controls.
+                            neutralize_spreadsheet_cell(log.resource_id or ""),
+                            neutralize_spreadsheet_cell(log.ip_address or ""),
+                            neutralize_spreadsheet_cell(
+                                json.dumps(details) if details is not None else ""
+                            ),
                         ]
                     )
                 yield buffer.getvalue()
@@ -582,6 +587,7 @@ async def export_audit_logs_excel(
     _require_admin(current_user)
     import openpyxl  # noqa: PLC0415 — lazy import
     from openpyxl.styles import Font, PatternFill  # noqa: PLC0415
+    from openpyxl.utils import get_column_letter  # noqa: PLC0415 — lazy import
 
     factory = get_session_factory()
     async with factory() as session:
@@ -604,6 +610,7 @@ async def export_audit_logs_excel(
 
         wb = openpyxl.Workbook()
         ws = wb.active
+        assert ws is not None, "a new Workbook always has an active sheet"
         ws.title = "Audit Logs"
 
         # Header styling.
@@ -620,20 +627,26 @@ async def export_audit_logs_excel(
 
         for row_idx, log in enumerate(logs, start=2):
             ws.cell(row=row_idx, column=1, value=log.timestamp.isoformat() if log.timestamp else "")
-            ws.cell(row=row_idx, column=2, value=log.user.username if log.user else "")
-            ws.cell(row=row_idx, column=3, value=log.action)
-            ws.cell(row=row_idx, column=4, value=log.resource_type)
-            ws.cell(row=row_idx, column=5, value=log.resource_id or "")
-            ws.cell(row=row_idx, column=6, value=log.ip_address or "")
+            ws.cell(
+                row=row_idx,
+                column=2,
+                value=neutralize_spreadsheet_cell(log.user.username if log.user else ""),
+            )
+            ws.cell(row=row_idx, column=3, value=neutralize_spreadsheet_cell(log.action))
+            ws.cell(row=row_idx, column=4, value=neutralize_spreadsheet_cell(log.resource_type))
+            ws.cell(row=row_idx, column=5, value=neutralize_spreadsheet_cell(log.resource_id or ""))
+            ws.cell(row=row_idx, column=6, value=neutralize_spreadsheet_cell(log.ip_address or ""))
             ws.cell(
                 row=row_idx,
                 column=7,
-                value=json.dumps(log.new_value) if log.new_value is not None else "",
+                value=neutralize_spreadsheet_cell(
+                    json.dumps(log.new_value) if log.new_value is not None else ""
+                ),
             )
 
         # Auto-adjust column widths.
         for col_idx, header in enumerate(headers, start=1):
-            ws.column_dimensions[openpyxl.utils.get_column_letter(col_idx)].width = max(
+            ws.column_dimensions[get_column_letter(col_idx)].width = max(
                 len(header) + 4, 20
             )
 

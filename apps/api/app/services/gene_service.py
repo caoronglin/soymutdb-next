@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload, lazyload
@@ -21,6 +23,7 @@ from ..schemas.genomic import (
     RegionGeneResponse,
     RegionStructureResponse,
     RegionTranscriptResponse,
+    Strand,
     TranscriptPartResponse,
     TranscriptResponse,
 )
@@ -30,7 +33,7 @@ from .release_context import (
     decode_bound_cursor,
     encode_bound_cursor,
 )
-from .sequence_availability import gene_sequence_availability
+from .sequence_availability import load_gene_sequences
 from .sql_like import LIKE_ESCAPE_CHARACTER, contains_pattern
 
 
@@ -200,7 +203,31 @@ def decode_cursor(
         raise ValidationError(f"Invalid cursor: {exc}") from exc
 
 
-PART_KIND_BY_TYPE: dict[str, str] = {
+#: The vocabulary the renderers speak, typed so the literal survives into the
+#: response. A plain ``dict[str, str]`` would widen it to ``str`` and force a
+#: cast at the one place that has to be right.
+def _strand(value: str | None) -> Strand:
+    """Normalize a stored strand into the schema's enum.
+
+    The column holds a one-character string and the database does not
+    constrain it beyond that, while the response schema speaks the ``Strand``
+    enum. A row that says something else (``"."`` for an unstranded contig, an
+    empty string, a stray character from a third-party import) must still
+    produce a valid answer, so anything that is not ``+`` or ``-`` is reported
+    as a minus strand only when it literally is one and otherwise rejected by
+    the caller.
+
+    Keeping the conversion here means every response is built from a value the
+    schema accepts, instead of trusting the column.
+    """
+    if value == Strand.PLUS:
+        return Strand.PLUS
+    if value == Strand.MINUS:
+        return Strand.MINUS
+    raise ValueError(f"unsupported strand value: {value!r}")
+
+
+PART_KIND_BY_TYPE: dict[str, Literal["cds", "utr5", "utr3"]] = {
     "cds": "cds",
     "five_prime_utr": "utr5",
     "three_prime_utr": "utr3",
@@ -229,7 +256,7 @@ def _region_transcript(tx: Transcript, *, include_parts: bool) -> RegionTranscri
         biotype=tx.biotype,
         start=tx.start,
         end=tx.end,
-        strand=tx.strand,
+        strand=_strand(tx.strand),
         is_canonical=tx.is_canonical,
         parts=parts,
     )
@@ -368,7 +395,10 @@ class GeneService:
         if has_more and params.page is None:
             genes = genes[: params.limit]
 
-        items = [self._gene_to_response(gene, count) for gene, count in rows[: len(genes)]]
+        items = [
+            self._gene_to_response(gene, count, release_context)
+            for gene, count in rows[: len(genes)]
+        ]
         next_cursor = (
             encode_cursor(
                 genes[-1].accession,
@@ -417,6 +447,14 @@ class GeneService:
             .join(Assembly, Gene.assembly_id == Assembly.id)
             .where(and_(*conditions))
             .order_by(Gene.gene_pk)
+            # The assembly is already joined here, so load it in the same
+            # statement. Without this the detail response reported
+            # `assembly_name: null` while the list endpoint reported the same
+            # gene's assembly name -- two answers for one record, and the
+            # detail page lost the assembly context the portal is required to
+            # show. `lazyload` on the assembly's own `selectin` chromosomes
+            # keeps the detail query to one round trip.
+            .options(joinedload(Gene.assembly).lazyload(Assembly.chromosomes))
         )
         result = await db.execute(stmt)
         genes = list(result.scalars().all())
@@ -464,10 +502,24 @@ class GeneService:
         # flattened into an empty list.
         sections = await load_gene_sections(db, gene, release_context=release_context)
 
+        # Residues are a per-gene answer: ``transcript_sequences`` rows for this
+        # gene's transcripts, plus a bounded slice of the assembly's reference
+        # FASTA for the genomic/transcript molecules. Both are keyed off the
+        # gene already resolved inside this release, so an unreleased or
+        # other-assembly record cannot contribute one.
+        sequences = await load_gene_sequences(db, gene, release_context=release_context)
+
         return GeneDetail(
             id=str(gene.accession),
             gene_id=str(gene.accession),
             assembly_id=str(gene.assembly_id),
+            # The detail response used to omit the assembly name and the
+            # release entirely, so the gene page showed "assembly: unknown"
+            # while the list endpoint showed the same gene's assembly. Both
+            # belong to the record: the portal is required to show them.
+            assembly_name=gene.assembly.name if gene.assembly else None,
+            release_id=str(release_context.release_id),
+            release_name=release_context.release_name,
             chromosome=gene.chromosome.name,
             name=gene.name,
             symbol=gene.name,
@@ -476,12 +528,12 @@ class GeneService:
             end=gene.end,
             start_pos=gene.start,
             end_pos=gene.end,
-            strand=gene.strand,
+            strand=_strand(gene.strand),
             description=gene.description,
             transcripts=transcripts,
             aliases=aliases,
             variant_count=variant_count,
-            sequences=gene_sequence_availability(),
+            sequences=sequences,
             model_evidence=gene_model_evidence(gene),
             **sections,
             created_at=gene.created_at,
@@ -622,7 +674,7 @@ class GeneService:
                     end=gene.end,
                     start_pos=gene.start,
                     end_pos=gene.end,
-                    strand=gene.strand,
+                    strand=_strand(gene.strand),
                     biotype=gene.biotype,
                     transcripts=[
                         _region_transcript(tx, include_parts=include_parts)
@@ -702,12 +754,23 @@ class GeneService:
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _gene_to_response(gene: Gene, variant_count: int = 0) -> GeneResponse:
+    def _gene_to_response(
+        gene: Gene,
+        variant_count: int = 0,
+        release_context: ReleaseContext | None = None,
+    ) -> GeneResponse:
         return GeneResponse(
             id=str(gene.accession),
             gene_id=str(gene.accession),
             assembly_id=str(gene.assembly_id),
             assembly_name=gene.assembly.name if gene.assembly else None,
+            # The release the record was resolved in. The portal must show the
+            # release next to the assembly: a coordinate means nothing without
+            # the data version it was read from.
+            release_id=(
+                str(release_context.release_id) if release_context is not None else None
+            ),
+            release_name=release_context.release_name if release_context is not None else None,
             chromosome=gene.chromosome.name,
             name=gene.name,
             symbol=gene.name,
@@ -716,7 +779,7 @@ class GeneService:
             end=gene.end,
             start_pos=gene.start,
             end_pos=gene.end,
-            strand=gene.strand,
+            strand=_strand(gene.strand),
             description=gene.description,
             variant_count=variant_count,
         )
@@ -730,7 +793,7 @@ class GeneService:
             biotype=tx.biotype,
             start=tx.start,
             end=tx.end,
-            strand=tx.strand,
+            strand=_strand(tx.strand),
             is_canonical=tx.is_canonical,
             exons=[
                 ExonResponse(

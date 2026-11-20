@@ -77,7 +77,7 @@ def _looks_like_public_id(value: str) -> bool:
     candidate = normalize_public_id(value)
     if not candidate.startswith(_PUBLIC_ID_PREFIX):
         return False
-    body = candidate[len(_PUBLIC_ID_PREFIX):]
+    body = candidate[len(_PUBLIC_ID_PREFIX) :]
     if not body:
         return False
     return all(char in _CROCKFORD_BODY for char in body)
@@ -207,9 +207,7 @@ async def _resolve_export_namespace(
             )
         )
     ).all()
-    aliases = {
-        version if name == assembly else name for name, version in rows
-    } - {assembly}
+    aliases = {version if name == assembly else name for name, version in rows} - {assembly}
     matches = [
         alias
         for alias in sorted(aliases)
@@ -262,21 +260,21 @@ async def list_variants(
     requested_public_id = mutant_line_public_id or mutant_line_id
     try:
         params = VariantFilterParams(
-        assembly=assembly,
-        chromosome=chromosome,
-        start=start,
-        end=end,
-        ref=ref,
-        alt=alt,
-        gene_id=gene_id,
-        variant_type=variant_type,
-        consequence=consequence,
-        impact=impact,
-        min_af=min_af,
-        max_af=max_af,
-        cursor=cursor,
-        limit=limit,
-    )
+            assembly=assembly,
+            chromosome=chromosome,
+            start=start,
+            end=end,
+            ref=ref,
+            alt=alt,
+            gene_id=gene_id,
+            variant_type=variant_type,
+            consequence=consequence,
+            impact=impact,
+            min_af=min_af,
+            max_af=max_af,
+            cursor=cursor,
+            limit=limit,
+        )
     except ValueError as exc:
         # An unknown filter value is client input, not a server error.
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -295,6 +293,41 @@ async def list_variants(
     )
 
 
+async def _require_known_assembly(
+    db: AsyncSession,
+    release_id: int,
+    assembly: str,
+) -> str:
+    """Return the canonical assembly name, or refuse the request.
+
+    The region endpoint addresses an assembly by name while the rest of the
+    API addresses it by id. Both labels the release knows are accepted -- the
+    assembly's name and its version -- and both resolve to the same
+    namespace, so neither is a second, interchangeable coordinate system.
+    """
+    rows = (
+        await db.execute(
+            select(Assembly.name, Assembly.version).where(
+                # The assembly must belong to the release being read; an
+                # assembly from another release is not "unknown", it is out of
+                # scope, and both deserve a 404 rather than an empty result
+                # set.
+                Assembly.release_id == release_id,
+                or_(Assembly.name == assembly, Assembly.version == assembly),
+            )
+        )
+    ).all()
+    if not rows:
+        raise NotFoundError(f"Assembly {assembly!r} is not available in this release")
+    names = {name for name, _version in rows if name}
+    if len(names) > 1:
+        raise ValidationError(
+            f"Assembly {assembly!r} matches more than one assembly in this release; "
+            "supply the exact assembly name"
+        )
+    return next(iter(names))
+
+
 @router.get("/region", response_model=list[VariantResponse])
 async def get_variants_by_region(
     db: AsyncSession = Depends(get_db),
@@ -308,6 +341,12 @@ async def get_variants_by_region(
     """Query variants in a genomic region (assembly is required)."""
     if end < start:
         raise ValidationError("end must be greater than or equal to start")
+    # An assembly that does not exist in this release must not look like a
+    # region that happens to hold no variants: the sibling endpoints
+    # (`/genes/{id}`, `/chromosomes`, `/region-structure`, `/assemblies/{id}`)
+    # all answer 404 for an unknown assembly, and a silent 200 `[]` here let a
+    # typo or a stale assembly name read as "this assembly has no variants".
+    await _require_known_assembly(db, release_context.release_id, assembly)
     return await service.get_variants_by_region(
         db,
         assembly=assembly,
@@ -348,12 +387,14 @@ async def _submit_export(
     Returns the new export id; the caller commits.
     """
     filters = export_request.filters.model_dump(
-        mode="json", exclude_none=True,
+        mode="json",
+        exclude_none=True,
         exclude={"cursor", "limit", "mutant_line_public_id"},
     )
     if export_request.filters.mutant_line_public_id is not None:
         filters["mutant_line_name"] = await _resolve_mutant_line_name(
-            db, export_request.filters.mutant_line_public_id,
+            db,
+            export_request.filters.mutant_line_public_id,
             release_context=release_context,
         )
     filters["release_key"] = release_context.release_key
@@ -361,9 +402,7 @@ async def _submit_export(
     # filters the worker receives, so the worker's SQL, the artifact's
     # provenance and the export record all state the same assembly instead
     # of the record advertising a namespace the file does not use.
-    assembly_scope = _export_assembly_scope(
-        export_request.filters.assembly, release_context
-    )
+    assembly_scope = _export_assembly_scope(export_request.filters.assembly, release_context)
     # An artifact that would contain no rows must not be recorded as a
     # successful export: the request is refused instead, so the submitter
     # learns that the namespace is empty rather than downloading an empty
@@ -373,9 +412,7 @@ async def _submit_export(
     # facts may have been imported under the version label. Resolve through
     # the assemblies row so both labels reach the same namespace, and record
     # the namespace the artifact is actually built from.
-    resolved_scope = await _resolve_export_namespace(
-        db, release_context.release_id, assembly_scope
-    )
+    resolved_scope = await _resolve_export_namespace(db, release_context.release_id, assembly_scope)
     if resolved_scope is None:
         raise ValidationError(
             f"No variants are published for assembly {assembly_scope!r} in this "
